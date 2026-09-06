@@ -15,6 +15,10 @@ Effect's own `FileSystem` service, which core may use because it comes from
 `effect`, while every native implementation stays outside core. See
 [storage](storage.md).
 
+Core today is `boot`, `observability`, the `fileSystem` helpers, the `fixture`
+seed, `source` (canonical text and its stamp) and `book` (the plain, in-memory
+Book over a `FileSystem` read). See [source and book](source.md).
+
 CodeMirror belongs to the editor layer and will live in `src/editor/` when that
 layer exists. It is not a core dependency at any depth.
 
