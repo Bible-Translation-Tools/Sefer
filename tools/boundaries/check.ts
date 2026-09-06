@@ -17,6 +17,7 @@ export interface BoundaryOptions {
   readonly paths?: Readonly<Record<string, readonly string[]>>;
   readonly pathsBase?: string;
   readonly forbiddenPackages?: readonly string[];
+  readonly rawAssetDirs?: readonly string[];
 }
 
 export const DEFAULT_FORBIDDEN_PACKAGES: readonly string[] = [
@@ -101,6 +102,10 @@ const collectSpecifiers = (source: ts.SourceFile): RawSpecifier[] => {
   return specifiers;
 };
 
+const RAW_QUERY = /\?raw(?:&|$)/;
+
+const withoutQuery = (specifier: string): string => specifier.split("?")[0] ?? specifier;
+
 const isRelative = (specifier: string): boolean =>
   specifier.startsWith("./") || specifier.startsWith("../") || specifier === "..";
 
@@ -141,6 +146,7 @@ export const checkCoreBoundary = (options: BoundaryOptions): BoundaryViolation[]
   const paths = options.paths ?? {};
   const pathsBase = path.resolve(options.pathsBase ?? path.dirname(coreDir));
   const forbidden = options.forbiddenPackages ?? DEFAULT_FORBIDDEN_PACKAGES;
+  const rawAssetDirs = (options.rawAssetDirs ?? []).map((directory) => path.resolve(directory));
   const violations: BoundaryViolation[] = [];
 
   for (const file of listSourceFiles(coreDir)) {
@@ -165,7 +171,12 @@ export const checkCoreBoundary = (options: BoundaryOptions): BoundaryViolation[]
       };
 
       if (isRelative(specifier.value)) {
-        const resolved = path.resolve(path.dirname(file), specifier.value);
+        const resolved = path.resolve(path.dirname(file), withoutQuery(specifier.value));
+        if (
+          RAW_QUERY.test(specifier.value) &&
+          rawAssetDirs.some((directory) => isInside(directory, resolved))
+        )
+          continue;
         if (!isInside(coreDir, resolved))
           report(`resolves to ${path.relative(pathsBase, resolved)}, outside core`);
         continue;
@@ -211,6 +222,7 @@ const main = (): void => {
     coreDir: path.join(root, "src", "core"),
     paths,
     pathsBase: base,
+    rawAssetDirs: [path.join(root, "fixtures")],
   });
 
   if (violations.length === 0) {

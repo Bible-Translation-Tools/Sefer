@@ -1,4 +1,4 @@
-import { Effect, Result } from "effect";
+import { Effect, FileSystem, Layer, Option, Result } from "effect";
 
 import { boot, type BootError, type BootInfo } from "../core/boot";
 import { Observability, ObservabilityLive, type ObservabilityService } from "../core/observability";
@@ -8,12 +8,30 @@ import { hostSink, installObservabilityDevSurface } from "../platform/observabil
 const buildIdentity = (): string | undefined =>
   typeof __SEFER_BUILD__ === "string" ? __SEFER_BUILD__ : undefined;
 
-interface Composed {
+export interface Composition {
   readonly boot: Result.Result<BootInfo, BootError>;
   readonly observability: ObservabilityService;
+  readonly fileSystem: FileSystem.FileSystem | undefined;
 }
 
-const program: Effect.Effect<Composed, never, Observability> = Effect.gen(function* () {
+export interface CompositionOptions {
+  readonly fileSystem?: Layer.Layer<FileSystem.FileSystem> | undefined;
+}
+
+const telemetryLayer = async (): Promise<Layer.Layer<never> | undefined> => {
+  const url = import.meta.env.VITE_SEFER_OTLP_URL ?? "";
+  if (!import.meta.env.DEV || url === "") return undefined;
+  const [otlp, http] = await Promise.all([
+    import("effect/unstable/observability/Otlp"),
+    import("effect/unstable/http/FetchHttpClient"),
+  ]);
+  return Layer.provide(
+    otlp.layerJson({ baseUrl: url, resource: { serviceName: "sefer" } }),
+    http.layer,
+  );
+};
+
+const program: Effect.Effect<Composition, never, Observability> = Effect.gen(function* () {
   const observability = yield* Observability;
   installObservabilityDevSurface(observability);
 
@@ -30,10 +48,23 @@ const program: Effect.Effect<Composed, never, Observability> = Effect.gen(functi
     );
   else observability.note("boot", "failed", result.failure._tag);
 
-  return { boot: result, observability };
+  const fileSystem = yield* Effect.serviceOption(FileSystem.FileSystem);
+
+  return { boot: result, observability, fileSystem: Option.getOrUndefined(fileSystem) };
 });
 
-const composed = Effect.runSync(Effect.provide(program, ObservabilityLive({ sink: hostSink() })));
+export const composeApplication = async (
+  options: CompositionOptions = {},
+): Promise<Composition> => {
+  const telemetry = await telemetryLayer();
+  const observability = ObservabilityLive({ sink: hostSink() });
+  const recorded = telemetry === undefined ? observability : Layer.merge(observability, telemetry);
+  const layer =
+    options.fileSystem === undefined ? recorded : Layer.merge(recorded, options.fileSystem);
+  return await Effect.runPromise(Effect.provide(program, layer));
+};
+
+const composed = await composeApplication();
 
 export const applicationBoot: Result.Result<BootInfo, BootError> = composed.boot;
 

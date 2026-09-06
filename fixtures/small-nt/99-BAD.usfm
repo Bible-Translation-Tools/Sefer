@@ -1,0 +1,14 @@
+\id BAD Deliberately malformed fixture
+\ide UTF-8
+\h Bad Book
+\toc1 The Deliberately Malformed Book
+\toc2 Bad Book
+\toc3 Bad
+\mt1 Bad Book
+\c 1
+\p
+\v 1 This verse opens a footnote \f + \ft that is never closed.
+\v 2 This verse number is duplicated below.
+\v 2 The duplicate.
+\v This verse marker carries no number at all.
+\v 4 The last verse skips a number and ends the book.

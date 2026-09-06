@@ -16,6 +16,7 @@
     "format": "oxfmt . '!**/*.gen.*' '!**/*.md' '!**/*.yaml' '!**/*.yml'",
     "format:check": "oxfmt --check . '!**/*.gen.*' '!**/*.md' '!**/*.yaml' '!**/*.yml'",
     "boundaries": "node tools/boundaries/check.ts",
+    "verify:launch": "node tools/verify/launch.ts",
     "test": "vitest",
     "test:unit": "vitest run --project core",
     "test:browser": "vitest run --project browser",

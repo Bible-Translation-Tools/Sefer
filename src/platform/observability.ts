@@ -1,3 +1,6 @@
+import type { Result } from "effect";
+
+import type { BootError, BootInfo } from "../core/boot";
 import type { ObservabilityService, ObservabilitySink } from "../core/observability";
 
 interface NodeRuntime {
@@ -12,8 +15,25 @@ export interface ObservabilityDevSurface {
   readonly setLevel: ObservabilityService["setLevel"];
 }
 
+export interface DevFixtureFile {
+  readonly path: string;
+  readonly bytes: number;
+}
+
+export interface DevFixtureState {
+  readonly project: string;
+  readonly files: readonly DevFixtureFile[];
+  readonly seededAt: number;
+}
+
+export interface DevState {
+  readonly boot: Result.Result<BootInfo, BootError>;
+  readonly fixture: DevFixtureState | undefined;
+  readonly observability: number;
+}
+
 declare global {
-  var __sefer: { observability?: ObservabilityDevSurface } | undefined;
+  var __sefer: { observability?: ObservabilityDevSurface; state?: () => DevState } | undefined;
 }
 
 const nodeRuntime = (): NodeRuntime | undefined => {
@@ -47,6 +67,13 @@ const consoleSink = (): ObservabilitySink | undefined => {
 export const hostSink = (): ObservabilitySink | undefined => {
   const runtime = nodeRuntime();
   return runtime === undefined ? consoleSink() : stderrSink(runtime);
+};
+
+export const installDevState = (state: () => DevState): void => {
+  if (!import.meta.env.DEV) return;
+  const held = globalThis.__sefer ?? {};
+  held.state = state;
+  globalThis.__sefer = held;
 };
 
 export const installObservabilityDevSurface = (service: ObservabilityService): void => {

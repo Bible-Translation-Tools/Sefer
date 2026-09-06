@@ -41,6 +41,8 @@ export default defineConfig({
                   "../../../**",
                   "@/app/**",
                   "@/platform/**",
+                  "!../fileSystem/*",
+                  "!../../../fixtures/**",
                 ],
                 message:
                   "Core stays framework and host independent; depend on a core contract instead. `pnpm boundaries` is the authoritative check.",

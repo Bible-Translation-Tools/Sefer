@@ -12,7 +12,10 @@ Read only the guidance relevant to the task:
 - [Boundaries](documentation/architecture/boundaries.md): what `src/core` may depend on, and the checks that enforce it.
 - [Storage](documentation/architecture/storage.md): the `effect/FileSystem` port, its Node and in-memory layers, atomic writes, root scoping, and the contract suite.
 
-In a dev build, `globalThis.__sefer.observability` exposes `recent()`, `export()` (JSONL), `level()`, and `setLevel()` — use it to read what the running application actually did instead of adding logging.
+In a dev build, `/dev/fixture` boots the application over a seeded in-memory copy of `fixtures/small-nt/` and lists it through the `FileSystem` service; the route exists only under `import.meta.env.DEV` and is absent from production builds.
+`pnpm verify:launch [--check]` starts a dev server on a free port against that route, writes artifacts to `.verify/<runId>/`, and prints one JSON line with `url`, `runId`, `runDir`, and `pid`.
+
+In a dev build, `globalThis.__sefer.observability` exposes `recent()`, `export()` (JSONL), `level()`, and `setLevel()`, and `globalThis.__sefer.state()` reports the boot result, the seeded fixture, and the ring depth — use them to read what the running application actually did instead of adding logging.
 
 Check `package.json` and runner configuration for executable commands. Distinguish intended tooling from working setup, and preserve unrelated worktree changes.
 

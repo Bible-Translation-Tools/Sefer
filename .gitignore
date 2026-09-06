@@ -12,3 +12,4 @@ src-tauri/gen
 scratchpad/
 .DS_Store
 *.local
+.verify/

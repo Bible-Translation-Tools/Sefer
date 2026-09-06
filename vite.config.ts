@@ -26,7 +26,11 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     // Scans src/routes and generates src/routeTree.gen.ts — the typed route
     // tree — on dev and build. Must be registered before solid().
-    tanstackRouter({ target: "solid", autoCodeSplitting: true }),
+    tanstackRouter({
+      target: "solid",
+      autoCodeSplitting: true,
+      routeFileIgnorePattern: "^dev$",
+    }),
     // Client mode only for now: TanStack's SSR needs per-request router
     // wiring (router.load() + dehydration) that the generated streaming
     // entry doesn't perform — see the README's SSR note.
@@ -38,6 +42,9 @@ export default defineConfig(({ mode }) => ({
   server: {
     port: 3000,
     strictPort: true,
+  },
+  optimizeDeps: {
+    include: ["effect/unstable/http/FetchHttpClient", "effect/unstable/observability/Otlp"],
   },
   test: {
     projects: [

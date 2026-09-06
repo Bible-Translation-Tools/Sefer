@@ -2,6 +2,26 @@
 
 Status: agreed workflow direction. This is not yet an executable app-specific skill: exact launch isolation, readiness checks, and desktop driving recipes must be proved as the application takes shape.
 
+## What exists now
+
+Status: this section describes code that exists.
+
+- **The dev fixture route** is `/dev/fixture`, served only by the dev server. It is not a generated file route: `vite.config.ts` sets `routeFileIgnorePattern: "^dev$"` so the router generator never scans `src/routes/dev/`, and `src/App.tsx` registers the route through a dynamic `import()` guarded by `import.meta.env.DEV`. A production `vite build` therefore contains none of it; `grep -r "/dev/fixture" dist/` and `grep -r "__sefer" dist/` both come back empty.
+- **What the route does.** It calls `composeApplication({ fileSystem: FixtureFileSystemLive })` — the ordinary boot with one substitution — and renders the boot result, then every file of the `small-nt` project read back *through* the `FileSystem` service with its byte length. `reset` reseeds a fresh in-memory Layer; `?keep=1` keeps the instance already seeded. The seeded project is in-memory and page-scoped: it lives in the Layer instance for the life of the page and a reload starts from the same bytes. The route emits one `fixture` `ready` note carrying `small-nt: <n> files`.
+- **The fixture data** is `fixtures/small-nt/` — four real ULB books plus one deliberately malformed file — vendored and described in `fixtures/README.md`. `src/core/fixture/smallNt.ts` imports them with Vite `?raw` and exports `FixtureFileSystemLive`, the in-memory FileSystem Layer seeded under `/small-nt`.
+- **Dev surfaces on `globalThis.__sefer`**, in dev builds only: `observability` (`recent()`, `export()`, `level()`, `setLevel()`) and, once the fixture route has seeded, `state()` returning `{ boot, fixture: { project, files, seededAt }, observability }`, where `files` is `{ path, bytes }` per file and `observability` is the number of events currently in the ring.
+- **The launch helper** is `pnpm verify:launch [--fixture small-nt] [--check]` (`tools/verify/launch.ts`, Node built-ins only). It picks a free port, creates `.verify/<runId>/` (gitignored), starts `vite --port <p> --strictPort` with `SEFER_LOG=1` and `VITE_SEFER_LOG=1`, tees the child's stderr into `<runDir>/observability.jsonl` (stdout goes to `<runDir>/server.log`), polls `http://localhost:<p>/dev/fixture` with an `accept: text/html` header until it answers 200 or 60 s pass, and prints exactly one JSON line to stdout:
+
+```json
+{"url":"http://localhost:60634/dev/fixture","runId":"2026-09-06T21-52-51-542Z-9fdaca8a","runDir":"/…/Sefer/.verify/2026-09-06T21-52-51-542Z-9fdaca8a","pid":9032}
+```
+
+  Without `--check` it stays up until SIGINT or SIGTERM, then kills the dev server and exits 0. With `--check` it exits as soon as the route is ready — readiness is around 1.7 s on a warm cache.
+
+  The `accept: text/html` header is not optional: `@solidjs/vite-plugin` runs in client mode with `appType: "custom"`, and its dev page middleware only answers requests that ask for HTML. A plain `curl` or `fetch` with `accept: */*` gets `Cannot GET /` from every path, including `/`.
+
+  What the artifact directory does *not* yet contain is browser-side observability. `SEFER_LOG` reaches the Vite process, not the page; in a browser the ring mirrors `note` events to `console.debug` and is read through `__sefer.observability`. `observability.jsonl` currently holds the dev server's own stderr.
+
 ## Exploration and regression tests have different jobs
 
 Use exploration to investigate a change, try awkward interactions, inspect telemetry, and produce reviewable evidence. Exploration can be valuable without producing a committed test script.
