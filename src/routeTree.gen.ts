@@ -10,33 +10,43 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DevFixtureRouteImport } from './routes/dev/fixture'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DevFixtureRoute = DevFixtureRouteImport.update({
+  id: '/dev/fixture',
+  path: '/dev/fixture',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/dev/fixture': typeof DevFixtureRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/dev/fixture': typeof DevFixtureRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/dev/fixture': typeof DevFixtureRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/dev/fixture'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/dev/fixture'
+  id: '__root__' | '/' | '/dev/fixture'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DevFixtureRoute: typeof DevFixtureRoute
 }
 
 declare module '@tanstack/solid-router' {
@@ -48,11 +58,19 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dev/fixture': {
+      id: '/dev/fixture'
+      path: '/dev/fixture'
+      fullPath: '/dev/fixture'
+      preLoaderRoute: typeof DevFixtureRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DevFixtureRoute: DevFixtureRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -11,11 +11,6 @@ import "./App.css";
 // from this tree.
 import { routeTree } from "./routeTree.gen";
 
-if (import.meta.env.DEV) {
-  const { installDevRoutes } = await import("./routes/dev/register");
-  installDevRoutes(routeTree);
-}
-
 const router = createRouter({
   routeTree,
   defaultPendingComponent: () => <main>Loading…</main>,

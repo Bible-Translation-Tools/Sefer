@@ -29,7 +29,6 @@ export default defineConfig(({ mode }) => ({
     tanstackRouter({
       target: "solid",
       autoCodeSplitting: true,
-      routeFileIgnorePattern: "^dev$",
     }),
     // Client mode only for now: TanStack's SSR needs per-request router
     // wiring (router.load() + dehydration) that the generated streaming

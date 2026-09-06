@@ -1,8 +1,8 @@
 import { render } from "@solidjs/web";
 import { expect, test, vi } from "vitest";
 
-import { smallNtFileNames } from "../../core/fixture/smallNt";
-import { FixturePage } from "./fixture";
+import { smallNtFileNames } from "../core/fixture/smallNt";
+import { FixturePage } from "./FixturePage";
 
 test("the fixture route renders every seeded file and publishes dev state", async () => {
   const expected = smallNtFileNames().length;
