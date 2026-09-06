@@ -1,7 +1,8 @@
-import { Effect, FileSystem, Result } from "effect";
+import { Effect, FileSystem, Layer, Result } from "effect";
 import { For, Show, createSignal } from "solid-js";
 
-import { composeApplication, type Composition } from "../app/composition";
+import type { Composition } from "../app/composition";
+import { useComposition } from "../app/CompositionContext";
 import { FixtureFileSystemLive, SMALL_NT, SMALL_NT_ROOT } from "../core/fixture/smallNt";
 import { installDevState } from "../platform/observability";
 
@@ -16,15 +17,9 @@ interface DevFixtureState {
   readonly seededAt: number;
 }
 
-interface FixtureSession {
-  readonly composition: Composition;
-  readonly fixture: DevFixtureState;
-}
-
-const listFixture = (
-  fileSystem: FileSystem.FileSystem,
-): Effect.Effect<readonly DevFixtureFile[], never> =>
+const listFixture: Effect.Effect<readonly DevFixtureFile[], never, FileSystem.FileSystem> =
   Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
     const names = yield* fileSystem.readDirectory(SMALL_NT_ROOT);
     const files: DevFixtureFile[] = [];
     for (const name of [...names].sort()) {
@@ -34,10 +29,13 @@ const listFixture = (
     return files;
   }).pipe(Effect.orDie);
 
-const seed = async (): Promise<FixtureSession> => {
-  const composition = await composeApplication({ fileSystem: FixtureFileSystemLive });
-  const fileSystem = composition.fileSystem;
-  const files = fileSystem === undefined ? [] : await Effect.runPromise(listFixture(fileSystem));
+// No second composition: the root's already-built services come back through
+// `composition.layer`, and only the seeded FileSystem is new. Each call builds
+// a fresh instance of the memory Layer, which is what `reset` reseeds.
+const seed = async (composition: Composition): Promise<DevFixtureState> => {
+  const files = await Effect.runPromise(
+    Effect.provide(listFixture, Layer.merge(composition.layer, FixtureFileSystemLive)),
+  );
   const fixture: DevFixtureState = { project: SMALL_NT, files, seededAt: Date.now() };
 
   composition.observability.note("fixture", "ready", `${SMALL_NT}: ${files.length} files`);
@@ -47,17 +45,20 @@ const seed = async (): Promise<FixtureSession> => {
     observability: composition.observability.recent().length,
   }));
 
-  return { composition, fixture };
+  return fixture;
 };
 
 const bootLabel = (result: Composition["boot"]): string =>
   Result.isSuccess(result) ? `${result.success.host} ${result.success.build}` : result.failure._tag;
 
-let held: FixtureSession | undefined;
+let held: DevFixtureState | undefined;
 
-export const fixtureSession = async (keep: boolean): Promise<FixtureSession> => {
+export const fixtureSession = async (
+  composition: Composition,
+  keep: boolean,
+): Promise<DevFixtureState> => {
   if (keep && held !== undefined) return held;
-  held = await seed();
+  held = await seed(composition);
   return held;
 };
 
@@ -65,11 +66,12 @@ const keepRequested = (): boolean =>
   typeof location === "object" && new URLSearchParams(location.search).get("keep") === "1";
 
 export function FixturePage() {
-  const [session, setSession] = createSignal<FixtureSession | undefined>(undefined);
+  const composition = useComposition();
+  const [fixture, setFixture] = createSignal<DevFixtureState | undefined>(undefined);
 
   const load = (keep: boolean): void => {
-    void fixtureSession(keep).then((ready) => {
-      setSession(ready);
+    void fixtureSession(composition, keep).then((ready) => {
+      setFixture(ready);
     });
   };
 
@@ -78,17 +80,17 @@ export function FixturePage() {
   return (
     <main data-fixture={SMALL_NT}>
       <h1>Fixture project: {SMALL_NT}</h1>
-      <Show when={session()} fallback={<p>Seeding…</p>}>
+      <Show when={fixture()} fallback={<p>Seeding…</p>}>
         {(ready) => (
           <>
-            <p data-boot-phase={Result.isSuccess(ready().composition.boot) ? "ready" : "failed"}>
-              boot: {bootLabel(ready().composition.boot)}
+            <p data-boot-phase={Result.isSuccess(composition.boot) ? "ready" : "failed"}>
+              boot: {bootLabel(composition.boot)}
             </p>
             <button type="button" onClick={() => load(false)}>
               reset
             </button>
-            <ul data-fixture-files={ready().fixture.files.length}>
-              <For each={ready().fixture.files}>
+            <ul data-fixture-files={ready().files.length}>
+              <For each={ready().files}>
                 {(file) => (
                   <li data-path={file.path}>
                     {file.path} — {file.bytes} bytes

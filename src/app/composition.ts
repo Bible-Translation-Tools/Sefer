@@ -12,6 +12,10 @@ export interface Composition {
   readonly boot: Result.Result<BootInfo, BootError>;
   readonly observability: ObservabilityService;
   readonly fileSystem: FileSystem.FileSystem | undefined;
+  // The root's *built* services, not the recipe that built them: providing it
+  // again hands back the same Observability ring instead of making a second
+  // one, so a page may merge a child Layer over the root without recomposing.
+  readonly layer: Layer.Layer<Observability>;
 }
 
 export interface CompositionOptions {
@@ -49,8 +53,14 @@ const program: Effect.Effect<Composition, never, Observability> = Effect.gen(fun
   else observability.note("boot", "failed", result.failure._tag);
 
   const fileSystem = yield* Effect.serviceOption(FileSystem.FileSystem);
+  const services = yield* Effect.context<Observability>();
 
-  return { boot: result, observability, fileSystem: Option.getOrUndefined(fileSystem) };
+  return {
+    boot: result,
+    observability,
+    fileSystem: Option.getOrUndefined(fileSystem),
+    layer: Layer.succeedContext(services),
+  };
 });
 
 export const composeApplication = async (
@@ -63,9 +73,3 @@ export const composeApplication = async (
     options.fileSystem === undefined ? recorded : Layer.merge(recorded, options.fileSystem);
   return await Effect.runPromise(Effect.provide(program, layer));
 };
-
-const composed = await composeApplication();
-
-export const applicationBoot: Result.Result<BootInfo, BootError> = composed.boot;
-
-export const applicationObservability: ObservabilityService = composed.observability;

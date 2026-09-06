@@ -26,7 +26,7 @@ Sinks are the host's job, in `src/platform/observability.ts`. `hostSink()` retur
 
 `src/app/composition.ts` builds the Layer at the root, runs `boot` inside it, and emits one `boot` span and one `boot` note (`ready` with `<host> <build>` and the build identity as correlation, or `failed` with the error tag).
 
-`composeApplication(options)` is the one composition entry: it builds the Layer, runs `boot` inside it, and returns `{ boot, observability, fileSystem }`. `src/app/composition.ts` awaits it once at module scope with no options — the production root provides no `FileSystem` — and the dev fixture route calls it again with the seeded fixture Layer.
+`composeApplication(options)` is the one composition entry: it builds the Layer, runs `boot` inside it, and returns `{ boot, observability, fileSystem, layer }`. `src/App.tsx` awaits it once with no options — the production root provides no `FileSystem` — and hands the result to every consumer through `useComposition()`. There is one ring per running application: the dev fixture route merges its seeded FileSystem over `composition.layer` instead of composing again, so its `fixture` note lands in the same ring beside the `boot` note.
 
 OTLP is a dev-only toggle in `composeApplication`. When `import.meta.env.DEV` and `VITE_SEFER_OTLP_URL` is set, the composition dynamically imports `effect/unstable/observability/Otlp` and `effect/unstable/http/FetchHttpClient` and merges `Otlp.layerJson({ baseUrl, resource: { serviceName: "sefer" } })`, fed by the fetch `HttpClient`, beside `ObservabilityLive`. `Effect.log*` and `Effect.withSpan` inside the composed program then reach the collector as well as the ring. Run it with
 
@@ -34,7 +34,7 @@ OTLP is a dev-only toggle in `composeApplication`. When `import.meta.env.DEV` an
 VITE_SEFER_OTLP_URL=http://localhost:4318 pnpm dev
 ```
 
-and point any OTLP-HTTP viewer at `http://localhost:4318`; the layer posts to `/v1/logs`, `/v1/metrics`, and `/v1/traces` below that URL. The imports are dynamic and inside the `import.meta.env.DEV` branch, so a production build contains no OTLP code: `grep -r Otlp dist/` comes back empty. Note that the OTLP Layer builds asynchronously, which is why the composition is a `Promise` and `src/app/composition.ts` uses top-level `await`.
+and point any OTLP-HTTP viewer at `http://localhost:4318`; the layer posts to `/v1/logs`, `/v1/metrics`, and `/v1/traces` below that URL. The imports are dynamic and inside the `import.meta.env.DEV` branch, so a production build contains no OTLP code: `grep -r Otlp dist/` comes back empty. Note that the OTLP Layer builds asynchronously, which is why the composition is a `Promise` and `src/App.tsx` uses top-level `await`.
 
 Not present yet: JSONL files on disk, rotation, retention, batching, dropped-event counters, run IDs, and any editor instrumentation.
 

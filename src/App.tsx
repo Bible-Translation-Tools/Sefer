@@ -2,7 +2,8 @@ import { RouterProvider, createRouter } from "@tanstack/solid-router";
 import { Result } from "effect";
 import { Show } from "solid-js";
 
-import { applicationBoot } from "./app/composition";
+import { composeApplication } from "./app/composition";
+import { CompositionProvider, useComposition } from "./app/CompositionContext";
 
 import "./App.css";
 
@@ -24,15 +25,20 @@ declare module "@tanstack/solid-router" {
   }
 }
 
-const bootedInfo = Result.isSuccess(applicationBoot) ? applicationBoot.success : null;
-const bootErrorTag = Result.isFailure(applicationBoot) ? applicationBoot.failure._tag : "";
+// The one composition. Nothing else in the tree composes; every consumer
+// reaches these services through useComposition(). The await is top-level
+// because the dev-only OTLP Layer builds asynchronously, and the plugin's
+// generated client entry supports it.
+const composition = await composeApplication();
 
-// The app root: the plugin's generated entries render this component,
-// wrapped in src/Document.tsx.
-export default function App() {
+function Shell() {
+  const composed = useComposition();
+  const booted = Result.isSuccess(composed.boot) ? composed.boot.success : null;
+  const bootErrorTag = Result.isFailure(composed.boot) ? composed.boot.failure._tag : "";
+
   return (
     <Show
-      when={bootedInfo}
+      when={booted}
       fallback={<main data-boot-error={bootErrorTag}>boot failed: {bootErrorTag}</main>}
     >
       {(info) => (
@@ -42,5 +48,15 @@ export default function App() {
         </>
       )}
     </Show>
+  );
+}
+
+// The app root: the plugin's generated entries render this component,
+// wrapped in src/Document.tsx.
+export default function App() {
+  return (
+    <CompositionProvider value={composition}>
+      <Shell />
+    </CompositionProvider>
   );
 }
