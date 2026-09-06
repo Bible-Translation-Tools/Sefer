@@ -99,7 +99,7 @@ Each row: what the module owns, the handful of operations it must expose, and wh
 | module | slices | kind | owns | operations (sketch) |
 |---|---|---|---|---|
 | HostInfo | 01 | Layer | host kind, build identity, app paths | `kind`, `build`, `paths` |
-| FileSystem | 09, 24 | Layer per host | bytes on disk or in Web storage, atomic replace, listing, watching | `read(path)`, `writeAtomic(path, bytes)`, `list(dir)`, `stat`, `watch(dir) → Stream`, `remove` |
+| FileSystem | 09, 24 | Layer per host; the port is `effect/FileSystem` (Effect 4 core), implementations: Node (tests, tooling), Tauri fs plugin, Web OPFS also exposing the Node-shaped `fs` isomorphic-git needs | bytes on disk or in Web storage, atomic replace, listing, watching | `read(path)`, `writeAtomic(path, bytes)`, `list(dir)`, `stat`, `watch(dir) → Stream`, `remove` |
 | Observability | 12 | Layer | bounded ring of events, spans, verdicts; JSONL export; devtools read surface | `span(name)`, `note(rule, verdict, detail)`, `recent()`, `export()` |
 | Settings | 19 | Layer | persisted, schema-validated preferences | `get(key)`, `set(key, value)`, `changes → Stream` |
 | Credentials | 26 | Layer per host | tokens for remotes, never in project files | `get(remote)`, `set`, `clear` |
@@ -117,7 +117,7 @@ Each row: what the module owns, the handful of operations it must expose, and wh
 | Recovery | 11 | Effect | journal of unsaved work, restore on boot | `journal(book, change)`, `pending() → Restorable[]`, `restore(id)`, `discard(id)` |
 | Resources · Import | 20 | Effect | staged, validated import with provenance | `stage(files) → Staged`, `classify(staged)`, `commit(staged) → Books` |
 | Resources · Library | 21 | Effect | stable resource identities and project-role bindings | `resources()`, `bind(role, resource)`, `resolve(role)` |
-| Git | 24, 25 | Effect over FileSystem | repository lifecycle, commits, history, previous versions | `init/open`, `commit(receipts)`, `log(book)`, `checkout(rev) → bytes` |
+| Git | 24, 25 | Layer per host (owner decision 2026-09-06: git2 in Rust behind Tauri commands on desktop; isomorphic-git over the Web FileSystem on Web) | repository lifecycle, commits, history, previous versions; the port is the intersection of user jobs, not either library's API; one contract suite runs against both | `init/open`, `commit(receipts)`, `log(book)`, `checkout(rev) → bytes`, `status` |
 | Remote | 26 | Effect | approved online jobs | `attach(url)`, `push`, `pull`, `publish` |
 | ProjectAdmin | 31 | Effect | rename, delete, metadata, export | `rename`, `delete`, `metadata`, `export(format)` |
 | Shell | 19 | Solid app | commands, routing, localization, settings UI | `command(name)`, routes, `t(message)` |
