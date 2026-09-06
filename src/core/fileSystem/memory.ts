@@ -102,6 +102,7 @@ export const makeMemoryFileSystem = (initial?: MemorySeed): MemoryFileSystem => 
   };
 
   const descendants = (path: string): string[] => {
+    if (path === "") return [...store.keys()].filter((key) => key !== "" && !key.startsWith("/"));
     const prefix = path === "/" ? "/" : `${path}/`;
     return [...store.keys()].filter((key) => key !== path && key.startsWith(prefix));
   };

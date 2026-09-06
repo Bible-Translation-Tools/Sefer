@@ -7,30 +7,18 @@ import process from "node:process";
 
 const READINESS_TIMEOUT_MS = 60_000;
 const POLL_INTERVAL_MS = 250;
-const FIXTURES: readonly string[] = ["small-nt"];
 
 interface Options {
-  readonly fixture: string;
   readonly check: boolean;
 }
 
 const parseOptions = (argv: readonly string[]): Options => {
-  let fixture = "small-nt";
   let check = false;
-  for (let index = 0; index < argv.length; index += 1) {
-    const argument = argv[index];
+  for (const argument of argv) {
     if (argument === "--check") check = true;
-    else if (argument === "--fixture") {
-      const value = argv[index + 1];
-      if (value === undefined) throw new Error("--fixture needs a name");
-      fixture = value;
-      index += 1;
-    } else if (argument !== undefined && argument.startsWith("--fixture="))
-      fixture = argument.slice("--fixture=".length);
-    else throw new Error(`unknown argument: ${String(argument)}`);
+    else throw new Error(`unknown argument: ${argument}`);
   }
-  if (!FIXTURES.includes(fixture)) throw new Error(`unknown fixture: ${fixture}`);
-  return { fixture, check };
+  return { check };
 };
 
 const freePort = (): Promise<number> =>
@@ -93,7 +81,7 @@ const main = async (): Promise<void> => {
     ["--port", String(port), "--strictPort"],
     {
       cwd: root,
-      env: { ...process.env, SEFER_LOG: "1", VITE_SEFER_LOG: "1", SEFER_FIXTURE: options.fixture },
+      env: { ...process.env, SEFER_LOG: "1", VITE_SEFER_LOG: "1" },
       stdio: ["ignore", "pipe", "pipe"],
     },
   );

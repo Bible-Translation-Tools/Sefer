@@ -15,20 +15,9 @@ export interface ObservabilityDevSurface {
   readonly setLevel: ObservabilityService["setLevel"];
 }
 
-export interface DevFixtureFile {
-  readonly path: string;
-  readonly bytes: number;
-}
-
-export interface DevFixtureState {
-  readonly project: string;
-  readonly files: readonly DevFixtureFile[];
-  readonly seededAt: number;
-}
-
 export interface DevState {
   readonly boot: Result.Result<BootInfo, BootError>;
-  readonly fixture: DevFixtureState | undefined;
+  readonly fixture: unknown;
   readonly observability: number;
 }
 

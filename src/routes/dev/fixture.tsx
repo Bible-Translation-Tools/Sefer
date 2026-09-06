@@ -3,11 +3,18 @@ import { For, Show, createSignal } from "solid-js";
 
 import { composeApplication, type Composition } from "../../app/composition";
 import { FixtureFileSystemLive, SMALL_NT, SMALL_NT_ROOT } from "../../core/fixture/smallNt";
-import {
-  installDevState,
-  type DevFixtureFile,
-  type DevFixtureState,
-} from "../../platform/observability";
+import { installDevState } from "../../platform/observability";
+
+interface DevFixtureFile {
+  readonly path: string;
+  readonly bytes: number;
+}
+
+interface DevFixtureState {
+  readonly project: string;
+  readonly files: readonly DevFixtureFile[];
+  readonly seededAt: number;
+}
 
 interface FixtureSession {
   readonly composition: Composition;

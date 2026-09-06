@@ -15,7 +15,7 @@ test("the fixture route renders every seeded file and publishes dev state", asyn
     expect(target.querySelectorAll("li").length).toBe(expected);
   });
 
-  expect(globalThis.__sefer?.state?.().fixture?.files.length).toBe(expected);
+  expect(globalThis.__sefer?.state?.().fixture).toHaveProperty("files.length", expected);
 
   dispose();
   target.remove();
