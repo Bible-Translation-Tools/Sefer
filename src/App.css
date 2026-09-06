@@ -1,0 +1,13 @@
+body {
+  margin: 0;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+main {
+  margin-inline: auto;
+  max-width: 48rem;
+  padding: 4rem 1.5rem;
+}

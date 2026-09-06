@@ -1,0 +1,52 @@
+{
+  "name": "sefer",
+  "version": "0.0.0",
+  "description": "",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "start": "vite",
+    "dev": "vite",
+    "dev:tauri": "tauri dev",
+    "build": "vite build",
+    "build:tauri": "tauri build",
+    "serve": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint .",
+    "format": "oxfmt . '!**/*.gen.*' '!**/*.md' '!**/*.yaml' '!**/*.yml'",
+    "format:check": "oxfmt --check . '!**/*.gen.*' '!**/*.md' '!**/*.yaml' '!**/*.yml'",
+    "boundaries": "node tools/boundaries/check.ts",
+    "test": "vitest",
+    "test:unit": "vitest run --project core",
+    "test:browser": "vitest run --project browser",
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm boundaries && pnpm test:unit && pnpm build",
+    "prepare": "lefthook install"
+  },
+  "dependencies": {
+    "@codemirror/state": "6.5.2",
+    "@solidjs/web": "^2.0.0-rc.6",
+    "@tanstack/solid-router": "^2.0.0-rc.4",
+    "effect": "4.0.0-beta.67",
+    "isomorphic-git": "1.38.4",
+    "solid-js": "^2.0.0-rc.6"
+  },
+  "devDependencies": {
+    "@oxlint/plugins": "1.79.0",
+    "@solidjs/diagnostics": "^2.0.0-rc.6",
+    "@solidjs/vite-plugin": "^3.0.0-next.38",
+    "@tanstack/router-plugin": "1.168.35",
+    "@tauri-apps/cli": "2.11.2",
+    "@types/node": "26.4.1",
+    "@vitest/browser": "4.1.11",
+    "@vitest/browser-playwright": "4.1.11",
+    "eslint-plugin-solid": "~0.17.0",
+    "lefthook": "2.1.9",
+    "oxfmt": "0.53.0",
+    "oxlint": "1.79.0",
+    "playwright": "1.60.0",
+    "typescript": "5.9.3",
+    "vite": "8.2.2",
+    "vitest": "4.1.11"
+  },
+  "packageManager": "pnpm@12.0.0-rc.11"
+}

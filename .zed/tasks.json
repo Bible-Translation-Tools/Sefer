@@ -1,0 +1,42 @@
+[
+  {
+    "label": "check",
+    "command": "pnpm check"
+  },
+  {
+    "label": "typecheck",
+    "command": "pnpm typecheck"
+  },
+  {
+    "label": "lint",
+    "command": "pnpm lint"
+  },
+  {
+    "label": "format",
+    "command": "pnpm format"
+  },
+  {
+    "label": "format check",
+    "command": "pnpm format:check"
+  },
+  {
+    "label": "boundaries",
+    "command": "pnpm boundaries"
+  },
+  {
+    "label": "unit tests",
+    "command": "pnpm test:unit"
+  },
+  {
+    "label": "browser tests",
+    "command": "pnpm test:browser"
+  },
+  {
+    "label": "build",
+    "command": "pnpm build"
+  },
+  {
+    "label": "Tauri build",
+    "command": "pnpm build:tauri"
+  }
+]

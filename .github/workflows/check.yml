@@ -1,0 +1,73 @@
+name: check
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: check-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.4.1
+          cache: pnpm
+
+      - name: Install
+        run: |
+          set -euo pipefail
+          start=$SECONDS
+          pnpm install --frozen-lockfile
+          echo "install ${SECONDS}s" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Repository checks
+        run: |
+          set -euo pipefail
+          {
+            echo "| step | seconds |"
+            echo "| --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for step in typecheck lint format:check boundaries test:unit build; do
+            start=$SECONDS
+            pnpm run "$step"
+            echo "| $step | $((SECONDS - start)) |" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.4.1
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: |
+          set -euo pipefail
+          start=$SECONDS
+          pnpm exec playwright install --with-deps chromium
+          echo "chromium install $((SECONDS - start))s" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Browser tests
+        run: |
+          set -euo pipefail
+          start=$SECONDS
+          pnpm test:browser
+          echo "test:browser $((SECONDS - start))s" >> "$GITHUB_STEP_SUMMARY"

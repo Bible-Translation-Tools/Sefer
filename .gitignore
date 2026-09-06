@@ -1,0 +1,14 @@
+node_modules
+dist
+.vite
+.tanstack
+coverage
+test-results
+playwright-report
+blob-report
+playwright/.cache
+src-tauri/target
+src-tauri/gen
+scratchpad/
+.DS_Store
+*.local
