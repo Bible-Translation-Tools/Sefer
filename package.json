@@ -26,11 +26,12 @@
     "@codemirror/state": "6.5.2",
     "@solidjs/web": "^2.0.0-rc.6",
     "@tanstack/solid-router": "^2.0.0-rc.4",
-    "effect": "4.0.0-beta.67",
+    "effect": "4.0.0-rc.112",
     "isomorphic-git": "1.38.4",
     "solid-js": "^2.0.0-rc.6"
   },
   "devDependencies": {
+    "@effect/platform-node": "4.0.0-rc.112",
     "@oxlint/plugins": "1.79.0",
     "@solidjs/diagnostics": "^2.0.0-rc.6",
     "@solidjs/vite-plugin": "^3.0.0-next.38",

@@ -15,6 +15,8 @@ Effect is available at the application/core boundary for typed failures and, lat
 
 Observability is the first real Layer, built before any domain module so nothing later has to be rethreaded. `src/app/composition.ts` builds `ObservabilityLive` from `src/core/observability.ts`, hands it the host sink from `src/platform/observability.ts`, and runs `boot` inside it, so the first thing the application does is already recorded. See [observability](observability.md) for the service surface, the bounded ring, and the levels.
 
+The filesystem is not composed into the Web or Tauri root yet, because nothing consumes it. `src/app/composition.ts` provides no `FileSystem`; the host supplies one at the first storage slice — the Tauri fs plugin adapter on desktop, OPFS on Web. Tests and tooling use the Node layer in `src/platform/node/fileSystem.ts`. See [storage](storage.md) for the port, the present implementations, and the contract suite that accepts a new one.
+
 TanStack Router owns route matching, navigation, loaders, and route code splitting. It is not the sole owner of an open Project and is not assumed to be the dependency injection mechanism. A future composition root may pass capabilities explicitly or provide a narrowly scoped Effect Layer after the first real storage operation establishes the need.
 
 Core code must not import Solid, TanStack Router, Tauri, CodeMirror, DOM globals, or native filesystem implementations. Host-specific modules may depend inward on core contracts; core contracts must remain usable from Node tests. See [boundaries](boundaries.md) for the rule and the checks that enforce it.

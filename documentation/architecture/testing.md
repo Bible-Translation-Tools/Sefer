@@ -7,7 +7,7 @@ Status: agreed direction; adopt incrementally as capabilities arrive. This docum
 The current manifest and Vite/Vitest configuration define these commands:
 
 - `pnpm test`: starts Vitest with its normal interactive/watch behavior.
-- `pnpm test:unit`: runs the Node `core` project — `src/core/**/*.test.ts`, `src/app/**/*.test.ts`, and `tools/**/*.test.ts`.
+- `pnpm test:unit`: runs the Node `core` project — every `src/**/*.test.ts` except `*.browser.test.*`, and `tools/**/*.test.ts`.
 - `pnpm test:browser`: runs Chromium Browser Mode tests through the Playwright provider.
 - `pnpm check`: runs typecheck, lint, format check, `pnpm boundaries`, Node tests, and the Web build. Lefthook runs the same commands on `pre-commit`, and `.github/workflows/check.yml` runs them in CI with `pnpm test:browser` in a second job.
 

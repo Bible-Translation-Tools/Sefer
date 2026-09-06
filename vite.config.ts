@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import solid from "@solidjs/vite-plugin";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import { playwright } from "@vitest/browser-playwright";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 const shortGitSha = (): string | null => {
   try {
@@ -46,7 +46,8 @@ export default defineConfig(({ mode }) => ({
         test: {
           name: "core",
           environment: "node",
-          include: ["src/core/**/*.test.ts", "src/app/**/*.test.ts", "tools/**/*.test.ts"],
+          include: ["src/**/*.test.ts", "tools/**/*.test.ts"],
+          exclude: [...configDefaults.exclude, "**/*.browser.test.*"],
         },
       },
       {

@@ -10,6 +10,7 @@ This folder holds durable project guidance for humans and agents. Root `AGENTS.m
 - Working with Solid or investigating reactivity: [Solid development and diagnostics](./architecture/solid.md).
 - Understanding Web/Tauri composition: [composition](./architecture/composition.md).
 - Knowing what `src/core` may depend on: [boundaries](./architecture/boundaries.md).
+- Reading or writing files: [storage](./architecture/storage.md).
 - Using shared product terms: [glossary](./glossary.md).
 - Adding logs, spans, or agent-visible runtime evidence: [observability shorthand](./architecture/observability.md).
 

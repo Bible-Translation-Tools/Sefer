@@ -10,6 +10,11 @@ Core may not depend on Solid (`solid-js`, `@solidjs/*`), TanStack Router
 (`window`, `document`, `navigator`, `localStorage`, `sessionStorage`, `fetch`).
 A capability core needs arrives as a core port that a host implements.
 
+The filesystem is the shape of that rule, not an exception to it: the port is
+Effect's own `FileSystem` service, which core may use because it comes from
+`effect`, while every native implementation stays outside core. See
+[storage](storage.md).
+
 CodeMirror belongs to the editor layer and will live in `src/editor/` when that
 layer exists. It is not a core dependency at any depth.
 
