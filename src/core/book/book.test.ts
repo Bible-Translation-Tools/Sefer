@@ -3,7 +3,6 @@ import { expect, test } from "vitest";
 
 import { FixtureFileSystemLive, SMALL_NT_ROOT } from "../fixture/smallNt";
 import { Observability, ObservabilityLive } from "../observability";
-import { describes } from "../source/source";
 import type { Book, Receipt } from "./book";
 import { openBook } from "./book";
 
@@ -41,12 +40,12 @@ test("a book opened over the fixture filesystem carries its id, receipts, and su
   expect(original.startsWith("\\id PHM")).toBe(true);
 
   expect(first.origin).toBe("test");
-  expect(describes(first.before, original)).toBe(true);
-  expect(describes(first.after, original)).toBe(false);
-  expect(describes(first.after, `${original}\\rem checked\n`)).toBe(true);
+  expect(first.before.length).toBe(original.length);
+  expect(first.after.revision).toBe(first.before.revision + 1);
+  expect(first.after.length).toBe(`${original}\\rem checked\n`.length);
 
   expect(later.before).toEqual(first.after);
-  expect(describes(later.after, book.source().text)).toBe(true);
+  expect(later.after.length).toBe(book.source().text.length);
   expect(later.after.revision).toBe(2);
 
   expect(heard).toEqual(["first r1", "second r1", "first r2"]);

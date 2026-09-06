@@ -3,7 +3,6 @@ import { Data, Result } from "effect";
 export interface SourceStamp {
   readonly revision: number;
   readonly length: number;
-  readonly hash: string;
 }
 
 export interface Source {
@@ -24,47 +23,9 @@ export class SourceDecodeError extends Data.TaggedError("SourceDecodeError")<{
   readonly description: string;
 }> {}
 
-const hex16 = (limb: number): string => limb.toString(16).padStart(4, "0");
-
-/**
- * FNV-1a 64 over UTF-16 code units, carried in four 16-bit limbs so every
- * partial product stays exact in a double. Onion's header hash (xxh3-64) may
- * replace this at the engine boundary later; nothing here tries to match it.
- */
-export const hashText = (text: string): string => {
-  let h0 = 0x2325;
-  let h1 = 0x8422;
-  let h2 = 0x9ce4;
-  let h3 = 0xcbf2;
-  for (let index = 0; index < text.length; index += 1) {
-    h0 ^= text.charCodeAt(index);
-    const p0 = h0 * 0x1b3;
-    const p1 = h1 * 0x1b3 + (p0 >>> 16);
-    const p2 = h2 * 0x1b3 + h0 * 0x100 + (p1 >>> 16);
-    const p3 = h3 * 0x1b3 + h1 * 0x100 + (p2 >>> 16);
-    h0 = p0 & 0xffff;
-    h1 = p1 & 0xffff;
-    h2 = p2 & 0xffff;
-    h3 = p3 & 0xffff;
-  }
-  return `${hex16(h3)}${hex16(h2)}${hex16(h1)}${hex16(h0)}`;
-};
-
-const stampFor = (text: string, revision: number): SourceStamp => {
-  let hash: string | undefined;
-  return {
-    revision,
-    length: text.length,
-    get hash(): string {
-      hash ??= hashText(text);
-      return hash;
-    },
-  };
-};
-
 const sourceAt = (text: string, revision: number): Source => ({
   text,
-  stamp: stampFor(text, revision),
+  stamp: { revision, length: text.length },
 });
 
 const refuse = (reason: DecodeRefusal, description: string): SourceDecodeError =>
@@ -113,6 +74,3 @@ export const apply = (source: Source, change: Change): Source =>
     `${source.text.slice(0, change.from)}${change.insert}${source.text.slice(change.to)}`,
     source.stamp.revision + 1,
   );
-
-export const describes = (stamp: SourceStamp, text: string): boolean =>
-  stamp.length === text.length && stamp.hash === hashText(text);
