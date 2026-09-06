@@ -50,9 +50,21 @@ export const hashText = (text: string): string => {
   return `${hex16(h3)}${hex16(h2)}${hex16(h1)}${hex16(h0)}`;
 };
 
+const stampFor = (text: string, revision: number): SourceStamp => {
+  let hash: string | undefined;
+  return {
+    revision,
+    length: text.length,
+    get hash(): string {
+      hash ??= hashText(text);
+      return hash;
+    },
+  };
+};
+
 const sourceAt = (text: string, revision: number): Source => ({
   text,
-  stamp: { revision, length: text.length, hash: hashText(text) },
+  stamp: stampFor(text, revision),
 });
 
 const refuse = (reason: DecodeRefusal, description: string): SourceDecodeError =>

@@ -17,3 +17,5 @@ No derived product — analysis, findings, fixes, search hits, diffs, save basel
 `openBook(path)` reads through the `FileSystem` service and decodes, so it fails with `PlatformError` or `SourceDecodeError`. It captures `Observability` through `Effect.serviceOption` at open time, which keeps `apply` synchronous: each `apply` emits one `book.apply` note (`rewrote`, `<id> r<before> -> r<after> (<origin>)`, correlated by the book id) when the Layer was in context, and nothing when it was not.
 
 What Book is **not** yet: it is not editor-backed (no CodeMirror state, no undo history), it cannot save, and it keeps no history beyond the current revision. Those are slices 05–08 and 10. See [plan 04](../../planning/00-ideas/v2-04-source-and-book-lifetime.md).
+
+The hash is computed on first read of `stamp.hash` and memoized, so `apply` on the keystroke path costs the string splice only (measured 2026-09-06 on Psalms, 272k code units: eager hash 0.9 ms per apply, lazy under 0.2 ms). Boundaries that exchange derived products pay the hash once when they call `describes`.
