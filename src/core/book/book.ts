@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Option, type PlatformError } from "effect";
+import { Effect, FileSystem, Option, Result, type PlatformError } from "effect";
 
 import { Observability, type ObservabilityService } from "../observability";
 import {
@@ -6,6 +6,7 @@ import {
   decode,
   type Change,
   type Source,
+  type SourceChangeError,
   type SourceDecodeError,
   type SourceStamp,
 } from "../source/source";
@@ -22,7 +23,7 @@ export interface Book {
   readonly id: BookId;
   readonly path: string;
   source(): Source;
-  apply(change: Change, origin: string): Receipt;
+  apply(change: Change, origin: string): Result.Result<Receipt, SourceChangeError>;
   changes(fn: (receipt: Receipt) => void): () => void;
 }
 
@@ -52,7 +53,10 @@ export const makeBook = (
     source: () => current,
     apply: (change, origin) => {
       const before = current.stamp;
-      current = applyToSource(current, change);
+      const next = applyToSource(current, change);
+      if (Result.isFailure(next)) return Result.fail(next.failure);
+
+      current = next.success;
       const receipt: Receipt = { before, after: current.stamp, origin };
       observability?.note(
         "book.apply",
@@ -61,7 +65,7 @@ export const makeBook = (
         id,
       );
       for (const subscriber of Array.from(subscribers)) subscriber(receipt);
-      return receipt;
+      return Result.succeed(receipt);
     },
     changes: (fn) => {
       subscribers.add(fn);

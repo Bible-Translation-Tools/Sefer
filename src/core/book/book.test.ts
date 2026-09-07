@@ -1,4 +1,4 @@
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Result } from "effect";
 import { expect, test } from "vitest";
 
 import { FixtureFileSystemLive, SMALL_NT_ROOT } from "../fixture/smallNt";
@@ -10,7 +10,9 @@ const PHILEMON = `${SMALL_NT_ROOT}/58-PHM.usfm`;
 
 const append = (book: Book, insert: string, origin: string): Receipt => {
   const end = book.source().text.length;
-  return book.apply({ from: end, to: end, insert }, origin);
+  const applied = book.apply({ from: end, to: end, insert }, origin);
+  if (Result.isFailure(applied)) throw new Error(`apply refused: ${applied.failure.reason}`);
+  return applied.success;
 };
 
 test("a book opened over the fixture filesystem carries its id, receipts, and subscribers", async () => {

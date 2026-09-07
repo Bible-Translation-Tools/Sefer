@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import { describe, expect, test } from "vitest";
 
 import {
+  MAX_TEXT,
   Observability,
   ObservabilityLive,
   type ObservabilityEvent,
@@ -185,5 +186,36 @@ describe("effect integration", () => {
     expect(span.kind).toBe("span");
     expect(span.ms).toBeGreaterThanOrEqual(0);
     expect(typeof span.correlation).toBe("string");
+  });
+});
+
+describe("sink isolation", () => {
+  test("a throwing sink drops the export, keeps the ring, and never reaches the caller", () => {
+    const long = "x".repeat(MAX_TEXT + 40);
+    const { events, dropped } = withRing(
+      {
+        sink: () => {
+          throw new Error("sink is on fire");
+        },
+      },
+      (observability) => {
+        expect(() => observability.note("boot", "ready", long, "op-1")).not.toThrow();
+        return Effect.succeed({ events: observability.recent(), dropped: observability.dropped() });
+      },
+    );
+
+    expect(events.map((event) => event.name)).toEqual(["boot"]);
+    expect(dropped).toBe(1);
+    expect(named(events, "boot").detail).toBe("x".repeat(MAX_TEXT));
+    expect(named(events, "boot").detail?.length).toBe(MAX_TEXT);
+  });
+
+  test("a name longer than MAX_TEXT is truncated before it is recorded", () => {
+    const events = withRing({}, (observability) => {
+      observability.note("r".repeat(MAX_TEXT + 1), "passed");
+      return Effect.succeed(observability.recent());
+    });
+
+    expect(events[0]?.name).toBe("r".repeat(MAX_TEXT));
   });
 });

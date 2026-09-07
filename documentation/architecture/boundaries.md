@@ -2,7 +2,11 @@
 
 `src/core` holds domain and application policy that must run under plain Node.
 
-Core may use Effect, Node builtins, and other core modules.
+Core may use Effect and other core modules. Core policy may **not** use Node:
+`node:*` bare specifiers and `@effect/platform-node*` are forbidden, because
+core must run in a browser as well as under Node. A core `*.test.ts` file is
+exempt — a test is Node's own program and may reach for the builtins and the
+Node platform layer to build the fixtures the policy runs against.
 
 Core may not depend on Solid (`solid-js`, `@solidjs/*`), TanStack Router
 (`@tanstack/*`), Tauri (`@tauri-apps/*`), CodeMirror (`@codemirror/*`),

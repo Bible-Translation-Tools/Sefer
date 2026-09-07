@@ -23,6 +23,13 @@ export class SourceDecodeError extends Data.TaggedError("SourceDecodeError")<{
   readonly description: string;
 }> {}
 
+export type ChangeRefusal = "RangeOutOfBounds" | "SplitsSurrogatePair" | "CarriageReturn";
+
+export class SourceChangeError extends Data.TaggedError("SourceChangeError")<{
+  readonly reason: ChangeRefusal;
+  readonly description: string;
+}> {}
+
 const sourceAt = (text: string, revision: number): Source => ({
   text,
   stamp: { revision, length: text.length },
@@ -69,8 +76,47 @@ export const decode = (bytes: Uint8Array): Result.Result<Source, SourceDecodeErr
 
 export const encode = (source: Source): Uint8Array => new TextEncoder().encode(source.text);
 
-export const apply = (source: Source, change: Change): Source =>
-  sourceAt(
-    `${source.text.slice(0, change.from)}${change.insert}${source.text.slice(change.to)}`,
-    source.stamp.revision + 1,
+const refuseChange = (reason: ChangeRefusal, description: string): SourceChangeError =>
+  new SourceChangeError({ reason, description });
+
+const splitsSurrogatePair = (text: string, index: number): boolean => {
+  if (index <= 0 || index >= text.length) return false;
+  const before = text.charCodeAt(index - 1);
+  const at = text.charCodeAt(index);
+  return before >= 0xd800 && before <= 0xdbff && at >= 0xdc00 && at <= 0xdfff;
+};
+
+export const apply = (source: Source, change: Change): Result.Result<Source, SourceChangeError> => {
+  const { from, to, insert } = change;
+
+  if (
+    !Number.isInteger(from) ||
+    !Number.isInteger(to) ||
+    from < 0 ||
+    from > to ||
+    to > source.text.length
+  )
+    return Result.fail(
+      refuseChange(
+        "RangeOutOfBounds",
+        `[${from}, ${to}) is not a range inside text of length ${source.text.length}`,
+      ),
+    );
+
+  if (splitsSurrogatePair(source.text, from) || splitsSurrogatePair(source.text, to))
+    return Result.fail(
+      refuseChange("SplitsSurrogatePair", `[${from}, ${to}) lands inside a surrogate pair`),
+    );
+
+  if (insert.includes("\r"))
+    return Result.fail(
+      refuseChange("CarriageReturn", "the inserted text contains a carriage return"),
+    );
+
+  return Result.succeed(
+    sourceAt(
+      `${source.text.slice(0, from)}${insert}${source.text.slice(to)}`,
+      source.stamp.revision + 1,
+    ),
   );
+};

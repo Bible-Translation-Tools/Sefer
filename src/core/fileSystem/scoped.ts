@@ -11,6 +11,9 @@ const refuse = (method: string, path: string): PlatformError.PlatformError =>
     description: `"${path}" resolves outside the project root`,
   });
 
+const escapesRootPattern = (pattern: string): boolean =>
+  isAbsolutePath(pattern) || pattern.split("/").includes("..");
+
 export const scopedTo = (
   fileSystem: FileSystem.FileSystem,
   root: string,
@@ -66,9 +69,11 @@ export const scopedTo = (
     copyFile: (fromPath, toPath) =>
       two("copyFile", fromPath, toPath, (from, to) => fileSystem.copyFile(from, to)),
     glob: (pattern, options) =>
-      Effect.flatMap(temporaryIn("glob", options?.root), (resolved) =>
-        fileSystem.glob(pattern, { ...options, root: resolved }),
-      ),
+      escapesRootPattern(pattern)
+        ? Effect.fail(refuse("glob", pattern))
+        : Effect.flatMap(temporaryIn("glob", options?.root), (resolved) =>
+            fileSystem.glob(pattern, { ...options, root: resolved }),
+          ),
     link: (fromPath, toPath) =>
       two("link", fromPath, toPath, (from, to) => fileSystem.link(from, to)),
     makeDirectory: (path, options) =>

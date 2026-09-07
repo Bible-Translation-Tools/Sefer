@@ -30,6 +30,7 @@ flowchart TB
     Search[Search 18]
     MultiBook[MultiBook 28]
     Diff[Diff 23]
+    Baseline[Baseline · data contract]
   end
 
   subgraph durable [Durable editing · Effect]
@@ -52,7 +53,6 @@ flowchart TB
   ProjectAnalysis --> Galley
   ProjectAnalysis --> Source
   ProjectAnalysis --> FileSystem
-  Source --> Galley
   Editor --> Source
   Findings --> ProjectAnalysis
   Fixes --> Findings
@@ -63,7 +63,8 @@ flowchart TB
   MultiBook --> Editor
   MultiBook --> ProjectAnalysis
   Diff --> Source
-  Diff --> Save
+  Diff --> Baseline
+  Save --> Baseline
   Save --> Source
   Save --> FileSystem
   Recovery --> Save
@@ -105,14 +106,15 @@ Each row: what the module owns, the handful of operations it must expose, and wh
 | Credentials | 26 | Layer per host | tokens for remotes, never in project files | `get(remote)`, `set`, `clear` |
 | Galley | 03 | Layer for load, sync API | the pinned Scripture Kitchen WASM artifact (Galley = Onion parser + Sous proofreading, composed upstream), version acceptance, one `analyze` | `load() → scoped`, `version`, `analyze(text) → Analysis` (sync, one wants set: structure + diagnostics), `attrs` |
 | ProjectAnalysis | 13 | Effect | Sefer's whole-project consumer of Galley: census of a project's books, cross-book results, freshness by stamp. Not resources (see Resources) | `census(project)`, `analyze(project) → per-book stamped products`, `fresh?(stamp)` |
-| Source and Book | 04 | sync core, started (plain Book) | canonical UTF-8 text per book, `SourceStamp {revision, len, hash}`, book open/close | `open(bytes) → Book`, `book.text`, `book.stamp`, `book.apply(change) → stamp`, `subscribe`, `close` |
+| Source and Book | 04 | sync core, started (plain Book) | canonical UTF-8 text per book, `SourceStamp {revision, length}`, book open/close | `open(bytes) → Book`, `book.text`, `book.stamp`, `book.apply(change) → Result<Receipt, SourceChangeError>`, `subscribe`, `close` |
 | Editor | 05–08 | sync core, CodeMirror area | mapping, registry, plan, owned index, phases, stops, views; the funnel and undo | `mount(book, projection)`, `dispatch(intent) → Verdict`, `undo/redo`, `view(mode)`, `stopAt(pos)` |
 | Findings | 14 | sync core | one findings model over engine diagnostics and project checks, freshness against stamps | `list(book) → Finding[] @stamp`, `navigate(finding)`, `stale?(finding, stamp)` |
 | Fixes | 15 | sync core | safe application of engine-produced edits through the funnel | `preview(finding) → Edit[] @stamp`, `apply(preview)` refused if stamp moved |
 | Satellites | 16, 17 | sync core | read-only surfaces and editable windows over canonical content, clip, disposal | `openWindow(book, range, opts)`, `window.submit(change)`, `close` |
 | Search | 18 | sync core | project find with stamped hits, one-match replacement | `find(query) → Hit[] @stamp`, `replace(hit)` refused if stale |
 | MultiBook | 28 | sync core | one command across books, one history event per book, expiring immediate undo | `run(label, plan)`, `pendingUndo()`, `undoPending()` |
-| Diff | 23 | sync core over Save's baseline | saved-vs-working comparison and chosen-hunk revert | `compare(book) → Hunks`, `revert(hunk)` |
+| Diff | 23 | sync core over a Baseline | saved-vs-working comparison and chosen-hunk revert | `compare(book, baseline) → Hunks`, `revert(hunk)` |
+| Baseline | 10, 23 | data contract | a stamped snapshot of a book's last-saved bytes; produced by `SaveCoordinator`, read by `Diff` | `{ book, stamp, bytes }` — a value, no operations |
 | SaveCoordinator | 10 | Effect | persisted baseline per book, write receipts, external-change detection | `save(book) → Receipt {stamp, bytes hash}`, `baseline(book)`, `externalChanges → Stream` |
 | Recovery | 11 | Effect | journal of unsaved work, restore on boot | `journal(book, change)`, `pending() → Restorable[]`, `restore(id)`, `discard(id)` |
 | Resources · Import | 20 | Effect, schema started (`src/core/resources`) | staged, validated import with provenance | `stage(files) → Staged`, `classify(staged)`, `commit(staged) → Books` |
@@ -128,6 +130,9 @@ Each row: what the module owns, the handful of operations it must expose, and wh
 - The gates map onto columns: editor foundation (A) is the Core column with Galley; satellite correctness (B) is Satellites and Search; engine integration (C) is Galley, ProjectAnalysis, Findings, Fixes; durable editing (D) is the Durable column.
 - Only five modules are host-specific Layers. Everything in Core is testable in Node against the real engine and real CodeMirror state; everything in Durable is testable against a temporary directory or isolated Web storage.
 - `SourceStamp` is the one type every arrow into Findings, Fixes, Search, Save, Recovery and Diff carries. It is the freshness contract; no module trusts a length.
+- Source is a leaf: it points at nothing. It computes no hash of its own, so it needs no edge to Galley; content identity comes back from `analyze` at the Galley boundary.
+- Diff depends on a `Baseline`, not on the `SaveCoordinator` service. The coordinator produces the stamped snapshot; Diff is synchronous core over that value and never reaches into a Layer.
+- Observability sits at operation boundaries — the seams that own a lifetime, an I/O call, or a decision. Pure transformations carry no spans of their own; a span per synchronous function would cost more than it explains. The ring caps event text (`name` and `detail`) at 512 characters, so no event carries a payload.
 - Nothing here needs a service registry. Composition roots (Web, Tauri) provide the five host Layers and the Galley Layer; the rest is constructed from them.
 
 ## Names

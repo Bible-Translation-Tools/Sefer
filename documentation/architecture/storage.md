@@ -25,7 +25,9 @@ When `move` is absent the fallback for a file is copy-then-remove: the source by
 
 isomorphic-git 1.38.4 reads a global `Buffer` (`Buffer.from`, `Buffer.alloc`, `Buffer.concat`, `Buffer.isBuffer`) and no bundler supplies one to a browser build. The Web host must install one before calling into Git; `src/platform/web/git.browser.test.ts` does so from the `buffer` package, which is the reason that package is a dependency.
 
-`scopedTo(fileSystem, root)` in `src/core/fileSystem/scoped.ts` resolves every path against `root` and refuses absolute paths and any path that escapes the root with a `PlatformError` whose reason is `BadArgument`. UI and domain code receive a scoped filesystem, not raw path authority.
+`scopedTo(fileSystem, root)` in `src/core/fileSystem/scoped.ts` resolves every path against `root` and refuses absolute paths and any path that escapes the root with a `PlatformError` whose reason is `BadArgument`. `glob` takes a pattern, not a path, so it is judged on its own text: a pattern that starts with `/` or contains a `..` segment is refused before the host sees it, and `options.root` goes through the same check every path does. UI and domain code receive a scoped filesystem, not raw path authority.
+
+`scopedTo` is **lexical confinement against programming errors, not a security boundary**. It reasons about path text only: it does not call `realPath`, does not follow symlinks, and a symlink inside the root that points outside it is followed by the host. Host-enforced scope is the authority — the Tauri plugin's scope configuration on desktop, OPFS origin isolation on the Web. Treat a `scopedTo` refusal as a caught bug, never as a defence against a hostile path.
 
 ## Acceptance
 

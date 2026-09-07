@@ -34,6 +34,7 @@ export interface ObservabilityService {
   readonly export: () => string;
   readonly level: () => Level;
   readonly setLevel: (level: Level) => void;
+  readonly dropped: () => number;
 }
 
 export interface ObservabilityOptions {
@@ -46,9 +47,13 @@ export const DEFAULT_CAPACITY = 2000;
 
 export const DEFAULT_LEVEL: Level = "all";
 
+export const MAX_TEXT = 512;
+
 const VOLUME: Readonly<Record<Level, number>> = { off: 0, verdicts: 1, spans: 2, all: 3 };
 
 const round = (ms: number): number => Math.round(ms * 1000) / 1000;
+
+const capped = (text: string): string => (text.length <= MAX_TEXT ? text : text.slice(0, MAX_TEXT));
 
 const messageText = (message: unknown): string => {
   if (typeof message === "string") return message;
@@ -85,13 +90,25 @@ const makeRing = (options: ObservabilityOptions): Ring => {
   let at = 0;
   let count = 0;
   let seq = 0;
+  let dropped = 0;
 
   const push = (event: Omit<ObservabilityEvent, "seq" | "t">): void => {
-    const recorded: ObservabilityEvent = { seq: seq++, t: Date.now(), ...event };
+    const recorded: ObservabilityEvent = {
+      seq: seq++,
+      t: Date.now(),
+      ...event,
+      name: capped(event.name),
+      ...(event.detail === undefined ? {} : { detail: capped(event.detail) }),
+    };
     buffer[at] = recorded;
     at = (at + 1) % capacity;
     if (count < capacity) count += 1;
-    if (sink !== undefined) sink(recorded, `${toLine(recorded)}\n`);
+    if (sink === undefined) return;
+    try {
+      sink(recorded, `${toLine(recorded)}\n`);
+    } catch {
+      dropped += 1;
+    }
   };
 
   const recent = (limit?: number): readonly ObservabilityEvent[] => {
@@ -133,6 +150,7 @@ const makeRing = (options: ObservabilityOptions): Ring => {
     setLevel: (next) => {
       level = next;
     },
+    dropped: () => dropped,
     recordLog: (message, logLevel) => {
       if (VOLUME[level] < VOLUME.verdicts) return;
       push({

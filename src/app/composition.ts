@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Layer, Option, Result } from "effect";
+import { Effect, FileSystem, Layer, ManagedRuntime, Option, Result } from "effect";
 
 import { boot, type BootError, type BootInfo } from "../core/boot";
 import { Observability, ObservabilityLive, type ObservabilityService } from "../core/observability";
@@ -12,14 +12,14 @@ export interface Composition {
   readonly boot: Result.Result<BootInfo, BootError>;
   readonly observability: ObservabilityService;
   readonly fileSystem: FileSystem.FileSystem | undefined;
-  // The root's *built* services, not the recipe that built them: providing it
-  // again hands back the same Observability ring instead of making a second
-  // one, so a page may merge a child Layer over the root without recomposing.
   readonly layer: Layer.Layer<Observability>;
+  readonly runtime: ManagedRuntime.ManagedRuntime<Observability, never>;
+  readonly dispose: () => Promise<void>;
 }
 
 export interface CompositionOptions {
   readonly fileSystem?: Layer.Layer<FileSystem.FileSystem> | undefined;
+  readonly layers?: Layer.Layer<never> | undefined;
 }
 
 const telemetryLayer = async (): Promise<Layer.Layer<never> | undefined> => {
@@ -35,7 +35,13 @@ const telemetryLayer = async (): Promise<Layer.Layer<never> | undefined> => {
   );
 };
 
-const program: Effect.Effect<Composition, never, Observability> = Effect.gen(function* () {
+interface Composed {
+  readonly boot: Result.Result<BootInfo, BootError>;
+  readonly observability: ObservabilityService;
+  readonly fileSystem: FileSystem.FileSystem | undefined;
+}
+
+const program: Effect.Effect<Composed, never, Observability> = Effect.gen(function* () {
   const observability = yield* Observability;
   installObservabilityDevSurface(observability);
 
@@ -53,14 +59,8 @@ const program: Effect.Effect<Composition, never, Observability> = Effect.gen(fun
   else observability.note("boot", "failed", result.failure._tag);
 
   const fileSystem = yield* Effect.serviceOption(FileSystem.FileSystem);
-  const services = yield* Effect.context<Observability>();
 
-  return {
-    boot: result,
-    observability,
-    fileSystem: Option.getOrUndefined(fileSystem),
-    layer: Layer.succeedContext(services),
-  };
+  return { boot: result, observability, fileSystem: Option.getOrUndefined(fileSystem) };
 });
 
 export const composeApplication = async (
@@ -69,7 +69,18 @@ export const composeApplication = async (
   const telemetry = await telemetryLayer();
   const observability = ObservabilityLive({ sink: hostSink() });
   const recorded = telemetry === undefined ? observability : Layer.merge(observability, telemetry);
+  const withExtra = options.layers === undefined ? recorded : Layer.merge(recorded, options.layers);
   const layer =
-    options.fileSystem === undefined ? recorded : Layer.merge(recorded, options.fileSystem);
-  return await Effect.runPromise(Effect.provide(program, layer));
+    options.fileSystem === undefined ? withExtra : Layer.merge(withExtra, options.fileSystem);
+
+  const runtime: ManagedRuntime.ManagedRuntime<Observability, never> = ManagedRuntime.make(layer);
+  const composed = await runtime.runPromise(program);
+  const context = await runtime.context();
+
+  return {
+    ...composed,
+    layer: Layer.succeedContext(context),
+    runtime,
+    dispose: () => runtime.dispose(),
+  };
 };

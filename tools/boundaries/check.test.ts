@@ -123,11 +123,32 @@ describe("core boundary checker", () => {
     ).toEqual([]);
   });
 
-  test("allows effect and node builtins", () => {
+  test("allows effect", () => {
     expect(
       violationsFor(
         "src/core/allowed.ts",
-        'import { Effect } from "effect";\nimport path from "node:path";\nexport const a = [Effect, path];\n',
+        'import { Effect } from "effect";\nexport const a = Effect;\n',
+      ),
+    ).toEqual([]);
+  });
+
+  test("forbids node in core policy and allows it in a core test", () => {
+    const policy = violationsFor(
+      "src/core/nodeUser.ts",
+      'import fs from "node:fs";\nimport { NodeFileSystem } from "@effect/platform-node";\nexport const a = [fs, NodeFileSystem];\n',
+    );
+
+    expect(policy.map((violation) => violation.specifier)).toEqual([
+      "node:fs",
+      "@effect/platform-node",
+    ]);
+    expect(policy[0]?.reason).toContain('starts with "node:"');
+    expect(policy[1]?.reason).toContain("@effect/platform-node");
+
+    expect(
+      violationsFor(
+        "src/core/x.test.ts",
+        'import fs from "node:fs";\nimport { NodeFileSystem } from "@effect/platform-node";\nexport const a = [fs, NodeFileSystem];\n',
       ),
     ).toEqual([]);
   });

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { fileSystemContract } from "./contract";
 import { makeMemoryFileSystem, MemoryFileSystemLive } from "./memory";
 import { escapesRoot, joinPath, normalisePath, parentPath } from "./path";
+import { scopedTo } from "./scoped";
 
 fileSystemContract("memory", () => MemoryFileSystemLive());
 
@@ -26,6 +27,23 @@ describe("memory FileSystem", () => {
     seed({ "/project/nested/book.usfm": "seeded" });
     const entries = await Effect.runPromise(fileSystem.readDirectory("/project/nested"));
     expect(entries).toEqual(["book.usfm"]);
+  });
+
+  it("refuses a glob pattern that escapes the scoped root before the host sees it", async () => {
+    const { fileSystem } = makeMemoryFileSystem();
+    const scoped = scopedTo(fileSystem, "/project");
+
+    // The refusal must name the escape, not the unimplemented method: that is
+    // the proof the scope judged the pattern instead of delegating it.
+    await expect(Effect.runPromise(scoped.glob("../*.usfm"))).rejects.toThrow(
+      /resolves outside the project root/,
+    );
+    await expect(Effect.runPromise(scoped.glob("/etc/*"))).rejects.toThrow(
+      /resolves outside the project root/,
+    );
+    await expect(Effect.runPromise(scoped.glob("notes/*.usfm"))).rejects.toThrow(
+      /glob is not implemented/,
+    );
   });
 
   it("refuses operations it does not implement", async () => {

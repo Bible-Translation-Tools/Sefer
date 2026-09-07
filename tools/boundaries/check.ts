@@ -17,6 +17,7 @@ export interface BoundaryOptions {
   readonly paths?: Readonly<Record<string, readonly string[]>>;
   readonly pathsBase?: string;
   readonly forbiddenPackages?: readonly string[];
+  readonly forbiddenPrefixes?: readonly string[];
   readonly rawAssetDirs?: readonly string[];
 }
 
@@ -27,7 +28,22 @@ export const DEFAULT_FORBIDDEN_PACKAGES: readonly string[] = [
   "@tauri-apps/*",
   "isomorphic-git",
   "@codemirror/*",
+  "@effect/platform-node*",
 ];
+
+// A bare-specifier prefix, not a package name: "node:fs" and "node:fs/promises"
+// are both the Node builtin namespace, which no package glob spells.
+export const DEFAULT_FORBIDDEN_PREFIXES: readonly string[] = ["node:"];
+
+// Core policy must run under a browser as well as under Node, but a core *test*
+// is Node's own program: it may reach for the builtins and the Node platform
+// layer to set up the fixtures the policy runs against.
+const TEST_FILE = /\.test\.tsx?$/;
+
+const NODE_ONLY: readonly string[] = ["node:", "@effect/platform-node"];
+
+const isNodeSpecifier = (specifier: string): boolean =>
+  NODE_ONLY.some((prefix) => specifier.startsWith(prefix));
 
 interface RawSpecifier {
   readonly value: string;
@@ -115,7 +131,7 @@ const isInside = (directory: string, target: string): boolean => {
 };
 
 const matchesPackage = (specifier: string, pattern: string): boolean => {
-  if (pattern.endsWith("/*")) return specifier.startsWith(pattern.slice(0, -1));
+  if (pattern.endsWith("*")) return specifier.startsWith(pattern.slice(0, -1));
   return specifier === pattern || specifier.startsWith(`${pattern}/`);
 };
 
@@ -146,6 +162,7 @@ export const checkCoreBoundary = (options: BoundaryOptions): BoundaryViolation[]
   const paths = options.paths ?? {};
   const pathsBase = path.resolve(options.pathsBase ?? path.dirname(coreDir));
   const forbidden = options.forbiddenPackages ?? DEFAULT_FORBIDDEN_PACKAGES;
+  const forbiddenPrefixes = options.forbiddenPrefixes ?? DEFAULT_FORBIDDEN_PREFIXES;
   const rawAssetDirs = (options.rawAssetDirs ?? []).map((directory) => path.resolve(directory));
   const violations: BoundaryViolation[] = [];
 
@@ -157,6 +174,7 @@ export const checkCoreBoundary = (options: BoundaryOptions): BoundaryViolation[]
       true,
       file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
     );
+    const isTest = TEST_FILE.test(file);
 
     for (const specifier of collectSpecifiers(source)) {
       const { line, character } = source.getLineAndCharacterOfPosition(specifier.position);
@@ -191,6 +209,14 @@ export const checkCoreBoundary = (options: BoundaryOptions): BoundaryViolation[]
       if (aliased !== null) {
         if (!isInside(coreDir, aliased))
           report(`alias resolves to ${path.relative(pathsBase, aliased)}, outside core`);
+        continue;
+      }
+
+      if (isTest && isNodeSpecifier(specifier.value)) continue;
+
+      const bannedPrefix = forbiddenPrefixes.find((prefix) => specifier.value.startsWith(prefix));
+      if (bannedPrefix !== undefined) {
+        report(`forbidden bare specifier for core (starts with "${bannedPrefix}")`);
         continue;
       }
 
