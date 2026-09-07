@@ -12,6 +12,7 @@ This folder holds durable project guidance for humans and agents. Root `AGENTS.m
 - Knowing what `src/core` may depend on: [boundaries](./architecture/boundaries.md).
 - Reading or writing files: [storage](./architecture/storage.md).
 - Working with a book's canonical text or its stamp: [source and book](./architecture/source.md).
+- Validating Scripture Burrito or Resource Container metadata: [resource metadata schemas](./architecture/resources.md).
 - Using shared product terms: [glossary](./glossary.md).
 - Adding logs, spans, or agent-visible runtime evidence: [observability shorthand](./architecture/observability.md).
 

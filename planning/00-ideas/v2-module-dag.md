@@ -115,8 +115,8 @@ Each row: what the module owns, the handful of operations it must expose, and wh
 | Diff | 23 | sync core over Save's baseline | saved-vs-working comparison and chosen-hunk revert | `compare(book) → Hunks`, `revert(hunk)` |
 | SaveCoordinator | 10 | Effect | persisted baseline per book, write receipts, external-change detection | `save(book) → Receipt {stamp, bytes hash}`, `baseline(book)`, `externalChanges → Stream` |
 | Recovery | 11 | Effect | journal of unsaved work, restore on boot | `journal(book, change)`, `pending() → Restorable[]`, `restore(id)`, `discard(id)` |
-| Resources · Import | 20 | Effect | staged, validated import with provenance | `stage(files) → Staged`, `classify(staged)`, `commit(staged) → Books` |
-| Resources · Library | 21 | Effect | stable resource identities and project-role bindings | `resources()`, `bind(role, resource)`, `resolve(role)` |
+| Resources · Import | 20 | Effect, schema started (`src/core/resources`) | staged, validated import with provenance | `stage(files) → Staged`, `classify(staged)`, `commit(staged) → Books` |
+| Resources · Library | 21 | Effect, schema started (`src/core/resources`) | stable resource identities and project-role bindings | `resources()`, `bind(role, resource)`, `resolve(role)` |
 | Git | 24, 25 | Layer per host (owner decision 2026-09-06: git2 in Rust behind Tauri commands on desktop; isomorphic-git over the Web FileSystem on Web) | repository lifecycle, commits, history, previous versions; the port is the intersection of user jobs, not either library's API; one contract suite runs against both | `init/open`, `commit(receipts)`, `log(book)`, `checkout(rev) → bytes`, `status` |
 | Remote | 26 | Effect | approved online jobs | `attach(url)`, `push`, `pull`, `publish` |
 | ProjectAdmin | 31 | Effect | rename, delete, metadata, export | `rename`, `delete`, `metadata`, `export(format)` |

@@ -1,3 +1,9 @@
 # Fixtures
 
 `small-nt/` is the dev fixture project: four real Unlocked Literal Bible USFM files copied verbatim from `src/assets/en_ulb/` in the onion-2-spike repository — `58-PHM.usfm` (Philemon), `65-3JN.usfm` (3 John), `66-JUD.usfm` (Jude), and `19-PSA.usfm` (Psalms) — plus one file that is not real, `99-BAD.usfm`. The only edit to a real file is to `19-PSA.usfm`: it keeps the `\id`, `\ide`, `\h`, and `\toc` header lines and chapters 1 through 3, and everything from `\c 4` onward is cut, along with the dangling `\s5` chunk marker the cut left behind. `99-BAD.usfm` is written by hand and deliberately malformed — an unclosed `\f` footnote, a duplicated verse number, and a `\v` with no number — so that findings and diagnostics have something to report. The upstream book numbering is preserved exactly as the source names it; nothing here is renumbered.
+
+`resources/` holds the metadata the `src/core/resources` schemas decode.
+
+`manifest.yaml` is a real Resource Container manifest, copied verbatim from `tests/mockData/llx_reg/manifest.yaml` in the `scripture-editor-proto-2` repository: the Lauan (`llx`) Unlocked Literal Bible published by Wycliffe Associates, twenty-seven New Testament projects. The YAML is the source and `manifest.json` is its parsed form, produced once by a throwaway PyYAML script and committed because Sefer has no YAML parser dependency and the schema decodes an already-parsed value. Keep the two in step by hand if the YAML ever changes.
+
+`metadata.json` is not real. No Scripture Burrito is checked into either upstream repository, so this is the smallest realistic example, constructed from the Scripture Burrito 1.0 specification and the shape the previous application generated. It describes the `small-nt/` books above, and its `ingredients` checksums and sizes are the real md5 digests and byte counts of those four files. The `LICENSE.md` ingredient and the copyright statement are invented.
