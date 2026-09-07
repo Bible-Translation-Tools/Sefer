@@ -1,6 +1,6 @@
 # Sefer v2: module DAG and service shapes
 
-Status: idea for discussion, prepared 2026-09-06 from the 31 slices. It authorizes nothing; it is the slices seen at a glance as modules, their dependency direction, and the few methods each would need. Names are placeholders. Where a box is an Effect service it owns a lifetime, asynchrony or a host capability; everything else is synchronous code that Effect programs call.
+Status: idea for discussion, prepared 2026-09-06 from the 31 slices. The functions at each seam are listed in [the module seams](v2-module-seams.md). It authorizes nothing; it is the slices seen at a glance as modules, their dependency direction, and the few methods each would need. Names are placeholders. Where a box is an Effect service it owns a lifetime, asynchrony or a host capability; everything else is synchronous code that Effect programs call.
 
 ## The rule that shapes the graph
 
