@@ -1,6 +1,6 @@
 # Sefer v2: module seams — the functions where modules meet
 
-Status: idea for discussion, 2026-09-07. Companion to [the module DAG](v2-module-dag.md). Pseudo-TypeScript, not code: signatures and one-line intents for every high-level function each module needs, grouped by module, with the shared types that cross seams listed once. Authorizes nothing. Names are placeholders until the owning slice lands.
+Status: idea for discussion, 2026-09-07. Companion to [the module DAG](v2-module-dag.md); the Editor and Save sections are deepened in [the editor and save seams](v2-editor-and-save-seams.md). Pseudo-TypeScript, not code: signatures and one-line intents for every high-level function each module needs, grouped by module, with the shared types that cross seams listed once. Authorizes nothing. Names are placeholders until the owning slice lands.
 
 Conventions used below:
 
