@@ -1,0 +1,148 @@
+import { createFileRoute } from "@tanstack/solid-router";
+import { Effect, Result } from "effect";
+import { For, Show, createSignal } from "solid-js";
+
+import { t } from "../app/i18n";
+import { useShell } from "../app/ProjectContext";
+import { ShellGate } from "../app/ui/ShellGate";
+import type { Commit } from "../core/git/git";
+import { Git, repositoryPath } from "../core/git/git";
+import { decode } from "../core/source/source";
+
+/**
+ * The project's history, and one previous version read-only.
+ *
+ * Read-only is the point: a previous version is bytes from Git, decoded
+ * through `source.decode` like any other file, and shown. It is deliberately
+ * NOT loaded into a Book — restoring a version is an edit to the working text,
+ * and that flow (a diff, a confirmation, one undoable operation) is not built
+ * yet, so the screen shows and stops.
+ */
+
+interface Shown {
+  readonly commit: Commit;
+  readonly path: string;
+  readonly text: string;
+}
+
+function History() {
+  const shell = useShell();
+  const [log, setLog] = createSignal<readonly Commit[] | undefined>(undefined, { name: "gitLog" });
+  const [problem, setProblem] = createSignal("");
+  const [shown, setShown] = createSignal<Shown | undefined>(undefined, { name: "shownVersion" });
+
+  const load = (): void => {
+    const project = shell.project();
+    if (project === undefined) return;
+    void shell.services
+      .run(
+        Effect.gen(function* () {
+          const git = yield* Git;
+          const repo = yield* git.open(project.root);
+          return yield* git.log(repo);
+        }).pipe(Effect.result),
+      )
+      .then((result) => {
+        if (Result.isFailure(result)) {
+          setProblem(t("no history: {reason}", { reason: result.failure.reason }));
+          setLog([]);
+          return;
+        }
+        setProblem("");
+        setLog(result.success);
+      });
+  };
+  load();
+
+  const show = (commit: Commit): void => {
+    const project = shell.project();
+    const book = shell.focused() ?? project?.books[0];
+    if (project === undefined || book === undefined) return;
+    // Git addresses paths relative to the repository root; `repositoryPath`
+    // is the one place that conversion lives, and it refuses a path outside.
+    const inside = repositoryPath(project.root, book.path);
+    if (inside._tag === "None") {
+      setProblem(t("{path} is outside the repository", { path: book.path }));
+      return;
+    }
+    const relative = inside.value;
+    void shell.services
+      .run(
+        Effect.gen(function* () {
+          const git = yield* Git;
+          const repo = yield* git.open(project.root);
+          return yield* git.show(repo, commit.id, relative);
+        }).pipe(Effect.result),
+      )
+      .then((result) => {
+        if (Result.isFailure(result)) {
+          setProblem(t("could not read that version: {reason}", { reason: result.failure.reason }));
+          return;
+        }
+        const decoded = decode(result.success);
+        if (Result.isFailure(decoded)) {
+          setProblem(t("that version is not valid UTF-8"));
+          return;
+        }
+        setShown({ commit, path: relative, text: decoded.success.text });
+      });
+  };
+
+  return (
+    <main>
+      <header>
+        <h2>{t("History")}</h2>
+        <button type="button" class="spacer" onClick={load}>
+          {t("Reload")}
+        </button>
+      </header>
+
+      <Show when={shell.project()} fallback={<p class="muted">{t("Open a project first.")}</p>}>
+        <Show when={problem() !== ""}>
+          <p class="problem">{problem()}</p>
+        </Show>
+
+        <Show when={log()} fallback={<p class="muted">{t("Reading…")}</p>}>
+          {(commits) => (
+            <ul class="list" data-commits={commits().length}>
+              <For each={commits()}>
+                {(commit) => (
+                  <li data-commit={commit.id}>
+                    <code>{commit.id.slice(0, 8)}</code>
+                    <span>{commit.message}</span>
+                    <span class="muted">{commit.author.name}</span>
+                    <button type="button" class="spacer" onClick={() => show(commit)}>
+                      {t("Show")}
+                    </button>
+                  </li>
+                )}
+              </For>
+            </ul>
+          )}
+        </Show>
+
+        <Show when={shown()}>
+          {(version) => (
+            <section class="card">
+              <div class="row">
+                <strong>{version().path}</strong>
+                <code class="muted">{version().commit.id.slice(0, 8)}</code>
+                <button type="button" class="spacer" onClick={() => setShown(undefined)}>
+                  {t("Close")}
+                </button>
+              </div>
+              <pre>
+                <code>{version().text}</code>
+              </pre>
+            </section>
+          )}
+        </Show>
+      </Show>
+    </main>
+  );
+}
+
+export const Route = createFileRoute("/history")({
+  head: () => ({ meta: [{ title: "Sefer — history" }] }),
+  component: () => <ShellGate>{() => <History />}</ShellGate>,
+});

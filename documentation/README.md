@@ -14,12 +14,15 @@ This folder holds durable project guidance for humans and agents. Root `AGENTS.m
 - Working with a book's canonical text or its stamp: [source and book](./architecture/source.md).
 - Validating Scripture Burrito or Resource Container metadata, importing, or binding a library resource to a role: [resources](./architecture/resources.md).
 - Parsing or proofreading USFM through the pinned engine: [Galley](./architecture/galley.md).
+- Editing USFM — the editing phases, the editor-backed Book, windows and satellites: [editor](./architecture/editor.md).
+- Reading a diagnostic or applying an offered repair: [findings and fixes](./architecture/findings.md).
 - Opening a folder of books, the four Book states, external changes: [project](./architecture/project.md).
 - Asking the host for paths, settings, credentials, or a dialog: [host capabilities](./architecture/host.md).
 - Saving, autosave, conflicts, and crash recovery: [save and recovery](./architecture/save.md).
 - Comparing against the saved baseline or running one command across books: [diff and multibook](./architecture/diff-and-multibook.md).
 - Finding text and replacing one match: [search](./architecture/search.md).
 - Committing receipts, reading history, project admin: [git](./architecture/git.md).
+- Composing the services, adding a command, a route, or a design token: [application shell](./architecture/shell.md).
 - Using shared product terms: [glossary](./glossary.md).
 - Adding logs, spans, or agent-visible runtime evidence: [observability shorthand](./architecture/observability.md).
 

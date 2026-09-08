@@ -1,0 +1,55 @@
+# The application shell
+
+The shell is the Solid layer above every module: it composes their Layers once, offers their operations as commands, and renders thin screens over them. It owns no domain logic — every screen is a synchronous read of something a module already holds, plus a button that calls back into it.
+
+## Services: one composition, one file
+
+`src/app/composition.ts` owns boot and Observability and stops there (see [composition](composition.md)). `src/app/services.ts` is the next ring out: `composeServices(composition)` merges the Web host's capabilities and every core module over the built composition and returns plain service values plus `run(effect)`.
+
+Wiring facts that carry meaning, not taste:
+
+- `run` provides the **application** scope (`runtime.scope`). `openProject` and `ProjectAnalysis.attach` require `Scope`; a per-call `Effect.scoped` would close the project the instant the call returned.
+- `RecoveryLive` is provided **to** `SaveCoordinatorLive` (`Layer.provideMerge`). Save reads Recovery through `serviceOption`, so it only journals when Recovery is in its own context.
+- The Save hasher is built with `Layer.unwrap` over `Galley`: core computes no content hash, and the hasher is a function that needs the built engine.
+- `Observability` is merged back over the modules (`provideMerge`, not `provide`) because `run` may ask for the ring itself.
+- The `seat` (`src/app/services.ts`) is how a plain Book becomes an `EditorBook`. It records each one it makes, which is how the shell reaches an `EditorBook` from a `Book` port with no type assertion. It gives each book a fresh `galley.memoize()`, and adds the **mountable** half of the editor (`commandsLayer`, `viewLayer()`) so a view can be constructed straight over `book.state`.
+- Composition **rejects** if the engine will not load. There is no useful Sefer without Galley, and `ShellGate` renders that failure instead of an editor that refuses every parse.
+
+`?fixture=1` in a dev build composes over the seeded `fixtures/small-nt` memory FileSystem instead of OPFS — the shortest route to a real project on screen.
+
+## State: `src/app/ProjectContext.tsx`
+
+The open `Project`, the focused book, the mode, the clipped chapter, the findings cursor and the status line live in one Solid context above the router. TanStack owns navigation, not lifetimes: a route match is destroyed on every navigation, and a Project owns Book lifetimes.
+
+The context carries a stable handle — `useShellState()` (always available) and `useShell()` (only inside a `ShellGate`) — because a Solid 2 context value is read when the provider is created and cannot be swapped later.
+
+## The Solid/Book boundary
+
+**One subscription per book, in `src/app/ui/BookEditor.tsx`, and nowhere else.** That component creates the `EditorView` over `book.state`, routes every transaction through `book.fromView`, and in its `book.changes` callback does three things: writes a stamp signal, hands the editor's own `Analysis` to `ProjectAnalysis.supply` (so a keystroke costs no second wasm call), and calls `shell.bump()`.
+
+`bump()` increments one signal. Every derived screen — the census, the dirty markers, the findings list, the stale badges — reads `shell.tick()` and re-reads its module. No other component subscribes to a Book, and nothing outside that file holds text.
+
+Mode and chapter are dispatched into the canonical state through a compartment. Neither is a document change, so `fromView` ignores them: a projection is presentation and a clip is a view choice.
+
+## Commands
+
+`src/app/commands.ts` holds the registry (`registerCommand`, `runCommand`, `commands()`), a `Mod-`-chord matcher on the document, and the core set. Each command has at least three callers — a button, a keystroke, and the palette — and `when()` is the "is this possible now?" question asked once. Commands reach the application only through `ShellBridge`, which is the honest list of what a command needs; a command that wants something not on it is telling us the shell owns state it has not admitted to owning.
+
+An Effect-returning command is run on the app runtime by the runner `registerShellCommands` installs.
+
+## Routes and tokens
+
+`/projects`, `/project/$id`, `/project/$id/book/$book`, `/find`, `/findings`, `/history`, `/settings`, plus `/` and the dev-only `/dev/fixture`. File routes under `src/routes`; `src/routeTree.gen.ts` is generated — never edit it.
+
+`src/app/ui/tokens.css` is the design system as plain custom properties, ported from the v1 editor's vanilla-extract contract so the two read as one product. Components use the semantic names (`--surface-primary`), never the ramps. Dark is a token swap under `[data-theme="dark"]` and `prefers-color-scheme`. `src/App.css` holds the shell's own component rules. No component library, no CSS-in-JS.
+
+Every user-visible string goes through `t()` (`src/app/i18n.ts`) — an identity with `{param}` interpolation. The point is the seam; Lingui replaces the body later.
+
+## What is stubbed
+
+- **Opening an arbitrary folder on the Web host.** `WebDialogsLive.pickFolder` returns a picked handle's *name*, not a path the OPFS layer can read. `/projects` lists the OPFS subtree Sefer owns and says so.
+- **Drafting** (`src/app/workflows/drafting.ts`) and **STET** (`src/app/workflows/stet.ts`) are typed stubs that `Effect.die`. Each file's header says what it composes and why the missing piece is domain vocabulary rather than code.
+- **Replace-all** across a project. Only single-hit replace is offered; replace-all is a MultiBook operation with one Undo per book, and offering the button before that flow is wired would offer something we cannot take back.
+- **Restoring a previous version.** `/history` shows a commit's bytes read-only; loading one into a Book is an edit and needs a diff and a confirmation.
+- **The inline linter and its gutter**, for a reason outside the shell: the installed `@codemirror/lint` resolves its own copy of `@codemirror/state` (6.5.2) while the app uses 6.7.4, so `usfmLinter()`'s facets come from a different module instance and CodeMirror answers "Unrecognized extension value in extension set". Adding `resolve: { dedupe: ["@codemirror/state", "@codemirror/view"] }` to `vite.config.ts` fixes it (verified), after which `usfmLinter(), lintGutter()` can be appended to `mountable` in `src/app/services.ts`. The duplication affects `src/editor/recipes/lint.ts` for anyone who mounts it, so the fix belongs in the build config.
+- **Settings enumeration.** `SettingsService` has no "list every registered key" — a key belongs to the module that declared it. `src/app/settings.ts` is the shell's own set, and `/settings` renders exactly those.

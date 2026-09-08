@@ -10,11 +10,43 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as FindRouteImport } from './routes/find'
+import { Route as FindingsRouteImport } from './routes/findings'
+import { Route as HistoryRouteImport } from './routes/history'
+import { Route as ProjectsRouteImport } from './routes/projects'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as DevFixtureRouteImport } from './routes/dev/fixture'
+import { Route as ProjectIdIndexRouteImport } from './routes/project/$id/index'
+import { Route as ProjectIdBookBookRouteImport } from './routes/project/$id/book/$book'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FindRoute = FindRouteImport.update({
+  id: '/find',
+  path: '/find',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FindingsRoute = FindingsRouteImport.update({
+  id: '/findings',
+  path: '/findings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HistoryRoute = HistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProjectsRoute = ProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DevFixtureRoute = DevFixtureRouteImport.update({
@@ -22,31 +54,97 @@ const DevFixtureRoute = DevFixtureRouteImport.update({
   path: '/dev/fixture',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProjectIdIndexRoute = ProjectIdIndexRouteImport.update({
+  id: '/project/$id/',
+  path: '/project/$id/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProjectIdBookBookRoute = ProjectIdBookBookRouteImport.update({
+  id: '/project/$id/book/$book',
+  path: '/project/$id/book/$book',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/find': typeof FindRoute
+  '/findings': typeof FindingsRoute
+  '/history': typeof HistoryRoute
+  '/projects': typeof ProjectsRoute
+  '/settings': typeof SettingsRoute
   '/dev/fixture': typeof DevFixtureRoute
+  '/project/$id/': typeof ProjectIdIndexRoute
+  '/project/$id/book/$book': typeof ProjectIdBookBookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/find': typeof FindRoute
+  '/findings': typeof FindingsRoute
+  '/history': typeof HistoryRoute
+  '/projects': typeof ProjectsRoute
+  '/settings': typeof SettingsRoute
   '/dev/fixture': typeof DevFixtureRoute
+  '/project/$id': typeof ProjectIdIndexRoute
+  '/project/$id/book/$book': typeof ProjectIdBookBookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/find': typeof FindRoute
+  '/findings': typeof FindingsRoute
+  '/history': typeof HistoryRoute
+  '/projects': typeof ProjectsRoute
+  '/settings': typeof SettingsRoute
   '/dev/fixture': typeof DevFixtureRoute
+  '/project/$id/': typeof ProjectIdIndexRoute
+  '/project/$id/book/$book': typeof ProjectIdBookBookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dev/fixture'
+  fullPaths:
+    | '/'
+    | '/find'
+    | '/findings'
+    | '/history'
+    | '/projects'
+    | '/settings'
+    | '/dev/fixture'
+    | '/project/$id/'
+    | '/project/$id/book/$book'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dev/fixture'
-  id: '__root__' | '/' | '/dev/fixture'
+  to:
+    | '/'
+    | '/find'
+    | '/findings'
+    | '/history'
+    | '/projects'
+    | '/settings'
+    | '/dev/fixture'
+    | '/project/$id'
+    | '/project/$id/book/$book'
+  id:
+    | '__root__'
+    | '/'
+    | '/find'
+    | '/findings'
+    | '/history'
+    | '/projects'
+    | '/settings'
+    | '/dev/fixture'
+    | '/project/$id/'
+    | '/project/$id/book/$book'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  FindRoute: typeof FindRoute
+  FindingsRoute: typeof FindingsRoute
+  HistoryRoute: typeof HistoryRoute
+  ProjectsRoute: typeof ProjectsRoute
+  SettingsRoute: typeof SettingsRoute
   DevFixtureRoute: typeof DevFixtureRoute
+  ProjectIdIndexRoute: typeof ProjectIdIndexRoute
+  ProjectIdBookBookRoute: typeof ProjectIdBookBookRoute
 }
 
 declare module '@tanstack/solid-router' {
@@ -58,6 +156,41 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/find': {
+      id: '/find'
+      path: '/find'
+      fullPath: '/find'
+      preLoaderRoute: typeof FindRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/findings': {
+      id: '/findings'
+      path: '/findings'
+      fullPath: '/findings'
+      preLoaderRoute: typeof FindingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/history': {
+      id: '/history'
+      path: '/history'
+      fullPath: '/history'
+      preLoaderRoute: typeof HistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/projects': {
+      id: '/projects'
+      path: '/projects'
+      fullPath: '/projects'
+      preLoaderRoute: typeof ProjectsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dev/fixture': {
       id: '/dev/fixture'
       path: '/dev/fixture'
@@ -65,12 +198,33 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof DevFixtureRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/project/$id/': {
+      id: '/project/$id/'
+      path: '/project/$id'
+      fullPath: '/project/$id/'
+      preLoaderRoute: typeof ProjectIdIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/project/$id/book/$book': {
+      id: '/project/$id/book/$book'
+      path: '/project/$id/book/$book'
+      fullPath: '/project/$id/book/$book'
+      preLoaderRoute: typeof ProjectIdBookBookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  FindRoute: FindRoute,
+  FindingsRoute: FindingsRoute,
+  HistoryRoute: HistoryRoute,
+  ProjectsRoute: ProjectsRoute,
+  SettingsRoute: SettingsRoute,
   DevFixtureRoute: DevFixtureRoute,
+  ProjectIdIndexRoute: ProjectIdIndexRoute,
+  ProjectIdBookBookRoute: ProjectIdBookBookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

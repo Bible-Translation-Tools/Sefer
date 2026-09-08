@@ -42,6 +42,11 @@ export default defineConfig(({ mode }) => ({
     port: 3000,
     strictPort: true,
   },
+  resolve: {
+    // @codemirror/lint pins its own @codemirror/state; a second copy means a
+    // second Facet identity and "Unrecognized extension value in extension set".
+    dedupe: ["@codemirror/state", "@codemirror/view"],
+  },
   optimizeDeps: {
     include: ["effect/unstable/http/FetchHttpClient", "effect/unstable/observability/Otlp"],
   },

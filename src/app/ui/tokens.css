@@ -1,0 +1,321 @@
+/*
+ * The design system, as plain custom properties.
+ *
+ * Ported from the v1 editor's vanilla-extract contract
+ * (scripture-editor-proto-2 `src/app/ui/styles/designSystem.css.ts` and
+ * `reset.css.ts`) so the two editors read as one product. The port is
+ * deliberately literal: the primitive ramps and the semantic names are the v1
+ * values, only the mechanism changed — CSS custom properties instead of a
+ * generated theme contract, because Sefer ships no CSS-in-JS build step.
+ *
+ * Two rules for anything that consumes this file:
+ *
+ *  - Components reference SEMANTIC names (`--surface-primary`), never the
+ *    ramps (`--brand-40`). The ramps exist so the semantic layer has one
+ *    source; a component reaching past it re-decides the theme by hand.
+ *  - Dark is a token swap, not a second stylesheet. `[data-theme="dark"]`
+ *    (explicit choice) and `prefers-color-scheme: dark` under
+ *    `:not([data-theme="light"])` (system default) redefine the same names.
+ *
+ * Fonts are referenced by family name with a system fallback stack. Nothing is
+ * vendored: a host that has Charis SIL installed gets scripture in it, and a
+ * host that does not gets a serif, which is the honest degradation for a
+ * local-first app that must not block first paint on a webfont.
+ */
+
+:root {
+  /* Primitives — the ramps. Do not use these directly in a component. */
+  --brand-5: #00102e;
+  --brand-10: #001847;
+  --brand-20: #002c72;
+  --brand-30: #0040a0;
+  --brand-40: #0056d1;
+  --brand-50: #3070ef;
+  --brand-70: #88a9ff;
+  --brand-80: #b2c5ff;
+  --brand-90: #dae2ff;
+  --brand-95: #eef0ff;
+
+  --neutral-0: #000000;
+  --neutral-5: #0e0e0e;
+  --neutral-10: #1f1f1f;
+  --neutral-20: #343434;
+  --neutral-30: #4d4d4d;
+  --neutral-50: #808080;
+  --neutral-60: #999999;
+  --neutral-80: #cccccc;
+  --neutral-90: #e6e6e6;
+  --neutral-95: #f2f2f2;
+  --neutral-100: #ffffff;
+
+  --error-20: #611a16;
+  --error-30: #922821;
+  --error-40: #c33620;
+  --error-80: #e6aaa9;
+  --error-95: #f9edeb;
+
+  --warning-20: #5c4200;
+  --warning-30: #8a5e00;
+  --warning-80: #fadf9e;
+  --warning-95: #fdf7e8;
+
+  --success-20: #386336;
+  --success-40: #61c76c;
+  --success-80: #b9e8c4;
+  --success-95: #e2f7e7;
+
+  /* Typography, spacing, radii — theme-independent. */
+  --font-ui: Inter, "Inter var", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-scripture: "Charis SIL", Charis, Cambria, Georgia, serif;
+  --font-mono: "Atkinson Hyperlegible Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --text-h1: 3rem;
+  --text-h2: 2.25rem;
+  --text-h3: 1.5rem;
+  --text-h4: 1.25rem;
+  --text-body: 1rem;
+  --text-small: 0.875rem;
+  --text-smallest: 0.75rem;
+
+  --space-none: 0;
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 3rem;
+  --space-xl: 5rem;
+
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  --border-thin: 1px;
+  --border-thick: 2px;
+
+  /* Semantic contract — light. */
+  --brand-base: var(--brand-40);
+  --brand-dark: var(--brand-30);
+  --brand-light: var(--brand-95);
+
+  --surface-primary: var(--neutral-100);
+  --surface-secondary: var(--neutral-95);
+  --surface-tertiary: var(--neutral-90);
+  --surface-canvas: #f4f8fb;
+  --surface-border: var(--neutral-90);
+  --surface-overlay: rgba(31, 31, 31, 0.6);
+  --on-surface-primary: var(--neutral-5);
+  --on-surface-secondary: var(--neutral-20);
+  --on-surface-tertiary: var(--neutral-60);
+
+  --surface-error: var(--error-95);
+  --on-surface-error: var(--error-40);
+  --surface-warning: var(--warning-95);
+  --on-surface-warning: var(--warning-30);
+  --surface-success: var(--success-95);
+  --on-surface-success: var(--success-40);
+
+  --sidebar-surface: var(--brand-10);
+  --sidebar-surface-hover: color-mix(in srgb, #ffffff 8%, transparent);
+  --sidebar-surface-active: color-mix(in srgb, #ffffff 12%, transparent);
+  --sidebar-border: color-mix(in srgb, #ffffff 8%, transparent);
+  --sidebar-on-surface: var(--neutral-100);
+  --sidebar-on-surface-muted: color-mix(in srgb, #ffffff 64%, transparent);
+
+  --button-primary-surface: var(--brand-40);
+  --button-primary-surface-hover: var(--brand-30);
+  --button-primary-on-surface: var(--neutral-100);
+  --button-secondary-surface: transparent;
+  --button-secondary-surface-hover: var(--neutral-95);
+  --button-secondary-on-surface: var(--neutral-5);
+  --button-secondary-border: var(--neutral-90);
+  --button-tertiary-surface-hover: var(--neutral-95);
+  --button-tertiary-on-surface: var(--neutral-20);
+
+  --kbd-surface: #f4f8fb;
+  --kbd-on-surface: rgba(15, 47, 76, 0.8);
+  --kbd-border: var(--neutral-90);
+
+  --shadow-small: 0 1px 2px 0 rgba(31, 31, 31, 0.12);
+  --shadow-medium: 0 2px 4px 0 rgba(31, 31, 31, 0.16), 0 1px 3px 0 rgba(31, 31, 31, 0.1);
+  --shadow-large: 0 4px 8px 0 rgba(31, 31, 31, 0.2), 0 2px 4px 0 rgba(31, 31, 31, 0.12);
+}
+
+/* Dark, as the token swap. Both selectors carry the same block: the explicit
+   choice must win over the system preference in both directions. */
+:root[data-theme="dark"] {
+  --brand-base: var(--brand-70);
+  --brand-dark: var(--brand-70);
+  --brand-light: var(--brand-5);
+
+  --surface-primary: var(--neutral-20);
+  --surface-secondary: var(--neutral-10);
+  --surface-tertiary: var(--neutral-5);
+  --surface-canvas: color-mix(in srgb, var(--brand-40) 6%, var(--neutral-10));
+  --surface-border: var(--neutral-5);
+  --surface-overlay: rgba(31, 31, 31, 0.8);
+  --on-surface-primary: var(--neutral-90);
+  --on-surface-secondary: var(--neutral-80);
+  --on-surface-tertiary: var(--neutral-50);
+
+  --surface-error: var(--error-20);
+  --on-surface-error: var(--error-80);
+  --surface-warning: var(--warning-20);
+  --on-surface-warning: var(--warning-80);
+  --surface-success: var(--success-20);
+  --on-surface-success: var(--success-80);
+
+  --button-primary-surface: var(--brand-70);
+  --button-primary-surface-hover: var(--brand-80);
+  --button-primary-on-surface: var(--neutral-10);
+  --button-secondary-surface-hover: var(--neutral-10);
+  --button-secondary-on-surface: var(--neutral-90);
+  --button-secondary-border: var(--neutral-5);
+  --button-tertiary-surface-hover: var(--neutral-10);
+  --button-tertiary-on-surface: var(--neutral-80);
+
+  --kbd-surface: var(--neutral-10);
+  --kbd-on-surface: var(--neutral-80);
+  --kbd-border: var(--neutral-5);
+
+  --shadow-small: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-medium: 0 2px 4px 0 rgba(0, 0, 0, 0.5);
+  --shadow-large: 0 4px 8px 0 rgba(0, 0, 0, 0.6);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --brand-base: var(--brand-70);
+    --brand-dark: var(--brand-70);
+    --brand-light: var(--brand-5);
+
+    --surface-primary: var(--neutral-20);
+    --surface-secondary: var(--neutral-10);
+    --surface-tertiary: var(--neutral-5);
+    --surface-canvas: color-mix(in srgb, var(--brand-40) 6%, var(--neutral-10));
+    --surface-border: var(--neutral-5);
+    --surface-overlay: rgba(31, 31, 31, 0.8);
+    --on-surface-primary: var(--neutral-90);
+    --on-surface-secondary: var(--neutral-80);
+    --on-surface-tertiary: var(--neutral-50);
+
+    --surface-error: var(--error-20);
+    --on-surface-error: var(--error-80);
+    --surface-warning: var(--warning-20);
+    --on-surface-warning: var(--warning-80);
+    --surface-success: var(--success-20);
+    --on-surface-success: var(--success-80);
+
+    --button-primary-surface: var(--brand-70);
+    --button-primary-surface-hover: var(--brand-80);
+    --button-primary-on-surface: var(--neutral-10);
+    --button-secondary-surface-hover: var(--neutral-10);
+    --button-secondary-on-surface: var(--neutral-90);
+    --button-secondary-border: var(--neutral-5);
+    --button-tertiary-surface-hover: var(--neutral-10);
+    --button-tertiary-on-surface: var(--neutral-80);
+
+    --kbd-surface: var(--neutral-10);
+    --kbd-on-surface: var(--neutral-80);
+    --kbd-border: var(--neutral-5);
+
+    --shadow-small: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+    --shadow-medium: 0 2px 4px 0 rgba(0, 0, 0, 0.5);
+    --shadow-large: 0 4px 8px 0 rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* The reset essentials, in a layer so any component rule outranks them. */
+@layer reset {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    background-repeat: no-repeat;
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    text-size-adjust: none;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+    block-size: 100%;
+    color-scheme: light dark;
+  }
+
+  body {
+    min-block-size: 100%;
+    font-family: var(--font-ui);
+  }
+
+  img,
+  svg,
+  video,
+  canvas {
+    display: block;
+    max-inline-size: 100%;
+    block-size: auto;
+  }
+
+  input,
+  button,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+
+  textarea {
+    resize: vertical;
+  }
+
+  fieldset {
+    border: none;
+  }
+
+  p,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    overflow-wrap: break-word;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  input,
+  label,
+  button,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    line-height: 1.15;
+  }
+
+  table {
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums lining-nums slashed-zero;
+  }
+
+  :disabled {
+    opacity: 0.8;
+    cursor: not-allowed;
+  }
+
+  :focus-visible {
+    outline: var(--border-thick) solid var(--brand-base);
+    outline-offset: 2px;
+  }
+}
