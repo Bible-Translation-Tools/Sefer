@@ -30,6 +30,10 @@ export interface EditorDevSurface {
   readonly keystrokes: () => readonly unknown[];
   readonly spans: () => readonly unknown[];
   readonly summary: () => readonly unknown[];
+  /** The last transactions and the pipeline stages each flowed through. */
+  readonly traces: () => readonly unknown[];
+  /** One trace, as a person reads it. Newest when given no index. */
+  readonly trace: (at?: number) => string;
 }
 
 declare global {

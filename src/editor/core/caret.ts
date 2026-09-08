@@ -139,11 +139,6 @@ export function moveCaret(
     );
     if (to === null) return false;
     if (to.head === sel.head && to.assoc === sel.assoc) return true;
-    note(view.state, {
-      rule: "moveCaret",
-      verdict: "moved",
-      detail: `asked for ${to.head}:${to.assoc} — compare the next 'caret' landing`,
-    });
     view.dispatch({
       selection: EditorSelection.cursor(to.head, to.assoc),
       scrollIntoView: true,
@@ -169,12 +164,16 @@ export function caretLineBoundary(
     const sel = view.state.selection.main;
     if (view.textDirectionAt(sel.head) !== Direction.LTR) return false;
     const at = view.moveToLineBoundary(EditorSelection.cursor(sel.head), end, true).head;
-    view.dispatch({
-      selection: EditorSelection.cursor(
-        stopsIn(view.state, structureAt(view.state), r).settle(at, end ? "forward" : "backward"),
-      ),
-      scrollIntoView: true,
+    const to = stopsIn(view.state, structureAt(view.state), r).settle(
+      at,
+      end ? "forward" : "backward",
+    );
+    note(view.state, {
+      rule: "caretLineBoundary",
+      verdict: to === sel.head ? "passed" : "moved",
+      detail: `${end ? "End" : "Home"} ${sel.head} → ${to} (line boundary ${at}, settled ${end ? "forward" : "backward"})`,
     });
+    view.dispatch({ selection: EditorSelection.cursor(to), scrollIntoView: true });
     return true;
   };
 }
@@ -197,6 +196,11 @@ export function extendCaret(
     );
     if (to === null) return false;
     if (to.head === sel.head && to.assoc === sel.assoc) return true;
+    note(view.state, {
+      rule: "extendCaret",
+      verdict: "moved",
+      detail: `${visualRight ? "→" : "←"} anchor ${sel.anchor}, head ${sel.head} → ${to.head}`,
+    });
     view.dispatch({
       selection: EditorSelection.range(sel.anchor, to.head),
       scrollIntoView: true,

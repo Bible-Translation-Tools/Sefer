@@ -146,17 +146,39 @@ export {
 } from "./recipes/copy";
 export { alignedWordTooltip, attrSpans, type AttrSpan } from "./recipes/attrs";
 
-// Instruments: a local span ring and per-rule verdicts, plus the one bridge
-// into Sefer's Observability ring.
+// Instruments. `core/instrument.ts` is the one instrument for the pipeline —
+// one trace per transaction, the stages in order — and `observabilityTracer`
+// is the one bridge into Sefer's ring. `core/timing.ts` is the local span ring
+// the keystroke meter attributes time with; `core/trace.ts` is the flat
+// per-event adapter over the same instrument.
 export { keystrokeMeter, type Measured, type Meter } from "./core/meter";
 export { onSpan, recent, span, summary, type TimingSpan } from "./core/timing";
 export {
+  clearRefusal,
+  dumpTrace,
+  flushTrace,
+  lastRefusal,
+  localTracer,
+  makeTracer,
+  traceFor,
+  tracer,
+  traces,
+  tracing,
+  type Emitter,
+  type Trace,
+  type TraceEmit,
+  type TraceEntry,
+  type TraceSummary,
+  type Tracer,
+} from "./core/instrument";
+export {
   ringSink,
+  sinkTracer,
   traceSink,
   type TraceEvent,
   type TraceSink,
   type TraceStep,
   type Verdict,
 } from "./core/trace";
-export { observabilitySink } from "./observability";
+export { observabilityTracer } from "./observability";
 export { inspect } from "./core/inspect";

@@ -49,10 +49,10 @@ import type { Change, Source, SourceStamp } from "../core/source/source";
 import type { Analyze } from "./core/analyzer";
 import { historyLayer, usfmEditorHeadless } from "./core/compose";
 import { docText, structureAt, type DocStructure } from "./core/docStructure";
+import { clearRefusal, lastRefusal, localTracer, tracer } from "./core/instrument";
 import { trusted } from "./core/kernel";
-import { traceSink, type TraceSink } from "./core/trace";
 import { changesOf, fromCanonical, type Funnel, type Receive } from "./funnel";
-import { observabilitySink } from "./observability";
+import { observabilityTracer } from "./observability";
 
 /**
  * A Book whose text lives in a CodeMirror state, plus the four things only
@@ -124,24 +124,22 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
   let holds = 0;
   let closed = false;
 
-  // Best-effort attribution for a refusal. The phases already say which rule
-  // closed the door — they note it on the trace — so the cheapest way to name
-  // it in a `Refusal` is to listen. Installed at LOWEST precedence so a caller
-  // who wants the trace for itself keeps it; when they do, refusals fall back
-  // to the phase set's name.
-  let lastRefused: string | null = null;
-  const forward = observability === undefined ? undefined : observabilitySink(observability);
-  const sink: TraceSink = (event) => {
-    if (event.verdict === "refused") lastRefused = event.rule;
-    forward?.(event);
-  };
-
+  // The instrument (`core/instrument.ts`) is installed at LOWEST precedence so
+  // a caller who wants the trace for itself keeps it; when they do, this book
+  // still reads refusals, because the refusal slot belongs to the instrument
+  // rather than to any one tracer. With no Observability the trace is still
+  // assembled — `__sefer.editor.traces()` and `Refusal.rule` need it — it just
+  // does not leave the process.
   let own = EditorState.create({
     doc: plain.source().text,
     extensions: [
       usfmEditorHeadless({ analyze: options.analyze }),
       historyLayer,
-      Prec.lowest(traceSink.of(sink)),
+      Prec.lowest(
+        tracer.of(
+          observability === undefined ? localTracer : observabilityTracer(observability, id),
+        ),
+      ),
       options.extensions ?? [],
     ],
   });
@@ -171,12 +169,21 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
     return receipt;
   };
 
+  /**
+   * The refusal a rejected `apply` reports.
+   *
+   * The FIRST stage that refused, not the last: a change filter that vetoes a
+   * range runs before the transaction rules that would have rewritten it, so
+   * the first door to close is the one that decided. `reason` is that stage's
+   * own words when it had any — the same detail the trace shows.
+   */
   const refuse = (origin: Origin, count: number): Refusal => {
-    const rule = lastRefused ?? "editor.phases";
+    const first = lastRefusal();
+    const rule = first?.rule ?? "editor.phases";
     observability?.note("book.apply", "refused", `${id} ${rule} (${origin})`, id);
     return new Refusal({
       rule,
-      reason: "Refused",
+      reason: first?.detail ?? "Refused",
       description: `${id} refused ${count} change(s) from ${origin}`,
     });
   };
@@ -238,7 +245,7 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
     apply: (changes, origin, trust = UNTRUSTED): Result.Result<Receipt, Refusal> => {
       const list = asChangeList(changes);
       const before = stamp();
-      lastRefused = null;
+      clearRefusal();
       const spec = specFor(list, origin, trust);
       const bound = view;
       if (bound !== null) {

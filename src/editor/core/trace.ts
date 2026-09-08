@@ -1,29 +1,38 @@
 /**
- * Per-rule verdicts: which door a keystroke went through, and what it decided.
+ * The legacy per-event view of the trace: a flat `TraceSink`, the ring behind
+ * `ringSink`, and the two update listeners.
  *
- * A no-op without a sink, so the instrument costs a facet read when nobody is
- * watching. The sink is a facet rather than a module global because two states
- * (a book and a window over it) trace separately, and because a test wants the
- * ring while the app wants the Observability bridge.
+ * `core/instrument.ts` is the instrument now — one `Trace` per transaction,
+ * with the stages in order. This file is the adapter that keeps the flat
+ * "one event per decision" shape working for a harness that wants a ring and a
+ * demo that wants a table, so adopting the tracer cost no call site.
+ *
+ * `note`, `noteTr` and `tracing` are re-exported from the instrument rather
+ * than reimplemented: the rules import them from here today, and there is only
+ * one implementation to import.
  */
 
-import {
-  EditorState,
-  Facet,
-  StateEffect,
-  type Extension,
-  type Transaction,
-} from "@codemirror/state";
+import { StateEffect, type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
-export type Verdict = "refused" | "rewrote" | "moved" | "consumed" | "declined" | "passed";
+import {
+  makeTracer,
+  note,
+  tracer,
+  type Emitter,
+  type TraceEntry,
+  type TraceStep,
+  type Tracer,
+} from "./instrument";
 
-export interface TraceStep {
-  rule: string;
-  verdict: Verdict;
-  detail?: string;
-}
+export { note, noteTr, tracing } from "./instrument";
+export type { TraceStep, Verdict } from "./instrument";
 
+/**
+ * One decision, flat. `docLength`/`head` are the trace's — the state the
+ * transaction began from — rather than each entry's: an entry is a frame
+ * around a rule, and the rule ran against that state.
+ */
 export interface TraceEvent extends TraceStep {
   at: number;
   kind: "rule" | "press";
@@ -33,57 +42,56 @@ export interface TraceEvent extends TraceStep {
 
 export type TraceSink = (e: TraceEvent) => void;
 
-export const traceSink = Facet.define<TraceSink, TraceSink | null>({
-  combine: (v) => v[0] ?? null,
-});
+/** A flat sink as a `Tracer`. The adapter, and the only one. */
+export const sinkTracer = (sink: TraceSink): Tracer => {
+  const emit: Emitter = (trace) => {
+    const one = (e: TraceEntry): void => {
+      sink({
+        rule: e.phase === "" ? e.name : `${e.phase}:${e.name}`,
+        verdict: e.verdict,
+        ...(e.detail === undefined ? {} : { detail: e.detail }),
+        at: e.at,
+        kind: trace.origin === "press" ? "press" : "rule",
+        docLength: trace.docLength,
+        head: trace.head,
+      });
+    };
+    return { frame: () => one, step: one, end: () => {} };
+  };
+  return makeTracer(emit);
+};
 
+/**
+ * `traceSink.of(sink)` — the extension a harness or a demo installs.
+ *
+ * Not a Facet any more: the facet is `instrument.tracer`, and there is exactly
+ * one hot-path facet read. Keeping the `.of` shape means `traceSink.of(mine)`
+ * still reads the same at both call sites.
+ */
+export const traceSink = {
+  of: (sink: TraceSink): Extension => tracer.of(sinkTracer(sink)),
+};
+
+/**
+ * A verdict carried on a transaction, for a rule that decides in one place and
+ * is only sure in another (a view plugin, an async lint).
+ */
 export const traceStep = StateEffect.define<TraceStep>();
 
-export const tracing = (state: EditorState): boolean => state.facet(traceSink) !== null;
-
-let seq = 0;
-
-export function note(state: EditorState, s: TraceStep, kind: "rule" | "press" = "rule"): void {
-  const sink = state.facet(traceSink);
-  if (!sink) return;
-  sink({
-    ...s,
-    at: ++seq,
-    kind,
-    docLength: state.doc.length,
-    head: state.selection.main.head,
-  });
-}
-
-export function noteTr(tr: Transaction, s: TraceStep): void {
-  const sink = tr.startState.facet(traceSink);
-  if (!sink) return;
-  sink({
-    ...s,
-    at: ++seq,
-    kind: "rule",
-    docLength: tr.changes.newLength,
-    head: tr.newSelection.main.head,
-  });
-}
-
 export const traceListener: Extension = EditorView.updateListener.of((u) => {
-  const sink = u.state.facet(traceSink);
-  if (!sink) return;
   for (const tr of u.transactions)
-    for (const e of tr.effects)
-      if (e.is(traceStep))
-        sink({
-          ...e.value,
-          at: ++seq,
-          kind: "rule",
-          docLength: tr.state.doc.length,
-          head: tr.state.selection.main.head,
-        });
+    for (const e of tr.effects) if (e.is(traceStep)) note(u.state, e.value);
 });
 
+/**
+ * Where the caret actually landed, after every rule had its say.
+ *
+ * The one thing a trace of the rules cannot tell you: settlement, the clip and
+ * the view all move the caret, and this is the answer they agreed on. Noted as
+ * a `press` so it reads as the end of the gesture rather than a rule's verdict.
+ */
 export const landingListener: Extension = EditorView.updateListener.of((u) => {
-  if (!u.selectionSet || !u.state.facet(traceSink)) return;
+  if (!u.selectionSet) return;
   const before = u.startState.selection.main;
   const after = u.state.selection.main;
   note(

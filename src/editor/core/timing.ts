@@ -7,6 +7,12 @@
  * paragraph typed. `armed()` is false in the ordinary case, and then a span is
  * two `performance.now()` calls and no allocation. `src/editor/observability.ts`
  * is the one bridge to Sefer's ring, and it forwards verdicts, not spans.
+ *
+ * `onDerived` is how these spans reach the transaction trace
+ * (`core/instrument.ts`): a span here cannot see an `EditorState`, so instead
+ * of plumbing one through every derivation the closer calls back and the entry
+ * lands on whichever trace is open. Registered once, at module load; when no
+ * trace is open the callback returns immediately.
  */
 
 export interface TimingSpan {
@@ -32,6 +38,20 @@ let bucket: Map<string, SpanTotal> | null = null;
 let stack: number[] | null = null;
 
 export const recent = (): readonly TimingSpan[] => ring;
+
+/**
+ * A closed span, for whoever is assembling the wider picture. ONE listener —
+ * `core/instrument.ts` — because this is a bridge, not a bus. Called for every
+ * span, armed or not, so the trace sees the derivation pipeline without the
+ * `performance.mark` machinery being switched on.
+ */
+type Derived = (name: string, note: string, ms: number) => void;
+
+let derived: Derived | null = null;
+
+export const onDerived = (fn: Derived): void => {
+  derived = fn;
+};
 
 export const armed = (): boolean => listeners.size > 0 || bucket !== null;
 
@@ -72,7 +92,12 @@ export function summary(): { name: string; n: number; last: number; avg: number;
 
 export function span(name: string, note: string | (() => string) = ""): () => number {
   const t0 = performance.now();
-  if (listeners.size === 0 && bucket === null) return () => +(performance.now() - t0).toFixed(3);
+  if (listeners.size === 0 && bucket === null)
+    return () => {
+      const ms = +(performance.now() - t0).toFixed(3);
+      derived?.(name, typeof note === "function" ? note() : note, ms);
+      return ms;
+    };
   const mark = `${name}-${seq}`;
   performance.mark(`${mark}-start`);
   const frame = stack ? stack.push(0) - 1 : -1;
@@ -100,6 +125,7 @@ export function span(name: string, note: string | (() => string) = ""): () => nu
     };
     ring.unshift(entry);
     if (ring.length > RING) ring.length = RING;
+    derived?.(name, entry.note, ms);
     for (const fn of listeners) fn();
     return ms;
   };

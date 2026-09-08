@@ -9,7 +9,7 @@
  */
 
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { EditorState, type Extension, Prec, type Transaction } from "@codemirror/state";
+import { EditorState, type Extension, Prec, Transaction } from "@codemirror/state";
 import { Decoration, EditorView, drawSelection, keymap, type KeyBinding } from "@codemirror/view";
 
 import { type Analysis, TOKEN_SPELLING_BIT } from "../../core/galley";
@@ -28,12 +28,12 @@ import {
   usfmModeProjection,
 } from "./editorState";
 import { guardedEnter, setBlockMarker } from "./input";
+import { traceFor, type Verdict } from "./instrument";
 import type { ChangeRule, TransactionRule } from "./kernel";
 import { MARKUP_TOKEN_KINDS } from "./mapping";
 import { HOOK, PHASES, RULE_NAMES, type ParserPort, type PhaseRule, type RuleName } from "./phases";
 import { renderRangeField, renderWindow } from "./render";
 import { span } from "./timing";
-import { note } from "./trace";
 
 export type { ClipRange, RuleName };
 export { RULE_NAMES };
@@ -112,9 +112,39 @@ export const readingLayer: Extension = [
  * filters from the LAST registered to the first, so the list is reversed on
  * the way out to make registration order the order rules actually see.
  *
- * Every rule is wrapped once, so a trace says which door a keystroke went
- * through and the meter attributes the time to a phase.
+ * Every rule runs inside a trace STAGE (`core/instrument.ts`), so one read of
+ * a trace says which doors a keystroke went through, in order, and what each
+ * decided. The verdict comes from the rule's own `note` when it made one, and
+ * otherwise from what it returned — see `changeVerdict`/`transactionVerdict`.
+ * The local span stays as well: the keystroke meter attributes time by phase,
+ * and it is armed independently of the trace.
  */
+
+/**
+ * What a change filter's return value means. `true` is the ordinary case;
+ * `false` vetoes the whole transaction; a list of offsets protects those
+ * ranges — which is not itself a refusal (the rest of the change lands), so it
+ * reads as `passed` with the ranges as detail.
+ */
+const changeVerdict = (out: boolean | readonly number[]): [Verdict, string | undefined] =>
+  out === true
+    ? ["passed", undefined]
+    : out === false
+      ? ["refused", "vetoed the whole transaction"]
+      : ["passed", `guarding ${out.length / 2} range(s)`];
+
+/**
+ * What a transaction filter's return value means. The rule got `tr` and either
+ * handed it back (passed), returned nothing at all (refused — CodeMirror drops
+ * the transaction), or returned something else (rewrote).
+ */
+const transactionVerdict = (tr: Transaction, out: unknown): [Verdict, string | undefined] =>
+  out === tr
+    ? ["passed", undefined]
+    : Array.isArray(out) && out.length === 0
+      ? ["refused", "dropped the transaction"]
+      : ["rewrote", undefined];
+
 export function install(
   rules: readonly PhaseRule[],
   parser: ParserPort,
@@ -125,16 +155,28 @@ export function install(
   for (const r of rules) {
     if (omit.has(r.name)) continue;
     const fn = r.rule(parser);
+    const isChange = HOOK[r.phase] === "change";
     const entered = (tr: Transaction) => {
-      note(tr.startState, { rule: `phase:${r.name}`, verdict: "passed", detail: r.phase });
+      const trace = traceFor(tr.startState, tr.annotation(Transaction.userEvent) ?? "transaction");
+      const close = trace === null ? null : trace.stage(r.phase, r.name);
       const done = span(`phase:${r.phase}`, r.name);
       try {
-        return fn(tr);
+        const out = fn(tr);
+        if (close !== null) {
+          // SAFETY: HOOK decides which hook this rule was registered on, and
+          // PHASES only pairs a 'change' phase with a ChangeRule, so `out` is
+          // that rule's own return type.
+          const [verdict, detail] = isChange
+            ? changeVerdict(out as boolean | readonly number[])
+            : transactionVerdict(tr, out);
+          close(verdict, detail);
+        }
+        return out;
       } finally {
         done();
       }
     };
-    if (HOOK[r.phase] === "change") {
+    if (isChange) {
       // SAFETY: HOOK says this phase is a change filter, and PHASES only ever
       // pairs a 'change' phase with a rule returning a ChangeRule's verdict
       // (boolean or a range list). `entered` returns exactly what `fn` did.
@@ -156,26 +198,64 @@ export function rulesLayer(options: EditorOptions): Extension {
   );
 }
 
+/**
+ * One command invocation as a trace COMMAND frame.
+ *
+ * The frame is what makes a keystroke readable end to end: the command opens
+ * it, the dispatch it makes runs the phase stages nested inside it, and the
+ * command's own `note` (moveCaret's from→to, guardedBackspace's plan) becomes
+ * the frame's verdict. With no tracer armed this is one facet read and the
+ * original command.
+ */
+const traced =
+  <T extends { state: EditorState }>(name: string, run: (target: T) => boolean) =>
+  (target: T): boolean => {
+    const trace = traceFor(target.state, "key");
+    if (trace === null) return run(target);
+    const close = trace.command(name);
+    let ok = false;
+    try {
+      ok = run(target);
+      return ok;
+    } finally {
+      close(ok ? "consumed" : "declined");
+    }
+  };
+
 export function usfmKeys(): readonly KeyBinding[] {
+  const move = (right: boolean) =>
+    traced("moveCaret", moveCaret(structureAt, right, undefined, PAINT_PORT));
+  const extend = (right: boolean) =>
+    traced("extendCaret", extendCaret(structureAt, right, undefined, PAINT_PORT));
+  const boundary = (end: boolean) =>
+    traced("caretLineBoundary", caretLineBoundary(structureAt, end, PAINT_PORT));
+  const byWord = (right: boolean) =>
+    traced("moveCaretByWord", moveCaretByWord(structureAt, right, PAINT_PORT));
+  const backspace = () =>
+    traced("guardedBackspace", guardedBackspace(structureAt, planAt, PAINT_PORT));
+  const del = () => traced("guardedDelete", guardedDelete(structureAt, planAt, PAINT_PORT));
   return [
-    { key: "ArrowLeft", run: moveCaret(structureAt, false, undefined, PAINT_PORT) },
-    { key: "ArrowRight", run: moveCaret(structureAt, true, undefined, PAINT_PORT) },
-    { key: "Shift-ArrowLeft", run: extendCaret(structureAt, false, undefined, PAINT_PORT) },
-    { key: "Shift-ArrowRight", run: extendCaret(structureAt, true, undefined, PAINT_PORT) },
-    { key: "Home", run: caretLineBoundary(structureAt, false, PAINT_PORT) },
-    { key: "End", run: caretLineBoundary(structureAt, true, PAINT_PORT) },
-    { key: "Mod-ArrowLeft", run: caretLineBoundary(structureAt, false, PAINT_PORT) },
-    { key: "Mod-ArrowRight", run: caretLineBoundary(structureAt, true, PAINT_PORT) },
-    { key: "Alt-ArrowLeft", run: moveCaretByWord(structureAt, false, PAINT_PORT) },
-    { key: "Alt-ArrowRight", run: moveCaretByWord(structureAt, true, PAINT_PORT) },
-    { key: "Enter", run: guardedEnter(structureAt, planAt) },
-    { key: "Backspace", run: guardedBackspace(structureAt, planAt, PAINT_PORT) },
-    { key: "Backspace", run: mergeParagraphBackwards(structureAt) },
-    { key: "Delete", run: guardedDelete(structureAt, planAt, PAINT_PORT) },
-    { key: "Ctrl-d", run: guardedDelete(structureAt, planAt, PAINT_PORT) },
-    { key: "Ctrl-h", run: guardedBackspace(structureAt, planAt, PAINT_PORT) },
-    { key: "Mod-Alt-1", run: setBlockMarker(structureAt, "q1") },
-    { key: "Mod-Alt-0", run: setBlockMarker(structureAt, "p") },
+    { key: "ArrowLeft", run: move(false) },
+    { key: "ArrowRight", run: move(true) },
+    { key: "Shift-ArrowLeft", run: extend(false) },
+    { key: "Shift-ArrowRight", run: extend(true) },
+    { key: "Home", run: boundary(false) },
+    { key: "End", run: boundary(true) },
+    { key: "Mod-ArrowLeft", run: boundary(false) },
+    { key: "Mod-ArrowRight", run: boundary(true) },
+    { key: "Alt-ArrowLeft", run: byWord(false) },
+    { key: "Alt-ArrowRight", run: byWord(true) },
+    { key: "Enter", run: traced("guardedEnter", guardedEnter(structureAt, planAt)) },
+    { key: "Backspace", run: backspace() },
+    {
+      key: "Backspace",
+      run: traced("mergeParagraphBackwards", mergeParagraphBackwards(structureAt)),
+    },
+    { key: "Delete", run: del() },
+    { key: "Ctrl-d", run: del() },
+    { key: "Ctrl-h", run: backspace() },
+    { key: "Mod-Alt-1", run: traced("setBlockMarker", setBlockMarker(structureAt, "q1")) },
+    { key: "Mod-Alt-0", run: traced("setBlockMarker", setBlockMarker(structureAt, "p")) },
   ];
 }
 

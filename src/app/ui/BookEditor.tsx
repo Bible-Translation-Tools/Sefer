@@ -39,6 +39,8 @@ import {
   keystrokeMeter,
   recent as editorSpans,
   summary as editorSummary,
+  dumpTrace,
+  traces as editorTraces,
   type Measured,
 } from "../../editor";
 import { installEditorDevSurface } from "../../platform/observability";
@@ -113,6 +115,14 @@ export function BookEditor(props: BookEditorProps) {
         keystrokes: () => keystrokes,
         spans: editorSpans,
         summary: editorSummary,
+        // The pipeline instrument: which stages each recent transaction flowed
+        // through and what each decided. `trace()` prints one of them.
+        traces: editorTraces,
+        trace: (at) => {
+          const held = editorTraces();
+          const one = held[at === undefined ? held.length - 1 : at];
+          return one === undefined ? "no trace recorded" : dumpTrace(one);
+        },
       });
       created.dispatch({
         effects: StateEffect.appendConfig.of([projection.of([]), meter.extension]),
