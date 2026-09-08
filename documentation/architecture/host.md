@@ -52,18 +52,37 @@ The `src/platform/tauri/` Layers are implemented over the Tauri plugins and the 
 `src/app/services.ts` chooses by `detectHost()` and reaches the desktop Layers through a dynamic
 `import()`, so the Web bundle never evaluates `@tauri-apps/*`.
 
-## How composition should merge them
+## How composition merges them
 
-`composeApplication()` builds Observability today and provides no other host Layer, because nothing
-consumes one ([composition](composition.md)). The host capabilities go in as one merged Layer when the
-first consumer lands, in dependency order:
+`src/app/composition.ts` still owns only boot and Observability ([composition](composition.md)). The
+host Layers are merged one ring out, in `src/app/services.ts`, and all six are provided today —
+`composeServices()` cannot return without them, because `HostInfo` and `FileSystem` are what every
+rooted module reads its root from.
 
-- `HostInfoLive` — from `WebHostInfoLive(buildIdentity())` on Web; it needs the same build identity
-  `boot` already validates, so composition should pass the validated `BootInfo.build` rather than
-  re-reading `__SEFER_BUILD__`.
-- `FileSystem` — already an option on `CompositionOptions`.
-- `SettingsLive` needs both of the above: `Layer.provide(SettingsLive, Layer.merge(hostInfo, fileSystem))`.
-- `SessionCredentialsLive` and `WebDialogsLive` need nothing, and read Observability when it is there.
+`detectHost()` decides once, and the desktop Layers arrive through a dynamic `import()` of
+`src/platform/tauri/index` inside that branch and nowhere else, so a Web bundle never evaluates — or
+even fetches — `@tauri-apps/*`. The type is named as `typeof import(...)`, which is erased.
 
-Both host entries merge the same shape, so nothing above the composition root learns which host it is
-on. See [boundaries](boundaries.md) and [storage](storage.md).
+What `domainLayer(build, fixture, paths, tauri)` wires, in dependency order:
+
+- **HostInfo** — `WebHostInfoLive(build)` or `TauriHostInfoLive(build)`, where `build` is read off the
+  boot result the composition already validated rather than from `__SEFER_BUILD__` a second time.
+- **FileSystem** — `OpfsFileSystemLive` or `TauriFileSystemLive`, and `FixtureFileSystemLive` on either
+  host when `?fixture=1` asked for the seeded project.
+- **Credentials** — `SessionCredentialsLive` on Web (no secure store, so tokens deliberately do not
+  survive a reload) or `TauriCredentialsLive` over the OS keychain. `GiteaLive` is provided *over* it
+  (`Layer.provideMerge`), because Gitea needs the credential store and the browser's `fetch`.
+- **Dialogs** — `WebDialogsLive` (File System Access API) or `TauriDialogsLive` (native pickers).
+- **Updater** — `NoUpdaterLive(build)`, which refuses honestly, or `TauriUpdaterLive`.
+- **Galley** — `WebGalleyLive` on both: the wasm engine runs in the webview, not in Rust, so there is
+  nothing host-specific to swap.
+
+Those are merged as one `host` Layer with the FileSystem, and every core module is provided over it:
+`Layer.provideMerge(modules, Layer.merge(host, fileSystem))`. `SettingsLive` therefore finds the
+`HostInfo` and `FileSystem` it needs without being wired to them by hand, and the same is true of
+Recovery's and Library's roots, which are passed as plain strings resolved from `paths` before the
+Layers are built (`WEB_PATHS`, or `await tauriPaths()`).
+
+Both host branches merge the same shape, so nothing above `composeServices` learns which host it is
+on: the shell reads `hostInfo.kind()` when it wants to *say* which one, never to decide behaviour.
+See [the shell](shell.md), [boundaries](boundaries.md) and [storage](storage.md).

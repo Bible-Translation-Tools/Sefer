@@ -21,6 +21,10 @@ Wiring facts that carry meaning, not taste:
 
 The open `Project`, the focused book, the mode, the clipped chapter, the findings cursor and the status line live in one Solid context above the router. TanStack owns navigation, not lifetimes: a route match is destroyed on every navigation, and a Project owns Book lifetimes.
 
+`shell.unsaved(book)` is exactly `SaveCoordinator.dirty(book)` plus a `tick()` read for reactivity. It
+used to add a revision check of its own, because a book opened from disk had no baseline and so read
+dirty untouched; the shell now tells Save what disk holds instead, with `adopt` at focus ([save](save.md)).
+
 The context carries a stable handle — `useShellState()` (always available) and `useShell()` (only inside a `ShellGate`) — because a Solid 2 context value is read when the provider is created and cannot be swapped later.
 
 ## The Solid/Book boundary
@@ -30,6 +34,32 @@ The context carries a stable handle — `useShellState()` (always available) and
 `bump()` increments one signal. Every derived screen — the census, the dirty markers, the findings list, the stale badges — reads `shell.tick()` and re-reads its module. No other component subscribes to a Book, and nothing outside that file holds text.
 
 Mode and chapter are dispatched into the canonical state through a compartment. Neither is a document change, so `fromView` ignores them: a projection is presentation and a clip is a view choice.
+
+## How a book opens: the whole book, unless asked otherwise
+
+A book opens **whole** — one scrolling document, no clip. A book is one document, and chapter-at-a-time
+is a way of reading it, not its shape; the editor's clip (`pickChapter`) is dispatched into the
+canonical state through a compartment, so un-clipped is simply `null`.
+
+`editor.preferChapterView` (default `false`, "Open books one chapter at a time" on `/settings`) turns
+that around for readers who want it. It is registered in `src/app/settings.ts` like every other shell
+preference, and the shell is its second reader, so the keys are declared once there and memoised
+against the `SettingsService` — registering a name twice is a programming error the service notes.
+`ProjectContext` holds the value in a signal kept live by a forked fiber over `settings.changes`, so
+turning it on takes effect immediately.
+
+What each state means:
+
+- **Off (the default).** `focus` opens on `null` — the whole book. The chapter picker still works:
+  choosing a chapter clips, "Whole book" un-clips, and `editor.chapter.next/previous/whole` do the
+  same from the palette. Navigation that names an offset (a finding, a search hit) leaves the book
+  un-clipped and the offset is scrolled to.
+- **On.** `focus` opens clipped — to the chapter the navigation asked for, or the first one — and the
+  picker is labelled and marked `data-prominent="true"` for a style rule to pick up.
+
+Findings and search navigate by URL, and the route that lands calls `focus(bookId)` with no offset. So
+the offset is left on the shell first: `shell.aim(bookId, from)` records it, `focus` reads it to
+choose the opening chapter, and `shell.reveal()` keeps it for the editor surface to scroll to.
 
 ## Commands
 
@@ -52,4 +82,8 @@ Every user-visible string goes through `t()` (`src/app/i18n.ts`) — an identity
 - **Replace-all** across a project. Only single-hit replace is offered; replace-all is a MultiBook operation with one Undo per book, and offering the button before that flow is wired would offer something we cannot take back.
 - **Restoring a previous version.** `/history` shows a commit's bytes read-only; loading one into a Book is an edit and needs a diff and a confirmation.
 - **The inline linter and its gutter**, for a reason outside the shell: the installed `@codemirror/lint` resolves its own copy of `@codemirror/state` (6.5.2) while the app uses 6.7.4, so `usfmLinter()`'s facets come from a different module instance and CodeMirror answers "Unrecognized extension value in extension set". Adding `resolve: { dedupe: ["@codemirror/state", "@codemirror/view"] }` to `vite.config.ts` fixes it (verified), after which `usfmLinter(), lintGutter()` can be appended to `mountable` in `src/app/services.ts`. The duplication affects `src/editor/recipes/lint.ts` for anyone who mounts it, so the fix belongs in the build config.
+- **Scrolling to a target in an un-clipped book.** `shell.aim` and `shell.reveal()` carry the offset a
+  finding or a search hit named, and `focus` already uses it to choose the opening chapter when chapter
+  view is on. With chapter view off nothing scrolls to it yet: the scroll belongs in
+  `src/app/ui/BookEditor.tsx`, the one component that holds the `EditorView`.
 - **Settings enumeration.** `SettingsService` has no "list every registered key" — a key belongs to the module that declared it. `src/app/settings.ts` is the shell's own set, and `/settings` renders exactly those.

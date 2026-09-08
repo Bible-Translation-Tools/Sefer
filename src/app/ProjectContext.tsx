@@ -17,7 +17,7 @@
  * one subscription per book, at the one place that already has to have one.
  */
 
-import { Effect, Option, Result } from "effect";
+import { Effect, Fiber, Option, Result, Stream } from "effect";
 import {
   createContext,
   createSignal,
@@ -43,6 +43,7 @@ import { registerShellCommands, type ShellBridge } from "./commands";
 import { useComposition } from "./CompositionContext";
 import { t } from "./i18n";
 import { composeServices, fixtureRequested, type Services } from "./services";
+import { shellKeys } from "./settings";
 
 export interface Shell {
   readonly services: Services;
@@ -58,17 +59,35 @@ export interface Shell {
   /**
    * Has this book changed since it was opened or last saved?
    *
-   * NOT `SaveCoordinator.dirty` alone: that answers "differs from what was
-   * written", and a book opened from disk has no baseline yet, so it reads
-   * dirty before anyone has touched it. The honest question for a marker is
-   * whether the text moved, which the revision answers.
+   * Exactly `SaveCoordinator.dirty` — the coordinator adopts a baseline when
+   * the shell opens a book, so "no baseline" no longer means "just opened".
+   * Reading `tick()` is what makes the answer reactive.
    */
   readonly unsaved: (book: Book) => boolean;
 
   readonly mode: Accessor<ProjectionName>;
   readonly setMode: (mode: ProjectionName) => void;
+  /** The clipped chapter ordinal, or `null` for the whole book (the default). */
   readonly chapter: Accessor<number | null>;
   readonly setChapter: (ordinal: number | null) => void;
+  /**
+   * `editor.preferChapterView`, live. Read it to decide how prominent the
+   * chapter picker is; the shell itself reads it when it opens a book.
+   */
+  readonly preferChapterView: Accessor<boolean>;
+
+  /**
+   * Where the next book to open should look.
+   *
+   * Findings and search navigate by URL, and the route that lands calls
+   * `focus(bookId)` with no offset — so the offset is left here first and
+   * `focus` picks it up. What happens with it is the preference's business:
+   * with chapter view ON the book opens clipped to the chapter that contains
+   * it, and with chapter view OFF (the default) the whole book is shown and
+   * `reveal` names the offset to scroll to.
+   */
+  readonly aim: (bookId: BookId, from: number) => void;
+  readonly reveal: Accessor<{ readonly bookId: BookId; readonly from: number } | undefined>;
 
   /** The finding the "next/previous finding" commands point at. */
   readonly finding: Accessor<Finding | undefined>;
@@ -146,6 +165,30 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
   const [status, setStatus] = createSignal("", { name: "status" });
   const [paletteOpen, setPaletteOpen] = createSignal(false, { name: "paletteOpen" });
   const [cursor, setCursor] = createSignal(0, { name: "findingCursor" });
+  const [reveal, setReveal] = createSignal<{ bookId: BookId; from: number } | undefined>(
+    undefined,
+    {
+      name: "reveal",
+    },
+  );
+
+  // The one preference the shell reads outside the settings screen. Held in a
+  // signal, and kept in step with a forked fiber over `settings.changes`, so
+  // turning chapter view on moves the picker's prominence immediately instead
+  // of at the next reload.
+  const keys = shellKeys(services.settings);
+  const [preferChapterView, setPreferChapterView] = createSignal(
+    services.settings.get(keys.preferChapterView),
+    { name: "preferChapterView" },
+  );
+  const watching = services.runtime.runFork(
+    Stream.runForEach(services.settings.changes(keys.preferChapterView), (on) =>
+      Effect.sync(() => setPreferChapterView(on)),
+    ),
+  );
+  onCleanup(() => {
+    Effect.runFork(Fiber.interrupt(watching));
+  });
 
   const report = (message: string): void => {
     setStatus(message);
@@ -203,8 +246,24 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
 
   const unsaved = (book: Book): boolean => {
     tick();
-    if (!services.save.dirty(book)) return false;
-    return Option.isSome(services.save.baseline(book)) || book.source().stamp.revision > 0;
+    return services.save.dirty(book);
+  };
+
+  /**
+   * The chapter a book opens on.
+   *
+   * `null` — the whole book — unless the reader asked for chapter view. A
+   * book is one document; clipping it is a preference, not the shape of the
+   * thing. When the preference is on, a navigation that named an offset opens
+   * on the chapter containing it, and everything else opens on the first.
+   */
+  const openingChapter = (book: EditorBook, at: number | undefined): number | null => {
+    if (!preferChapterView()) return null;
+    if (at === undefined) return 0;
+    const chapters = book.structure().chapters;
+    let found = 0;
+    for (const chapter of chapters) if (chapter.from <= at) found = chapter.ordinal;
+    return found;
   };
 
   // One autosave fiber per book, in the application scope. `focus` is
@@ -224,13 +283,18 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
       Effect.gen(function* () {
         const book = yield* Effect.result(staticProject.instantiate(bookId));
         if (Result.isFailure(book)) return undefined;
+        const coordinator = yield* SaveCoordinator;
+        // The text we just read IS what disk holds, so Save is told so before
+        // anything can edit it — otherwise a book nobody has touched reads
+        // dirty. `adopt` refuses on a second visit and on a book whose text
+        // has already moved, so calling it on every focus is safe.
+        yield* coordinator.adopt(book.success);
         // Journalling starts here, not at open: a book nobody is editing has
         // nothing to recover, and the journal fiber belongs to the app scope.
         const recovery = yield* Recovery;
         yield* recovery.attach(book.success, staticProject.id);
         if (!armed.has(bookId)) {
           armed.add(bookId);
-          const coordinator = yield* SaveCoordinator;
           yield* coordinator.autosave(book.success, DEFAULT_AUTOSAVE_POLICY);
         }
         return book.success;
@@ -244,7 +308,16 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
       return;
     }
     setFocused(editing);
-    setChapter(null);
+    // The aim, if one was left for this book, decides the opening chapter and
+    // then stays put for the editor surface to scroll to.
+    const aimed = reveal();
+    const at = aimed?.bookId === bookId ? aimed.from : undefined;
+    if (aimed !== undefined && aimed.bookId !== bookId) setReveal(undefined);
+    setChapter(openingChapter(editing, at));
+  };
+
+  const aim = (bookId: BookId, from: number): void => {
+    setReveal({ bookId, from });
   };
 
   const stepFinding = (delta: 1 | -1): void => {
@@ -263,6 +336,7 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     );
     const held_project = project();
     if (held_project === undefined) return;
+    aim(target.bookId, target.from);
     go(
       `/project/${encodeURIComponent(held_project.root)}/book/${encodeURIComponent(target.bookId)}`,
     );
@@ -313,6 +387,9 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     setChapter: (ordinal) => {
       setChapter(ordinal);
     },
+    preferChapterView,
+    aim,
+    reveal,
     finding,
     tick,
     bump,

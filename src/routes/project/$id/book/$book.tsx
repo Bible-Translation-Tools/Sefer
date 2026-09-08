@@ -11,6 +11,12 @@ import { ShellGate } from "../../../../app/ui/ShellGate";
  * The editor screen: a chapter picker, a mode toggle, the mounted book, and a
  * status line.
  *
+ * A book opens WHOLE — one document, scrolled — and the chapter picker is a
+ * way to narrow that. `editor.preferChapterView` (the shell's setting, read
+ * through `shell.preferChapterView()`) flips which of the two is the point:
+ * with it on the book opens clipped and the picker is labelled and prominent,
+ * with it off the picker is a plain control that clips on demand.
+ *
  * Everything on this page reads the Book through the shell. The page itself
  * holds no text, no structure and no analysis — `BookEditor` owns the one
  * subscription, and this component only reads what the shell already knows.
@@ -55,8 +61,17 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
             <div class="row">
               <strong>{book().id}</strong>
 
+              {/* The picker works either way — picking a chapter clips, "Whole
+                  book" un-clips — but it only claims space when the reader
+                  asked to read a chapter at a time. `data-prominent` is the
+                  hook a style rule can hang off. */}
+              <Show when={shell.preferChapterView()}>
+                <label for="chapter-picker">{t("Chapter")}</label>
+              </Show>
               <select
+                id="chapter-picker"
                 aria-label={t("Chapter")}
+                data-prominent={String(shell.preferChapterView())}
                 value={shell.chapter() === null ? "" : String(shell.chapter())}
                 onChange={(event) => {
                   const value = event.currentTarget.value;

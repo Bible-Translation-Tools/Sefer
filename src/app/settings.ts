@@ -42,25 +42,55 @@ export interface NumberSetting {
  */
 export type AnyDescriptor = BooleanSetting | StringSetting | NumberSetting;
 
+/** The tokens the shell keeps after registering, by the name the code uses. */
+export interface ShellKeys {
+  readonly theme: SettingKey<string>;
+  readonly startInUsfmMode: SettingKey<boolean>;
+  readonly autosaveIdleMs: SettingKey<number>;
+  /**
+   * Off by default, and that default is a decision: a book is ONE document,
+   * so the editor shows the whole of it and scrolls. Turning this on clips the
+   * view to a chapter at a time (`ProjectContext` picks the chapter at open,
+   * the picker changes it) for people who would rather read that way.
+   */
+  readonly preferChapterView: SettingKey<boolean>;
+}
+
 /**
- * Registers the shell's preferences. Called once, from the settings screen's
- * first render, because these are the only screen that reads them; registering
- * the same name twice is a programming error the service notes.
+ * Registered once per `SettingsService`, and cached.
+ *
+ * There are two readers now — the settings screen renders the descriptors, and
+ * the shell reads `preferChapterView` when it opens a book — and registering
+ * the same name twice is a programming error the service notes. So the keys
+ * are declared here, memoised against the service that holds them, and both
+ * readers ask for the same tokens rather than each declaring their own.
  */
-export const shellSettings = (settings: SettingsService): readonly AnyDescriptor[] => [
-  {
-    key: settings.register("shell.theme", Schema.String, "system"),
-    label: "Theme (system, light, dark)",
-    kind: "string",
-  },
-  {
-    key: settings.register("shell.startInUsfmMode", Schema.Boolean, false),
-    label: "Start books in USFM mode",
-    kind: "boolean",
-  },
-  {
-    key: settings.register("shell.autosaveIdleMs", Schema.Number, 1200),
-    label: "Autosave idle (ms)",
-    kind: "number",
-  },
-];
+const registered = new WeakMap<SettingsService, ShellKeys>();
+
+export const shellKeys = (settings: SettingsService): ShellKeys => {
+  const held = registered.get(settings);
+  if (held !== undefined) return held;
+  const keys: ShellKeys = {
+    theme: settings.register("shell.theme", Schema.String, "system"),
+    startInUsfmMode: settings.register("shell.startInUsfmMode", Schema.Boolean, false),
+    autosaveIdleMs: settings.register("shell.autosaveIdleMs", Schema.Number, 1200),
+    preferChapterView: settings.register("editor.preferChapterView", Schema.Boolean, false),
+  };
+  registered.set(settings, keys);
+  return keys;
+};
+
+/** The shell's preferences as the settings form's rows, in display order. */
+export const shellSettings = (settings: SettingsService): readonly AnyDescriptor[] => {
+  const keys = shellKeys(settings);
+  return [
+    { key: keys.theme, label: "Theme (system, light, dark)", kind: "string" },
+    { key: keys.startInUsfmMode, label: "Start books in USFM mode", kind: "boolean" },
+    {
+      key: keys.preferChapterView,
+      label: "Open books one chapter at a time",
+      kind: "boolean",
+    },
+    { key: keys.autosaveIdleMs, label: "Autosave idle (ms)", kind: "number" },
+  ];
+};

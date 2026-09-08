@@ -12,7 +12,8 @@
 //     the write stay dirty instead of being silently promoted.
 //   * `serialize(path)` — one queue per path. Autosave, an explicit save and a
 //     `saveAll` cannot interleave writes to the same file.
-//   * the baselines — one per successful write, the contract Diff consumes and
+//   * the baselines — one per successful write, plus the one `adopt` seeds
+//     when a book is opened from disk; the contract Diff consumes and
 //     Recovery asks about.
 //   * conflicts — an external change that really differs from the baseline
 //     blocks saving that book until the user resolves it. Sefer surfaces
@@ -48,9 +49,9 @@ import { trustedBy, type Book, type BookId } from "../book/book";
 import { writeFileAtomic } from "../fileSystem/atomic";
 import { Observability } from "../observability";
 import { Recovery } from "../recovery/recovery";
+import { debounced, type DebouncePolicy } from "../schedule/debounce";
 import { decode, encode, type SourceStamp } from "../source/source";
 import type { Baseline } from "./baseline";
-import { debounced, type DebouncePolicy } from "./debounce";
 
 /** What one successful write did. Git commits receipts, never guesses. */
 export interface SaveReceipt {
@@ -108,6 +109,25 @@ export interface SaveCoordinatorService {
    * must never do quietly.
    */
   readonly save: (book: Book) => Effect.Effect<SaveReceipt, SaveError>;
+  /**
+   * Seeds the baseline from the book's CURRENT text, as "what disk holds".
+   *
+   * Why this exists: a baseline is what Save last wrote, and `dirty` treats a
+   * missing one as dirty — nothing has been written, so everything is
+   * unsaved. That is right for a book Sefer created, and wrong for a book
+   * Sefer just READ: the text in hand IS the bytes on disk, so the honest
+   * baseline is already known and nobody should see an untouched book marked
+   * unsaved. Call it once where a book is opened from disk (the shell does, in
+   * `ProjectContext.focus`), and `dirty` becomes the only question anyone has
+   * to ask.
+   *
+   * Adopting is refused — quietly, it is not an error — when a baseline
+   * already exists (a real write, or a second open of the same book) or when
+   * the book's revision is past 0. A revision past 0 means something has
+   * applied since the read (a Recovery replay, a fix), and that text is
+   * genuinely not on disk; adopting it would promote unsaved work to saved.
+   */
+  readonly adopt: (book: Book) => Effect.Effect<void>;
   /** What was last written for this book, if anything was. */
   readonly baseline: (book: Book) => Option.Option<Baseline>;
   /**
@@ -222,6 +242,38 @@ const make = (
         return hasher(source.text) !== baseline.hash;
       return source.stamp.revision !== baseline.stamp.revision;
     };
+
+    /**
+     * See the port's comment. An Effect rather than a plain function because
+     * every other entry point here is one and the caller already has a
+     * program in hand at open time; nothing in it is asynchronous.
+     */
+    const adopt = (book: Book): Effect.Effect<void> =>
+      Effect.sync(() => {
+        remember(book);
+        if (baselines.has(book.id)) return;
+        const source = book.source();
+        if (source.stamp.revision !== 0) {
+          observability?.note(
+            "save.adopt",
+            "declined",
+            `${book.id} r${source.stamp.revision}`,
+            book.id,
+          );
+          return;
+        }
+        baselines.set(book.id, {
+          bookId: book.id,
+          path: book.path,
+          stamp: source.stamp,
+          ...(hasher === undefined ? {} : { hash: hasher(source.text) }),
+          text: source.text,
+          // When we learned it, not when it was written: Save has no use for
+          // the file's mtime and the port's stat is optional on some hosts.
+          savedAt: Date.now(),
+        });
+        observability?.note("save.adopt", "consumed", `${book.id} r0`, book.id);
+      });
 
     const save = (book: Book): Effect.Effect<SaveReceipt, SaveError> =>
       Effect.gen(function* () {
@@ -369,6 +421,7 @@ const make = (
 
     return {
       save,
+      adopt,
       baseline: (book) => Option.fromUndefinedOr(baselines.get(book.id)),
       dirty,
 

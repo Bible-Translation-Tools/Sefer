@@ -18,13 +18,15 @@ Git.commit(receipts) later, explicitly
 
 `serialize(path)` is one Effect `Semaphore` of one permit per path. Save is the only owner of write ordering, so an explicit save, an autosave and a `saveAll` cannot interleave writes to the same file. `writeFileAtomic` ([storage](storage.md)) writes the deterministic `<path>.sefer-tmp` sibling and renames it over the target.
 
-`autosave(book, policy)` subscribes to `book.changes` and arms a debounce with two bounds — `idleMs` of quiet, and `maxIntervalMs` from the first edit of a burst so continuous typing still saves. The listener touches two numbers and opens a latch; the save runs on a fiber tied to the Scope, never inside `apply`. Autosave failures are noted, not raised: a disk that cannot be written must not tear down the editor.
+`autosave(book, policy)` subscribes to `book.changes` and arms the shared two-bound debounce (`src/core/schedule/debounce.ts` — Save's autosave, Recovery's journal and ProjectAnalysis's re-analyze loop are the three callers) with two bounds — `idleMs` of quiet, and `maxIntervalMs` from the first edit of a burst so continuous typing still saves. The listener touches two numbers and opens a latch; the save runs on a fiber tied to the Scope, never inside `apply`. Autosave failures are noted, not raised: a disk that cannot be written must not tear down the editor.
 
 ## The Baseline contract
 
 `Baseline { bookId; path; stamp; hash?; text; savedAt }` (`src/core/save/baseline.ts`) is a value with no operations: what Save last wrote for one book. Save produces exactly one per successful write; Diff (slice 23) consumes it; Recovery asks about it to know what is pending.
 
-`dirty(book)` answers from the baseline alone. No baseline means dirty — nothing has been saved, so everything is unsaved. Within a session the stamp's revision decides; when the baseline and the current text both carry an engine hash, the hash decides. A same-length replacement can therefore never pass as saved. Core computes no hash: `SaveCoordinatorLive({ hasher })` takes the engine's xxh3 from composition once `src/core/galley` exposes it, and `hash` is absent until then.
+`adopt(book)` seeds a baseline from a book's current text, as "what disk holds". It exists because "no baseline" and "not saved" are not the same thing: a book Sefer just READ has no baseline, but the text in hand *is* the bytes on disk, and marking it unsaved before anyone touched it is a lie the shell used to paper over with a revision check of its own. The shell calls it where it opens a book (`ProjectContext.focus`), so `dirty(book)` is the only question a marker has to ask. Adopting is refused quietly when a baseline already exists (a real write, or a second visit to the same book) or when the book's revision is past 0 — a revision past 0 means something has applied since the read, most likely a Recovery replay, and that text is genuinely not on disk.
+
+`dirty(book)` answers from the baseline alone. No baseline means dirty — nothing has been saved or adopted, so everything is unsaved. Within a session the stamp's revision decides; when the baseline and the current text both carry an engine hash, the hash decides. A same-length replacement can therefore never pass as saved. Core computes no hash: `SaveCoordinatorLive({ hasher })` takes the engine's xxh3 from composition once `src/core/galley` exposes it, and `hash` is absent until then.
 
 ## Serialisation style: always LF
 

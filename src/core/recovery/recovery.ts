@@ -27,7 +27,7 @@ import { writeFileStringAtomic } from "../fileSystem/atomic";
 import { joinPath } from "../fileSystem/path";
 import { Observability } from "../observability";
 import type { Baseline } from "../save/baseline";
-import { debounced, type DebouncePolicy } from "../save/debounce";
+import { debounced, type DebouncePolicy } from "../schedule/debounce";
 import type { Change, SourceStamp } from "../source/source";
 
 /** One accepted apply, in the shape the journal line carries. */

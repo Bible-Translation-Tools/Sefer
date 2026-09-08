@@ -14,7 +14,7 @@ Core computes no content hash. Content identity is Galley's job: the engine hash
 - `SplitsSurrogatePair` — `from` or `to` lands between a high and a low surrogate. UTF-16 offsets are not character offsets, and slicing inside an astral character (an emoji, most historic scripts) leaves a lone surrogate on each side.
 - `CarriageReturn` — `insert` contains `\r`. Canonical text is LF; `decode` already refuses CR on the way in, and `apply` refuses to reintroduce it.
 
-An admitted change produces a new `Source` with `revision + 1` and the new length. `Book.apply(change, origin)` returns `Result<Receipt, SourceChangeError>` on the same rules: a refused change is not an edit, so the book stays on its current revision, emits no `book.apply` note, and publishes nothing to subscribers.
+An admitted change produces a new `Source` with `revision + 1` and the new length. `Book.apply(changes, origin, trust?)` returns `Result<Receipt, Refusal>`, and these rules are the floor under both implementations: a refused change is not an edit, so the book stays on its current revision and publishes nothing to subscribers.
 
 ## The freshness rule
 
@@ -22,9 +22,24 @@ No derived product — analysis, findings, fixes, search hits, diffs, save basel
 
 ## Book
 
-`src/core/book/book.ts` is the port and its one plain implementation. A `Book` has an `id` (the `\id` marker's code when the text starts with `\id`, otherwise the file stem), a `path`, `source()`, `apply(change, origin) → Result<Receipt, SourceChangeError>`, and `changes(fn) → unsubscribe`. A `Receipt` is `{ before, after, origin }` — the stamp on each side of the edit and who asked for it. Subscribers are called synchronously, in subscription order, after the edit lands.
+`src/core/book/book.ts` is the port: one addressable USFM document and the **one write path** into its canonical text. A `Book` has an `id` (the `\id` marker's code when the text starts with `\id`, otherwise the file stem), a `path`, and four operations:
 
-`openBook(path)` reads through the `FileSystem` service and decodes, so it fails with `PlatformError` or `SourceDecodeError`. It captures `Observability` through `Effect.serviceOption` at open time, which keeps `apply` synchronous: each `apply` emits one `book.apply` note (`rewrote`, `<id> r<before> -> r<after> (<origin>)`, correlated by the book id) when the Layer was in context, and nothing when it was not.
+- `source()` — canonical text and stamp, from whichever seat holds it.
+- `apply(changes, origin, trust?) → Result<Receipt, Refusal>` — the write path. `changes` is a `Change` or a list of them, in the coordinates of the text **before** the edit (CodeMirror's change-set convention), and must not overlap. Synchronous: it returns after every subscriber has run.
+- `changes(fn(receipt, changes)) → unsubscribe` — synchronous fan-out in subscription order, after acceptance.
+- `history() → History | null` — undo/redo when a CodeMirror state holds the text, `null` for the plain Book.
 
-What Book is **not** yet: it is not editor-backed (no CodeMirror state, no undo history), it cannot save, and it keeps no history beyond the current revision. Those are slices 05–08 and 10. See [plan 04](../../planning/00-ideas/v2-04-source-and-book-lifetime.md).
+A `Receipt` is `{ before, after, origin }`: the stamp on each side of the edit and who asked for it. A `Refusal` is a tagged error naming the `rule` that closed the door (`source.apply` for the plain Book's range checks, an editing phase's name for the editor-backed one), its own `reason`, and a description. A refused change is not an edit: the book stays on its revision, publishes nothing, and notes `book.apply` `refused`.
 
+`Origin` says who asked — `keyboard`, `paste`, `window`, `fix`, `format`, `replace`, `recovery`, `revert`, `project.*`, or any other string the editor recorded as CodeMirror's `userEvent`. `Trust` is separate and explicit: `UNTRUSTED` (the default) is judged by every admission rule, and `trustedBy("save.takeDisk")` bypasses the keyboard guards the way a fix-it does. The two are not the same question — a `revert` origin still has to say who trusted it.
+
+`applyAll(source, changes)` is the shared helper: it sorts the list **back to front** and splices in that order, so each later range is untouched by the edits before it, and it stamps the result **once** — a Book edit is one revision however many changes it carried. Overlapping ranges are refused as out of range once an earlier splice has moved them. `makeListeners()` is the other shared piece: it snapshots the subscriber set before iterating, so a listener may unsubscribe itself.
+
+### Two implementations, one port
+
+- **The plain Book** (`makeBook(path, source, observability?)`, and `openBook(path)` which reads through the `FileSystem` service and decodes): text held as a `Source`, no admission rules beyond Source's own, no history. It serves the census, project analysis, search and multi-book operations over books nobody is editing. `openBook` fails with `PlatformError` or `SourceDecodeError`, and captures `Observability` through `Effect.serviceOption` at open time, which is what keeps `apply` synchronous: each accepted apply emits one `book.apply` note when the Layer was in context, and nothing when it was not.
+- **The editor-backed Book** (`editorBook(plain, { analyze, extensions?, observability? })` in `src/editor/book.ts`): the canonical text is a CodeMirror `EditorState`, and `apply` runs the editing phases before accepting. It continues the plain book's revision rather than restarting it, so a Save baseline or a Recovery journal taken while the book was plain still compares against what the seat reports. It adds what only a state can answer — `state`, `structure()`, `bindView(view)`/`fromView(view, trs)`, `attached()`/`hold()`, `attach(receive)`, `funnel()`, `close()` — and its `history()` is real.
+
+Readers cannot tell the two apart, which is the point: Save, Recovery, ProjectAnalysis and the UI subscribe once, through the port, and trust that they saw every edit. A view bound with `bindView` **must** route its transactions through `fromView`; a view that dispatched on its own would make publication silently incomplete, so `apply` throws rather than report a receipt nobody heard.
+
+See [the editor](editor.md) for the phases and [save](save.md) for what subscribes.
