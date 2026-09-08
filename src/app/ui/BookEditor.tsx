@@ -36,8 +36,17 @@ import {
   structureAt,
   type EditorBook,
   type ProjectionName,
+  keystrokeMeter,
+  recent as editorSpans,
+  summary as editorSummary,
+  type Measured,
 } from "../../editor";
+import { installEditorDevSurface } from "../../platform/observability";
+import { useComposition } from "../CompositionContext";
 import { useShell } from "../ProjectContext";
+
+// Last measurements for the dev surface; one module-level ring is enough.
+const keystrokes: Measured[] = [];
 
 // The editor's own stylesheet. It ships with the editor module and is imported
 // where the view mounts, so a route that never opens a book never loads it.
@@ -56,6 +65,7 @@ interface Bound {
 
 export function BookEditor(props: BookEditorProps) {
   const shell = useShell();
+  const observability = useComposition().observability;
   const [stamp, setStamp] = createSignal<SourceStamp | undefined>(undefined, { name: "stamp" });
   const [bound, setBound] = createSignal<Bound | undefined>(undefined, { name: "boundView" });
   const [host, setHost] = createSignal<HTMLDivElement | undefined>(undefined, {
@@ -84,8 +94,28 @@ export function BookEditor(props: BookEditorProps) {
       created.dom.classList.add("cm-mode-regular");
       // The mountable half of the editor is added here rather than baked into
       // the seat, because the canonical state must also work headless.
+      // The keystroke meter closes one gesture per DOM event and reports the
+      // wall time from event to last update, the analyzes it cost, and the
+      // per-span totals. The ring gets one bounded note per gesture; the dev
+      // surface keeps the last fifty measurements whole.
+      const meter = keystrokeMeter((measured) => {
+        const totals = Array.from(measured.totals, ([name, t]) => `${name}=${t.ms.toFixed(1)}`);
+        observability.note(
+          "keystroke",
+          "ready",
+          `${measured.ms.toFixed(1)}ms analyzes=${measured.analyzes} ${totals.join(" ")}`,
+          book.id,
+        );
+        keystrokes.push(measured);
+        if (keystrokes.length > 50) keystrokes.shift();
+      });
+      installEditorDevSurface({
+        keystrokes: () => keystrokes,
+        spans: editorSpans,
+        summary: editorSummary,
+      });
       created.dispatch({
-        effects: StateEffect.appendConfig.of(projection.of([])),
+        effects: StateEffect.appendConfig.of([projection.of([]), meter.extension]),
       });
 
       const supply = (): void => {

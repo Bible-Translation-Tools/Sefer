@@ -21,8 +21,25 @@ export interface DevState {
   readonly observability: number;
 }
 
+/**
+ * The editor's own instruments, read-only. Typed loosely on purpose: platform
+ * does not depend on the editor layer, and this surface exists for a person or
+ * an agent reading the running app, not for code.
+ */
+export interface EditorDevSurface {
+  readonly keystrokes: () => readonly unknown[];
+  readonly spans: () => readonly unknown[];
+  readonly summary: () => readonly unknown[];
+}
+
 declare global {
-  var __sefer: { observability?: ObservabilityDevSurface; state?: () => DevState } | undefined;
+  var __sefer:
+    | {
+        observability?: ObservabilityDevSurface;
+        state?: () => DevState;
+        editor?: EditorDevSurface;
+      }
+    | undefined;
 }
 
 const nodeRuntime = (): NodeRuntime | undefined => {
@@ -62,6 +79,13 @@ export const installDevState = (state: () => DevState): void => {
   if (!import.meta.env.DEV) return;
   const held = globalThis.__sefer ?? {};
   held.state = state;
+  globalThis.__sefer = held;
+};
+
+export const installEditorDevSurface = (surface: EditorDevSurface): void => {
+  if (!import.meta.env.DEV) return;
+  const held = globalThis.__sefer ?? {};
+  held.editor = surface;
   globalThis.__sefer = held;
 };
 

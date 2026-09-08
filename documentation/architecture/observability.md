@@ -99,3 +99,9 @@ An ordinary `verification.step` event may correlate a UI action. Use bounded flu
 7. Measure hot-path cost when adding editor or Galley detail.
 
 Keep the application schema independent of the native writer. Tauri JSONL preservation, batching, rotation, cross-platform paths, and bounded retention remain probe questions.
+
+## The keystroke meter
+
+When a book is mounted, the editor's `keystrokeMeter` closes one gesture per DOM event and writes one bounded note per gesture: `keystroke · ready · <wall ms> analyzes=<n> <span>=<ms> …`, correlated by book id. The wall time is DOM event to last CodeMirror update; the per-span totals (`phase:*`, `scan`, `index`, `decorate`, `paint`) come from the editor's own timing ring, and the engine's `analyze` span lands in this ring separately under the Galley adapter. In a dev build `globalThis.__sefer.editor` exposes `keystrokes()` (the last fifty measurements whole), `spans()` and `summary()` from that ring.
+
+Measured 2026-09-08 on the Psalms fixture in the dev build: `boot` 0 ms (it only validates the host and build), `project.open` ~3 ms for five books, the initial `analyze.project` ~20 ms, warm `analyze` per keystroke ~0.5 ms (7 ms cold), keystroke wall 2–3 ms warm and ~11 ms for the first keystroke after mount.
