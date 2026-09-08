@@ -1,21 +1,29 @@
 import { createFileRoute } from "@tanstack/solid-router";
-import { Result } from "effect";
+import { Effect, Result } from "effect";
 import { For, Show, createSignal } from "solid-js";
 
 import { t } from "../app/i18n";
 import { useShell } from "../app/ProjectContext";
 import { ResultCard } from "../app/ui/ResultCard";
 import { ShellGate } from "../app/ui/ShellGate";
+import { CorpusEngine } from "../core/galley";
 import * as Search from "../core/search/search";
 
 /**
  * Find across the project, and replace one match.
  *
- * The core module does the whole of the work: `find` scans the open Books,
- * `resolveHit` decides whether a hit can still be trusted, and `replace` goes
- * through the book's one write path so the editing rules judge the
- * replacement. Nothing here re-derives an offset — a hit whose book has moved
- * on is shown as stale and refuses.
+ * The core module does the whole of the work: `findProjected` searches the
+ * ENGINE's verse-text projection — the reading, not the markup — `resolveHit`
+ * decides whether a hit can still be trusted, and `replace` goes through the
+ * book's one write path so the editing rules judge the replacement. Nothing
+ * here re-derives an offset — a hit whose book has moved on is shown as stale
+ * and refuses.
+ *
+ * The projection is the default because it is what the translator is reading:
+ * a search for a word cannot be answered by a marker that happens to contain
+ * it, and a hit that spans a footnote is shown as spanning one rather than
+ * quietly replacing the footnote with it. "Search markup too" switches to the
+ * raw scan of canonical text, which is also the only door that takes a regex.
  *
  * Only single-hit replace is offered. Replace-all across a project is a
  * MultiBook operation with one Undo per book, and offering the button before
@@ -28,14 +36,33 @@ function Find() {
   const [insert, setInsert] = createSignal("");
   const [hits, setHits] = createSignal<readonly Search.Hit[]>([], { name: "hits" });
   const [problem, setProblem] = createSignal("");
+  const [markup, setMarkup] = createSignal(false, { name: "searchMarkup" });
   const [opened, setOpened] = createSignal<Search.Hit | undefined>(undefined, {
     name: "openedHit",
   });
 
-  const run = (): void => {
+  /**
+   * One search, through whichever door the toggle names.
+   *
+   * The engine path is asynchronous because the corpus is: on desktop the
+   * projections live in the native process, which is exactly where the search
+   * has to run. The corpus already holds every book of the open project —
+   * `ProjectAnalysis.attach` registers them as it opens — so nothing here
+   * registers anything, and a book the corpus does not know simply has no
+   * hits.
+   */
+  const run = async (): Promise<void> => {
     const project = shell.project();
     if (project === undefined) return;
-    const found = Search.find(project.books, { text: text() }, { limit: 200 });
+    const books = project.books;
+    const staticQuery = { text: text() };
+    const found = markup()
+      ? Search.find(books, staticQuery, { limit: 200 })
+      : await shell.services.run(
+          Effect.flatMap(CorpusEngine, (corpus) =>
+            Effect.result(Search.findProjected(corpus, books, staticQuery, { limit: 200 })),
+          ),
+        );
     if (Result.isFailure(found)) {
       setProblem(found.failure.description);
       setHits([]);
@@ -62,7 +89,7 @@ function Find() {
         : t("refused by {rule}", { rule: result.failure.rule }),
     );
     shell.bump();
-    run();
+    void run();
   };
 
   const bookFor = (hit: Search.Hit) => shell.services.seated(hit.bookId);
@@ -85,7 +112,7 @@ function Find() {
             value={text()}
             onInput={(event) => setText(event.currentTarget.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter") run();
+              if (event.key === "Enter") void run();
             }}
           />
           <input
@@ -94,9 +121,17 @@ function Find() {
             value={insert()}
             onInput={(event) => setInsert(event.currentTarget.value)}
           />
-          <button type="button" data-variant="primary" onClick={run}>
+          <button type="button" data-variant="primary" onClick={() => void run()}>
             {t("Find")}
           </button>
+          <label class="muted">
+            <input
+              type="checkbox"
+              checked={markup()}
+              onChange={(event) => setMarkup(event.currentTarget.checked)}
+            />
+            {t("Search markup too")}
+          </label>
           <span class="muted spacer">{t("{count} hits", { count: hits().length })}</span>
         </div>
 
@@ -124,9 +159,22 @@ function Find() {
                   <button type="button" class="spacer" onClick={() => setOpened(hit)}>
                     {t("Show")}
                   </button>
-                  <button type="button" onClick={() => replaceOne(hit)}>
-                    {t("Replace")}
-                  </button>
+                  {/* A hit that crosses dropped markup has no single range to
+                      replace, and whether that markup survives is the editor's
+                      call — so the button is not offered rather than offered
+                      and refused. */}
+                  <Show
+                    when={!Search.spansMarkup(hit)}
+                    fallback={
+                      <span class="badge" data-spans-markup="true">
+                        {t("spans markup")}
+                      </span>
+                    }
+                  >
+                    <button type="button" onClick={() => replaceOne(hit)}>
+                      {t("Replace")}
+                    </button>
+                  </Show>
                 </Show>
               </li>
             )}

@@ -31,7 +31,7 @@
 
 import { Context, Data, Effect, Layer } from "effect";
 
-import { Galley, type FindingsSnapshot } from "./galley";
+import { Galley, type EngineHit, type FindQuery, type FindingsSnapshot } from "./galley";
 
 /**
  * Which door a publication went through. Carried in telemetry only — the
@@ -90,6 +90,22 @@ export interface CorpusEngineService {
    */
   readonly publish: () => Effect.Effect<FindingsSnapshot, CorpusError>;
 
+  /**
+   * Literal find over every registered book's verse-text projection, in
+   * canonical book order.
+   *
+   * On the corpus port and not on `Galley` because the corpus is what HOLDS
+   * the retained texts and masks: on desktop the books were registered across
+   * IPC and the projections live in the native Pantry, so the search has to
+   * run where they are. It is also the same reason this is asynchronous —
+   * a project-wide scan is not keystroke work.
+   *
+   * A book the corpus was never told about contributes no hits. Registration
+   * is `ProjectAnalysis.attach`'s job, which registers every book of a project
+   * as it opens, so a find on an open project sees all of them.
+   */
+  readonly find: (query: FindQuery) => Effect.Effect<readonly EngineHit[], CorpusError>;
+
   /** Resident bytes on whichever side of the seam the corpus lives. */
   readonly residentBytes: () => Effect.Effect<number, CorpusError>;
 }
@@ -125,6 +141,7 @@ export const WasmCorpusLive: Layer.Layer<CorpusEngine, never, Galley> = Layer.ef
         Effect.try({ try: () => galley.updateReference(id, text), catch: engineFailure }),
       remove: (id) => Effect.try({ try: () => galley.remove(id), catch: engineFailure }),
       publish: () => Effect.try({ try: () => galley.publish(), catch: engineFailure }),
+      find: (query) => Effect.try({ try: () => galley.findAll(query), catch: engineFailure }),
       residentBytes: () => Effect.sync(() => galley.residentBytes()),
     };
   }),

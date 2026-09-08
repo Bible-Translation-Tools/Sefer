@@ -51,6 +51,8 @@ export const __wbg_set_knobs_z_long: (a: number, b: number) => void;
 export const __wbg_set_knobs_z_short: (a: number, b: number) => void;
 export const galley_config: (a: number) => number;
 export const galley_entryCount: (a: number) => number;
+export const galley_find: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
+export const galley_findAll: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
 export const galley_lastLocated: (a: number) => number;
 export const galley_lastMapped: (a: number) => number;
 export const galley_lastPaired: (a: number) => number;
@@ -70,6 +72,6 @@ export const galley_verseText: (a: number, b: number, c: number) => [number, num
 export const __wbindgen_externrefs: WebAssembly.Table;
 export const __wbindgen_malloc: (a: number, b: number) => number;
 export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
-export const __wbindgen_free: (a: number, b: number, c: number) => void;
 export const __externref_table_dealloc: (a: number) => void;
+export const __wbindgen_free: (a: number, b: number, c: number) => void;
 export const __wbindgen_start: () => void;

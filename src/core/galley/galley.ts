@@ -115,6 +115,124 @@ export interface KnobValues {
   readonly z_short: number;
 }
 
+// ---------------------------------------------------------------------------
+// Find, through the engine
+// ---------------------------------------------------------------------------
+
+/**
+ * What to look for. LITERAL — never a pattern.
+ *
+ * The engine's find is `memmem` over the projection; there is no regex on that
+ * side and the `regex` crate is deliberately not one of its dependencies. A
+ * regex query belongs to the raw-text scan in `src/core/search/search.ts`,
+ * which says which query goes which way.
+ */
+export interface FindQuery {
+  readonly text: string;
+  /** Off by default, which is the simple lowercase fold — not a collator. */
+  readonly caseSensitive?: boolean;
+  /** The words rule the engine restates in `galley/src/find.md`. */
+  readonly wholeWord?: boolean;
+  /** Total hits, not per book. Omitted means no bound. */
+  readonly limit?: number;
+}
+
+/** Half-open, in UTF-16 units. */
+export interface EngineRange {
+  readonly from: number;
+  readonly to: number;
+}
+
+/**
+ * One hit of the engine's find, in BOTH coordinate spaces.
+ *
+ * `projected` is where the hit sits in the verse-text projection — what the
+ * reader sees in visual mode — and `source` is where its bytes are in the
+ * canonical USFM, which is where an edit has to land. They are not the same
+ * interval, and the difference is not a rounding error: a hit that crosses
+ * markup the projection dropped covers source that it does not cover in the
+ * projection. So `source` is one range PER CONTIGUOUS PIECE, in order, and
+ * `source.length > 1` means the hit spans markup — the ranges between the
+ * pieces are exactly what the projection left out.
+ *
+ * `preview` is the projected text around the hit, ellipsed for a result card.
+ * Display only: it is trimmed and elided, so no offset may be read back out of
+ * it. It comes from the engine because the projection is materialized for the
+ * search and dropped with it (`galley/src/wasm.md`, "The find buffer").
+ */
+export interface EngineHit {
+  /** The caller's own book id, absent only from a single-book `find`. */
+  readonly bookId?: string;
+  readonly projected: EngineRange;
+  readonly source: readonly EngineRange[];
+  readonly preview: string;
+}
+
+/**
+ * Decodes the find buffer both engine doors emit — the wasm handle here and
+ * the native `Expediter` behind `src/platform/tauri/corpus.ts`.
+ *
+ * The layout is stated once, in `galley/src/wasm.md` ("The find buffer"):
+ * little-endian `u32` throughout, UTF-16 offsets, the two length arrays before
+ * the byte blob so every word stays four-byte aligned.
+ *
+ * Exported because the desktop door reads the same bytes off IPC; nothing
+ * outside `src/core/galley` decodes an engine buffer.
+ */
+export const decodeHits = (bytes: Uint8Array): readonly EngineHit[] => {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const word = (index: number): number => view.getUint32(index * 4, true);
+
+  const hitCount = word(0);
+  const bookCount = word(1);
+  let at = 2;
+
+  // Pass one: the fixed-width hit records, whose width varies with the piece
+  // count, so the id and preview tables cannot be found without walking them.
+  const records: {
+    readonly book: number;
+    readonly projected: EngineRange;
+    readonly source: EngineRange[];
+  }[] = [];
+  for (let hit = 0; hit < hitCount; hit += 1) {
+    const book = word(at);
+    const projected = { from: word(at + 1), to: word(at + 2) };
+    const pieces = word(at + 3);
+    at += 4;
+    const source: EngineRange[] = [];
+    for (let piece = 0; piece < pieces; piece += 1)
+      source.push({ from: word(at + piece * 2), to: word(at + piece * 2 + 1) });
+    at += pieces * 2;
+    records.push({ book, projected, source });
+  }
+
+  const idLengths: number[] = [];
+  for (let book = 0; book < bookCount; book += 1) idLengths.push(word(at + book));
+  at += bookCount;
+  const previewLengths: number[] = [];
+  for (let hit = 0; hit < hitCount; hit += 1) previewLengths.push(word(at + hit));
+  at += hitCount;
+
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let cursor = at * 4;
+  const take = (length: number): string => {
+    const text = decoder.decode(bytes.subarray(cursor, cursor + length));
+    cursor += length;
+    return text;
+  };
+  const ids = idLengths.map(take);
+  const previews = previewLengths.map(take);
+
+  return records.map((record, index) => ({
+    bookId: ids[record.book],
+    projected: record.projected,
+    source: record.source,
+    // SAFETY: `previews` was built from `previewLengths`, which has one entry
+    // per hit record, so every record index is inside it.
+    preview: previews[index]!,
+  }));
+};
+
 type KnobKey = keyof KnobValues;
 
 const KNOB_KEYS: readonly KnobKey[] = [
@@ -189,6 +307,23 @@ export interface GalleyService {
    * never hold findings from an older snapshot beside a newer one.
    */
   readonly publish: () => FindingsSnapshot;
+
+  /**
+   * Literal find over ONE registered book's verse-text projection.
+   *
+   * Searches what the reader sees: a needle inside a footnote is not found,
+   * and a needle that spans one comes back with one source range per
+   * contiguous piece. Synchronous, like `analyze`, and it throws the engine's
+   * error when `id` is not a registered book — a corpus that has not been
+   * told about the book would otherwise report it clean.
+   */
+  readonly find: (id: string, query: FindQuery) => readonly EngineHit[];
+
+  /**
+   * The same over every registered book, in canonical book order. Every hit
+   * carries its `bookId`, so no second call is needed to place one.
+   */
+  readonly findAll: (query: FindQuery) => readonly EngineHit[];
 
   /** A copy of the knobs the next `publish` judges with. */
   readonly knobs: () => KnobValues;
@@ -370,6 +505,25 @@ const makeService = (
     version: engineVersion,
     analyze,
     memoize,
+    find: (id, query) =>
+      decodeHits(
+        handle.find(
+          id,
+          query.text,
+          query.caseSensitive === true,
+          query.wholeWord === true,
+          query.limit ?? 0,
+        ),
+      ),
+    findAll: (query) =>
+      decodeHits(
+        handle.findAll(
+          query.text,
+          query.caseSensitive === true,
+          query.wholeWord === true,
+          query.limit ?? 0,
+        ),
+      ),
     update: (id, text) => handle.update(id, text),
     updateReference: (id, text) => handle.updateReference(id, text),
     remove: (id) => handle.remove(id),

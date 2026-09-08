@@ -6,9 +6,9 @@
       "wasm"
     ],
     "target": "web",
-    "revision": "663403ac0f2bb2aa1b5dba9efd2601f35ffd28ac",
-    "revisionDate": "2026-09-07T16:05:54-05:00",
-    "subject": "Heap profile: optional Reference and --source-copy; peak 47.6 / 53.7 / 63.7 MiB.",
+    "revision": "f3a2b0bfcae1b294abdbc41165f3d916c5eaecc8",
+    "revisionDate": "2026-09-08T13:37:39-05:00",
+    "subject": "Find crosses the wall: one buffer of hits, UTF-16, both coordinate spaces.",
     "build": "wasm-pack build --target web --release -- --features wasm"
   },
   "wire": {
@@ -25,9 +25,9 @@
     "onion-reader.ts": "2c9bb7494d568d0437b6bcee1aed1b4ac871f8cd0c7864bc72fa65306cc538cc",
     "sous-reader.ts": "2b6548d90d4e9a93b7c490937f61f2359355ac50f651f3d58951e7cd535f2aa9",
     "diagnostics.json": "d4b067e4b3fb1076bbd11bc62eb1dfe975bdd3e76c78b737c37297c22b968d00",
-    "pkg-web/usfm_galley.js": "4d0da4484d65628ffa18746a3c727feb54425ec076e50f882016078920dc57e2",
-    "pkg-web/usfm_galley.d.ts": "288b0f1263efea985f47c294e891ddc94ef3bdd75e0c340cda22bba329561039",
-    "pkg-web/usfm_galley_bg.wasm": "cb683bcc003ecfec9a7613570e6d97768398e48bc960ca6421413f23dd4ef3cc",
-    "pkg-web/usfm_galley_bg.wasm.d.ts": "adfe3b6246812c002d820dab9a5ab0160294b624b0a2d63d9471fbd1e777d1f5"
+    "pkg-web/usfm_galley.js": "a0b5a5275296e4046645c996036cf93d836ef312155edc660b97e5667411a716",
+    "pkg-web/usfm_galley.d.ts": "2945e6c5134db8d340002ad4bbf78c9b58971e881122b3c6997219dda1ea893d",
+    "pkg-web/usfm_galley_bg.wasm": "2152bdf41d4a981d0371fcd6644842eaced758c861a3f5edcf661ca7557a91b8",
+    "pkg-web/usfm_galley_bg.wasm.d.ts": "90c03bf7edb272af1e82f5cb3137792766d9b0cb00696e8bf522a559ed6417e5"
   }
 }

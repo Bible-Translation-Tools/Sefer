@@ -21,6 +21,34 @@ export class Galley {
      */
     entryCount(): number;
     /**
+     * Every hit of `needle` in ONE registered target's verse-text
+     * projection, as the find buffer ([`crate::find::wire`] and `wasm.md`
+     * state the layout: little-endian `u32`, UTF-16 offsets, both coordinate
+     * spaces per hit).
+     *
+     * The search runs over the PROJECTION — what a reader sees — so a needle
+     * inside a footnote is not found, and a needle that spans one comes back
+     * as one source range per contiguous piece. That is the whole reason the
+     * buffer carries a piece count per hit.
+     *
+     * Literal only: `needle` is never a pattern. `whole_word` is the words
+     * rule galley restates in `find.md`; case-insensitive is the simple
+     * lowercase fold, not a collator. `limit` bounds hits across the whole
+     * call, and `0` means no bound. Errors when `id` is not a registered
+     * target — a reference retains neither text nor projection, so it cannot
+     * be searched, and answering "no hits" would say it was clean.
+     */
+    find(id: string, needle: string, case_sensitive: boolean, whole_word: boolean, limit: number): Uint8Array;
+    /**
+     * The same over EVERY registered target, in canonical book order — the
+     * project-wide find.
+     *
+     * The buffer's `bookIndex` indexes its own id table, which names every
+     * target searched whether or not it matched, so a consumer never has to
+     * ask a second question to learn which book a hit is in.
+     */
+    findAll(needle: string, case_sensitive: boolean, whole_word: boolean, limit: number): Uint8Array;
+    /**
      * Books rescanned for sites rather than replaying cached rows.
      */
     lastLocated(): number;
@@ -213,6 +241,8 @@ export interface InitOutput {
     readonly __wbg_set_knobs_z_short: (a: number, b: number) => void;
     readonly galley_config: (a: number) => number;
     readonly galley_entryCount: (a: number) => number;
+    readonly galley_find: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
+    readonly galley_findAll: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly galley_lastLocated: (a: number) => number;
     readonly galley_lastMapped: (a: number) => number;
     readonly galley_lastPaired: (a: number) => number;
@@ -232,8 +262,8 @@ export interface InitOutput {
     readonly __wbindgen_externrefs: WebAssembly.Table;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
-    readonly __wbindgen_free: (a: number, b: number, c: number) => void;
     readonly __externref_table_dealloc: (a: number) => void;
+    readonly __wbindgen_free: (a: number, b: number, c: number) => void;
     readonly __wbindgen_start: () => void;
 }
 

@@ -36,6 +36,67 @@ export class Galley {
         return ret;
     }
     /**
+     * Every hit of `needle` in ONE registered target's verse-text
+     * projection, as the find buffer ([`crate::find::wire`] and `wasm.md`
+     * state the layout: little-endian `u32`, UTF-16 offsets, both coordinate
+     * spaces per hit).
+     *
+     * The search runs over the PROJECTION — what a reader sees — so a needle
+     * inside a footnote is not found, and a needle that spans one comes back
+     * as one source range per contiguous piece. That is the whole reason the
+     * buffer carries a piece count per hit.
+     *
+     * Literal only: `needle` is never a pattern. `whole_word` is the words
+     * rule galley restates in `find.md`; case-insensitive is the simple
+     * lowercase fold, not a collator. `limit` bounds hits across the whole
+     * call, and `0` means no bound. Errors when `id` is not a registered
+     * target — a reference retains neither text nor projection, so it cannot
+     * be searched, and answering "no hits" would say it was clean.
+     * @param {string} id
+     * @param {string} needle
+     * @param {boolean} case_sensitive
+     * @param {boolean} whole_word
+     * @param {number} limit
+     * @returns {Uint8Array}
+     */
+    find(id, needle, case_sensitive, whole_word, limit) {
+        const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(needle, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.galley_find(this.__wbg_ptr, ptr0, len0, ptr1, len1, case_sensitive, whole_word, limit);
+        if (ret[3]) {
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        var v3 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v3;
+    }
+    /**
+     * The same over EVERY registered target, in canonical book order — the
+     * project-wide find.
+     *
+     * The buffer's `bookIndex` indexes its own id table, which names every
+     * target searched whether or not it matched, so a consumer never has to
+     * ask a second question to learn which book a hit is in.
+     * @param {string} needle
+     * @param {boolean} case_sensitive
+     * @param {boolean} whole_word
+     * @param {number} limit
+     * @returns {Uint8Array}
+     */
+    findAll(needle, case_sensitive, whole_word, limit) {
+        const ptr0 = passStringToWasm0(needle, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.galley_findAll(this.__wbg_ptr, ptr0, len0, case_sensitive, whole_word, limit);
+        if (ret[3]) {
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v2;
+    }
+    /**
      * Books rescanned for sites rather than replaying cached rows.
      * @returns {number}
      */

@@ -62,6 +62,7 @@ pub fn run() {
             corpus::corpus_update_reference,
             corpus::corpus_remove,
             corpus::corpus_publish,
+            corpus::corpus_find,
             corpus::corpus_resident_bytes,
         ])
         // One Expediter for the life of the process, as `CorpusState`. It is

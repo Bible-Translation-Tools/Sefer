@@ -25,12 +25,28 @@ The same handle holds the project: `update(id, text)` registers or replaces one 
 
 Both halves read the same warm chunk cache inside the handle, which is why they are one service and not two.
 
+## Find, over the projection
+
+`find(id, query)` and `findAll(query)` search the engine's **verse-text projection** — the reading, not the markup — and place every hit back in the source. `FindQuery { text, caseSensitive?, wholeWord?, limit? }` is LITERAL: the engine's find is `memmem` and the `regex` crate is deliberately not one of its dependencies, so a regex query belongs to the raw scan in [Search](search.md). `limit` bounds hits across the whole call, and `0`/omitted means no bound.
+
+`EngineHit { bookId?, projected, source, preview }` carries **both coordinate spaces**, because they are not the same interval:
+
+- `projected` — where the hit sits in the projection. What a highlighter or a second search wants.
+- `source` — where its bytes are in canonical USFM, **one range per contiguous piece**. `source.length > 1` means the hit crossed markup the projection dropped, and the gaps between the pieces are exactly that markup. Nothing hands back a single bounding range that would swallow a footnote.
+- `preview` — the projected text around the hit, ellipsed for a result card. Display only. It rides in the buffer because the projection is materialized per search and dropped with it; a host that wanted the string afterwards would have to mask the whole book again.
+
+Whether the markup between two pieces survives a replacement is the caller's decision and the engine refuses to make it (`galley/src/find.md`, "Replacement is the caller's"). Search's answer is to refuse the replacement, not to guess.
+
+`decodeHits(bytes)` reads the buffer both doors emit — little-endian `u32` throughout, offsets in UTF-16, layout stated once in `galley/src/wasm.md` ("The find buffer"). It is exported from `src/core/galley` because the desktop door reads the same bytes off IPC; nothing outside this module decodes an engine buffer.
+
 ## Two doors, one publication
 
-The corpus half runs somewhere other than the main JavaScript thread on desktop, and `CorpusEngine` (`src/core/galley/corpus.ts`) is the seam that lets it. It is a narrow, deliberately **asynchronous** port over exactly the five calls `ProjectAnalysis` makes off the keystroke path: `update`, `updateReference`, `remove`, `publish`, `residentBytes`. Two implementations:
+The corpus half runs somewhere other than the main JavaScript thread on desktop, and `CorpusEngine` (`src/core/galley/corpus.ts`) is the seam that lets it. It is a narrow, deliberately **asynchronous** port over the calls that run off the keystroke path: `update`, `updateReference`, `remove`, `publish`, `residentBytes` — and `find`. Find is on the corpus port and not on `Galley` because the corpus is what HOLDS the retained texts and masks: on desktop the books were registered across IPC and their projections live in the native Pantry, so the search has to run where they are. Two implementations:
 
 - `WasmCorpusLive` (Web, and the Layer's default everywhere) delegates to the wasm handle in this process. The asynchrony is nominal — one fiber step per scheduler pass, not per keystroke.
-- `NativeCorpusLive` (`src/platform/tauri/corpus.ts`) invokes the commands in `src-tauri/src/corpus.rs`, where the **same engine crate** is linked natively with its `parallel` feature, so a publication's chapter map goes wide on rayon. `corpus_publish` answers with `tauri::ipc::Response`, so the buffer crosses as raw bytes and arrives as an `ArrayBuffer` rather than a JSON array of numbers.
+- `NativeCorpusLive` (`src/platform/tauri/corpus.ts`) invokes the commands in `src-tauri/src/corpus.rs`, where the **same engine crate** is linked natively with its `parallel` feature, so a publication's chapter map goes wide on rayon. `corpus_publish` and `corpus_find` answer with `tauri::ipc::Response`, so those buffers cross as raw bytes and arrive as an `ArrayBuffer` rather than a JSON array of numbers.
+
+The find buffer is encoded by `galley::find::wire` on both sides — the wasm handle and the native `Expediter::find` — for the same reason the publication is one format: two encoders would drift, and a misread offset into scripture points at the wrong bytes.
 
 The engine is not `Send` — its chunk cache shares a chapter's products between books through `Rc`, which is the right call for a single-owner structure — so the desktop host gives it one owner thread for the life of the process and every command posts a closure to it. That is also better than a lock: a `Mutex` on a tokio worker would block that worker for the length of a publication.
 
@@ -50,7 +66,7 @@ Everything else on the corpus path is off the JS thread on desktop.
 
 ### Where the native engine comes from
 
-`src-tauri/Cargo.toml` names `usfm_galley` (and `sous-core`, for the `Brigade` pass galley does not re-export) as a **path** dependency on the sibling `usfm_onion_2/` checkout, with `features = ["parallel"]` and deliberately without `wasm`. That is the same working tree the vendored wasm was built from — revision `663403ac0f2bb2aa1b5dba9efd2601f35ffd28ac`, recorded in `vendor/galley/manifest.json` — which is what makes "one engine, two doors" true rather than approximately true. When the engine is pushed, those two lines become `git = "…/scripture-kitchen.git", rev = "<the manifest revision>"`, and regenerating the wasm artifact means moving the Cargo pin in the same commit.
+`src-tauri/Cargo.toml` names `usfm_galley` (and `sous-core`, for the `Brigade` pass galley does not re-export) as a **path** dependency on the sibling `usfm_onion_2/` checkout, with `features = ["parallel"]` and deliberately without `wasm`. That is the same working tree the vendored wasm was built from — revision `f3a2b0bfcae1b294abdbc41165f3d916c5eaecc8`, recorded in `vendor/galley/manifest.json` — which is what makes "one engine, two doors" true rather than approximately true. When the engine is pushed, those two lines become `git = "…/scripture-kitchen.git", rev = "<the manifest revision>"`, and regenerating the wasm artifact means moving the Cargo pin in the same commit.
 
 ## Loading it
 
@@ -69,4 +85,4 @@ See `vendor/galley/README.md`. The build command and the engine revision are rec
 
 ## What the handle cannot do yet
 
-The stateless Onion doors the spike used are **not** on this handle: there is no `format`, `formatEdits`, `attrs`, `attrResolve` or `locate`. A diagnostic still carries its own `fix()` edits, so the fix path works; whole-document formatting, attribute resolution and the `locate` string do not, and neither does corpus search. Sous exposes no `find`. When Sefer needs one of those, the ask goes upstream to the engine's wasm surface — the adapter does not reimplement it.
+The stateless Onion doors the spike used are **not** on this handle: there is no `format`, `formatEdits`, `attrs`, `attrResolve` or `locate`. A diagnostic still carries its own `fix()` edits, so the fix path works; whole-document formatting, attribute resolution and the `locate` string do not. `find` and `findAll` were the previous entry on this list and are now on the handle (engine revision `f3a2b0b`); the pattern held — when Sefer needs one of these, the ask goes upstream to the engine's wasm surface and the adapter does not reimplement it.

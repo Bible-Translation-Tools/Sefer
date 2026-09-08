@@ -26,7 +26,9 @@ import {
   CorpusEngine,
   CorpusError,
   FindingsSnapshot,
+  decodeHits,
   type CorpusEngineService,
+  type EngineHit,
 } from "../../core/galley";
 
 /**
@@ -84,12 +86,53 @@ const openSnapshot = (payload: unknown): Effect.Effect<FindingsSnapshot, CorpusE
   });
 };
 
+/**
+ * The find buffer arrives the same way a publication does — raw `ipc::Response`
+ * bytes — and goes through the same decoder the wasm door's buffer does, which
+ * is the point: one wire format, two engine doors (`galley/src/wasm.md`, "The
+ * find buffer").
+ */
+const openHits = (payload: unknown): Effect.Effect<readonly EngineHit[], CorpusError> => {
+  if (!(payload instanceof ArrayBuffer) && !ArrayBuffer.isView(payload))
+    return Effect.fail(
+      new CorpusError({
+        reason: "Io",
+        description: `corpus_find answered with ${typeof payload}, not bytes`,
+      }),
+    );
+  const bytes =
+    payload instanceof ArrayBuffer
+      ? new Uint8Array(payload)
+      : new Uint8Array(payload.buffer, payload.byteOffset, payload.byteLength);
+  return Effect.try({
+    // A buffer that will not decode is a wire disagreement between this build
+    // and the engine the host linked. Loud, not silent: a misread buffer is
+    // offsets into scripture that point at the wrong bytes.
+    try: () => decodeHits(bytes),
+    catch: (cause) =>
+      new CorpusError({
+        reason: "Io",
+        description: cause instanceof Error ? cause.message : String(cause),
+      }),
+  });
+};
+
 const nativeCorpus: CorpusEngineService = {
   kind: "native",
   update: (id, text) => call<string>("corpus_update", { id, text }),
   updateReference: (id, text) => call<string>("corpus_update_reference", { id, text }),
   remove: (id) => call<boolean>("corpus_remove", { id }),
   publish: () => Effect.flatMap(call<unknown>("corpus_publish"), openSnapshot),
+  find: (query) =>
+    Effect.flatMap(
+      call<unknown>("corpus_find", {
+        needle: query.text,
+        caseSensitive: query.caseSensitive === true,
+        wholeWord: query.wholeWord === true,
+        limit: query.limit ?? 0,
+      }),
+      openHits,
+    ),
   residentBytes: () => call<number>("corpus_resident_bytes"),
 };
 

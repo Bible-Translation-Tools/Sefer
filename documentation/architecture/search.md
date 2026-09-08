@@ -1,8 +1,28 @@
 # Search
 
-`src/core/search/search.ts` is project-wide Find and the Replace behind it (seams §3.10). It is pure and synchronous: plain functions over `Book`s, no service, no Layer, no engine. It takes `readonly Book[]` rather than a Project so the result browser, a satellite window and a script can each call it with whatever books they hold.
+`src/core/search/search.ts` is project-wide Find and the Replace behind it (seams §3.10). It takes `readonly Book[]` rather than a Project so the result browser, a satellite window and a script can each call it with whatever books they hold.
 
-## Find
+## Two doors, one `Hit`
+
+- `findProjected(corpus, books, query, options?)` — **the default.** Searches the engine's verse-text projection, what the reader sees in visual mode, and places every hit back in the source. Asynchronous, because the corpus is (on desktop it is a different process).
+- `find(books, query, options?)` — the raw scan of canonical USFM text. Pure, synchronous, no engine. Kept for the two things the projection cannot answer: a **regex** query, and a search meant to reach the markup itself.
+
+Both produce the same `Hit`, so `resolveHit`, `replace`, `replaceInBook` and `planReplace` are written once and neither door has a private replace path.
+
+Which door: regex → raw, always (the engine's find is literal `memmem`; `findProjected` refuses a `regex` query as `InvalidRegex` rather than silently searching for the pattern's characters). Deliberate markup search → raw. Everything a translator means by "find" → projected.
+
+## Find, through the engine
+
+`findProjected(corpus, books, query, options?) → Effect<readonly Hit[], SearchError>`.
+
+- Matching is the engine's: literal, case-insensitive by default under the simple lowercase fold, and `wholeWord` under the words rule the engine restates in `galley/src/find.md` — not this module's `\p{L}\p{N}_` edge test.
+- Markup can neither hide a match nor manufacture one. A needle inside a footnote is not found; a marker that happens to contain the needle's letters is not a hit.
+- Each hit carries `projected` (the reading's coordinates) as well as `from`/`to` (the source's). A hit that crosses markup the projection dropped carries `pieces`, one range per contiguous run — see below.
+- The books given are what binds the result: a hit for a book not in `books` is dropped, and each hit carries the stamp its book holds at the time of the call, exactly as a raw hit does.
+- The corpus must have been told about the books. `ProjectAnalysis.attach` registers every book of a project as it opens, so a find on an open project sees them all; a book the corpus never received simply has no hits.
+- `SearchError { reason: "Engine" }` carries a corpus failure's reason and description — one error type, because a caller shows both the same way.
+
+## Find, raw
 
 `find(books, query, options?) → Result<readonly Hit[], SearchError>`.
 
@@ -15,7 +35,9 @@ Each scan is a fresh `String`/`RegExp` walk of every canonical text. There is no
 
 ## Hits are version-bound
 
-`Hit { bookId, stamp, from, to, ref, preview }`. `from`/`to` are UTF-16 offsets into the revision named by `stamp`, which is the book's stamp at scan time. `preview` is display text only — the containing line narrowed to about 90 characters around the match, with `…` on truncated edges — and must never be parsed back into coordinates.
+`Hit { bookId, stamp, from, to, ref, preview, projected?, pieces? }`. `from`/`to` are UTF-16 offsets into the revision named by `stamp`, which is the book's stamp at scan time. `preview` is display text only — the containing line narrowed to about 90 characters around the match, with `…` on truncated edges — and must never be parsed back into coordinates.
+
+`projected` and `pieces` are present only on hits from `findProjected`. `pieces` appears only when there is more than **one** source piece, which means the hit spans markup the projection dropped; `from`/`to` are then the FIRST piece, so anything that only wants somewhere to scroll to still works. `spansMarkup(hit)` is the question, and a hit that answers yes is **not replaceable** here: `replace` refuses it as `Refusal { rule: "search.replace", reason: "SpansMarkup" }` and `planReplace` returns `null`. That is a rule, not a limitation — the markup between the pieces either survives the replacement or does not, and only the person editing knows which. The engine's job was to say the gap is there.
 
 `resolveHit(hit, books)` returns `{ book, from, to }` or `null`. It is `null` when the book is no longer in `books` or its revision has moved since the scan. Every action on a result card goes through it first, which is how a stale card refuses instead of editing the wrong range (vision §12.2: "every result is version-bound").
 
@@ -29,12 +51,14 @@ This is a marker scan, not a parse. Galley's TOC is the real answer: when Projec
 
 Sefer does not offer a project-wide Replace All over a Bible (vision §12.2). The result browser presents editable result cards and the user replaces one match at a time; nothing in this module walks the corpus and rewrites it.
 
-- `replace(hit, insert, books) → Result<Receipt, Refusal>` — one match. Refused as `Refusal { rule: "search.replace", reason: "Stale" }` when the hit no longer resolves.
+- `replace(hit, insert, books) → Result<Receipt, Refusal>` — one match. Refused as `Refusal { rule: "search.replace", reason: "Stale" }` when the hit no longer resolves, or `"SpansMarkup"` when it crosses dropped markup.
 - `replaceInBook(book, hits, insert)` — several hits of **one** book as a single edit, so the book publishes one receipt and the phases judge the change list together.
-- `planReplace(book, hits, insert) → readonly Change[] | null` — the change list `replaceInBook` uses, in before-text coordinates and ascending order, shaped for MultiBook's `runAcrossBooks(label, plan)`, which asks per book. `null` when the plan cannot be made: no hits, a hit from another book, a moved stamp, or two overlapping hits. `runAcrossBooks` reads `null` as "this book is not part of the operation", which is the right answer in all of those cases.
+- `planReplace(book, hits, insert) → readonly Change[] | null` — the change list `replaceInBook` uses, in before-text coordinates and ascending order, shaped for MultiBook's `runAcrossBooks(label, plan)`, which asks per book. `null` when the plan cannot be made: no hits, a hit from another book, a moved stamp, two overlapping hits, or a hit that spans markup. `runAcrossBooks` reads `null` as "this book is not part of the operation", which is the right answer in all of those cases.
 
 Every replacement goes through `book.apply(changes, "replace", UNTRUSTED)` — the one write path. Search does not judge markup: an untrusted replacement is examined by the editing phases exactly like a keystroke, so one that would break markup comes back as their `Refusal`.
 
 ## Not yet
 
-Search sees only canonical USFM text. Visual search across intervening markup needs Onion-derived projections (vision §12.1), and searching source/reference resources by role needs Project's resource roles; neither is wired. There is no scope narrower than "these books", and no search-and-replace history.
+Searching source/reference resources by role needs Project's resource roles, which is not wired. There is no scope narrower than "these books", and no search-and-replace history. Replacing a hit that spans markup is refused rather than offered as a choice between "keep the markup" and "drop it"; that choice belongs to the editor, not to a result card.
+
+`refAt` still reads `\c`/`\v` markers rather than the TOC, on both doors.

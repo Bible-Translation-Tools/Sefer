@@ -30,8 +30,8 @@
 //! length of a publication.
 //!
 //! The command set mirrors `galley/src/wasm.rs` exactly — `update`,
-//! `update_reference`, `remove`, `publish`, `resident_bytes` — because the two
-//! doors must not drift. Judging knobs deliberately stay on the wasm handle:
+//! `update_reference`, `remove`, `publish`, `find`, `resident_bytes` — because
+//! the two doors must not drift. Judging knobs deliberately stay on the wasm handle:
 //! they are read and written by the shell's settings surface, and a knob that
 //! lived in two places would be a knob that disagreed with itself.
 
@@ -39,7 +39,7 @@ use tauri::async_runtime::{channel, Sender};
 use tauri::ipc::Response;
 
 use sous_core::Brigade;
-use usfm_galley::{BookId, Expediter, Retain, Role};
+use usfm_galley::{BookId, Expediter, Find, Retain, Role};
 
 use crate::errors::{fail, ENGINE, IO};
 
@@ -194,6 +194,49 @@ pub async fn corpus_publish(state: tauri::State<'_, CorpusState>) -> Result<Resp
             .map_err(|error| fail(ENGINE, error.to_string()))
     })
     .await??;
+    Ok(Response::new(bytes))
+}
+
+/// Every hit of a literal `needle` over every registered book's verse-text
+/// projection, in canonical book order, as the find buffer
+/// (`galley/src/wasm.md`, "The find buffer").
+///
+/// The search runs HERE rather than in the webview for the same reason the
+/// publication does: this is where the retained texts and masks are. The
+/// webview holds a book's text too, but only the corpus holds the projection
+/// every hit is placed in, and re-deriving 66 of those in JavaScript to search
+/// them would be the cold path this module exists to avoid.
+///
+/// Raw `ipc::Response` bytes, like `corpus_publish`: the buffer is fixed-width
+/// `u32` records, and JSON-encoding it into an array of numbers would cost
+/// more than the search that produced it. Answered by the same
+/// `decodeHits` the wasm door's buffer goes through — one format, two doors.
+///
+/// `limit` bounds hits across the whole corpus, not per book; `0` means no
+/// bound. Literal only: there is no regex on this side of the wall.
+#[tauri::command]
+pub async fn corpus_find(
+    state: tauri::State<'_, CorpusState>,
+    needle: String,
+    case_sensitive: bool,
+    whole_word: bool,
+    limit: u32,
+) -> Result<Response, String> {
+    let bytes = ask(&state, move |sous| {
+        // Collected before the search so the registry's borrow ends: `find`
+        // takes the Pantry mutably to read each book's retained projection.
+        let ids: Vec<BookId> = sous
+            .pantry()
+            .books(Role::Target)
+            .iter()
+            .map(|(id, _)| id.clone())
+            .collect();
+        let find = Find::literal(needle.as_str())
+            .case_insensitive(!case_sensitive)
+            .whole_word(whole_word);
+        sous.find(&find, &ids, limit)
+    })
+    .await?;
     Ok(Response::new(bytes))
 }
 
