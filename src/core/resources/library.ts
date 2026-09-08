@@ -39,8 +39,24 @@ import { decodeResourceContainerManifest } from "./resourceContainer";
 /** What a resource is. The `unknown` classification is never registered. */
 export type ResourceKind = "burrito" | "resourceContainer" | "looseUsfm";
 
-/** What a resource is *for*, in one project. */
-export type Role = "source" | "notes" | "reference" | "glossary";
+/**
+ * What a resource is *for*, in one project. The well-known roles are named
+ * here; the type stays open so a project can bind a role Sefer has no surface
+ * for yet (translation notes, translation words, questions) without a core
+ * change. A role holds MANY resources: two source texts side by side, or a
+ * notes set per language, are ordinary — nothing here is pre-baked to one.
+ */
+export type Role = "source" | "notes" | "reference" | "glossary" | (string & {});
+
+export const ROLES = {
+  source: "source",
+  notes: "notes",
+  reference: "reference",
+  glossary: "glossary",
+  translationNotes: "tn",
+  translationWords: "tw",
+  translationQuestions: "tq",
+} as const satisfies Record<string, Role>;
 
 export interface Resource {
   /**
@@ -53,6 +69,13 @@ export interface Resource {
   readonly root: string;
   readonly title: string;
   readonly language?: string;
+  /**
+   * What the container says it holds — a Burrito flavor (`textTranslation`),
+   * or a Resource Container subject (`Bible`, `Translation Notes`,
+   * `Translation Words`). Sefer does not render every subject yet; carrying it
+   * lets a surface pick the renderer, and lets the library list what it holds.
+   */
+  readonly subject?: string;
 }
 
 /** Reference text for one verse (or one chapter, when `ref.verse` is absent). */
@@ -79,14 +102,20 @@ export interface LibraryService {
   readonly add: (root: string) => Effect.Effect<Resource, LibraryError>;
   /** Forgets a resource and every binding that pointed at it. */
   readonly remove: (id: string) => Effect.Effect<void, LibraryError>;
-  /** Gives `resourceId` the role `role` in `projectId`, replacing any previous holder. */
+  /** Adds `resourceId` to the resources holding `role` in `projectId`; idempotent, order kept. */
   readonly bind: (
     projectId: string,
     role: Role,
     resourceId: string,
   ) => Effect.Effect<void, LibraryError>;
-  /** The resource bound to `role`, or `none`. A missing binding is explicit, never substituted. */
-  readonly resolve: (projectId: string, role: Role) => Effect.Effect<Option.Option<Resource>>;
+  /** Removes one binding; a no-op when it was not there. */
+  readonly unbind: (projectId: string, role: Role, resourceId: string) => Effect.Effect<void>;
+  /** Every resource bound to `role` in `projectId`, in binding order; empty is explicit, never substituted. */
+  readonly resolve: (projectId: string, role: Role) => Effect.Effect<readonly Resource[]>;
+  /** Every binding of one project, so a shell can lay out panes without knowing the roles up front. */
+  readonly bound: (
+    projectId: string,
+  ) => Effect.Effect<readonly { readonly role: Role; readonly resource: Resource }[]>;
   /**
    * Reference text for `ref` from a registered resource. `none` when the
    * resource, its book file, or the chapter/verse is not there; fails `Io` only
@@ -108,12 +137,13 @@ const ResourceRecord = Schema.Struct({
   root: Schema.String,
   title: Schema.String,
   language: Schema.optionalKey(Schema.String),
+  subject: Schema.optionalKey(Schema.String),
 });
 
 const Registry = Schema.Struct({
   resources: Schema.Array(ResourceRecord),
-  /** `{ [projectId]: { [role]: resourceId } }` — a project's role assignments. */
-  bindings: Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.String)),
+  /** `{ [projectId]: { [role]: resourceId[] } }` — a project's role assignments, many per role. */
+  bindings: Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Array(Schema.String))),
 });
 
 type Registry = typeof Registry.Type;
@@ -121,6 +151,9 @@ type Registry = typeof Registry.Type;
 const decodeRegistry = Schema.decodeUnknownResult(Registry);
 
 const EMPTY: Registry = { resources: [], bindings: {} };
+
+const withId = (ids: readonly string[], id: string): readonly string[] =>
+  ids.includes(id) ? ids : [...ids, id];
 
 const refuse = (reason: LibraryRefusal, description: string): LibraryError =>
   new LibraryError({ reason, description });
@@ -163,7 +196,11 @@ const describe = (
   fileSystem: FileSystem.FileSystem,
   root: string,
   kind: ResourceKind,
-): Effect.Effect<{ readonly title: string; readonly language?: string }> =>
+): Effect.Effect<{
+  readonly title: string;
+  readonly language?: string;
+  readonly subject?: string;
+}> =>
   Effect.gen(function* () {
     if (kind === "burrito") {
       const value = yield* readJson(fileSystem, joinPath(root, "metadata.json"));
@@ -175,6 +212,7 @@ const describe = (
         return {
           title: title ?? lastSegment(root),
           ...(language === undefined ? {} : { language }),
+          subject: metadata.type.flavorType.flavor.name,
         };
       }
     }
@@ -183,7 +221,11 @@ const describe = (
       const decoded = decodeResourceContainerManifest(value);
       if (Result.isSuccess(decoded)) {
         const core = decoded.success.dublin_core;
-        return { title: core.title, language: core.language.identifier };
+        return {
+          title: core.title,
+          language: core.language.identifier,
+          ...(core.subject === undefined ? {} : { subject: core.subject }),
+        };
       }
     }
     return { title: lastSegment(root) };
@@ -320,9 +362,11 @@ const makeLibrary = (
 
       remove: (id) =>
         Effect.suspend(() => {
-          const bindings: Record<string, Record<string, string>> = {};
+          const bindings: Record<string, Record<string, readonly string[]>> = {};
           for (const [projectId, roles] of Object.entries(held.bindings)) {
-            const kept = Object.entries(roles).filter(([, resourceId]) => resourceId !== id);
+            const kept = Object.entries(roles)
+              .map(([role, ids]) => [role, ids.filter((resourceId) => resourceId !== id)] as const)
+              .filter(([, ids]) => ids.length > 0);
             if (kept.length > 0) bindings[projectId] = Object.fromEntries(kept);
           }
           return persist({
@@ -339,18 +383,41 @@ const makeLibrary = (
                 ...held,
                 bindings: {
                   ...held.bindings,
-                  [projectId]: { ...held.bindings[projectId], [role]: resourceId },
+                  [projectId]: {
+                    ...held.bindings[projectId],
+                    [role]: withId(held.bindings[projectId]?.[role] ?? [], resourceId),
+                  },
                 },
               }),
         ),
 
-      resolve: (projectId, role) =>
-        Effect.sync(() => {
-          const resourceId = held.bindings[projectId]?.[role];
-          if (resourceId === undefined) return Option.none<Resource>();
-          const resource = find(resourceId);
-          return resource === undefined ? Option.none<Resource>() : Option.some(resource);
+      unbind: (projectId, role, resourceId) =>
+        Effect.suspend(() => {
+          const ids = (held.bindings[projectId]?.[role] ?? []).filter((id) => id !== resourceId);
+          const roles = { ...held.bindings[projectId] };
+          if (ids.length === 0) delete roles[role];
+          else roles[role] = ids;
+          return Effect.ignore(
+            persist({ ...held, bindings: { ...held.bindings, [projectId]: roles } }),
+          );
         }),
+
+      resolve: (projectId, role) =>
+        Effect.sync(() =>
+          (held.bindings[projectId]?.[role] ?? [])
+            .map(find)
+            .filter((resource): resource is Resource => resource !== undefined),
+        ),
+
+      bound: (projectId) =>
+        Effect.sync(() =>
+          Object.entries(held.bindings[projectId] ?? {}).flatMap(([role, ids]) =>
+            ids
+              .map(find)
+              .filter((resource): resource is Resource => resource !== undefined)
+              .map((resource) => ({ role, resource })),
+          ),
+        ),
 
       lookup: (resourceId, ref) =>
         Effect.gen(function* () {
