@@ -14,3 +14,8 @@ scratchpad/
 *.local
 .verify/
 .codegraph/
+
+# Build-time configuration lives in the environment, never in the tree.
+.env
+.env.*
+!.env.example
