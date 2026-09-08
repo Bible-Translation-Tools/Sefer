@@ -38,7 +38,11 @@ import {
 import { Observability, type ObservabilityService } from "../observability";
 import type { Analysis } from "./analysis";
 
-export type { FindingsSnapshot };
+// The VALUE, not just the type: the corpus half's other implementation
+// (`src/platform/tauri/corpus.ts`) opens a buffer the native engine produced,
+// and the rule that nothing outside `src/core/galley` imports `vendor/` holds
+// for the reader too.
+export { FindingsSnapshot };
 export type { Finding, Pattern, BookView } from "../../../vendor/galley/sous-reader";
 
 /** The wasm module could not be instantiated at all. */

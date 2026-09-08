@@ -34,7 +34,9 @@ import {
 import type { BookId } from "../core/book/book";
 import { FixtureFileSystemLive, SMALL_NT_ROOT } from "../core/fixture/smallNt";
 import {
+  CorpusEngine,
   Galley,
+  WasmCorpusLive,
   type EngineLoadError,
   type GalleyService,
   type VersionMismatch,
@@ -104,6 +106,7 @@ export type Domain =
   | Observability
   | FileSystem.FileSystem
   | Galley
+  | CorpusEngine
   | HostInfo
   | Settings
   | Credentials
@@ -242,10 +245,32 @@ const domainLayer = (
     tauri === undefined ? SessionCredentialsLive : tauri.TauriCredentialsLive,
   );
 
-  // The engine is the same wasm build on both hosts: Galley runs in the
-  // webview, not in Rust, so there is nothing host-specific to swap.
+  /**
+   * The engine, in its two halves.
+   *
+   * `Galley` — the per-book synchronous parse the editor lives on — is the same
+   * wasm build in the webview on BOTH hosts. There is nothing host-specific to
+   * swap there and there never will be: a fiber and an IPC hop per keystroke is
+   * a budget Sefer does not have.
+   *
+   * `CorpusEngine` — the whole-corpus `update`/`publish` half — is where the
+   * hosts differ. On desktop it is the same engine built natively with rayon,
+   * behind Tauri commands, so a publication does not run on the thread that
+   * paints the editor. On Web it delegates to the wasm handle in this process,
+   * which is still main-thread work; a Worker is the next step, and the seam
+   * that makes it a one-Layer change is now in place. Identical published bytes
+   * either way — the engine's own conformance tests hold that.
+   *
+   * `provideMerge` on the Web side because `WasmCorpusLive` needs the handle
+   * `WebGalleyLive` builds, and both must come OUT of this layer.
+   */
+  const engine =
+    tauri === undefined
+      ? Layer.provideMerge(WasmCorpusLive, WebGalleyLive)
+      : Layer.merge(WebGalleyLive, tauri.NativeCorpusLive);
+
   const host = Layer.mergeAll(
-    WebGalleyLive,
+    engine,
     // Real native pickers on desktop, the File System Access API on Web.
     tauri === undefined ? WebDialogsLive : tauri.TauriDialogsLive,
     account,

@@ -32,6 +32,28 @@ tauri-plugin-os = "2"
 # is deliberately absent because Sefer authenticates with a token, never a key.
 git2 = { version = "0.20", features = ["https"] }
 
+# The Scripture Kitchen engine, NATIVELY — the desktop half of the CorpusEngine
+# port (src-tauri/src/corpus.rs). `parallel` is the whole reason it is here: it
+# maps a publication's chapters on rayon's global pool, and the engine's own
+# `tests/equivalence.rs` holds those published bytes against the serial map's.
+#
+# A PATH dependency to the sibling checkout, deliberately. The wasm artifact in
+# `vendor/galley/` was built from that SAME working tree — revision
+# 663403ac0f2bb2aa1b5dba9efd2601f35ffd28ac, recorded in
+# `vendor/galley/manifest.json` — which is what makes "one engine, two doors"
+# true rather than approximately true. The engine is not published yet; once it
+# is pushed these two lines become:
+#
+#   usfm_galley = { git = "https://github.com/WycliffeAssociates/scripture-kitchen.git", rev = "663403ac0f2bb2aa1b5dba9efd2601f35ffd28ac", features = ["parallel"] }
+#   sous-core   = { git = "https://github.com/WycliffeAssociates/scripture-kitchen.git", rev = "663403ac0f2bb2aa1b5dba9efd2601f35ffd28ac" }
+#
+# and the manifest revision stays the single source of that pin. Note the
+# absent `wasm` feature: the native door links no wasm-bindgen.
+usfm_galley = { path = "../../usfm_onion_2/galley", features = ["parallel"] }
+# `Brigade` — the concrete `ChapterPass` the Expediter is parameterised over —
+# lives in sous-core and galley does not re-export it, so it is named directly.
+sous-core = { path = "../../usfm_onion_2/sous-chef/core" }
+
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-process = "2"
 tauri-plugin-updater = "2"

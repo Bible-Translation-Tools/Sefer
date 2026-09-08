@@ -4,4 +4,5 @@
  */
 
 export * from "./analysis";
+export * from "./corpus";
 export * from "./galley";

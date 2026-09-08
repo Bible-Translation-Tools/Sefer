@@ -25,6 +25,33 @@ The same handle holds the project: `update(id, text)` registers or replaces one 
 
 Both halves read the same warm chunk cache inside the handle, which is why they are one service and not two.
 
+## Two doors, one publication
+
+The corpus half runs somewhere other than the main JavaScript thread on desktop, and `CorpusEngine` (`src/core/galley/corpus.ts`) is the seam that lets it. It is a narrow, deliberately **asynchronous** port over exactly the five calls `ProjectAnalysis` makes off the keystroke path: `update`, `updateReference`, `remove`, `publish`, `residentBytes`. Two implementations:
+
+- `WasmCorpusLive` (Web, and the Layer's default everywhere) delegates to the wasm handle in this process. The asynchrony is nominal — one fiber step per scheduler pass, not per keystroke.
+- `NativeCorpusLive` (`src/platform/tauri/corpus.ts`) invokes the commands in `src-tauri/src/corpus.rs`, where the **same engine crate** is linked natively with its `parallel` feature, so a publication's chapter map goes wide on rayon. `corpus_publish` answers with `tauri::ipc::Response`, so the buffer crosses as raw bytes and arrives as an `ArrayBuffer` rather than a JSON array of numbers.
+
+The engine is not `Send` — its chunk cache shares a chapter's products between books through `Rc`, which is the right call for a single-owner structure — so the desktop host gives it one owner thread for the life of the process and every command posts a closure to it. That is also better than a lock: a `Mutex` on a tokio worker would block that worker for the length of a publication.
+
+**The bytes are identical.** Not an aspiration: the engine's own conformance tests pin the native `Expediter`, the wasm `Galley` handle and the JS reader against one set of golden buffers (`galley/src/wasm.md`, "The claim"), and `galley/tests/equivalence.rs` pins the parallel chapter map against the serial one. `FindingsSnapshot.open` reads either, and `ProjectAnalysis` cannot tell which door ran except from the `analyze.publish` span, whose note carries `wasm` or `native`.
+
+The `Galley` handle is still the only USFM parser, on both hosts. `analyze` never crosses this seam and never will; the desktop build links the engine without its `wasm` feature and exposes no parse command. Judging knobs also stay on the wasm handle — the shell's settings surface reads and writes them, and a knob that lived in two places would be a knob that disagreed with itself.
+
+### The cold paths that remain
+
+Stated plainly, because "desktop uses rayon now" is not the same as "nothing is cold":
+
+1. **Wasm instantiation at boot.** `GalleyLive` fetches and `initSync`s the module before the first keystroke, on both hosts. Unavoidable while the editor's parse is in wasm.
+2. **The initial serial `analyze` of every book on `attach`.** `ProjectAnalysis.attach` parses each book one at a time on the main thread — on BOTH hosts, because the parse cannot move. It is a project-open cost, not an interaction cost (vision §11.1), and it is the largest remaining one.
+3. **The Web corpus publish is still main-thread.** `WasmCorpusLive` is a synchronous call in a fiber. A Worker is the next step and the port's signature is already the one it needs; only that Layer changes.
+
+Everything else on the corpus path is off the JS thread on desktop.
+
+### Where the native engine comes from
+
+`src-tauri/Cargo.toml` names `usfm_galley` (and `sous-core`, for the `Brigade` pass galley does not re-export) as a **path** dependency on the sibling `usfm_onion_2/` checkout, with `features = ["parallel"]` and deliberately without `wasm`. That is the same working tree the vendored wasm was built from — revision `663403ac0f2bb2aa1b5dba9efd2601f35ffd28ac`, recorded in `vendor/galley/manifest.json` — which is what makes "one engine, two doors" true rather than approximately true. When the engine is pushed, those two lines become `git = "…/scripture-kitchen.git", rev = "<the manifest revision>"`, and regenerating the wasm artifact means moving the Cargo pin in the same commit.
+
 ## Loading it
 
 `GalleyLive(bytes)` is a scoped Layer: it checks the handshake, instantiates the module once, opens the handle, and frees it in a finalizer. It takes bytes rather than fetching them so core stays free of both `node:fs` and `fetch`; the hosts supply them.

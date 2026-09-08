@@ -31,6 +31,14 @@
 //     shows known-stale findings rather than an apparently clean project
 //     (vision §11.4).
 //
+// Two engines, not one. The per-book `analyze` comes off the `Galley` handle in
+// this process — that is the editor's synchronous path and it never moves. The
+// whole-corpus half (`update`, `remove`, `publish`) goes through the
+// `CorpusEngine` port instead, which on desktop is native Rust with rayon
+// mapping chapters on Tauri's thread pool. Everything below that awaits a
+// corpus call is therefore the place where the work leaves the JS thread; see
+// documentation/architecture/galley.md, "Two doors, one publication".
+//
 // Telemetry carries counts and codes only. A diagnostic's message quotes the
 // document and lives in Findings.
 
@@ -39,10 +47,12 @@ import { Context, Duration, Effect, Latch, Layer, Option, PubSub, Scope, Stream 
 import type { Book, BookId } from "../book/book";
 import { fromAnalysis, fromSnapshot, type Finding } from "../findings/finding";
 import {
+  CorpusEngine,
   describesExactly,
   Galley,
   stampOf,
   type Analysis,
+  type CorpusEngineService,
   type EngineStamp,
   type FindingsSnapshot,
   type GalleyService,
@@ -191,6 +201,7 @@ const summaryOf = (bookId: BookId, entry: Entry): BookSummary => {
 
 const make = (
   galley: GalleyService,
+  corpus: CorpusEngineService,
   observability: ObservabilityService | undefined,
 ): Effect.Effect<ProjectAnalysisService> =>
   Effect.gen(function* () {
@@ -230,55 +241,87 @@ const make = (
     };
 
     /**
-     * Analyze one book and register it with the corpus. Returns the stamp the
-     * analysis describes, or `undefined` when the engine refused the text (the
-     * previously held analysis is kept and the entry stays stale).
+     * Analyze one book and register it with the corpus. Succeeds with the
+     * stamp the analysis describes, or `undefined` when the engine refused the
+     * text (the previously held analysis is kept and the entry stays stale).
+     *
+     * The parse is synchronous and in-process: it is the same `analyze` the
+     * editor runs, off the same warm chunk cache. The corpus registration is
+     * not — on desktop `corpus.update` crosses IPC into native Rust — so the
+     * `yield*` below is where this book's share of the work leaves the JS
+     * thread.
      */
-    const refresh = (bookId: BookId, book: Book, entry: Entry): SourceStamp | undefined => {
-      const source = book.source();
-      const handed = supplied.get(bookId);
-      supplied.delete(bookId);
-      // The editor's analysis counts only if it describes the text the Book
-      // holds RIGHT NOW; a keystroke between the supply and this pass makes it
-      // a stale gift, not a shortcut.
-      let analysis: Analysis;
-      if (handed !== undefined && describesExactly(handed, source.text)) analysis = handed;
-      else {
-        try {
-          analysis = galley.analyze(source.text);
-        } catch {
-          // Retain, do not clear: an engine refusal is an integration problem,
-          // not evidence that the book became clean.
-          observability?.note("analyze", "failed", bookId, bookId);
-          return undefined;
+    const refresh = (
+      bookId: BookId,
+      book: Book,
+      entry: Entry,
+    ): Effect.Effect<SourceStamp | undefined> =>
+      Effect.gen(function* () {
+        const source = book.source();
+        const handed = supplied.get(bookId);
+        supplied.delete(bookId);
+        // The editor's analysis counts only if it describes the text the Book
+        // holds RIGHT NOW; a keystroke between the supply and this pass makes
+        // it a stale gift, not a shortcut.
+        let analysis: Analysis;
+        if (handed !== undefined && describesExactly(handed, source.text)) analysis = handed;
+        else {
+          try {
+            analysis = galley.analyze(source.text);
+          } catch {
+            // Retain, do not clear: an engine refusal is an integration
+            // problem, not evidence that the book became clean.
+            observability?.note("analyze", "failed", bookId, bookId);
+            return undefined;
+          }
         }
-      }
-      entry.analysis = analysis;
-      entry.stamp = source.stamp;
-      entry.stale = false;
-      galley.update(bookId, source.text);
-      const { errors } = countsOf(bookId, analysis, source.stamp);
-      observability?.note(
-        "analyze",
-        "ready",
-        `${bookId} diag=${analysis.dish.diagnostics.length} err=${errors}`,
-        bookId,
-      );
-      return source.stamp;
-    };
+        entry.analysis = analysis;
+        entry.stamp = source.stamp;
+        entry.stale = false;
+        // A corpus registration that did not land costs this book its share of
+        // the cross-book half only; its own analysis stands, and the next pass
+        // registers it again. Reported, never swallowed.
+        yield* Effect.catch(corpus.update(bookId, source.text), (error) =>
+          Effect.sync(() =>
+            observability?.note("analyze.corpus", "failed", `${bookId} ${error.reason}`, bookId),
+          ),
+        );
+        const { errors } = countsOf(bookId, analysis, source.stamp);
+        observability?.note(
+          "analyze",
+          "ready",
+          `${bookId} diag=${analysis.dish.diagnostics.length} err=${errors}`,
+          bookId,
+        );
+        return source.stamp;
+      });
 
-    const publishCorpus = (): void => {
-      const done = observability?.span("analyze.publish");
-      snapshot = galley.publish();
+    /**
+     * One whole-corpus publication, through whichever door this host got. The
+     * span carries the engine kind so a reading of the ring says which one ran
+     * and how long it took there.
+     *
+     * A refused publication RETAINS the previous snapshot: known-stale
+     * cross-book findings beat an apparently clean project.
+     */
+    const publishCorpus = Effect.gen(function* () {
+      const done = observability?.span("analyze.publish", corpus.kind);
+      const published = yield* Effect.catch(corpus.publish(), (error) =>
+        Effect.sync(() => {
+          observability?.note("analyze.publish", "failed", `${corpus.kind} ${error.reason}`);
+          return undefined;
+        }),
+      );
+      if (published !== undefined) snapshot = published;
       done?.();
-    };
+    });
 
     /**
      * One scheduler pass: re-analyze every pending book, then publish the
      * corpus ONCE. Publishing per book would throw away the previous snapshot
      * n times and judge the corpus n times for one user gesture.
      */
-    const pass = Effect.sync(() => {
+    const pass = Effect.gen(function* () {
       const project = attached;
       if (project === undefined) {
         pending.clear();
@@ -291,11 +334,11 @@ const make = (
         const entry = entries.get(bookId);
         const book = project.book(bookId);
         if (entry === undefined || book === undefined) continue;
-        const stamp = refresh(bookId, book, entry);
+        const stamp = yield* refresh(bookId, book, entry);
         if (stamp !== undefined) refreshed.push({ bookId, stamp });
       }
       if (refreshed.length > 0) {
-        publishCorpus();
+        yield* publishCorpus;
         invalidateCaches();
       }
       return refreshed;
@@ -334,7 +377,7 @@ const make = (
       Effect.gen(function* () {
         // One project at a time. Re-attaching drops the previous corpus rather
         // than judging two projects as one.
-        for (const bookId of entries.keys()) galley.remove(bookId);
+        for (const bookId of entries.keys()) yield* Effect.ignore(corpus.remove(bookId));
         entries.clear();
         supplied.clear();
         pending.clear();
@@ -367,10 +410,14 @@ const make = (
             stale: true,
           };
           entries.set(book.id, entry);
-          refresh(book.id, book, entry);
+          // Serial, on this thread, one book at a time: a project-open cost,
+          // not an interaction cost. It is also the remaining cold path on
+          // BOTH hosts — the parse cannot move, so only the corpus half of
+          // each lap crosses the seam.
+          yield* refresh(book.id, book, entry);
           subscribe(book);
         }
-        publishCorpus();
+        yield* publishCorpus;
         invalidateCaches();
         done?.();
         observability?.note("analyze.project", "ready", `${entries.size} books`);
@@ -468,16 +515,20 @@ const make = (
   });
 
 /**
- * The Layer. Needs `Galley`; takes `Observability` optionally, so core policy
- * runs with or without the ring. It is NOT scoped: the module holds no host
- * resource of its own, and the fibers and subscriptions belong to the scope
- * that called `attach`.
+ * The Layer. Needs `Galley` for the synchronous per-book parse and
+ * `CorpusEngine` for the whole-corpus half — two requirements because on
+ * desktop they are two processes. Takes `Observability` optionally, so core
+ * policy runs with or without the ring. It is NOT scoped: the module holds no
+ * host resource of its own, and the fibers and subscriptions belong to the
+ * scope that called `attach`.
  */
-export const ProjectAnalysisLive: Layer.Layer<ProjectAnalysis, never, Galley> = Layer.effect(
-  ProjectAnalysis,
-  Effect.gen(function* () {
-    const galley = yield* Galley;
-    const observability = yield* Effect.serviceOption(Observability);
-    return yield* make(galley, Option.getOrUndefined(observability));
-  }),
-);
+export const ProjectAnalysisLive: Layer.Layer<ProjectAnalysis, never, Galley | CorpusEngine> =
+  Layer.effect(
+    ProjectAnalysis,
+    Effect.gen(function* () {
+      const galley = yield* Galley;
+      const corpus = yield* CorpusEngine;
+      const observability = yield* Effect.serviceOption(Observability);
+      return yield* make(galley, corpus, Option.getOrUndefined(observability));
+    }),
+  );

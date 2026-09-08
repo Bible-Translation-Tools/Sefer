@@ -36,11 +36,14 @@ Two stamps, two scopes. `stamp` is the Book's `SourceStamp`: within one Book's l
 
 One project's worth of stamped, disposable analyses, plus the last Galley publication. It exists because a translator must not have to open sixty-six files to learn whether the project has errors (vision §11.1), so `attach(project)` analyzes **every** book once at project open and registers each as a corpus target.
 
+It takes **two** services, because on desktop they are two processes: `Galley` for the synchronous per-book `analyze`, which never leaves the webview, and `CorpusEngine` for the whole-corpus half (`update`, `remove`, `publish`). Every `yield*` on a corpus call is therefore the point where the work leaves the JS thread — natively with rayon on desktop, still in-process on Web. See [Galley](galley.md), "Two doors, one publication", including the cold paths that remain. A refused corpus call **retains**, exactly as a refused parse does: the note is recorded, the previous snapshot stands, and the next pass registers the book again.
+
 - `attach` subscribes to every `book.changes` and to `project.changed` (a seat swap replaces the object holding the canonical text, so the old subscription is dead). A change marks the book stale and arms one scheduling fiber.
 - **One fiber, not one per book.** It waits for ~150 ms of quiet (or 1 s from the start of a burst), then re-analyzes every pending book and publishes the corpus **once** — `publish()` is whole-corpus and a snapshot replaces the previous one entirely, so per-book publication would judge the corpus n times for one gesture.
 - The instantiated book is never analyzed twice: the editor hands its current parse in through `supply(bookId, analysis)`, which composition wires. The scheduler then owes that book only its corpus registration. A supplied analysis is used only if it still `describesExactly` the Book's text.
 - An engine refusal **retains**: the last analysis stays, the entry stays stale, `note('analyze', 'failed', …)` records it. A failed refresh never reports a clean project (vision §11.4).
 - `findings()` is memoised until something changes; `crossBook()` is the Sous half alone.
+- The `analyze.publish` span's note carries the engine kind (`wasm` or `native`), so a reading of the observability ring says which door ran and how long it took there.
 
 Filtering and grouping are presentation policy. `findings.ts` orders findings by book (project order), then severity, then position; hiding a category is the shell's business and does not alter analysis truth.
 

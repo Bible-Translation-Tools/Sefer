@@ -9,6 +9,7 @@
 //! The names line up deliberately with the two core error types:
 //!   `GitError.reason`    — NotARepository | Io | Conflict | Refused
 //!   `RemoteError.reason` — Unavailable | Unauthorized | Network | Rejected
+//!   `CorpusError.reason`  — Engine | Io | Unavailable
 //! `AuthFailed`, `Offline` and `Rejected` are the transport half; `Io` is the
 //! catch-all, and an unprefixed string (which should not happen) is read as
 //! `Io` so a new failure degrades to "something went wrong" rather than being
@@ -29,6 +30,10 @@ pub const AUTH_FAILED: &str = "AuthFailed";
 pub const OFFLINE: &str = "Offline";
 /// The remote reached us and said no: non-fast-forward, no write access.
 pub const REJECTED: &str = "Rejected";
+/// The analysis engine refused the input or the publication (`CorpusError`'s
+/// `Engine`). Not `Io`: nothing was wrong with the call, only with what it was
+/// asked to judge.
+pub const ENGINE: &str = "Engine";
 
 /// `"<reason>: <detail>"` — the only shape a command's error string ever takes.
 pub fn fail(reason: &str, detail: impl AsRef<str>) -> String {
