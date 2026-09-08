@@ -10,6 +10,8 @@ export default defineConfig({
     "src-tauri/gen",
     "**/*.gen.*",
     "pnpm-lock.yaml",
+    // Generated upstream by Scripture Kitchen; see vendor/galley/manifest.json.
+    "vendor",
   ],
   settings: solidV2.settings,
   rules: {

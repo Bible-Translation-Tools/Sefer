@@ -1,0 +1,33 @@
+{
+  "engine": {
+    "spec": "../usfm_onion_2",
+    "crate": "usfm_galley",
+    "features": [
+      "wasm"
+    ],
+    "target": "web",
+    "revision": "663403ac0f2bb2aa1b5dba9efd2601f35ffd28ac",
+    "revisionDate": "2026-09-07T16:05:54-05:00",
+    "subject": "Heap profile: optional Reference and --source-copy; peak 47.6 / 53.7 / 63.7 MiB.",
+    "build": "wasm-pack build --target web --release -- --features wasm"
+  },
+  "wire": {
+    "onion": {
+      "magic": 1381453391,
+      "formatVersion": 4
+    },
+    "sous": {
+      "magic": 1398099795,
+      "formatVersion": 1
+    }
+  },
+  "artifacts": {
+    "onion-reader.ts": "2c9bb7494d568d0437b6bcee1aed1b4ac871f8cd0c7864bc72fa65306cc538cc",
+    "sous-reader.ts": "2b6548d90d4e9a93b7c490937f61f2359355ac50f651f3d58951e7cd535f2aa9",
+    "diagnostics.json": "d4b067e4b3fb1076bbd11bc62eb1dfe975bdd3e76c78b737c37297c22b968d00",
+    "pkg-web/usfm_galley.js": "4d0da4484d65628ffa18746a3c727feb54425ec076e50f882016078920dc57e2",
+    "pkg-web/usfm_galley.d.ts": "288b0f1263efea985f47c294e891ddc94ef3bdd75e0c340cda22bba329561039",
+    "pkg-web/usfm_galley_bg.wasm": "cb683bcc003ecfec9a7613570e6d97768398e48bc960ca6421413f23dd4ef3cc",
+    "pkg-web/usfm_galley_bg.wasm.d.ts": "adfe3b6246812c002d820dab9a5ab0160294b624b0a2d63d9471fbd1e777d1f5"
+  }
+}

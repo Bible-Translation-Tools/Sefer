@@ -13,8 +13,8 @@
     "serve": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint .",
-    "format": "oxfmt . '!**/*.gen.*' '!**/*.md' '!**/*.yaml' '!**/*.yml'",
-    "format:check": "oxfmt --check . '!**/*.gen.*' '!**/*.md' '!**/*.yaml' '!**/*.yml'",
+    "format": "oxfmt . '!**/*.gen.*' '!**/*.md' '!**/*.yaml' '!**/*.yml' '!vendor/**'",
+    "format:check": "oxfmt --check . '!**/*.gen.*' '!**/*.md' '!**/*.yaml' '!**/*.yml' '!vendor/**'",
     "boundaries": "node tools/boundaries/check.ts",
     "verify:launch": "node tools/verify/launch.ts",
     "test": "vitest",
@@ -24,7 +24,10 @@
     "prepare": "lefthook install"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.11.0",
+    "@codemirror/lint": "^6.9.7",
     "@codemirror/state": "6.5.2",
+    "@codemirror/view": "^6.43.11",
     "@solidjs/web": "^2.0.0-rc.6",
     "@tanstack/solid-router": "^2.0.0-rc.4",
     "buffer": "6.0.3",
