@@ -19,6 +19,12 @@ export interface BoundaryOptions {
   readonly forbiddenPackages?: readonly string[];
   readonly forbiddenPrefixes?: readonly string[];
   readonly rawAssetDirs?: readonly string[];
+  /**
+   * Directories of vendored, host-neutral code core may import by relative
+   * path — the pinned Galley engine (`vendor/galley`). Vendored code is checked
+   * by the hash in its manifest, not by this walker.
+   */
+  readonly vendorDirs?: readonly string[];
 }
 
 export const DEFAULT_FORBIDDEN_PACKAGES: readonly string[] = [
@@ -164,6 +170,7 @@ export const checkCoreBoundary = (options: BoundaryOptions): BoundaryViolation[]
   const forbidden = options.forbiddenPackages ?? DEFAULT_FORBIDDEN_PACKAGES;
   const forbiddenPrefixes = options.forbiddenPrefixes ?? DEFAULT_FORBIDDEN_PREFIXES;
   const rawAssetDirs = (options.rawAssetDirs ?? []).map((directory) => path.resolve(directory));
+  const vendorDirs = (options.vendorDirs ?? []).map((directory) => path.resolve(directory));
   const violations: BoundaryViolation[] = [];
 
   for (const file of listSourceFiles(coreDir)) {
@@ -195,6 +202,10 @@ export const checkCoreBoundary = (options: BoundaryOptions): BoundaryViolation[]
           rawAssetDirs.some((directory) => isInside(directory, resolved))
         )
           continue;
+        if (vendorDirs.some((directory) => isInside(directory, resolved))) continue;
+        // A core test is Node's own program: it may reach outside core for the
+        // Node platform layers (filesystem, engine bytes) it builds fixtures with.
+        if (isTest) continue;
         if (!isInside(coreDir, resolved))
           report(`resolves to ${path.relative(pathsBase, resolved)}, outside core`);
         continue;
@@ -249,6 +260,7 @@ const main = (): void => {
     paths,
     pathsBase: base,
     rawAssetDirs: [path.join(root, "fixtures")],
+    vendorDirs: [path.join(root, "vendor", "galley")],
   });
 
   if (violations.length === 0) {

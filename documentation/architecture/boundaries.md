@@ -14,6 +14,13 @@ Core may not depend on Solid (`solid-js`, `@solidjs/*`), TanStack Router
 (`window`, `document`, `navigator`, `localStorage`, `sessionStorage`, `fetch`).
 A capability core needs arrives as a core port that a host implements.
 
+Two relative-import exceptions exist, both listed in `tools/boundaries/check.ts`:
+`?raw` imports from `fixtures/` (the seeded dev project) and anything under
+`vendor/galley/` — the pinned Scripture Kitchen engine, which is host-neutral
+generated code whose identity is the hash in `vendor/galley/manifest.json`.
+Only `src/core/galley` should import it; every other module reads the engine
+through that adapter.
+
 The filesystem is the shape of that rule, not an exception to it: the port is
 Effect's own `FileSystem` service, which core may use because it comes from
 `effect`, while every native implementation stays outside core. See
