@@ -1,0 +1,483 @@
+// projectAnalysis.ts
+//
+// ProjectAnalysis — Sefer's whole-project consumer of Galley (seams §2.2;
+// editor-and-save §1.5 and §2 sinks 2–4; vision §11.1 "global truth, local
+// rendering").
+//
+// It exists to answer one question the editor cannot: does this PROJECT have
+// errors? A translator must not have to open sixty-six files to find out. So
+// this is the only module that holds many books' analyses at once, and it
+// holds them as stamped, disposable products: a publish on a book marks its
+// entry stale, and re-analysis happens off the keystroke path.
+//
+// Three decisions shape the whole file.
+//
+//  1. ONE scheduling fiber, not one per book. The seams call for "a debounced
+//     fiber per book"; a single fiber over a pending set of book ids gives the
+//     same ~150 ms quiet window with less machinery, and coalesces a bulk
+//     operation that touches forty books into one pass and ONE corpus
+//     publication — which is what "bulk operations coalesce" has to mean,
+//     because `publish()` is whole-corpus and a snapshot replaces the previous
+//     one entirely.
+//
+//  2. The instantiated book is not analyzed twice. The editor already analyzes
+//     synchronously on every keystroke, so it hands its current `Analysis` in
+//     through `supply(bookId, analysis)`; the scheduler then only owes that
+//     book its corpus update. Composition wires `supply` from the editor
+//     layer — core cannot reach into CodeMirror.
+//
+//  3. Failure retains, never clears. `analyze` throws on text the engine
+//     refuses; the held analysis stays and the entry stays stale, so the panel
+//     shows known-stale findings rather than an apparently clean project
+//     (vision §11.4).
+//
+// Telemetry carries counts and codes only. A diagnostic's message quotes the
+// document and lives in Findings.
+
+import { Context, Duration, Effect, Latch, Layer, Option, PubSub, Scope, Stream } from "effect";
+
+import type { Book, BookId } from "../book/book";
+import { fromAnalysis, fromSnapshot, type Finding } from "../findings/finding";
+import {
+  describesExactly,
+  Galley,
+  stampOf,
+  type Analysis,
+  type EngineStamp,
+  type FindingsSnapshot,
+  type GalleyService,
+} from "../galley";
+import { Observability, type ObservabilityService } from "../observability";
+import type { Project } from "../project/project";
+import type { SourceStamp } from "../source/source";
+
+/**
+ * Quiet window before a changed book is re-analyzed. Long enough that typing
+ * in an unfocused-but-subscribed book does not queue a parse per keystroke,
+ * short enough that the panel feels attached to the document.
+ */
+const QUIET = 150;
+
+/** Upper bound from the first arming of a burst, so a long paste-and-type
+ * session still refreshes the panel instead of waiting for silence. */
+const DEADLINE = 1_000;
+
+/** One book's row in the census. Counts come from the held analysis. */
+export interface BookSummary {
+  readonly bookId: BookId;
+  readonly path: string;
+  readonly stamp: SourceStamp;
+  readonly chapters: number;
+  readonly verses: number;
+  readonly diagnostics: { readonly errors: number; readonly warnings: number };
+}
+
+/** What `analysis(bookId)` hands back: the parse, and the text it describes. */
+export interface HeldAnalysis {
+  readonly analysis: Analysis;
+  readonly stamp: SourceStamp;
+}
+
+export interface ProjectAnalysisService {
+  /**
+   * Subscribe to a Project: analyze every book once, register the corpus, and
+   * keep both in step as books change. Requires `Scope` because it forks the
+   * scheduling fiber and holds subscriptions; closing the scope drops both.
+   *
+   * Analyzing every book here is deliberate and is the point of the module
+   * (vision §11.1). It is a project-open cost, not an interaction cost.
+   *
+   * Attaching a second Project replaces the first: the module holds one
+   * project's worth of analyses, and the Galley corpus is one corpus.
+   */
+  readonly attach: (project: Project) => Effect.Effect<void, never, Scope.Scope>;
+
+  /**
+   * The editor's own synchronous analysis, handed in instead of a second
+   * parse. Safe to call from a `book.changes` callback: it writes two maps and
+   * opens a latch. The book's corpus registration is refreshed on the next
+   * scheduler pass, so a keystroke costs no wasm call beyond the editor's own.
+   */
+  readonly supply: (bookId: BookId, analysis: Analysis) => void;
+
+  /**
+   * The project census, from the analyses currently held. Synchronous: every
+   * input is already in memory, and a census that could suspend would be a
+   * census the shell has to await on every render.
+   *
+   * A book with no held analysis yet (or one whose analysis failed) reports
+   * zero chapters, zero verses and zero counts — read `fresh` to tell that
+   * apart from a clean book.
+   */
+  readonly census: (project: Project) => readonly BookSummary[];
+
+  readonly analysis: (bookId: BookId) => Option.Option<HeldAnalysis>;
+  /** Is the held analysis the one for this stamp? */
+  readonly fresh: (bookId: BookId, stamp: SourceStamp) => boolean;
+  /** Mark a book's analysis stale and schedule a re-analysis. */
+  readonly invalidate: (bookId: BookId) => void;
+
+  /**
+   * Every finding in the project, in one shape: per-book Onion diagnostics
+   * from the held analyses, plus the Sous findings of the last publication.
+   * Memoised until something changes, because a panel asks on every render.
+   */
+  readonly findings: () => readonly Finding[];
+
+  /** Just the corpus-level half — the findings no single book could produce. */
+  readonly crossBook: () => readonly Finding[];
+
+  /** Republishes `{ bookId, stamp }` after each re-analysis. */
+  readonly watch: () => Stream.Stream<{ readonly bookId: BookId; readonly stamp: SourceStamp }>;
+}
+
+export class ProjectAnalysis extends Context.Service<ProjectAnalysis, ProjectAnalysisService>()(
+  "ProjectAnalysis",
+) {}
+
+interface Entry {
+  /** The last analysis we hold, fresh or not. Retained through failures. */
+  analysis: Analysis | undefined;
+  /** The Book stamp `analysis` describes. */
+  stamp: SourceStamp | undefined;
+  path: string;
+  /** True when the text moved and the analysis has not caught up. */
+  stale: boolean;
+}
+
+/** The two rungs the census reports, counted once over the one shape. */
+const countsOf = (
+  bookId: BookId,
+  analysis: Analysis,
+  stamp: SourceStamp,
+): { readonly errors: number; readonly warnings: number } => {
+  let errors = 0;
+  let warnings = 0;
+  for (const finding of fromAnalysis(bookId, analysis, stamp)) {
+    if (finding.severity === "error") errors += 1;
+    else if (finding.severity === "warning") warnings += 1;
+  }
+  return { errors, warnings };
+};
+
+const summaryOf = (bookId: BookId, entry: Entry): BookSummary => {
+  const analysis = entry.analysis;
+  if (analysis === undefined || entry.stamp === undefined)
+    return {
+      bookId,
+      path: entry.path,
+      stamp: { revision: 0, length: 0 },
+      chapters: 0,
+      verses: 0,
+      diagnostics: { errors: 0, warnings: 0 },
+    };
+  const { toc } = analysis.dish;
+  // A bridged anchor (`\v 5-7`) names three verses from one row, so the count
+  // is over verse NUMBERS, not over rows. `first === 0` is the engine's mark
+  // for a missing or malformed designator; it still occupies one anchor.
+  let verses = 0;
+  toc.forEachVerse((_chapter, first, last) => {
+    verses += last >= first && first > 0 ? last - first + 1 : 1;
+  });
+  return {
+    bookId,
+    path: entry.path,
+    stamp: entry.stamp,
+    chapters: toc.chapterRows.length,
+    verses,
+    diagnostics: countsOf(bookId, analysis, entry.stamp),
+  };
+};
+
+const make = (
+  galley: GalleyService,
+  observability: ObservabilityService | undefined,
+): Effect.Effect<ProjectAnalysisService> =>
+  Effect.gen(function* () {
+    const entries = new Map<BookId, Entry>();
+    /** Analyses handed in by the editor, keyed by book; consumed by the pass. */
+    const supplied = new Map<BookId, Analysis>();
+    const pending = new Set<BookId>();
+    let attached: Project | undefined;
+    let snapshot: FindingsSnapshot | undefined;
+    let findingsCache: readonly Finding[] | undefined;
+    let corpusCache: readonly Finding[] | undefined;
+
+    const pubsub = yield* PubSub.unbounded<{
+      readonly bookId: BookId;
+      readonly stamp: SourceStamp;
+    }>();
+    const latch = Latch.makeUnsafe(false);
+    let lastArmed = 0;
+    let burstStarted = 0;
+    let armed = false;
+
+    const invalidateCaches = (): void => {
+      findingsCache = undefined;
+      corpusCache = undefined;
+    };
+
+    /** Synchronous, called from `book.changes`. Two numbers and a latch. */
+    const arm = (bookId: BookId): void => {
+      pending.add(bookId);
+      const now = Date.now();
+      lastArmed = now;
+      if (!armed) {
+        armed = true;
+        burstStarted = now;
+      }
+      latch.openUnsafe();
+    };
+
+    /**
+     * Analyze one book and register it with the corpus. Returns the stamp the
+     * analysis describes, or `undefined` when the engine refused the text (the
+     * previously held analysis is kept and the entry stays stale).
+     */
+    const refresh = (bookId: BookId, book: Book, entry: Entry): SourceStamp | undefined => {
+      const source = book.source();
+      const handed = supplied.get(bookId);
+      supplied.delete(bookId);
+      // The editor's analysis counts only if it describes the text the Book
+      // holds RIGHT NOW; a keystroke between the supply and this pass makes it
+      // a stale gift, not a shortcut.
+      let analysis: Analysis;
+      if (handed !== undefined && describesExactly(handed, source.text)) analysis = handed;
+      else {
+        try {
+          analysis = galley.analyze(source.text);
+        } catch {
+          // Retain, do not clear: an engine refusal is an integration problem,
+          // not evidence that the book became clean.
+          observability?.note("analyze", "failed", bookId, bookId);
+          return undefined;
+        }
+      }
+      entry.analysis = analysis;
+      entry.stamp = source.stamp;
+      entry.stale = false;
+      galley.update(bookId, source.text);
+      const { errors } = countsOf(bookId, analysis, source.stamp);
+      observability?.note(
+        "analyze",
+        "ready",
+        `${bookId} diag=${analysis.dish.diagnostics.length} err=${errors}`,
+        bookId,
+      );
+      return source.stamp;
+    };
+
+    const publishCorpus = (): void => {
+      const done = observability?.span("analyze.publish");
+      snapshot = galley.publish();
+      done?.();
+    };
+
+    /**
+     * One scheduler pass: re-analyze every pending book, then publish the
+     * corpus ONCE. Publishing per book would throw away the previous snapshot
+     * n times and judge the corpus n times for one user gesture.
+     */
+    const pass = Effect.sync(() => {
+      const project = attached;
+      if (project === undefined) {
+        pending.clear();
+        return;
+      }
+      const todo = [...pending];
+      pending.clear();
+      const refreshed: { bookId: BookId; stamp: SourceStamp }[] = [];
+      for (const bookId of todo) {
+        const entry = entries.get(bookId);
+        const book = project.book(bookId);
+        if (entry === undefined || book === undefined) continue;
+        const stamp = refresh(bookId, book, entry);
+        if (stamp !== undefined) refreshed.push({ bookId, stamp });
+      }
+      if (refreshed.length > 0) {
+        publishCorpus();
+        invalidateCaches();
+      }
+      return refreshed;
+    });
+
+    const resolveBook = (
+      id: string,
+    ):
+      | { readonly bookId: BookId; readonly stamp: SourceStamp; readonly engine: EngineStamp }
+      | undefined => {
+      const entry = entries.get(id);
+      if (entry === undefined || entry.analysis === undefined || entry.stamp === undefined)
+        return undefined;
+      return { bookId: id, stamp: entry.stamp, engine: stampOf(entry.analysis) };
+    };
+
+    const crossBook = (): readonly Finding[] => {
+      if (corpusCache !== undefined) return corpusCache;
+      corpusCache = snapshot === undefined ? [] : fromSnapshot(snapshot, resolveBook);
+      return corpusCache;
+    };
+
+    const findings = (): readonly Finding[] => {
+      if (findingsCache !== undefined) return findingsCache;
+      const out: Finding[] = [];
+      for (const [bookId, entry] of entries) {
+        if (entry.analysis === undefined || entry.stamp === undefined) continue;
+        out.push(...fromAnalysis(bookId, entry.analysis, entry.stamp));
+      }
+      out.push(...crossBook());
+      findingsCache = out;
+      return out;
+    };
+
+    const attach = (project: Project): Effect.Effect<void, never, Scope.Scope> =>
+      Effect.gen(function* () {
+        // One project at a time. Re-attaching drops the previous corpus rather
+        // than judging two projects as one.
+        for (const bookId of entries.keys()) galley.remove(bookId);
+        entries.clear();
+        supplied.clear();
+        pending.clear();
+        snapshot = undefined;
+        invalidateCaches();
+        attached = project;
+
+        const unsubscribes = new Map<BookId, () => void>();
+        const subscribe = (book: Book): void => {
+          unsubscribes.get(book.id)?.();
+          // The Book publishes synchronously inside `apply`; arming is the
+          // only thing allowed to happen here (editor-and-save §1.3).
+          unsubscribes.set(
+            book.id,
+            book.changes(() => {
+              const entry = entries.get(book.id);
+              if (entry !== undefined) entry.stale = true;
+              invalidateCaches();
+              arm(book.id);
+            }),
+          );
+        };
+
+        const done = observability?.span("analyze.project", project.root);
+        for (const book of project.books) {
+          const entry: Entry = {
+            analysis: undefined,
+            stamp: undefined,
+            path: book.path,
+            stale: true,
+          };
+          entries.set(book.id, entry);
+          refresh(book.id, book, entry);
+          subscribe(book);
+        }
+        publishCorpus();
+        invalidateCaches();
+        done?.();
+        observability?.note("analyze.project", "ready", `${entries.size} books`);
+
+        // A seat swap replaces the object that holds a book's canonical text,
+        // so the old subscription is dead: re-resolve and re-subscribe, and
+        // re-analyze because the seat may already hold different text.
+        const unwatchProject = project.changed((bookId) => {
+          const book = project.book(bookId);
+          if (book === undefined) return;
+          subscribe(book);
+          const entry = entries.get(bookId);
+          if (entry !== undefined) entry.stale = true;
+          invalidateCaches();
+          arm(bookId);
+        });
+
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            unwatchProject();
+            for (const off of unsubscribes.values()) off();
+            unsubscribes.clear();
+            if (attached === project) attached = undefined;
+          }),
+        );
+
+        // The scheduling fiber. `Effect.forever` over "wait for quiet, then
+        // one pass" — the numbers are re-read each lap so arming during the
+        // wait extends the quiet period without restarting the deadline.
+        const loop = Effect.forever(
+          Effect.gen(function* () {
+            yield* latch.await;
+            for (;;) {
+              const now = Date.now();
+              const untilQuiet = QUIET - (now - lastArmed);
+              const untilDeadline = DEADLINE - (now - burstStarted);
+              const wait = Math.min(untilQuiet, untilDeadline);
+              if (wait <= 0) break;
+              yield* Effect.sleep(Duration.millis(wait));
+            }
+            // Close before the pass: an edit arriving during it re-arms and is
+            // picked up by the next lap rather than being lost.
+            armed = false;
+            latch.closeUnsafe();
+            const refreshed = yield* pass;
+            for (const event of refreshed ?? []) yield* PubSub.publish(pubsub, event);
+          }),
+        );
+        yield* Effect.forkScoped(loop);
+      });
+
+    return {
+      attach,
+      supply: (bookId, analysis) => {
+        supplied.set(bookId, analysis);
+        arm(bookId);
+      },
+      census: (project) =>
+        project.books.map((book) => {
+          const entry = entries.get(book.id);
+          return entry === undefined
+            ? summaryOf(book.id, {
+                analysis: undefined,
+                stamp: undefined,
+                path: book.path,
+                stale: true,
+              })
+            : summaryOf(book.id, entry);
+        }),
+      analysis: (bookId) => {
+        const entry = entries.get(bookId);
+        if (entry === undefined || entry.analysis === undefined || entry.stamp === undefined)
+          return Option.none();
+        return Option.some({ analysis: entry.analysis, stamp: entry.stamp });
+      },
+      fresh: (bookId, stamp) => {
+        const entry = entries.get(bookId);
+        return (
+          entry !== undefined &&
+          !entry.stale &&
+          entry.stamp !== undefined &&
+          entry.stamp.revision === stamp.revision
+        );
+      },
+      invalidate: (bookId) => {
+        const entry = entries.get(bookId);
+        if (entry !== undefined) entry.stale = true;
+        invalidateCaches();
+        arm(bookId);
+      },
+      findings,
+      crossBook,
+      watch: () => Stream.fromPubSub(pubsub),
+    };
+  });
+
+/**
+ * The Layer. Needs `Galley`; takes `Observability` optionally, so core policy
+ * runs with or without the ring. It is NOT scoped: the module holds no host
+ * resource of its own, and the fibers and subscriptions belong to the scope
+ * that called `attach`.
+ */
+export const ProjectAnalysisLive: Layer.Layer<ProjectAnalysis, never, Galley> = Layer.effect(
+  ProjectAnalysis,
+  Effect.gen(function* () {
+    const galley = yield* Galley;
+    const observability = yield* Effect.serviceOption(Observability);
+    return yield* make(galley, Option.getOrUndefined(observability));
+  }),
+);
