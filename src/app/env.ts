@@ -7,7 +7,8 @@
 // "not configured for this build" message) instead of guessing a host.
 //
 // Names are SEFER-prefixed so they cannot collide with the v1 app's variables
-// when both are built on one machine. `.env.example` lists them with notes.
+// when both are built on one machine. documentation/architecture/configuration.md
+// lists them with notes.
 
 const read = (value: string | undefined): string | null => {
   const trimmed = value?.trim();

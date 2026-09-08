@@ -4,6 +4,7 @@ import { For, Show, createEffect, createSignal } from "solid-js";
 import { runCommand } from "../../../app/commands";
 import { t } from "../../../app/i18n";
 import { useShell } from "../../../app/ProjectContext";
+import { CloudPanel } from "../../../app/ui/CloudPanel";
 import { ShellGate } from "../../../app/ui/ShellGate";
 
 /**
@@ -107,6 +108,10 @@ function ProjectPage(props: { readonly root: string }) {
                 )}
               </For>
             </ul>
+
+            {/* Remote sync, below the census: it acts on the whole project,
+                and it is the one panel here that can be offline. */}
+            <CloudPanel root={props.root} />
 
             <Show when={project().failed.length > 0}>
               <p class="problem">

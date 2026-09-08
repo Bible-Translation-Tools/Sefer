@@ -40,16 +40,43 @@ suite both must pass: init, empty status, a file written through `FileSystem`, a
 then `log`, `show`, and `previousVersions` agreeing on it. It is exported and registered nowhere — the
 tier each Layer belongs to is the registration site's decision.
 
-## Remote is deferred
+## Remote
 
 `src/core/remote/remote.ts` defines the port — `attach`, `fetch`, `pull`, `push`, `publish`, and
-`progress(): Stream<Progress>` — plus `RemoteUnavailableLive`, which refuses every call with
-`RemoteError({ reason: "Unavailable" })`. The four reasons (`Unavailable`, `Unauthorized`, `Network`,
-`Rejected`) exist because only one of them is worth retrying unchanged. Slice 26 is not a small step: on
-the Web, isomorphic-git's HTTP client needs a CORS proxy (Will runs `wacs-isomorphic-git-proxy` in a
-sibling repository, so the proxy URL is configuration) and a credential callback fed from the host
-`Credentials` service — tokens never live in project files; on desktop the transport is git2 behind the
-same Rust commands as `TauriGitLive`. Until both halves exist there is no honest partial implementation.
+`progress(): Stream<Progress>`. Its four reasons (`Unavailable`, `Unauthorized`, `Network`, `Rejected`)
+exist because only one of them is worth retrying unchanged. Cloning is not a fifth method:
+`cloneRepository(url, into)` in `src/core/remote/clone.ts` is `Git.init` → `attach` → `pull`, in core
+because the ORDER is policy — a project on disk always knows where its bytes came from, even if the
+pull fails half way.
+
+`src/core/remote/gitea.ts` is the account half. WACS is a Gitea instance, so the flow is v1's:
+`POST /api/v1/users/{user}/tokens` with HTTP Basic auth (plus `X-Gitea-OTP` when the account has two
+factors) mints a token scoped to `SESSION_TOKEN_SCOPES` and named `sefer-<platform>-<date>`, and the
+password is used for that one request and never stored. `login`, `logout`, `session`,
+`listWritableRepos`, `listOwnedRepos`, `createRepo`, `getRepo`, `forkRepo`; `GiteaError` reasons are
+`Unauthorized`, `OtpRequired`, `Network`, `Refused`, `Io`, and a 401 that mentions OTP is `OtpRequired`
+rather than a wrong password. The session is a `Credential` (`username`, `token`, plus the token's name
+and id) in the host `Credentials` service and nowhere else — never a project file. Core may not touch
+`fetch`, so the transport arrives as the `HttpFetch` port and `GiteaLive({ fetch, platform })` is the
+only thing needing a host. Repository listings resolve `/api/v1/user` first and pass `uid` to
+`/repos/search`: without it the search is instance-wide and reads as empty for someone who owns repos.
+
+`WebRemoteLive({ corsProxyUrl, requestedWith, giteaHost })` (`src/platform/web/remote.ts`) answers the
+port with isomorphic-git's `http/web`. A browser cannot speak git smart-HTTP to Gitea directly — no CORS
+headers — so every transfer goes through the proxy Will runs (`wacs-isomorphic-git-proxy`); with no
+proxy configured every transfer refuses `Unavailable` and names the variable instead of failing later on
+CORS. `onAuth` reads `Credentials.get(origin-of-the-remote-URL)`, one credential per Gitea instance.
+`publish(repo, target)` takes a URL, or a `name`/`owner/name` on the configured host that it creates
+first, then attaches, then pushes. `progress()` is a sliding `PubSub`, so a panel watching a transfer
+can never hold it back. Desktop answers the same port through git2 in Rust (`src/platform/tauri`), where
+no proxy is involved.
+
+Configuration is `src/app/env.ts` only (see [configuration.md](configuration.md)):
+`VITE_SEFER_GITEA_WEB_HOST`, `VITE_SEFER_GITEA_DESKTOP_HOST`, `VITE_SEFER_GIT_CORS_PROXY_URL`,
+`VITE_SEFER_GIT_PROXY_X_REQUESTED_WITH`. `src/app/ui/CloudPanel.tsx` is the surface — configured host,
+sign-in with OTP, the writable-repo list, create-and-publish, Push, Pull, and one progress line — and
+the commands are `remote.login`, `remote.pull`, `remote.push`. `RemoteUnavailableLive` remains for a
+host with no transport.
 
 ## ProjectAdmin
 

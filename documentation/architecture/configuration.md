@@ -23,5 +23,5 @@ environment. `tools/tauri/updaterConfig.ts` writes a config overlay from
 Tauri build is invoked with `--config` pointing at it. See
 [desktop host](desktop.md).
 
-`.env*` files are never committed. Do not add a second reader of
+`.env*` files are never committed (this table is the reference; there is no `.env.example`). Do not add a second reader of
 `import.meta.env`; add a field to `env.ts`.

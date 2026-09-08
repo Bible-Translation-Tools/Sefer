@@ -6,8 +6,9 @@
  * someone asked for, and `progress()` exists so a long transfer can be shown
  * and cancelled rather than appearing to hang.
  *
- * Only the port and a refusing implementation live here. The real one is
- * deferred; see `RemoteUnavailableLive`.
+ * Only the port and a refusing implementation live here; the hosts answer it
+ * (`src/platform/web/remote.ts`, `src/platform/tauri`), and `./gitea.ts` is
+ * the account half — signing in and finding a repository to attach to.
  */
 import { Context, Data, Effect, Layer, type Option, Stream } from "effect";
 
@@ -78,17 +79,14 @@ const unavailable = <A>(): Effect.Effect<A, RemoteError> =>
   );
 
 /**
- * TODO(seam): slice 26. Every method refuses.
+ * The refusing implementation, for a host with no transport at all.
  *
- * The Web half is not a small step: isomorphic-git's `http` client cannot
- * reach a git server from a browser without a CORS proxy, and it needs a
- * credential callback fed from the host `Credentials` service (tokens never
- * live in project files). Will already runs `wacs-isomorphic-git-proxy` in a
- * sibling repository, so the proxy URL becomes configuration rather than
- * something Sefer hosts. The desktop half goes through the same Rust commands
- * as `TauriGitLive`, where git2 does the transport and no proxy is involved.
- * Until both exist there is no honest partial implementation, so this Layer
- * says so instead of half-working.
+ * It is no longer the only one — `WebRemoteLive` (`src/platform/web/remote.ts`)
+ * answers this port with isomorphic-git through a CORS proxy, and desktop
+ * answers it with git2 behind Tauri commands. This Layer stays because a
+ * composition that has neither must still build, and it must say so rather
+ * than let a sync surface claim a project is up to date with a remote it
+ * never reached.
  */
 export const RemoteUnavailableLive: Layer.Layer<Remote> = Layer.succeed(Remote, {
   attach: () => unavailable(),

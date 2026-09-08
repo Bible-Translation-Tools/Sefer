@@ -16,6 +16,16 @@ import { Context, Effect, Layer, Option } from "effect";
 export interface Credential {
   readonly username: string;
   readonly token: string;
+  /**
+   * The two facts a Gitea session needs beyond the token itself: the name the
+   * token was created under and its id. They are optional because most
+   * credentials are just a username and a secret — only a token Sefer minted
+   * itself (see `src/core/remote/gitea.ts`) can name and revoke it later, and
+   * a host that persists credentials keeps them alongside the token rather
+   * than in a second file that could drift out of step with it.
+   */
+  readonly tokenName?: string;
+  readonly tokenId?: string;
 }
 
 export interface CredentialsService {

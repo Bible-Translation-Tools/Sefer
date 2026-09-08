@@ -23,8 +23,10 @@ import { createSignal } from "solid-js";
 import type { Book } from "../core/book/book";
 import { Git } from "../core/git/git";
 import type { Project } from "../core/project/project";
+import { Remote } from "../core/remote/remote";
 import { SaveCoordinator } from "../core/save/saveCoordinator";
 import type { ProjectionName } from "../editor";
+import { giteaHostFor } from "./env";
 import { t } from "./i18n";
 import type { Domain, Services } from "./services";
 
@@ -213,6 +215,30 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
 
   const hasProject = (): boolean => bridge.project() !== undefined;
   const hasBook = (): boolean => bridge.focused() !== undefined;
+
+  /**
+   * Pull and push differ by one word, so they share this. The project's
+   * repository is opened rather than initialised: transferring into a folder
+   * that is not a repository yet is a publish, not a pull.
+   */
+  const runTransfer = (direction: "pull" | "push") => {
+    const project = bridge.project();
+    if (project === undefined) return;
+    return Effect.gen(function* () {
+      const git = yield* Git;
+      const remote = yield* Remote;
+      const repo = yield* git.open(project.root);
+      const progress = yield* direction === "pull" ? remote.pull(repo) : remote.push(repo);
+      bridge.report(
+        t("{direction}: {phase} ({loaded})", {
+          direction,
+          phase: progress.phase,
+          loaded: progress.loaded,
+        }),
+      );
+      bridge.bump();
+    });
+  };
 
   const registrations = [
     registerCommand({
@@ -418,6 +444,48 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
           bridge.bump();
         });
       },
+    }),
+
+    // ---------------------------------------------------------------------
+    // Remote sync. Three commands, because remote work is three separate
+    // approvals: prove who you are, take what arrived, publish what you did.
+    // None of them ever runs by itself (documentation/architecture/git.md).
+    // ---------------------------------------------------------------------
+
+    registerCommand({
+      id: "remote.login",
+      title: t("Sign in to the cloud…"),
+      run: () => {
+        // The sign-in form needs a password and an OTP field, which is a
+        // surface, not a command; this takes the user to it. A build with no
+        // Gitea host configured says so rather than opening an empty form.
+        const host = giteaHostFor(services.hostInfo.kind());
+        if (host === null) {
+          bridge.report(t("no cloud host in this build: set VITE_SEFER_GITEA_WEB_HOST"));
+          return;
+        }
+        const project = bridge.project();
+        if (project === undefined) {
+          bridge.go("/projects");
+          return;
+        }
+        bridge.go(`/project/${encodeURIComponent(project.root)}`);
+        bridge.report(t("sign in to {host} in the Cloud panel", { host }));
+      },
+    }),
+
+    registerCommand({
+      id: "remote.pull",
+      title: t("Pull from the cloud"),
+      when: hasProject,
+      run: () => runTransfer("pull"),
+    }),
+
+    registerCommand({
+      id: "remote.push",
+      title: t("Push to the cloud"),
+      when: hasProject,
+      run: () => runTransfer("push"),
     }),
 
     registerCommand({
