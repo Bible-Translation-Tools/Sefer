@@ -168,6 +168,18 @@ export function BookEditor(props: BookEditorProps) {
     },
   );
 
+  // An aimed open (a finding, a search hit, the palette) scrolls to its offset
+  // once the view is bound. Runs after the clip above so the target is visible
+  // whether the reader prefers the whole book or one chapter.
+  createEffect(
+    () => ({ held: bound(), aimed: shell.reveal() }),
+    ({ held, aimed }) => {
+      if (held === undefined || aimed === undefined || aimed.bookId !== props.book.id) return;
+      const at = Math.min(aimed.from, held.view.state.doc.length);
+      held.view.dispatch({ effects: EditorView.scrollIntoView(at, { y: "center" }) });
+    },
+  );
+
   return (
     <div
       class="editor-host cm-host"
