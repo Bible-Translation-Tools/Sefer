@@ -7,6 +7,7 @@ import { t } from "../app/i18n";
 import { useShell } from "../app/ProjectContext";
 import { shellSettings, type AnyDescriptor } from "../app/settings";
 import { ShellGate } from "../app/ui/ShellGate";
+import { UpdatePanel } from "../app/ui/UpdatePanel";
 import type { SettingKey } from "../core/host/settings";
 
 /**
@@ -104,6 +105,8 @@ function SettingsPage() {
           file: `${shell.services.hostInfo.paths().appData}/settings.json`,
         })}
       </p>
+
+      <UpdatePanel />
     </main>
   );
 }

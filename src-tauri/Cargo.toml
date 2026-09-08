@@ -5,11 +5,59 @@ description = "Sefer desktop host"
 authors = ["Sefer contributors"]
 edition = "2021"
 
+# The `_lib` suffix is not redundant: on Windows a lib and a bin of the same
+# name collide (rust-lang/cargo#8519). `main.rs` is a two-line shim over it.
+[lib]
+name = "sefer_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [build-dependencies]
 tauri-build = { version = "2.5", features = [] }
 
 [dependencies]
+# Mirrors the v1 app: naming openssl with the `vendored` feature makes
+# libgit2-sys link a built-from-source OpenSSL, which is what lets the Linux
+# release build produce a portable AppImage/deb instead of depending on
+# whatever libssl the runner happens to carry. On macOS and Windows git2 uses
+# the platform TLS stack and this dependency is inert.
+openssl = { version = "0.10", features = ["vendored"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 tauri = { version = "2.11", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-os = "2"
+# The Git port's desktop half. `https` is the transport Gitea/WACS needs; ssh
+# is deliberately absent because Sefer authenticates with a token, never a key.
+git2 = { version = "0.20", features = ["https"] }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-process = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-window-state = "2"
+
+# `keyring` selects its backing store at compile time, and the feature that
+# names one store pulls that platform's dependencies (dbus on Linux). Enabling
+# all three everywhere would break the macOS build, so each target names its
+# own.
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service"] }
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]
+
+[profile.dev]
+incremental = true
+opt-level = 0
+debug = true
+
+[profile.dev.package."*"]
+opt-level = 1
+debug = false

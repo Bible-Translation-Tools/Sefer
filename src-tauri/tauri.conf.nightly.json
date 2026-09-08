@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Sefer Nightly",
+  "identifier": "org.wycliffe.sefer.nightly",
+  "app": {
+    "windows": [
+      {
+        "title": "Sefer Nightly"
+      }
+    ]
+  }
+}

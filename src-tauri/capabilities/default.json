@@ -1,7 +1,97 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Minimal Sefer desktop capability set",
+  "description": "Everything the Sefer desktop host's webview is allowed to reach.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": [
+    "core:default",
+    "fs:default",
+    "fs:allow-read-file",
+    "fs:allow-read-text-file",
+    "fs:allow-write-file",
+    "fs:allow-write-text-file",
+    "fs:allow-read-dir",
+    "fs:allow-mkdir",
+    "fs:allow-remove",
+    "fs:allow-rename",
+    "fs:allow-copy-file",
+    "fs:allow-exists",
+    "fs:allow-stat",
+    "fs:allow-lstat",
+    "fs:allow-watch",
+    "fs:allow-unwatch",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        {
+          "path": "$APPDATA"
+        },
+        {
+          "path": "$APPDATA/**"
+        },
+        {
+          "path": "$APPDATA/**/.*"
+        },
+        {
+          "path": "$APPDATA/**/.*/**"
+        },
+        {
+          "path": "$APPLOCALDATA"
+        },
+        {
+          "path": "$APPLOCALDATA/**"
+        },
+        {
+          "path": "$APPLOCALDATA/**/.*"
+        },
+        {
+          "path": "$APPLOCALDATA/**/.*/**"
+        },
+        {
+          "path": "$DOCUMENT"
+        },
+        {
+          "path": "$DOCUMENT/**"
+        },
+        {
+          "path": "$DOCUMENT/**/.*"
+        },
+        {
+          "path": "$DOCUMENT/**/.*/**"
+        },
+        {
+          "path": "$HOME"
+        },
+        {
+          "path": "$HOME/**"
+        },
+        {
+          "path": "$HOME/**/.*"
+        },
+        {
+          "path": "$HOME/**/.*/**"
+        },
+        {
+          "path": "$TEMP"
+        },
+        {
+          "path": "$TEMP/**"
+        },
+        {
+          "path": "$TEMP/**/.*"
+        },
+        {
+          "path": "$TEMP/**/.*/**"
+        }
+      ]
+    },
+    "dialog:default",
+    "os:default",
+    "opener:default",
+    "opener:allow-open-path",
+    "updater:default",
+    "process:default",
+    "process:allow-restart",
+    "window-state:default"
+  ]
 }

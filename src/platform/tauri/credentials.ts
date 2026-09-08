@@ -1,21 +1,89 @@
 /**
- * TODO(seam): the desktop host's Credentials, backed by the OS keychain.
- * Unwired stub.
+ * The desktop host's Credentials, over the OS keychain.
  *
- * The real implementation stores each remote's credential through a keychain
- * plugin (`@tauri-apps/plugin-stronghold`, or a small Rust command over the
- * `keyring` crate) so a token survives a restart without ever being written
- * into a project file. Neither exists yet, so this Layer refuses to build:
- * silently falling back to the session map would look like it persisted.
+ * Keychain on macOS, the Credential Manager on Windows, the Secret Service on
+ * Linux — the Rust `keyring` crate covers all three, and `src-tauri/src/
+ * credentials.rs` exposes it as three commands. This is the whole reason the
+ * desktop host reports `secureStore: true` while the Web host does not: a
+ * token survives a restart without ever being written into a project file or
+ * into `settings.json`.
+ *
+ * The keychain stores one opaque secret per account, and a `Credential` is now
+ * more than a token (it may carry the name and id of a token Sefer minted
+ * itself). So the whole record is stored as JSON under one entry rather than
+ * spread across several — one write, one read, nothing that can drift apart.
+ * A secret that will not parse is treated as absent: it was written by an
+ * older or different shape, and the honest answer is "sign in again".
  */
-import { Effect, Layer } from "effect";
+import { invoke } from "@tauri-apps/api/core";
+import { Effect, Layer, Option } from "effect";
 
-import { Credentials } from "../../core/host/credentials";
+import { Credentials, type Credential } from "../../core/host/credentials";
 
-const UNIMPLEMENTED =
-  "TauriCredentialsLive is a stub: wire the OS keychain before composing the desktop host, or compose SessionCredentialsLive deliberately.";
+/**
+ * The keychain service name; the account within it is the remote's key.
+ *
+ * Deliberately the stable identifier rather than the running build's, so a
+ * Nightly install and a Stable install share one stored credential: it is the
+ * same person talking to the same Gitea, and making them sign in twice would
+ * teach nobody anything.
+ */
+export const KEYCHAIN_SERVICE = "org.wycliffe.sefer";
 
-export const TauriCredentialsLive: Layer.Layer<Credentials> = Layer.effect(
-  Credentials,
-  Effect.die(new Error(UNIMPLEMENTED)),
-);
+const decode = (secret: string): Option.Option<Credential> => {
+  try {
+    const parsed: unknown = JSON.parse(secret);
+    if (parsed === null || typeof parsed !== "object") return Option.none();
+    const record: Record<string, unknown> = { ...parsed };
+    const { username, token, tokenName, tokenId } = record;
+    if (typeof username !== "string" || typeof token !== "string") return Option.none();
+    return Option.some({
+      username,
+      token,
+      ...(typeof tokenName === "string" ? { tokenName } : {}),
+      ...(typeof tokenId === "string" ? { tokenId } : {}),
+    });
+  } catch {
+    return Option.none();
+  }
+};
+
+export const TauriCredentialsLive: Layer.Layer<Credentials> = Layer.succeed(Credentials, {
+  get: (remote) =>
+    Effect.map(
+      // A keychain that refuses to answer is reported as "nothing stored":
+      // `get` cannot fail by contract, and a sign-in prompt is a better
+      // outcome than a dead flow.
+      Effect.orElseSucceed(
+        Effect.tryPromise(() =>
+          invoke<string | null>("credentials_get", {
+            service: KEYCHAIN_SERVICE,
+            account: remote,
+          }),
+        ),
+        () => null,
+      ),
+      (secret) => (secret === null ? Option.none() : decode(secret)),
+    ),
+
+  // `set` and `clear` die rather than swallow a keychain failure. The port has
+  // no error channel, and the two silent outcomes are both worse than a crash:
+  // a sign-in that did not persist, and a sign-out that left the token behind.
+  set: (remote, credential) =>
+    Effect.orDie(
+      Effect.tryPromise(() =>
+        invoke<void>("credentials_set", {
+          service: KEYCHAIN_SERVICE,
+          account: remote,
+          secret: JSON.stringify(credential),
+        }),
+      ),
+    ),
+
+  clear: (remote) =>
+    Effect.orDie(
+      Effect.tryPromise(() =>
+        invoke<void>("credentials_clear", { service: KEYCHAIN_SERVICE, account: remote }),
+      ),
+    ),
+});

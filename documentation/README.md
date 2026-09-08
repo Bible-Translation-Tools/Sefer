@@ -18,6 +18,7 @@ This folder holds durable project guidance for humans and agents. Root `AGENTS.m
 - Reading a diagnostic or applying an offered repair: [findings and fixes](./architecture/findings.md).
 - Opening a folder of books, the four Book states, external changes: [project](./architecture/project.md).
 - Asking the host for paths, settings, credentials, or a dialog: [host capabilities](./architecture/host.md).
+- Working on the desktop app — Tauri plugins, the Rust commands, the updater, or a release: [desktop host](./architecture/desktop.md).
 - Saving, autosave, conflicts, and crash recovery: [save and recovery](./architecture/save.md).
 - Comparing against the saved baseline or running one command across books: [diff and multibook](./architecture/diff-and-multibook.md).
 - Finding text and replacing one match: [search](./architecture/search.md).

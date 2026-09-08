@@ -205,10 +205,7 @@ const makeWebRemote = (
      * callback while the port promises the caller one final `Progress`: the
      * last event seen is that answer.
      */
-    const wireFor = (
-      repo: Repo,
-      last: { current: Progress },
-    ): Effect.Effect<Wire, RemoteError> =>
+    const wireFor = (repo: Repo, last: { current: Progress }): Effect.Effect<Wire, RemoteError> =>
       Effect.gen(function* () {
         if (options.corsProxyUrl === null) {
           return yield* Effect.fail(

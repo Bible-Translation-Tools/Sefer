@@ -1,18 +1,19 @@
 # Host capabilities
 
-Everything Sefer cannot do by itself arrives as one of six Effect Layers. Each has one interface in
+Everything Sefer cannot do by itself arrives as one of seven Effect Layers. Each has one interface in
 `src/core/host/` (or, for the two that predate this seam, in `src/core/`) and one implementation per
 host in `src/platform/{web,tauri,node}/`. Core policy asks the service; only `src/platform` names a
 host, and `pnpm boundaries` enforces that direction.
 
 | Layer | Interface | Web | Tauri | Tests / dev |
 | --- | --- | --- | --- | --- |
-| HostInfo | `src/core/host/hostInfo.ts` | `WebHostInfoLive(build)` | stub, dies on build | `HostInfoLive(values)` |
-| FileSystem | `effect/FileSystem` | `OpfsFileSystemLive` | not written yet | `MemoryFileSystemLive`, `NodeFileSystemLive` |
+| HostInfo | `src/core/host/hostInfo.ts` | `WebHostInfoLive(build)` | `TauriHostInfoLive(build)` | `HostInfoLive(values)` |
+| FileSystem | `effect/FileSystem` | `OpfsFileSystemLive` | `TauriFileSystemLive` | `MemoryFileSystemLive`, `NodeFileSystemLive` |
 | Observability | `src/core/observability.ts` | `ObservabilityLive({ sink: hostSink() })` | same | same |
 | Settings | `src/core/host/settings.ts` | `SettingsLive` | `SettingsLive` | `MemorySettingsLive` |
-| Credentials | `src/core/host/credentials.ts` | `SessionCredentialsLive` | stub, dies on build | `SessionCredentialsLive` |
-| Dialogs | `src/core/host/dialogs.ts` | `WebDialogsLive` | stub, dies on build | `HeadlessDialogsLive(answers)` |
+| Credentials | `src/core/host/credentials.ts` | `SessionCredentialsLive` | `TauriCredentialsLive` (OS keychain) | `SessionCredentialsLive` |
+| Dialogs | `src/core/host/dialogs.ts` | `WebDialogsLive` | `TauriDialogsLive` | `HeadlessDialogsLive(answers)` |
+| Updater | `src/core/host/updater.ts` | `NoUpdaterLive(build)` | `TauriUpdaterLive({ updaterHost })` | `NoUpdaterLive(build)` |
 
 ## What each one owns
 
@@ -38,12 +39,18 @@ when not. Its pickers yield handle names, not paths; mapping a picked handle to 
 `FileSystem` can read belongs to the project/library slice, and is marked `TODO(seam)` in
 `src/platform/web/dialogs.ts`.
 
-## Stubs fail loudly
+**Updater** is how a running Sefer replaces itself. Only the desktop host can, so the Web Layer is a
+real implementation that refuses: `check()` answers `Unavailable` with a reason to display, and every
+install path fails loudly. That is why the About panel is written once and rendered on both hosts.
+`check()` cannot fail — "we could not find out" is an answer the panel shows, not an error the shell
+handles — while installing can, because it either happened or it did not.
 
-The three `src/platform/tauri/` Layers die on build with a message naming the missing dependency
-(`@tauri-apps/api`, the dialog plugin, a keychain plugin). Answering with guessed app directories, or
-quietly falling back to a session credential map, would look like success and write to the wrong
-place. Nothing composes them yet.
+## Both hosts are real
+
+The `src/platform/tauri/` Layers are implemented over the Tauri plugins and the Rust commands in
+`src-tauri/`; see [desktop host](desktop.md) for the command vocabulary and what is still missing.
+`src/app/services.ts` chooses by `detectHost()` and reaches the desktop Layers through a dynamic
+`import()`, so the Web bundle never evaluates `@tauri-apps/*`.
 
 ## How composition should merge them
 

@@ -46,11 +46,14 @@ import {
   type CredentialsService,
 } from "../core/host/credentials";
 import { Dialogs, type DialogsService } from "../core/host/dialogs";
-import { HostInfo, type HostInfoService } from "../core/host/hostInfo";
+import { HostInfo, type HostInfoService, type HostPaths } from "../core/host/hostInfo";
 import { Settings, SettingsLive, type SettingsService } from "../core/host/settings";
+import { NoUpdaterLive, Updater, type UpdaterService } from "../core/host/updater";
 import { Observability } from "../core/observability";
 import type { Seat } from "../core/project/project";
 import { Recovery, RecoveryLive, type RecoveryService } from "../core/recovery/recovery";
+import { Gitea, GiteaLive, type GiteaService } from "../core/remote/gitea";
+import { Remote, type RemoteService } from "../core/remote/remote";
 import { Library, LibraryLive, type LibraryService } from "../core/resources/library";
 import {
   SaveCoordinator,
@@ -58,12 +61,15 @@ import {
   type SaveCoordinatorService,
 } from "../core/save/saveCoordinator";
 import { commandsLayer, editorBook, usfmLinter, viewLayer, type EditorBook } from "../editor";
+import { detectHost } from "../platform/host";
 import { WebDialogsLive } from "../platform/web/dialogs";
 import { OpfsFileSystemLive } from "../platform/web/fileSystem";
 import { WebGalleyLive } from "../platform/web/galley";
 import { WebGitLive } from "../platform/web/git";
 import { OPFS_ROOT, WEB_PATHS, WebHostInfoLive } from "../platform/web/hostInfo";
+import { WebRemoteLive } from "../platform/web/remote";
 import type { Composition } from "./composition";
+import { env } from "./env";
 
 /**
  * Where the shell looks for projects on the Web host.
@@ -76,8 +82,19 @@ import type { Composition } from "./composition";
  */
 export const PROJECTS_ROOT = `${OPFS_ROOT}/projects`;
 
-/** Where the resource library's index and imported resources live. */
+/** Where the resource library's index and imported resources live, on Web. */
 export const LIBRARY_ROOT = `${WEB_PATHS.appData}/library`;
+
+/**
+ * The desktop host's whole Layer set, as a TYPE only.
+ *
+ * `typeof import(...)` is erased at compile time, so naming the module here
+ * costs a Web bundle nothing. The VALUE arrives through the dynamic
+ * `import()` in `composeServices`, inside the `tauri` branch and nowhere else
+ * — every file behind that barrel imports `@tauri-apps/*`, which must not be
+ * evaluated in a browser.
+ */
+type TauriHost = typeof import("../platform/tauri/index");
 
 /** The engine is the one Layer that can refuse to build. */
 export type EngineFailure = EngineLoadError | VersionMismatch;
@@ -91,11 +108,14 @@ export type Domain =
   | Settings
   | Credentials
   | Dialogs
+  | Updater
   | SaveCoordinator
   | Recovery
   | ProjectAnalysis
   | Library
   | Git
+  | Gitea
+  | Remote
   | ProjectAdmin;
 
 export interface Services {
@@ -116,11 +136,14 @@ export interface Services {
   readonly settings: SettingsService;
   readonly credentials: CredentialsService;
   readonly dialogs: DialogsService;
+  readonly updater: UpdaterService;
   readonly save: SaveCoordinatorService;
   readonly recovery: RecoveryService;
   readonly projectAnalysis: ProjectAnalysisService;
   readonly library: LibraryService;
   readonly git: GitService;
+  readonly gitea: GiteaService;
+  readonly remote: RemoteService;
   readonly admin: ProjectAdminService;
 
   /** Plain → Instantiated: `openProject(root, { seat })`. */
@@ -135,8 +158,8 @@ export interface Services {
    */
   readonly seated: (id: BookId) => EditorBook | undefined;
   /** Which FileSystem this composition got, for the shell to say so. */
-  readonly storage: "opfs" | "fixture";
-  /** The OPFS subtree the projects list enumerates. */
+  readonly storage: "opfs" | "native" | "fixture";
+  /** The subtree the projects list enumerates. */
   readonly projectsRoot: string;
   /**
    * The seeded fixture project's root, when this composition is running over
@@ -187,18 +210,51 @@ const saveLayer: Layer.Layer<SaveCoordinator, never, FileSystem.FileSystem | Gal
 const domainLayer = (
   build: string,
   fixture: boolean,
+  paths: HostPaths,
+  tauri: TauriHost | undefined,
 ): Layer.Layer<Exclude<Domain, Observability>, EngineFailure> => {
   // The host's answers: paths, locale, capabilities. Everything rooted below
   // reads its root from here.
-  const hostInfo = WebHostInfoLive(build);
+  const hostInfo = tauri === undefined ? WebHostInfoLive(build) : tauri.TauriHostInfoLive(build);
 
-  // Storage. OPFS in a browser; the seeded fixture when a developer asks.
-  const fileSystem = fixture ? FixtureFileSystemLive : OpfsFileSystemLive;
+  // Storage. Real files on desktop, OPFS in a browser; the seeded fixture when
+  // a developer asks, on either host.
+  const fileSystem = fixture
+    ? FixtureFileSystemLive
+    : tauri === undefined
+      ? OpfsFileSystemLive
+      : tauri.TauriFileSystemLive;
 
   // The host capabilities layer: the pinned wasm engine, the folder/file
   // pickers, and a session-lifetime credential store (the Web host has no
   // secure store, so tokens deliberately do not survive a reload).
-  const host = Layer.mergeAll(WebGalleyLive, WebDialogsLive, SessionCredentialsLive, hostInfo);
+  // Gitea sits in the host ring, not the module ring, because it needs the
+  // credential store and the browser's `fetch` — core names neither. The
+  // token it mints is called `sefer-web-<date>`, which is the only string
+  // Sefer ever writes into someone's Gitea account.
+  const account = Layer.provideMerge(
+    GiteaLive({
+      fetch: (input, init) => globalThis.fetch(input, init),
+      platform: tauri === undefined ? "web" : "desktop",
+    }),
+    // Desktop persists tokens in the OS keychain; the Web host cannot, and
+    // says so by keeping them for the session only.
+    tauri === undefined ? SessionCredentialsLive : tauri.TauriCredentialsLive,
+  );
+
+  // The engine is the same wasm build on both hosts: Galley runs in the
+  // webview, not in Rust, so there is nothing host-specific to swap.
+  const host = Layer.mergeAll(
+    WebGalleyLive,
+    // Real native pickers on desktop, the File System Access API on Web.
+    tauri === undefined ? WebDialogsLive : tauri.TauriDialogsLive,
+    account,
+    hostInfo,
+    // Self-update: real on desktop, an honest refusal in a browser.
+    tauri === undefined
+      ? NoUpdaterLive(build)
+      : tauri.TauriUpdaterLive({ updaterHost: env.updaterHost }),
+  );
 
   // Save must find Recovery, or a crash costs the user everything since the
   // last write: `SaveCoordinatorLive` takes Recovery through `serviceOption`,
@@ -206,7 +262,7 @@ const domainLayer = (
   // provideMerge rather than a sibling merge.
   const saveAndRecovery = Layer.provideMerge(
     saveLayer,
-    RecoveryLive({ journalRoot: WEB_PATHS.appData }),
+    RecoveryLive({ journalRoot: paths.appData }),
   );
 
   const modules = Layer.mergeAll(
@@ -215,9 +271,20 @@ const domainLayer = (
     // The project census, the held per-book analyses, and every finding.
     ProjectAnalysisLive,
     // Imported resources and the role bindings a project reads them through.
-    LibraryLive({ libraryRoot: LIBRARY_ROOT }),
-    // History: isomorphic-git over the same FileSystem port.
-    WebGitLive,
+    LibraryLive({ libraryRoot: `${paths.appData}/library` }),
+    // History: git2 through Tauri commands on desktop, isomorphic-git over the
+    // same FileSystem port in a browser.
+    tauri === undefined ? WebGitLive : tauri.TauriGitLive,
+    // Transfer. On desktop git2 speaks smart-HTTP itself, so there is no proxy
+    // in the picture; on Web every URL comes from `env`, and a build with no
+    // proxy configured refuses transfers by name instead of failing on CORS.
+    tauri === undefined
+      ? WebRemoteLive({
+          corsProxyUrl: env.gitCorsProxyUrl,
+          requestedWith: env.gitProxyRequestedWith,
+          giteaHost: env.giteaWebHost,
+        })
+      : tauri.TauriRemoteLive({ giteaHost: env.giteaDesktopHost }),
     // Rename, delete, metadata, export.
     ProjectAdminLive,
     saveAndRecovery,
@@ -248,9 +315,23 @@ export const composeServices = async (
 ): Promise<Services> => {
   const fixture = options.fixture ?? false;
   const build = buildIdentity(composition);
+  /**
+   * The desktop Layers arrive through a dynamic import so a Web bundle never
+   * evaluates — or even fetches — the `@tauri-apps/*` code they sit on. Vite
+   * code-splits this, which is exactly the point: `pnpm build` must not carry
+   * the plugins.
+   */
+  const tauri: TauriHost | undefined =
+    detectHost() === "tauri" ? await import("../platform/tauri/index") : undefined;
+  /**
+   * The roots everything writable hangs off, resolved BEFORE the Layers are
+   * built because Recovery and Library take theirs as options. On desktop they
+   * are the OS app directories; on Web they are the OPFS constants.
+   */
+  const paths = tauri === undefined ? WEB_PATHS : await tauri.tauriPaths();
   // provideMerge, not provide: `run` may ask for Observability itself, and the
   // composition's ring must stay visible above these modules.
-  const layer = Layer.provideMerge(domainLayer(build, fixture), composition.layer);
+  const layer = Layer.provideMerge(domainLayer(build, fixture, paths, tauri), composition.layer);
   const runtime = ManagedRuntime.make(layer);
 
   const run = <A, E>(effect: Effect.Effect<A, E, Domain | Scope.Scope>): Promise<A> =>
@@ -267,11 +348,14 @@ export const composeServices = async (
       const settings = yield* Settings;
       const credentials = yield* Credentials;
       const dialogs = yield* Dialogs;
+      const updater = yield* Updater;
       const save = yield* SaveCoordinator;
       const recovery = yield* Recovery;
       const projectAnalysis = yield* ProjectAnalysis;
       const library = yield* Library;
       const git = yield* Git;
+      const gitea = yield* Gitea;
+      const remote = yield* Remote;
       const admin = yield* ProjectAdmin;
       return {
         fileSystem,
@@ -280,11 +364,14 @@ export const composeServices = async (
         settings,
         credentials,
         dialogs,
+        updater,
         save,
         recovery,
         projectAnalysis,
         library,
         git,
+        gitea,
+        remote,
         admin,
       };
     }),
@@ -292,10 +379,15 @@ export const composeServices = async (
 
   const { galley } = resolved;
   const version = galley.version();
+  const storageKind: Services["storage"] = fixture
+    ? "fixture"
+    : tauri === undefined
+      ? "opfs"
+      : "native";
   composition.observability.note(
     "shell.services",
     "ready",
-    `${fixture ? "fixture" : "opfs"} galley ${version.engine}`,
+    `${storageKind} galley ${version.engine}`,
   );
 
   /**
@@ -325,8 +417,10 @@ export const composeServices = async (
     ...resolved,
     seat,
     seated: (id) => seats.get(id),
-    storage: fixture ? "fixture" : "opfs",
-    projectsRoot: PROJECTS_ROOT,
+    storage: storageKind,
+    // Desktop keeps its own projects beside its other app data; on Web that
+    // subtree is all the projects list can honestly enumerate.
+    projectsRoot: tauri === undefined ? PROJECTS_ROOT : `${paths.appData}/projects`,
     fixtureProject: fixture ? SMALL_NT_ROOT : undefined,
     dispose: () => runtime.dispose(),
   };
