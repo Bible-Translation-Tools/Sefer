@@ -116,8 +116,8 @@ importers:
         specifier: ^6.9.7
         version: 6.9.7
       '@codemirror/state':
-        specifier: 6.5.2
-        version: 6.5.2
+        specifier: ^6.7.0
+        version: 6.7.4
       '@codemirror/view':
         specifier: ^6.43.11
         version: 6.43.11
