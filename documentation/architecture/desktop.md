@@ -16,6 +16,7 @@ dialogs, OS paths and locale, native git, an OS keychain, and self-update. Each 
 | `Git`                                  | `TauriGitLive`                      | `git_*` commands over `git2`                                                      |
 | `Remote`                               | `TauriRemoteLive({ giteaHost })`    | `git_ensure_remote/fetch/pull/push`; `publish` needs `Gitea` for repo creation    |
 | `Updater` (`src/core/host/updater.ts`) | `TauriUpdaterLive({ updaterHost })` | `plugin-updater` + `install_update_from_endpoint`                                 |
+| `CorpusEngine` (`src/core/galley/corpus.ts`) | `NativeCorpusLive`            | `corpus_*` commands over a native `usfm_galley` Expediter on one owner thread, rayon inside `publish`; see [Galley](galley.md) |
 
 `src/app/services.ts` picks these by `detectHost()` and loads them through a dynamic
 `import("../platform/tauri/index")` inside the `tauri` branch only. That is load-bearing: every file

@@ -129,6 +129,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # src-tauri/Cargo.toml pins the native engine by PATH to a sibling checkout
+      # (../usfm_onion_2), the same working tree vendor/galley was built from.
+      # Two prerequisites before this step works: the revision in
+      # vendor/galley/manifest.json must be pushed to scripture-kitchen, and
+      # SEFER_KITCHEN_TOKEN must read that private repository. Once pushed, the
+      # cleaner end state is a `git = …, rev = …` dependency and no step here.
+      - name: Check out the engine beside the workspace
+        env:
+          KITCHEN_TOKEN: ${{ secrets.SEFER_KITCHEN_TOKEN }}
+        run: |
+          set -euo pipefail
+          rev=$(node -p "require('./vendor/galley/manifest.json').engine.revision")
+          git clone --no-checkout "https://x-access-token:${KITCHEN_TOKEN}@github.com/WycliffeAssociates/scripture-kitchen.git" "${{ github.workspace }}/../usfm_onion_2"
+          git -C "${{ github.workspace }}/../usfm_onion_2" checkout --quiet "$rev"
+
       - uses: pnpm/action-setup@v4
         with:
           version: 12.0.0-rc.11
