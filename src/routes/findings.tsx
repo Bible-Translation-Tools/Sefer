@@ -46,6 +46,9 @@ function FindingsPage() {
     const project = shell.project();
     if (project === undefined) return;
     const target = Findings.navigateTarget(finding, analysisFor(finding)?.analysis);
+    // Leave the aim before navigating: the book route reads it to decide the
+    // opening clip (chapter preference) and the editor scrolls to it.
+    shell.aim(target.bookId, target.from);
     void navigate({
       to: "/project/$id/book/$book",
       params: {

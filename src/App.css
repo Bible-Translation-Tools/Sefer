@@ -325,3 +325,9 @@ code {
 .palette li button:hover {
   background: var(--surface-secondary);
 }
+
+/* The chapter picker steps forward when the reader prefers one chapter at a time. */
+select[data-prominent="true"] {
+  border-color: var(--brand-base);
+  font-weight: 600;
+}
