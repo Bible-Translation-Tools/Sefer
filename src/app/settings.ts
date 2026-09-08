@@ -14,6 +14,7 @@
 
 import { Schema } from "effect";
 
+import { PRODUCERS, SEVERITIES } from "../core/findings/filter";
 import type { SettingKey, SettingsService } from "../core/host/settings";
 
 export interface BooleanSetting {
@@ -35,6 +36,38 @@ export interface NumberSetting {
 }
 
 /**
+ * The persistent half of the findings panel's filter (vision §11.4: "category
+ * and severity filters should be persistent user preferences").
+ *
+ * Only the half that is a PREFERENCE is here. Which rungs and which producers
+ * a reader wants to see, and whether stale rows are hidden, are lasting
+ * choices about how they read; the free-text box and the book selection are
+ * session state, because a text filter that survived a restart would present
+ * as an empty project and a remembered book set would hide the book you just
+ * opened. `src/routes/findings.tsx` holds those two in signals and persists
+ * neither.
+ *
+ * There is no `kind` for a struct, so this key is deliberately NOT in
+ * `shellSettings`: the settings form draws one widget per `kind`, and a
+ * multi-select over two closed sets is the findings panel's own chip row
+ * rather than a generic widget. The panel is the only editor of this key.
+ */
+const FindingsFilterPreference = Schema.Struct({
+  severities: Schema.Array(Schema.Literals(SEVERITIES)),
+  producers: Schema.Array(Schema.Literals(PRODUCERS)),
+  hideStale: Schema.Boolean,
+});
+
+export type FindingsFilterPreference = typeof FindingsFilterPreference.Type;
+
+/** Everything shown: the panel must not open hiding the reason a project is unclean. */
+const FINDINGS_FILTER_DEFAULT: FindingsFilterPreference = {
+  severities: SEVERITIES,
+  producers: PRODUCERS,
+  hideStale: false,
+};
+
+/**
  * Every shell preference, as one list the form can walk. A discriminated
  * union rather than `Descriptor<unknown>`: `kind` is what tells the form which
  * widget to draw AND what type the key holds, and a switch on it narrows both
@@ -54,6 +87,11 @@ export interface ShellKeys {
    * the picker changes it) for people who would rather read that way.
    */
   readonly preferChapterView: SettingKey<boolean>;
+  /**
+   * The findings panel's persistent filter. Edited on `/findings`, not on
+   * `/settings` — see `FindingsFilterPreference`.
+   */
+  readonly findingsFilter: SettingKey<FindingsFilterPreference>;
 }
 
 /**
@@ -75,6 +113,11 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     startInUsfmMode: settings.register("shell.startInUsfmMode", Schema.Boolean, false),
     autosaveIdleMs: settings.register("shell.autosaveIdleMs", Schema.Number, 1200),
     preferChapterView: settings.register("editor.preferChapterView", Schema.Boolean, false),
+    findingsFilter: settings.register(
+      "findings.filter",
+      FindingsFilterPreference,
+      FINDINGS_FILTER_DEFAULT,
+    ),
   };
   registered.set(settings, keys);
   return keys;

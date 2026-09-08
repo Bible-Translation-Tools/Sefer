@@ -331,3 +331,52 @@ select[data-prominent="true"] {
   border-color: var(--brand-base);
   font-weight: 600;
 }
+
+/* ------------------------------------------------------------- findings */
+
+/*
+ * The filter row on /findings. Chips are buttons, not checkboxes: the state
+ * is `aria-pressed`, which the generic `button[aria-pressed="true"]` rule
+ * above already colours, so a chip only needs to be smaller and rounder.
+ */
+.findings-filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-block-end: var(--space-sm);
+}
+
+button.chip {
+  border-radius: var(--radius-full);
+  padding: 0 var(--space-sm);
+  font-size: var(--text-smallest);
+  display: inline-flex;
+  gap: var(--space-xs);
+  align-items: center;
+}
+
+.findings-group {
+  margin-block-end: var(--space-sm);
+}
+
+.findings-group > summary {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: baseline;
+  padding: var(--space-xs) var(--space-sm);
+  cursor: pointer;
+  font-size: var(--text-small);
+}
+
+/* Stale rows stay visible and stay dim: the badge says why, and hiding them
+ * is the reader's own choice ("Hide stale"), never the panel's. */
+.list > li[data-stale="true"] {
+  opacity: 0.65;
+}
+
+/* The keyboard cursor. One row at a time, marked with aria-current so a
+ * screen reader hears the same thing the eye sees. */
+.list > li[aria-current="true"] {
+  border-color: var(--brand-base);
+  box-shadow: inset 0.2rem 0 0 0 var(--brand-base);
+}
