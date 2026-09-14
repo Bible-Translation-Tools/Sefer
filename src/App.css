@@ -8,8 +8,6 @@
  * space below comes from ui/tokens.css.
  */
 
-@import "./app/ui/tokens.css";
-
 body {
   background: var(--surface-canvas);
   color: var(--on-surface-primary);

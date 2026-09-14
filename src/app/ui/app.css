@@ -1,0 +1,43 @@
+/*
+ * The one global stylesheet, imported once from `src/App.tsx`.
+ *
+ * It pulls in `tokens.css` — which is where Tailwind itself, the semantic
+ * tokens and the `@theme` bridge live — and then adds only what genuinely
+ * cannot be a utility on an element:
+ *
+ *  - the page ground, which is painted on <body> and therefore has no JSX to
+ *    carry a class;
+ *  - `.editor-host`, the CodeMirror frame. `src/app/ui/BookEditor.tsx` writes
+ *    that class itself and is owned by the editor work, so the shell styles it
+ *    from here rather than reaching into that file.
+ *
+ * Everything else is a utility on the element, or a primitive in
+ * `src/app/ui/primitives/`. If you are about to add a rule here, the question
+ * to answer first is which element could not have carried the class.
+ */
+
+@import "./tokens.css";
+
+@layer base {
+  body {
+    background: var(--surface-secondary);
+    color: var(--on-surface-primary);
+    font-size: var(--text-body);
+  }
+}
+
+@layer components {
+  /* The CodeMirror frame: a white card the view fills. `.cm-host` (in
+     `src/editor/editor.css`) owns what happens inside it. */
+  .editor-host {
+    background: var(--surface-primary);
+    border: var(--border-thin) solid var(--surface-border);
+    border-radius: var(--radius-lg);
+    overflow: auto;
+    min-block-size: 0;
+  }
+
+  .editor-host[data-mode="usfm"] .cm-editor {
+    font-family: var(--font-mono);
+  }
+}

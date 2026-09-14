@@ -1,27 +1,54 @@
 /*
- * The design system, as plain custom properties.
+ * The design system, as plain custom properties — and the bridge that turns
+ * them into Tailwind utilities.
  *
  * Ported from the v1 editor's vanilla-extract contract
  * (scripture-editor-proto-2 `src/app/ui/styles/designSystem.css.ts` and
  * `reset.css.ts`) so the two editors read as one product. The port is
  * deliberately literal: the primitive ramps and the semantic names are the v1
- * values, only the mechanism changed — CSS custom properties instead of a
- * generated theme contract, because Sefer ships no CSS-in-JS build step.
+ * values, only the mechanism changed.
  *
- * Two rules for anything that consumes this file:
+ * Three rules for anything that consumes this file:
  *
- *  - Components reference SEMANTIC names (`--surface-primary`), never the
- *    ramps (`--brand-40`). The ramps exist so the semantic layer has one
- *    source; a component reaching past it re-decides the theme by hand.
- *  - Dark is a token swap, not a second stylesheet. `[data-theme="dark"]`
- *    (explicit choice) and `prefers-color-scheme: dark` under
- *    `:not([data-theme="light"])` (system default) redefine the same names.
+ *  - Components reference SEMANTIC names (`--surface-primary`, or the
+ *    `bg-surface-primary` utility the `@theme` block below mints from it),
+ *    never the ramps (`--brand-40`). The ramps exist so the semantic layer has
+ *    one source; a component reaching past it re-decides the theme by hand.
+ *    Tailwind's own colour palette is switched off (`--color-*: initial`), so
+ *    `bg-slate-50` is a build error rather than a token that ignores the theme.
+ *  - Dark is a token swap, not a second stylesheet and NOT Tailwind's `dark:`
+ *    variant. `[data-theme="dark"]` (explicit choice) and
+ *    `prefers-color-scheme: dark` under `:not([data-theme="light"])` (system
+ *    default) redefine the same names, and every utility resolves through
+ *    them. The `dark` variant is redefined below to match those two selectors
+ *    only so that a stray `dark:` cannot disagree with the swap.
+ *  - The `@theme` block maps semantic names into Tailwind's namespaces. Colours
+ *    go through `@theme inline`, so a utility compiles to
+ *    `var(--surface-primary)` itself and the swap is the only indirection.
  *
  * Fonts are referenced by family name with a system fallback stack. Nothing is
  * vendored: a host that has Charis SIL installed gets scripture in it, and a
  * host that does not gets a serif, which is the honest degradation for a
  * local-first app that must not block first paint on a webfont.
  */
+
+/* `source(none)` because the automatic scan is rooted at this file's own
+   directory, which is three levels below the components that use utilities.
+   One explicit glob over `src/` is both wider and easier to audit. */
+@import "tailwindcss" source(none);
+@source "../../**/*.{ts,tsx}";
+
+/* The only `dark:` that can exist here is one that agrees with the swap. */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+}
 
 :root {
   /* Primitives — the ramps. Do not use these directly in a component. */
@@ -64,18 +91,11 @@
   --success-80: #b9e8c4;
   --success-95: #e2f7e7;
 
-  /* Typography, spacing, radii — theme-independent. */
-  --font-ui: Inter, "Inter var", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-scripture: "Charis SIL", Charis, Cambria, Georgia, serif;
-  --font-mono: "Atkinson Hyperlegible Mono", ui-monospace, "SF Mono", Menlo, monospace;
-
-  --text-h1: 3rem;
-  --text-h2: 2.25rem;
-  --text-h3: 1.5rem;
-  --text-h4: 1.25rem;
-  --text-body: 1rem;
-  --text-small: 0.875rem;
-  --text-smallest: 0.75rem;
+  /* Spacing and strokes — theme-independent, and not a Tailwind namespace, so
+     they stay ordinary properties for hand-written CSS. The type scale, the
+     radii, the shadows and the families live in the @theme block below, which
+     emits them onto :root as well. */
+  --font-ui: var(--font-sans);
 
   --space-none: 0;
   --space-xs: 0.25rem;
@@ -83,13 +103,6 @@
   --space-md: 1rem;
   --space-lg: 3rem;
   --space-xl: 5rem;
-
-  --radius-xs: 2px;
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-full: 9999px;
 
   --border-thin: 1px;
   --border-thick: 2px;
@@ -116,12 +129,16 @@
   --surface-success: var(--success-95);
   --on-surface-success: var(--success-40);
 
-  --sidebar-surface: var(--brand-10);
-  --sidebar-surface-hover: color-mix(in srgb, #ffffff 8%, transparent);
-  --sidebar-surface-active: color-mix(in srgb, #ffffff 12%, transparent);
-  --sidebar-border: color-mix(in srgb, #ffffff 8%, transparent);
-  --sidebar-on-surface: var(--neutral-100);
-  --sidebar-on-surface-muted: color-mix(in srgb, #ffffff 64%, transparent);
+  /* The sidebar is a white panel, not a dark rail (design-direction.md). The
+     names survive the change so nothing downstream re-decides the theme; they
+     now point at the ordinary surface contract, which is why dark needs no
+     sidebar block of its own. */
+  --sidebar-surface: var(--surface-primary);
+  --sidebar-surface-hover: var(--surface-secondary);
+  --sidebar-surface-active: var(--brand-light);
+  --sidebar-border: var(--surface-border);
+  --sidebar-on-surface: var(--on-surface-primary);
+  --sidebar-on-surface-muted: var(--on-surface-tertiary);
 
   --button-primary-surface: var(--brand-40);
   --button-primary-surface-hover: var(--brand-30);
@@ -226,8 +243,113 @@
   }
 }
 
-/* The reset essentials, in a layer so any component rule outranks them. */
-@layer reset {
+/*
+ * The bridge into Tailwind.
+ *
+ * Colours are `inline` so a utility compiles straight to `var(--surface-primary)`
+ * — one hop, and the dark swap above is the only place a colour is decided.
+ * Everything else is a plain `@theme`, which both mints the utility and emits
+ * the variable onto `:root`, so hand-written CSS (`src/editor/editor.css`) can
+ * keep saying `var(--radius-lg)`.
+ */
+@theme inline {
+  /* Tailwind's own palette is off: a colour that is not in the semantic
+     contract is not a colour this product has. `white`/`black` stay because
+     scrims and overlays are composed from them, never themed. */
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-inherit: inherit;
+  --color-white: #ffffff;
+  --color-black: #000000;
+
+  --color-brand: var(--brand-base);
+  --color-brand-strong: var(--brand-dark);
+  --color-brand-light: var(--brand-light);
+
+  --color-surface-primary: var(--surface-primary);
+  --color-surface-secondary: var(--surface-secondary);
+  --color-surface-tertiary: var(--surface-tertiary);
+  --color-surface-canvas: var(--surface-canvas);
+  --color-surface-border: var(--surface-border);
+  --color-surface-overlay: var(--surface-overlay);
+  --color-surface-error: var(--surface-error);
+  --color-surface-warning: var(--surface-warning);
+  --color-surface-success: var(--surface-success);
+
+  --color-on-surface-primary: var(--on-surface-primary);
+  --color-on-surface-secondary: var(--on-surface-secondary);
+  --color-on-surface-tertiary: var(--on-surface-tertiary);
+  --color-on-surface-error: var(--on-surface-error);
+  --color-on-surface-warning: var(--on-surface-warning);
+  --color-on-surface-success: var(--on-surface-success);
+
+  --color-sidebar-surface: var(--sidebar-surface);
+  --color-sidebar-surface-hover: var(--sidebar-surface-hover);
+  --color-sidebar-surface-active: var(--sidebar-surface-active);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-on-surface: var(--sidebar-on-surface);
+  --color-sidebar-on-surface-muted: var(--sidebar-on-surface-muted);
+
+  --color-button-primary-surface: var(--button-primary-surface);
+  --color-button-primary-surface-hover: var(--button-primary-surface-hover);
+  --color-button-primary-on-surface: var(--button-primary-on-surface);
+  --color-button-secondary-surface: var(--button-secondary-surface);
+  --color-button-secondary-surface-hover: var(--button-secondary-surface-hover);
+  --color-button-secondary-on-surface: var(--button-secondary-on-surface);
+  --color-button-secondary-border: var(--button-secondary-border);
+  --color-button-tertiary-surface-hover: var(--button-tertiary-surface-hover);
+  --color-button-tertiary-on-surface: var(--button-tertiary-on-surface);
+
+  --color-kbd-surface: var(--kbd-surface);
+  --color-kbd-on-surface: var(--kbd-on-surface);
+  --color-kbd-border: var(--kbd-border);
+}
+
+@theme {
+  --font-sans: Inter, "Inter var", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-scripture: "Charis SIL", Charis, Cambria, Georgia, serif;
+  --font-mono: "Atkinson Hyperlegible Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* The v1 type scale, added to Tailwind's own: `text-h3`, `text-small`. */
+  --text-h1: 3rem;
+  --text-h2: 2.25rem;
+  --text-h3: 1.5rem;
+  --text-h4: 1.25rem;
+  --text-body: 1rem;
+  --text-small: 0.875rem;
+  --text-smallest: 0.75rem;
+
+  /* Our radii REPLACE Tailwind's, so `rounded-lg` is the product's 12px and
+     not the framework's 8px. The card radius the mockups use is lg/xl. */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+}
+
+/*
+ * The shadows are hand-written utilities, not `@theme` entries, and that is
+ * deliberate: Tailwind parses a themed shadow so it can offer `shadow-<color>`,
+ * which bakes the LIGHT colour into the class and leaves the dark override
+ * below unread. A one-line `@utility` keeps the swap.
+ */
+@utility shadow-small {
+  box-shadow: var(--shadow-small);
+}
+@utility shadow-medium {
+  box-shadow: var(--shadow-medium);
+}
+@utility shadow-large {
+  box-shadow: var(--shadow-large);
+}
+
+/* The reset essentials, in Tailwind's own `base` layer so every utility
+   outranks them. Preflight already ships most of this; what stays is the part
+   that is ours — the focus ring, the UI family, the tabular table figures. */
+@layer base {
   *,
   *::before,
   *::after {

@@ -10,6 +10,10 @@ playwright/.cache
 src-tauri/target
 src-tauri/gen
 scratchpad/
+# Agent worktrees: whole checkouts of this repo, nested. Untracked, and hidden
+# from every tool that walks the tree — oxlint refuses to load its JS plugins
+# twice, which is what a nested copy of oxlint.config.ts asks it to do.
+.claude/worktrees/
 .DS_Store
 *.local
 .verify/

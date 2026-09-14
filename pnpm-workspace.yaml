@@ -14,3 +14,24 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - solid-js
   - '@solidjs/*'
+  - lucide-solid@1.46.0
+
+# corvu-next pins its Solid peers to an exact beta (2.0.0-beta.19) and
+# lucide-solid still declares Solid 1 (^1.4.7). Both resolve against the one
+# installed solid-js/@solidjs/web — pnpm's store shows a single copy of each —
+# so the range is the only thing that disagrees. Declaring it here keeps the
+# install clean instead of teaching everyone to ignore a peer warning.
+#
+# lucide-solid is Solid 1 in more than its peer range; `tools/vite/lucideSolid.ts`
+# is what actually makes it run.
+peerDependencyRules:
+  allowedVersions:
+    "@corvu-next/dialog>solid-js": "2.0.0-rc.6"
+    "@corvu-next/dialog>@solidjs/web": "2.0.0-rc.6"
+    "@corvu-next/popover>solid-js": "2.0.0-rc.6"
+    "@corvu-next/popover>@solidjs/web": "2.0.0-rc.6"
+    "@corvu-next/resizable>solid-js": "2.0.0-rc.6"
+    "@corvu-next/resizable>@solidjs/web": "2.0.0-rc.6"
+    "@corvu-next/tooltip>solid-js": "2.0.0-rc.6"
+    "@corvu-next/tooltip>@solidjs/web": "2.0.0-rc.6"
+    "lucide-solid>solid-js": "2.0.0-rc.6"

@@ -29,6 +29,10 @@
     "@codemirror/lint": "^6.9.7",
     "@codemirror/state": "^6.7.0",
     "@codemirror/view": "^6.43.11",
+    "@corvu-next/dialog": "0.1.5",
+    "@corvu-next/popover": "0.1.5",
+    "@corvu-next/resizable": "0.1.5",
+    "@corvu-next/tooltip": "0.1.5",
     "@solidjs/web": "^2.0.0-rc.6",
     "@tanstack/solid-router": "^2.0.0-rc.4",
     "@tauri-apps/api": "^2.11.1",
@@ -41,6 +45,7 @@
     "buffer": "6.0.3",
     "effect": "4.0.0-rc.112",
     "isomorphic-git": "1.38.4",
+    "lucide-solid": "1.46.0",
     "solid-js": "^2.0.0-rc.6"
   },
   "devDependencies": {
@@ -48,6 +53,7 @@
     "@oxlint/plugins": "1.79.0",
     "@solidjs/diagnostics": "^2.0.0-rc.6",
     "@solidjs/vite-plugin": "^3.0.0-next.38",
+    "@tailwindcss/vite": "4.3.3",
     "@tanstack/router-plugin": "1.168.35",
     "@tauri-apps/cli": "2.11.2",
     "@types/node": "26.4.1",
@@ -58,6 +64,7 @@
     "oxfmt": "0.53.0",
     "oxlint": "1.79.0",
     "playwright": "1.60.0",
+    "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "vite": "8.2.2",
     "vitest": "4.1.11"

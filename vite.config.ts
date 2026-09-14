@@ -1,9 +1,12 @@
 import { execFileSync } from "node:child_process";
 
 import solid from "@solidjs/vite-plugin";
+import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import { playwright } from "@vitest/browser-playwright";
 import { configDefaults, defineConfig } from "vitest/config";
+
+import { lucideSolidCompat } from "./tools/vite/lucideSolid.ts";
 
 const shortGitSha = (): string | null => {
   try {
@@ -24,6 +27,13 @@ export default defineConfig(({ mode }) => ({
   // (or a built-in shell). `vite build` prerenders the shell into
   // dist/client/index.html and emits a purely static dist/client.
   plugins: [
+    // Tailwind v4 compiles from the CSS itself: `src/app/ui/tokens.css` holds
+    // the `@import "tailwindcss"`, the `@source` glob and the `@theme` bridge,
+    // so there is no config file to keep in step with it.
+    tailwindcss(),
+    // lucide-solid is a Solid 1 package; this redirects its own solid imports
+    // to a shim. See tools/vite/lucideSolid.ts.
+    lucideSolidCompat(),
     // Scans src/routes and generates src/routeTree.gen.ts — the typed route
     // tree — on dev and build. Must be registered before solid().
     tanstackRouter({
