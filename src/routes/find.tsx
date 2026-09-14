@@ -23,7 +23,7 @@ import {
 import { ShellGate } from "../app/ui/ShellGate";
 import { SAMPLE_TERMS } from "../app/workflows/stet";
 import type { BookId } from "../core/book/book";
-import { group, type BookText } from "../core/excerpts/excerpts";
+import { extend, group, type BookText, type Extent } from "../core/excerpts/excerpts";
 import { CorpusEngine, describesExactly } from "../core/galley";
 import * as Search from "../core/search/search";
 
@@ -97,6 +97,30 @@ function Find() {
   const [problem, setProblem] = createSignal("", { name: "problem" });
   const [cursor, setCursor] = createSignal(0, { name: "cursor" });
   const [term, setTerm] = createSignal(SAMPLE_TERMS[0]?.id ?? "God", { name: "term" });
+
+  /**
+   * How far each card has been expanded, by verse sid.
+   *
+   * Here rather than in the card: a card scrolls out of the list's window and
+   * its row is unmounted, and "show me one more verse" must survive that — as
+   * it must survive the re-search an accepted edit provokes. A sid that is no
+   * longer in the results is simply never asked for.
+   */
+  const [extents, setExtents] = createSignal<ReadonlyMap<string, Extent>>(new Map(), {
+    name: "excerptExtents",
+  });
+
+  const expand = (sid: string, direction: -1 | 1): void => {
+    setExtents((held) => {
+      const next = new Map(held);
+      const now = next.get(sid) ?? { up: 1, down: 1 };
+      next.set(
+        sid,
+        direction === -1 ? { up: now.up + 1, down: now.down } : { up: now.up, down: now.down + 1 },
+      );
+      return next;
+    });
+  };
 
   // One memo for the whole screen, not one per excerpt: every book that holds
   // a hit is analysed through it, and a fresh memo per render would re-parse
@@ -228,7 +252,26 @@ function Find() {
             : analyze(source.text);
         books.push({ bookId: book.id, text: source.text, analysis });
       }
-      return group(books, hits());
+      const built = group(books, hits());
+      if (extents().size === 0) return built;
+      // Only the cards the reader actually expanded are rebuilt; the rest are
+      // the objects `group` already made, so a list of hundreds costs one
+      // extra projection per expansion and nothing per untouched card.
+      const texts = new Map(books.map((book) => [book.bookId, book] as const));
+      return {
+        outline: built.outline,
+        groups: built.groups.map((entry) => {
+          const text = texts.get(entry.bookId);
+          if (text === undefined) return entry;
+          return {
+            ...entry,
+            excerpts: entry.excerpts.map((excerpt) => {
+              const want = extents().get(excerpt.sid);
+              return want === undefined ? excerpt : extend(text, excerpt, want);
+            }),
+          };
+        }),
+      };
     },
     { name: "excerptModel" },
   );
@@ -264,14 +307,28 @@ function Find() {
     return shell.services.seated(bookId);
   };
 
-  const openInEditor = (bookId: BookId, from: number): void => {
+  /**
+   * Open the main editor on a hit.
+   *
+   * Synchronous, deliberately: `aim` then `navigate`, with nothing awaited
+   * between the click and the route change, because every await here is time
+   * the reader spends looking at a card that did not visibly react. The span
+   * is what says where the remaining time goes — the route's own `focus`
+   * instantiates the book, and on a big one that is the part worth measuring.
+   */
+  const openInEditor = (bookId: BookId, from: number, to?: number): void => {
     const project = shell.project();
     if (project === undefined) return;
-    shell.aim(bookId, from);
+    const done = shell.services.composition.observability.span(
+      "find.openInEditor",
+      `${bookId} ${from}`,
+    );
+    shell.aim(bookId, from, to);
     void navigate({
       to: "/project/$id/book/$book",
       params: { id: encodeURIComponent(project.root), book: bookId },
     });
+    done();
   };
 
   /**
@@ -304,6 +361,7 @@ function Find() {
       seat={seat}
       analyze={analyze}
       onEdited={edited}
+      onExpand={expand}
       focus={cursorSid()}
       empty={
         <EmptyState
@@ -439,6 +497,7 @@ function Find() {
             seat={seat}
             analyze={analyze}
             onEdited={edited}
+            onExpand={expand}
           />
         </Show>
       </Show>

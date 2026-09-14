@@ -86,6 +86,16 @@ export interface Excerpt {
    * sentence the reference names without a second reference per line.
    */
   readonly focus: Mark | null;
+  /**
+   * Is there another verse of this chapter above and below what is shown?
+   *
+   * The card's expand chevrons are drawn from this, so "can I see more" is
+   * answered by the model that knows the chapter's extent rather than by a
+   * component counting anchors. Both are `false` on an excerpt with no verse
+   * anchor (front matter), which is not a place expanding by verse means
+   * anything.
+   */
+  readonly more: { readonly up: boolean; readonly down: boolean };
 }
 
 /** Every excerpt of one book, under the header the list renders. */
@@ -333,6 +343,110 @@ const rangesOf = (hit: Occurrence): readonly { from: number; to: number }[] =>
  * the book — rather than being dropped, because a match the reader can see is
  * a match the list must show.
  */
+/**
+ * How many verses either side of its own the excerpt shows. One each is the
+ * default: context is what makes a one-line hit readable, and more than that
+ * is the reader's choice, made with the card's chevrons.
+ */
+export interface Extent {
+  readonly up: number;
+  readonly down: number;
+}
+
+const ONE_EITHER_SIDE: Extent = { up: 1, down: 1 };
+
+/**
+ * Walk `steps` verses from `index` without leaving the chapter.
+ *
+ * Clamped to the CHAPTER, deliberately: a neighbour from the next chapter is
+ * not context, it is a different place — the same rule the default extent
+ * follows, applied however far the reader expands.
+ */
+const walk = (spans: readonly VerseSpan[], index: number, steps: number, by: -1 | 1): number => {
+  const chapter = spans[index]?.chapter;
+  let at = index;
+  for (let taken = 0; taken < steps; taken += 1) {
+    const next = spans[at + by];
+    if (next === undefined || next.chapter !== chapter) break;
+    at += by;
+  }
+  return at;
+};
+
+/**
+ * One excerpt: the verse at `index`, `extent` verses either side, and every
+ * occurrence it owns.
+ *
+ * `excerptsOf` and `extend` both come through here, so a card the reader has
+ * expanded is built by exactly the same arithmetic as the card they started
+ * with — only the extent differs.
+ */
+const buildExcerpt = (
+  book: BookText,
+  spans: readonly VerseSpan[],
+  name: string,
+  chapters: readonly { readonly number: number; readonly from: number; readonly to: number }[],
+  index: number,
+  held: readonly Occurrence[],
+  extent: Extent,
+): Excerpt => {
+  const verse = index < 0 ? undefined : spans[index];
+  const chapter =
+    verse?.chapter ??
+    chapters.find((row) => row.from <= (held[0]?.from ?? 0) && (held[0]?.from ?? 0) < row.to)
+      ?.number ??
+    0;
+
+  const low = verse === undefined ? index : walk(spans, index, extent.up, -1);
+  const high = verse === undefined ? index : walk(spans, index, extent.down, 1);
+  const from =
+    verse === undefined
+      ? (chapters.find((row) => row.number === chapter)?.from ?? 0)
+      : (spans[low]?.from ?? verse.from);
+  const to =
+    verse === undefined ? (spans[0]?.from ?? book.analysis.docLen) : (spans[high]?.to ?? verse.to);
+
+  const projection = project(book.analysis, from, to);
+  const ref: Ref =
+    verse === undefined
+      ? { book: book.bookId, chapter }
+      : { book: book.bookId, chapter: verse.chapter, verse: verse.first };
+
+  return {
+    bookId: book.bookId,
+    sid:
+      verse === undefined
+        ? `${book.bookId} ${chapter}`
+        : sidOf(book.bookId, verse.chapter, verse.first, verse.last),
+    ref,
+    label: refLabel(name, ref),
+    span: { from, to },
+    hits: held,
+    text: projection.text,
+    marks: marksFor(projection, held.flatMap(rangesOf)),
+    focus:
+      verse === undefined
+        ? null
+        : (marksFor(projection, [{ from: verse.from, to: verse.to }])[0] ?? null),
+    more:
+      verse === undefined
+        ? { up: false, down: false }
+        : {
+            up: walk(spans, low, 1, -1) !== low,
+            down: walk(spans, high, 1, 1) !== high,
+          },
+  };
+};
+
+/**
+ * The excerpts of one book: one per verse that holds at least one occurrence,
+ * in document order, each carrying every occurrence inside it.
+ *
+ * An occurrence before the book's first verse anchor (front matter, a chapter
+ * heading) still gets an excerpt — clamped to its chapter, or to the head of
+ * the book — rather than being dropped, because a match the reader can see is
+ * a match the list must show.
+ */
 export const excerptsOf = (book: BookText, hits: readonly Occurrence[]): readonly Excerpt[] => {
   if (hits.length === 0) return [];
   const spans = verseSpans(book.analysis);
@@ -353,60 +467,34 @@ export const excerptsOf = (book: BookText, hits: readonly Occurrence[]): readonl
   }
 
   const out: Excerpt[] = [];
-  for (const index of order) {
-    const held = grouped.get(index) ?? [];
-    // SAFETY: every index in `order` came from `verseAt`, so it is either -1
-    // or an index into `spans`.
-    const verse = index < 0 ? undefined : spans[index]!;
-    const chapter =
-      verse?.chapter ??
-      chapters.find((row) => row.from <= (held[0]?.from ?? 0) && (held[0]?.from ?? 0) < row.to)
-        ?.number ??
-      0;
-
-    // The verse either side, clamped to the chapter: context is what makes a
-    // one-line hit readable, and a neighbour from the next chapter is not
-    // context, it is a different place.
-    const before = index > 0 ? spans[index - 1] : undefined;
-    const after = index >= 0 ? spans[index + 1] : undefined;
-    const from =
-      verse === undefined
-        ? (chapters.find((row) => row.number === chapter)?.from ?? 0)
-        : before !== undefined && before.chapter === verse.chapter
-          ? before.from
-          : verse.from;
-    const to =
-      verse === undefined
-        ? (spans[0]?.from ?? book.analysis.docLen)
-        : after !== undefined && after.chapter === verse.chapter
-          ? after.to
-          : verse.to;
-
-    const projection = project(book.analysis, from, to);
-    const ref: Ref =
-      verse === undefined
-        ? { book: book.bookId, chapter }
-        : { book: book.bookId, chapter: verse.chapter, verse: verse.first };
-
-    out.push({
-      bookId: book.bookId,
-      sid:
-        verse === undefined
-          ? `${book.bookId} ${chapter}`
-          : sidOf(book.bookId, verse.chapter, verse.first, verse.last),
-      ref,
-      label: refLabel(name, ref),
-      span: { from, to },
-      hits: held,
-      text: projection.text,
-      marks: marksFor(projection, held.flatMap(rangesOf)),
-      focus:
-        verse === undefined
-          ? null
-          : (marksFor(projection, [{ from: verse.from, to: verse.to }])[0] ?? null),
-    });
-  }
+  for (const index of order)
+    out.push(
+      buildExcerpt(book, spans, name, chapters, index, grouped.get(index) ?? [], ONE_EITHER_SIDE),
+    );
   return out;
+};
+
+/**
+ * The same excerpt, showing `extent` verses either side of its own.
+ *
+ * Rebuilt from the verse anchor rather than grown from the span it has, so
+ * expanding is idempotent in the extent: the card holds "two up, one down",
+ * not a span it has been nudging. An excerpt with no verse anchor comes back
+ * unchanged — there is nothing to count in either direction.
+ */
+export const extend = (book: BookText, excerpt: Excerpt, extent: Extent): Excerpt => {
+  const spans = verseSpans(book.analysis);
+  const index = verseAt(spans, excerpt.hits[0]?.from ?? excerpt.span.from);
+  if (index < 0) return excerpt;
+  return buildExcerpt(
+    book,
+    spans,
+    bookName(book.text, book.bookId),
+    book.analysis.dish.toc.chapters(),
+    index,
+    excerpt.hits,
+    { up: Math.max(1, extent.up), down: Math.max(1, extent.down) },
+  );
 };
 
 /**

@@ -89,8 +89,16 @@ export interface Shell {
    * it, and with chapter view OFF (the default) the whole book is shown and
    * `reveal` names the offset to scroll to.
    */
-  readonly aim: (bookId: BookId, from: number) => void;
-  readonly reveal: Accessor<{ readonly bookId: BookId; readonly from: number } | undefined>;
+  /**
+   * Where the next open of `bookId` should land. `to` is the END of the thing
+   * being aimed at when the caller knows it — a search hit does, a finding
+   * does — and it is what the editor marks on arrival; without it there is a
+   * position to scroll to and nothing to point at.
+   */
+  readonly aim: (bookId: BookId, from: number, to?: number) => void;
+  readonly reveal: Accessor<
+    { readonly bookId: BookId; readonly from: number; readonly to?: number } | undefined
+  >;
 
   /** The finding the "next/previous finding" commands point at. */
   readonly finding: Accessor<Finding | undefined>;
@@ -220,12 +228,11 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
   const [status, setStatus] = createSignal("", { name: "status" });
   const [paletteOpen, setPaletteOpen] = createSignal(false, { name: "paletteOpen" });
   const [cursor, setCursor] = createSignal(0, { name: "findingCursor" });
-  const [reveal, setReveal] = createSignal<{ bookId: BookId; from: number } | undefined>(
-    undefined,
-    {
-      name: "reveal",
-    },
-  );
+  const [reveal, setReveal] = createSignal<
+    { bookId: BookId; from: number; to?: number } | undefined
+  >(undefined, {
+    name: "reveal",
+  });
 
   // The one preference the shell reads outside the settings screen. Held in a
   // signal, and kept in step with a forked fiber over `settings.changes`, so
@@ -459,8 +466,8 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     setChapter(openingChapter(editing, at));
   };
 
-  const aim = (bookId: BookId, from: number): void => {
-    setReveal({ bookId, from });
+  const aim = (bookId: BookId, from: number, to?: number): void => {
+    setReveal(to === undefined ? { bookId, from } : { bookId, from, to });
   };
 
   const stepFinding = (delta: 1 | -1): void => {

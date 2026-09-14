@@ -44,6 +44,18 @@ const scope = StateField.define<{ from: number; to: number }>({
 
 export const satelliteRange = (state: EditorState) => state.field(scope, false) ?? null;
 
+/**
+ * Re-clips a LIVE satellite to a new range.
+ *
+ * The alternative is destroying the view and mounting another, which loses
+ * the caret, the selection and the scroll — and a reader who asked to see one
+ * more verse did not ask to lose their place. The window is a state field, so
+ * moving it is one transaction.
+ */
+export const reclip = (view: EditorView, range: { from: number; to: number }): void => {
+  view.dispatch({ effects: windowEffect.of(range) });
+};
+
 export function collapseOutside(
   state: EditorState,
   range: { from: number; to: number },

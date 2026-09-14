@@ -196,6 +196,16 @@ export function Toolbar() {
           >
             {t("Save & Review")}
           </button>
+          <button
+            type="button"
+            class={item}
+            onClick={() => {
+              setMenuOpen(false);
+              go("/inventory");
+            }}
+          >
+            {t("Character inventory")}
+          </button>
           {/* Disabled, with the reason: the pinned engine exposes no
               `formatEdits`, so `Fixes.formatBook` refuses every call. */}
           <button type="button" class={item} disabled title={t("The engine cannot format yet.")}>

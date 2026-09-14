@@ -23,6 +23,7 @@ import HistoryIcon from "lucide-solid/icons/history";
 import ListChecks from "lucide-solid/icons/list-checks";
 import PanelLeft from "lucide-solid/icons/panel-left";
 import SettingsIcon from "lucide-solid/icons/settings";
+import TypeIcon from "lucide-solid/icons/type";
 import { Show } from "solid-js";
 
 import { t } from "../../i18n";
@@ -111,6 +112,18 @@ export function IconRail() {
       </Show>
 
       <div class="mt-auto flex flex-col items-center gap-1">
+        {/* Which characters this project actually uses. A project question,
+            so the tile is only offered while one is open. */}
+        <Show when={shell.project() !== undefined}>
+          <IconButton
+            label={t("Character inventory")}
+            tooltipSide="right"
+            aria-pressed={at("/inventory")}
+            icon={<TypeIcon size={18} />}
+            onClick={() => go("/inventory")}
+          />
+        </Show>
+
         {/* The count rides the button rather than sitting beside it: the rail
             is one tile wide, and a badge in the flow would push the icon off
             its own centre line. */}

@@ -38,6 +38,8 @@ import { stale } from "../../core/findings/finding";
 import type { SourceStamp } from "../../core/source/source";
 import {
   assignment,
+  flash,
+  flashing,
   showCorpusFindings,
   type CorpusFinding,
   modeFacet,
@@ -134,7 +136,7 @@ export function BookEditor(props: BookEditorProps) {
         },
       });
       created.dispatch({
-        effects: StateEffect.appendConfig.of([projection.of([]), meter.extension]),
+        effects: StateEffect.appendConfig.of([projection.of([]), meter.extension, flashing()]),
       });
 
       const supply = (): void => {
@@ -212,12 +214,21 @@ export function BookEditor(props: BookEditorProps) {
   // An aimed open (a finding, a search hit, the palette) scrolls to its offset
   // once the view is bound. Runs after the clip above so the target is visible
   // whether the reader prefers the whole book or one chapter.
+  //
+  // And it FLASHES. The scroll alone is not an answer when the target is
+  // already on screen — which is exactly the case when the reader clicks a
+  // second hit in the book they are already in, and the page not moving reads
+  // as the click not landing.
   createEffect(
     () => ({ held: bound(), aimed: shell.reveal() }),
     ({ held, aimed }) => {
       if (held === undefined || aimed === undefined || aimed.bookId !== props.book.id) return;
-      const at = Math.min(aimed.from, held.view.state.doc.length);
+      const length = held.view.state.doc.length;
+      const at = Math.min(aimed.from, length);
+      const end = Math.min(aimed.to ?? at, length);
       held.view.dispatch({ effects: EditorView.scrollIntoView(at, { y: "center" }) });
+      const cancel = flash(held.view, { from: at, to: end });
+      onCleanup(cancel);
     },
   );
 

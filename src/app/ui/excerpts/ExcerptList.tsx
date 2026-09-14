@@ -45,8 +45,8 @@ import { ExcerptCard } from "./ExcerptCard";
 export interface ExcerptListProps {
   readonly groups: readonly BookExcerpts[];
   readonly outline: readonly OutlineRow[];
-  /** Aim the main editor at this offset of this book. */
-  readonly onOpen: (bookId: BookId, from: number) => void;
+  /** Aim the main editor at this range of this book. */
+  readonly onOpen: (bookId: BookId, from: number, to?: number) => void;
   /** Plain → Instantiated, for the one excerpt being edited. */
   readonly seat: (bookId: BookId) => Promise<EditorBook | undefined>;
   readonly analyze: (text: string) => Analysis;
@@ -59,6 +59,13 @@ export interface ExcerptListProps {
   readonly focus?: string;
   /** STET's source verse for one excerpt. */
   readonly renderPair?: (excerpt: Excerpt) => JSX.Element;
+  /**
+   * Show one more verse above (-1) or below (+1) of one excerpt. The EXTENT
+   * is the feed's state, keyed by sid, not this component's: a card scrolls
+   * out of the window and its row is unmounted, and an expansion the reader
+   * asked for must survive that.
+   */
+  readonly onExpand?: (sid: string, direction: -1 | 1) => void;
   readonly empty?: JSX.Element;
 }
 
@@ -310,30 +317,36 @@ export function ExcerptList(props: ExcerptListProps) {
       >
         <Show when={props.groups.length > 0} fallback={props.empty}>
           <div style={{ height: `${layout().total}px` }} class="relative">
-            <For each={props.groups}>
+            {/* `keyed={false}`: the feed rebuilds its groups whenever anything
+                about them changes — an expanded excerpt, a re-search after an
+                edit — and a keyed `For` would destroy and rebuild every
+                section and every card inside it, taking an open satellite
+                with them. The sections are one per book in a stable order, so
+                the index is the identity and the child takes an accessor. */}
+            <For each={props.groups} keyed={false}>
               {(group) => (
                 <section
-                  data-book={group.bookId}
+                  data-book={group().bookId}
                   class="absolute inset-x-0"
-                  style={{ top: `${geometryOf(group.bookId).top}px` }}
+                  style={{ top: `${geometryOf(group().bookId).top}px` }}
                 >
                   <header
-                    ref={(element) => measure(element, `header:${group.bookId}`)}
+                    ref={(element) => measure(element, `header:${group().bookId}`)}
                     class="sticky top-0 z-10 flex items-baseline gap-2 border-b border-surface-border bg-surface-secondary/95 px-1 py-1.5 backdrop-blur-xs"
                   >
                     <strong class="text-small font-semibold text-on-surface-primary">
-                      {group.bookId}
+                      {group().bookId}
                     </strong>
-                    <span class="text-small text-on-surface-secondary">{group.name}</span>
+                    <span class="text-small text-on-surface-secondary">{group().name}</span>
                     <span class="ms-auto text-smallest text-on-surface-tertiary">
-                      {t("{count} hits", { count: group.count })}
+                      {t("{count} hits", { count: group().count })}
                     </span>
                   </header>
                   <div
                     class="relative"
-                    style={{ height: `${geometryOf(group.bookId).bodyHeight}px` }}
+                    style={{ height: `${geometryOf(group().bookId).bodyHeight}px` }}
                   >
-                    <For each={visible(geometryOf(group.bookId))}>
+                    <For each={visible(geometryOf(group().bookId))}>
                       {(sid) => (
                         <Show when={rowsBySid().get(sid)}>
                           {(row) => (
@@ -351,11 +364,17 @@ export function ExcerptList(props: ExcerptListProps) {
                                   props.onOpen(
                                     row().excerpt.bookId,
                                     row().excerpt.hits[0]?.from ?? row().excerpt.span.from,
+                                    row().excerpt.hits[0]?.to,
                                   )
                                 }
                                 seat={() => props.seat(row().excerpt.bookId)}
                                 analyze={props.analyze}
                                 pair={props.renderPair?.(row().excerpt)}
+                                onExpand={
+                                  props.onExpand === undefined
+                                    ? undefined
+                                    : (direction) => props.onExpand?.(sid, direction)
+                                }
                               />
                             </div>
                           )}

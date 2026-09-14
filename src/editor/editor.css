@@ -489,6 +489,17 @@
   border-radius: 2px;
 }
 
+/* The arrival mark: where a finding or a search hit put you. The highlight
+   token, so landing on a match looks like the match it was, and a transition
+   so it fades rather than blinks. */
+.cm-mode-regular .usfm-flash {
+  background: var(--surface-highlight);
+  color: var(--on-surface-highlight);
+  border-radius: 2px;
+  box-shadow: 0 0 0 2px var(--surface-highlight);
+  transition: background 240ms ease-out;
+}
+
 .cm-mode-regular .usfm-word {
   border-bottom: 1px dotted var(--editor-word-line);
   cursor: help;

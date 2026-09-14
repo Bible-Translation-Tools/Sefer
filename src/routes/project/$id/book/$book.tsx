@@ -6,6 +6,8 @@ import { useShell } from "../../../../app/ProjectContext";
 import { BookEditor } from "../../../../app/ui/BookEditor";
 import { Resizable } from "../../../../app/ui/primitives";
 import { ShellGate } from "../../../../app/ui/ShellGate";
+import { bookName } from "../../../../app/ui/workspace/books";
+import { metadataOf } from "../../../../app/ui/workspace/project";
 import { ReferenceColumn } from "../../../../app/ui/workspace/ReferenceColumn";
 import { Toolbar } from "../../../../app/ui/workspace/Toolbar";
 
@@ -63,7 +65,26 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
     <main class="flex h-full min-h-0 min-w-0 flex-col gap-3 p-4">
       <Show
         when={shell.focused()}
-        fallback={<p class="text-small text-on-surface-tertiary">{shell.status()}</p>}
+        fallback={
+          /* Opening a book parses it, and a big one takes long enough that a
+             blank card reads as a broken link. The line says which book and
+             the bar says it is still happening; the status line underneath
+             says what the shell last did. */
+          <div class="space-y-3" data-opening={props.bookId}>
+            <p class="text-small text-on-surface-secondary">
+              {t("Opening {book}…", {
+                book: bookName(props.bookId, metadataOf(shell.project())),
+              })}
+            </p>
+            <div
+              aria-hidden="true"
+              class="h-0.5 w-full overflow-hidden rounded-full bg-surface-tertiary"
+            >
+              <div class="h-full w-1/3 animate-pulse rounded-full bg-brand" />
+            </div>
+            <p class="text-smallest text-on-surface-tertiary">{shell.status()}</p>
+          </div>
+        }
       >
         {(book) => (
           <>
