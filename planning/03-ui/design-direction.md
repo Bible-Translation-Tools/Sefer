@@ -52,6 +52,7 @@ Differs from Zed's multibuffer deliberately:
 - Hits are grouped by the **verse sid from Onion's table of contents**; one excerpt per unique sid, however many hits fall inside it. Each excerpt has its own small header: the reference ("Philemon 1:4"), an **Edit** button, and an **Open in editor** action (aims the main editor at the hit).
 - Excerpts are **read-only by default**: plain projected text of the hit's verse plus one verse either side, hits highlighted. Cheap to virtualize, no accidental edits from a results list.
 - **Edit is a click.** Edit swaps that one excerpt for a satellite editor (`src/editor/recipes/satellite.ts`) clipped to the same span, writing through the funnel to the canonical Book. Done (or leaving the excerpt) collapses it back to read-only text re-read from the Book. Only one or a few satellites are live at a time.
+- An **outline** beside the list: one row per book with its hit count ("PHM 3", "JUD 12"), in canonical order. Clicking a row scrolls the virtualized list to that book's sticky header; the row for the book currently in view is highlighted as the list scrolls. STET gets the same outline (per term, and per book inside a term).
 - Cross-project find stays the `/find` route with the same list.
 
 ## Diagnostics popovers
