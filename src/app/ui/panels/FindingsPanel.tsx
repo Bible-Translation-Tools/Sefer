@@ -16,6 +16,16 @@
  * (vision §11.4), and the census, the inline marks and the corpus counts are
  * untouched by anything on this screen.
  *
+ * Two things make a long list readable without lying about it. A row names
+ * WHERE it is — `navigateTarget(finding, analysis)` turns the offset into
+ * "PHM 1:4", and only when the analysis in hand is the one the finding was
+ * computed from; otherwise the row shows the raw offset, because a chapter
+ * and verse from another revision would name the wrong place with total
+ * confidence. And a run of consecutive rows with the SAME code and the same
+ * message collapses to one row carrying "× 21", which expands on click. The
+ * collapse is per group and purely visual: the header's count, the filter
+ * counts and the census are all still over findings, never over rows.
+ *
  * The keyboard cursor is LOCAL to this route, and deliberately so. The shell
  * has its own findings cursor over the unfiltered list (`editor.findings.next`
  * in the palette walks the whole project, which is what that command means);
@@ -28,7 +38,7 @@ import { useNavigate } from "@tanstack/solid-router";
 import { Option, Result } from "effect";
 import CircleCheck from "lucide-solid/icons/circle-check";
 import Wrench from "lucide-solid/icons/wrench";
-import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 
 import type { BookId } from "../../../core/book/book";
 import * as Filter from "../../../core/findings/filter";
@@ -46,6 +56,8 @@ import {
   SegmentedControl,
   severityTone,
 } from "../primitives";
+import { bookName } from "../workspace/books";
+import { metadataOf } from "../workspace/project";
 import { createFindingsFilter, VIEWS, type FindingsView } from "./findingsFilter";
 import { FindingsFilters } from "./FindingsFilters";
 
@@ -57,8 +69,46 @@ const ROW = [
   "aria-[current=true]:shadow-[inset_0.1875rem_0_0_0_var(--brand-base)]",
 ].join(" ");
 
-/** A row's stable identity for the cursor — the finding's own semantic id. */
-const idOf = (finding: Finding | undefined): string => finding?.id ?? "";
+/**
+ * One displayed row. Ordinarily one finding; when `count` is greater than one
+ * it stands for a run of identical findings and carries the toggle that opens
+ * them. `id` is the cursor's identity — the finding's own semantic id, scoped
+ * by the group, because the same finding appears in exactly one group per view
+ * but the view can change under the cursor.
+ */
+interface Row {
+  readonly id: string;
+  readonly finding: Finding;
+  readonly count: number;
+  /** Whether the run this row heads is currently showing its members. */
+  readonly open: boolean;
+}
+
+/** One section of the list: a group, as rows. */
+interface Section {
+  readonly key: string;
+  readonly count: number;
+  readonly rows: readonly Row[];
+}
+
+/**
+ * Consecutive findings with the same code AND the same message are one thing
+ * said N times — 76 rows of "\s5 is not a known marker" is a wall, not a
+ * report. Only CONSECUTIVE ones fold, so the fold never re-orders and never
+ * reaches across a group: `list` has already put them in position order, and
+ * two runs separated by a different finding are two places to look.
+ */
+const runs = (findings: readonly Finding[]): readonly (readonly Finding[])[] => {
+  const out: Finding[][] = [];
+  for (const finding of findings) {
+    const last = out.at(-1);
+    const head = last?.[0];
+    if (last !== undefined && head?.code === finding.code && head.message === finding.message)
+      last.push(finding);
+    else out.push([finding]);
+  }
+  return out;
+};
 
 export function FindingsPanel() {
   const shell = useShell();
@@ -69,6 +119,10 @@ export function FindingsPanel() {
   });
   const [note, setNote] = createSignal("");
   const [cursor, setCursor] = createSignal(0, { name: "findingsCursor" });
+  /** The runs the reader has opened, by row id. Session state, like the view. */
+  const [expanded, setExpanded] = createSignal<ReadonlySet<string>>(new Set(), {
+    name: "findingsExpanded",
+  });
 
   const all = (): readonly Finding[] => {
     shell.tick();
@@ -87,6 +141,18 @@ export function FindingsPanel() {
   const shown = (): readonly Finding[] =>
     Filter.applyFilter(all(), filters.filter(), (finding) => isStale(finding));
 
+  /**
+   * What a group header says besides its key. Only the "by book" view has a
+   * human name to add — a code and a severity ARE their own words — and the
+   * name comes from the project's own metadata first, exactly as the sidebar's
+   * does, so the two cannot disagree about what a book is called.
+   */
+  const heading = (key: string): string | undefined => {
+    if (filters.view() !== "book") return undefined;
+    const name = bookName(key, metadataOf(shell.project()));
+    return name === key ? undefined : name;
+  };
+
   /** Every book in the project, so a clean book still offers its chip. */
   const books = (): readonly BookId[] => shell.project()?.books.map((book) => book.id) ?? [];
 
@@ -102,17 +168,77 @@ export function FindingsPanel() {
     return Filter.groupBy(rows, view);
   };
 
-  const at = (index: number): Finding | undefined => shown()[index];
+  /**
+   * The groups as rows: identical runs folded, opened ones unfolded. One memo
+   * so the row markup, the cursor and `scrollIntoView` all read the same list
+   * — and so a hundred rows do not each rebuild it.
+   */
+  const sections = createMemo(
+    (): readonly Section[] =>
+      groups().map((group) => {
+        const rows: Row[] = [];
+        for (const run of runs(group.findings)) {
+          const head = run[0];
+          if (head === undefined) continue;
+          const id = `${group.key}:${head.id}`;
+          if (run.length === 1) {
+            rows.push({ id, finding: head, count: 1, open: false });
+            continue;
+          }
+          rows.push({ id, finding: head, count: run.length, open: expanded().has(id) });
+          if (expanded().has(id))
+            for (const finding of run.slice(1))
+              rows.push({ id: `${group.key}:${finding.id}`, finding, count: 1, open: false });
+        }
+        return { key: group.key, count: group.count, rows };
+      }),
+    { name: "findingsSections" },
+  );
 
-  /** Wraps, like the palette's own finding commands, over the FILTERED list. */
+  /** Every row on screen, in reading order: what the cursor walks. */
+  const visible = createMemo((): readonly Row[] => sections().flatMap((section) => section.rows), {
+    name: "findingsVisibleRows",
+  });
+
+  const at = (index: number): Row | undefined => visible()[index];
+
+  /** The cursor's row id, once per change rather than once per row. */
+  const current = createMemo(() => at(cursor())?.id ?? "", { name: "findingsCursorId" });
+
+  /** Wraps, like the palette's own finding commands, over the VISIBLE rows. */
   const step = (delta: 1 | -1): void => {
-    const rows = shown();
-    if (rows.length === 0) return;
-    setCursor((held) => (held + delta + rows.length) % rows.length);
+    // A snapshot on purpose: the wrap is over the list as it is when the key
+    // was pressed.
+    const staticCount = visible().length;
+    if (staticCount === 0) return;
+    setCursor((held) => (held + delta + staticCount) % staticCount);
+  };
+
+  const toggle = (id: string): void => {
+    setExpanded((held) => {
+      const next = new Set(held);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
   };
 
   const analysisFor = (finding: Finding) =>
     Option.getOrUndefined(shell.services.projectAnalysis.analysis(finding.bookId));
+
+  /**
+   * Where a finding points, as a person writes it. `navigateTarget` fills in
+   * the reference only when the analysis handed to it still describes the very
+   * text the finding was measured against — so a row either names a verse it
+   * can prove or shows the offset, and never guesses one in between.
+   */
+  const place = (finding: Finding): { readonly text: string; readonly exact: boolean } => {
+    const ref = Findings.navigateTarget(finding, analysisFor(finding)?.analysis).ref;
+    if (ref === undefined) return { text: `@${finding.from}`, exact: false };
+    return {
+      text: ref.verse === undefined ? `${ref.chapter}` : `${ref.chapter}:${ref.verse}`,
+      exact: true,
+    };
+  };
 
   const open = (finding: Finding): void => {
     const project = shell.project();
@@ -128,6 +254,15 @@ export function FindingsPanel() {
         book: encodeURIComponent(target.bookId),
       },
     });
+  };
+
+  /** What Enter does: a folded run opens where a single row goes to the book. */
+  const activate = (row: Row): void => {
+    if (row.count > 1 && !row.open) {
+      toggle(row.id);
+      return;
+    }
+    open(row.finding);
   };
 
   /**
@@ -151,7 +286,7 @@ export function FindingsPanel() {
       else if (event.key === "k" || event.key === "ArrowUp") step(-1);
       else if (event.key === "Enter") {
         const held = at(cursor());
-        if (held !== undefined) open(held);
+        if (held !== undefined) activate(held);
       } else return;
       event.preventDefault();
     };
@@ -168,7 +303,7 @@ export function FindingsPanel() {
   // than held in a ref: the row is re-created by `<For>` on every filter
   // change, and `aria-current` already names exactly one of them.
   createEffect(
-    () => `${cursor()}:${shown().length}`,
+    () => `${cursor()}:${visible().length}`,
     () => {
       document
         .querySelector('[data-findings-row][aria-current="true"]')
@@ -215,42 +350,73 @@ export function FindingsPanel() {
    * One row. Stale rows stay visible and stay dim — the badge says why, and
    * hiding them is the reader's own choice ("Hide stale"), never the panel's.
    * The cursor is `aria-current`, so a screen reader hears what the eye sees.
+   *
+   * A row standing for a run carries the count as a toggle. Everything else on
+   * it — the reference, the code, the message — is the run's first member,
+   * which is what "identical" means here.
    */
-  const row = (finding: Finding) => (
-    <li
-      data-findings-row
-      data-code={finding.code}
-      data-producer={finding.producer}
-      data-stale={isStale(finding) ? "true" : undefined}
-      aria-current={idOf(at(cursor())) === finding.id ? "true" : undefined}
-      class={ROW}
-    >
-      <Badge tone={severityTone(finding.severity)}>{finding.severity}</Badge>
-      <strong class="text-small font-semibold text-on-surface-primary">{finding.bookId}</strong>
-      <code class="font-mono text-smallest text-on-surface-tertiary">{finding.code}</code>
-      <span class="min-w-0 flex-1 truncate text-small text-on-surface-secondary">
-        {finding.message}
-      </span>
-      <Show when={isStale(finding)}>
-        <Badge tone="muted">{t("stale")}</Badge>
-      </Show>
-      <Button size="sm" variant="tertiary" onClick={() => open(finding)}>
-        {t("Go")}
-      </Button>
-      <Show when={finding.fix !== undefined}>
-        <Button size="sm" icon={<Wrench size={12} />} onClick={() => offer(finding)}>
-          {t("Fix")}
+  const row = (entry: Row) => {
+    const finding = entry.finding;
+    return (
+      <li
+        data-findings-row
+        data-code={finding.code}
+        data-producer={finding.producer}
+        data-count={entry.count}
+        data-stale={isStale(finding) ? "true" : undefined}
+        aria-current={current() === entry.id ? "true" : undefined}
+        class={ROW}
+      >
+        <Badge tone={severityTone(finding.severity)}>{finding.severity}</Badge>
+        <strong class="text-small font-semibold whitespace-nowrap text-on-surface-primary">
+          {finding.bookId}{" "}
+          <Show
+            when={place(finding).exact}
+            fallback={
+              <span class="font-normal text-on-surface-tertiary" title={t("no fresh analysis")}>
+                {place(finding).text}
+              </span>
+            }
+          >
+            <span class="tabular-nums text-on-surface-secondary">{place(finding).text}</span>
+          </Show>
+        </strong>
+        <code class="font-mono text-smallest text-on-surface-tertiary">{finding.code}</code>
+        <span class="min-w-0 flex-1 truncate text-small text-on-surface-secondary">
+          {finding.message}
+        </span>
+        <Show when={entry.count > 1}>
+          <Button
+            size="sm"
+            variant="tertiary"
+            aria-expanded={entry.open ? "true" : "false"}
+            class="font-mono tabular-nums"
+            onClick={() => toggle(entry.id)}
+          >
+            {entry.open ? t("× {count} — collapse", { count: entry.count }) : `× ${entry.count}`}
+          </Button>
+        </Show>
+        <Show when={isStale(finding)}>
+          <Badge tone="muted">{t("stale")}</Badge>
+        </Show>
+        <Button size="sm" variant="tertiary" onClick={() => open(finding)}>
+          {t("Go")}
         </Button>
-      </Show>
-    </li>
-  );
+        <Show when={finding.fix !== undefined}>
+          <Button size="sm" icon={<Wrench size={12} />} onClick={() => offer(finding)}>
+            {t("Fix")}
+          </Button>
+        </Show>
+      </li>
+    );
+  };
 
   return (
     <main class="min-w-0 space-y-4 p-6">
       <PanelHeader
         title={t("Findings")}
         subtitle={t(
-          "j / k or the arrows move, Enter opens. Filters hide rows; they never delete findings.",
+          "j / k or the arrows move; Enter opens a row, or unfolds a repeated one. Filters hide rows; they never delete findings.",
         )}
         actions={
           <>
@@ -312,26 +478,29 @@ export function FindingsPanel() {
             )}
           </Show>
 
-          <For each={groups()}>
-            {(group) => (
+          <For each={sections()}>
+            {(section) => (
               <Show
-                when={group.key !== ""}
+                when={section.key !== ""}
                 fallback={
                   <Card padded={false} class="overflow-hidden">
                     <ul class="divide-y divide-surface-border">
-                      <For each={group.findings}>{row}</For>
+                      <For each={section.rows}>{row}</For>
                     </ul>
                   </Card>
                 }
               >
-                <section data-group={group.key}>
+                <section data-group={section.key}>
                   <header class="sticky top-0 z-10 -mx-1 mb-1.5 flex items-baseline gap-2 bg-surface-secondary/90 px-1 py-2 backdrop-blur-sm">
-                    <h3 class="text-small font-semibold text-on-surface-primary">{group.key}</h3>
-                    <Badge tone="muted">{t("{count} shown", { count: group.count })}</Badge>
+                    <h3 class="text-small font-semibold text-on-surface-primary">{section.key}</h3>
+                    <Show when={heading(section.key)}>
+                      {(name) => <span class="text-small text-on-surface-secondary">{name()}</span>}
+                    </Show>
+                    <Badge tone="muted">{t("{count} shown", { count: section.count })}</Badge>
                   </header>
                   <Card padded={false} class="overflow-hidden">
                     <ul class="divide-y divide-surface-border">
-                      <For each={group.findings}>{row}</For>
+                      <For each={section.rows}>{row}</For>
                     </ul>
                   </Card>
                 </section>
