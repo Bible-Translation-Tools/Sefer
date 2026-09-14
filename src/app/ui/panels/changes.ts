@@ -1,10 +1,20 @@
 /**
  * "What have I changed?", as the history and save panels both need to ask it.
  *
- * One function, because there is one answer: `diff.compare(book, baseline)`
- * over the baseline `SaveCoordinator` holds for that book. Nothing here
- * subscribes to anything — the caller reads `shell.tick()` to make the answer
- * reactive, which is the single-subscription rule the shell documents.
+ * There are TWO baselines and they answer different questions, so both live
+ * here rather than one being mistaken for the other:
+ *
+ *   * `unsavedChanges` is against the last write to DISK
+ *     (`SaveCoordinator.baseline`). The shell arms `autosave`, so this is
+ *     empty about a second after typing stops. It is a status line, not a
+ *     review.
+ *   * `recordedChanges` is against the last recorded VERSION (the blob at
+ *     HEAD, read by `recorded.ts`). This is what a review screen means by
+ *     "what has changed", and the only one a commit should be built from.
+ *
+ * Nothing here subscribes to anything — the caller reads `shell.tick()` to
+ * make the answer reactive, which is the single-subscription rule the shell
+ * documents.
  *
  * The `+`/`−` counts are line counts over the hunks, not a second diff: a
  * summary that disagreed with the diff beneath it would be worse than no
@@ -18,6 +28,7 @@ import { compare, type Hunk } from "../../../core/diff/diff";
 import type { Baseline } from "../../../core/save/baseline";
 import type { Shell } from "../../ProjectContext";
 import { lines } from "./format";
+import type { Recorded } from "./recorded";
 
 export interface BookChanges {
   readonly bookId: BookId;
@@ -28,6 +39,13 @@ export interface BookChanges {
   readonly added: number;
   /** Lines the baseline had that the working text does not. */
   readonly removed: number;
+  /**
+   * Set when there is no baseline at all — a book the recorded version has
+   * never seen. `hunks` is empty on purpose: a diff against nothing is the
+   * whole file, which nobody reads as a review, so the panel says "first time"
+   * and gives the line count instead.
+   */
+  readonly firstTime?: boolean;
 }
 
 export const countsOf = (
@@ -52,12 +70,47 @@ export const changesOf = (
 };
 
 /**
- * Every open book whose working text differs from what Save last wrote.
+ * Every book whose working text differs from the last RECORDED version.
  *
- * A book with no baseline is skipped rather than reported as wholly new: Save
- * adopts a baseline where the shell opens a book, so "no baseline" means this
- * book was never opened in this session and there is nothing on screen to
- * diff.
+ * This is the review answer, and it does not care what is on disk: the disk
+ * caught up on its own, the history did not. A book HEAD has never seen is
+ * reported as `firstTime`, so "nothing recorded yet" reads as five books about
+ * to be recorded rather than as a clean project.
+ */
+export const recordedChanges = (shell: Shell, recorded: Recorded): readonly BookChanges[] => {
+  shell.tick();
+  const project = shell.project();
+  if (project === undefined || !recorded.read) return [];
+  const out: BookChanges[] = [];
+  for (const book of project.books) {
+    const at = recorded.texts.get(book.id);
+    if (at === undefined) {
+      out.push({
+        bookId: book.id,
+        path: book.path,
+        book,
+        hunks: [],
+        added: lines(book.source().text).length,
+        removed: 0,
+        firstTime: true,
+      });
+      continue;
+    }
+    const changed = changesOf(book, { bookId: book.id, stamp: at.stamp, text: at.text });
+    if (changed.hunks.length > 0) out.push(changed);
+  }
+  return out;
+};
+
+/**
+ * Every open book whose working text differs from what was last WRITTEN.
+ *
+ * The status-line answer, not the review one: an idle pause writes on its own,
+ * so this is empty most of the time and its emptiness says nothing about the
+ * history. A book with no baseline is skipped rather than reported as wholly
+ * new — Save adopts a baseline where the shell opens a book, so "no baseline"
+ * means this book was never opened in this session and there is nothing on
+ * screen to diff.
  */
 export const unsavedChanges = (shell: Shell): readonly BookChanges[] => {
   shell.tick();

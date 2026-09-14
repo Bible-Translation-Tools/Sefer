@@ -19,5 +19,6 @@ export {
 export { FindingsPanel } from "./FindingsPanel";
 export { HistoryPanel } from "./HistoryPanel";
 export { SavePanel } from "./SavePanel";
-export { changesOf, countsOf, unsavedChanges, type BookChanges } from "./changes";
+export { changesOf, countsOf, recordedChanges, unsavedChanges, type BookChanges } from "./changes";
+export { createRecordedVersion, type Recorded, type RecordedVersion } from "./recorded";
 export { ago, exact, lines } from "./format";

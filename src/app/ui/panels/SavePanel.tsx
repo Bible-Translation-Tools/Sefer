@@ -16,9 +16,12 @@
  *     `SaveCoordinator.saveAll` writes anything still pending and `Git.commit`
  *     records exactly those paths under the message you wrote.
  *
- * The summary is `core/diff` against the Save baseline — the same hunks the
- * history panel shows — so "3 books, +12 −4" and the diff beside it can never
- * disagree.
+ * The summary is `core/diff` against the last RECORDED version — the blob at
+ * HEAD, read by `recorded.ts` — and NOT against the Save baseline. The disk
+ * baseline moves on its own about a second after typing stops, so a review
+ * built on it shows an empty diff for a session full of work. The Save
+ * baseline is kept for exactly one thing on this screen: the muted line that
+ * says whether anything is still to be written.
  *
  * Git is allowed to be absent. A commit that fails is reported on its own,
  * after a save that succeeded is reported as a success: the bytes reached the
@@ -32,15 +35,37 @@ import Check from "lucide-solid/icons/check";
 import History from "lucide-solid/icons/history";
 import LifeBuoy from "lucide-solid/icons/life-buoy";
 import Save from "lucide-solid/icons/save";
+import Undo2 from "lucide-solid/icons/undo-2";
 import { For, Show, createEffect, createSignal } from "solid-js";
 
 import type { BookId } from "../../../core/book/book";
+import * as Diff from "../../../core/diff/diff";
 import type { Restorable } from "../../../core/recovery/recovery";
+import type { SourceStamp } from "../../../core/source/source";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { Badge, Button, Card, EmptyState, Input, PanelHeader, toasts } from "../primitives";
-import { unsavedChanges } from "./changes";
+import { Badge, Button, Card, Dialog, EmptyState, Input, PanelHeader, toasts } from "../primitives";
+import { bookName } from "../workspace/books";
+import { metadataOf } from "../workspace/project";
+import { recordedChanges, unsavedChanges, type BookChanges } from "./changes";
+import { DiffView } from "./DiffView";
 import { ago, exact } from "./format";
+import { createRecordedVersion } from "./recorded";
+
+/** A row in the book list; the look is shared with the history timeline. */
+const ROW = [
+  "flex w-full cursor-pointer flex-col gap-1 px-3.5 py-2.5 text-start transition-colors",
+  "hover:bg-surface-secondary",
+  "aria-[current=true]:bg-brand-light",
+  "aria-[current=true]:shadow-[inset_0.1875rem_0_0_0_var(--brand-base)]",
+].join(" ");
+
+interface Confirmation {
+  readonly title: string;
+  readonly description: string;
+  readonly label: string;
+  readonly run: () => void;
+}
 
 /** The author every Sefer commit carries until accounts reach this screen. */
 const AUTHOR = { name: "Sefer", email: "sefer@localhost" } as const;
@@ -51,8 +76,65 @@ export function SavePanel() {
   const [message, setMessage] = createSignal("");
   const [busy, setBusy] = createSignal(false, { name: "saving" });
   const [journals, setJournals] = createSignal<readonly Restorable[]>([], { name: "journals" });
+  const [picked, setPicked] = createSignal<BookId | undefined>(undefined, { name: "reviewBook" });
+  const [confirming, setConfirming] = createSignal<Confirmation | undefined>(undefined, {
+    name: "confirmRevert",
+  });
 
-  const changed = () => unsavedChanges(shell);
+  const version = createRecordedVersion(shell);
+
+  /**
+   * The review, against the last RECORDED version — never against the disk.
+   * `autosave` writes about a second after typing stops, so a review built on
+   * the disk baseline reports an empty session's worth of work as nothing at
+   * all. See `changes.ts` for the two baselines.
+   */
+  const changed = () => recordedChanges(shell, version.recorded());
+
+  /** The status-line answer: what has not reached the file yet. */
+  const pending = () => unsavedChanges(shell);
+
+  /** What a person calls a book, as the sidebar and the history call it. */
+  const nameOf = (bookId: BookId): string => bookName(bookId, metadataOf(shell.project()));
+
+  /**
+   * The book whose diff is on the right. The first changed book until somebody
+   * picks another, and back to the first when the pick stops being changed —
+   * a reverted book must not leave the pane showing a diff that is gone.
+   */
+  const current = (): BookChanges | undefined => {
+    const rows = changed();
+    return rows.find((row) => row.bookId === picked()) ?? rows[0];
+  };
+
+  const announce = (done: Result.Result<unknown, { readonly reason: string }>): void => {
+    if (Result.isFailure(done)) {
+      toasts.error({ title: t("Revert refused"), message: t(done.failure.reason) });
+      return;
+    }
+    toasts.success({ title: t("Reverted") });
+    shell.bump();
+  };
+
+  const revertHunk = (changes: BookChanges, hunk: Diff.Hunk): void => {
+    setConfirming({
+      title: t("Revert this change?"),
+      label: t("Revert"),
+      description: t("{book} goes back to the recorded version for this one hunk.", {
+        book: nameOf(changes.bookId),
+      }),
+      run: () => announce(Diff.revert(hunk, changes.book)),
+    });
+  };
+
+  const revertFile = (changes: BookChanges): void => {
+    setConfirming({
+      title: t("Revert every change in {book}?", { book: nameOf(changes.bookId) }),
+      label: t("Revert {count} change(s)", { count: changes.hunks.length }),
+      description: t("One edit, so one Undo takes the whole thing back."),
+      run: () => announce(Diff.revertAll(changes.hunks, changes.book)),
+    });
+  };
 
   const totals = () => {
     let added = 0;
@@ -140,7 +222,9 @@ export function SavePanel() {
         }
         toasts.success({
           title: t("Restored {book}", { book: journal.bookId }),
-          message: t("The work is in the editor and still unsaved — Save writes the file."),
+          message: t(
+            "The work is in the editor. It is not a recorded version until you record one.",
+          ),
         });
         shell.bump();
       });
@@ -164,34 +248,45 @@ export function SavePanel() {
 
   const commit = async (): Promise<void> => {
     const project = shell.project();
-    if (project === undefined || busy()) return;
+    // A snapshot: the review is over the books as they stood when the button
+    // was pressed, and those are the paths the commit will stage.
+    const review = changed();
+    if (project === undefined || busy() || review.length === 0) return;
     setBusy(true);
-    const notice = toasts.progress({ title: t("Saving…") });
+    const notice = toasts.progress({ title: t("Recording…") });
 
+    // The file has to hold the text before a commit can stage it. Usually
+    // there is nothing left to do here — the idle write got there first — so
+    // an empty receipt list is the ordinary case, not a reason to stop.
     const saved = await shell.services.run(
       Effect.result(shell.services.save.saveAll(project.books)),
     );
     if (Result.isFailure(saved)) {
       toasts.update(notice, {
         tone: "error",
-        title: t("Save failed"),
+        title: t("Could not write to disk"),
         message: saved.failure.description,
         autoClose: false,
       });
       setBusy(false);
       return;
     }
-    const receipts = saved.success;
     shell.bump();
+
+    // What to stage: exactly the books this review is about, each with the
+    // stamp of the text now on disk — `saveAll` has just made the two agree,
+    // so a receipt here names bytes that really are in the file.
+    const receipts: { readonly path: string; readonly stamp: SourceStamp }[] = [];
+    for (const book of review) {
+      const baseline = shell.services.save.baseline(book.book);
+      if (Option.isNone(baseline)) continue;
+      receipts.push({ path: baseline.value.path, stamp: baseline.value.stamp });
+    }
     if (receipts.length === 0) {
-      toasts.update(notice, { title: t("Nothing to save"), tone: "info" });
+      toasts.update(notice, { title: t("Nothing to record"), tone: "info" });
       setBusy(false);
       return;
     }
-    toasts.update(notice, {
-      tone: "success",
-      title: t("Saved {count} book(s)", { count: receipts.length }),
-    });
 
     // A one-time read, deliberately: the commit records the message as it
     // stood when Save was pressed, not whatever the field says when the write
@@ -206,19 +301,28 @@ export function SavePanel() {
       ),
     );
     if (Result.isFailure(recorded)) {
-      toasts.error({
-        title: t("Saved, but not recorded in git"),
+      toasts.update(notice, {
+        tone: "error",
+        autoClose: false,
+        title: t("On disk, but not recorded"),
         message: t("{reason}: {description}", {
           reason: recorded.failure.reason,
           description: recorded.failure.description ?? t("no detail"),
         }),
       });
     } else {
-      toasts.success({
-        title: t("Committed {hash}", { hash: recorded.success.slice(0, 7) }),
+      toasts.update(notice, {
+        tone: "success",
+        title: t("Recorded {count} book(s) as {hash}", {
+          count: receipts.length,
+          hash: recorded.success.slice(0, 7),
+        }),
         message: staticMessage,
       });
       setMessage("");
+      // The version moved, so the baseline every summary on this screen is
+      // measured against moved with it.
+      version.refresh();
     }
     setBusy(false);
   };
@@ -244,137 +348,239 @@ export function SavePanel() {
         when={shell.project()}
         fallback={<EmptyState icon={<Save size={22} />} title={t("Open a project first.")} />}
       >
-        <div class="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
-          <div class="min-w-0 space-y-4">
-            <Show when={recovered().length > 0}>
-              <Card class="space-y-3 border-brand/40" aria-label={t("Recovered work")}>
-                <PanelHeader
-                  level={3}
-                  title={
-                    <span class="flex items-center gap-2">
-                      <LifeBuoy size={16} class="text-brand" aria-hidden="true" />
-                      {t("Recovered work")}
-                    </span>
-                  }
-                  subtitle={t(
-                    "Sefer found a working-state backup from an earlier session that was never saved. Restoring puts it back in the editor; it is still unsaved until you Save.",
-                  )}
-                />
-                <ul class="divide-y divide-surface-border">
-                  <For each={recovered()}>
-                    {(journal) => (
-                      <li class="flex flex-wrap items-center gap-2 py-2">
-                        <strong class="text-small font-semibold">{journal.bookId}</strong>
-                        <code class="min-w-0 truncate font-mono text-smallest text-on-surface-tertiary">
-                          {journal.path}
-                        </code>
-                        <Badge>{t("{count} edit(s)", { count: journal.entries.length })}</Badge>
-                        <Button
-                          size="sm"
-                          variant="tertiary"
-                          class="ms-auto"
-                          onClick={() => discard(journal)}
-                        >
-                          {t("Discard")}
-                        </Button>
-                        <Button size="sm" variant="primary" onClick={() => restore(journal)}>
-                          {t("Restore")}
-                        </Button>
-                      </li>
-                    )}
-                  </For>
-                </ul>
-              </Card>
-            </Show>
+        <Show when={recovered().length > 0}>
+          <Card class="space-y-3 border-brand/40" aria-label={t("Recovered work")}>
+            <PanelHeader
+              level={3}
+              title={
+                <span class="flex items-center gap-2">
+                  <LifeBuoy size={16} class="text-brand" aria-hidden="true" />
+                  {t("Recovered work")}
+                </span>
+              }
+              subtitle={t(
+                "Sefer found a working-state backup from an earlier session that was never recorded. Restoring puts it back in the editor, where the ordinary idle write picks it up.",
+              )}
+            />
+            <ul class="divide-y divide-surface-border">
+              <For each={recovered()}>
+                {(journal) => (
+                  <li class="flex flex-wrap items-center gap-2 py-2">
+                    <strong class="text-small font-semibold">{journal.bookId}</strong>
+                    <code class="min-w-0 truncate font-mono text-smallest text-on-surface-tertiary">
+                      {journal.path}
+                    </code>
+                    <Badge>{t("{count} edit(s)", { count: journal.entries.length })}</Badge>
+                    <Button
+                      size="sm"
+                      variant="tertiary"
+                      class="ms-auto"
+                      onClick={() => discard(journal)}
+                    >
+                      {t("Discard")}
+                    </Button>
+                    <Button size="sm" variant="primary" onClick={() => restore(journal)}>
+                      {t("Restore")}
+                    </Button>
+                  </li>
+                )}
+              </For>
+            </ul>
+          </Card>
+        </Show>
 
-            <Card class="space-y-3" aria-label={t("What this version will record")}>
-              <PanelHeader
-                level={3}
-                title={t("What this version will record")}
-                actions={
-                  <Show when={changed().length > 0}>
-                    <Badge tone="success">+{totals().added}</Badge>
-                    <Badge tone="error">−{totals().removed}</Badge>
-                  </Show>
-                }
-              />
+        <div class="grid items-start gap-4 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
+          <div class="min-w-0 space-y-4 lg:sticky lg:top-6">
+            <Card padded={false} class="overflow-hidden" aria-label={t("Books in this version")}>
+              <div class="flex flex-wrap items-center gap-2 border-b border-surface-border px-3.5 py-2.5">
+                <h3 class="text-small font-semibold text-on-surface-primary">
+                  {t("{count} book(s) to record", { count: changed().length })}
+                </h3>
+                <Show when={changed().length > 0}>
+                  <Badge tone="success" class="ms-auto">
+                    +{totals().added}
+                  </Badge>
+                  <Badge tone="error">−{totals().removed}</Badge>
+                </Show>
+              </div>
               <Show
                 when={changed().length > 0}
                 fallback={
-                  <EmptyState
-                    icon={<Check size={20} />}
-                    title={t("Nothing is waiting to be written.")}
-                    description={t(
-                      "Every book on screen is already on disk — the idle write got there first.",
-                    )}
-                  />
+                  <div class="p-3">
+                    <EmptyState
+                      icon={<Check size={20} />}
+                      title={t("Everything is already in the latest version.")}
+                      description={t("Nothing has changed since the last one was recorded.")}
+                    />
+                  </div>
                 }
               >
                 <ul class="divide-y divide-surface-border" data-changed={changed().length}>
                   <For each={changed()}>
                     {(book) => (
-                      <li class="flex flex-wrap items-center gap-2 py-2" data-book={book.bookId}>
-                        <strong class="text-small font-semibold text-on-surface-primary">
-                          {book.bookId}
-                        </strong>
-                        <code class="min-w-0 flex-1 truncate font-mono text-smallest text-on-surface-tertiary">
-                          {book.path}
-                        </code>
-                        <Badge>{t("{count} hunk(s)", { count: book.hunks.length })}</Badge>
-                        <Badge tone="success">+{book.added}</Badge>
-                        <Badge tone="error">−{book.removed}</Badge>
+                      <li data-book={book.bookId}>
+                        <button
+                          type="button"
+                          class={ROW}
+                          aria-current={current()?.bookId === book.bookId ? "true" : undefined}
+                          onClick={() => setPicked(book.bookId)}
+                        >
+                          <span class="flex w-full items-center gap-2">
+                            <strong class="min-w-0 flex-1 truncate text-small font-semibold text-on-surface-primary">
+                              {nameOf(book.bookId)}
+                            </strong>
+                            <Show
+                              when={book.firstTime === true}
+                              fallback={
+                                <>
+                                  <Badge tone="success">+{book.added}</Badge>
+                                  <Badge tone="error">−{book.removed}</Badge>
+                                </>
+                              }
+                            >
+                              <Badge tone="brand">{t("new")}</Badge>
+                            </Show>
+                          </span>
+                          <span class="w-full truncate font-mono text-smallest text-on-surface-tertiary">
+                            {book.path}
+                          </span>
+                        </button>
                       </li>
                     )}
                   </For>
                 </ul>
               </Show>
             </Card>
+
+            <Card class="space-y-3" aria-label={t("Commit")}>
+              <label
+                class="block text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase"
+                for="commit-message"
+              >
+                {t("Message")}
+              </label>
+              <Input
+                id="commit-message"
+                wrapperClass="w-full"
+                placeholder={defaultMessage()}
+                value={message()}
+                onInput={(event) => setMessage(event.currentTarget.value)}
+              />
+              <Button
+                variant="primary"
+                class="w-full"
+                icon={<Save size={14} />}
+                loading={busy()}
+                disabled={changed().length === 0}
+                onClick={() => void commit()}
+              >
+                {t("Record this version")}
+              </Button>
+              <p class="text-smallest text-on-surface-tertiary">
+                {t(
+                  "A book is written to disk shortly after you stop typing, and a working-state backup is kept while you type. Neither is a version: this button is what puts one in the history, under your message.",
+                )}
+              </p>
+              <p class="text-smallest text-on-surface-tertiary" data-pending={pending().length}>
+                <Show when={pending().length > 0} fallback={t("Every book is written to disk.")}>
+                  {t("{count} book(s) still to be written to disk; recording writes them first.", {
+                    count: pending().length,
+                  })}
+                </Show>
+              </p>
+              <p class="text-smallest text-on-surface-tertiary" data-backup="last">
+                <Show
+                  when={lastBackup()}
+                  fallback={t("No working-state backup is waiting to be recovered.")}
+                >
+                  {(at) => (
+                    <span title={exact(at())}>
+                      {t("Working-state backup: {when}", { when: ago(at()) })}
+                    </span>
+                  )}
+                </Show>
+              </p>
+            </Card>
           </div>
 
-          <Card class="space-y-3 lg:sticky lg:top-6" aria-label={t("Commit")}>
-            <label
-              class="block text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase"
-              for="commit-message"
+          <Card class="min-w-0 space-y-3" aria-label={t("Changes")}>
+            <Show
+              when={current()}
+              fallback={
+                <EmptyState
+                  icon={<Check size={20} />}
+                  title={t("No changes to review.")}
+                  description={t("Type in a book and it will appear here.")}
+                />
+              }
             >
-              {t("Message")}
-            </label>
-            <Input
-              id="commit-message"
-              wrapperClass="w-full"
-              placeholder={defaultMessage()}
-              value={message()}
-              onInput={(event) => setMessage(event.currentTarget.value)}
-            />
-            <Button
-              variant="primary"
-              class="w-full"
-              icon={<Save size={14} />}
-              loading={busy()}
-              disabled={changed().length === 0}
-              onClick={() => void commit()}
-            >
-              {t("Save and record")}
-            </Button>
-            <p class="text-smallest text-on-surface-tertiary">
-              {t(
-                "A book is written to disk shortly after you stop typing, and a working-state backup is kept while you type. This records a version in the history, under your message — only the files Sefer wrote.",
+              {(book) => (
+                <div class="space-y-3" data-diff-book={book().bookId}>
+                  <PanelHeader
+                    level={3}
+                    title={nameOf(book().bookId)}
+                    subtitle={book().path}
+                    actions={
+                      <Show when={book().firstTime !== true}>
+                        <Button
+                          size="sm"
+                          variant="tertiary"
+                          icon={<Undo2 size={12} />}
+                          onClick={() => revertFile(book())}
+                        >
+                          {t("Revert file")}
+                        </Button>
+                      </Show>
+                    }
+                  />
+                  <Show
+                    when={book().firstTime !== true}
+                    fallback={
+                      <EmptyState
+                        title={t("Recorded for the first time.")}
+                        description={t("{count} line(s) go into the first version of this book.", {
+                          count: book().added,
+                        })}
+                      />
+                    }
+                  >
+                    <DiffView hunks={book().hunks} onRevert={(hunk) => revertHunk(book(), hunk)} />
+                  </Show>
+                </div>
               )}
-            </p>
-            <p class="text-smallest text-on-surface-tertiary" data-backup="last">
-              <Show
-                when={lastBackup()}
-                fallback={t("No working-state backup is waiting to be recovered.")}
-              >
-                {(at) => (
-                  <span title={exact(at())}>
-                    {t("Working-state backup: {when}", { when: ago(at()) })}
-                  </span>
-                )}
-              </Show>
-            </p>
+            </Show>
           </Card>
         </div>
       </Show>
+
+      <Dialog
+        open={confirming() !== undefined}
+        onOpenChange={(open) => {
+          if (!open) setConfirming(undefined);
+        }}
+        title={confirming()?.title ?? ""}
+        description={confirming()?.description}
+        footer={
+          <>
+            <Button onClick={() => setConfirming(undefined)}>{t("Cancel")}</Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                confirming()?.run();
+                setConfirming(undefined);
+              }}
+            >
+              {confirming()?.label ?? t("Revert")}
+            </Button>
+          </>
+        }
+      >
+        <p class="text-small text-on-surface-secondary">
+          {t(
+            "This changes the text in the editor, where Undo can take it back. It records nothing.",
+          )}
+        </p>
+      </Dialog>
     </main>
   );
 }

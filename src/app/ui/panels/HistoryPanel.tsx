@@ -7,18 +7,20 @@
  * can name the books it changed without reading a single blob, and reading one
  * happens only when somebody selects that commit.
  *
- * The diff is `core/diff` — the same module the editor's unsaved-changes view
- * uses — between the working text and the selected side. That makes "Revert"
- * mean exactly one thing everywhere in the product: `diff.revert` through
- * `book.apply` with `trustedBy("diff.revert")`, refused when the book has
- * moved since the hunk was measured. This panel never writes a file and never
- * writes git; it moves the working text and leaves Save to write it.
+ * The diff is `core/diff` between the working text and the selected side, and
+ * Revert means exactly one thing everywhere in the product: `diff.revert`
+ * through `book.apply` with `trustedBy("diff.revert")`, refused when the book
+ * has moved since the hunk was measured. It moves the TEXT IN THE EDITOR and
+ * nothing else — no file is written here and no version is recorded — so Undo
+ * takes it back, and it is behind a confirmation because scripture is not
+ * something to replace by accident.
  *
  * The top row is what has not been recorded, because "where am I now" is the
- * question people come to a history for first. Its baseline is
- * `SaveCoordinator.baseline` — the last write to DISK, which an idle pause
- * makes on its own — not a commit. So the ordinary reading of that row is
- * "everything typed is already on disk, and none of it is a version yet".
+ * question people come to a history for first. Its baseline is the blob at
+ * HEAD (`recorded.ts`), NOT `SaveCoordinator.baseline`: the disk baseline
+ * moves on its own about a second after typing stops, so a row built on it
+ * would report a session full of work as nothing at all. What the disk
+ * baseline still answers is the small "not yet written" note beside it.
  */
 
 import { useNavigate } from "@tanstack/solid-router";
@@ -39,9 +41,10 @@ import { useShell } from "../../ProjectContext";
 import { Badge, Button, Card, Dialog, EmptyState, PanelHeader, toasts } from "../primitives";
 import { bookName } from "../workspace/books";
 import { metadataOf } from "../workspace/project";
-import { changesOf, unsavedChanges, type BookChanges } from "./changes";
+import { changesOf, recordedChanges, unsavedChanges, type BookChanges } from "./changes";
 import { DiffView } from "./DiffView";
 import { ago, exact } from "./format";
+import { createRecordedVersion } from "./recorded";
 
 /** The uncommitted row's id in the selection. A commit id is 40 hex digits. */
 const WORKING = "working";
@@ -68,19 +71,20 @@ export function HistoryPanel() {
   const [versions, setVersions] = createSignal<ReadonlyMap<BookId, readonly Version[]>>(new Map(), {
     name: "gitVersions",
   });
-  const [uncommitted, setUncommitted] = createSignal(0, { name: "uncommittedPaths" });
   const [problem, setProblem] = createSignal("");
   const [selected, setSelected] = createSignal<string>(WORKING, { name: "selectedCommit" });
   const [shown, setShown] = createSignal<readonly BookChanges[]>([], { name: "shownDiff" });
   const [confirming, setConfirming] = createSignal<Confirmation | undefined>(undefined, {
     name: "confirmRevert",
   });
+  /** HEAD's blobs: the baseline the top row is measured against. */
+  const version = createRecordedVersion(shell);
 
   /**
    * One pass over the repository. Every git call goes through `Effect.result`
    * so that a repository that does not exist — the ordinary case in a browser
    * fixture, where nothing has ever run `git init` — reports itself once and
-   * leaves the unsaved row working.
+   * leaves the top row working.
    */
   const load = (): void => {
     const project = shell.project();
@@ -94,7 +98,6 @@ export function HistoryPanel() {
             return { kind: "absent", reason: opened.failure.reason } as const;
           const repo = opened.success;
           const commits = yield* Effect.result(git.log(repo));
-          const status = yield* Effect.result(git.status(repo));
           const perBook = new Map<BookId, readonly Version[]>();
           for (const book of project.books) {
             const inside = repositoryPath(project.root, book.path);
@@ -105,7 +108,6 @@ export function HistoryPanel() {
           return {
             kind: "read",
             commits: Result.isSuccess(commits) ? commits.success : [],
-            changed: Result.isSuccess(status) ? status.success.changed.length : 0,
             perBook,
           } as const;
         }),
@@ -121,8 +123,8 @@ export function HistoryPanel() {
         }
         setProblem("");
         setLog(answer.commits);
-        setUncommitted(answer.changed);
         setVersions(answer.perBook);
+        version.refresh();
       });
   };
   load();
@@ -143,9 +145,9 @@ export function HistoryPanel() {
   /**
    * The selected side, as a diff against the working text.
    *
-   * `working` reads the Save baseline; a commit reads its blobs. Either way
-   * the RIGHT side is the book in hand, which is what makes Revert mean
-   * "put this back" rather than "check out an old file".
+   * The top row reads the recorded baseline; a commit reads its own blobs.
+   * Either way the RIGHT side is the book in hand, so every diff on this
+   * screen is "how what I have differs from that", read the same way round.
    */
   const recompute = async (): Promise<void> => {
     const project = shell.project();
@@ -155,15 +157,15 @@ export function HistoryPanel() {
       return;
     }
     if (id === WORKING) {
-      setShown(unsavedChanges(shell));
+      setShown(notRecorded());
       return;
     }
     const out: BookChanges[] = [];
     for (const bookId of booksIn(id)) {
       const book = project.book(bookId);
-      const version = versionOf(bookId, id);
-      if (book === undefined || version === undefined) continue;
-      const bytes = await shell.services.run(Effect.result(version.bytes()));
+      const blob = versionOf(bookId, id);
+      if (book === undefined || blob === undefined) continue;
+      const bytes = await shell.services.run(Effect.result(blob.bytes()));
       if (Result.isFailure(bytes)) continue;
       const decoded = decode(bytes.success);
       if (Result.isFailure(decoded)) continue;
@@ -174,14 +176,14 @@ export function HistoryPanel() {
       });
       // A commit touches a file; it does not follow that the file still
       // differs from the text in hand. A book that matches is dropped rather
-      // than shown as an empty diff with a Revert button that would refuse.
+      // than shown as an empty diff.
       if (changes.hunks.length > 0) out.push(changes);
     }
     setShown(out);
   };
 
   createEffect(
-    () => `${selected()}:${shell.tick()}:${versions().size}`,
+    () => `${selected()}:${shell.tick()}:${versions().size}:${version.recorded().head ?? ""}`,
     () => {
       void recompute();
     },
@@ -202,9 +204,7 @@ export function HistoryPanel() {
       label: t("Revert"),
       description: t(
         "{book} goes back to the selected version for this one hunk. Undo takes it back.",
-        {
-          book: changes.bookId,
-        },
+        { book: nameOf(changes.bookId) },
       ),
       run: () => announce(Diff.revert(hunk, changes.book)),
     });
@@ -212,7 +212,7 @@ export function HistoryPanel() {
 
   const revertFile = (changes: BookChanges): void => {
     setConfirming({
-      title: t("Revert every change in {book}?", { book: changes.bookId }),
+      title: t("Revert every change in {book}?", { book: nameOf(changes.bookId) }),
       label: t("Revert {count} change(s)", { count: changes.hunks.length }),
       description: t("One edit, so one Undo takes the whole thing back."),
       run: () => announce(Diff.revertAll(changes.hunks, changes.book)),
@@ -222,7 +222,11 @@ export function HistoryPanel() {
   const selectedCommit = (): Commit | undefined =>
     log()?.find((commit) => commit.id === selected());
 
-  const unsaved = (): readonly BookChanges[] => unsavedChanges(shell);
+  /** What the latest recorded version does not hold yet: the review answer. */
+  const notRecorded = (): readonly BookChanges[] => recordedChanges(shell, version.recorded());
+
+  /** The other question, kept small: what has not reached the file yet. */
+  const notWritten = (): readonly BookChanges[] => unsavedChanges(shell);
 
   /** The one way to Save & Review from this screen, so both doors agree. */
   const review = (): void => {
@@ -308,31 +312,27 @@ export function HistoryPanel() {
                         aria-hidden="true"
                       />
                       <span class="min-w-0 flex-1 truncate text-small font-semibold text-on-surface-primary">
-                        {t("Unsaved changes")}
+                        {t("Not recorded yet")}
                       </span>
-                      <Show when={unsaved().length > 0}>
-                        <Badge tone="warning">{unsaved().length}</Badge>
+                      <Show when={notRecorded().length > 0}>
+                        <Badge tone="warning">{notRecorded().length}</Badge>
                       </Show>
                     </div>
                     <div class="flex w-full flex-wrap items-center gap-x-2 gap-y-1 text-smallest text-on-surface-tertiary">
                       <Show
-                        when={unsaved().length > 0}
-                        fallback={<span>{t("Everything typed is already on disk.")}</span>}
+                        when={notRecorded().length > 0}
+                        fallback={<span>{t("Every book is in the latest version.")}</span>}
                       >
                         <span>
-                          {t("{count} book(s) not yet written to disk", {
-                            count: unsaved().length,
+                          {t("{count} book(s) changed since the last version", {
+                            count: notRecorded().length,
                           })}
                         </span>
                       </Show>
-                      <Show when={uncommitted() > 0}>
-                        <Show when={unsaved().length > 0}>
-                          <span aria-hidden="true">·</span>
-                        </Show>
+                      <Show when={notWritten().length > 0}>
+                        <span aria-hidden="true">·</span>
                         <span>
-                          {t("{count} file(s) changed since the last version", {
-                            count: uncommitted(),
-                          })}
+                          {t("{count} not yet written to disk", { count: notWritten().length })}
                         </span>
                       </Show>
                     </div>
@@ -389,12 +389,12 @@ export function HistoryPanel() {
               level={3}
               title={
                 selected() === WORKING
-                  ? t("Unsaved changes")
+                  ? t("Not recorded yet")
                   : (selectedCommit()?.message ?? t("Selected version"))
               }
               subtitle={
                 selected() === WORKING
-                  ? t("The text in the editor against what is on disk.")
+                  ? t("The text in the editor against the last recorded version.")
                   : t("Working text against {hash}.", { hash: selected().slice(0, 7) })
               }
             />
@@ -405,7 +405,7 @@ export function HistoryPanel() {
                 <EmptyState
                   title={
                     selected() === WORKING
-                      ? t("Everything on screen is what is on disk.")
+                      ? t("Everything on screen is already in the latest version.")
                       : t("This version matches the text in hand.")
                   }
                 />
@@ -421,22 +421,38 @@ export function HistoryPanel() {
                       <code class="min-w-0 truncate font-mono text-smallest text-on-surface-tertiary">
                         {changes.path}
                       </code>
-                      <Badge tone="success">+{changes.added}</Badge>
-                      <Badge tone="error">−{changes.removed}</Badge>
-                      <Button
-                        size="sm"
-                        variant="tertiary"
-                        class="ms-auto"
-                        icon={<Undo2 size={12} />}
-                        onClick={() => revertFile(changes)}
+                      <Show
+                        when={changes.firstTime === true}
+                        fallback={
+                          <>
+                            <Badge tone="success">+{changes.added}</Badge>
+                            <Badge tone="error">−{changes.removed}</Badge>
+                          </>
+                        }
                       >
-                        {t("Revert file")}
-                      </Button>
+                        <Badge tone="brand">{t("first version")}</Badge>
+                        <Badge tone="success">
+                          {t("{count} line(s)", { count: changes.added })}
+                        </Badge>
+                      </Show>
+                      <Show when={changes.firstTime !== true}>
+                        <Button
+                          size="sm"
+                          variant="tertiary"
+                          class="ms-auto"
+                          icon={<Undo2 size={12} />}
+                          onClick={() => revertFile(changes)}
+                        >
+                          {t("Revert file")}
+                        </Button>
+                      </Show>
                     </div>
-                    <DiffView
-                      hunks={changes.hunks}
-                      onRevert={(hunk) => revertHunk(changes, hunk)}
-                    />
+                    <Show when={changes.firstTime !== true}>
+                      <DiffView
+                        hunks={changes.hunks}
+                        onRevert={(hunk) => revertHunk(changes, hunk)}
+                      />
+                    </Show>
                   </section>
                 )}
               </For>
@@ -469,7 +485,7 @@ export function HistoryPanel() {
       >
         <p class="text-small text-on-surface-secondary">
           {t(
-            "This changes the text in the editor. It does not write a file and does not touch git.",
+            "This changes the text in the editor. It does not write a file and does not record a version.",
           )}
         </p>
       </Dialog>
