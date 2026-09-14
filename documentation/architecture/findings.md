@@ -6,13 +6,25 @@ Galley produces diagnostics in the same call that produces structure. This is wh
 
 | sink | who | when | code |
 |---|---|---|---|
-| 1 · editor inline | the editor's lint recipe | synchronously, every keystroke, from the current state's analysis | `src/editor` |
+| 1a · editor inline, Onion | the editor's lint recipe | synchronously, every keystroke, from the current state's analysis | `src/editor` |
+| 1b · editor inline, Sous | `sousField`, pushed in by `showCorpusFindings` | when ProjectAnalysis publishes — never on the keystroke path | `src/editor`, fed from `src/app/ui/BookEditor.tsx` |
 | 2 · Findings, per book | `fromAnalysis(bookId, analysis, stamp)` | off the keystroke path for other books; from the editor's own analysis for the instantiated one | `src/core/findings/` |
 | 3 · ProjectAnalysis | `census`, `findings`, `crossBook`, `watch` | debounced ~150 ms after a publish; once per project open | `src/core/analysis/` |
 | 4 · Observability | `note('analyze', …, 'BOOK diag=N err=E', bookId)` | per analysis | inside ProjectAnalysis and Galley |
 | 5 · Fixes | `preview(finding, book, analysis)` | on demand, per finding | `src/core/fixes/` |
 
 Sink 4 carries counts and codes only. A diagnostic's message quotes the document, so it lives in sinks 1, 2 and 5 and never in telemetry.
+
+### Why sink 1 has two halves
+
+The editor can recompute Onion's diagnostics for free — it already parses the document on every keystroke, and rebuilding the marks from the current state is what makes an inline mark structurally unable to be stale. It can recompute nothing of Sous: a corpus finding is a judgement about the project, produced by a whole-corpus publication that happens ~150 ms after the reader stops typing, on another thread on desktop. So the two halves flow in opposite directions and meet at one `linter`:
+
+- **Onion** is pulled, synchronously, by `findings(state)`.
+- **Sous** is pushed, by `BookEditor` — which already holds the one `book.changes` subscription and already calls `projectAnalysis.supply` — on every `ProjectAnalysis.watch()` event. It filters `crossBook()` to this book and drops anything `stale`, so only findings stamped with the revision on screen are handed over.
+
+`sousField` then enforces the same rule from the other side: **any document change empties it**. Nothing maps a corpus offset through a `ChangeSet`, because the result would be an underline in a plausible but unmeasured place — exactly the failure the two stamps exist to prevent. The next publication refills it within the scheduler's quiet window, and until then the reader sees Onion's marks alone.
+
+Both halves are drawn by the one `linter`, so there is one gutter, one popover and one keyboard order over them. `source` is what distinguishes them for a reader: `onion/<code>` or `sous/<code>`. Only the Onion half carries an action — `fixes.preview` refuses a Sous finding `NotEngineFix`, and offering a button that always refuses would be a lie in the interface. The action applies through the bound view, which is `book.fromView`, which is the one write path: Undo, Save, Recovery and the panel all hear the receipt. It re-analyzes the live document first and discards the edits if the engine stamp moved.
 
 ## The one shape
 
@@ -79,4 +91,5 @@ Sefer writes no USFM transformations. Onion attaches the edits to the diagnostic
 - `apply` refuses `Stale` if the Book's revision moved since the preview. `applyAll(previews, book)` puts one book's set through a single `apply` — one Undo step, one receipt — and one stale or foreign member refuses the whole set rather than applying it partially.
 - Whether the edit is admissible at all is the Book's business: an editor-backed Book runs its phases, and a fix that would break structure is refused by the rules, not by a check here.
 - `formatBook` **fails** with `Unsupported`. The pinned artifact exposes no `format`/`formatEdits` (see [Galley](galley.md), "What the handle cannot do yet"), and reimplementing the formatter in TypeScript is out of scope. The ask goes upstream to the engine's wasm surface.
-- Sous findings never carry edits — they measure. `preview` refuses them `NotEngineFix`.
+- Sous findings never carry edits — they measure. `preview` refuses them `NotEngineFix`, and sink 1 offers them no button for the same reason.
+- Inside the editor the door is the bound view, not `fixes.apply`: `applyFix` dispatches the engine's edits with `trusted.of('lint-fix')`, and because the view was bound with `dispatchTransactions: (trs) => book.fromView(view, trs)` that IS `book.apply` — the same phases, the same receipt. The freshness check is the engine stamp rather than the revision: the editor re-analyzes the live document and compares hashes, so a same-length edit made while the tooltip was open is caught. `fixes.preview`/`apply` remain the door for a surface with no view, which is the panel.
