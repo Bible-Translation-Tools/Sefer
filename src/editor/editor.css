@@ -743,3 +743,12 @@
   cursor: pointer;
   padding: 2px 6px;
 }
+
+/* An excerpt's matches, inside a satellite opened from the multibuffer. The
+   same tokens the read-only card highlights with, so clicking Edit does not
+   move the match. */
+.cm-excerpt-hit {
+  background-color: var(--surface-warning);
+  color: var(--on-surface-warning);
+  border-radius: 2px;
+}
