@@ -60,3 +60,7 @@ Its limits, plainly:
 Each pattern row with convictions carries a toggle that narrows the flagged list to that one pattern; the secondary action hands the same question to `/findings` as `sous.convention.<Channel>`, through the router — an `<a href>` would be a full load, and the open Project would go with it.
 
 Three empty states, because they are three different sentences: no project; a project whose corpus has not been published yet ("Analyzing…", distinguished by the snapshot's own book count being zero); and a publication that carries no glyph patterns at all.
+
+## What the engine would need to publish for a full census
+
+The page is shaped for more than the current Sous branch emits. To become a character-by-character inventory rather than a conviction list it needs, per glyph in the corpus (not only convicted ones): total sites and per-book spread; the full neighbour table on both sides; placement against Letter / Space / Digit / Nonletter / Edge; cluster (run) shapes; and an API that enumerates every site of a glyph or of a pattern, not only the convicted ones. Until then `sitesOfGlyph(inventory, codePoint)` returns the underlined sites the snapshot does carry, which is what "show the other places this character is flagged" means today.

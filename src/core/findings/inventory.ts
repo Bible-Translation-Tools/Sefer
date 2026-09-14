@@ -511,3 +511,12 @@ export const EMPTY: Inventory = {
   patternCount: 0,
   flaggedSites: 0,
 };
+
+/**
+ * Every flagged site of one glyph — "the other places this character is
+ * underlined". The sites are already grouped on the `Glyph`; this is the door
+ * a caller holding only a code point (the editor's lint tooltip, a Findings
+ * filter) reaches for, so the grouping rule lives in one place.
+ */
+export const sitesOfGlyph = (held: Inventory, codePoint: number): readonly FlaggedSite[] =>
+  held.glyphs.find((glyph) => glyph.codePoint === codePoint)?.flagged ?? [];
