@@ -14,9 +14,11 @@
  * moved since the hunk was measured. This panel never writes a file and never
  * writes git; it moves the working text and leaves Save to write it.
  *
- * The top row is the uncommitted state, because "what have I not saved yet" is
- * the question people come to a history for first. Its baseline is
- * `SaveCoordinator.baseline` — what Save last wrote — not a commit.
+ * The top row is what has not been recorded, because "where am I now" is the
+ * question people come to a history for first. Its baseline is
+ * `SaveCoordinator.baseline` — the last write to DISK, which an idle pause
+ * makes on its own — not a commit. So the ordinary reading of that row is
+ * "everything typed is already on disk, and none of it is a version yet".
  */
 
 import { useNavigate } from "@tanstack/solid-router";
@@ -35,6 +37,8 @@ import { decode } from "../../../core/source/source";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { Badge, Button, Card, Dialog, EmptyState, PanelHeader, toasts } from "../primitives";
+import { bookName } from "../workspace/books";
+import { metadataOf } from "../workspace/project";
 import { changesOf, unsavedChanges, type BookChanges } from "./changes";
 import { DiffView } from "./DiffView";
 import { ago, exact } from "./format";
@@ -108,7 +112,10 @@ export function HistoryPanel() {
       )
       .then((answer) => {
         if (answer.kind === "absent") {
-          setProblem(t("no repository here yet: {reason}", { reason: answer.reason }));
+          // The TAG, not a sentence: the card below decides what to say about
+          // it, and "NotARepository" is the ordinary state of a project nobody
+          // has recorded yet rather than an error to print at someone.
+          setProblem(answer.reason);
           setLog([]);
           return;
         }
@@ -217,6 +224,14 @@ export function HistoryPanel() {
 
   const unsaved = (): readonly BookChanges[] => unsavedChanges(shell);
 
+  /** The one way to Save & Review from this screen, so both doors agree. */
+  const review = (): void => {
+    void navigate({ to: "/history", search: { review: true } });
+  };
+
+  /** What a person calls a book: the project's own name for it, else the canon's. */
+  const nameOf = (bookId: BookId): string => bookName(bookId, metadataOf(shell.project()));
+
   return (
     <main class="min-w-0 space-y-4 p-6">
       <PanelHeader
@@ -227,11 +242,8 @@ export function HistoryPanel() {
             <Button icon={<RefreshCw size={14} />} onClick={load}>
               {t("Reload")}
             </Button>
-            <Button
-              variant="primary"
-              onClick={() => void navigate({ to: "/history", search: { review: true } })}
-            >
-              {t("Save…")}
+            <Button variant="primary" onClick={review}>
+              {t("Save & Review")}
             </Button>
           </>
         }
@@ -250,11 +262,32 @@ export function HistoryPanel() {
         <div class="grid items-start gap-4 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
           <div class="space-y-3 lg:sticky lg:top-6">
             <Show when={problem() !== ""}>
-              <Card class="text-small text-on-surface-secondary">
-                <p>{problem()}</p>
-                <p class="mt-1 text-smallest text-on-surface-tertiary">
-                  {t("Save & Review creates the repository on the first commit.")}
-                </p>
+              <Card class="space-y-2" data-history-problem={problem()}>
+                <Show
+                  when={problem() === "NotARepository"}
+                  fallback={
+                    <>
+                      <p class="text-small text-on-surface-secondary">
+                        {t("Sefer could not read this project's history.")}
+                      </p>
+                      <p class="text-smallest text-on-surface-tertiary">
+                        {t("The repository refused the read: {reason}.", { reason: problem() })}
+                      </p>
+                    </>
+                  }
+                >
+                  <p class="text-small text-on-surface-secondary">
+                    {t("Nothing has been recorded for this project yet.")}
+                  </p>
+                  <p class="text-smallest text-on-surface-tertiary">
+                    {t(
+                      "Your books are still written to disk as you work. Save & Review is what records a version you can come back to — the first one creates the repository.",
+                    )}
+                  </p>
+                  <Button variant="primary" size="sm" onClick={review}>
+                    {t("Save & Review")}
+                  </Button>
+                </Show>
               </Card>
             </Show>
 
@@ -284,10 +317,10 @@ export function HistoryPanel() {
                     <div class="flex w-full flex-wrap items-center gap-x-2 gap-y-1 text-smallest text-on-surface-tertiary">
                       <Show
                         when={unsaved().length > 0}
-                        fallback={<span>{t("Nothing changed since the last save.")}</span>}
+                        fallback={<span>{t("Everything typed is already on disk.")}</span>}
                       >
                         <span>
-                          {t("{count} book(s) differ from the last save", {
+                          {t("{count} book(s) not yet written to disk", {
                             count: unsaved().length,
                           })}
                         </span>
@@ -296,7 +329,11 @@ export function HistoryPanel() {
                         <Show when={unsaved().length > 0}>
                           <span aria-hidden="true">·</span>
                         </Show>
-                        <span>{t("{count} path(s) uncommitted", { count: uncommitted() })}</span>
+                        <span>
+                          {t("{count} file(s) changed since the last version", {
+                            count: uncommitted(),
+                          })}
+                        </span>
                       </Show>
                     </div>
                   </button>
@@ -328,7 +365,11 @@ export function HistoryPanel() {
                             {ago(commit.at)}
                           </time>
                           <For each={booksIn(commit.id)}>
-                            {(bookId) => <Badge tone="brand">{bookId}</Badge>}
+                            {(bookId) => (
+                              <span title={bookId}>
+                                <Badge tone="brand">{nameOf(bookId)}</Badge>
+                              </span>
+                            )}
                           </For>
                         </div>
                       </button>
@@ -353,7 +394,7 @@ export function HistoryPanel() {
               }
               subtitle={
                 selected() === WORKING
-                  ? t("Working text against what Save last wrote.")
+                  ? t("The text in the editor against what is on disk.")
                   : t("Working text against {hash}.", { hash: selected().slice(0, 7) })
               }
             />
@@ -375,7 +416,7 @@ export function HistoryPanel() {
                   <section class="space-y-2" data-diff-book={changes.bookId}>
                     <div class="flex flex-wrap items-center gap-2">
                       <strong class="text-small font-semibold text-on-surface-primary">
-                        {changes.bookId}
+                        {nameOf(changes.bookId)}
                       </strong>
                       <code class="min-w-0 truncate font-mono text-smallest text-on-surface-tertiary">
                         {changes.path}

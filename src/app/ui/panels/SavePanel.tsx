@@ -1,14 +1,20 @@
 /**
- * Save & Review: what is about to be written, and the one button that writes it.
+ * Save & Review: what has changed, and the one button that records it.
  *
- * Two modules write bytes in this application and they are not the same thing,
- * so this screen never lets them share a word. **Save** writes the project
- * file and then records it in git — `SaveCoordinator.saveAll` produces the
- * receipts and `Git.commit` stages exactly those paths, nothing else. The
- * crash journal (`core/recovery`) is the **working-state backup**: it is not
- * an autosave, it does not write your file, and the copy on this page says so
- * in one line rather than leaving people to guess which of the two kept their
- * work.
+ * Three things keep your work, they are not the same thing, and this screen
+ * never lets them share a word.
+ *
+ *   * The FILE is written on its own. `SaveCoordinator.autosave`, armed per
+ *     book by the shell with `DEFAULT_AUTOSAVE_POLICY`, writes the book to
+ *     disk shortly after typing pauses (and at most 15 s into a long burst).
+ *     Nobody presses anything for that, so this page must never claim the
+ *     work is unwritten until someone does.
+ *   * The WORKING-STATE BACKUP is the crash journal (`core/recovery`), kept
+ *     while you type. It is not the file and it is not a version: it exists
+ *     so a session that ended badly can be replayed into the editor.
+ *   * A VERSION is what this screen adds, and only on a deliberate press:
+ *     `SaveCoordinator.saveAll` writes anything still pending and `Git.commit`
+ *     records exactly those paths under the message you wrote.
  *
  * The summary is `core/diff` against the Save baseline — the same hunks the
  * history panel shows — so "3 books, +12 −4" and the diff beside it can never
@@ -220,8 +226,10 @@ export function SavePanel() {
   return (
     <main class="min-w-0 space-y-4 p-6">
       <PanelHeader
-        title={t("Save")}
-        subtitle={t("What will be written to disk, and recorded in the project's history.")}
+        title={t("Save & Review")}
+        subtitle={t(
+          "Your books are written to disk on their own. This is where a version goes into the project's history.",
+        )}
         actions={
           <Button
             icon={<History size={14} />}
@@ -279,10 +287,10 @@ export function SavePanel() {
               </Card>
             </Show>
 
-            <Card class="space-y-3" aria-label={t("What will be committed")}>
+            <Card class="space-y-3" aria-label={t("What this version will record")}>
               <PanelHeader
                 level={3}
-                title={t("What will be committed")}
+                title={t("What this version will record")}
                 actions={
                   <Show when={changed().length > 0}>
                     <Badge tone="success">+{totals().added}</Badge>
@@ -295,8 +303,10 @@ export function SavePanel() {
                 fallback={
                   <EmptyState
                     icon={<Check size={20} />}
-                    title={t("Nothing has changed since the last save.")}
-                    description={t("Saving now would write no bytes and record no commit.")}
+                    title={t("Nothing is waiting to be written.")}
+                    description={t(
+                      "Every book on screen is already on disk — the idle write got there first.",
+                    )}
                   />
                 }
               >
@@ -347,7 +357,7 @@ export function SavePanel() {
             </Button>
             <p class="text-smallest text-on-surface-tertiary">
               {t(
-                "Sefer keeps a working-state backup while you type; Save writes the file. Only the files Save wrote are recorded.",
+                "A book is written to disk shortly after you stop typing, and a working-state backup is kept while you type. This records a version in the history, under your message — only the files Sefer wrote.",
               )}
             </p>
             <p class="text-smallest text-on-surface-tertiary" data-backup="last">
