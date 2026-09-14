@@ -223,7 +223,7 @@ export function BookEditor(props: BookEditorProps) {
 
   return (
     <div
-      class="editor-host cm-host"
+      class="editor-host cm-host shadow-small"
       data-mode={shell.mode()}
       data-revision={(stamp() ?? props.book.source().stamp).revision}
       ref={setHost}
