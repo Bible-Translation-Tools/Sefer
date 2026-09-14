@@ -2,8 +2,13 @@
  * The popover, over `@corvu-next/popover`.
  *
  * One of the four files allowed to import corvu. The trigger is whatever the
- * caller passes — rendered through `as="span" class="contents"` so the caller's
- * own button keeps its look, its ref and its handlers.
+ * caller passes — rendered through `as="span"` so the caller's own button keeps
+ * its look, its ref and its handlers.
+ *
+ * The wrapper is `inline-flex` and NOT `display: contents`, for the same reason
+ * `Tooltip` learned: a contents-display box is not a box, so Floating UI
+ * measures the trigger's rect as zero and pins the panel to the top-left corner
+ * of the viewport instead of under the button.
  *
  * Controlled and uncontrolled both work: pass `open`/`onOpenChange` for the
  * first, pass neither for the second.
@@ -45,7 +50,7 @@ export function Popover(props: PopoverProps) {
       placement={placementOf(props.side ?? "bottom", props.align ?? "center")}
       floatingOptions={{ offset: 8, flip: true, shift: true }}
     >
-      <CorvuPopover.Trigger as="span" class="contents">
+      <CorvuPopover.Trigger as="span" class="inline-flex">
         {props.trigger}
       </CorvuPopover.Trigger>
       <CorvuPopover.Portal>

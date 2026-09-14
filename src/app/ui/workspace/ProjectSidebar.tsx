@@ -20,7 +20,7 @@ import ChevronRight from "lucide-solid/icons/chevron-right";
 import SearchIcon from "lucide-solid/icons/search";
 import SettingsIcon from "lucide-solid/icons/settings";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
-import { For, Show, createSignal } from "solid-js";
+import { For, Show, createEffect, createSignal } from "solid-js";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
@@ -39,6 +39,29 @@ export function ProjectSidebar() {
   const navigate = useNavigate();
   const shell = useShell();
   const [query, setQuery] = createSignal("", { name: "sidebarQuery" });
+  // A reference typed with a chapter ("Luke 1") names a place in a book that is
+  // not open yet. Setting the clip before navigating does not survive: the
+  // route's effect calls `focus`, and `focus` decides the opening chapter
+  // itself (`editor.preferChapterView`). So the chapter is REMEMBERED and
+  // applied once the book it names is the focused one.
+  const [pending, setPending] = createSignal<
+    { readonly bookId: string; readonly chapter: number } | undefined
+  >(undefined, { name: "pendingChapter" });
+
+  createEffect(
+    () => ({ focused: shell.focused()?.id, want: pending() }),
+    ({ focused, want }) => {
+      if (want === undefined || focused === undefined || focused !== want.bookId) return;
+      setPending(undefined);
+      // By LABEL, not by index: the engine's first chapter row is the front
+      // matter, so "3" is not necessarily the third row.
+      const at = shell
+        .focused()
+        ?.structure()
+        .chapters.findIndex((chapter) => chapter.label === String(want.chapter));
+      if (at !== undefined && at >= 0) shell.setChapter(at);
+    },
+  );
 
   const go = (to: string): void => {
     // SAFETY: the book path is built at runtime from a project root and a book
@@ -109,9 +132,9 @@ export function ProjectSidebar() {
       shell.report(t("no book matches {query}", { query: query() }));
       return;
     }
-    // The chapter is set before the navigation so the book opens on it: the
-    // route's own effect calls `focus`, which reads the shell, not the URL.
-    if (found.chapter !== undefined) shell.setChapter(found.chapter - 1);
+    setPending(
+      found.chapter === undefined ? undefined : { bookId: found.bookId, chapter: found.chapter },
+    );
     openBook(found.bookId);
     setQuery("");
   };
