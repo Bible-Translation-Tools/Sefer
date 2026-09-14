@@ -1,0 +1,437 @@
+/**
+ * The project's history: what git recorded, and what has not been recorded yet.
+ *
+ * The timeline is `git.log` plus one `git.previousVersions` per book, and that
+ * second call is what makes the rest of the panel cheap: it answers "which
+ * commits touched this book" AND hands back a `bytes()` thunk, so a commit row
+ * can name the books it changed without reading a single blob, and reading one
+ * happens only when somebody selects that commit.
+ *
+ * The diff is `core/diff` — the same module the editor's unsaved-changes view
+ * uses — between the working text and the selected side. That makes "Revert"
+ * mean exactly one thing everywhere in the product: `diff.revert` through
+ * `book.apply` with `trustedBy("diff.revert")`, refused when the book has
+ * moved since the hunk was measured. This panel never writes a file and never
+ * writes git; it moves the working text and leaves Save to write it.
+ *
+ * The top row is the uncommitted state, because "what have I not saved yet" is
+ * the question people come to a history for first. Its baseline is
+ * `SaveCoordinator.baseline` — what Save last wrote — not a commit.
+ */
+
+import { useNavigate } from "@tanstack/solid-router";
+import { Effect, Result } from "effect";
+import GitCommitVertical from "lucide-solid/icons/git-commit-vertical";
+import PencilLine from "lucide-solid/icons/pencil-line";
+import RefreshCw from "lucide-solid/icons/refresh-cw";
+import Undo2 from "lucide-solid/icons/undo-2";
+import { For, Show, createEffect, createSignal } from "solid-js";
+
+import type { BookId } from "../../../core/book/book";
+import * as Diff from "../../../core/diff/diff";
+import type { Commit, Version } from "../../../core/git/git";
+import { Git, repositoryPath } from "../../../core/git/git";
+import { decode } from "../../../core/source/source";
+import { t } from "../../i18n";
+import { useShell } from "../../ProjectContext";
+import { Badge, Button, Card, Dialog, EmptyState, PanelHeader, toasts } from "../primitives";
+import { changesOf, unsavedChanges, type BookChanges } from "./changes";
+import { DiffView } from "./DiffView";
+import { ago, exact } from "./format";
+
+/** The uncommitted row's id in the selection. A commit id is 40 hex digits. */
+const WORKING = "working";
+
+/** The one row look, shared by the uncommitted row and every commit row. */
+const ROW = [
+  "flex w-full cursor-pointer flex-col gap-1 px-3.5 py-3 text-start transition-colors",
+  "hover:bg-surface-secondary",
+  "aria-[current=true]:bg-brand-light",
+  "aria-[current=true]:shadow-[inset_0.1875rem_0_0_0_var(--brand-base)]",
+].join(" ");
+
+interface Confirmation {
+  readonly title: string;
+  readonly description: string;
+  readonly label: string;
+  readonly run: () => void;
+}
+
+export function HistoryPanel() {
+  const shell = useShell();
+  const navigate = useNavigate();
+  const [log, setLog] = createSignal<readonly Commit[] | undefined>(undefined, { name: "gitLog" });
+  const [versions, setVersions] = createSignal<ReadonlyMap<BookId, readonly Version[]>>(new Map(), {
+    name: "gitVersions",
+  });
+  const [uncommitted, setUncommitted] = createSignal(0, { name: "uncommittedPaths" });
+  const [problem, setProblem] = createSignal("");
+  const [selected, setSelected] = createSignal<string>(WORKING, { name: "selectedCommit" });
+  const [shown, setShown] = createSignal<readonly BookChanges[]>([], { name: "shownDiff" });
+  const [confirming, setConfirming] = createSignal<Confirmation | undefined>(undefined, {
+    name: "confirmRevert",
+  });
+
+  /**
+   * One pass over the repository. Every git call goes through `Effect.result`
+   * so that a repository that does not exist — the ordinary case in a browser
+   * fixture, where nothing has ever run `git init` — reports itself once and
+   * leaves the unsaved row working.
+   */
+  const load = (): void => {
+    const project = shell.project();
+    if (project === undefined) return;
+    void shell.services
+      .run(
+        Effect.gen(function* () {
+          const git = yield* Git;
+          const opened = yield* Effect.result(git.open(project.root));
+          if (Result.isFailure(opened))
+            return { kind: "absent", reason: opened.failure.reason } as const;
+          const repo = opened.success;
+          const commits = yield* Effect.result(git.log(repo));
+          const status = yield* Effect.result(git.status(repo));
+          const perBook = new Map<BookId, readonly Version[]>();
+          for (const book of project.books) {
+            const inside = repositoryPath(project.root, book.path);
+            if (inside._tag === "None") continue;
+            const found = yield* Effect.result(git.previousVersions(repo, inside.value));
+            if (Result.isSuccess(found)) perBook.set(book.id, found.success);
+          }
+          return {
+            kind: "read",
+            commits: Result.isSuccess(commits) ? commits.success : [],
+            changed: Result.isSuccess(status) ? status.success.changed.length : 0,
+            perBook,
+          } as const;
+        }),
+      )
+      .then((answer) => {
+        if (answer.kind === "absent") {
+          setProblem(t("no repository here yet: {reason}", { reason: answer.reason }));
+          setLog([]);
+          return;
+        }
+        setProblem("");
+        setLog(answer.commits);
+        setUncommitted(answer.changed);
+        setVersions(answer.perBook);
+      });
+  };
+  load();
+
+  /** Which books a commit touched, from the per-book version lists. */
+  const booksIn = (id: string): readonly BookId[] => {
+    const out: BookId[] = [];
+    for (const [bookId, list] of versions())
+      if (list.some((version) => version.commit.id === id)) out.push(bookId);
+    return out;
+  };
+
+  const versionOf = (bookId: BookId, id: string): Version | undefined =>
+    versions()
+      .get(bookId)
+      ?.find((version) => version.commit.id === id);
+
+  /**
+   * The selected side, as a diff against the working text.
+   *
+   * `working` reads the Save baseline; a commit reads its blobs. Either way
+   * the RIGHT side is the book in hand, which is what makes Revert mean
+   * "put this back" rather than "check out an old file".
+   */
+  const recompute = async (): Promise<void> => {
+    const project = shell.project();
+    const id = selected();
+    if (project === undefined) {
+      setShown([]);
+      return;
+    }
+    if (id === WORKING) {
+      setShown(unsavedChanges(shell));
+      return;
+    }
+    const out: BookChanges[] = [];
+    for (const bookId of booksIn(id)) {
+      const book = project.book(bookId);
+      const version = versionOf(bookId, id);
+      if (book === undefined || version === undefined) continue;
+      const bytes = await shell.services.run(Effect.result(version.bytes()));
+      if (Result.isFailure(bytes)) continue;
+      const decoded = decode(bytes.success);
+      if (Result.isFailure(decoded)) continue;
+      const changes = changesOf(book, {
+        bookId,
+        stamp: decoded.success.stamp,
+        text: decoded.success.text,
+      });
+      // A commit touches a file; it does not follow that the file still
+      // differs from the text in hand. A book that matches is dropped rather
+      // than shown as an empty diff with a Revert button that would refuse.
+      if (changes.hunks.length > 0) out.push(changes);
+    }
+    setShown(out);
+  };
+
+  createEffect(
+    () => `${selected()}:${shell.tick()}:${versions().size}`,
+    () => {
+      void recompute();
+    },
+  );
+
+  const announce = (done: Result.Result<unknown, { readonly reason: string }>): void => {
+    if (Result.isFailure(done)) {
+      toasts.error({ title: t("Revert refused"), message: t(done.failure.reason) });
+      return;
+    }
+    toasts.success({ title: t("Reverted") });
+    shell.bump();
+  };
+
+  const revertHunk = (changes: BookChanges, hunk: Diff.Hunk): void => {
+    setConfirming({
+      title: t("Revert this change?"),
+      label: t("Revert"),
+      description: t(
+        "{book} goes back to the selected version for this one hunk. Undo takes it back.",
+        {
+          book: changes.bookId,
+        },
+      ),
+      run: () => announce(Diff.revert(hunk, changes.book)),
+    });
+  };
+
+  const revertFile = (changes: BookChanges): void => {
+    setConfirming({
+      title: t("Revert every change in {book}?", { book: changes.bookId }),
+      label: t("Revert {count} change(s)", { count: changes.hunks.length }),
+      description: t("One edit, so one Undo takes the whole thing back."),
+      run: () => announce(Diff.revertAll(changes.hunks, changes.book)),
+    });
+  };
+
+  const selectedCommit = (): Commit | undefined =>
+    log()?.find((commit) => commit.id === selected());
+
+  const unsaved = (): readonly BookChanges[] => unsavedChanges(shell);
+
+  return (
+    <main class="min-w-0 space-y-4 p-6">
+      <PanelHeader
+        title={t("History")}
+        subtitle={t("What git recorded, newest first — and, at the top, what it has not.")}
+        actions={
+          <>
+            <Button icon={<RefreshCw size={14} />} onClick={load}>
+              {t("Reload")}
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => void navigate({ to: "/history", search: { review: true } })}
+            >
+              {t("Save…")}
+            </Button>
+          </>
+        }
+      />
+
+      <Show
+        when={shell.project()}
+        fallback={
+          <EmptyState
+            icon={<GitCommitVertical size={22} />}
+            title={t("Open a project first.")}
+            description={t("History is read from the project's own repository.")}
+          />
+        }
+      >
+        <div class="grid items-start gap-4 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
+          <div class="space-y-3 lg:sticky lg:top-6">
+            <Show when={problem() !== ""}>
+              <Card class="text-small text-on-surface-secondary">
+                <p>{problem()}</p>
+                <p class="mt-1 text-smallest text-on-surface-tertiary">
+                  {t("Save & Review creates the repository on the first commit.")}
+                </p>
+              </Card>
+            </Show>
+
+            <Card padded={false} class="overflow-hidden" aria-label={t("Timeline")}>
+              <ul class="divide-y divide-surface-border" data-commits={log()?.length ?? 0}>
+                <li>
+                  <button
+                    type="button"
+                    data-commit={WORKING}
+                    aria-current={selected() === WORKING ? "true" : undefined}
+                    class={ROW}
+                    onClick={() => setSelected(WORKING)}
+                  >
+                    <div class="flex w-full items-center gap-2">
+                      <PencilLine
+                        size={14}
+                        class="shrink-0 text-on-surface-tertiary"
+                        aria-hidden="true"
+                      />
+                      <span class="min-w-0 flex-1 truncate text-small font-semibold text-on-surface-primary">
+                        {t("Unsaved changes")}
+                      </span>
+                      <Show when={unsaved().length > 0}>
+                        <Badge tone="warning">{unsaved().length}</Badge>
+                      </Show>
+                    </div>
+                    <div class="flex w-full flex-wrap items-center gap-x-2 gap-y-1 text-smallest text-on-surface-tertiary">
+                      <Show
+                        when={unsaved().length > 0}
+                        fallback={<span>{t("Nothing changed since the last save.")}</span>}
+                      >
+                        <span>
+                          {t("{count} book(s) differ from the last save", {
+                            count: unsaved().length,
+                          })}
+                        </span>
+                      </Show>
+                      <Show when={uncommitted() > 0}>
+                        <Show when={unsaved().length > 0}>
+                          <span aria-hidden="true">·</span>
+                        </Show>
+                        <span>{t("{count} path(s) uncommitted", { count: uncommitted() })}</span>
+                      </Show>
+                    </div>
+                  </button>
+                </li>
+
+                <For each={log() ?? []}>
+                  {(commit) => (
+                    <li>
+                      <button
+                        type="button"
+                        data-commit={commit.id}
+                        aria-current={selected() === commit.id ? "true" : undefined}
+                        class={ROW}
+                        onClick={() => setSelected(commit.id)}
+                      >
+                        <div class="flex w-full items-center gap-2">
+                          <Badge class="font-mono">{commit.id.slice(0, 7)}</Badge>
+                          <span class="min-w-0 flex-1 truncate text-small font-medium text-on-surface-primary">
+                            {commit.message}
+                          </span>
+                        </div>
+                        <div class="flex w-full flex-wrap items-center gap-x-2 gap-y-1 text-smallest text-on-surface-tertiary">
+                          <span>{commit.author.name}</span>
+                          <span aria-hidden="true">·</span>
+                          <time
+                            datetime={new Date(commit.at).toISOString()}
+                            title={exact(commit.at)}
+                          >
+                            {ago(commit.at)}
+                          </time>
+                          <For each={booksIn(commit.id)}>
+                            {(bookId) => <Badge tone="brand">{bookId}</Badge>}
+                          </For>
+                        </div>
+                      </button>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </Card>
+
+            <Show when={problem() === "" && (log()?.length ?? 0) === 0}>
+              <p class="px-1 text-smallest text-on-surface-tertiary">{t("No commits yet.")}</p>
+            </Show>
+          </div>
+
+          <Card class="min-w-0 space-y-4" aria-label={t("Changes")}>
+            <PanelHeader
+              level={3}
+              title={
+                selected() === WORKING
+                  ? t("Unsaved changes")
+                  : (selectedCommit()?.message ?? t("Selected version"))
+              }
+              subtitle={
+                selected() === WORKING
+                  ? t("Working text against what Save last wrote.")
+                  : t("Working text against {hash}.", { hash: selected().slice(0, 7) })
+              }
+            />
+
+            <Show
+              when={shown().length > 0}
+              fallback={
+                <EmptyState
+                  title={
+                    selected() === WORKING
+                      ? t("Everything on screen is what is on disk.")
+                      : t("This version matches the text in hand.")
+                  }
+                />
+              }
+            >
+              <For each={shown()}>
+                {(changes) => (
+                  <section class="space-y-2" data-diff-book={changes.bookId}>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <strong class="text-small font-semibold text-on-surface-primary">
+                        {changes.bookId}
+                      </strong>
+                      <code class="min-w-0 truncate font-mono text-smallest text-on-surface-tertiary">
+                        {changes.path}
+                      </code>
+                      <Badge tone="success">+{changes.added}</Badge>
+                      <Badge tone="error">−{changes.removed}</Badge>
+                      <Button
+                        size="sm"
+                        variant="tertiary"
+                        class="ms-auto"
+                        icon={<Undo2 size={12} />}
+                        onClick={() => revertFile(changes)}
+                      >
+                        {t("Revert file")}
+                      </Button>
+                    </div>
+                    <DiffView
+                      hunks={changes.hunks}
+                      onRevert={(hunk) => revertHunk(changes, hunk)}
+                    />
+                  </section>
+                )}
+              </For>
+            </Show>
+          </Card>
+        </div>
+      </Show>
+
+      <Dialog
+        open={confirming() !== undefined}
+        onOpenChange={(open) => {
+          if (!open) setConfirming(undefined);
+        }}
+        title={confirming()?.title ?? ""}
+        description={confirming()?.description}
+        footer={
+          <>
+            <Button onClick={() => setConfirming(undefined)}>{t("Cancel")}</Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                confirming()?.run();
+                setConfirming(undefined);
+              }}
+            >
+              {confirming()?.label ?? t("Revert")}
+            </Button>
+          </>
+        }
+      >
+        <p class="text-small text-on-surface-secondary">
+          {t(
+            "This changes the text in the editor. It does not write a file and does not touch git.",
+          )}
+        </p>
+      </Dialog>
+    </main>
+  );
+}

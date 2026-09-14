@@ -19,6 +19,7 @@ import type { Analysis } from "../../core/galley";
 import type { EditorBook } from "../../editor";
 import { commandsLayer, openWindow, viewLayer } from "../../editor";
 import { t } from "../i18n";
+import { Card } from "./primitives";
 
 import "../../editor/editor.css";
 
@@ -67,14 +68,22 @@ export function ResultCard(props: ResultCardProps) {
     },
   );
 
+  // The card is the surface every other panel uses; the editor host inside it
+  // is full-bleed (`padded={false}`), because CodeMirror owns its own gutters
+  // and a padded wrapper would put the text twice as far from the edge as the
+  // main editor does.
   return (
     <Show
       when={!missing()}
       fallback={
-        <p class="text-small text-on-surface-tertiary">{t("That hit is no longer in the text.")}</p>
+        <Card class="text-small text-on-surface-tertiary">
+          {t("That hit is no longer in the text.")}
+        </Card>
       }
     >
-      <div class="editor-host cm-host max-h-96" ref={setHost} />
+      <Card padded={false} class="overflow-hidden">
+        <div class="editor-host cm-host max-h-96" ref={setHost} />
+      </Card>
     </Show>
   );
 }
