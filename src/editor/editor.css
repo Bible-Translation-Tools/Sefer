@@ -1,127 +1,79 @@
 /* ---------------------------------------------------------------------------
  * The regular projection's palette.
  *
- * Paper, ink and everything the scripture surface paints with used to be
- * literal hexes, under a comment further down saying that was deliberate:
- * paper and terminal are projection choices, not a light/dark preference. That
- * reading holds for the TERMINAL and not for the PAPER. USFM mode is a terminal
- * in both themes, because that is what a terminal is; the regular projection is
- * the page someone reads all day, and a bright sheet of #f7f6f3 in a dark room
- * is not a projection choice, it is a missing theme.
+ * It is the PRODUCT's palette, not a palette of its own. The page the reader
+ * edits is a white card among white cards (design-direction.md, "Overall
+ * layout": "the editor card, white, generous padding"), so paper is
+ * `--surface-primary`, ink is `--on-surface-primary`, and the numbers are the
+ * brand — which is also why almost nothing here needs a dark value: the
+ * tokens already swap, and one name that follows them cannot disagree with
+ * the toolbar above it.
  *
- * So the regular mode's colours are named here and swapped under the same two
- * selectors `src/app/ui/tokens.css` uses — the explicit `data-theme` and the
- * system preference — and the whole surface follows. They are deliberately NOT
- * the app's semantic tokens: the scripture surface is warm paper and ink, not
- * chrome, and painting it `--surface-primary` would make the text you are
- * editing exactly the colour of the toolbar above it.
+ * This replaces the warm sepia sheet and amber ink the surface was ported
+ * with. Paper and terminal are projection choices, but "warm paper" was a
+ * THEME, made in a file that has no business making one; the terminal below
+ * keeps its own because a terminal is a terminal in both schemes.
+ *
+ * What is left with literal values is the apparatus: a footnote, a
+ * cross-reference and a nested editor are different KINDS of thing, and the
+ * semantic set has no name for that distinction. Those four keep a hue each,
+ * light and dark.
  * ------------------------------------------------------------------------- */
 
 :root {
-  --editor-paper: #f7f6f3;
-  --editor-ink: #1f1d1b;
-  --editor-accent: #b45309;
-  --editor-highlight: #fde68a;
-  --editor-faint: #a8a29e;
-  --editor-muted: #78716c;
-  --editor-meta: #c7c2ba;
-  --editor-chunk: #d6d3d1;
-  --editor-rule: #ddd8d0;
-  --editor-note: #57534e;
+  --editor-paper: var(--surface-primary);
+  --editor-ink: var(--on-surface-primary);
+  /* Verse and chapter numbers, and the caret. The mockup's "verse numbers
+     superscript in red/brand"; `--brand-base` is brand-40 in light and
+     brand-70 in dark, so this reads on both. */
+  --editor-accent: var(--brand-base);
+  /* Selection is a brand tint, not the find highlight: two different answers
+     to "what is marked here", and they must not share a colour. */
+  --editor-selection: color-mix(in srgb, var(--brand-base) 22%, transparent);
+  --editor-faint: var(--on-surface-tertiary);
+  --editor-muted: var(--on-surface-secondary);
+  --editor-meta: var(--on-surface-tertiary);
+  --editor-chunk: var(--surface-border);
+  --editor-rule: var(--surface-border);
+  --editor-note: var(--on-surface-secondary);
+  --editor-word-line: var(--surface-border);
+  --editor-word-hover: var(--surface-secondary);
+  --editor-note-hover: var(--surface-secondary);
+  --editor-focus-bg: color-mix(in srgb, var(--brand-base) 10%, transparent);
+  --editor-focus-bar: var(--brand-base);
+  --editor-error-bg: var(--surface-error);
+  --editor-error-line: var(--on-surface-error);
+  --editor-warn-bg: var(--surface-warning);
+  --editor-warn-line: var(--on-surface-warning);
+  --editor-slot-line: var(--on-surface-warning);
+  --editor-slot-bg: var(--surface-warning);
+  --editor-chip-bg: var(--brand-light);
+  --editor-chip-bg-hover: color-mix(in srgb, var(--brand-base) 20%, transparent);
+  --editor-open-bg: var(--brand-light);
+  --editor-open-line: color-mix(in srgb, var(--brand-base) 35%, transparent);
+  --editor-open-fg: var(--brand-dark);
+  --editor-pip-bg: var(--surface-secondary);
+  --editor-pip-neutral-bg: var(--surface-secondary);
+  --editor-fr-bg: var(--surface-secondary);
+
+  /* The apparatus, which the tokens do not name. */
   --editor-link: #0e7490;
   --editor-link-x: #7c3aed;
-  --editor-word-line: #c9b8a0;
-  --editor-word-hover: #f2ece1;
-  --editor-note-hover: #efece7;
-  --editor-focus-bg: #eff5ff;
-  --editor-focus-bar: #1d4ed8;
-  --editor-error-bg: #fde2e1;
-  --editor-error-line: #f0a6a2;
-  --editor-warn-bg: #fdf1cd;
-  --editor-warn-line: #e6c766;
-  --editor-slot-line: #d6a668;
-  --editor-slot-bg: #fdf3e3;
-  --editor-chip-bg: #d8ecf2;
-  --editor-chip-bg-hover: #b9dce6;
-  --editor-open-bg: #eef6f8;
-  --editor-open-line: #bcd9e2;
-  --editor-open-fg: #155e75;
-  --editor-pip-bg: #efe8fc;
-  --editor-pip-neutral-bg: #f5f5f4;
-  --editor-fr-bg: #e7eef2;
   --editor-nested-fg: #6d28d9;
   --editor-nested-line: #ddd0f7;
 }
 
 :root[data-theme="dark"] {
-  --editor-paper: #1b1917;
-  --editor-ink: #e7e2da;
-  --editor-accent: #e9a25b;
-  --editor-highlight: #5c4a15;
-  --editor-faint: #7a736c;
-  --editor-muted: #a39a90;
-  --editor-meta: #5f594f;
-  --editor-chunk: #4a4540;
-  --editor-rule: #3a352f;
-  --editor-note: #b5aca1;
   --editor-link: #6cc0d6;
   --editor-link-x: #b393f5;
-  --editor-word-line: #5a5049;
-  --editor-word-hover: #2a2723;
-  --editor-note-hover: #2a2723;
-  --editor-focus-bg: #182740;
-  --editor-focus-bar: #5b8def;
-  --editor-error-bg: #4a1f1f;
-  --editor-error-line: #aa3333;
-  --editor-warn-bg: #453a17;
-  --editor-warn-line: #a8892f;
-  --editor-slot-line: #7a5a2e;
-  --editor-slot-bg: #332b1d;
-  --editor-chip-bg: #1d3c45;
-  --editor-chip-bg-hover: #27515e;
-  --editor-open-bg: #17292f;
-  --editor-open-line: #2f4b55;
-  --editor-open-fg: #8ecbdc;
-  --editor-pip-bg: #2e2545;
-  --editor-pip-neutral-bg: #2a2724;
-  --editor-fr-bg: #22323a;
   --editor-nested-fg: #b393f5;
   --editor-nested-line: #3d3357;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --editor-paper: #1b1917;
-    --editor-ink: #e7e2da;
-    --editor-accent: #e9a25b;
-    --editor-highlight: #5c4a15;
-    --editor-faint: #7a736c;
-    --editor-muted: #a39a90;
-    --editor-meta: #5f594f;
-    --editor-chunk: #4a4540;
-    --editor-rule: #3a352f;
-    --editor-note: #b5aca1;
     --editor-link: #6cc0d6;
     --editor-link-x: #b393f5;
-    --editor-word-line: #5a5049;
-    --editor-word-hover: #2a2723;
-    --editor-note-hover: #2a2723;
-    --editor-focus-bg: #182740;
-    --editor-focus-bar: #5b8def;
-    --editor-error-bg: #4a1f1f;
-    --editor-error-line: #aa3333;
-    --editor-warn-bg: #453a17;
-    --editor-warn-line: #a8892f;
-    --editor-slot-line: #7a5a2e;
-    --editor-slot-bg: #332b1d;
-    --editor-chip-bg: #1d3c45;
-    --editor-chip-bg-hover: #27515e;
-    --editor-open-bg: #17292f;
-    --editor-open-line: #2f4b55;
-    --editor-open-fg: #8ecbdc;
-    --editor-pip-bg: #2e2545;
-    --editor-pip-neutral-bg: #2a2724;
-    --editor-fr-bg: #22323a;
     --editor-nested-fg: #b393f5;
     --editor-nested-line: #3d3357;
   }
@@ -162,7 +114,7 @@
   max-width: 40rem;
   margin: 0 auto;
   padding: 56px 0 30vh;
-  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-family: var(--font-scripture);
   /* The reader's own size (`editor.fontSize`, written onto <html> by
      `src/app/ui/theme.ts`). The fallback is the value this was hardcoded to,
      so a document with no preference applied still reads the same. */
@@ -177,7 +129,7 @@
 }
 .cm-mode-regular .cm-selectionBackground,
 .cm-mode-regular.cm-focused .cm-selectionBackground {
-  background: var(--editor-highlight) !important;
+  background: var(--editor-selection) !important;
 }
 .cm-mode-regular .cm-line {
   padding: 0;
@@ -188,42 +140,43 @@
 }
 .cm-mode-regular .usfm-p,
 .cm-mode-regular .usfm-pi {
-  text-indent: 1.4em;
+  text-indent: 1.5em;
 }
 .cm-mode-regular .usfm-m,
 .cm-mode-regular .usfm-nb {
   text-indent: 0;
 }
 
-.cm-mode-regular .usfm-q,
-.cm-mode-regular .usfm-q1 {
-  padding-left: 2.4em;
-  text-indent: -1.2em;
-}
-
+/* Poetry, on the prototype's ladder (16 / 32 / 64 / 96px), with a hanging
+   indent so a wrapped line sits under the one it continues rather than under
+   its verse number. */
 .cm-mode-regular .usfm-q,
 .cm-mode-regular .usfm-q1,
 .cm-mode-regular .usfm-q2,
-.cm-mode-regular .usfm-q3 {
+.cm-mode-regular .usfm-q3,
+.cm-mode-regular .usfm-q4 {
   padding-bottom: 0;
+  text-indent: -0.9em;
+}
+.cm-mode-regular .usfm-q,
+.cm-mode-regular .usfm-q1 {
+  padding-inline-start: calc(16px + 0.9em);
 }
 .cm-mode-regular .usfm-q2 {
-  padding-left: 3.6em;
-  text-indent: -1.2em;
+  padding-inline-start: calc(32px + 0.9em);
 }
 .cm-mode-regular .usfm-q3 {
-  padding-left: 4.8em;
-  text-indent: -1.2em;
+  padding-inline-start: calc(64px + 0.9em);
+}
+.cm-mode-regular .usfm-q4 {
+  padding-inline-start: calc(96px + 0.9em);
 }
 .cm-mode-regular .usfm-b {
   min-height: 0.8em;
 }
 
 .cm-mode-regular .usfm-verse {
-  font:
-    600 0.6em/1 ui-sans-serif,
-    system-ui,
-    sans-serif;
+  font: 700 0.66em/1 var(--font-ui);
   vertical-align: super;
   color: var(--editor-accent);
   margin: 0 0.3em 0 0.12em;
@@ -234,11 +187,8 @@
   text-indent: 0;
 }
 .cm-mode-regular .usfm-chapnum {
-  font:
-    700 2.6em/1 "Iowan Old Style",
-    Georgia,
-    serif;
-  color: var(--editor-faint);
+  font: 700 2.4em/1 var(--font-scripture);
+  color: var(--editor-accent);
   letter-spacing: -0.02em;
 }
 .cm-mode-regular .usfm-head {
@@ -257,10 +207,7 @@
   text-indent: 0;
 }
 .cm-mode-regular .usfm-mt {
-  font:
-    700 1.7em/1.25 "Iowan Old Style",
-    Georgia,
-    serif;
+  font: 700 1.7em/1.25 var(--font-scripture);
   text-align: center;
   padding: 0.5em 0 0.2em;
 }
@@ -269,9 +216,7 @@
 .cm-mode-regular .usfm-toc2,
 .cm-mode-regular .usfm-toc3,
 .cm-mode-regular .usfm-meta {
-  font:
-    400 11px/1.5 ui-monospace,
-    monospace;
+  font: 400 11px/1.5 var(--font-mono);
   color: var(--editor-meta);
   text-indent: 0;
 }
@@ -323,10 +268,7 @@
 }
 
 .cm-mode-regular .usfm-caller {
-  font:
-    600 0.62em/1 ui-sans-serif,
-    system-ui,
-    sans-serif;
+  font: 600 0.62em/1 var(--font-ui);
   vertical-align: super;
   color: var(--editor-link);
   user-select: none;
@@ -340,10 +282,7 @@
   margin: 1.2em auto 2.2em;
   padding-top: 0.7em;
   border-top: 1px solid var(--editor-rule);
-  font:
-    400 13px/1.55 ui-sans-serif,
-    system-ui,
-    sans-serif;
+  font: 400 13px/1.55 var(--font-ui);
   color: var(--editor-note);
   text-indent: 0;
 }
@@ -372,10 +311,7 @@
   direction: ltr;
 }
 .cm-mode-regular .usfm-num-v {
-  font:
-    600 0.62em/1 ui-sans-serif,
-    system-ui,
-    sans-serif;
+  font: 700 0.66em/1 var(--font-ui);
   vertical-align: super;
   color: var(--editor-accent);
 }
@@ -384,11 +320,8 @@
   white-space: pre;
 }
 .cm-mode-regular .usfm-num-c {
-  font:
-    700 2.4em/1 "Iowan Old Style",
-    Georgia,
-    serif;
-  color: var(--editor-faint);
+  font: 700 2.4em/1 var(--font-scripture);
+  color: var(--editor-accent);
   letter-spacing: -0.02em;
 }
 
@@ -411,10 +344,7 @@
 
 .cm-mode-regular .usfm-note-close {
   display: inline-block;
-  font:
-    600 11px/1 ui-sans-serif,
-    system-ui,
-    sans-serif;
+  font: 600 11px/1 var(--font-ui);
   color: var(--editor-link);
   background: var(--editor-chip-bg);
   border-radius: 3px;
@@ -527,10 +457,7 @@
   min-width: 260px;
 }
 .usfm-attrs-head {
-  font:
-    600 15px/1.3 "Iowan Old Style",
-    Georgia,
-    serif;
+  font: 600 15px/1.3 var(--font-scripture);
   padding-bottom: 6px;
   margin-bottom: 6px;
   border-bottom: 1px solid var(--surface-border);
@@ -584,10 +511,7 @@
 
 .cm-mode-regular .usfm-pip {
   display: inline-block;
-  font:
-    600 0.7em/1 ui-sans-serif,
-    system-ui,
-    sans-serif;
+  font: 600 0.7em/1 var(--font-ui);
   color: var(--editor-link-x);
   background: var(--editor-pip-bg);
   border-radius: 3px;
@@ -599,10 +523,7 @@
 
 .cm-mode-regular .usfm-verse-pip {
   display: inline;
-  font:
-    600 0.62em/1 ui-sans-serif,
-    system-ui,
-    sans-serif;
+  font: 600 0.62em/1 var(--font-ui);
   color: var(--editor-faint);
   background: var(--editor-pip-neutral-bg);
   border-radius: 2px;
@@ -619,10 +540,7 @@
   border-radius: 3px;
   background: var(--editor-fr-bg);
   color: var(--editor-link);
-  font:
-    600 0.78em/1.5 ui-sans-serif,
-    system-ui,
-    sans-serif;
+  font: 600 0.78em/1.5 var(--font-ui);
   letter-spacing: 0.02em;
   white-space: nowrap;
   user-select: none;

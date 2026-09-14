@@ -74,7 +74,15 @@ component: the scripture column's own size, applied by `src/app/ui/theme.ts`
 from the `editor.fontSize` preference, read by `.cm-mode-regular .cm-content`.
 
 `src/editor/editor.css` is a separate, hand-written CodeMirror theme owned by
-the editor module. It consumes the same tokens and is not part of this layer.
+the editor module. It is not part of this layer, but it is the same palette:
+the REGULAR projection derives every colour from the semantic tokens — paper
+is `--surface-primary`, ink `--on-surface-primary`, verse and chapter numbers
+`--brand-base`, selection a brand tint — so the page the reader edits is a
+white card among white cards and follows the theme without a second dark
+block. Four apparatus hues (footnote, cross-reference, nested editor) keep
+literal values, because the token set has no name for that distinction. USFM
+mode keeps its own terminal palette on purpose: a terminal is a terminal in
+both schemes.
 
 ## The primitives
 
