@@ -360,21 +360,23 @@
 .cm-mode-regular .usfm-word:hover {
   background: #f2ece1;
 }
-.cm-tooltip.cm-tooltip-hover {
+/* The attribute popover paints its own box. Scoped to its own class:
+   `.cm-tooltip-hover` is worn by EVERY hover tooltip, and stripping the
+   background off all of them left the diagnostics popover transparent. */
+.cm-host .cm-editor .cm-tooltip.cm-tooltip-attrs {
   border: none;
   background: none;
+  box-shadow: none;
+  overflow: visible;
 }
 .usfm-attrs {
-  background: #1c1917;
-  color: #e7e5e4;
-  border: 1px solid #44403c;
+  background: var(--surface-primary);
+  color: var(--on-surface-primary);
+  border: 1px solid var(--surface-border);
   border-radius: 8px;
   padding: 10px 12px;
-  font:
-    400 12px/1.5 ui-sans-serif,
-    system-ui,
-    sans-serif;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.25);
+  font: 400 12px/1.5 var(--font-ui);
+  box-shadow: var(--shadow-large);
   min-width: 260px;
 }
 .usfm-attrs-head {
@@ -384,7 +386,7 @@
     serif;
   padding-bottom: 6px;
   margin-bottom: 6px;
-  border-bottom: 1px solid #44403c;
+  border-bottom: 1px solid var(--surface-border);
 }
 .usfm-attr {
   display: grid;
@@ -394,10 +396,8 @@
   margin: 3px 0;
 }
 .usfm-attr-k {
-  color: #a8a29e;
-  font:
-    400 11px/1 ui-monospace,
-    monospace;
+  color: var(--on-surface-tertiary);
+  font: 400 11px/1 var(--font-mono);
   background: transparent;
   border: 1px solid transparent;
   padding: 3px 2px;
@@ -408,35 +408,31 @@
   cursor: default;
 }
 .usfm-attr-k:not([readonly]) {
-  background: #0c0a09;
-  border-color: #57534e;
+  background: var(--surface-secondary);
+  border-color: var(--surface-border);
   border-radius: 3px;
 }
 .usfm-attr-k:not([readonly]):focus {
   outline: none;
-  border-color: #38bdf8;
+  border-color: var(--brand-base);
 }
 .usfm-attr-v {
-  background: #0c0a09;
-  border: 1px solid #57534e;
+  background: var(--surface-secondary);
+  border: 1px solid var(--surface-border);
   border-radius: 4px;
-  color: #fbbf24;
-  font:
-    400 12px/1 ui-monospace,
-    monospace;
+  color: var(--on-surface-primary);
+  font: 400 12px/1 var(--font-mono);
   padding: 4px 6px;
   width: 100%;
 }
 .usfm-attr-v:focus {
   outline: none;
-  border-color: #38bdf8;
+  border-color: var(--brand-base);
 }
 .usfm-attrs-foot {
   margin-top: 7px;
-  color: #78716c;
-  font:
-    400 10px/1 ui-monospace,
-    monospace;
+  color: var(--on-surface-tertiary);
+  font: 400 10px/1 var(--font-mono);
 }
 
 .cm-mode-regular .usfm-pip {
@@ -532,19 +528,16 @@
 .usfm-note-done {
   margin-left: 8px;
   padding: 1px 8px;
-  font:
-    500 10px/1.6 ui-sans-serif,
-    system-ui,
-    sans-serif;
-  color: #1c1917;
-  background: #fafaf9;
-  border: 1px solid #d6d3d1;
+  font: 500 10px/1.6 var(--font-ui);
+  color: var(--button-secondary-on-surface);
+  background: var(--surface-primary);
+  border: 1px solid var(--button-secondary-border);
   border-radius: 4px;
   cursor: pointer;
   vertical-align: top;
 }
 .usfm-note-done:hover {
-  background: #f0efee;
+  background: var(--button-secondary-surface-hover);
 }
 .cm-mode-regular .usfm-note-editing {
   outline: 1px solid rgb(217 119 6 / 0.5);
@@ -566,4 +559,187 @@
 }
 .cm-mode-regular .usfm-note-edit .cm-line {
   padding: 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * Sink 1's chrome: the diagnostics popover, the lint gutter and the lint panel.
+ *
+ * Everything that FLOATS above the document is app chrome, not scripture, so it
+ * reads from the semantic tokens in `src/app/ui/tokens.css` and follows the
+ * app's theme — light and dark — instead of carrying its own hexes. (The two
+ * scripture surfaces below, `.cm-mode-regular` and `.cm-mode-usfm`, are
+ * deliberately NOT theme-swapped: paper and terminal are projection choices the
+ * reader makes, not a light/dark preference, and their palettes stay literal.)
+ *
+ * CodeMirror's own base theme paints `.cm-tooltip` `#f5f5f5` and only swaps it
+ * under a `&dark` editor theme, which Sefer does not install — so in dark mode
+ * the popover was light grey behind light text.
+ *
+ * Every selector below is prefixed `.cm-host .cm-editor` for ONE reason:
+ * `EditorView.baseTheme` emits `.ͼ1 .cm-diagnosticAction` — two classes — so a
+ * bare `.cm-diagnosticAction` loses on specificity and the defaults come back.
+ * The prefix is also true: these rules only mean anything inside a mounted view.
+ * ------------------------------------------------------------------------- */
+
+.cm-host .cm-editor .cm-tooltip {
+  background: var(--surface-primary);
+  color: var(--on-surface-primary);
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-large);
+  font: 400 12px/1.5 var(--font-ui);
+  overflow: hidden;
+}
+
+.cm-host .cm-editor .cm-tooltip .cm-tooltip-arrow::before {
+  border-top-color: var(--surface-border);
+  border-bottom-color: var(--surface-border);
+}
+.cm-host .cm-editor .cm-tooltip .cm-tooltip-arrow::after {
+  border-top-color: var(--surface-primary);
+  border-bottom-color: var(--surface-primary);
+}
+
+.cm-host .cm-editor .cm-tooltip.cm-tooltip-lint,
+.cm-host .cm-editor .cm-tooltip .cm-tooltip-lint {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  max-width: 34rem;
+  max-height: 20rem;
+  overflow-y: auto;
+}
+
+/* One diagnostic. The severity is the left rule; the row itself keeps the
+   tooltip's surface so several rows read as one card. */
+.cm-host .cm-editor .cm-diagnostic {
+  display: block;
+  margin: 0;
+  padding: 8px 12px 8px 11px;
+  border-left: 3px solid var(--on-surface-tertiary);
+  white-space: pre-wrap;
+  color: var(--on-surface-primary);
+}
+.cm-host .cm-editor .cm-diagnostic + .cm-diagnostic {
+  border-top: 1px solid var(--surface-border);
+}
+.cm-host .cm-editor .cm-diagnostic-error {
+  border-left-color: var(--on-surface-error);
+}
+.cm-host .cm-editor .cm-diagnostic-warning {
+  border-left-color: var(--on-surface-warning);
+}
+.cm-host .cm-editor .cm-diagnostic-info,
+.cm-host .cm-editor .cm-diagnostic-hint {
+  border-left-color: var(--brand-base);
+}
+
+.cm-host .cm-editor .cm-diagnosticText {
+  display: block;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--on-surface-primary);
+}
+
+/* Which producer said so — `onion/<code>` or `sous/<code>`. Mono, quiet, and
+   below the message, because it is provenance rather than the point. */
+.cm-host .cm-editor .cm-diagnosticSource {
+  margin-top: 5px;
+  font: 400 10px/1.4 var(--font-mono);
+  letter-spacing: 0.02em;
+  color: var(--on-surface-tertiary);
+  opacity: 1;
+}
+
+/* The fix button. A real button, not a chip: it writes to the document. */
+.cm-host .cm-editor .cm-diagnosticAction {
+  display: inline-block;
+  margin: 7px 6px 0 0;
+  padding: 3px 9px;
+  font: 500 11px/1.5 var(--font-ui);
+  color: var(--button-primary-on-surface);
+  background: var(--button-primary-surface);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.cm-host .cm-editor .cm-diagnosticAction:hover {
+  background: var(--button-primary-surface-hover);
+}
+.cm-host .cm-editor .cm-diagnosticAction:focus-visible {
+  outline: 2px solid var(--brand-base);
+  outline-offset: 2px;
+}
+
+/* The inline range. CodeMirror's default is a background-image squiggle in a
+   fixed colour; a wavy text-decoration takes a custom property instead. */
+.cm-host .cm-editor .cm-lintRange {
+  background-image: none;
+  padding-bottom: 0;
+  text-decoration: underline wavy;
+  text-decoration-thickness: 1px;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
+}
+.cm-host .cm-editor .cm-lintRange-error {
+  text-decoration-color: var(--on-surface-error);
+}
+.cm-host .cm-editor .cm-lintRange-warning {
+  text-decoration-color: var(--on-surface-warning);
+}
+.cm-host .cm-editor .cm-lintRange-info,
+.cm-host .cm-editor .cm-lintRange-hint {
+  text-decoration-color: var(--brand-base);
+}
+.cm-host .cm-editor .cm-lintRange-active {
+  background-color: color-mix(in srgb, var(--brand-base) 20%, transparent);
+  border-radius: 2px;
+}
+
+/* The gutter marker. The default is `content: url(<svg with a baked colour>)`;
+   restoring normal content and masking a shape lets the fill be a token. */
+.cm-host .cm-editor .cm-lint-marker {
+  content: normal;
+  width: 0.85em;
+  height: 0.85em;
+  cursor: pointer;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+  background-color: var(--on-surface-tertiary);
+}
+.cm-host .cm-editor .cm-lint-marker-error {
+  background-color: var(--on-surface-error);
+  mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" fill="black"/></svg>');
+}
+.cm-host .cm-editor .cm-lint-marker-warning {
+  background-color: var(--on-surface-warning);
+  mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M20 3 L38 36 L2 36 Z" fill="black"/></svg>');
+}
+.cm-host .cm-editor .cm-lint-marker-info,
+.cm-host .cm-editor .cm-lint-marker-hint {
+  background-color: var(--brand-base);
+  mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect x="5" y="5" width="30" height="30" rx="6" fill="black"/></svg>');
+}
+
+/* The lint panel (the `F8`/"open diagnostics" list at the bottom). */
+.cm-host .cm-editor .cm-panel.cm-panel-lint {
+  background: var(--surface-primary);
+  color: var(--on-surface-primary);
+  border-top: 1px solid var(--surface-border);
+}
+.cm-host .cm-editor .cm-panel.cm-panel-lint ul {
+  max-height: 140px;
+}
+.cm-host .cm-editor .cm-panel.cm-panel-lint ul [aria-selected] {
+  background-color: var(--surface-secondary);
+}
+.cm-host .cm-editor .cm-panel.cm-panel-lint ul:focus [aria-selected] {
+  background-color: color-mix(in srgb, var(--brand-base) 20%, transparent);
+  color: var(--on-surface-primary);
+}
+.cm-host .cm-editor .cm-panel.cm-panel-lint [name="close"] {
+  color: var(--on-surface-secondary);
+  cursor: pointer;
+  padding: 2px 6px;
 }

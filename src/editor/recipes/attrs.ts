@@ -103,6 +103,11 @@ export function alignedWordTooltip(structureAt: (s: EditorState) => DocStructure
         pos: w.surfaceFrom,
         end: w.surfaceTo,
         above: true,
+        // This popover paints its own chrome, so the stylesheet strips
+        // CodeMirror's tooltip box off it — by this class, not by
+        // `.cm-tooltip-hover`, which every hover tooltip carries, the lint one
+        // included.
+        class: "cm-tooltip-attrs",
         create() {
           const dom = document.createElement("div");
           dom.className = "usfm-attrs";
