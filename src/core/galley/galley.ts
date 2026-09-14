@@ -44,6 +44,24 @@ import type { Analysis } from "./analysis";
 // for the reader too.
 export { FindingsSnapshot };
 export type { Finding, Pattern, BookView } from "../../../vendor/galley/sous-reader";
+// The pattern table's own vocabulary. Re-exported (not re-declared) so that a
+// reader of the table — `src/core/findings/inventory.ts` — names the same
+// closed sets the wire does, and a channel added upstream is a type error here
+// rather than a silently unhandled row.
+export {
+  CHANNELS,
+  CONVENTION_REASONS,
+  OUTER_CLASSES,
+  PATTERN_DIGIT_GLYPH,
+  POOLS,
+} from "../../../vendor/galley/sous-reader";
+export type {
+  Channel,
+  ConventionReason,
+  OuterClass,
+  PatternKey,
+  Pool,
+} from "../../../vendor/galley/sous-reader";
 
 /** The wasm module could not be instantiated at all. */
 export class EngineLoadError extends Data.TaggedError("EngineLoadError")<{

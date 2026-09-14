@@ -15,6 +15,7 @@ Read only the guidance relevant to the task:
 - [Application shell](documentation/architecture/shell.md): read before touching `src/app`, `src/routes`, or the design tokens; covers the one services composition, the command registry, the routes, and the single Solid/Book subscription rule.
 - [The UI layer](documentation/architecture/ui.md): read before adding a screen, a component, or a colour; covers Tailwind over the semantic tokens, the primitive inventory, the dark-mode rule, and why corvu lives only inside `primitives/`.
 - [Resource metadata](documentation/architecture/resources.md): the Scripture Burrito and Resource Container schemas every metadata value is decoded through, whoever read the bytes.
+- [Character inventory](documentation/architecture/inventory.md): read before touching `/inventory` or the Sous pattern table; covers what "occurrences" means and why the table is not a census of the project's characters.
 
 `src/App.tsx` calls `composeApplication()` exactly once; services reach components through `useComposition()` (`src/app/CompositionContext.tsx`).
 

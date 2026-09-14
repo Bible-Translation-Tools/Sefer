@@ -16,6 +16,7 @@ This folder holds durable project guidance for humans and agents. Root `AGENTS.m
 - Parsing or proofreading USFM through the pinned engine: [Galley](./architecture/galley.md).
 - Editing USFM — the editing phases, the editor-backed Book, windows and satellites: [editor](./architecture/editor.md).
 - Reading a diagnostic or applying an offered repair: [findings and fixes](./architecture/findings.md).
+- Reading how the project uses a character, or the Sous pattern table: [character inventory](./architecture/inventory.md).
 - Opening a folder of books, the four Book states, external changes: [project](./architecture/project.md).
 - Asking the host for paths, settings, credentials, or a dialog: [host capabilities](./architecture/host.md).
 - Working on the desktop app — Tauri plugins, the Rust commands, the updater, or a release: [desktop host](./architecture/desktop.md).
