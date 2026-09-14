@@ -39,9 +39,20 @@ This is the remote catalogue browser. Local projects list (proto's IndexRoute/Pr
 
 Heading "Spiritual Terms"; search field; toolbar (undo, redo, findings badge, Save, kebab). Left: list of term cards; each shows the term bold and a "done/total" count (green check when complete). The expanded term card shows the gloss ("This word can mean:" bullets), a "Hide verse references ^" disclosure, a list of references with per-row state icons, and a "Show all references (43)" switch. Right: per-verse rows, each a pair of cards: source (bookmark icon, "Matthew 8:13 –" bold, text with the term highlighted yellow) and target ("Mateusz 8:13 –", target text). The focused row is elevated with a larger card. Ignore approve/state affordances.
 
-## Find (Zed-style multibuffer)
+## Key terms (STET) reuses the Find excerpt pattern
 
-Not a modal over the text. A pane beside the text. Results are a virtualized list of excerpts grouped under a **sticky header per book** (the project/book is our "file"): "PHM · Philemon  ·  3 hits". Each excerpt is a **satellite editor** (`src/editor/recipes/satellite.ts`) clipped to the hit's verse ± one verse, hits highlighted, editable in place — edits go through the funnel to the canonical Book. Each excerpt has a "Open in editor" affordance (→ aim the main editor). Cross-project find stays the `/find` route with the same list.
+STET is the same multibuffer: the list of excerpts is **prebaked on the source side** — for a term, the source occurrences (source book, verse sid, highlighted span) are the "hits", and each excerpt shows the target verse for that sid beside the source verse (the pair of cards in the mockup). Same per-sid header, same read-only default, same Edit → satellite on the target text, same Open in editor. Build one excerpt-list component and feed it from two producers (search hits, term occurrences).
+
+## Find (multibuffer, read-only until asked)
+
+Not a modal over the text. A pane beside the text. Results are a virtualized list grouped under a **sticky header per book** (the project/book is our "file"): "PHM · Philemon  ·  3 hits".
+
+Differs from Zed's multibuffer deliberately:
+
+- Hits are grouped by the **verse sid from Onion's table of contents**; one excerpt per unique sid, however many hits fall inside it. Each excerpt has its own small header: the reference ("Philemon 1:4"), an **Edit** button, and an **Open in editor** action (aims the main editor at the hit).
+- Excerpts are **read-only by default**: plain projected text of the hit's verse plus one verse either side, hits highlighted. Cheap to virtualize, no accidental edits from a results list.
+- **Edit is a click.** Edit swaps that one excerpt for a satellite editor (`src/editor/recipes/satellite.ts`) clipped to the same span, writing through the funnel to the canonical Book. Done (or leaving the excerpt) collapses it back to read-only text re-read from the Book. Only one or a few satellites are live at a time.
+- Cross-project find stays the `/find` route with the same list.
 
 ## Diagnostics popovers
 
