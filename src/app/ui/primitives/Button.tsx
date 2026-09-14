@@ -23,7 +23,11 @@ const classes = variants({
   base: [
     "inline-flex items-center justify-center gap-1.5 rounded-md border font-medium",
     "whitespace-nowrap transition-colors cursor-pointer select-none",
-    "disabled:cursor-not-allowed disabled:opacity-60",
+    // A disabled button drops its variant's colours entirely rather than
+    // fading them: an outlined button at 60% opacity still reads as one you
+    // may press, which is the one thing a disabled control must not do.
+    "disabled:cursor-not-allowed disabled:border-surface-border",
+    "disabled:bg-surface-secondary disabled:text-on-surface-tertiary",
     // A pressed button is a toggle, whatever its variant.
     "aria-pressed:bg-brand-light aria-pressed:border-brand aria-pressed:text-brand",
   ].join(" "),

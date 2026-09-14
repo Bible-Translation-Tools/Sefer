@@ -19,8 +19,7 @@ function FindProjectRoute() {
         tab="find"
         crumbs={[
           { label: t("Sefer"), to: "/" },
-          { label: t("Find Project") },
-          { label: t("Start") },
+          { label: t("Projects"), to: "/projects" },
         ]}
       />
       <FindProject onDownloaded={() => undefined} />

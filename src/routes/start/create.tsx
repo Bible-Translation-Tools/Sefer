@@ -18,7 +18,8 @@ function CreateProjectRoute() {
       <Breadcrumb
         crumbs={[
           { label: t("Sefer"), to: "/" },
-          { label: t("Find Project"), to: "/start/find" },
+          { label: t("Projects"), to: "/projects" },
+          { label: t("Find project"), to: "/start/find" },
           { label: t("Create") },
         ]}
       />

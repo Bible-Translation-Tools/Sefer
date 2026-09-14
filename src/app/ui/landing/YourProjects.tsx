@@ -133,7 +133,22 @@ export function YourProjects(props: { readonly reload: number }) {
                       </code>
                     </TableCell>
                     <TableCell class="text-on-surface-secondary">
-                      {row.language === "" ? "—" : row.language}
+                      {/* A project whose metadata declares no language still has
+                          an identity on disk, and the folder id is it — more use
+                          than a dash, and muted so nobody reads it as a tag. */}
+                      <Show
+                        when={row.language !== ""}
+                        fallback={
+                          <span
+                            class="text-on-surface-tertiary"
+                            title={t("No language declared in this project's metadata.")}
+                          >
+                            {row.folder}
+                          </span>
+                        }
+                      >
+                        {row.language}
+                      </Show>
                     </TableCell>
                     <TableCell class="tabular-nums text-on-surface-secondary">
                       {row.books}

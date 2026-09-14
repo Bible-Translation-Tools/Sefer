@@ -29,7 +29,10 @@ export function ProjectsLanding() {
     <main class="min-w-0 space-y-6 p-6">
       <LandingHeader
         tab="yours"
-        crumbs={[{ label: t("Sefer"), to: "/" }, { label: t("Projects") }]}
+        crumbs={[
+          { label: t("Sefer"), to: "/" },
+          { label: t("Projects"), to: "/projects" },
+        ]}
       />
 
       <section class="space-y-3">
