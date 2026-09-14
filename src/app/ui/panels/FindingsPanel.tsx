@@ -36,6 +36,8 @@
 
 import { useNavigate } from "@tanstack/solid-router";
 import { Option, Result } from "effect";
+import ChevronDown from "lucide-solid/icons/chevron-down";
+import ChevronRight from "lucide-solid/icons/chevron-right";
 import CircleCheck from "lucide-solid/icons/circle-check";
 import Wrench from "lucide-solid/icons/wrench";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
@@ -234,6 +236,9 @@ export function FindingsPanel() {
   const place = (finding: Finding): { readonly text: string; readonly exact: boolean } => {
     const ref = Findings.navigateTarget(finding, analysisFor(finding)?.analysis).ref;
     if (ref === undefined) return { text: `@${finding.from}`, exact: false };
+    // Chapter 0 is the matter before the first `\c` — an id line, a heading,
+    // a table of contents entry. "PHM 0" would read as a chapter nobody has.
+    if (ref.chapter < 1) return { text: t("front"), exact: true };
     return {
       text: ref.verse === undefined ? `${ref.chapter}` : `${ref.chapter}:${ref.verse}`,
       exact: true,
@@ -388,12 +393,18 @@ export function FindingsPanel() {
         <Show when={entry.count > 1}>
           <Button
             size="sm"
-            variant="tertiary"
+            variant="secondary"
             aria-expanded={entry.open ? "true" : "false"}
-            class="font-mono tabular-nums"
+            aria-label={
+              entry.open
+                ? t("Fold {count} identical findings", { count: entry.count })
+                : t("Unfold {count} identical findings", { count: entry.count })
+            }
+            class="tabular-nums"
+            icon={entry.open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
             onClick={() => toggle(entry.id)}
           >
-            {entry.open ? t("× {count} — collapse", { count: entry.count }) : `× ${entry.count}`}
+            × {entry.count}
           </Button>
         </Show>
         <Show when={isStale(finding)}>
