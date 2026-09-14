@@ -57,6 +57,61 @@ export function collapseOutside(
   return Decoration.set(out, true);
 }
 
+/**
+ * The satellite's own clip, as an extension: everything outside `range` is
+ * replaced by a block widget, so the view shows one excerpt of a whole book.
+ *
+ * Recomputed from the `scope` field rather than from the range the caller
+ * passed, so the clip follows the text: an edit above the excerpt moves it,
+ * and an edit inside it grows it, without the caller re-mounting anything.
+ */
+export const clippedToScope = (): Extension =>
+  EditorView.decorations.compute([scope], (state) => collapseOutside(state, state.field(scope)));
+
+/** A range a satellite was asked to highlight. */
+export type MarkedRange = { readonly from: number; readonly to: number };
+
+const HIT_MARK = Decoration.mark({ class: "cm-excerpt-hit" });
+
+const decorationsOf = (ranges: readonly MarkedRange[]): DecorationSet =>
+  Decoration.set(
+    ranges
+      .filter((range) => range.to > range.from)
+      .map((range) => HIT_MARK.range(range.from, range.to)),
+    true,
+  );
+
+const initialMarks = Facet.define<readonly MarkedRange[], readonly MarkedRange[]>({
+  combine: (values) => values[0] ?? [],
+});
+
+const setMarks = StateEffect.define<readonly MarkedRange[]>();
+
+const markField = StateField.define<DecorationSet>({
+  create: (state) => decorationsOf(state.facet(initialMarks)),
+  update(marks, tr) {
+    for (const effect of tr.effects) if (effect.is(setMarks)) return decorationsOf(effect.value);
+    return tr.docChanged ? marks.map(tr.changes) : marks;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
+/**
+ * Paints `ranges` — the matches this excerpt was opened for — inside a
+ * satellite, and maps them through every edit like any other decoration. The
+ * class is `src/editor/editor.css`'s, so the highlight is the one the
+ * read-only card shows and the reader does not lose the match by clicking
+ * Edit. `repaintMarks` replaces the set on a live view.
+ */
+export const markedRanges = (ranges: readonly MarkedRange[]): Extension => [
+  initialMarks.of(ranges),
+  markField,
+];
+
+export const repaintMarks = (view: EditorView, ranges: readonly MarkedRange[]): void => {
+  view.dispatch({ effects: setMarks.of(ranges) });
+};
+
 export interface SatelliteOptions {
   /** Where the view mounts. */
   readonly parent: HTMLElement;

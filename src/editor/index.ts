@@ -115,9 +115,13 @@ export { changesOf, fromCanonical, type Funnel, type Receive } from "./funnel";
 // Satellites and windows (§3.9).
 export { openWindow, type ClipWindow, type WindowOptions } from "./window";
 export {
+  clippedToScope,
   collapseOutside,
+  markedRanges,
   mountSatellite,
+  repaintMarks,
   satelliteRange,
+  type MarkedRange,
   type Satellite,
   type SatelliteOptions,
 } from "./recipes/satellite";

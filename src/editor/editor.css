@@ -873,3 +873,32 @@
   cursor: pointer;
   padding: 2px 6px;
 }
+
+/* An excerpt's matches, inside a satellite opened from the multibuffer. The
+   same tokens the read-only card highlights with, so clicking Edit does not
+   move the match. */
+.cm-excerpt-hit {
+  background-color: var(--surface-warning);
+  color: var(--on-surface-warning);
+  border-radius: 2px;
+}
+
+/* A satellite inside an excerpt card (`src/app/ui/excerpts/`).
+   `.cm-mode-regular` is the PAGE: a centred 40rem column with a 56px head and
+   a 30vh tail, on its own paper. A card is none of those, so these rules undo
+   exactly that chrome and leave every USFM decoration alone — and they take
+   their colours from the tokens, because a card is themed and the page theme
+   above is not yet. */
+.cm-excerpt.cm-mode-regular {
+  background: transparent;
+}
+.cm-excerpt .cm-content {
+  max-width: none;
+  margin: 0;
+  padding: 8px 12px;
+  font-size: var(--text-body);
+  color: var(--on-surface-primary);
+}
+.cm-excerpt .cm-scroller {
+  overflow: hidden;
+}
