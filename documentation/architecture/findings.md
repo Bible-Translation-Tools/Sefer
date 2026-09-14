@@ -24,6 +24,8 @@ The editor can recompute Onion's diagnostics for free — it already parses the 
 
 `sousField` then enforces the same rule from the other side: **any document change empties it**. Nothing maps a corpus offset through a `ChangeSet`, because the result would be an underline in a plausible but unmeasured place — exactly the failure the two stamps exist to prevent. The next publication refills it within the scheduler's quiet window, and until then the reader sees Onion's marks alone.
 
+The field is declared to the linter through `needsRefresh`, not through `forceLinting` alone. CodeMirror's lint plugin schedules a run on a document change and `force()` only shortens a run it has already scheduled — and a corpus publication arrives *after* that run finished, by construction. `needsRefresh` is what makes a second, document-independent source legal at all.
+
 Both halves are drawn by the one `linter`, so there is one gutter, one popover and one keyboard order over them. `source` is what distinguishes them for a reader: `onion/<code>` or `sous/<code>`. Only the Onion half carries an action — `fixes.preview` refuses a Sous finding `NotEngineFix`, and offering a button that always refuses would be a lie in the interface. The action applies through the bound view, which is `book.fromView`, which is the one write path: Undo, Save, Recovery and the panel all hear the receipt. It re-analyzes the live document first and discards the edits if the engine stamp moved.
 
 ## The one shape
