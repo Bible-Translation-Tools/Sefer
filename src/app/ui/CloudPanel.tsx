@@ -39,7 +39,15 @@ import { Button, Card, Input, PanelHeader } from "./primitives";
  */
 const describe = (cause: unknown): string => String(cause);
 
-export function CloudPanel(props: { readonly root: string }) {
+/**
+ * `root` is the project this panel attaches and publishes. It is optional
+ * because `/settings` shows the same panel with no project open: signing in and
+ * out is an ACCOUNT action and belongs there, while attaching a repository is a
+ * fact about one project on disk. With no root the account half renders and the
+ * attach/publish half says what is missing, rather than offering a button that
+ * would `git.init` whatever folder happened to be at hand.
+ */
+export function CloudPanel(props: { readonly root?: string | undefined }) {
   const shell = useShell();
   const { services } = shell;
 
@@ -89,10 +97,26 @@ export function CloudPanel(props: { readonly root: string }) {
 
   // The progress line. A forked fiber rather than an awaited effect, because
   // the stream never completes; it is interrupted when the panel unmounts.
+  //
+  // The interrupt is registered in the COMPONENT body, not inside the effect
+  // callback: Solid 2 runs that callback unowned, so an `onCleanup` in there is
+  // never honoured (`NO_OWNER_CLEANUP`) and the fiber would outlive the panel,
+  // still writing into a signal nothing renders. The held fiber is interrupted
+  // both here and at the top of each re-run, so a root change replaces the
+  // subscription rather than stacking a second one on it.
+  let progressFiber: Fiber.Fiber<void, unknown> | undefined;
+  const stopProgress = (): void => {
+    if (progressFiber === undefined) return;
+    Effect.runFork(Fiber.interrupt(progressFiber));
+    progressFiber = undefined;
+  };
+  onCleanup(stopProgress);
+
   createEffect(
     () => props.root,
     () => {
-      const fiber = services.runtime.runFork(
+      stopProgress();
+      progressFiber = services.runtime.runFork(
         Effect.flatMap(Remote, (remote) =>
           Stream.runForEach(remote.progress(), (progress) =>
             Effect.sync(() =>
@@ -109,9 +133,6 @@ export function CloudPanel(props: { readonly root: string }) {
           ),
         ),
       );
-      onCleanup(() => {
-        Effect.runFork(Fiber.interrupt(fiber));
-      });
     },
   );
 
@@ -158,12 +179,14 @@ export function CloudPanel(props: { readonly root: string }) {
 
   /** Attach an existing repository as this project's `origin`. */
   const attach = (repo: RemoteRepo): void => {
+    const root = props.root;
+    if (root === undefined) return;
     attempt(async () => {
       await services.run(
         Effect.gen(function* () {
           const git = yield* Git;
           const remote = yield* Remote;
-          const opened = yield* git.init(props.root);
+          const opened = yield* git.init(root);
           yield* remote.attach(opened, repo.cloneUrl);
         }),
       );
@@ -176,6 +199,8 @@ export function CloudPanel(props: { readonly root: string }) {
    * `Remote.publish` owns that order — see `src/platform/web/remote.ts`.
    */
   const publish = (): void => {
+    const root = props.root;
+    if (root === undefined) return;
     attempt(async () => {
       // Read inside the work, not at setup: the field may have changed between
       // the render that made this handler and the submit that ran it. The
@@ -187,7 +212,7 @@ export function CloudPanel(props: { readonly root: string }) {
         Effect.gen(function* () {
           const git = yield* Git;
           const remote = yield* Remote;
-          const opened = yield* git.init(props.root);
+          const opened = yield* git.init(root);
           yield* remote.publish(opened, staticName);
         }),
       );
@@ -266,13 +291,22 @@ export function CloudPanel(props: { readonly root: string }) {
                     </Button>
                   </div>
 
-                  <div class="flex flex-wrap items-center gap-2">
-                    <Button onClick={listRepos} disabled={busy()}>
-                      {t("Attach to repo…")}
-                    </Button>
-                    <Button onClick={() => runCommand("remote.pull")}>{t("Pull")}</Button>
-                    <Button onClick={() => runCommand("remote.push")}>{t("Push")}</Button>
-                  </div>
+                  <Show
+                    when={props.root !== undefined}
+                    fallback={
+                      <p class="text-small text-on-surface-tertiary" data-cloud="no-project">
+                        {t("Open a project to attach it to a repository, or to push and pull.")}
+                      </p>
+                    }
+                  >
+                    <div class="flex flex-wrap items-center gap-2">
+                      <Button onClick={listRepos} disabled={busy()}>
+                        {t("Attach to repo…")}
+                      </Button>
+                      <Button onClick={() => runCommand("remote.pull")}>{t("Pull")}</Button>
+                      <Button onClick={() => runCommand("remote.push")}>{t("Push")}</Button>
+                    </div>
+                  </Show>
 
                   <Show when={repos().length > 0}>
                     <ul class="flex flex-col gap-1" data-repos={repos().length}>
@@ -298,7 +332,9 @@ export function CloudPanel(props: { readonly root: string }) {
                   </Show>
 
                   <form
-                    class="flex flex-wrap items-center gap-2"
+                    class={
+                      props.root === undefined ? "hidden" : "flex flex-wrap items-center gap-2"
+                    }
                     onSubmit={(event) => {
                       event.preventDefault();
                       publish();
