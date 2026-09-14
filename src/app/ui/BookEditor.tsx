@@ -159,6 +159,14 @@ export function BookEditor(props: BookEditorProps) {
         for (const finding of shell.services.projectAnalysis.crossBook())
           if (finding.bookId === book.id && !stale(finding, book)) list.push(finding);
         showCorpusFindings(created, list);
+        // Counts and ids only — a finding's message quotes the document and
+        // never reaches the ring (editor-and-save §2, sink 4).
+        observability.note(
+          "editor.sous",
+          "ready",
+          `${book.id} n=${list.length} r${book.source().stamp.revision}`,
+          book.id,
+        );
       };
       corpus();
       // One pass of the analysis scheduler publishes the corpus once and then

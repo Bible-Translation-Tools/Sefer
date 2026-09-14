@@ -185,9 +185,14 @@ export const corpusFindings = (state: EditorState): readonly CorpusFinding[] =>
  * Hand the editor the corpus findings for its book, and re-lint.
  *
  * The dispatch changes no document, so the bound Book ignores it (`fromView`
- * accepts document changes only) — this is presentation, not an edit. The
- * linter would not otherwise notice: it re-runs on document changes, and this
- * is the one source that moves without one.
+ * accepts document changes only) — this is presentation, not an edit.
+ *
+ * `forceLinting` alone is NOT enough and was the whole of the first bug here:
+ * it only shortens a run the plugin has already scheduled, and the plugin only
+ * schedules one when the document changed. A corpus publication lands ~150 ms
+ * after the last keystroke, by which time that run is long over — so the
+ * findings sat in the field and were never drawn. `needsRefresh` below is what
+ * makes the field a lint input; this call then just skips the delay.
  */
 export const showCorpusFindings = (view: EditorView, list: readonly CorpusFinding[]): void => {
   view.dispatch({ effects: setCorpusFindings.of(list) });
@@ -259,7 +264,14 @@ export function usfmLinter(
         }
         return out;
       },
-      { delay: 150 },
+      {
+        delay: 150,
+        // The second source moves without a document change, and a document
+        // change is the only thing the lint plugin watches by default. This is
+        // the hook that makes `sousField` a lint input.
+        needsRefresh: (update) =>
+          update.state.field(sousField, false) !== update.startState.field(sousField, false),
+      },
     ),
   ];
 }
