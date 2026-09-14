@@ -1,9 +1,11 @@
 import { createFileRoute } from "@tanstack/solid-router";
 import { Effect, Result } from "effect";
+import SearchIcon from "lucide-solid/icons/search";
 import { For, Show, createSignal } from "solid-js";
 
 import { t } from "../app/i18n";
 import { useShell } from "../app/ProjectContext";
+import { Badge, Button, Card, Input, PanelHeader, Switch } from "../app/ui/primitives";
 import { ResultCard } from "../app/ui/ResultCard";
 import { ShellGate } from "../app/ui/ShellGate";
 import { CorpusEngine } from "../core/galley";
@@ -99,15 +101,18 @@ function Find() {
   const analyze = shell.services.galley.memoize();
 
   return (
-    <main>
-      <header>
-        <h2>{t("Find")}</h2>
-      </header>
+    <main class="min-w-0 space-y-4 p-6">
+      <PanelHeader title={t("Find")} />
 
-      <Show when={shell.project()} fallback={<p class="muted">{t("Open a project first.")}</p>}>
-        <div class="row">
-          <input
+      <Show
+        when={shell.project()}
+        fallback={<p class="text-small text-on-surface-tertiary">{t("Open a project first.")}</p>}
+      >
+        <Card class="flex flex-wrap items-center gap-2">
+          <Input
             type="search"
+            icon={<SearchIcon size={14} />}
+            wrapperClass="w-64"
             placeholder={t("Find in project")}
             value={text()}
             onInput={(event) => setText(event.currentTarget.value)}
@@ -115,67 +120,70 @@ function Find() {
               if (event.key === "Enter") void run();
             }}
           />
-          <input
+          <Input
             type="text"
+            wrapperClass="w-56"
+            aria-label={t("Replace with")}
             placeholder={t("Replace with")}
             value={insert()}
             onInput={(event) => setInsert(event.currentTarget.value)}
           />
-          <button type="button" data-variant="primary" onClick={() => void run()}>
+          <Button variant="primary" onClick={() => void run()}>
             {t("Find")}
-          </button>
-          <label class="muted">
-            <input
-              type="checkbox"
-              checked={markup()}
-              onChange={(event) => setMarkup(event.currentTarget.checked)}
-            />
-            {t("Search markup too")}
-          </label>
-          <span class="muted spacer">{t("{count} hits", { count: hits().length })}</span>
-        </div>
+          </Button>
+          <Switch checked={markup()} onChange={setMarkup} label={t("Search markup too")} />
+          <span class="ms-auto text-small text-on-surface-tertiary">
+            {t("{count} hits", { count: hits().length })}
+          </span>
+        </Card>
 
         <Show when={problem() !== ""}>
-          <p class="problem">{problem()}</p>
+          <p class="rounded-md bg-surface-error px-4 py-3 text-small text-on-surface-error">
+            {problem()}
+          </p>
         </Show>
 
-        <ul class="list" data-hits={hits().length}>
+        <ul class="flex flex-col gap-2" data-hits={hits().length}>
           <For each={hits()}>
             {(hit) => (
               <li data-book={hit.bookId}>
-                <strong>
-                  {hit.ref.book} {hit.ref.chapter}
-                  {hit.ref.verse === undefined ? "" : `:${hit.ref.verse}`}
-                </strong>
-                <code>{hit.preview}</code>
-                <Show
-                  when={!stale(hit)}
-                  fallback={
-                    <span class="badge spacer" data-stale="true">
-                      {t("stale")}
-                    </span>
-                  }
-                >
-                  <button type="button" class="spacer" onClick={() => setOpened(hit)}>
-                    {t("Show")}
-                  </button>
-                  {/* A hit that crosses dropped markup has no single range to
-                      replace, and whether that markup survives is the editor's
-                      call — so the button is not offered rather than offered
-                      and refused. */}
+                <Card class="flex flex-wrap items-center gap-3">
+                  <strong class="text-small">
+                    {hit.ref.book} {hit.ref.chapter}
+                    {hit.ref.verse === undefined ? "" : `:${hit.ref.verse}`}
+                  </strong>
+                  <code class="truncate font-mono text-small text-on-surface-secondary">
+                    {hit.preview}
+                  </code>
                   <Show
-                    when={!Search.spansMarkup(hit)}
+                    when={!stale(hit)}
                     fallback={
-                      <span class="badge" data-spans-markup="true">
-                        {t("spans markup")}
-                      </span>
+                      <Badge tone="muted" class="ms-auto">
+                        {t("stale")}
+                      </Badge>
                     }
                   >
-                    <button type="button" onClick={() => replaceOne(hit)}>
-                      {t("Replace")}
-                    </button>
+                    <Button size="sm" class="ms-auto" onClick={() => setOpened(hit)}>
+                      {t("Show")}
+                    </Button>
+                    {/* A hit that crosses dropped markup has no single range to
+                        replace, and whether that markup survives is the editor's
+                        call — so the button is not offered rather than offered
+                        and refused. */}
+                    <Show
+                      when={!Search.spansMarkup(hit)}
+                      fallback={
+                        <Badge tone="warning" data-spans-markup="true">
+                          {t("spans markup")}
+                        </Badge>
+                      }
+                    >
+                      <Button size="sm" onClick={() => replaceOne(hit)}>
+                        {t("Replace")}
+                      </Button>
+                    </Show>
                   </Show>
-                </Show>
+                </Card>
               </li>
             )}
           </For>
@@ -185,12 +193,12 @@ function Find() {
           {(hit) => (
             <Show when={bookFor(hit())} keyed>
               {(book) => (
-                <section class="card">
-                  <p class="muted">
+                <Card class="space-y-2">
+                  <p class="text-small text-on-surface-tertiary">
                     {t("{book} — the chapter this hit lives in", { book: book.id })}
                   </p>
                   <ResultCard book={book} at={hit().from} analyze={analyze} />
-                </section>
+                </Card>
               )}
             </Show>
           )}

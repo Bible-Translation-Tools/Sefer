@@ -1,11 +1,12 @@
 import type { JSX } from "@solidjs/web";
 import { createFileRoute } from "@tanstack/solid-router";
 import { Effect, Result } from "effect";
-import { For, createSignal } from "solid-js";
+import { For, Show, createSignal } from "solid-js";
 
 import { t } from "../app/i18n";
 import { useShell } from "../app/ProjectContext";
 import { shellSettings, type AnyDescriptor } from "../app/settings";
+import { Card, Input, PanelHeader, Switch } from "../app/ui/primitives";
 import { ShellGate } from "../app/ui/ShellGate";
 import { UpdatePanel } from "../app/ui/UpdatePanel";
 import type { SettingKey } from "../core/host/settings";
@@ -52,27 +53,31 @@ function SettingsPage() {
     switch (descriptor.kind) {
       case "boolean":
         return (
-          <input
+          <Switch
             id={descriptor.key.name}
-            type="checkbox"
+            aria-label={t(descriptor.label)}
             checked={read(descriptor.key)}
-            onChange={(event) => write(descriptor.key, event.currentTarget.checked)}
+            onChange={(next) => write(descriptor.key, next)}
           />
         );
       case "number":
         return (
-          <input
+          <Input
             id={descriptor.key.name}
             type="number"
+            size="sm"
+            wrapperClass="w-32"
             value={read(descriptor.key)}
             onChange={(event) => write(descriptor.key, Number(event.currentTarget.value))}
           />
         );
       case "string":
         return (
-          <input
+          <Input
             id={descriptor.key.name}
             type="text"
+            size="sm"
+            wrapperClass="w-64"
             value={read(descriptor.key)}
             onChange={(event) => write(descriptor.key, event.currentTarget.value)}
           />
@@ -81,26 +86,30 @@ function SettingsPage() {
   };
 
   return (
-    <main>
-      <header>
-        <h2>{t("Settings")}</h2>
-        <span class="muted spacer">{shell.services.hostInfo.kind()}</span>
-      </header>
+    <main class="min-w-0 max-w-4xl space-y-4 p-6">
+      <PanelHeader title={t("Settings")} subtitle={shell.services.hostInfo.kind()} />
 
-      <ul class="list" data-settings={descriptors.length}>
+      <Card
+        padded={false}
+        class="divide-y divide-surface-border"
+        data-settings={descriptors.length}
+      >
         <For each={descriptors}>
           {(descriptor) => (
-            <li data-setting={descriptor.key.name}>
-              <label for={descriptor.key.name}>{t(descriptor.label)}</label>
-              <span class="spacer" />
-              {widget(descriptor)}
-            </li>
+            <div class="flex items-center gap-3 px-4 py-3" data-setting={descriptor.key.name}>
+              <label for={descriptor.key.name} class="text-small text-on-surface-primary">
+                {t(descriptor.label)}
+              </label>
+              <span class="ms-auto">{widget(descriptor)}</span>
+            </div>
           )}
         </For>
-      </ul>
+      </Card>
 
-      <p class="muted">{problem()}</p>
-      <p class="muted">
+      <Show when={problem() !== ""}>
+        <p class="text-small text-on-surface-error">{problem()}</p>
+      </Show>
+      <p class="text-smallest text-on-surface-tertiary">
         {t("Stored in {file}", {
           file: `${shell.services.hostInfo.paths().appData}/settings.json`,
         })}

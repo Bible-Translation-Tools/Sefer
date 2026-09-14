@@ -30,6 +30,7 @@
   /* The CodeMirror frame: a white card the view fills. `.cm-host` (in
      `src/editor/editor.css`) owns what happens inside it. */
   .editor-host {
+    flex: 1;
     background: var(--surface-primary);
     border: var(--border-thin) solid var(--surface-border);
     border-radius: var(--radius-lg);

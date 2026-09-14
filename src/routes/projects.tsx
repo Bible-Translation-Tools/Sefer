@@ -1,9 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/solid-router";
 import { Effect, FileSystem } from "effect";
+import FolderOpen from "lucide-solid/icons/folder-open";
 import { For, Show, createSignal } from "solid-js";
 
 import { t } from "../app/i18n";
 import { useShell } from "../app/ProjectContext";
+import { Badge, Button, Card, EmptyState, PanelHeader } from "../app/ui/primitives";
 import { ShellGate } from "../app/ui/ShellGate";
 
 /**
@@ -13,7 +15,7 @@ import { ShellGate } from "../app/ui/ShellGate";
  * over the fixture FileSystem) the seeded `small-nt` project. It is NOT a
  * folder picker: `WebDialogsLive.pickFolder` returns a picked handle's name
  * rather than a path, so an arbitrary disk folder cannot be read yet — the
- * "Open a folder…" button says so instead of failing silently.
+ * page says so instead of failing silently.
  */
 
 const listProjects = (
@@ -44,48 +46,48 @@ function Projects() {
   };
 
   return (
-    <main>
-      <header>
-        <h2>{t("Projects")}</h2>
-        <span class="muted spacer">{shell.services.projectsRoot}</span>
-      </header>
+    <main class="min-w-0 space-y-4 p-6">
+      <PanelHeader title={t("Projects")} subtitle={shell.services.projectsRoot} />
 
       <Show when={shell.services.fixtureProject}>
         {(fixture) => (
-          <ul class="list">
-            <li>
-              <strong>{t("small-nt (seeded fixture)")}</strong>
-              <button
-                type="button"
-                data-variant="primary"
-                class="spacer"
-                onClick={() => open(fixture())}
-              >
-                {t("Open")}
-              </button>
-            </li>
-          </ul>
+          <Card class="flex items-center gap-3">
+            <strong class="text-small">{t("small-nt (seeded fixture)")}</strong>
+            <Badge tone="brand">{t("dev")}</Badge>
+            <Button variant="primary" class="ms-auto" onClick={() => open(fixture())}>
+              {t("Open")}
+            </Button>
+          </Card>
         )}
       </Show>
 
-      <Show when={roots()} fallback={<p class="muted">{t("Reading…")}</p>}>
+      <Show
+        when={roots()}
+        fallback={<p class="text-small text-on-surface-tertiary">{t("Reading…")}</p>}
+      >
         {(names) => (
           <Show
             when={names().length > 0}
             fallback={
-              <p class="muted">
-                {t("No projects yet. Import a resource, or open the dev fixture with ?fixture=1.")}
-              </p>
+              <EmptyState
+                icon={<FolderOpen size={22} />}
+                title={t("No projects yet")}
+                description={t("Import a resource, or open the dev fixture with ?fixture=1.")}
+              />
             }
           >
-            <ul class="list">
+            <ul class="flex flex-col gap-2">
               <For each={names()}>
                 {(root) => (
                   <li>
-                    <code>{root}</code>
-                    <button type="button" class="spacer" onClick={() => open(root)}>
-                      {t("Open")}
-                    </button>
+                    <Card class="flex items-center gap-3">
+                      <code class="truncate font-mono text-small text-on-surface-secondary">
+                        {root}
+                      </code>
+                      <Button class="ms-auto" onClick={() => open(root)}>
+                        {t("Open")}
+                      </Button>
+                    </Card>
                   </li>
                 )}
               </For>
@@ -94,7 +96,7 @@ function Projects() {
         )}
       </Show>
 
-      <p class="muted">
+      <p class="max-w-prose text-smallest text-on-surface-tertiary">
         {t(
           "This host cannot yet read a folder outside its own storage: the browser picker hands back a handle, not a path.",
         )}

@@ -1,10 +1,13 @@
 import { createFileRoute } from "@tanstack/solid-router";
+import BookOpen from "lucide-solid/icons/book-open";
+import Code from "lucide-solid/icons/code";
 import { For, Show, createEffect } from "solid-js";
 
 import { runCommand } from "../../../../app/commands";
 import { t } from "../../../../app/i18n";
 import { useShell } from "../../../../app/ProjectContext";
 import { BookEditor } from "../../../../app/ui/BookEditor";
+import { Button, SegmentedControl, Select } from "../../../../app/ui/primitives";
 import { ShellGate } from "../../../../app/ui/ShellGate";
 
 /**
@@ -20,7 +23,16 @@ import { ShellGate } from "../../../../app/ui/ShellGate";
  * Everything on this page reads the Book through the shell. The page itself
  * holds no text, no structure and no analysis — `BookEditor` owns the one
  * subscription, and this component only reads what the shell already knows.
+ *
+ * The mode switcher is the mockups' segmented control, with two segments and
+ * not four: Key terms and Form are screens that do not exist yet, and an
+ * offered mode that cannot be entered is worse than an absent one.
  */
+
+const MODES = [
+  { value: "regular", label: "Regular", icon: <BookOpen size={14} /> },
+  { value: "usfm", label: "USFM", icon: <Code size={14} /> },
+] as const;
 
 function BookPage(props: { readonly root: string; readonly bookId: string }) {
   const shell = useShell();
@@ -54,22 +66,29 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
   };
 
   return (
-    <main>
-      <Show when={shell.focused()} fallback={<p class="muted">{shell.status()}</p>}>
+    <main class="min-w-0 p-6">
+      <Show
+        when={shell.focused()}
+        fallback={<p class="text-small text-on-surface-tertiary">{shell.status()}</p>}
+      >
         {(book) => (
-          <div class="editor-frame">
-            <div class="row">
-              <strong>{book().id}</strong>
+          <div class="flex h-[calc(100vh-3rem)] flex-col gap-3">
+            <div class="flex flex-wrap items-center gap-3">
+              <strong class="text-h4 font-semibold text-on-surface-primary">{book().id}</strong>
 
               {/* The picker works either way — picking a chapter clips, "Whole
                   book" un-clips — but it only claims space when the reader
                   asked to read a chapter at a time. `data-prominent` is the
-                  hook a style rule can hang off. */}
+                  hook the Select's own style rule hangs off. */}
               <Show when={shell.preferChapterView()}>
-                <label for="chapter-picker">{t("Chapter")}</label>
+                <label for="chapter-picker" class="text-small text-on-surface-secondary">
+                  {t("Chapter")}
+                </label>
               </Show>
-              <select
+              <Select
                 id="chapter-picker"
+                size="sm"
+                wrapperClass="w-44"
                 aria-label={t("Chapter")}
                 data-prominent={String(shell.preferChapterView())}
                 value={shell.chapter() === null ? "" : String(shell.chapter())}
@@ -86,39 +105,36 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                     </option>
                   )}
                 </For>
-              </select>
+              </Select>
 
-              <button
-                type="button"
-                aria-pressed={shell.mode() === "usfm" ? "true" : "false"}
-                onClick={() => runCommand("editor.toggleMode")}
-              >
-                {t("USFM")}
-              </button>
+              <SegmentedControl
+                label={t("Mode")}
+                size="sm"
+                items={MODES}
+                value={shell.mode() === "usfm" ? "usfm" : "regular"}
+                onChange={() => runCommand("editor.toggleMode")}
+              />
 
-              <button
-                type="button"
-                data-variant="primary"
-                class="spacer"
-                onClick={() => runCommand("book.save")}
-              >
+              <Button variant="primary" class="ms-auto" onClick={() => runCommand("book.save")}>
                 {t("Save")}
-              </button>
+              </Button>
             </div>
 
             {/* Keyed on the book id: a different book is a different canonical
                 state, so the view is rebuilt rather than repointed. */}
-            <Show when={book().id} keyed>
-              <BookEditor book={book()} />
-            </Show>
+            <div class="flex min-h-0 flex-1 flex-col">
+              <Show when={book().id} keyed>
+                <BookEditor book={book()} />
+              </Show>
+            </div>
 
-            <div class="status-bar">
+            <div class="flex gap-4 text-smallest tabular-nums text-on-surface-tertiary">
               <span data-revision={stamp()?.revision}>
                 {t("r{revision}", { revision: stamp()?.revision ?? 0 })}
               </span>
               <span>{t("{length} chars", { length: stamp()?.length ?? 0 })}</span>
               <span data-dirty={String(dirty())}>{dirty() ? t("unsaved") : t("saved")}</span>
-              <span class="muted spacer">{shell.status()}</span>
+              <span class="ms-auto">{shell.status()}</span>
             </div>
           </div>
         )}

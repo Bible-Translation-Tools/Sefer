@@ -16,6 +16,9 @@
  *
  * Nothing here decides what a finding is. `applyFilter` (core) does the
  * subtraction and never deletes anything: every chip below is about a screen.
+ *
+ * The chips are `Button`s with `aria-pressed`, not checkboxes: the state is
+ * the attribute a screen reader already reads, and the primitive styles it.
  */
 
 import { Effect, Fiber, Stream } from "effect";
@@ -33,6 +36,7 @@ import type { Producer, Severity } from "../../core/findings/finding";
 import { t } from "../i18n";
 import type { Services } from "../services";
 import { shellKeys, type FindingsFilterPreference } from "../settings";
+import { Button, Card, Input } from "./primitives";
 
 /** How the list is broken up. `flat` is the absence of grouping. */
 export type FindingsView = GroupKind | "flat";
@@ -46,6 +50,9 @@ const VIEWS: readonly { readonly view: FindingsView; readonly label: string }[] 
 
 /** How many codes the picker offers before it stops being a picker. */
 const TOP_CODES = 8;
+
+/** Every chip wears the same shape; only the state differs. */
+const CHIP = "rounded-full px-2.5";
 
 export interface FindingsFilterState {
   readonly filter: Accessor<FindingsFilter>;
@@ -157,129 +164,135 @@ export function FindingsFilters(props: FindingsFiltersProps) {
   const codes = (): readonly Facet<string>[] => props.facets.codes.slice(0, TOP_CODES);
 
   return (
-    <section class="card findings-filters" aria-label={t("Filters")}>
-      <div class="row" data-filter="severity">
-        <span class="muted">{t("Severity")}</span>
+    <Card class="space-y-2" aria-label={t("Filters")}>
+      <div class="flex flex-wrap items-center gap-1.5" data-filter="severity">
+        <span class="text-smallest text-on-surface-tertiary">{t("Severity")}</span>
         <For each={props.facets.severities}>
           {(facet: Facet<Severity>) => (
-            <button
-              type="button"
-              class="chip"
+            <Button
+              size="sm"
+              variant="tertiary"
+              class={CHIP}
               data-severity={facet.value}
               aria-pressed={filter().severities.includes(facet.value) ? "true" : "false"}
               onClick={() =>
                 props.state.update({ severities: toggled(filter().severities, facet.value) })
               }
             >
-              {t(facet.value)} <span class="muted">{facet.count}</span>
-            </button>
+              {t(facet.value)} <span class="opacity-60">{facet.count}</span>
+            </Button>
           )}
         </For>
 
-        <span class="muted">{t("Producer")}</span>
+        <span class="ms-2 text-smallest text-on-surface-tertiary">{t("Producer")}</span>
         <For each={props.facets.producers}>
           {(facet: Facet<Producer>) => (
-            <button
-              type="button"
-              class="chip"
+            <Button
+              size="sm"
+              variant="tertiary"
+              class={CHIP}
               data-producer={facet.value}
               aria-pressed={filter().producers.includes(facet.value) ? "true" : "false"}
               onClick={() =>
                 props.state.update({ producers: toggled(filter().producers, facet.value) })
               }
             >
-              {t(facet.value)} <span class="muted">{facet.count}</span>
-            </button>
+              {t(facet.value)} <span class="opacity-60">{facet.count}</span>
+            </Button>
           )}
         </For>
 
-        <button
-          type="button"
-          class="chip spacer"
+        <Button
+          size="sm"
+          variant="tertiary"
+          class={`${CHIP} ms-auto`}
           aria-pressed={filter().hideStale ? "true" : "false"}
           onClick={() => props.state.update({ hideStale: !filter().hideStale })}
         >
           {t("Hide stale")}
-        </button>
+        </Button>
       </div>
 
-      <div class="row" data-filter="book">
-        <span class="muted">{t("Books")}</span>
+      <div class="flex flex-wrap items-center gap-1.5" data-filter="book">
+        <span class="text-smallest text-on-surface-tertiary">{t("Books")}</span>
         <For each={props.books}>
           {(bookId) => (
-            <button
-              type="button"
-              class="chip"
+            <Button
+              size="sm"
+              variant="tertiary"
+              class={CHIP}
               data-book={bookId}
               aria-pressed={chosen(filter().books, bookId) ? "true" : "false"}
               onClick={() => props.state.update({ books: narrowed(filter().books, bookId) })}
             >
-              {bookId} <span class="muted">{countOf(props.facets.books, bookId)}</span>
-            </button>
+              {bookId} <span class="opacity-60">{countOf(props.facets.books, bookId)}</span>
+            </Button>
           )}
         </For>
         <Show when={filter().books !== null}>
-          <button
-            type="button"
-            data-variant="tertiary"
-            onClick={() => props.state.update({ books: null })}
-          >
+          <Button size="sm" variant="tertiary" onClick={() => props.state.update({ books: null })}>
             {t("All books")}
-          </button>
+          </Button>
         </Show>
       </div>
 
       <Show when={codes().length > 0}>
-        <div class="row" data-filter="code">
-          <span class="muted">{t("Codes")}</span>
+        <div class="flex flex-wrap items-center gap-1.5" data-filter="code">
+          <span class="text-smallest text-on-surface-tertiary">{t("Codes")}</span>
           <For each={codes()}>
             {(facet) => (
-              <button
-                type="button"
-                class="chip"
+              <Button
+                size="sm"
+                variant="tertiary"
+                class={CHIP}
                 data-code={facet.value}
                 aria-pressed={chosen(filter().codes, facet.value) ? "true" : "false"}
                 onClick={() => props.state.update({ codes: narrowed(filter().codes, facet.value) })}
               >
-                <code>{facet.value}</code> <span class="muted">{facet.count}</span>
-              </button>
+                <code class="font-mono">{facet.value}</code>{" "}
+                <span class="opacity-60">{facet.count}</span>
+              </Button>
             )}
           </For>
           <Show when={filter().codes !== null}>
-            <button
-              type="button"
-              data-variant="tertiary"
+            <Button
+              size="sm"
+              variant="tertiary"
               onClick={() => props.state.update({ codes: null })}
             >
               {t("All codes")}
-            </button>
+            </Button>
           </Show>
         </div>
       </Show>
 
-      <div class="row" data-filter="view">
-        <input
+      <div class="flex flex-wrap items-center gap-1.5" data-filter="view">
+        <Input
           type="search"
+          size="sm"
+          wrapperClass="w-56"
           aria-label={t("Filter findings")}
           placeholder={t("Filter by text…")}
           value={filter().text}
           onInput={(event) => props.state.update({ text: event.currentTarget.value })}
         />
-        <span class="spacer" />
-        <For each={VIEWS}>
-          {(option) => (
-            <button
-              type="button"
-              class="chip"
-              data-view={option.view}
-              aria-pressed={props.state.view() === option.view ? "true" : "false"}
-              onClick={() => props.state.setView(option.view)}
-            >
-              {t(option.label)}
-            </button>
-          )}
-        </For>
+        <div class="ms-auto flex flex-wrap items-center gap-1.5">
+          <For each={VIEWS}>
+            {(option) => (
+              <Button
+                size="sm"
+                variant="tertiary"
+                class={CHIP}
+                data-view={option.view}
+                aria-pressed={props.state.view() === option.view ? "true" : "false"}
+                onClick={() => props.state.setView(option.view)}
+              >
+                {t(option.label)}
+              </Button>
+            )}
+          </For>
+        </div>
       </div>
-    </section>
+    </Card>
   );
 }

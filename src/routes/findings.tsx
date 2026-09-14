@@ -1,10 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/solid-router";
 import { Option, Result } from "effect";
+import CircleCheck from "lucide-solid/icons/circle-check";
 import { For, Show, createSignal, onCleanup } from "solid-js";
 
 import { t } from "../app/i18n";
 import { useShell } from "../app/ProjectContext";
 import { createFindingsFilter, FindingsFilters } from "../app/ui/FindingsFilters";
+import { Badge, Button, Card, EmptyState, PanelHeader, severityTone } from "../app/ui/primitives";
 import { ShellGate } from "../app/ui/ShellGate";
 import type { BookId } from "../core/book/book";
 import * as Filter from "../core/findings/filter";
@@ -173,76 +175,76 @@ function FindingsPage() {
     shell.bump();
   };
 
+  /**
+   * One row. Stale rows stay visible and stay dim — the badge says why, and
+   * hiding them is the reader's own choice ("Hide stale"), never the panel's.
+   * The cursor is `aria-current`, so a screen reader hears what the eye sees.
+   */
   const row = (finding: Finding) => (
     <li
       data-code={finding.code}
       data-producer={finding.producer}
       data-stale={isStale(finding) ? "true" : undefined}
       aria-current={idOf(at(cursor())) === finding.id ? "true" : undefined}
+      class="rounded-md border border-surface-border bg-surface-primary aria-[current=true]:border-brand aria-[current=true]:shadow-[inset_0.2rem_0_0_0_var(--brand-base)] data-[stale=true]:opacity-65"
     >
-      <span class="badge" data-severity={finding.severity}>
-        {finding.severity}
-      </span>
-      <strong>{finding.bookId}</strong>
-      <code>{finding.code}</code>
-      <span>{finding.message}</span>
-      <Show when={isStale(finding)}>
-        <span class="badge" data-stale="true">
-          {t("stale")}
-        </span>
-      </Show>
-      <button type="button" class="spacer" onClick={() => open(finding)}>
-        {t("Go")}
-      </button>
-      <Show when={finding.fix !== undefined}>
-        <button type="button" onClick={() => offer(finding)}>
-          {t("Fix…")}
-        </button>
-      </Show>
+      <div class="flex flex-wrap items-center gap-2 px-3 py-2">
+        <Badge tone={severityTone(finding.severity)}>{finding.severity}</Badge>
+        <strong class="text-small">{finding.bookId}</strong>
+        <code class="font-mono text-small text-on-surface-tertiary">{finding.code}</code>
+        <span class="text-small text-on-surface-secondary">{finding.message}</span>
+        <Show when={isStale(finding)}>
+          <Badge tone="muted">{t("stale")}</Badge>
+        </Show>
+        <Button size="sm" class="ms-auto" onClick={() => open(finding)}>
+          {t("Go")}
+        </Button>
+        <Show when={finding.fix !== undefined}>
+          <Button size="sm" onClick={() => offer(finding)}>
+            {t("Fix…")}
+          </Button>
+        </Show>
+      </div>
     </li>
   );
 
   return (
-    <main>
-      <header>
-        <h2>{t("Findings")}</h2>
-        <span class="muted spacer" data-findings-count={shown().length}>
-          {t("{shown} of {total} shown", { shown: shown().length, total: all().length })}
-        </span>
-      </header>
+    <main class="min-w-0 space-y-4 p-6">
+      <PanelHeader
+        title={t("Findings")}
+        subtitle={t(
+          "j / k or the arrows move, Enter opens. Filters hide rows; they never delete findings.",
+        )}
+        actions={
+          <span class="text-small text-on-surface-tertiary" data-findings-count={shown().length}>
+            {t("{shown} of {total} shown", { shown: shown().length, total: all().length })}
+          </span>
+        }
+      />
 
       <FindingsFilters state={filters} facets={facets()} books={books()} />
 
-      <p class="muted">
-        {t("j / k or the arrows move, Enter opens. Filters hide rows; they never delete findings.")}
-      </p>
-
       <Show when={note() !== ""}>
-        <p class="muted">{note()}</p>
+        <p class="text-small text-on-surface-tertiary">{note()}</p>
       </Show>
 
       <Show when={preview()}>
         {(fix) => (
-          <section class="card">
-            <div class="row">
-              <strong>{fix().label}</strong>
-              <button
-                type="button"
-                data-variant="primary"
-                class="spacer"
-                onClick={() => apply(fix())}
-              >
+          <Card class="space-y-2">
+            <div class="flex flex-wrap items-center gap-2">
+              <strong class="text-small">{fix().label}</strong>
+              <Button variant="primary" size="sm" class="ms-auto" onClick={() => apply(fix())}>
                 {t("Apply")}
-              </button>
-              <button type="button" onClick={() => setPreview(undefined)}>
+              </Button>
+              <Button size="sm" onClick={() => setPreview(undefined)}>
                 {t("Dismiss")}
-              </button>
+              </Button>
             </div>
-            <ul class="list">
+            <ul class="flex flex-col gap-1">
               <For each={fix().changes}>
                 {(change) => (
-                  <li>
-                    <code>
+                  <li class="flex gap-3 rounded-sm bg-surface-secondary px-2 py-1 font-mono text-smallest">
+                    <code class="text-on-surface-tertiary">
                       {change.from}–{change.to}
                     </code>
                     <code>{change.insert === "" ? t("(delete)") : change.insert}</code>
@@ -250,27 +252,29 @@ function FindingsPage() {
                 )}
               </For>
             </ul>
-          </section>
+          </Card>
         )}
       </Show>
 
-      <div data-findings={shown().length} data-view={filters.view()}>
+      <div class="space-y-3" data-findings={shown().length} data-view={filters.view()}>
         <For each={groups()}>
           {(group) => (
             <Show
               when={group.key !== ""}
               fallback={
-                <ul class="list">
+                <ul class="flex flex-col gap-1.5">
                   <For each={group.findings}>{row}</For>
                 </ul>
               }
             >
-              <details class="findings-group" open data-group={group.key}>
-                <summary>
+              <details open data-group={group.key}>
+                <summary class="flex cursor-pointer items-baseline gap-2 py-1 text-small font-medium text-on-surface-primary">
                   <strong>{group.key}</strong>
-                  <span class="muted">{t("{count} shown", { count: group.count })}</span>
+                  <span class="text-smallest font-normal text-on-surface-tertiary">
+                    {t("{count} shown", { count: group.count })}
+                  </span>
                 </summary>
-                <ul class="list">
+                <ul class="mt-1.5 flex flex-col gap-1.5">
                   <For each={group.findings}>{row}</For>
                 </ul>
               </details>
@@ -280,11 +284,19 @@ function FindingsPage() {
       </div>
 
       <Show when={shown().length === 0}>
-        <p class="muted">
-          <Show when={all().length > 0} fallback={t("Nothing to report — or no project is open.")}>
-            {t("{total} findings, all hidden by the filter.", { total: all().length })}
-          </Show>
-        </p>
+        <Show
+          when={all().length > 0}
+          fallback={
+            <EmptyState
+              icon={<CircleCheck size={22} />}
+              title={t("Nothing to report — or no project is open.")}
+            />
+          }
+        >
+          <EmptyState
+            title={t("{total} findings, all hidden by the filter.", { total: all().length })}
+          />
+        </Show>
       </Show>
     </main>
   );

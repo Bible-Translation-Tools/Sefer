@@ -20,6 +20,7 @@ import { Show, createSignal } from "solid-js";
 import type { AvailableUpdate } from "../../core/host/updater";
 import { t } from "../i18n";
 import { useServices } from "../ProjectContext";
+import { Button, Card, PanelHeader } from "./primitives";
 
 /** What the panel is waiting on; `""` means nothing. */
 type Busy = "" | "checking" | "installing";
@@ -59,55 +60,65 @@ export function UpdatePanel() {
     });
   };
 
+  const row = (label: string, value: string, mark?: Record<string, string>) => (
+    <div class="flex items-center gap-3 px-4 py-2 text-small" {...mark}>
+      <span class="text-on-surface-secondary">{label}</span>
+      <span class="ms-auto font-mono text-smallest text-on-surface-primary">{value}</span>
+    </div>
+  );
+
   return (
-    <section data-update-panel>
-      <h3>{t("About")}</h3>
+    <Card padded={false} class="divide-y divide-surface-border" data-update-panel>
+      <div class="px-4 py-3">
+        <PanelHeader
+          level={3}
+          title={t("About")}
+          actions={
+            <Button
+              size="sm"
+              onClick={check}
+              disabled={busy() !== ""}
+              loading={busy() === "checking"}
+            >
+              {t("Check for updates")}
+            </Button>
+          }
+        />
+      </div>
 
-      <ul class="list">
-        <li>
-          <span>{t("Version")}</span>
-          <span class="spacer" />
-          <span data-update-version>{services.updater.currentVersion()}</span>
-        </li>
-        <li>
-          <span>{t("Channel")}</span>
-          <span class="spacer" />
-          <span data-update-channel>{services.updater.channel()}</span>
-        </li>
-        <li>
-          <span>{t("Build")}</span>
-          <span class="spacer" />
-          <span class="muted">{services.hostInfo.build()}</span>
-        </li>
-      </ul>
-
-      <p>
-        <button type="button" onClick={check} disabled={busy() !== ""}>
-          {t("Check for updates")}
-        </button>
-      </p>
+      {row(t("Version"), services.updater.currentVersion(), { "data-update-version": "" })}
+      {row(t("Channel"), services.updater.channel(), { "data-update-channel": "" })}
+      {row(t("Build"), services.hostInfo.build())}
 
       <Show when={available()}>
         {(update) => (
-          <p data-update-available>
-            {t("Version {version} is available.", { version: update().version })}{" "}
-            <button type="button" onClick={install} disabled={busy() !== ""}>
+          <div class="flex items-center gap-3 px-4 py-3 text-small" data-update-available>
+            {t("Version {version} is available.", { version: update().version })}
+            <Button
+              variant="primary"
+              size="sm"
+              class="ms-auto"
+              onClick={install}
+              disabled={busy() !== ""}
+              loading={busy() === "installing"}
+            >
               {t("Install and relaunch")}
-            </button>
-          </p>
+            </Button>
+          </div>
         )}
       </Show>
 
-      <Show when={busy() === "checking"}>
-        <p class="muted">{t("Checking…")}</p>
-      </Show>
       <Show when={busy() === "installing"}>
-        <p class="muted">{t("Downloading and installing…")}</p>
+        <p class="px-4 py-2 text-small text-on-surface-tertiary">
+          {t("Downloading and installing…")}
+        </p>
       </Show>
 
-      <p class="muted" data-update-note>
-        {note()}
-      </p>
-    </section>
+      <Show when={note() !== ""}>
+        <p class="px-4 py-2 text-smallest text-on-surface-tertiary" data-update-note>
+          {note()}
+        </p>
+      </Show>
+    </Card>
   );
 }

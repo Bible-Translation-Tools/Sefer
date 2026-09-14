@@ -4,6 +4,7 @@ import { For, Show, createSignal } from "solid-js";
 
 import { t } from "../app/i18n";
 import { useShell } from "../app/ProjectContext";
+import { Button, Card, PanelHeader } from "../app/ui/primitives";
 import { ShellGate } from "../app/ui/ShellGate";
 import type { Commit } from "../core/git/git";
 import { Git, repositoryPath } from "../core/git/git";
@@ -89,31 +90,38 @@ function History() {
   };
 
   return (
-    <main>
-      <header>
-        <h2>{t("History")}</h2>
-        <button type="button" class="spacer" onClick={load}>
-          {t("Reload")}
-        </button>
-      </header>
+    <main class="min-w-0 space-y-4 p-6">
+      <PanelHeader title={t("History")} actions={<Button onClick={load}>{t("Reload")}</Button>} />
 
-      <Show when={shell.project()} fallback={<p class="muted">{t("Open a project first.")}</p>}>
+      <Show
+        when={shell.project()}
+        fallback={<p class="text-small text-on-surface-tertiary">{t("Open a project first.")}</p>}
+      >
         <Show when={problem() !== ""}>
-          <p class="problem">{problem()}</p>
+          <p class="rounded-md bg-surface-error px-4 py-3 text-small text-on-surface-error">
+            {problem()}
+          </p>
         </Show>
 
-        <Show when={log()} fallback={<p class="muted">{t("Reading…")}</p>}>
+        <Show
+          when={log()}
+          fallback={<p class="text-small text-on-surface-tertiary">{t("Reading…")}</p>}
+        >
           {(commits) => (
-            <ul class="list" data-commits={commits().length}>
+            <ul class="flex flex-col gap-2" data-commits={commits().length}>
               <For each={commits()}>
                 {(commit) => (
                   <li data-commit={commit.id}>
-                    <code>{commit.id.slice(0, 8)}</code>
-                    <span>{commit.message}</span>
-                    <span class="muted">{commit.author.name}</span>
-                    <button type="button" class="spacer" onClick={() => show(commit)}>
-                      {t("Show")}
-                    </button>
+                    <Card class="flex flex-wrap items-center gap-3">
+                      <code class="font-mono text-small text-on-surface-tertiary">
+                        {commit.id.slice(0, 8)}
+                      </code>
+                      <span class="text-small">{commit.message}</span>
+                      <span class="text-small text-on-surface-tertiary">{commit.author.name}</span>
+                      <Button size="sm" class="ms-auto" onClick={() => show(commit)}>
+                        {t("Show")}
+                      </Button>
+                    </Card>
                   </li>
                 )}
               </For>
@@ -123,18 +131,20 @@ function History() {
 
         <Show when={shown()}>
           {(version) => (
-            <section class="card">
-              <div class="row">
-                <strong>{version().path}</strong>
-                <code class="muted">{version().commit.id.slice(0, 8)}</code>
-                <button type="button" class="spacer" onClick={() => setShown(undefined)}>
+            <Card class="space-y-3">
+              <div class="flex flex-wrap items-center gap-3">
+                <strong class="text-small">{version().path}</strong>
+                <code class="font-mono text-small text-on-surface-tertiary">
+                  {version().commit.id.slice(0, 8)}
+                </code>
+                <Button size="sm" class="ms-auto" onClick={() => setShown(undefined)}>
                   {t("Close")}
-                </button>
+                </Button>
               </div>
-              <pre>
+              <pre class="max-h-[60vh] overflow-auto rounded-md bg-surface-secondary p-3 font-mono text-smallest">
                 <code>{version().text}</code>
               </pre>
-            </section>
+            </Card>
           )}
         </Show>
       </Show>

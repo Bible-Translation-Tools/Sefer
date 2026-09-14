@@ -25,12 +25,19 @@ export function ShellGate(props: { readonly children: () => JSX.Element }) {
   };
 
   return (
-    <Switch fallback={<p class="muted">{t("Loading the USFM engine…")}</p>}>
+    <Switch
+      fallback={
+        <p class="p-6 text-small text-on-surface-tertiary">{t("Loading the USFM engine…")}</p>
+      }
+    >
       <Match when={state().kind === "ready"}>{props.children()}</Match>
       <Match when={state().kind === "failed"}>
-        <p class="problem" data-shell="failed">
+        <p
+          class="m-6 rounded-md bg-surface-error px-4 py-3 text-small text-on-surface-error"
+          data-shell="failed"
+        >
           {t("The USFM engine did not load. Sefer cannot parse without it.")}{" "}
-          <code>{reason()}</code>
+          <code class="font-mono">{reason()}</code>
         </p>
       </Match>
     </Switch>

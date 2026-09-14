@@ -5,35 +5,37 @@
  * radius and the softest of the three shadows. `padded={false}` is for a card
  * whose body is a list or a table that must reach the edges.
  *
+ * It takes every `<section>` prop, so `aria-label` and the `data-*` hooks that
+ * the dev surface and the verification scripts query for pass straight through.
+ *
  * `PanelHeader` is the card's top line — a title, an optional subtitle, and an
  * `actions` slot pushed to the end. It is a separate export rather than a prop
  * because plenty of cards have no header and plenty of headers sit above
  * something that is not a card.
  */
 
-import type { JSX } from "@solidjs/web";
+import type { ComponentProps, JSX } from "@solidjs/web";
+import { merge, omit } from "solid-js";
 
 import { cx, type ClassValue } from "./cx";
 
-export interface CardProps {
-  readonly class?: ClassValue;
+export interface CardProps extends ComponentProps<"section"> {
   /** Off when the body is a full-bleed list or table. */
   readonly padded?: boolean;
-  readonly children: JSX.Element;
 }
 
 export function Card(props: CardProps) {
-  return (
-    <section
-      class={cx(
+  const rest = omit(props, "padded", "class");
+  const merged = merge(rest, {
+    get class() {
+      return cx(
         "rounded-lg border border-surface-border bg-surface-primary shadow-small",
-        props.padded === false ? "" : "p-4",
+        props.padded === false ? undefined : "p-4",
         props.class,
-      )}
-    >
-      {props.children}
-    </section>
-  );
+      );
+    },
+  });
+  return <section {...merged} />;
 }
 
 export interface PanelHeaderProps {
@@ -56,7 +58,7 @@ export function PanelHeader(props: PanelHeaderProps) {
           <h2 class="truncate text-h3 font-semibold text-on-surface-primary">{props.title}</h2>
         )}
         {props.subtitle !== undefined && (
-          <p class="mt-0.5 truncate text-small text-on-surface-tertiary">{props.subtitle}</p>
+          <p class="mt-0.5 text-small text-on-surface-tertiary">{props.subtitle}</p>
         )}
       </div>
       {props.actions !== undefined && (

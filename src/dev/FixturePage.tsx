@@ -3,6 +3,7 @@ import { For, Show, createSignal } from "solid-js";
 
 import type { Composition } from "../app/composition";
 import { useComposition } from "../app/CompositionContext";
+import { Button } from "../app/ui/primitives";
 import { FixtureFileSystemLive, SMALL_NT, SMALL_NT_ROOT } from "../core/fixture/smallNt";
 import { installDevState } from "../platform/observability";
 
@@ -78,18 +79,19 @@ export function FixturePage() {
   load(keepRequested());
 
   return (
-    <main data-fixture={SMALL_NT}>
-      <h1>Fixture project: {SMALL_NT}</h1>
-      <Show when={fixture()} fallback={<p>Seeding…</p>}>
+    <main class="min-w-0 space-y-3 p-6" data-fixture={SMALL_NT}>
+      <h1 class="text-h3 font-semibold">Fixture project: {SMALL_NT}</h1>
+      <Show when={fixture()} fallback={<p class="text-small text-on-surface-tertiary">Seeding…</p>}>
         {(ready) => (
           <>
-            <p data-boot-phase={Result.isSuccess(composition.boot) ? "ready" : "failed"}>
+            <p
+              class="text-small text-on-surface-secondary"
+              data-boot-phase={Result.isSuccess(composition.boot) ? "ready" : "failed"}
+            >
               boot: {bootLabel(composition.boot)}
             </p>
-            <button type="button" onClick={() => load(false)}>
-              reset
-            </button>
-            <ul data-fixture-files={ready().files.length}>
+            <Button onClick={() => load(false)}>reset</Button>
+            <ul class="text-small" data-fixture-files={ready().files.length}>
               <For each={ready().files}>
                 {(file) => (
                   <li data-path={file.path}>
@@ -98,7 +100,7 @@ export function FixturePage() {
                 )}
               </For>
             </ul>
-            <p>
+            <p class="text-small text-on-surface-tertiary">
               In-memory and page-scoped: the seeded FileSystem lives in this Layer instance for the
               life of the page. Reload reseeds; <code>?keep=1</code> keeps the current instance.
             </p>

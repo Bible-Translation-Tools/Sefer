@@ -27,6 +27,7 @@ import { runCommand } from "../commands";
 import { giteaHostFor } from "../env";
 import { t } from "../i18n";
 import { useShell } from "../ProjectContext";
+import { Button, Card, Input, PanelHeader } from "./primitives";
 
 /**
  * Every failure this panel shows, as one line.
@@ -196,50 +197,51 @@ export function CloudPanel(props: { readonly root: string }) {
   };
 
   return (
-    <section data-panel="cloud">
-      <h3>{t("Cloud")}</h3>
+    <Card class="space-y-3" data-panel="cloud">
+      <PanelHeader level={3} title={t("Cloud")} />
 
       <Show
         when={host}
         fallback={
-          <p class="muted" data-cloud="unconfigured">
+          <p class="text-small text-on-surface-tertiary" data-cloud="unconfigured">
             {t("Cloud sync is not configured for this build: set VITE_SEFER_GITEA_WEB_HOST.")}
           </p>
         }
       >
         {(base) => (
           <>
-            <p class="muted">
-              <code>{base()}</code>
-            </p>
+            <p class="font-mono text-smallest text-on-surface-tertiary">{base()}</p>
 
             <Show
               when={session()}
               fallback={
                 <form
-                  class="row"
+                  class="flex flex-wrap items-center gap-2"
                   onSubmit={(event) => {
                     event.preventDefault();
                     signIn();
                   }}
                 >
-                  <input
+                  <Input
                     type="text"
+                    wrapperClass="w-40"
                     autocomplete="username"
                     placeholder={t("username")}
                     value={username()}
                     onInput={(event) => setUsername(event.currentTarget.value)}
                   />
-                  <input
+                  <Input
                     type="password"
+                    wrapperClass="w-40"
                     autocomplete="current-password"
                     placeholder={t("password")}
                     value={password()}
                     onInput={(event) => setPassword(event.currentTarget.value)}
                   />
                   <Show when={otpWanted()}>
-                    <input
+                    <Input
                       type="text"
+                      wrapperClass="w-32"
                       inputmode="numeric"
                       autocomplete="one-time-code"
                       placeholder={t("one-time code")}
@@ -247,47 +249,48 @@ export function CloudPanel(props: { readonly root: string }) {
                       onInput={(event) => setOtp(event.currentTarget.value)}
                     />
                   </Show>
-                  <button type="submit" disabled={busy()}>
+                  <Button type="submit" variant="primary" disabled={busy()}>
                     {t("Sign in")}
-                  </button>
+                  </Button>
                 </form>
               }
             >
               {(held) => (
                 <>
-                  <div class="row">
-                    <span>{t("signed in as {user}", { user: held().username })}</span>
-                    <button type="button" class="spacer" onClick={signOut} disabled={busy()}>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-small">
+                      {t("signed in as {user}", { user: held().username })}
+                    </span>
+                    <Button class="ms-auto" onClick={signOut} disabled={busy()}>
                       {t("Sign out")}
-                    </button>
+                    </Button>
                   </div>
 
-                  <div class="row">
-                    <button type="button" onClick={listRepos} disabled={busy()}>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <Button onClick={listRepos} disabled={busy()}>
                       {t("Attach to repo…")}
-                    </button>
-                    <button type="button" onClick={() => runCommand("remote.pull")}>
-                      {t("Pull")}
-                    </button>
-                    <button type="button" onClick={() => runCommand("remote.push")}>
-                      {t("Push")}
-                    </button>
+                    </Button>
+                    <Button onClick={() => runCommand("remote.pull")}>{t("Pull")}</Button>
+                    <Button onClick={() => runCommand("remote.push")}>{t("Push")}</Button>
                   </div>
 
                   <Show when={repos().length > 0}>
-                    <ul class="list" data-repos={repos().length}>
+                    <ul class="flex flex-col gap-1" data-repos={repos().length}>
                       <For each={repos()}>
                         {(repo) => (
-                          <li data-repo={repo.fullName}>
-                            <strong>{repo.fullName}</strong>
-                            <button
-                              type="button"
-                              class="spacer"
+                          <li
+                            class="flex items-center gap-3 rounded-md border border-surface-border px-3 py-2"
+                            data-repo={repo.fullName}
+                          >
+                            <strong class="text-small">{repo.fullName}</strong>
+                            <Button
+                              size="sm"
+                              class="ms-auto"
                               onClick={() => attach(repo)}
                               disabled={busy()}
                             >
                               {t("Attach")}
-                            </button>
+                            </Button>
                           </li>
                         )}
                       </For>
@@ -295,40 +298,44 @@ export function CloudPanel(props: { readonly root: string }) {
                   </Show>
 
                   <form
-                    class="row"
+                    class="flex flex-wrap items-center gap-2"
                     onSubmit={(event) => {
                       event.preventDefault();
                       publish();
                     }}
                   >
-                    <input
+                    <Input
                       type="text"
+                      wrapperClass="w-64"
                       placeholder={t("new repository name")}
                       value={newName()}
                       onInput={(event) => setNewName(event.currentTarget.value)}
                     />
-                    <button type="submit" disabled={busy()}>
+                    <Button type="submit" disabled={busy()}>
                       {t("Create and publish")}
-                    </button>
+                    </Button>
                   </form>
                 </>
               )}
             </Show>
 
             <Show when={phase() !== ""}>
-              <p class="muted" data-cloud="progress">
+              <p class="text-small text-on-surface-tertiary" data-cloud="progress">
                 {phase()}
               </p>
             </Show>
 
             <Show when={problem() !== ""}>
-              <p class="problem" data-cloud="problem">
+              <p
+                class="rounded-md bg-surface-error px-3 py-2 text-small break-words text-on-surface-error"
+                data-cloud="problem"
+              >
                 {problem()}
               </p>
             </Show>
           </>
         )}
       </Show>
-    </section>
+    </Card>
   );
 }

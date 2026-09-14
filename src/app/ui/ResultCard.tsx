@@ -70,9 +70,11 @@ export function ResultCard(props: ResultCardProps) {
   return (
     <Show
       when={!missing()}
-      fallback={<p class="muted">{t("That hit is no longer in the text.")}</p>}
+      fallback={
+        <p class="text-small text-on-surface-tertiary">{t("That hit is no longer in the text.")}</p>
+      }
     >
-      <div class="editor-host cm-host" ref={setHost} />
+      <div class="editor-host cm-host max-h-96" ref={setHost} />
     </Show>
   );
 }

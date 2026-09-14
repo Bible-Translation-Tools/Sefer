@@ -1,10 +1,16 @@
 import { HeadContent, Link, Outlet, createRootRoute, useNavigate } from "@tanstack/solid-router";
+import FolderOpen from "lucide-solid/icons/folder-open";
+import HistoryIcon from "lucide-solid/icons/history";
+import SearchIcon from "lucide-solid/icons/search";
+import SettingsIcon from "lucide-solid/icons/settings";
+import TriangleAlert from "lucide-solid/icons/triangle-alert";
 import { For, Show, onCleanup } from "solid-js";
 
 import { installCommandKeys, runCommand } from "../app/commands";
 import { t } from "../app/i18n";
 import { ProjectProvider, readyShell, useShellState } from "../app/ProjectContext";
 import { CommandPalette } from "../app/ui/CommandPalette";
+import { Kbd, Toaster } from "../app/ui/primitives";
 
 /**
  * The application shell: the sidebar, the palette, the status line, and the
@@ -13,14 +19,20 @@ import { CommandPalette } from "../app/ui/CommandPalette";
  * The provider is here rather than in `src/App.tsx` because it needs the
  * router's `navigate` — a command that jumps to a finding is navigation — and
  * because App.tsx owns exactly one thing, the composition.
+ *
+ * The sidebar is a WHITE panel and a plain vertical nav list
+ * (planning/03-ui/design-direction.md). It is deliberately not the project
+ * sidebar the mockups describe — the book list, the chapter grid, the
+ * collapse-to-rail — because that one belongs to the open project and is built
+ * with the workspace, not under it.
  */
 
 const NAV = [
-  { to: "/projects", label: "Projects" },
-  { to: "/findings", label: "Findings" },
-  { to: "/find", label: "Find" },
-  { to: "/history", label: "History" },
-  { to: "/settings", label: "Settings" },
+  { to: "/projects", label: "Projects", icon: FolderOpen },
+  { to: "/findings", label: "Findings", icon: TriangleAlert },
+  { to: "/find", label: "Find", icon: SearchIcon },
+  { to: "/history", label: "History", icon: HistoryIcon },
+  { to: "/settings", label: "Settings", icon: SettingsIcon },
 ] as const;
 
 function Chrome() {
@@ -34,22 +46,35 @@ function Chrome() {
   const shell = () => readyShell(state());
 
   return (
-    <div class="app">
-      <nav class="app-sidebar">
+    <div class="grid min-h-screen grid-cols-[14rem_1fr] bg-surface-secondary">
+      <nav class="flex flex-col gap-0.5 border-e border-sidebar-border bg-sidebar-surface p-3">
         {/* Not a heading: the landing route already owns the page's h1, and two
             "Sefer" headings would make the accessibility tree ambiguous. */}
-        <div class="brand">{t("Sefer")}</div>
+        <div class="px-2 pb-3 text-h4 font-bold text-on-surface-primary">{t("Sefer")}</div>
         <For each={NAV}>
           {(item) => (
-            <Link to={item.to} activeProps={{ "data-status": "active" }}>
+            <Link
+              to={item.to}
+              class="flex items-center gap-2 rounded-md px-2 py-1.5 text-small text-sidebar-on-surface-muted no-underline transition-colors hover:bg-sidebar-surface-hover hover:text-sidebar-on-surface"
+              activeProps={{
+                "data-status": "active",
+                class: "bg-sidebar-surface-active font-medium text-brand",
+              }}
+            >
+              <item.icon size={16} aria-hidden="true" />
               {t(item.label)}
             </Link>
           )}
         </For>
-        <button type="button" data-variant="tertiary" onClick={() => runCommand("palette.open")}>
-          {t("Commands")} <kbd>Mod-K</kbd>
+        <button
+          type="button"
+          class="mt-1 flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-small text-sidebar-on-surface-muted transition-colors hover:bg-sidebar-surface-hover hover:text-sidebar-on-surface"
+          onClick={() => runCommand("palette.open")}
+        >
+          {t("Commands")}
+          <Kbd class="ms-auto">Mod-K</Kbd>
         </button>
-        <footer>
+        <footer class="mt-auto space-y-0.5 px-2 pt-3 text-smallest text-on-surface-tertiary">
           <Show when={shell()} fallback={<span>{t("starting…")}</span>}>
             {(ready) => (
               <>
@@ -69,6 +94,7 @@ function Chrome() {
           />
         )}
       </Show>
+      <Toaster />
     </div>
   );
 }
@@ -96,5 +122,9 @@ function Root() {
 export const Route = createRootRoute({
   head: () => ({ meta: [{ title: "Sefer" }] }),
   component: Root,
-  notFoundComponent: () => <main class="plain">{t("Page not found.")}</main>,
+  notFoundComponent: () => (
+    <main class="mx-auto w-full max-w-3xl p-10 text-small text-on-surface-tertiary">
+      {t("Page not found.")}
+    </main>
+  ),
 });

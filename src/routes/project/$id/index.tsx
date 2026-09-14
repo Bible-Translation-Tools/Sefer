@@ -5,6 +5,7 @@ import { runCommand } from "../../../app/commands";
 import { t } from "../../../app/i18n";
 import { useShell } from "../../../app/ProjectContext";
 import { CloudPanel } from "../../../app/ui/CloudPanel";
+import { Badge, Button, Card, PanelHeader } from "../../../app/ui/primitives";
 import { ShellGate } from "../../../app/ui/ShellGate";
 
 /**
@@ -46,64 +47,60 @@ function ProjectPage(props: { readonly root: string }) {
   };
 
   return (
-    <main>
-      <header>
-        <h2>{t("Project")}</h2>
-        <code class="muted spacer">{props.root}</code>
-      </header>
+    <main class="min-w-0 space-y-4 p-6">
+      <PanelHeader title={t("Project")} subtitle={props.root} />
 
       <Show
         when={shell.project()}
-        fallback={<p class="muted">{opening() ? t("Opening…") : shell.status()}</p>}
+        fallback={
+          <p class="text-small text-on-surface-tertiary">
+            {opening() ? t("Opening…") : shell.status()}
+          </p>
+        }
       >
         {(project) => (
           <>
-            <div class="row">
-              <button type="button" onClick={() => runCommand("project.saveAll")}>
-                {t("Save all")}
-              </button>
-              <button type="button" onClick={() => runCommand("git.commit")}>
-                {t("Commit")}
-              </button>
-              <span class="muted spacer">
+            <Card class="flex flex-wrap items-center gap-2">
+              <Button onClick={() => runCommand("project.saveAll")}>{t("Save all")}</Button>
+              <Button onClick={() => runCommand("git.commit")}>{t("Commit")}</Button>
+              <span class="ms-auto text-small text-on-surface-tertiary">
                 {t("{count} books", { count: project().books.length })}
               </span>
-            </div>
+            </Card>
 
-            <ul class="list" data-books={project().books.length}>
+            <ul class="flex flex-col gap-2" data-books={project().books.length}>
               <For each={census()}>
                 {(book) => (
                   <li data-book={book.bookId}>
-                    <Link
-                      to="/project/$id/book/$book"
-                      params={{
-                        id: encodeURIComponent(props.root),
-                        book: encodeURIComponent(book.bookId),
-                      }}
-                    >
-                      <strong>{book.bookId}</strong>
-                    </Link>
-                    <span class="muted">
-                      {t("{chapters} ch · {verses} vv", {
-                        chapters: book.chapters,
-                        verses: book.verses,
-                      })}
-                    </span>
-                    <Show when={book.diagnostics.errors > 0}>
-                      <span class="badge" data-severity="error">
-                        {book.diagnostics.errors}
+                    <Card class="flex flex-wrap items-center gap-3">
+                      <Link
+                        to="/project/$id/book/$book"
+                        params={{
+                          id: encodeURIComponent(props.root),
+                          book: encodeURIComponent(book.bookId),
+                        }}
+                        class="font-semibold text-brand no-underline hover:underline"
+                      >
+                        {book.bookId}
+                      </Link>
+                      <span class="text-small text-on-surface-tertiary">
+                        {t("{chapters} ch · {verses} vv", {
+                          chapters: book.chapters,
+                          verses: book.verses,
+                        })}
                       </span>
-                    </Show>
-                    <Show when={book.diagnostics.warnings > 0}>
-                      <span class="badge" data-severity="warning">
-                        {book.diagnostics.warnings}
-                      </span>
-                    </Show>
-                    <Show when={dirty(book.bookId)}>
-                      <span class="badge spacer" data-dirty="true">
-                        {t("unsaved")}
-                      </span>
-                    </Show>
+                      <Show when={book.diagnostics.errors > 0}>
+                        <Badge tone="error">{book.diagnostics.errors}</Badge>
+                      </Show>
+                      <Show when={book.diagnostics.warnings > 0}>
+                        <Badge tone="warning">{book.diagnostics.warnings}</Badge>
+                      </Show>
+                      <Show when={dirty(book.bookId)}>
+                        <Badge tone="brand" class="ms-auto">
+                          {t("unsaved")}
+                        </Badge>
+                      </Show>
+                    </Card>
                   </li>
                 )}
               </For>
@@ -114,7 +111,7 @@ function ProjectPage(props: { readonly root: string }) {
             <CloudPanel root={props.root} />
 
             <Show when={project().failed.length > 0}>
-              <p class="problem">
+              <p class="rounded-md bg-surface-error px-4 py-3 text-small text-on-surface-error">
                 {t("{count} file(s) did not become books.", { count: project().failed.length })}
               </p>
             </Show>
