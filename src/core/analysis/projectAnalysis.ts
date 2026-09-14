@@ -378,10 +378,7 @@ const make = (
 
     const characters = (): Inventory => {
       if (inventoryCache !== undefined) return inventoryCache;
-      inventoryCache =
-        snapshot === undefined
-          ? EMPTY_INVENTORY
-          : inventory(snapshot, (id) => resolveBook(id)?.bookId);
+      inventoryCache = snapshot === undefined ? EMPTY_INVENTORY : inventory(snapshot, resolveBook);
       return inventoryCache;
     };
 

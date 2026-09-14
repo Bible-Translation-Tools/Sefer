@@ -35,18 +35,21 @@
 // Pure: no Effect, no Solid, no host. It takes the snapshot and a resolver and
 // returns plain values, exactly as `filter.ts` does for the panel.
 
-import type { BookId } from "../book/book";
+import type { BookId, Ref } from "../book/book";
 import {
   OUTER_CLASSES,
   PATTERN_DIGIT_GLYPH,
+  type Analysis,
   type Channel,
   type ConventionReason,
+  type EngineStamp,
   type FindingsSnapshot,
   type OuterClass,
   type Pattern,
   type PatternKey,
   type Pool,
 } from "../galley";
+import type { SourceStamp } from "../source/source";
 
 /** The word channels: they judge a word, not a scalar, and carry a hash. */
 const WORD_CHANNELS: ReadonlySet<Channel> = new Set<Channel>(["Casing", "WordLength", "Doubled"]);
@@ -82,14 +85,44 @@ export interface PlacementCell {
   readonly next: PatternRow | undefined;
 }
 
-/** A site the engine convicted, with enough to navigate and to explain. */
+/**
+ * A site the engine convicted, with enough to navigate to it, to explain it,
+ * and to know whether it is still true.
+ *
+ * It carries both stamps for the same reason a `Finding` does: `stamp` is the
+ * Book's revision, which decides whether a "Go" would land where the engine
+ * looked, and `engine` is the hash the table of contents must match before an
+ * offset may be turned into a chapter and verse. A site without them could be
+ * shown but never trusted.
+ */
 export interface FlaggedSite {
   readonly bookId: BookId;
   readonly from: number;
   readonly to: number;
+  /** Every rung the site matched, not only the channel that owns the pattern. */
   readonly reasons: readonly ConventionReason[];
   readonly pattern: number;
+  readonly stamp: SourceStamp;
+  readonly engine: EngineStamp;
 }
+
+/**
+ * Where a flagged site points, as a chapter and verse — when, and only when,
+ * the analysis handed over describes the very text the engine measured.
+ *
+ * The same rule as `findings.navigateTarget`, for the same reason: the table
+ * of contents is the only route from an offset to a reference, and one from
+ * another revision names the wrong verse with total confidence. `undefined`
+ * means "show the offset", never "guess".
+ */
+export const siteRef = (site: FlaggedSite, analysis: Analysis | undefined): Ref | undefined => {
+  if (analysis === undefined) return undefined;
+  if (analysis.docLen !== site.engine.docLen || analysis.sourceHash !== site.engine.sourceHash)
+    return undefined;
+  const at = analysis.dish.toc.at(site.from);
+  if (at === null) return undefined;
+  return { book: site.bookId, chapter: at.chapter, ...(at.verse > 0 ? { verse: at.verse } : {}) };
+};
 
 /** Everything the publication said about one code point. */
 export interface Glyph {
@@ -103,14 +136,17 @@ export interface Glyph {
   /**
    * An occurrences PROXY, not a count of the character in the text.
    *
-   * Every channel publishes the denominator it judged against — for a
-   * neighbour channel that is the number of sites of this glyph, for
-   * `Placement` the number of placements, for `Rarity` the corpus total. The
-   * largest of them is the closest thing the table holds to "how often does
-   * this character occur", and it is fair because each denominator is a count
-   * of real sites; it is a proxy because a glyph the engine measured on only
-   * one narrow channel reports that channel's denominator and nothing wider.
-   * Nothing here re-reads the text to check, deliberately: this module is a
+   * Every channel publishes a fraction, and which half of it counts THIS
+   * glyph depends on the channel. A neighbour, `Placement` or `RunShape` row
+   * is judged against the glyph's own sites, so its DENOMINATOR is the count.
+   * `Rarity` is judged against the whole corpus — its denominator is every
+   * scalar Sous measured — so its NUMERATOR is the count instead. The largest
+   * of those is the closest the table comes to "how often does this character
+   * occur".
+   *
+   * It stays a proxy for two reasons. A glyph the engine measured on only one
+   * narrow channel reports that channel's population and nothing wider. And
+   * nothing here re-reads the text to check, deliberately: this module is a
    * reader of the publication, not a second measurement of the project.
    */
   readonly sites: number;
@@ -326,9 +362,11 @@ interface Bucket {
  * The pattern table, pivoted per code point, with the convention findings
  * joined on.
  *
- * `resolveBook` maps a published host id back to the `BookId` the shell holds,
- * exactly as `fromSnapshot` does; a book the caller no longer holds is skipped
- * rather than guessed at, because a site nobody can open is not a site.
+ * `resolveBook` is the SAME resolver `fromSnapshot` takes — a published host
+ * id back to the book and the two stamps of the text we published — so
+ * `ProjectAnalysis` hands both readers one function and the sites here carry
+ * the same freshness answer the findings do. A book the caller no longer holds
+ * is skipped rather than guessed at: a site nobody can open is not a site.
  *
  * A publication in UTF-8 coordinates keeps its PATTERNS — a share and a
  * denominator are coordinate-free — but contributes no flagged sites, for the
@@ -338,7 +376,11 @@ interface Bucket {
  */
 export const inventory = (
   snapshot: FindingsSnapshot,
-  resolveBook: (id: string) => BookId | undefined,
+  resolveBook: (
+    id: string,
+  ) =>
+    | { readonly bookId: BookId; readonly stamp: SourceStamp; readonly engine: EngineStamp }
+    | undefined,
 ): Inventory => {
   const patterns = snapshot.patterns();
   const wordPatterns: PatternRow[] = [];
@@ -351,16 +393,18 @@ export const inventory = (
     for (let index = 0; index < snapshot.length; index += 1) {
       const book = snapshot.book(index);
       if (book === undefined) continue;
-      const bookId = resolveBook(book.id);
-      if (bookId === undefined) continue;
+      const resolved = resolveBook(book.id);
+      if (resolved === undefined) continue;
       for (let row = 0; row < book.count; row += 1) {
         const finding = book.at(row);
         if (finding.kind !== "Convention") continue;
         const at = finding.convention.pattern;
         const site: FlaggedSite = {
-          bookId,
+          bookId: resolved.bookId,
           from: finding.from,
           to: finding.to,
+          stamp: resolved.stamp,
+          engine: resolved.engine,
           reasons: finding.convention.reasons,
           pattern: at,
         };
@@ -418,7 +462,10 @@ export const inventory = (
     let sites = 0;
     let books = 0;
     for (const row of bucket.rows) {
-      if (row.denominator > sites) sites = row.denominator;
+      // See `Glyph.sites`: Rarity counts this glyph in its numerator, every
+      // other channel counts it in its denominator.
+      const counted = row.channel === "Rarity" ? row.numerator : row.denominator;
+      if (counted > sites) sites = counted;
       if (row.books > books) books = row.books;
     }
     glyphs.push({
