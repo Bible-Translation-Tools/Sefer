@@ -1,3 +1,132 @@
+/* ---------------------------------------------------------------------------
+ * The regular projection's palette.
+ *
+ * Paper, ink and everything the scripture surface paints with used to be
+ * literal hexes, under a comment further down saying that was deliberate:
+ * paper and terminal are projection choices, not a light/dark preference. That
+ * reading holds for the TERMINAL and not for the PAPER. USFM mode is a terminal
+ * in both themes, because that is what a terminal is; the regular projection is
+ * the page someone reads all day, and a bright sheet of #f7f6f3 in a dark room
+ * is not a projection choice, it is a missing theme.
+ *
+ * So the regular mode's colours are named here and swapped under the same two
+ * selectors `src/app/ui/tokens.css` uses — the explicit `data-theme` and the
+ * system preference — and the whole surface follows. They are deliberately NOT
+ * the app's semantic tokens: the scripture surface is warm paper and ink, not
+ * chrome, and painting it `--surface-primary` would make the text you are
+ * editing exactly the colour of the toolbar above it.
+ * ------------------------------------------------------------------------- */
+
+:root {
+  --editor-paper: #f7f6f3;
+  --editor-ink: #1f1d1b;
+  --editor-accent: #b45309;
+  --editor-highlight: #fde68a;
+  --editor-faint: #a8a29e;
+  --editor-muted: #78716c;
+  --editor-meta: #c7c2ba;
+  --editor-chunk: #d6d3d1;
+  --editor-rule: #ddd8d0;
+  --editor-note: #57534e;
+  --editor-link: #0e7490;
+  --editor-link-x: #7c3aed;
+  --editor-word-line: #c9b8a0;
+  --editor-word-hover: #f2ece1;
+  --editor-note-hover: #efece7;
+  --editor-focus-bg: #eff5ff;
+  --editor-focus-bar: #1d4ed8;
+  --editor-error-bg: #fde2e1;
+  --editor-error-line: #f0a6a2;
+  --editor-warn-bg: #fdf1cd;
+  --editor-warn-line: #e6c766;
+  --editor-slot-line: #d6a668;
+  --editor-slot-bg: #fdf3e3;
+  --editor-chip-bg: #d8ecf2;
+  --editor-chip-bg-hover: #b9dce6;
+  --editor-open-bg: #eef6f8;
+  --editor-open-line: #bcd9e2;
+  --editor-open-fg: #155e75;
+  --editor-pip-bg: #efe8fc;
+  --editor-pip-neutral-bg: #f5f5f4;
+  --editor-fr-bg: #e7eef2;
+  --editor-nested-fg: #6d28d9;
+  --editor-nested-line: #ddd0f7;
+}
+
+:root[data-theme="dark"] {
+  --editor-paper: #1b1917;
+  --editor-ink: #e7e2da;
+  --editor-accent: #e9a25b;
+  --editor-highlight: #5c4a15;
+  --editor-faint: #7a736c;
+  --editor-muted: #a39a90;
+  --editor-meta: #5f594f;
+  --editor-chunk: #4a4540;
+  --editor-rule: #3a352f;
+  --editor-note: #b5aca1;
+  --editor-link: #6cc0d6;
+  --editor-link-x: #b393f5;
+  --editor-word-line: #5a5049;
+  --editor-word-hover: #2a2723;
+  --editor-note-hover: #2a2723;
+  --editor-focus-bg: #182740;
+  --editor-focus-bar: #5b8def;
+  --editor-error-bg: #4a1f1f;
+  --editor-error-line: #aa3333;
+  --editor-warn-bg: #453a17;
+  --editor-warn-line: #a8892f;
+  --editor-slot-line: #7a5a2e;
+  --editor-slot-bg: #332b1d;
+  --editor-chip-bg: #1d3c45;
+  --editor-chip-bg-hover: #27515e;
+  --editor-open-bg: #17292f;
+  --editor-open-line: #2f4b55;
+  --editor-open-fg: #8ecbdc;
+  --editor-pip-bg: #2e2545;
+  --editor-pip-neutral-bg: #2a2724;
+  --editor-fr-bg: #22323a;
+  --editor-nested-fg: #b393f5;
+  --editor-nested-line: #3d3357;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --editor-paper: #1b1917;
+    --editor-ink: #e7e2da;
+    --editor-accent: #e9a25b;
+    --editor-highlight: #5c4a15;
+    --editor-faint: #7a736c;
+    --editor-muted: #a39a90;
+    --editor-meta: #5f594f;
+    --editor-chunk: #4a4540;
+    --editor-rule: #3a352f;
+    --editor-note: #b5aca1;
+    --editor-link: #6cc0d6;
+    --editor-link-x: #b393f5;
+    --editor-word-line: #5a5049;
+    --editor-word-hover: #2a2723;
+    --editor-note-hover: #2a2723;
+    --editor-focus-bg: #182740;
+    --editor-focus-bar: #5b8def;
+    --editor-error-bg: #4a1f1f;
+    --editor-error-line: #aa3333;
+    --editor-warn-bg: #453a17;
+    --editor-warn-line: #a8892f;
+    --editor-slot-line: #7a5a2e;
+    --editor-slot-bg: #332b1d;
+    --editor-chip-bg: #1d3c45;
+    --editor-chip-bg-hover: #27515e;
+    --editor-open-bg: #17292f;
+    --editor-open-line: #2f4b55;
+    --editor-open-fg: #8ecbdc;
+    --editor-pip-bg: #2e2545;
+    --editor-pip-neutral-bg: #2a2724;
+    --editor-fr-bg: #22323a;
+    --editor-nested-fg: #b393f5;
+    --editor-nested-line: #3d3357;
+  }
+}
+
 .usfm-line {
   margin: 0;
   font:
@@ -27,7 +156,7 @@
 }
 
 .cm-mode-regular {
-  background: #f7f6f3;
+  background: var(--editor-paper);
 }
 .cm-mode-regular .cm-content {
   max-width: 40rem;
@@ -36,16 +165,16 @@
   font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
   font-size: 18px;
   line-height: 1.72;
-  color: #1f1d1b;
-  caret-color: #b45309;
+  color: var(--editor-ink);
+  caret-color: var(--editor-accent);
 }
 .cm-mode-regular .cm-cursor {
-  border-left-color: #b45309;
+  border-left-color: var(--editor-accent);
   border-left-width: 2px;
 }
 .cm-mode-regular .cm-selectionBackground,
 .cm-mode-regular.cm-focused .cm-selectionBackground {
-  background: #fde68a !important;
+  background: var(--editor-highlight) !important;
 }
 .cm-mode-regular .cm-line {
   padding: 0;
@@ -93,7 +222,7 @@
     system-ui,
     sans-serif;
   vertical-align: super;
-  color: #b45309;
+  color: var(--editor-accent);
   margin: 0 0.3em 0 0.12em;
   user-select: none;
 }
@@ -106,7 +235,7 @@
     700 2.6em/1 "Iowan Old Style",
     Georgia,
     serif;
-  color: #a8a29e;
+  color: var(--editor-faint);
   letter-spacing: -0.02em;
 }
 .cm-mode-regular .usfm-head {
@@ -118,7 +247,7 @@
 .cm-mode-regular .usfm-d {
   font-weight: 400;
   font-style: italic;
-  color: #78716c;
+  color: var(--editor-muted);
   font-size: 0.92em;
 }
 .cm-mode-regular .usfm-front {
@@ -140,12 +269,12 @@
   font:
     400 11px/1.5 ui-monospace,
     monospace;
-  color: #c7c2ba;
+  color: var(--editor-meta);
   text-indent: 0;
 }
 .cm-mode-regular .usfm-chunk::after {
   content: "·";
-  color: #d6d3d1;
+  color: var(--editor-chunk);
   padding: 0 0.3em;
 }
 
@@ -196,23 +325,23 @@
     system-ui,
     sans-serif;
   vertical-align: super;
-  color: #0e7490;
+  color: var(--editor-link);
   user-select: none;
   cursor: pointer;
 }
 .cm-mode-regular .usfm-caller-x {
-  color: #7c3aed;
+  color: var(--editor-link-x);
 }
 .cm-mode-regular .usfm-notes {
   max-width: 40rem;
   margin: 1.2em auto 2.2em;
   padding-top: 0.7em;
-  border-top: 1px solid #ddd8d0;
+  border-top: 1px solid var(--editor-rule);
   font:
     400 13px/1.55 ui-sans-serif,
     system-ui,
     sans-serif;
-  color: #57534e;
+  color: var(--editor-note);
   text-indent: 0;
 }
 .cm-mode-regular .usfm-note {
@@ -221,13 +350,13 @@
   padding: 0.12em 0;
 }
 .cm-mode-regular .usfm-note-mark {
-  color: #0e7490;
+  color: var(--editor-link);
   font-weight: 600;
   font-size: 0.85em;
   padding-top: 0.15em;
 }
 .cm-mode-regular .usfm-note-ref {
-  color: #a8a29e;
+  color: var(--editor-faint);
   white-space: nowrap;
 }
 .cm-mode-usfm .usfm-notes {
@@ -245,7 +374,7 @@
     system-ui,
     sans-serif;
   vertical-align: super;
-  color: #b45309;
+  color: var(--editor-accent);
 }
 
 .cm-mode-regular .usfm-delim {
@@ -256,7 +385,7 @@
     700 2.4em/1 "Iowan Old Style",
     Georgia,
     serif;
-  color: #a8a29e;
+  color: var(--editor-faint);
   letter-spacing: -0.02em;
 }
 
@@ -264,8 +393,8 @@
   display: inline-block;
   width: 0.9em;
   height: 0.9em;
-  border: 1px dashed #d6a668;
-  background: #fdf3e3;
+  border: 1px dashed var(--editor-slot-line);
+  background: var(--editor-slot-bg);
   border-radius: 2px;
   vertical-align: super;
   margin-right: 0.3em;
@@ -283,8 +412,8 @@
     600 11px/1 ui-sans-serif,
     system-ui,
     sans-serif;
-  color: #0e7490;
-  background: #d8ecf2;
+  color: var(--editor-link);
+  background: var(--editor-chip-bg);
   border-radius: 3px;
   padding: 2px 4px;
   margin: 0 0.2em;
@@ -292,19 +421,19 @@
   user-select: none;
 }
 .cm-mode-regular .usfm-note-close:hover {
-  background: #b9dce6;
+  background: var(--editor-chip-bg-hover);
 }
 
 .cm-mode-regular .usfm-lint-error,
 .cm-mode-usfm .usfm-lint-error {
-  background: #fde2e1;
-  box-shadow: inset 0 0 0 1px #f0a6a2;
+  background: var(--editor-error-bg);
+  box-shadow: inset 0 0 0 1px var(--editor-error-line);
   border-radius: 2px;
 }
 .cm-mode-regular .usfm-lint-warn,
 .cm-mode-usfm .usfm-lint-warn {
-  background: #fdf1cd;
-  box-shadow: inset 0 0 0 1px #e6c766;
+  background: var(--editor-warn-bg);
+  box-shadow: inset 0 0 0 1px var(--editor-warn-line);
   border-radius: 2px;
 }
 .cm-mode-usfm .usfm-lint-error {
@@ -317,21 +446,21 @@
 }
 
 .cm-mode-regular .usfm-note-open {
-  background: #eef6f8;
-  box-shadow: inset 0 0 0 1px #bcd9e2;
+  background: var(--editor-open-bg);
+  box-shadow: inset 0 0 0 1px var(--editor-open-line);
   border-radius: 3px;
   font:
     400 0.82em/1.5 ui-monospace,
     SFMono-Regular,
     monospace;
-  color: #155e75;
+  color: var(--editor-open-fg);
   padding: 0.1em 0.2em;
 }
 .cm-mode-regular .usfm-note {
   cursor: pointer;
 }
 .cm-mode-regular .usfm-note:hover {
-  background: #efece7;
+  background: var(--editor-note-hover);
 }
 
 .cm-mode-regular .cm-gutters {
@@ -344,21 +473,21 @@
 }
 
 .cm-mode-regular .usfm-focus {
-  background: #eff5ff;
-  box-shadow: inset 3px 0 0 #1d4ed8;
+  background: var(--editor-focus-bg);
+  box-shadow: inset 3px 0 0 var(--editor-focus-bar);
   border-radius: 3px;
 }
 .cm-mode-regular .usfm-hit {
-  background: #fde68a;
+  background: var(--editor-highlight);
   border-radius: 2px;
 }
 
 .cm-mode-regular .usfm-word {
-  border-bottom: 1px dotted #c9b8a0;
+  border-bottom: 1px dotted var(--editor-word-line);
   cursor: help;
 }
 .cm-mode-regular .usfm-word:hover {
-  background: #f2ece1;
+  background: var(--editor-word-hover);
 }
 /* The attribute popover paints its own box. Scoped to its own class:
    `.cm-tooltip-hover` is worn by EVERY hover tooltip, and stripping the
@@ -441,8 +570,8 @@
     600 0.7em/1 ui-sans-serif,
     system-ui,
     sans-serif;
-  color: #7c3aed;
-  background: #efe8fc;
+  color: var(--editor-link-x);
+  background: var(--editor-pip-bg);
   border-radius: 3px;
   padding: 1px 3px;
   margin: 0 0.12em;
@@ -456,8 +585,8 @@
     600 0.62em/1 ui-sans-serif,
     system-ui,
     sans-serif;
-  color: #a8a29e;
-  background: #f5f5f4;
+  color: var(--editor-faint);
+  background: var(--editor-pip-neutral-bg);
   border-radius: 2px;
   padding: 1px 2px;
   margin: 0 0.22em 0 0;
@@ -470,8 +599,8 @@
   margin-right: 0.5em;
   padding: 0.05em 0.4em;
   border-radius: 3px;
-  background: #e7eef2;
-  color: #0e7490;
+  background: var(--editor-fr-bg);
+  color: var(--editor-link);
   font:
     600 0.78em/1.5 ui-sans-serif,
     system-ui,
@@ -482,7 +611,7 @@
   cursor: default;
 }
 .cm-mode-regular .usfm-ft {
-  color: #292524;
+  color: var(--editor-ink);
   font:
     400 0.95em/1.6 Charter,
     Georgia,
@@ -490,8 +619,8 @@
 }
 
 .cm-mode-regular .usfm-nested {
-  color: #6d28d9;
-  box-shadow: inset 0 -1px 0 #ddd0f7;
+  color: var(--editor-nested-fg);
+  box-shadow: inset 0 -1px 0 var(--editor-nested-line);
 }
 .cm-mode-regular .usfm-nested-xt {
   font-style: italic;
@@ -566,10 +695,11 @@
  *
  * Everything that FLOATS above the document is app chrome, not scripture, so it
  * reads from the semantic tokens in `src/app/ui/tokens.css` and follows the
- * app's theme — light and dark — instead of carrying its own hexes. (The two
- * scripture surfaces below, `.cm-mode-regular` and `.cm-mode-usfm`, are
- * deliberately NOT theme-swapped: paper and terminal are projection choices the
- * reader makes, not a light/dark preference, and their palettes stay literal.)
+ * app's theme — light and dark — instead of carrying its own hexes. (Of the
+ * two scripture surfaces above, `.cm-mode-regular` swaps with the theme through
+ * the `--editor-*` names at the top of this file; `.cm-mode-usfm` keeps its
+ * literal terminal palette in both themes, because a terminal is dark either
+ * way and that IS the projection choice.)
  *
  * CodeMirror's own base theme paints `.cm-tooltip` `#f5f5f5` and only swaps it
  * under a `&dark` editor theme, which Sefer does not install — so in dark mode

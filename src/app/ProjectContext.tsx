@@ -35,6 +35,7 @@ import type { Book, BookId } from "../core/book/book";
 import type { Finding } from "../core/findings/finding";
 import { navigateTarget } from "../core/findings/findings";
 import * as Fixes from "../core/fixes/fixes";
+import type { SettingKey } from "../core/host/settings";
 import { openProject as openProjectEffect, type Project } from "../core/project/project";
 import { Recovery } from "../core/recovery/recovery";
 import { DEFAULT_AUTOSAVE_POLICY, SaveCoordinator } from "../core/save/saveCoordinator";
@@ -43,7 +44,7 @@ import { registerShellCommands, type ShellBridge } from "./commands";
 import { useComposition } from "./CompositionContext";
 import { t } from "./i18n";
 import { composeServices, fixtureRequested, type Services } from "./services";
-import { shellKeys } from "./settings";
+import { shellKeys, SIDEBAR_WIDTH } from "./settings";
 
 export interface Shell {
   readonly services: Services;
@@ -104,6 +105,30 @@ export interface Shell {
   readonly report: (message: string) => void;
   readonly paletteOpen: Accessor<boolean>;
   readonly setPaletteOpen: (open: boolean) => void;
+
+  /**
+   * How many findings the reader is being asked to look at, by rung.
+   *
+   * The rail's bell and the toolbar's bell both want one number and neither
+   * wants to learn the findings module's vocabulary to get it, so the count is
+   * derived once here. `tick()` is read for the same reason everything derived
+   * here reads it: an edit changes the answer and nothing subscribes to a Book.
+   */
+  readonly findingCounts: Accessor<{ readonly errors: number; readonly warnings: number }>;
+
+  /**
+   * The workspace chrome: is the project sidebar showing, and how wide is it.
+   *
+   * Both are `workspace.*` preferences (src/app/settings.ts) and both live
+   * here for the same reason the mode and the clipped chapter do — the rail
+   * that toggles the sidebar and the sidebar itself are in different subtrees
+   * of the root route, and a route match is not a lifetime.
+   */
+  readonly sidebarOpen: Accessor<boolean>;
+  readonly setSidebarOpen: (open: boolean) => void;
+  /** A fraction of the workspace row; see `SIDEBAR_WIDTH`. */
+  readonly sidebarWidth: Accessor<number>;
+  readonly setSidebarWidth: (fraction: number) => void;
 }
 
 interface Ready {
@@ -190,6 +215,32 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     Effect.runFork(Fiber.interrupt(watching));
   });
 
+  // The workspace chrome, seeded from the preferences and written back as the
+  // reader moves it. No `settings.changes` fiber like `preferChapterView`
+  // above: this shell is the ONLY writer of these two keys — there is no
+  // settings widget for either — so the signal cannot fall behind the file.
+  const [sidebarOpen, setSidebarOpen] = createSignal(services.settings.get(keys.sidebarOpen), {
+    name: "sidebarOpen",
+  });
+  const [sidebarWidth, setSidebarWidth] = createSignal(services.settings.get(keys.sidebarWidth), {
+    name: "sidebarWidth",
+  });
+
+  const persist = <S,>(key: SettingKey<S>, value: S): void => {
+    // `Effect.result` because a rejected preference is a note, not a crash:
+    // the value is already on screen, and the shell's status line is where a
+    // refusal belongs.
+    void services.run(Effect.result(services.settings.set(key, value)));
+  };
+
+  // A drag publishes a fraction per pointer move, and every `settings.set`
+  // rewrites the whole preferences file. So the SIGNAL moves at pointer speed
+  // and the FILE is written once the drag settles.
+  let widthWrite: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => {
+    if (widthWrite !== undefined) clearTimeout(widthWrite);
+  });
+
   const report = (message: string): void => {
     setStatus(message);
     services.composition.observability.note("shell", "consumed", message);
@@ -204,6 +255,16 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     // after an edit; ProjectAnalysis memoises the list itself.
     tick();
     return project() === undefined ? [] : services.projectAnalysis.findings();
+  };
+
+  const findingCounts = (): { readonly errors: number; readonly warnings: number } => {
+    let errors = 0;
+    let warnings = 0;
+    for (const held of findings()) {
+      if (held.severity === "error") errors += 1;
+      else if (held.severity === "warning") warnings += 1;
+    }
+    return { errors, warnings };
   };
 
   const finding = (): Finding | undefined => {
@@ -398,6 +459,22 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     paletteOpen,
     setPaletteOpen: (open) => {
       setPaletteOpen(open);
+    },
+    findingCounts,
+    sidebarOpen,
+    setSidebarOpen: (open) => {
+      setSidebarOpen(open);
+      persist(keys.sidebarOpen, open);
+    },
+    sidebarWidth,
+    setSidebarWidth: (fraction) => {
+      const clamped = Math.min(SIDEBAR_WIDTH.max, Math.max(SIDEBAR_WIDTH.min, fraction));
+      setSidebarWidth(clamped);
+      if (widthWrite !== undefined) clearTimeout(widthWrite);
+      widthWrite = setTimeout(() => {
+        widthWrite = undefined;
+        persist(keys.sidebarWidth, clamped);
+      }, 400);
     },
   };
 

@@ -92,7 +92,24 @@ export interface ShellKeys {
    * `/settings` — see `FindingsFilterPreference`.
    */
   readonly findingsFilter: SettingKey<FindingsFilterPreference>;
+  /**
+   * Is the project sidebar showing, or is the workspace down to its icon rail?
+   * Written by the rail's panel toggle, and read once when the shell is built.
+   */
+  readonly sidebarOpen: SettingKey<boolean>;
+  /**
+   * How wide the project sidebar is, as a FRACTION of the workspace row (rail
+   * excluded), because that is the unit `Resizable` speaks: a split conserves
+   * fractions, so a pixel width would have to be converted against a root that
+   * has not been measured when the panel first renders. Clamped by the panel's
+   * own `minSize`/`maxSize`, so a stale value from a much wider window still
+   * lands somewhere usable.
+   */
+  readonly sidebarWidth: SettingKey<number>;
 }
+
+/** The sidebar's share of the workspace row, and the range a drag may reach. */
+export const SIDEBAR_WIDTH = { default: 0.2, min: 0.15, max: 0.36 } as const;
 
 /**
  * Registered once per `SettingsService`, and cached.
@@ -118,6 +135,8 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
       FindingsFilterPreference,
       FINDINGS_FILTER_DEFAULT,
     ),
+    sidebarOpen: settings.register("workspace.sidebarOpen", Schema.Boolean, true),
+    sidebarWidth: settings.register("workspace.sidebarWidth", Schema.Number, SIDEBAR_WIDTH.default),
   };
   registered.set(settings, keys);
   return keys;

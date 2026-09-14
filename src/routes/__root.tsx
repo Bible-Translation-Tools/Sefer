@@ -1,39 +1,79 @@
-import { HeadContent, Link, Outlet, createRootRoute, useNavigate } from "@tanstack/solid-router";
-import FolderOpen from "lucide-solid/icons/folder-open";
-import HistoryIcon from "lucide-solid/icons/history";
-import SearchIcon from "lucide-solid/icons/search";
-import SettingsIcon from "lucide-solid/icons/settings";
-import TriangleAlert from "lucide-solid/icons/triangle-alert";
-import { For, Show, onCleanup } from "solid-js";
+import { HeadContent, Outlet, createRootRoute, useNavigate } from "@tanstack/solid-router";
+import { Show, onCleanup, untrack } from "solid-js";
 
 import { installCommandKeys, runCommand } from "../app/commands";
 import { t } from "../app/i18n";
-import { ProjectProvider, readyShell, useShellState } from "../app/ProjectContext";
+import { ProjectProvider, readyShell, useShell, useShellState } from "../app/ProjectContext";
+import { SIDEBAR_WIDTH } from "../app/settings";
 import { CommandPalette } from "../app/ui/CommandPalette";
-import { Kbd, Toaster } from "../app/ui/primitives";
+import { Kbd, Resizable, Toaster } from "../app/ui/primitives";
+import { IconRail } from "../app/ui/workspace/IconRail";
+import { ProjectSidebar } from "../app/ui/workspace/ProjectSidebar";
 
 /**
- * The application shell: the sidebar, the palette, the status line, and the
- * one <ProjectProvider> every route reads.
+ * The application shell: the icon rail, the project sidebar, the palette, the
+ * status line, and the one <ProjectProvider> every route reads.
  *
  * The provider is here rather than in `src/App.tsx` because it needs the
  * router's `navigate` — a command that jumps to a finding is navigation — and
  * because App.tsx owns exactly one thing, the composition.
  *
- * The sidebar is a WHITE panel and a plain vertical nav list
- * (planning/03-ui/design-direction.md). It is deliberately not the project
- * sidebar the mockups describe — the book list, the chapter grid, the
- * collapse-to-rail — because that one belongs to the open project and is built
- * with the workspace, not under it.
+ * The chrome is the mockups' workspace (planning/03-ui/design-direction.md,
+ * "Overall layout"): a permanent icon RAIL for "where in Sefer am I", and
+ * beside it a resizable project SIDEBAR for "where in this project am I". The
+ * rail's panel toggle collapses the second, never the first.
+ *
+ * Why the collapsed sidebar is hidden rather than unmounted: `Resizable`
+ * registers its panels DURING render, in document order, so a conditionally
+ * rendered panel would renumber the split — and unmounting the sidebar's
+ * SIBLING (the panel holding the routed content) would destroy and rebuild the
+ * editor's `EditorView` every time someone tapped the toggle. The canonical
+ * text would survive that, because it lives in the Book; the reader's scroll
+ * position and selection would not.
  */
 
-const NAV = [
-  { to: "/projects", label: "Projects", icon: FolderOpen },
-  { to: "/findings", label: "Findings", icon: TriangleAlert },
-  { to: "/find", label: "Find", icon: SearchIcon },
-  { to: "/history", label: "History", icon: HistoryIcon },
-  { to: "/settings", label: "Settings", icon: SettingsIcon },
-] as const;
+function Workspace() {
+  const shell = useShell();
+  // Plain variables, not expressions in the props: `Resizable.Panel` reads its
+  // three sizes ONCE, during registration, and a JSX expression is a lazy memo
+  // Solid 2 warns about when it is read outside a tracking scope. The width is
+  // a one-time read by design — the persisted value seeds the split, and the
+  // split owns it from there (primitives/Resizable.tsx) — so it is untracked
+  // rather than merely read, which is the same statement said to the compiler.
+  const initialWidth = untrack(() => shell.sidebarWidth());
+  const minWidth = SIDEBAR_WIDTH.min;
+  const maxWidth = SIDEBAR_WIDTH.max;
+  return (
+    <Resizable.Root
+      class="h-full"
+      onSizesChange={(sizes) => {
+        const first = sizes[0];
+        if (first !== undefined) shell.setSidebarWidth(first);
+      }}
+    >
+      <Resizable.Panel
+        initialSize={initialWidth}
+        minSize={minWidth}
+        maxSize={maxWidth}
+        class={shell.sidebarOpen() ? undefined : "hidden"}
+      >
+        <ProjectSidebar />
+      </Resizable.Panel>
+      <Resizable.Handle
+        label={t("Resize the project panel")}
+        class={shell.sidebarOpen() ? undefined : "hidden"}
+      />
+      {/* The `!` is load-bearing: `Resizable.Panel` writes its share as an
+          inline `flex-basis`, and with the sidebar hidden the routed content
+          has to take the whole row back. */}
+      <Resizable.Panel class={shell.sidebarOpen() ? undefined : "[flex-basis:100%]!"}>
+        <div class="h-full overflow-y-auto">
+          <Outlet />
+        </div>
+      </Resizable.Panel>
+    </Resizable.Root>
+  );
+}
 
 function Chrome() {
   const state = useShellState();
@@ -46,46 +86,52 @@ function Chrome() {
   const shell = () => readyShell(state());
 
   return (
-    <div class="grid min-h-screen grid-cols-[14rem_1fr] bg-surface-secondary">
-      <nav class="flex flex-col gap-0.5 border-e border-sidebar-border bg-sidebar-surface p-3">
-        {/* Not a heading: the landing route already owns the page's h1, and two
-            "Sefer" headings would make the accessibility tree ambiguous. */}
-        <div class="px-2 pb-3 text-h4 font-bold text-on-surface-primary">{t("Sefer")}</div>
-        <For each={NAV}>
-          {(item) => (
-            <Link
-              to={item.to}
-              class="flex items-center gap-2 rounded-md px-2 py-1.5 text-small text-sidebar-on-surface-muted no-underline transition-colors hover:bg-sidebar-surface-hover hover:text-sidebar-on-surface"
-              activeProps={{
-                "data-status": "active",
-                class: "bg-sidebar-surface-active font-medium text-brand",
-              }}
-            >
-              <item.icon size={16} aria-hidden="true" />
-              {t(item.label)}
-            </Link>
-          )}
-        </For>
-        <button
-          type="button"
-          class="mt-1 flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-small text-sidebar-on-surface-muted transition-colors hover:bg-sidebar-surface-hover hover:text-sidebar-on-surface"
-          onClick={() => runCommand("palette.open")}
-        >
-          {t("Commands")}
-          <Kbd class="ms-auto">Mod-K</Kbd>
-        </button>
-        <footer class="mt-auto space-y-0.5 px-2 pt-3 text-smallest text-on-surface-tertiary">
+    <div class="flex h-screen bg-surface-secondary">
+      <Show
+        when={shell()}
+        fallback={<div class="w-13 shrink-0 border-e border-sidebar-border bg-surface-primary" />}
+      >
+        <IconRail />
+      </Show>
+
+      <div class="flex min-w-0 flex-1 flex-col">
+        <div class="min-h-0 flex-1">
+          <Show
+            when={shell()}
+            fallback={
+              <div class="h-full overflow-y-auto">
+                <Outlet />
+              </div>
+            }
+          >
+            <Workspace />
+          </Show>
+        </div>
+
+        {/* The status line, one compact row at the foot of the content column.
+            It is the shell's only permanent readout — which storage this
+            composition got, what the last operation said, and the one chord
+            that reaches everything else. */}
+        <footer class="flex items-center gap-3 border-t border-sidebar-border bg-surface-primary px-3 py-1 text-smallest text-on-surface-tertiary">
           <Show when={shell()} fallback={<span>{t("starting…")}</span>}>
             {(ready) => (
               <>
-                <div data-storage={ready().services.storage}>{ready().services.storage}</div>
-                <div>{ready().status()}</div>
+                <span data-storage={ready().services.storage}>{ready().services.storage}</span>
+                <span class="truncate">{ready().status()}</span>
+                <button
+                  type="button"
+                  class="ms-auto flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 transition-colors hover:bg-surface-secondary hover:text-on-surface-secondary"
+                  onClick={() => runCommand("palette.open")}
+                >
+                  {t("Commands")}
+                  <Kbd>Mod-K</Kbd>
+                </button>
               </>
             )}
           </Show>
         </footer>
-      </nav>
-      <Outlet />
+      </div>
+
       <Show when={shell()}>
         {(ready) => (
           <CommandPalette
