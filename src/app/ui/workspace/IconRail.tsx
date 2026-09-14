@@ -15,7 +15,7 @@
  * (planning/03-ui/design-direction.md).
  */
 
-import { useNavigate } from "@tanstack/solid-router";
+import { useNavigate, useRouterState } from "@tanstack/solid-router";
 import Bell from "lucide-solid/icons/bell";
 import BookOpen from "lucide-solid/icons/book-open";
 import Code from "lucide-solid/icons/code";
@@ -47,16 +47,40 @@ export function IconRail() {
   const findings = () => shell.findingCounts();
   const attention = () => findings().errors + findings().warnings;
 
+  // Where in Sefer the reader is, so the rail can say so. A prefix test and
+  // not an equality: `/findings` has no children yet, but `/start/*` is the
+  // projects screen's second half and must not read as somewhere else.
+  const path = useRouterState({ select: (state) => state.location.pathname });
+  const at = (prefix: string): "true" | "false" => (path().startsWith(prefix) ? "true" : "false");
+  // `/find` in key-terms mode is the tile's own screen, and the mode is in the
+  // URL — which is why the route derives it from the search params rather than
+  // seeding a signal from them (src/routes/find.tsx).
+  const searchMode = useRouterState({
+    select: (state) => {
+      // SAFETY: the router types this union over every route's own search
+      // schema, and only `/find` declares `mode`. The property is read, never
+      // called, and the `startsWith` below is what makes the read meaningful.
+      const search = state.location.search as { readonly mode?: string };
+      return search.mode;
+    },
+  });
+  const stet = (): boolean => path().startsWith("/find") && searchMode() === "stet";
+
   return (
     <nav
       aria-label={t("Sefer")}
       class="flex w-13 shrink-0 flex-col items-center gap-1 border-e border-sidebar-border bg-surface-primary py-3"
     >
+      {/* Pressed reports what is ON SCREEN, not what the preference says: with
+          no project and no history the panel has nothing to show and the shell
+          collapses it (`shell.sidebarShowing`), and a toggle lit over a
+          collapsed panel would be the rail claiming otherwise. The click still
+          writes the reader's own answer, which is waiting when a project opens. */}
       <IconButton
-        label={shell.sidebarOpen() ? t("Hide the project panel") : t("Show the project panel")}
+        label={shell.sidebarShowing() ? t("Hide the project panel") : t("Show the project panel")}
         tooltipSide="right"
         icon={<PanelLeft size={18} />}
-        aria-pressed={shell.sidebarOpen() ? "true" : "false"}
+        aria-pressed={shell.sidebarShowing() ? "true" : "false"}
         onClick={() => shell.setSidebarOpen(!shell.sidebarOpen())}
       />
 
@@ -74,6 +98,7 @@ export function IconRail() {
           label={t("Key terms")}
           tooltipSide="right"
           icon={<ListChecks size={18} />}
+          aria-pressed={stet() ? "true" : "false"}
           onClick={() => go("/find", { mode: "stet" })}
         />
         <IconButton
@@ -93,6 +118,7 @@ export function IconRail() {
           <IconButton
             label={t("Findings")}
             tooltipSide="right"
+            aria-pressed={at("/findings")}
             icon={<Bell size={18} />}
             onClick={() => go("/findings")}
           />
@@ -110,12 +136,14 @@ export function IconRail() {
         <IconButton
           label={t("History")}
           tooltipSide="right"
+          aria-pressed={at("/history")}
           icon={<HistoryIcon size={18} />}
           onClick={() => go("/history")}
         />
         <IconButton
           label={t("Settings")}
           tooltipSide="right"
+          aria-pressed={at("/settings")}
           icon={<SettingsIcon size={18} />}
           onClick={() => go("/settings")}
         />

@@ -54,12 +54,55 @@ What each state means:
   choosing a chapter clips, "Whole book" un-clips, and `editor.chapter.next/previous/whole` do the
   same from the palette. Navigation that names an offset (a finding, a search hit) leaves the book
   un-clipped and the offset is scrolled to.
-- **On.** `focus` opens clipped — to the chapter the navigation asked for, or the first one — and the
-  picker is labelled and marked `data-prominent="true"` for a style rule to pick up.
+- **On.** `focus` opens clipped — to the chapter the navigation asked for, or the first one.
 
 Findings and search navigate by URL, and the route that lands calls `focus(bookId)` with no offset. So
 the offset is left on the shell first: `shell.aim(bookId, from)` records it, `focus` reads it to
 choose the opening chapter, and `shell.reveal()` keeps it for the editor surface to scroll to.
+
+## The workspace chrome
+
+Three components, in `src/app/ui/workspace/`, and one rule between them: the
+RAIL answers "where in Sefer am I", the SIDEBAR answers "where in this project
+am I", and the TOOLBAR answers "what am I looking at".
+
+- **`IconRail`** is permanent and one tile wide. Its panel toggle collapses the
+  sidebar and never itself. The mode tiles (Refine, Key terms, USFM) appear
+  only while a project is open; Key terms is a navigation to `/find?mode=stet`
+  and is lit from the URL, not from a signal. Findings, History and Settings
+  are lit by a `pathname` prefix, which is also why `/start/*` lights the
+  project chooser: it is the projects screen's second half.
+- **`ProjectSidebar`** is the book list, the review pills from
+  `ProjectAnalysis.census`, and the chapter grid of the FOCUSED book — the one
+  place a chapter is chosen. There is no chapter `<select>` on the editor page.
+  With no project open the panel shows `shell.recentProjects` instead (the
+  `shell.recentProjects` preference the landing screen writes as it opens a
+  root) plus an "All projects" link; with no project AND no history there is
+  nothing to show, so `shell.sidebarShowing()` is false and the panel is off
+  screen. That is separate from `shell.sidebarOpen()`, which stays exactly as
+  the reader left it.
+- **`Toolbar`** names the book — "Philemon (small-nt)" whole, "Philemon 1
+  (small-nt)" clipped, "Philemon front (small-nt)" in the front matter — and
+  every action on it is a `runCommand`.
+
+The split itself is `Resizable` (`src/app/ui/primitives/Resizable.tsx`), which
+does not implement collapsing: a collapsed pane is a different tree, so the
+sidebar panel is HIDDEN rather than unmounted, because unmounting it would
+renumber the split and rebuild the editor's `EditorView` beside it.
+
+The chrome's own preferences, all declared in `src/app/settings.ts`:
+`workspace.sidebarOpen` (the reader's toggle) and `workspace.sidebarWidth` (a
+fraction of the row, written once the drag settles); `shell.theme`,
+`shell.fontSize` and `shell.zoom`, applied to `<html>` by
+`src/app/ui/theme.ts`; `editor.fontSize`, the scripture column's own size,
+applied by the same module as `--editor-font-size` and kept live by a fiber
+over `settings.changes` in `ProjectContext`; and `shell.recentProjects`, the
+root → ISO-8601 record the sidebar and the landing screen share.
+
+`shell.updateAvailable()` is one `Updater.check()` per session, on the desktop
+host only, five seconds after the shell is built. The sidebar footer reads an
+answer rather than asking one, which is what keeps a footer from making a
+network request per render.
 
 ## The findings panel's filter
 
@@ -73,7 +116,7 @@ An Effect-returning command is run on the app runtime by the runner `registerShe
 
 ## Routes and tokens
 
-`/projects`, `/project/$id`, `/project/$id/book/$book`, `/find`, `/findings`, `/history`, `/settings`, plus `/` and the dev-only `/dev/fixture`. File routes under `src/routes`; `src/routeTree.gen.ts` is generated — never edit it.
+`/projects`, `/start/create`, `/start/find`, `/project/$id`, `/project/$id/book/$book`, `/find`, `/findings`, `/history`, `/settings`, plus `/` and the dev-only `/dev/fixture`. `/find` owns its search params (`q`, `mode`, `scope`) and derives its whole state from them, so a link into it from the rail or the toolbar changes the screen that is already mounted. File routes under `src/routes`; `src/routeTree.gen.ts` is generated — never edit it.
 
 `src/app/ui/tokens.css` is the design system as plain custom properties, ported from the v1 editor's vanilla-extract contract so the two read as one product, and it is also the Tailwind v4 configuration: an `@theme` block mints a utility from every semantic name. Components use the semantic names (`bg-surface-primary`), never the ramps. Dark is a token swap under `[data-theme="dark"]` and `prefers-color-scheme`, never Tailwind's `dark:` variant. The reusable components live in `src/app/ui/primitives/`, which is the only place corvu is imported. `src/app/ui/app.css` is the one global stylesheet and holds only the `<body>` ground and the CodeMirror frame. See [the UI layer](ui.md).
 

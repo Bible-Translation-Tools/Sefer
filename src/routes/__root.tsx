@@ -9,6 +9,10 @@ import { CommandPalette } from "../app/ui/CommandPalette";
 import { Kbd, Resizable, Toaster } from "../app/ui/primitives";
 import { IconRail } from "../app/ui/workspace/IconRail";
 import { ProjectSidebar } from "../app/ui/workspace/ProjectSidebar";
+// The appearance applier, imported for its side effect and imported HERE: it
+// writes the cached theme, interface size and scripture size onto <html> at
+// module load, and the root route is the one module every screen goes through.
+import "../app/ui/theme";
 
 /**
  * The application shell: the icon rail, the project sidebar, the palette, the
@@ -55,18 +59,18 @@ function Workspace() {
         initialSize={initialWidth}
         minSize={minWidth}
         maxSize={maxWidth}
-        class={shell.sidebarOpen() ? undefined : "hidden"}
+        class={shell.sidebarShowing() ? undefined : "hidden"}
       >
         <ProjectSidebar />
       </Resizable.Panel>
       <Resizable.Handle
         label={t("Resize the project panel")}
-        class={shell.sidebarOpen() ? undefined : "hidden"}
+        class={shell.sidebarShowing() ? undefined : "hidden"}
       />
       {/* The `!` is load-bearing: `Resizable.Panel` writes its share as an
           inline `flex-basis`, and with the sidebar hidden the routed content
           has to take the whole row back. */}
-      <Resizable.Panel class={shell.sidebarOpen() ? undefined : "[flex-basis:100%]!"}>
+      <Resizable.Panel class={shell.sidebarShowing() ? undefined : "[flex-basis:100%]!"}>
         <div class="h-full overflow-y-auto">
           <Outlet />
         </div>

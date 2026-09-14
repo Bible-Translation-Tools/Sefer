@@ -13,10 +13,11 @@
  * open grids would be two answers to "which chapter am I in".
  */
 
-import { useNavigate } from "@tanstack/solid-router";
+import { useNavigate, useRouterState } from "@tanstack/solid-router";
 import BookIcon from "lucide-solid/icons/book";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";
+import FolderClock from "lucide-solid/icons/folder-clock";
 import SearchIcon from "lucide-solid/icons/search";
 import SettingsIcon from "lucide-solid/icons/settings";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
@@ -24,9 +25,9 @@ import { For, Show, createEffect, createSignal } from "solid-js";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { Input } from "../primitives";
+import { Badge, Input } from "../primitives";
 import { bookName, parseReference, testamentOf, type Testament } from "./books";
-import { bookPath, metadataOf, projectLanguage, projectName } from "./project";
+import { bookPath, metadataOf, projectLanguage, projectName, projectPath } from "./project";
 
 interface Row {
   readonly id: string;
@@ -179,7 +180,7 @@ export function ProjectSidebar() {
                     type="button"
                     data-chapter={chapter.index}
                     data-current={shell.chapter() === chapter.index ? "" : undefined}
-                    class="w-full cursor-pointer rounded-md border border-transparent py-1 text-center text-smallest tabular-nums transition-colors data-current:border-brand data-current:bg-brand-light data-current:font-semibold data-current:text-brand not-data-current:text-on-surface-secondary not-data-current:hover:bg-sidebar-surface-hover"
+                    class="w-full cursor-pointer rounded-md border py-1 text-center text-smallest tabular-nums transition-colors data-current:border-brand data-current:bg-brand-light data-current:font-semibold data-current:text-brand not-data-current:border-surface-border not-data-current:bg-surface-primary not-data-current:text-on-surface-secondary not-data-current:hover:bg-sidebar-surface-hover"
                     onClick={() => shell.setChapter(chapter.index)}
                   >
                     {chapter.label}
@@ -202,12 +203,64 @@ export function ProjectSidebar() {
     </Show>
   );
 
+  /**
+   * With no project open, the panel is the way back into one.
+   *
+   * The book list and the reference box both need a project to mean anything —
+   * an empty list under a search box that searches it is the panel saying
+   * nothing twice. `shell.recentProjects` is what the landing screen wrote as
+   * it opened each one, so this is a history and not a directory listing; when
+   * it is empty there is nothing to show and the shell collapses the panel
+   * altogether (`shell.sidebarShowing`).
+   */
+  const Recents = () => (
+    <nav aria-label={t("Recent projects")} class="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+      <p class="px-2 pt-3 pb-1 text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase">
+        {t("Recent projects")}
+      </p>
+      <ul>
+        <For each={shell.recentProjects()}>
+          {(recent) => (
+            <li>
+              <button
+                type="button"
+                data-recent={recent.root}
+                class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start text-small text-sidebar-on-surface transition-colors hover:bg-sidebar-surface-hover"
+                onClick={() => go(projectPath(recent.root))}
+              >
+                <FolderClock size={15} aria-hidden="true" class="shrink-0" />
+                <span class="min-w-0 flex-1 truncate">{recent.name}</span>
+              </button>
+            </li>
+          )}
+        </For>
+      </ul>
+      <button
+        type="button"
+        class="mt-2 w-full cursor-pointer rounded-md px-2 py-1.5 text-start text-small text-brand transition-colors hover:bg-sidebar-surface-hover"
+        onClick={() => go("/projects")}
+      >
+        {t("All projects")}
+      </button>
+    </nav>
+  );
+
+  /**
+   * Is the reader on the projects side of the app? `/start/*` is the landing
+   * screen's second half — bringing a project in — so the chooser is the
+   * current place there too, and marking only `/projects` would make the
+   * sidebar disagree with the screen.
+   */
+  const path = useRouterState({ select: (state) => state.location.pathname });
+  const choosing = (): boolean => path().startsWith("/projects") || path().startsWith("/start");
+
   return (
     <div class="flex h-full flex-col border-e border-sidebar-border bg-sidebar-surface">
       <div class="p-3 pb-2">
         <button
           type="button"
-          class="flex w-full cursor-pointer items-center gap-2 rounded-lg border border-surface-border bg-surface-primary px-3 py-2 text-start transition-colors hover:bg-sidebar-surface-hover"
+          data-current={choosing() ? "" : undefined}
+          class="flex w-full cursor-pointer items-center gap-2 rounded-lg border bg-surface-primary px-3 py-2 text-start transition-colors hover:bg-sidebar-surface-hover data-current:border-brand data-current:bg-brand-light not-data-current:border-surface-border"
           onClick={() => go("/projects")}
         >
           <span class="min-w-0 flex-1">
@@ -226,38 +279,40 @@ export function ProjectSidebar() {
         </button>
       </div>
 
-      <div class="px-3 pb-2">
-        <Input
-          size="sm"
-          type="search"
-          icon={<SearchIcon size={14} />}
-          aria-label={t("Go to a book or chapter")}
-          placeholder={t("Search 'Luke 1'…")}
-          value={query()}
-          onInput={(event) => setQuery(event.currentTarget.value)}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter") return;
-            event.preventDefault();
-            jump();
-          }}
-        />
-      </div>
+      <Show when={shell.project()} fallback={<Recents />}>
+        <div class="px-3 pb-2">
+          <Input
+            size="sm"
+            type="search"
+            icon={<SearchIcon size={14} />}
+            aria-label={t("Go to a book or chapter")}
+            placeholder={t("Search 'Luke 1'…")}
+            value={query()}
+            onInput={(event) => setQuery(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              jump();
+            }}
+          />
+        </div>
 
-      <nav aria-label={t("Books")} class="@container min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-        <Show
-          when={rows().length > 0}
-          fallback={
-            <p class="px-2 py-4 text-small text-on-surface-tertiary">
-              {t("This project has no books yet.")}
-            </p>
-          }
-        >
-          <ul>
-            <Section label={t("Old Testament")} rows={section("ot")} />
-            <Section label={t("New Testament")} rows={section("nt")} />
-          </ul>
-        </Show>
-      </nav>
+        <nav aria-label={t("Books")} class="@container min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+          <Show
+            when={rows().length > 0}
+            fallback={
+              <p class="px-2 py-4 text-small text-on-surface-tertiary">
+                {t("This project has no books yet.")}
+              </p>
+            }
+          >
+            <ul>
+              <Section label={t("Old Testament")} rows={section("ot")} />
+              <Section label={t("New Testament")} rows={section("nt")} />
+            </ul>
+          </Show>
+        </nav>
+      </Show>
 
       <footer class="border-t border-sidebar-border p-3">
         <button
@@ -268,11 +323,15 @@ export function ProjectSidebar() {
           <SettingsIcon size={15} aria-hidden="true" />
           {t("Settings")}
         </button>
-        {/* TODO(seam): the "Update available" pill the mockup puts here. The
-            `Updater` port only answers on demand (`check()` is an Effect that
-            reaches the network), and there is no signal to read — polling it
-            from the sidebar would make every project a background request.
-            It wants a checked-once-at-start value on the shell first. */}
+        {/* The mockup's "Update available" pill. `shell.updateAvailable` is one
+            `Updater.check()` per session, on the desktop host, a few seconds
+            after boot — the sidebar reads an answer rather than asking, which
+            is what keeps a footer from making a network request per render. */}
+        <Show when={shell.updateAvailable()}>
+          <p class="px-2 pt-2">
+            <Badge tone="brand">{t("Update available")}</Badge>
+          </p>
+        </Show>
       </footer>
     </div>
   );

@@ -42,6 +42,9 @@ export const projectName = (project: Project | undefined): string => {
 export const projectLanguage = (project: Project | undefined): string =>
   metadataOf(project)?.languages[0]?.tag ?? "";
 
+/** The route of one project. */
+export const projectPath = (root: string): string => `/project/${encodeURIComponent(root)}`;
+
 /** The route of one book in one project, with both segments encoded once. */
 export const bookPath = (root: string, bookId: string): string =>
   `/project/${encodeURIComponent(root)}/book/${encodeURIComponent(bookId)}`;

@@ -64,13 +64,14 @@ export function Toolbar() {
     const project = shell.project();
     const clipped = shell.chapter();
     const label = clipped === null ? undefined : book.structure().chapters[clipped]?.label;
-    const where =
-      clipped === null ? t("whole book") : label === undefined || label === "" ? t("front") : label;
-    return t("{book} {where} ({project})", {
-      book: bookName(book.id, metadataOf(project)),
-      where,
-      project: projectName(project),
-    });
+    const named = bookName(book.id, metadataOf(project));
+    const of = projectName(project);
+    // A whole book is the ordinary case, so it says nothing: "Philemon
+    // (small-nt)". A clip names where you are — "Philemon 1 (small-nt)" — and
+    // an empty label is the front matter, which is a place, not a blank.
+    if (clipped === null) return t("{book} ({project})", { book: named, project: of });
+    const where = label === undefined || label === "" ? t("front") : label;
+    return t("{book} {where} ({project})", { book: named, where, project: of });
   };
 
   const segment = (): Segment => (shell.mode() === "usfm" ? "usfm" : "regular");

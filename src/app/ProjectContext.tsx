@@ -40,11 +40,13 @@ import { openProject as openProjectEffect, type Project } from "../core/project/
 import { Recovery } from "../core/recovery/recovery";
 import { DEFAULT_AUTOSAVE_POLICY, SaveCoordinator } from "../core/save/saveCoordinator";
 import type { EditorBook, ProjectionName } from "../editor";
+import { detectHost } from "../platform/host";
 import { registerShellCommands, type ShellBridge } from "./commands";
 import { useComposition } from "./CompositionContext";
 import { t } from "./i18n";
 import { composeServices, fixtureRequested, type Services } from "./services";
-import { shellKeys, SIDEBAR_WIDTH } from "./settings";
+import { shellKeys, SIDEBAR_WIDTH, type RecentProjects } from "./settings";
+import { applyEditorFontSize } from "./ui/theme";
 
 export interface Shell {
   readonly services: Services;
@@ -126,9 +128,37 @@ export interface Shell {
    */
   readonly sidebarOpen: Accessor<boolean>;
   readonly setSidebarOpen: (open: boolean) => void;
+  /**
+   * Is the sidebar actually on screen — the reader's toggle AND something to
+   * put in it. With no project open and no history the panel had nothing but
+   * an empty book list and a search box that searched it, so it collapses to
+   * the rail; `sidebarOpen` keeps the reader's own answer, untouched, for when
+   * a project is open again.
+   */
+  readonly sidebarShowing: Accessor<boolean>;
   /** A fraction of the workspace row; see `SIDEBAR_WIDTH`. */
   readonly sidebarWidth: Accessor<number>;
   readonly setSidebarWidth: (fraction: number) => void;
+  /**
+   * The project roots this device has opened, newest first — `shell.recentProjects`
+   * read as a list. The landing screen writes the key as it opens a project;
+   * the sidebar reads it so a window with nothing open still offers the way
+   * back in.
+   */
+  readonly recentProjects: Accessor<readonly RecentProject[]>;
+  /**
+   * Is there a newer Sefer? Checked ONCE per session, on the desktop host
+   * only, a few seconds after boot, and never awaited by anything: the answer
+   * is a pill in the sidebar footer and nothing branches on it.
+   */
+  readonly updateAvailable: Accessor<boolean>;
+}
+
+/** One row of `shell.recentProjects`: a root, its folder name, and when. */
+export interface RecentProject {
+  readonly root: string;
+  readonly name: string;
+  readonly at: string;
 }
 
 interface Ready {
@@ -215,6 +245,42 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     Effect.runFork(Fiber.interrupt(watching));
   });
 
+  // The scripture size. Applied to the document rather than held for a
+  // component to read: `src/editor/editor.css` reads `--editor-font-size` for
+  // every `.cm-mode-regular` surface, so one write resizes the open book, the
+  // reference column and every excerpt satellite at once. The fiber is what
+  // makes the stepper on `/settings` move the text under it.
+  applyEditorFontSize(services.settings.get(keys.editorFontSize));
+  const sizing = services.runtime.runFork(
+    Stream.runForEach(services.settings.changes(keys.editorFontSize), (px) =>
+      Effect.sync(() => applyEditorFontSize(px)),
+    ),
+  );
+  onCleanup(() => {
+    Effect.runFork(Fiber.interrupt(sizing));
+  });
+
+  // Which roots this device has opened, newest first. A signal and a fiber
+  // for the same reason as above: the landing screen writes the key as it
+  // opens a project, and the sidebar beside it must not still be showing the
+  // list from before.
+  const asRows = (held: RecentProjects): readonly RecentProject[] =>
+    Object.entries(held)
+      .map(([root, at]) => ({ root, at, name: root.slice(root.lastIndexOf("/") + 1) || root }))
+      .sort((left, right) => right.at.localeCompare(left.at));
+  const [recentProjects, setRecentProjects] = createSignal<readonly RecentProject[]>(
+    asRows(services.settings.get(keys.recentProjects)),
+    { name: "recentProjects", equals: false },
+  );
+  const recents = services.runtime.runFork(
+    Stream.runForEach(services.settings.changes(keys.recentProjects), (held) =>
+      Effect.sync(() => setRecentProjects(asRows(held))),
+    ),
+  );
+  onCleanup(() => {
+    Effect.runFork(Fiber.interrupt(recents));
+  });
+
   // The workspace chrome, seeded from the preferences and written back as the
   // reader moves it. No `settings.changes` fiber like `preferChapterView`
   // above: this shell is the ONLY writer of these two keys — there is no
@@ -240,6 +306,22 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
   onCleanup(() => {
     if (widthWrite !== undefined) clearTimeout(widthWrite);
   });
+
+  // Is there a newer Sefer? One check, on the desktop host only, five seconds
+  // after the shell is built — late enough that it never competes with opening
+  // a project, and once because a pill in a footer does not need polling. The
+  // Web host's `NoUpdaterLive` answers `Unavailable` without a request, so the
+  // host test is about honesty rather than cost.
+  const [updateAvailable, setUpdateAvailable] = createSignal(false, { name: "updateAvailable" });
+  if (detectHost() === "tauri") {
+    const askAt = setTimeout(() => {
+      void services
+        .run(services.updater.check())
+        .then((answer) => setUpdateAvailable(answer._tag === "Available"))
+        .catch(() => setUpdateAvailable(false));
+    }, 5000);
+    onCleanup(() => clearTimeout(askAt));
+  }
 
   const report = (message: string): void => {
     setStatus(message);
@@ -466,6 +548,9 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
       setSidebarOpen(open);
       persist(keys.sidebarOpen, open);
     },
+    sidebarShowing: () => sidebarOpen() && (project() !== undefined || recentProjects().length > 0),
+    recentProjects,
+    updateAvailable,
     sidebarWidth,
     setSidebarWidth: (fraction) => {
       const clamped = Math.min(SIDEBAR_WIDTH.max, Math.max(SIDEBAR_WIDTH.min, fraction));
