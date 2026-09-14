@@ -12,6 +12,14 @@
  * the step it is on. Nothing touches the project root until `commit`, so
  * cancelling or failing leaves a staging directory and nothing else.
  *
+ * There are two ways into that pipeline and the difference is the FIRST step
+ * only. A host with a native disk hands back a real path and `stage` copies it.
+ * A browser has no path to hand back, so `src/platform/web/intake.ts` writes
+ * the picked bytes into the staging directory itself and returns the same
+ * `Staged` value — after which classify and commit are identical. Intake is
+ * reached through a dynamic import, so the zip decoder is fetched by the people
+ * who use it and never sits in the first load.
+ *
  * Cloning is `cloneRepository` (`src/core/remote/clone.ts`) over the Gitea
  * session the cloud panel already holds — this screen does not log anyone in,
  * it only spends a session that exists.
@@ -53,17 +61,43 @@ interface Progress {
   readonly step: Step | undefined;
   readonly message: string;
   readonly failed: boolean;
+  /** "12 of 66 files" while a step is running; the steps alone say too little. */
+  readonly detail?: string;
 }
 
 const lastSegment = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
 
 /**
- * A rejection as one line. `services.run` rejects with the fiber's failure,
- * whose own string already carries a tagged error's reason and description;
- * reading the fields would mean asserting a shape the promise type lacks.
+ * A rejection as one line.
+ *
+ * `services.run` rejects with whatever the fiber failed with, and that is not
+ * always an `Error` carrying a message: a tagged failure has `reason` and
+ * `description` instead, and a fiber failure's own message is sometimes empty.
+ * An import that fails must say why — an empty red dialog is the worst
+ * possible answer — so this reads what is actually there before falling back.
  */
-const describe = (cause: unknown): string =>
-  cause instanceof Error ? cause.message : String(cause);
+const describe = (cause: unknown): string => {
+  if (typeof cause === "string") return cause;
+  if (cause !== null && typeof cause === "object") {
+    // SAFETY: every field of the asserted shape is `unknown` and checked with
+    // `typeof` before it is used — the assertion names what might be there,
+    // and proves nothing.
+    const shape = cause as {
+      readonly message?: unknown;
+      readonly reason?: unknown;
+      readonly description?: unknown;
+      readonly cause?: unknown;
+    };
+    const reason = typeof shape.reason === "string" ? shape.reason : "";
+    const description = typeof shape.description === "string" ? shape.description : "";
+    if (reason !== "" || description !== "")
+      return [reason, description].filter((part) => part !== "").join(": ");
+    if (typeof shape.message === "string" && shape.message !== "") return shape.message;
+    if (shape.cause !== undefined && shape.cause !== cause) return describe(shape.cause);
+  }
+  const text = String(cause);
+  return text === "" || text === "[object Object]" ? "no detail" : text;
+};
 
 interface SourceCard {
   readonly id: string;
@@ -91,8 +125,8 @@ export function ImportHub(props: { readonly onImported: () => void }) {
   const [cloneNote, setCloneNote] = createSignal("", { name: "cloneNote" });
   const [cloneUrl, setCloneUrl] = createSignal("", { name: "cloneUrl" });
 
-  const running = (title: string, step: Step): void => {
-    setProgress({ title, step, message: "", failed: false });
+  const running = (title: string, step: Step, detail?: string): void => {
+    setProgress({ title, step, message: "", failed: false, detail });
   };
 
   const finished = (title: string, message: string, failed: boolean): void => {
@@ -135,6 +169,73 @@ export function ImportHub(props: { readonly onImported: () => void }) {
       running(title, "commit");
       toasts.update(toast, { title: t("Importing project"), message: t("Committing books") });
       const into = `${services.projectsRoot}/${lastSegment(source)}`;
+      const books = await services.run(commit(services.fileSystem, staged, { root: into }));
+
+      finished(
+        t("Ready"),
+        t("{count} books imported as {kind} into {root}.", {
+          count: books.length,
+          kind,
+          root: into,
+        }),
+        false,
+      );
+      toasts.update(toast, {
+        title: t("Project imported"),
+        message: t("{count} books", { count: books.length }),
+        tone: "success",
+      });
+      props.onImported();
+    })().catch((cause: unknown) => {
+      const message = describe(cause);
+      finished(t("Couldn't bring it in"), message, true);
+      toasts.update(toast, { title: t("Import failed"), message, tone: "error", autoClose: false });
+    });
+  };
+
+  /**
+   * The browser's way in: pick, write the bytes into staging, then the same
+   * classify and commit the native path runs. One function for both sources —
+   * a zip and a folder differ only in which picker produced the files.
+   */
+  const importPicked = (title: string, source: "folder" | "zip"): void => {
+    const toast = toasts.progress({ title: t("Importing project"), message: t("Choosing files") });
+    running(title, "pick");
+
+    void (async () => {
+      const intake = await import("../../../platform/web/intake");
+      const picked = source === "zip" ? await intake.pickZip() : await intake.pickFolder();
+      if (picked === undefined) {
+        setProgress(undefined);
+        toasts.dismiss(toast);
+        return;
+      }
+
+      running(title, "stage", t("0 of {total} files", { total: picked.files.length }));
+      toasts.update(toast, { title: t("Importing project"), message: t("Copying files in") });
+      const staged = await services.run(
+        intake.intake(
+          services.fileSystem,
+          `${services.hostInfo.paths().temp}/import`,
+          picked,
+          (written, total) =>
+            running(
+              title,
+              "stage",
+              t("{written} of {total} files", {
+                written,
+                total,
+              }),
+            ),
+        ),
+      );
+
+      running(title, "classify");
+      const kind = await services.run(classify(services.fileSystem, staged));
+
+      running(title, "commit");
+      toasts.update(toast, { title: t("Importing project"), message: t("Committing books") });
+      const into = `${services.projectsRoot}/${picked.name}`;
       const books = await services.run(commit(services.fileSystem, staged, { root: into }));
 
       finished(
@@ -208,14 +309,15 @@ export function ImportHub(props: { readonly onImported: () => void }) {
       });
   };
 
-  const folderExplainer = (): string => {
-    if (!capabilities.nativeDisk)
-      return t(
-        "This host cannot read a folder outside its own storage: the browser picker hands back a handle, not a path.",
-      );
-    if (!capabilities.dialogs) return t("This host has no folder picker.");
-    return t("Copy a Burrito, Resource Container or folder of USFM into Sefer.");
-  };
+  /** True when the host reads a real path; false when the browser must copy. */
+  const nativeFolder = capabilities.nativeDisk && capabilities.dialogs;
+
+  const folderExplainer = (): string =>
+    nativeFolder
+      ? t("Copy a Burrito, Resource Container or folder of USFM into Sefer.")
+      : t(
+          "Choose a folder and the browser copies its files into Sefer's own storage — the files on your disk are left alone.",
+        );
 
   const cloudExplainer = (): string => {
     if (giteaHost === null)
@@ -230,12 +332,12 @@ export function ImportHub(props: { readonly onImported: () => void }) {
       id: "zip",
       icon: <FileArchive size={18} aria-hidden="true" />,
       title: t("Import zip"),
-      // Honest rather than hopeful: nothing in Sefer reads an archive yet, which
-      // is why `ProjectAdmin.export` also refuses `usfm-zip`.
-      explainer: t("Sefer has no archive reader yet — unzip it and use Open folder."),
+      explainer: t(
+        "A .zip of a Burrito, a Resource Container or a folder of USFM. It is read here, in the page.",
+      ),
       action: t("Choose file"),
-      available: false,
-      onRun: () => undefined,
+      available: true,
+      onRun: () => importPicked(t("Import from a zip"), "zip"),
     },
     {
       id: "folder",
@@ -243,8 +345,9 @@ export function ImportHub(props: { readonly onImported: () => void }) {
       title: t("Open folder"),
       explainer: folderExplainer(),
       action: t("Choose folder"),
-      available: capabilities.nativeDisk && capabilities.dialogs,
-      onRun: importFolder,
+      available: true,
+      onRun: () =>
+        nativeFolder ? importFolder() : importPicked(t("Import from a folder"), "folder"),
     },
     {
       id: "cloud",
@@ -384,6 +487,11 @@ export function ImportHub(props: { readonly onImported: () => void }) {
                         <li class={cx("flex items-center gap-2 text-small", tone())}>
                           <span aria-hidden="true">{position() < 0 ? "✓" : "•"}</span>
                           {t(STEP_LABEL[each])}
+                          <Show when={position() === 0 && state().detail !== undefined}>
+                            <span class="ms-auto text-smallest tabular-nums text-on-surface-tertiary">
+                              {state().detail}
+                            </span>
+                          </Show>
                         </li>
                       );
                     }}

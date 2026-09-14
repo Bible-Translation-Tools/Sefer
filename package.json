@@ -43,6 +43,7 @@
     "@tauri-apps/plugin-updater": "^2.11.0",
     "buffer": "6.0.3",
     "effect": "4.0.0-rc.112",
+    "fflate": "^0.8.3",
     "isomorphic-git": "1.38.4",
     "lucide-solid": "1.46.0",
     "solid-js": "^2.0.0-rc.6"
