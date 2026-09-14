@@ -7,7 +7,7 @@ import ChevronUpIcon from "lucide-solid/icons/chevron-up";
 import RegexIcon from "lucide-solid/icons/regex";
 import SearchIcon from "lucide-solid/icons/search";
 import WholeWordIcon from "lucide-solid/icons/whole-word";
-import { Show, createMemo, createSignal, untrack } from "solid-js";
+import { Show, createEffect, createMemo, createSignal } from "solid-js";
 
 import { t } from "../app/i18n";
 import { useShell } from "../app/ProjectContext";
@@ -53,37 +53,50 @@ import * as Search from "../core/search/search";
  *    receipt and one undo step each. There is no single corpus-wide rewrite
  *    here, and there is not meant to be (vision §12.2).
  *
- * `?q=` seeds the query and `?mode=stet` opens the key-terms feed over the
- * same list, which is what the workspace toolbar links to.
+ * **The URL is the state**, not a seed for it: `mode`, `q` and `scope` are
+ * read from the search params on every render, and the controls that change
+ * them navigate. The rail's Key terms tile and the workspace toolbar's search
+ * box both link here, and this screen is already mounted when they do — a
+ * one-time read of the params would have left the tile lit and the view
+ * unchanged. What stays local is what is not yet a search: the text being
+ * typed, the three matching toggles, the replacement, and the match cursor.
  */
 
 type Mode = "find" | "stet";
 
+type Scope = "book" | "project";
+
 interface FindSearch {
   readonly q?: string;
   readonly mode?: Mode;
+  readonly scope?: Scope;
 }
 
 function Find() {
   const shell = useShell();
   const navigate = useNavigate();
   const params = Route.useSearch();
-  // The URL seeds the screen once. A deliberate one-time read: after that the
-  // signals below are the state, and a link that lands here again mounts a new
-  // component.
-  const seed = untrack(params);
 
-  const [text, setText] = createSignal(seed.q ?? "", { name: "query" });
+  /** The three the URL owns. Read, never held. */
+  const mode = (): Mode => params().mode ?? "find";
+  const scope = (): Scope => params().scope ?? "project";
+  const asked = (): string => params().q ?? "";
+
+  /** One navigation, merged over what the URL already says. */
+  const ask = (next: FindSearch): void => {
+    void navigate({ to: "/find", search: { ...params(), ...next }, replace: true });
+  };
+
+  const [text, setText] = createSignal(asked(), { name: "query" });
   const [insert, setInsert] = createSignal("", { name: "replaceWith" });
   const [regex, setRegex] = createSignal(false, { name: "regex" });
   const [matchCase, setMatchCase] = createSignal(false, { name: "matchCase" });
   const [wholeWord, setWholeWord] = createSignal(false, { name: "wholeWord" });
-  const [scope, setScope] = createSignal<"book" | "project">("project", { name: "scope" });
+
   const [hits, setHits] = createSignal<readonly Search.Hit[]>([], { name: "hits" });
   const [problem, setProblem] = createSignal("", { name: "problem" });
   const [cursor, setCursor] = createSignal(0, { name: "cursor" });
   const [replacing, setReplacing] = createSignal(false, { name: "replaceOpen" });
-  const [mode, setMode] = createSignal<Mode>(seed.mode ?? "find", { name: "findMode" });
   const [term, setTerm] = createSignal(SAMPLE_TERMS[0]?.id ?? "God", { name: "term" });
 
   // One memo for the whole screen, not one per excerpt: every book that holds
@@ -103,14 +116,15 @@ function Find() {
   interface Over {
     readonly mode?: Mode;
     readonly term?: string;
-    readonly scope?: "book" | "project";
+    readonly scope?: Scope;
+    readonly text?: string;
   }
 
   const query = (over?: Over): Search.Query =>
     (over?.mode ?? mode()) === "stet"
       ? { text: over?.term ?? term(), wholeWord: true }
       : {
-          text: text(),
+          text: over?.text ?? text(),
           caseSensitive: matchCase(),
           wholeWord: wholeWord(),
           regex: regex(),
@@ -157,10 +171,32 @@ function Find() {
     setHits(found.success);
   };
 
-  // The component body runs once in Solid, so this IS the mount: a link that
-  // arrived with a query, or in key-terms mode, searches without a second
-  // click.
-  if (seed.q !== undefined || seed.mode === "stet") void run();
+  /**
+   * The URL, searched.
+   *
+   * This is the mount AND every later arrival: a link into `/find` while the
+   * screen is already open changes the params and nothing else, so the search
+   * has to hang off them rather than off the component body. The values are
+   * handed to `run` rather than read back from it for the reason `Over`
+   * exists — Solid batches, and the signals are not written yet.
+   */
+  createEffect(
+    () => ({ q: asked(), mode: mode(), scope: scope() }),
+    (now) => {
+      setText(now.q);
+      void run({ mode: now.mode, scope: now.scope, text: now.q });
+    },
+  );
+
+  /**
+   * The Find button and the Enter key. A query the URL already names is simply
+   * re-run: navigating to the same search changes nothing, and the reader who
+   * pressed Find again would get no answer at all.
+   */
+  const commit = (): void => {
+    if (asked() === text()) void run({ text: text() });
+    else ask({ q: text() });
+  };
 
   /**
    * The books the excerpt model needs: canonical text plus the parse that
@@ -325,11 +361,7 @@ function Find() {
             label={t("Feed")}
             size="sm"
             value={mode()}
-            onChange={(next) => {
-              const chosen = next === "stet" ? "stet" : "find";
-              setMode(chosen);
-              void run({ mode: chosen });
-            }}
+            onChange={(next) => ask({ mode: next === "stet" ? "stet" : "find" })}
             items={[
               { value: "find", label: t("Find") },
               { value: "stet", label: t("Key terms") },
@@ -353,7 +385,7 @@ function Find() {
                 value={text()}
                 onInput={(event) => setText(event.currentTarget.value)}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter") void run();
+                  if (event.key === "Enter") commit();
                 }}
               />
               <div class="flex items-center gap-0.5">
@@ -384,18 +416,14 @@ function Find() {
                 label={t("Scope")}
                 size="sm"
                 value={scope()}
-                onChange={(next) => {
-                  const chosen = next === "book" ? "book" : "project";
-                  setScope(chosen);
-                  void run({ scope: chosen });
-                }}
+                onChange={(next) => ask({ scope: next === "book" ? "book" : "project" })}
                 items={[
                   { value: "book", label: t("This book"), disabled: focusedBook() === undefined },
                   { value: "project", label: t("Whole project") },
                 ]}
               />
 
-              <Button variant="primary" size="sm" onClick={() => void run()}>
+              <Button variant="primary" size="sm" onClick={commit}>
                 {t("Find")}
               </Button>
 
@@ -505,6 +533,7 @@ export const Route = createFileRoute("/find")({
   validateSearch: (search: Record<string, unknown>): FindSearch => ({
     ...(typeof search["q"] === "string" && search["q"] !== "" ? { q: search["q"] } : {}),
     ...(search["mode"] === "stet" ? { mode: "stet" as const } : {}),
+    ...(search["scope"] === "book" ? { scope: "book" as const } : {}),
   }),
   head: () => ({ meta: [{ title: "Sefer — find" }] }),
   component: () => <ShellGate>{() => <Find />}</ShellGate>,

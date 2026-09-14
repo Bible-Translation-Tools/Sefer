@@ -57,6 +57,16 @@ Sefer does not offer a project-wide Replace All over a Bible (vision §12.2). Th
 
 Every replacement goes through `book.apply(changes, "replace", UNTRUSTED)` — the one write path. Search does not judge markup: an untrusted replacement is examined by the editing phases exactly like a keystroke, so one that would break markup comes back as their `Refusal`.
 
+## Excerpts
+
+`src/core/excerpts/excerpts.ts` turns a flat list of `Hit`s into what the Find screen actually shows: one card per VERSE, in book order, with an outline beside them. It is pure core — text, an analysis, hits in, excerpts out — so the same model serves the find results, the key-terms feed and anything later that presents a passage out of context.
+
+- `group(books, hits)` returns `{ groups, outline }`. A group is a book, in the caller's order; a book with no hits is neither a group nor an outline row. Grouping is by VERSE and not by hit: three matches in Philemon 1:4 are one card with three highlights.
+- **Two coordinate systems, and the module holds both.** `span` is the verse plus one either side, clamped to the chapter, in SOURCE offsets — that is what a satellite clips to. `text` is the `project`ion of exactly that span (markers, designators and note bodies dropped, the same reading `findProjected` searches) and `marks` index into `text`. `hits` stay in source coordinates, because that is what Replace and "open in editor" need. `focus` says where the excerpt's own verse sits in `text`, which is how a card dims the context around it.
+- An `Occurrence` is `bookId`/`from`/`to` and nothing else, so a `Hit` from either search door and a term's occurrence arrive the same way.
+- **Edit → satellite → funnel.** A card is read-only until Edit is clicked. Edit opens a CodeMirror satellite (`src/app/ui/excerpts/ExcerptEditor.tsx`) over the canonical Book — not over a copy of the text — so every keystroke goes through the book's one write path and the editing phases judge it exactly as they would in the editor. An accepted edit bumps the shell and the search is re-run against what the text now says.
+- **The STET feed** (`src/app/workflows/stet.ts`) is the same list under a term instead of a query: a key term selects a whole-word search, and the screen shows the term's glosses beside the excerpts. The terms are a stand-in until a key-terms resource can be bound, and the screen says so.
+
 ## Not yet
 
 Searching source/reference resources by role needs Project's resource roles, which is not wired. There is no scope narrower than "these books", and no search-and-replace history. Replacing a hit that spans markup is refused rather than offered as a choice between "keep the markup" and "drop it"; that choice belongs to the editor, not to a result card.
