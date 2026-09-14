@@ -29,7 +29,12 @@ export function Breadcrumb(props: { readonly crumbs: readonly Crumb[] }) {
               </Show>
               <Show when={crumb.to} fallback={<span>{crumb.label}</span>}>
                 {(to) => (
-                  <Link to={to()} class="no-underline hover:text-on-surface-secondary">
+                  // `search: true` so `?fixture=1` survives a crumb click.
+                  <Link
+                    to={to()}
+                    search={true}
+                    class="no-underline hover:text-on-surface-secondary"
+                  >
                     {crumb.label}
                   </Link>
                 )}

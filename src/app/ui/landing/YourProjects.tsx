@@ -108,7 +108,7 @@ export function YourProjects(props: { readonly reload: number }) {
               <TableRow>
                 <TableHeader>{t("Project")}</TableHeader>
                 <TableHeader>{t("Language")}</TableHeader>
-                <TableHeader class="text-end">{t("Books")}</TableHeader>
+                <TableHeader>{t("Books")}</TableHeader>
                 <TableHeader>{t("Last opened")}</TableHeader>
                 <TableHeader>
                   <span class="sr-only">{t("Actions")}</span>
@@ -135,7 +135,7 @@ export function YourProjects(props: { readonly reload: number }) {
                     <TableCell class="text-on-surface-secondary">
                       {row.language === "" ? "—" : row.language}
                     </TableCell>
-                    <TableCell class="text-end tabular-nums text-on-surface-secondary">
+                    <TableCell class="tabular-nums text-on-surface-secondary">
                       {row.books}
                     </TableCell>
                     <TableCell class="text-on-surface-secondary">

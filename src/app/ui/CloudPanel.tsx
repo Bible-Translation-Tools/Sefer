@@ -97,10 +97,26 @@ export function CloudPanel(props: { readonly root?: string | undefined }) {
 
   // The progress line. A forked fiber rather than an awaited effect, because
   // the stream never completes; it is interrupted when the panel unmounts.
+  //
+  // The interrupt is registered in the COMPONENT body, not inside the effect
+  // callback: Solid 2 runs that callback unowned, so an `onCleanup` in there is
+  // never honoured (`NO_OWNER_CLEANUP`) and the fiber would outlive the panel,
+  // still writing into a signal nothing renders. The held fiber is interrupted
+  // both here and at the top of each re-run, so a root change replaces the
+  // subscription rather than stacking a second one on it.
+  let progressFiber: Fiber.Fiber<void, unknown> | undefined;
+  const stopProgress = (): void => {
+    if (progressFiber === undefined) return;
+    Effect.runFork(Fiber.interrupt(progressFiber));
+    progressFiber = undefined;
+  };
+  onCleanup(stopProgress);
+
   createEffect(
     () => props.root,
     () => {
-      const fiber = services.runtime.runFork(
+      stopProgress();
+      progressFiber = services.runtime.runFork(
         Effect.flatMap(Remote, (remote) =>
           Stream.runForEach(remote.progress(), (progress) =>
             Effect.sync(() =>
@@ -117,9 +133,6 @@ export function CloudPanel(props: { readonly root?: string | undefined }) {
           ),
         ),
       );
-      onCleanup(() => {
-        Effect.runFork(Fiber.interrupt(fiber));
-      });
     },
   );
 

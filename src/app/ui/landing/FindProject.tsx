@@ -202,6 +202,7 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
           <h2 class="text-h4 font-bold text-on-surface-primary">{t("Find Project")}</h2>
           <Link
             to="/projects"
+            search={true}
             class="inline-flex items-center gap-1 text-smallest text-on-surface-tertiary no-underline hover:text-on-surface-secondary"
           >
             <ArrowLeft size={13} aria-hidden="true" />
@@ -264,7 +265,7 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
           </Select>
         </label>
 
-        <Link to="/start/create" class="no-underline">
+        <Link to="/start/create" search={true} class="no-underline">
           <Button variant="secondary" class="w-full" icon={<Plus size={15} aria-hidden="true" />}>
             {t("Create new project")}
           </Button>
@@ -288,7 +289,12 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
           <Badge tone={catalogue.source === "live" ? "success" : "warning"} size="sm">
             {catalogue.source === "live" ? t("live catalogue") : t("sample data")}
           </Badge>
-          <span class="font-mono">{catalogue.origin}</span>
+          <Show
+            when={catalogue.source === "live"}
+            fallback={<span>{t("No catalogue configured: set VITE_SEFER_LANGUAGE_API_URL.")}</span>}
+          >
+            <span class="font-mono">{catalogue.origin}</span>
+          </Show>
           <Show when={entries()}>
             {(all) => (
               <span class="ms-auto">

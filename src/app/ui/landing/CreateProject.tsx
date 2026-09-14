@@ -181,6 +181,7 @@ export function CreateProject() {
           actions={
             <Link
               to="/start/find"
+              search={true}
               class="inline-flex items-center gap-1 text-smallest text-on-surface-tertiary no-underline hover:text-on-surface-secondary"
             >
               <ArrowLeft size={13} aria-hidden="true" />
@@ -287,7 +288,9 @@ export function CreateProject() {
             {t("Validate metadata")}
           </Button>
           <p class="text-smallest text-on-surface-tertiary">
-            {t("Sefer cannot write a new project yet — see the note below.")}
+            {t(
+              "Sefer cannot write a new project yet: this checks the metadata against the Scripture Burrito schema and shows it.",
+            )}
           </p>
         </div>
 

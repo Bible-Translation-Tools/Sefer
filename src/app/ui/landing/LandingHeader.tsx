@@ -31,7 +31,11 @@ export function LandingHeader(props: {
         label={t("Landing section")}
         value={props.tab}
         onChange={(next) => {
-          void navigate({ to: next === "yours" ? "/projects" : "/start/find" });
+          // `search: true` keeps the query string, and the one that matters is
+          // `?fixture=1`: the composition reads it off `location` at startup,
+          // so a tab switch that dropped it would send the next RELOAD to OPFS
+          // instead of the seeded fixture.
+          void navigate({ to: next === "yours" ? "/projects" : "/start/find", search: true });
         }}
         items={[
           { value: "yours", label: t("Your projects") },
