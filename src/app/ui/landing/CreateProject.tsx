@@ -284,12 +284,19 @@ export function CreateProject() {
 
       <Card class="space-y-3">
         <div class="flex flex-wrap items-center gap-3">
-          <Button variant="primary" disabled={!complete()} onClick={build}>
+          {/* Disabled, and disabled ON PURPOSE: the form stops one step short of
+              writing anything (see the TODO in `build`), so the button that
+              would do it must not look like it did. Validating is the half that
+              works, and it is the secondary action for exactly that reason. */}
+          <Button variant="primary" disabled>
+            {t("Create (not available yet)")}
+          </Button>
+          <Button disabled={!complete()} onClick={build}>
             {t("Validate metadata")}
           </Button>
-          <p class="text-smallest text-on-surface-tertiary">
+          <p class="min-w-60 flex-1 text-smallest text-on-surface-tertiary">
             {t(
-              "Sefer cannot write a new project yet: this checks the metadata against the Scripture Burrito schema and shows it.",
+              "Sefer cannot write a new project yet: ProjectAdmin has no create, and a project with no books could not be opened. Validate checks this metadata against the Scripture Burrito schema and shows exactly what would be written.",
             )}
           </p>
         </div>

@@ -13,11 +13,11 @@
  * design's, the blanks are the API's, and inventing values to fill them would
  * hide exactly the gap someone needs to see.
  *
- * Download clones. There is no archive reader in Sefer, so the zip the
- * prototype fetched is not a route we have; `repo_url` is a git URL and
- * `cloneRepository` is the thing that already works. A row with no URL, or a
- * build with no transfer configured, gets a disabled link with the reason in a
- * tooltip.
+ * Download clones rather than fetching an archive. Sefer can read a zip a
+ * person hands it (see the import hub), but what this payload carries is
+ * `repo_url` — a git URL — and `cloneRepository` is what takes one. A row with
+ * no URL, or a build with no transfer configured, gets a disabled link with
+ * the reason in a tooltip.
  */
 
 import { Link } from "@tanstack/solid-router";

@@ -2,6 +2,10 @@
  * The landing screen's one header: the muted breadcrumb and the two-way
  * segmented control over "Your projects" and "Find project".
  *
+ * The trail ends in the tab, because the tab IS where you are: "Sefer /
+ * Projects / Find project". A screen passes the crumbs ABOVE it and never
+ * repeats its own name.
+ *
  * The two halves are two ROUTES rather than two signals, because they are two
  * places — one lists what is on this device, the other browses a service on
  * the internet — and a reader who bookmarks the catalogue or presses Back
@@ -18,6 +22,12 @@ import { Breadcrumb, type Crumb } from "./Breadcrumb";
 
 export type LandingTab = "yours" | "find";
 
+/** The tab's own name, which is also its crumb: the trail names the tab. */
+const TAB_LABEL: Readonly<Record<LandingTab, string>> = {
+  yours: "Your projects",
+  find: "Find project",
+};
+
 export function LandingHeader(props: {
   readonly tab: LandingTab;
   readonly crumbs: readonly Crumb[];
@@ -26,7 +36,7 @@ export function LandingHeader(props: {
 
   return (
     <header class="space-y-3">
-      <Breadcrumb crumbs={props.crumbs} />
+      <Breadcrumb crumbs={[...props.crumbs, { label: t(TAB_LABEL[props.tab]) }]} />
       <SegmentedControl
         label={t("Landing section")}
         value={props.tab}
@@ -38,8 +48,8 @@ export function LandingHeader(props: {
           void navigate({ to: next === "yours" ? "/projects" : "/start/find", search: true });
         }}
         items={[
-          { value: "yours", label: t("Your projects") },
-          { value: "find", label: t("Find project") },
+          { value: "yours", label: t(TAB_LABEL.yours) },
+          { value: "find", label: t(TAB_LABEL.find) },
         ]}
       />
     </header>
