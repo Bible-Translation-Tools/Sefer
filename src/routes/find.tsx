@@ -2,12 +2,11 @@ import { createFileRoute, useNavigate } from "@tanstack/solid-router";
 import { Effect, Option, Result, Stream } from "effect";
 import CaseSensitiveIcon from "lucide-solid/icons/case-sensitive";
 import ChevronDownIcon from "lucide-solid/icons/chevron-down";
-import ChevronRightIcon from "lucide-solid/icons/chevron-right";
 import ChevronUpIcon from "lucide-solid/icons/chevron-up";
 import RegexIcon from "lucide-solid/icons/regex";
 import SearchIcon from "lucide-solid/icons/search";
 import WholeWordIcon from "lucide-solid/icons/whole-word";
-import { Show, createEffect, createMemo, createSignal } from "solid-js";
+import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
 import { t } from "../app/i18n";
 import { useShell } from "../app/ProjectContext";
@@ -20,7 +19,6 @@ import {
   Input,
   PanelHeader,
   SegmentedControl,
-  Tooltip,
 } from "../app/ui/primitives";
 import { ShellGate } from "../app/ui/ShellGate";
 import { SAMPLE_TERMS } from "../app/workflows/stet";
@@ -45,13 +43,13 @@ import * as Search from "../core/search/search";
  *    searching for a word does not mean the marker that happens to contain it.
  *    `find` is the raw scan, and the only door that takes a regex, so turning
  *    the regex toggle on switches doors.
- *  - `resolveHit` decides whether a hit can still be trusted, and `replace`
- *    goes through the book's one write path so the editing rules judge the
- *    replacement. A hit that crosses markup the projection dropped is not
- *    replaceable, and the button says why instead of failing.
- *  - "Replace all" is one `replaceInBook` per book: one change list, one
- *    receipt and one undo step each. There is no single corpus-wide rewrite
- *    here, and there is not meant to be (vision §12.2).
+ *  - `resolveHit` decides whether a hit can still be trusted, so a card that
+ *    named a revision the book has moved past refuses instead of editing the
+ *    wrong range.
+ *  - Replace is **deliberately not surfaced yet**: `src/core/search` keeps
+ *    `replace`, `replaceInBook` and `planReplace`, and this screen offers
+ *    none of them — an edit happens through a card's Edit button, in the
+ *    satellite, where the editing phases judge it like any other keystroke.
  *
  * **The URL is the state**, not a seed for it: `mode`, `q` and `scope` are
  * read from the search params on every render, and the controls that change
@@ -59,7 +57,7 @@ import * as Search from "../core/search/search";
  * box both link here, and this screen is already mounted when they do — a
  * one-time read of the params would have left the tile lit and the view
  * unchanged. What stays local is what is not yet a search: the text being
- * typed, the three matching toggles, the replacement, and the match cursor.
+ * typed, the three matching toggles, and the match cursor.
  */
 
 type Mode = "find" | "stet";
@@ -87,8 +85,10 @@ function Find() {
     void navigate({ to: "/find", search: { ...params(), ...next }, replace: true });
   };
 
-  const [text, setText] = createSignal(asked(), { name: "query" });
-  const [insert, setInsert] = createSignal("", { name: "replaceWith" });
+  // The box starts on whatever the URL asked for; the effect below keeps it
+  // there. Untracked because this is the initial value of a signal, not a
+  // derivation of the params — Solid 2 is right to ask which one it is.
+  const [text, setText] = createSignal(untrack(asked), { name: "query" });
   const [regex, setRegex] = createSignal(false, { name: "regex" });
   const [matchCase, setMatchCase] = createSignal(false, { name: "matchCase" });
   const [wholeWord, setWholeWord] = createSignal(false, { name: "wholeWord" });
@@ -96,7 +96,6 @@ function Find() {
   const [hits, setHits] = createSignal<readonly Search.Hit[]>([], { name: "hits" });
   const [problem, setProblem] = createSignal("", { name: "problem" });
   const [cursor, setCursor] = createSignal(0, { name: "cursor" });
-  const [replacing, setReplacing] = createSignal(false, { name: "replaceOpen" });
   const [term, setTerm] = createSignal(SAMPLE_TERMS[0]?.id ?? "God", { name: "term" });
 
   // One memo for the whole screen, not one per excerpt: every book that holds
@@ -179,12 +178,19 @@ function Find() {
    * has to hang off them rather than off the component body. The values are
    * handed to `run` rather than read back from it for the reason `Over`
    * exists — Solid batches, and the signals are not written yet.
+   *
+   * `untrack` around the call says what the search is: a one-time read of the
+   * toggles as they stand. Tracking them here would re-run the search when
+   * "match case" was pressed, which is a change to what the NEXT search means,
+   * not an instruction to run one.
    */
   createEffect(
     () => ({ q: asked(), mode: mode(), scope: scope() }),
     (now) => {
       setText(now.q);
-      void run({ mode: now.mode, scope: now.scope, text: now.q });
+      untrack(() => {
+        void run({ mode: now.mode, scope: now.scope, text: now.q });
+      });
     },
   );
 
@@ -290,49 +296,6 @@ function Find() {
       .then(() => run());
   };
 
-  /** The hit the cursor is on, replaced through the book's one write path. */
-  const replaceOne = (): void => {
-    const project = shell.project();
-    const hit = hits()[cursor()];
-    if (project === undefined || hit === undefined) return;
-    const result = Search.replace(hit, insert(), project.books);
-    shell.report(
-      Result.isSuccess(result)
-        ? t("replaced 1 match in {book}", { book: hit.bookId })
-        : t("refused by {rule}", { rule: result.failure.rule }),
-    );
-    edited();
-  };
-
-  /**
-   * Every hit, book by book: one `replaceInBook` per book, which is one change
-   * list, one receipt and one undo step for that book. Split hits are refused
-   * by `planReplace`, so a book that holds one is skipped whole and said so.
-   */
-  const replaceAll = (): void => {
-    const project = shell.project();
-    if (project === undefined) return;
-    let changed = 0;
-    let refused = 0;
-    for (const book of project.books) {
-      const mine = hits().filter((hit) => hit.bookId === book.id && !Search.spansMarkup(hit));
-      if (mine.length === 0) continue;
-      const result = Search.replaceInBook(book, mine, insert());
-      if (Result.isSuccess(result)) changed += mine.length;
-      else refused += mine.length;
-    }
-    shell.report(
-      refused === 0
-        ? t("replaced {count} matches", { count: changed })
-        : t("replaced {count} matches, refused {refused}", { count: changed, refused }),
-    );
-    edited();
-  };
-
-  const splitHits = createMemo(() => hits().filter(Search.spansMarkup).length, {
-    name: "splitHits",
-  });
-
   const list = () => (
     <ExcerptList
       groups={model().groups}
@@ -375,7 +338,7 @@ function Find() {
         fallback={<p class="text-small text-on-surface-tertiary">{t("Open a project first.")}</p>}
       >
         <Show when={mode() === "find"}>
-          <Card class="space-y-2">
+          <Card>
             <div class="flex flex-wrap items-center gap-2">
               <Input
                 type="search"
@@ -451,52 +414,6 @@ function Find() {
                   onClick={() => step(1)}
                 />
               </div>
-            </div>
-
-            <div>
-              <button
-                type="button"
-                class="flex cursor-pointer items-center gap-1 text-small text-on-surface-secondary"
-                aria-expanded={replacing() ? "true" : "false"}
-                onClick={() => setReplacing((held) => !held)}
-              >
-                <Show when={replacing()} fallback={<ChevronRightIcon size={14} />}>
-                  <ChevronDownIcon size={14} />
-                </Show>
-                {t("Replace")}
-              </button>
-              <Show when={replacing()}>
-                <div class="mt-2 flex flex-wrap items-center gap-2">
-                  <Input
-                    type="text"
-                    wrapperClass="w-72"
-                    aria-label={t("Replace with")}
-                    placeholder={t("Replace with")}
-                    value={insert()}
-                    onInput={(event) => setInsert(event.currentTarget.value)}
-                  />
-                  <Button size="sm" disabled={hits().length === 0} onClick={replaceOne}>
-                    {t("Replace")}
-                  </Button>
-                  <Button size="sm" disabled={hits().length === 0} onClick={replaceAll}>
-                    {t("Replace all")}
-                  </Button>
-                  <Show when={splitHits() > 0}>
-                    <Tooltip
-                      label={t(
-                        "A match that crosses markup the projection dropped has no single range to replace — whether that markup survives is the editor's call.",
-                      )}
-                    >
-                      <span
-                        class="rounded-sm bg-surface-warning px-2 py-1 text-smallest text-on-surface-warning"
-                        data-spans-markup={splitHits()}
-                      >
-                        {t("{count} not replaceable", { count: splitHits() })}
-                      </span>
-                    </Tooltip>
-                  </Show>
-                </div>
-              </Show>
             </div>
           </Card>
         </Show>
