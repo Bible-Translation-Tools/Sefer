@@ -75,7 +75,7 @@ An Effect-returning command is run on the app runtime by the runner `registerShe
 
 `/projects`, `/project/$id`, `/project/$id/book/$book`, `/find`, `/findings`, `/history`, `/settings`, plus `/` and the dev-only `/dev/fixture`. File routes under `src/routes`; `src/routeTree.gen.ts` is generated — never edit it.
 
-`src/app/ui/tokens.css` is the design system as plain custom properties, ported from the v1 editor's vanilla-extract contract so the two read as one product. Components use the semantic names (`--surface-primary`), never the ramps. Dark is a token swap under `[data-theme="dark"]` and `prefers-color-scheme`. `src/App.css` holds the shell's own component rules. No component library, no CSS-in-JS.
+`src/app/ui/tokens.css` is the design system as plain custom properties, ported from the v1 editor's vanilla-extract contract so the two read as one product, and it is also the Tailwind v4 configuration: an `@theme` block mints a utility from every semantic name. Components use the semantic names (`bg-surface-primary`), never the ramps. Dark is a token swap under `[data-theme="dark"]` and `prefers-color-scheme`, never Tailwind's `dark:` variant. The reusable components live in `src/app/ui/primitives/`, which is the only place corvu is imported. `src/app/ui/app.css` is the one global stylesheet and holds only the `<body>` ground and the CodeMirror frame. See [the UI layer](ui.md).
 
 Every user-visible string goes through `t()` (`src/app/i18n.ts`) — an identity with `{param}` interpolation. The point is the seam; Lingui replaces the body later.
 
