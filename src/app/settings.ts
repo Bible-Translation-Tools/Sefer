@@ -109,7 +109,7 @@ export interface ShellKeys {
 }
 
 /** The sidebar's share of the workspace row, and the range a drag may reach. */
-export const SIDEBAR_WIDTH = { default: 0.19, min: 0.13, max: 0.36 } as const;
+export const SIDEBAR_WIDTH = { default: 0.2, min: 0.15, max: 0.36 } as const;
 
 /**
  * Registered once per `SettingsService`, and cached.

@@ -22,7 +22,7 @@ import { For, Show, createEffect, createSignal } from "solid-js";
 import type { Ref } from "../../../core/book/book";
 import type { Resource, Role } from "../../../core/resources/library";
 import { t } from "../../i18n";
-import type { Shell } from "../../ProjectContext";
+import { useShell } from "../../ProjectContext";
 import { Button, Card, EmptyState, cx } from "../primitives";
 
 /** The roles the column shows, in the order it shows them. */
@@ -35,13 +35,9 @@ interface Entry {
   readonly text: string;
 }
 
-export interface ReferenceColumnProps {
-  readonly shell: Shell;
-}
-
-export function ReferenceColumn(props: ReferenceColumnProps) {
+export function ReferenceColumn() {
   const navigate = useNavigate();
-  const shell = () => props.shell;
+  const shell = useShell();
   const [entries, setEntries] = createSignal<readonly Entry[]>([], { name: "referenceEntries" });
   const [loading, setLoading] = createSignal(true, { name: "referenceLoading" });
   const [expanded, setExpanded] = createSignal<string | undefined>(undefined, {
@@ -55,17 +51,17 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
    * starts).
    */
   const place = (): Ref | undefined => {
-    const book = shell().focused();
-    const project = shell().project();
+    const book = shell.focused();
+    const project = shell.project();
     if (book === undefined || project === undefined) return undefined;
-    return { book: book.id, chapter: (shell().chapter() ?? 0) + 1 };
+    return { book: book.id, chapter: (shell.chapter() ?? 0) + 1 };
   };
 
   // One pass per project/place: resolve the bindings, then look up the passage
   // in each. Re-running on the place is the point — the cards follow the
   // editor.
   createEffect(
-    () => ({ project: shell().project()?.id, at: place() }),
+    () => ({ project: shell.project()?.id, at: place() }),
     ({ project, at }) => {
       if (project === undefined) {
         setEntries([]);
@@ -73,10 +69,10 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         return;
       }
       setLoading(true);
-      void shell()
-        .services.run(
+      void shell.services
+        .run(
           Effect.gen(function* () {
-            const library = shell().services.library;
+            const library = shell.services.library;
             const found: Entry[] = [];
             for (const role of ROLES) {
               for (const resource of yield* library.resolve(project, role)) {
@@ -97,7 +93,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
             return found;
           }),
         )
-        .then((found) => {
+        .then((found: readonly Entry[]) => {
           setEntries(found);
           setLoading(false);
         });

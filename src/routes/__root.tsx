@@ -1,9 +1,9 @@
 import { HeadContent, Outlet, createRootRoute, useNavigate } from "@tanstack/solid-router";
-import { Show, onCleanup } from "solid-js";
+import { Show, onCleanup, untrack } from "solid-js";
 
 import { installCommandKeys, runCommand } from "../app/commands";
 import { t } from "../app/i18n";
-import { ProjectProvider, readyShell, useShellState, type Shell } from "../app/ProjectContext";
+import { ProjectProvider, readyShell, useShell, useShellState } from "../app/ProjectContext";
 import { SIDEBAR_WIDTH } from "../app/settings";
 import { CommandPalette } from "../app/ui/CommandPalette";
 import { Kbd, Resizable, Toaster } from "../app/ui/primitives";
@@ -32,32 +32,41 @@ import { ProjectSidebar } from "../app/ui/workspace/ProjectSidebar";
  * position and selection would not.
  */
 
-function Workspace(props: { readonly shell: Shell }) {
-  const shell = () => props.shell;
+function Workspace() {
+  const shell = useShell();
+  // Plain variables, not expressions in the props: `Resizable.Panel` reads its
+  // three sizes ONCE, during registration, and a JSX expression is a lazy memo
+  // Solid 2 warns about when it is read outside a tracking scope. The width is
+  // a one-time read by design — the persisted value seeds the split, and the
+  // split owns it from there (primitives/Resizable.tsx) — so it is untracked
+  // rather than merely read, which is the same statement said to the compiler.
+  const initialWidth = untrack(() => shell.sidebarWidth());
+  const minWidth = SIDEBAR_WIDTH.min;
+  const maxWidth = SIDEBAR_WIDTH.max;
   return (
     <Resizable.Root
       class="h-full"
       onSizesChange={(sizes) => {
         const first = sizes[0];
-        if (first !== undefined) shell().setSidebarWidth(first);
+        if (first !== undefined) shell.setSidebarWidth(first);
       }}
     >
       <Resizable.Panel
-        initialSize={shell().sidebarWidth()}
-        minSize={SIDEBAR_WIDTH.min}
-        maxSize={SIDEBAR_WIDTH.max}
-        class={shell().sidebarOpen() ? undefined : "hidden"}
+        initialSize={initialWidth}
+        minSize={minWidth}
+        maxSize={maxWidth}
+        class={shell.sidebarOpen() ? undefined : "hidden"}
       >
-        <ProjectSidebar shell={shell()} />
+        <ProjectSidebar />
       </Resizable.Panel>
       <Resizable.Handle
         label={t("Resize the project panel")}
-        class={shell().sidebarOpen() ? undefined : "hidden"}
+        class={shell.sidebarOpen() ? undefined : "hidden"}
       />
       {/* The `!` is load-bearing: `Resizable.Panel` writes its share as an
           inline `flex-basis`, and with the sidebar hidden the routed content
           has to take the whole row back. */}
-      <Resizable.Panel class={shell().sidebarOpen() ? undefined : "[flex-basis:100%]!"}>
+      <Resizable.Panel class={shell.sidebarOpen() ? undefined : "[flex-basis:100%]!"}>
         <div class="h-full overflow-y-auto">
           <Outlet />
         </div>
@@ -82,7 +91,7 @@ function Chrome() {
         when={shell()}
         fallback={<div class="w-13 shrink-0 border-e border-sidebar-border bg-surface-primary" />}
       >
-        {(ready) => <IconRail shell={ready()} />}
+        <IconRail />
       </Show>
 
       <div class="flex min-w-0 flex-1 flex-col">
@@ -95,7 +104,7 @@ function Chrome() {
               </div>
             }
           >
-            {(ready) => <Workspace shell={ready()} />}
+            <Workspace />
           </Show>
         </div>
 

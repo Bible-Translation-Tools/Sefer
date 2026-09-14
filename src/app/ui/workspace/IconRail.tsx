@@ -26,19 +26,15 @@ import SettingsIcon from "lucide-solid/icons/settings";
 import { Show } from "solid-js";
 
 import { t } from "../../i18n";
-import type { Shell } from "../../ProjectContext";
+import { useShell } from "../../ProjectContext";
 import { IconButton } from "../primitives";
 
 /** The reader's initials, on the tile the mockup puts at the foot of the rail. */
 const INITIALS = "GO";
 
-export interface IconRailProps {
-  readonly shell: Shell;
-}
-
-export function IconRail(props: IconRailProps) {
+export function IconRail() {
   const navigate = useNavigate();
-  const shell = () => props.shell;
+  const shell = useShell();
 
   const go = (to: string, search?: Readonly<Record<string, string>>): void => {
     // SAFETY: these are route literals the generated tree knows; the cast is
@@ -48,7 +44,7 @@ export function IconRail(props: IconRailProps) {
     void navigate({ to: to as never, search: search as never });
   };
 
-  const findings = () => shell().findingCounts();
+  const findings = () => shell.findingCounts();
   const attention = () => findings().errors + findings().warnings;
 
   return (
@@ -57,22 +53,22 @@ export function IconRail(props: IconRailProps) {
       class="flex w-13 shrink-0 flex-col items-center gap-1 border-e border-sidebar-border bg-surface-primary py-3"
     >
       <IconButton
-        label={shell().sidebarOpen() ? t("Hide the project panel") : t("Show the project panel")}
+        label={shell.sidebarOpen() ? t("Hide the project panel") : t("Show the project panel")}
         tooltipSide="right"
         icon={<PanelLeft size={18} />}
-        aria-pressed={shell().sidebarOpen() ? "true" : "false"}
-        onClick={() => shell().setSidebarOpen(!shell().sidebarOpen())}
+        aria-pressed={shell.sidebarOpen() ? "true" : "false"}
+        onClick={() => shell.setSidebarOpen(!shell.sidebarOpen())}
       />
 
-      <Show when={shell().project() !== undefined}>
+      <Show when={shell.project() !== undefined}>
         <span aria-hidden="true" class="my-2 h-px w-6 bg-surface-border" />
 
         <IconButton
           label={t("Refine")}
           tooltipSide="right"
           icon={<BookOpen size={18} />}
-          aria-pressed={shell().mode() === "usfm" ? "false" : "true"}
-          onClick={() => shell().setMode("default")}
+          aria-pressed={shell.mode() === "usfm" ? "false" : "true"}
+          onClick={() => shell.setMode("default")}
         />
         <IconButton
           label={t("Key terms")}
@@ -84,8 +80,8 @@ export function IconRail(props: IconRailProps) {
           label={t("USFM")}
           tooltipSide="right"
           icon={<Code size={18} />}
-          aria-pressed={shell().mode() === "usfm" ? "true" : "false"}
-          onClick={() => shell().setMode("usfm")}
+          aria-pressed={shell.mode() === "usfm" ? "true" : "false"}
+          onClick={() => shell.setMode("usfm")}
         />
       </Show>
 

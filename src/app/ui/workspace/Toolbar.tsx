@@ -29,7 +29,7 @@ import { Show, createSignal } from "solid-js";
 
 import { findCommand, runCommand } from "../../commands";
 import { t } from "../../i18n";
-import type { Shell } from "../../ProjectContext";
+import { useShell } from "../../ProjectContext";
 import { Card, IconButton, Input, Popover, SegmentedControl } from "../primitives";
 import { bookName } from "./books";
 import { metadataOf, projectName } from "./project";
@@ -37,15 +37,11 @@ import { metadataOf, projectName } from "./project";
 /** The three segments, as literal strings so Tailwind and the reader agree. */
 type Segment = "regular" | "stet" | "usfm";
 
-export interface ToolbarProps {
-  readonly shell: Shell;
-}
-
-export function Toolbar(props: ToolbarProps) {
+export function Toolbar() {
   const navigate = useNavigate();
   const [query, setQuery] = createSignal("", { name: "toolbarQuery" });
   const [menuOpen, setMenuOpen] = createSignal(false, { name: "toolbarMenu" });
-  const shell = () => props.shell;
+  const shell = useShell();
 
   const go = (to: string, search?: Readonly<Record<string, string>>): void => {
     // SAFETY: `/find` and `/history` are route literals, but their search
@@ -55,33 +51,39 @@ export function Toolbar(props: ToolbarProps) {
     void navigate({ to: to as never, search: search as never });
   };
 
+  /**
+   * "Mark 5 (Shila)" — book, where in it, project.
+   *
+   * The clip is an INDEX into the engine's chapter table, whose first row is
+   * the front matter and carries no label. So an empty label is named rather
+   * than printed as a blank: it is a place the reader can actually be.
+   */
   const title = (): string => {
-    const book = shell().focused();
+    const book = shell.focused();
     if (book === undefined) return "";
-    const project = shell().project();
-    const name = bookName(book.id, metadataOf(project));
-    const clipped = shell().chapter();
-    const chapters = book.structure().chapters;
+    const project = shell.project();
+    const clipped = shell.chapter();
+    const label = clipped === null ? undefined : book.structure().chapters[clipped]?.label;
     const where =
-      clipped === null ? t("whole book") : (chapters[clipped]?.label ?? String(clipped + 1));
+      clipped === null ? t("whole book") : label === undefined || label === "" ? t("front") : label;
     return t("{book} {where} ({project})", {
-      book: name,
+      book: bookName(book.id, metadataOf(project)),
       where,
       project: projectName(project),
     });
   };
 
-  const segment = (): Segment => (shell().mode() === "usfm" ? "usfm" : "regular");
+  const segment = (): Segment => (shell.mode() === "usfm" ? "usfm" : "regular");
 
   const pick = (value: Segment): void => {
     if (value === "stet") {
       go("/find", { mode: "stet" });
       return;
     }
-    shell().setMode(value === "usfm" ? "usfm" : "default");
+    shell.setMode(value === "usfm" ? "usfm" : "default");
   };
 
-  const findings = () => shell().findingCounts();
+  const findings = () => shell.findingCounts();
   const attention = () => findings().errors + findings().warnings;
 
   const can = (id: string): boolean => findCommand(id)?.available() === true;
@@ -91,7 +93,10 @@ export function Toolbar(props: ToolbarProps) {
 
   return (
     <div class="flex flex-wrap items-center gap-3">
-      <strong class="text-h4 font-semibold text-on-surface-primary" data-workspace-title>
+      <strong
+        class="min-w-0 shrink truncate text-h4 font-semibold text-on-surface-primary"
+        data-workspace-title
+      >
         {title()}
       </strong>
 

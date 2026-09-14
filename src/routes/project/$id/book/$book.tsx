@@ -31,6 +31,12 @@ const REFERENCE = { initial: 0.3, min: 0.18, max: 0.5 } as const;
 
 function BookPage(props: { readonly root: string; readonly bookId: string }) {
   const shell = useShell();
+  // Plain variables: `Resizable.Panel` reads its three sizes once, during
+  // registration, and a JSX expression there is a memo read outside a tracking
+  // scope — which Solid 2 warns about, correctly.
+  const referenceInitial = REFERENCE.initial;
+  const referenceMin = REFERENCE.min;
+  const referenceMax = REFERENCE.max;
 
   // Open the project and seat the book the URL names, and do it again whenever
   // the URL names a different one. Idempotent: `focus` runs
@@ -61,15 +67,15 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
       >
         {(book) => (
           <>
-            <Toolbar shell={shell} />
+            <Toolbar />
 
             <Resizable.Root class="min-h-0 flex-1">
               <Resizable.Panel
-                initialSize={REFERENCE.initial}
-                minSize={REFERENCE.min}
-                maxSize={REFERENCE.max}
+                initialSize={referenceInitial}
+                minSize={referenceMin}
+                maxSize={referenceMax}
               >
-                <ReferenceColumn shell={shell} />
+                <ReferenceColumn />
               </Resizable.Panel>
               <Resizable.Handle label={t("Resize the reference column")} />
               {/* No `<Card>` around the editor: `.editor-host` (app.css) IS

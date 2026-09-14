@@ -23,7 +23,7 @@ import TriangleAlert from "lucide-solid/icons/triangle-alert";
 import { For, Show, createSignal } from "solid-js";
 
 import { t } from "../../i18n";
-import type { Shell } from "../../ProjectContext";
+import { useShell } from "../../ProjectContext";
 import { Input } from "../primitives";
 import { bookName, parseReference, testamentOf, type Testament } from "./books";
 import { bookPath, metadataOf, projectLanguage, projectName } from "./project";
@@ -35,13 +35,9 @@ interface Row {
   readonly attention: number;
 }
 
-export interface ProjectSidebarProps {
-  readonly shell: Shell;
-}
-
-export function ProjectSidebar(props: ProjectSidebarProps) {
+export function ProjectSidebar() {
   const navigate = useNavigate();
-  const shell = () => props.shell;
+  const shell = useShell();
   const [query, setQuery] = createSignal("", { name: "sidebarQuery" });
 
   const go = (to: string): void => {
@@ -53,17 +49,17 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
   };
 
   const rows = (): readonly Row[] => {
-    shell().tick();
-    const project = shell().project();
+    shell.tick();
+    const project = shell.project();
     if (project === undefined) return [];
     const metadata = metadataOf(project);
-    const census = new Map(
-      shell()
-        .services.projectAnalysis.census(project)
-        .map((book) => [book.bookId, book.diagnostics]),
+    const counted = new Map(
+      shell.services.projectAnalysis
+        .census(project)
+        .map((book) => [book.bookId, book.diagnostics] as const),
     );
     return project.books.map((book) => {
-      const diagnostics = census.get(book.id);
+      const diagnostics = counted.get(book.id);
       return {
         id: book.id,
         name: bookName(book.id, metadata),
@@ -76,39 +72,52 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
   const section = (testament: Testament): readonly Row[] =>
     rows().filter((row) => row.testament === testament);
 
-  /** The chapters of the book the editor is showing — the only expandable one. */
-  const chapters = (): readonly string[] => {
-    shell().tick();
-    const book = shell().focused();
-    return book === undefined ? [] : book.structure().chapters.map((chapter) => chapter.label);
+  /**
+   * The chapters of the book the editor is showing — the only expandable one.
+   *
+   * `index` is carried rather than derived, because the engine's chapter table
+   * begins with the FRONT MATTER: everything before the first chapter marker is
+   * its own row with an empty label. That row is a real clip target — it is
+   * what the identification and the table of contents live in — but it is not a
+   * chapter, so the grid drops it and keeps the index the editor clips by.
+   */
+  const chapters = (): readonly { readonly index: number; readonly label: string }[] => {
+    shell.tick();
+    const book = shell.focused();
+    if (book === undefined) return [];
+    const rows: { index: number; label: string }[] = [];
+    book.structure().chapters.forEach((chapter, index) => {
+      if (chapter.label !== "") rows.push({ index, label: chapter.label });
+    });
+    return rows;
   };
 
   const openBook = (bookId: string): void => {
-    const project = shell().project();
+    const project = shell.project();
     if (project === undefined) return;
     go(bookPath(project.root, bookId));
   };
 
   const jump = (): void => {
-    const project = shell().project();
+    const project = shell.project();
     if (project === undefined) return;
     const found = parseReference(
       query(),
       project.books.map((book) => book.id),
     );
     if (found === undefined) {
-      shell().report(t("no book matches {query}", { query: query() }));
+      shell.report(t("no book matches {query}", { query: query() }));
       return;
     }
     // The chapter is set before the navigation so the book opens on it: the
     // route's own effect calls `focus`, which reads the shell, not the URL.
-    if (found.chapter !== undefined) shell().setChapter(found.chapter - 1);
+    if (found.chapter !== undefined) shell.setChapter(found.chapter - 1);
     openBook(found.bookId);
     setQuery("");
   };
 
   const BookRow = (rowProps: { readonly row: Row }) => {
-    const focused = (): boolean => shell().focused()?.id === rowProps.row.id;
+    const focused = (): boolean => shell.focused()?.id === rowProps.row.id;
     return (
       <li>
         <button
@@ -119,17 +128,19 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
           onClick={() => openBook(rowProps.row.id)}
         >
           <BookIcon size={15} aria-hidden="true" class="shrink-0" />
-          <span class="truncate">{rowProps.row.name}</span>
+          <span class="min-w-0 flex-1 truncate">{rowProps.row.name}</span>
           <Show when={rowProps.row.attention > 0}>
-            <span class="ms-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-surface-warning px-1.5 py-0.5 text-smallest font-medium text-on-surface-warning">
+            {/* The word goes when the pane is narrow and the triangle stays: a
+                truncated book name costs the reader more than the label does. */}
+            <span
+              title={t("This book has findings to review.")}
+              class="inline-flex shrink-0 items-center gap-1 rounded-full bg-surface-warning px-1.5 py-0.5 text-smallest font-medium text-on-surface-warning"
+            >
               <TriangleAlert size={11} aria-hidden="true" />
-              {t("Review")}
+              <span class="hidden @min-[13rem]:inline">{t("Review")}</span>
             </span>
           </Show>
-          <span
-            aria-hidden="true"
-            class={rowProps.row.attention > 0 ? "shrink-0" : "ms-auto shrink-0"}
-          >
+          <span aria-hidden="true" class="shrink-0">
             <Show when={focused()} fallback={<ChevronRight size={14} />}>
               <ChevronDown size={14} />
             </Show>
@@ -139,16 +150,16 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
         <Show when={focused() && chapters().length > 0}>
           <ol class="mt-1 mb-2 grid grid-cols-4 gap-1 ps-7 pe-2">
             <For each={chapters()}>
-              {(label, index) => (
+              {(chapter) => (
                 <li>
                   <button
                     type="button"
-                    data-chapter={index()}
-                    data-current={shell().chapter() === index() ? "" : undefined}
+                    data-chapter={chapter.index}
+                    data-current={shell.chapter() === chapter.index ? "" : undefined}
                     class="w-full cursor-pointer rounded-md border border-transparent py-1 text-center text-smallest tabular-nums transition-colors data-current:border-brand data-current:bg-brand-light data-current:font-semibold data-current:text-brand not-data-current:text-on-surface-secondary not-data-current:hover:bg-sidebar-surface-hover"
-                    onClick={() => shell().setChapter(index())}
+                    onClick={() => shell.setChapter(chapter.index)}
                   >
-                    {label}
+                    {chapter.label}
                   </button>
                 </li>
               )}
@@ -178,13 +189,13 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
         >
           <span class="min-w-0 flex-1">
             <span class="block truncate text-small font-bold text-on-surface-primary">
-              <Show when={shell().project()} fallback={t("No project open")}>
-                {projectName(shell().project())}
+              <Show when={shell.project()} fallback={t("No project open")}>
+                {projectName(shell.project())}
               </Show>
             </span>
-            <Show when={projectLanguage(shell().project()) !== ""}>
+            <Show when={projectLanguage(shell.project()) !== ""}>
               <span class="block truncate text-smallest text-on-surface-tertiary">
-                {projectLanguage(shell().project())}
+                {projectLanguage(shell.project())}
               </span>
             </Show>
           </span>
@@ -209,7 +220,7 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
         />
       </div>
 
-      <nav aria-label={t("Books")} class="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+      <nav aria-label={t("Books")} class="@container min-h-0 flex-1 overflow-y-auto px-3 pb-3">
         <Show
           when={rows().length > 0}
           fallback={
