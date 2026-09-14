@@ -127,9 +127,6 @@ importers:
       '@corvu-next/popover':
         specifier: 0.1.5
         version: 0.1.5(@solidjs/web@2.0.0-rc.6(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6)
-      '@corvu-next/resizable':
-        specifier: 0.1.5
-        version: 0.1.5(@solidjs/web@2.0.0-rc.6(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6)
       '@corvu-next/tooltip':
         specifier: 0.1.5
         version: 0.1.5(@solidjs/web@2.0.0-rc.6(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6)
@@ -389,12 +386,6 @@ packages:
     resolution: {integrity: sha512-0Bm5tFGTFPlnjvhc402qu3iYOLkFbBlw18IgqgCl+3Zbb+CtrpjryWzE3OQQD5xYe98p9Zppaf9OTy6eufG28Q==}
     peerDependencies:
       solid-js: 2.0.0-beta.17
-
-  '@corvu-next/resizable@0.1.5':
-    resolution: {integrity: sha512-H6MIcyrb+qe/U0dDwEy/l9d8LoAMyCW2cu/1elK36bvSmYY3A+tWX/dRyVIGCpbrp28DtMW5EkpNirqqHn7s3Q==}
-    peerDependencies:
-      '@solidjs/web': 2.0.0-beta.19
-      solid-js: 2.0.0-beta.19
 
   '@corvu-next/tooltip@0.1.5':
     resolution: {integrity: sha512-IXLkB4Hror5WmON7IIiZKR/Uxpn7SRuUbb0o98m4Dis8puiMC7stPNdyXorSQNb+Hg5kb65gl6BC2t2wId76dg==}
@@ -3070,12 +3061,6 @@ snapshots:
       solid-js: 2.0.0-rc.6
     transitivePeerDependencies:
       - '@solidjs/web'
-
-  '@corvu-next/resizable@0.1.5(@solidjs/web@2.0.0-rc.6(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6)':
-    dependencies:
-      '@corvu-next/utils': 0.1.4(@solidjs/web@2.0.0-rc.6(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6)
-      '@solidjs/web': 2.0.0-rc.6(solid-js@2.0.0-rc.6)
-      solid-js: 2.0.0-rc.6
 
   '@corvu-next/tooltip@0.1.5(@solidjs/web@2.0.0-rc.6(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6)':
     dependencies:
