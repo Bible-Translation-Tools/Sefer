@@ -147,7 +147,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
                 <span
                   class={
                     segment.hit
-                      ? "rounded-xs bg-surface-warning text-on-surface-warning"
+                      ? "rounded-xs bg-surface-highlight text-on-surface-highlight"
                       : segment.dim
                         ? "text-on-surface-tertiary"
                         : undefined

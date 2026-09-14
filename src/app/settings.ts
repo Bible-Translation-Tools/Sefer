@@ -16,6 +16,7 @@ import { Schema } from "effect";
 
 import { PRODUCERS, SEVERITIES } from "../core/findings/filter";
 import type { SettingKey, SettingsService } from "../core/host/settings";
+import { DEFAULT_EDITOR_FONT_SIZE, EDITOR_FONT_SIZE_RANGE } from "./ui/theme";
 
 /**
  * Which card a row is drawn in. A preference belongs to a group the way a
@@ -157,6 +158,13 @@ export interface ShellKeys {
    */
   readonly fontSize: SettingKey<number>;
   readonly zoom: SettingKey<number>;
+  /**
+   * The scripture column's own size in px, separate from the interface size:
+   * the chrome and the text being translated are read at different distances.
+   * `ProjectContext` applies it through `applyEditorFontSize`, so moving the
+   * stepper resizes the open book without a reload.
+   */
+  readonly editorFontSize: SettingKey<number>;
   /** Project root → ISO-8601 of the last open. See `RecentProjects`. */
   readonly recentProjects: SettingKey<RecentProjects>;
 }
@@ -192,6 +200,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     sidebarWidth: settings.register("workspace.sidebarWidth", Schema.Number, SIDEBAR_WIDTH.default),
     fontSize: settings.register("shell.fontSize", Schema.Number, 16),
     zoom: settings.register("shell.zoom", Schema.Number, 100),
+    editorFontSize: settings.register("editor.fontSize", Schema.Number, DEFAULT_EDITOR_FONT_SIZE),
     recentProjects: settings.register("shell.recentProjects", RecentProjects, {}),
   };
   registered.set(settings, keys);
@@ -235,6 +244,17 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
       max: 200,
       step: 10,
       unit: "%",
+    },
+    {
+      key: keys.editorFontSize,
+      label: "Scripture text size",
+      description: "How large the book itself is set, in pixels.",
+      kind: "number",
+      group: "editor",
+      min: EDITOR_FONT_SIZE_RANGE.min,
+      max: EDITOR_FONT_SIZE_RANGE.max,
+      step: 1,
+      unit: "px",
     },
     {
       key: keys.startInUsfmMode,

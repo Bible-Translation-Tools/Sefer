@@ -163,7 +163,10 @@
   margin: 0 auto;
   padding: 56px 0 30vh;
   font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-  font-size: 18px;
+  /* The reader's own size (`editor.fontSize`, written onto <html> by
+     `src/app/ui/theme.ts`). The fallback is the value this was hardcoded to,
+     so a document with no preference applied still reads the same. */
+  font-size: var(--editor-font-size, 18px);
   line-height: 1.72;
   color: var(--editor-ink);
   caret-color: var(--editor-accent);
@@ -477,8 +480,12 @@
   box-shadow: inset 3px 0 0 var(--editor-focus-bar);
   border-radius: 3px;
 }
+/* A find hit inside the page. The app's highlight token, not the paper
+   palette's: the same match shown on an excerpt card and in the editor has to
+   be the same colour, or clicking Edit appears to move it. */
 .cm-mode-regular .usfm-hit {
-  background: var(--editor-highlight);
+  background: var(--surface-highlight);
+  color: var(--on-surface-highlight);
   border-radius: 2px;
 }
 
@@ -878,8 +885,8 @@
    same tokens the read-only card highlights with, so clicking Edit does not
    move the match. */
 .cm-excerpt-hit {
-  background-color: var(--surface-warning);
-  color: var(--on-surface-warning);
+  background-color: var(--surface-highlight);
+  color: var(--on-surface-highlight);
   border-radius: 2px;
 }
 
