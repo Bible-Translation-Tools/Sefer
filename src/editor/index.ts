@@ -128,9 +128,14 @@ export { pickChapter, projectionFor, type ProjectionName } from "./views";
 // Diagnostics, sink 1 (editor-and-save §2).
 export {
   applyFix,
+  corpusFindings,
   findings,
   hiddenByPaint,
+  setCorpusFindings,
+  showCorpusFindings,
+  sousField,
   usfmLinter,
+  type CorpusFinding,
   type Finding,
   type HiddenTest,
 } from "./recipes/lint";

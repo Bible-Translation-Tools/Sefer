@@ -16,6 +16,12 @@
  *  - ONE subscription per book, here: `book.changes` writes a stamp signal (so
  *    the status bar is reactive) and hands the editor's own parse to
  *    ProjectAnalysis, so a keystroke costs no second wasm call.
+ *  - The corpus half of sink 1 flows the other way through the same seam. The
+ *    editor cannot compute a Sous finding, so `ProjectAnalysis.watch()` — which
+ *    fires once per scheduler pass, after the publication — is the cue to push
+ *    the book's fresh corpus findings into the editor's `sousField`. Off the
+ *    keystroke path by construction: a keystroke arms the scheduler and clears
+ *    the field; the refill arrives when the corpus publishes.
  *
  * Mode and chapter are dispatched into the canonical state through a
  * compartment. Neither is a document change, so `fromView` ignores them —
@@ -25,11 +31,15 @@
 
 import { Compartment, StateEffect } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import { Effect, Fiber, Stream } from "effect";
 import { createEffect, createRenderEffect, createSignal, onCleanup } from "solid-js";
 
+import { stale } from "../../core/findings/finding";
 import type { SourceStamp } from "../../core/source/source";
 import {
   assignment,
+  showCorpusFindings,
+  type CorpusFinding,
   modeFacet,
   pickChapter,
   projectionFor,
@@ -139,9 +149,30 @@ export function BookEditor(props: BookEditorProps) {
         shell.bump();
       });
 
+      // The corpus half of sink 1. `crossBook()` is the whole project's Sous
+      // findings; this book's share of them is shown inline, and only while
+      // the publication still describes the text the reader is looking at —
+      // `stale` is the one freshness question, and a stale finding is dropped
+      // silently rather than shifted onto an offset nobody measured.
+      const corpus = (): void => {
+        const list: CorpusFinding[] = [];
+        for (const finding of shell.services.projectAnalysis.crossBook())
+          if (finding.bookId === book.id && !stale(finding, book)) list.push(finding);
+        showCorpusFindings(created, list);
+      };
+      corpus();
+      // One pass of the analysis scheduler publishes the corpus once and then
+      // reports every book it refreshed, so any event means a new snapshot —
+      // including one provoked by another book, which is how a cross-book
+      // finding about this one appears.
+      const watching = shell.services.runtime.runFork(
+        Stream.runForEach(shell.services.projectAnalysis.watch(), () => Effect.sync(corpus)),
+      );
+
       setBound({ view: created, projection });
 
       onCleanup(() => {
+        Effect.runFork(Fiber.interrupt(watching));
         unsubscribe();
         unbind();
         created.destroy();

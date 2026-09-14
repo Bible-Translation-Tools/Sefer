@@ -2,18 +2,26 @@
  * Sink 1 of the diagnostics fan-out (editor-and-save §2): the engine's
  * diagnostics as inline marks and gutter actions.
  *
- * Rebuilt from the CURRENT state's analysis every keystroke, so an inline mark
- * cannot be stale — the freshness discipline the other sinks need is bought here
- * by not caching. A finding whose span is entirely inside hidden markup is
- * dropped by default: it reads as an underline on nothing. That test consults
- * the paint index, not the decoration set.
+ * TWO sources, one linter. Onion's per-book diagnostics are rebuilt from the
+ * CURRENT state's analysis every keystroke, so an inline mark cannot be stale —
+ * the freshness discipline the other sinks need is bought here by not caching.
+ * Sous's corpus findings cannot be rebuilt here at all: they are whole-corpus
+ * products that arrive from `ProjectAnalysis` long after the keystroke that
+ * provoked them, so they are PUSHED into `sousField` and are dropped, never
+ * shifted, the moment the document moves. That keeps the corpus half entirely
+ * off the keystroke hot path: a keystroke costs one synchronous Onion parse and
+ * one field reset, and no corpus work at all.
+ *
+ * A finding whose span is entirely inside hidden markup is dropped by default,
+ * whichever producer said so: it reads as an underline on nothing. That test
+ * consults the paint index, not the decoration set.
  *
  * A fix carries the stamp of the text it was computed from and is discarded if
- * the document moved under it.
+ * the document moved under it. Sous findings never carry one — they measure.
  */
 
-import { type Diagnostic as CmDiagnostic, linter } from "@codemirror/lint";
-import type { EditorState } from "@codemirror/state";
+import { type Diagnostic as CmDiagnostic, forceLinting, linter } from "@codemirror/lint";
+import { StateEffect, StateField, type EditorState, type Extension } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 
 import {
@@ -26,6 +34,7 @@ import {
   stampOf,
   versionOf,
 } from "../../core/galley";
+import type { SourceStamp } from "../../core/source/source";
 import { analyzed, analyzer } from "../core/analyzer";
 import { structureAt } from "../core/docStructure";
 import { PAINT_PORT } from "../core/editorState";
@@ -122,40 +131,135 @@ const SEVERITY_CLASS: Record<string, string> = {
   hint: "usfm-lint-info",
 };
 
+/**
+ * A corpus finding, as much of Sefer's one shape (`src/core/findings`) as the
+ * editor needs in order to draw it. Deliberately structural rather than an
+ * import of `Finding`: the editor renders what it is handed, and core's shape
+ * satisfies this without core learning that CodeMirror exists.
+ *
+ * `stamp` is the Book's `SourceStamp` for the text the offsets name. It is the
+ * freshness authority inside one Book's lifetime, and the caller is expected to
+ * have filtered on it already — `sousField` drops the whole set on the next
+ * document change regardless, because nothing here shifts an offset.
+ */
+export interface CorpusFinding {
+  readonly id: string;
+  readonly code: string;
+  readonly severity: "error" | "warning" | "info";
+  readonly message: string;
+  readonly from: number;
+  readonly to: number;
+  readonly stamp: SourceStamp;
+}
+
+const NO_CORPUS: readonly CorpusFinding[] = [];
+
+/** Replace the corpus findings shown for the book in this state. */
+export const setCorpusFindings = StateEffect.define<readonly CorpusFinding[]>();
+
+/**
+ * Sink 1's second source: the Sous findings for the instantiated book.
+ *
+ * Held rather than computed, because no amount of work in this process can
+ * produce them — they are a whole-corpus product. The update rule is the
+ * freshness rule in two lines: a document change invalidates every offset in
+ * the set, and the set is DROPPED rather than mapped through the changes.
+ * Mapping would produce a plausible underline in the wrong place, which is the
+ * failure the stamps exist to prevent; the next publication brings a correct
+ * set within the scheduler's quiet window.
+ */
+export const sousField = StateField.define<readonly CorpusFinding[]>({
+  create: () => NO_CORPUS,
+  update(held, tr) {
+    if (tr.docChanged) return NO_CORPUS;
+    for (const effect of tr.effects) if (effect.is(setCorpusFindings)) return effect.value;
+    return held;
+  },
+});
+
+/** What the linter is currently showing from the corpus half. */
+export const corpusFindings = (state: EditorState): readonly CorpusFinding[] =>
+  state.field(sousField, false) ?? NO_CORPUS;
+
+/**
+ * Hand the editor the corpus findings for its book, and re-lint.
+ *
+ * The dispatch changes no document, so the bound Book ignores it (`fromView`
+ * accepts document changes only) — this is presentation, not an edit. The
+ * linter would not otherwise notice: it re-runs on document changes, and this
+ * is the one source that moves without one.
+ */
+export const showCorpusFindings = (view: EditorView, list: readonly CorpusFinding[]): void => {
+  view.dispatch({ effects: setCorpusFindings.of(list) });
+  forceLinting(view);
+};
+
+/**
+ * The inline linter: Onion's diagnostics from the current state, plus whatever
+ * corpus findings were last pushed in. ONE `linter`, so one gutter, one
+ * tooltip and one keyboard order over both producers.
+ *
+ * `source` is what tells them apart for a reader — `onion/<code>` or
+ * `sous/<code>` — and it is the tooltip's footer line.
+ */
 export function usfmLinter(
   isHidden: HiddenTest = hiddenByPaint,
   suppressHidden: () => boolean = () => true,
-) {
-  return linter(
-    (view) => {
-      const out: CmDiagnostic[] = [];
-      for (const f of findings(view.state, isHidden)) {
-        if (f.severity === null) continue;
-        if (f.hidden && suppressHidden()) continue;
-        const fix = f.fix;
-        const stamp = f.stamp;
-        out.push({
-          from: f.from,
-          to: Math.max(f.to, f.from + 1),
-          severity: f.severity,
-          source: `onion/${f.name}`,
-          markClass: SEVERITY_CLASS[f.severity] ?? "usfm-lint-info",
-          message: f.message,
-          actions:
-            fix === null
-              ? undefined
-              : [
-                  {
-                    name: f.fixLabel ?? "fix",
-                    apply(target) {
-                      applyFix(target, fix, stamp);
+): Extension {
+  return [
+    sousField,
+    linter(
+      (view) => {
+        const out: CmDiagnostic[] = [];
+        for (const f of findings(view.state, isHidden)) {
+          if (f.severity === null) continue;
+          if (f.hidden && suppressHidden()) continue;
+          const fix = f.fix;
+          const stamp = f.stamp;
+          out.push({
+            from: f.from,
+            to: Math.max(f.to, f.from + 1),
+            severity: f.severity,
+            source: `onion/${f.name}`,
+            markClass: SEVERITY_CLASS[f.severity] ?? "usfm-lint-info",
+            message: f.message,
+            actions:
+              fix === null
+                ? undefined
+                : [
+                    {
+                      // "Fix: <label>" so the button says what it will do; the
+                      // catalogue's label on its own reads as one more noun in
+                      // a tooltip that is already mostly nouns.
+                      name: `Fix: ${f.fixLabel ?? "repair"}`,
+                      markClass: "usfm-fix-action",
+                      apply(target) {
+                        applyFix(target, fix, stamp);
+                      },
                     },
-                  },
-                ],
-        });
-      }
-      return out;
-    },
-    { delay: 150 },
-  );
+                  ],
+          });
+        }
+        const length = view.state.doc.length;
+        for (const f of corpusFindings(view.state)) {
+          // A publication whose offsets run past this document describes text
+          // this view does not hold. Dropped, never clamped.
+          if (f.from < 0 || f.to > length || f.from > f.to) continue;
+          if (suppressHidden() && isHidden(view.state, f.from, f.to)) continue;
+          out.push({
+            from: f.from,
+            to: Math.max(f.to, Math.min(f.from + 1, length)),
+            severity: f.severity,
+            source: `sous/${f.code}`,
+            markClass: SEVERITY_CLASS[f.severity] ?? "usfm-lint-info",
+            message: f.message,
+            // Sous measures; it never offers an edit (`fixes.preview` refuses
+            // it `NotEngineFix`), so there is no action to offer here either.
+          });
+        }
+        return out;
+      },
+      { delay: 150 },
+    ),
+  ];
 }
