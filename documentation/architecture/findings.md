@@ -85,6 +85,18 @@ What persists and what does not (vision §11.4: "category and severity filters s
 
 Core cannot navigate. `navigateTarget` returns a value; the shell calls `project.instantiate(bookId)`, mounts a view and scrolls the semantic span into place. The span stays exact even when visual mode hides the markup it covers (vision §11.3) — a presentation anchor is the view's decision, never a substitution here, because the same span is what a fix would edit.
 
+## The panel
+
+`/findings` is sink 2 on screen: `src/app/ui/panels/FindingsPanel.tsx`, the chip row beside it, and nothing else. Four decisions are worth stating.
+
+**Grouping is the view, and the count is always over findings.** `groupBy` returns the sections; "flat" is one unlabelled section rather than a second rendering path, because the row markup is the part worth having once. A "by book" header shows the id and the human name beside it (`bookName`, which reads the project's own metadata first, exactly as the sidebar does), and the header's badge counts FINDINGS, never rows.
+
+**A run of identical rows folds.** Consecutive findings in a group with the same `code` AND the same `message` collapse to one row carrying `× N`, which expands on click — seventy-six rows of "\s5 is not a known marker" is a wall, not a report. Only CONSECUTIVE ones fold, so the fold never re-orders and never reaches across a group, and it is purely presentational: the header count, the chip counts and the census are untouched. The keyboard cursor walks the VISIBLE rows, so `j`/`k` move over what the eye sees, and Enter unfolds a folded row where it opens an ordinary one.
+
+**A row's reference is derived, or it is not shown.** Each row names where it is by calling `navigateTarget(finding, analysis)` with the analysis `ProjectAnalysis` holds for that book. That fills `ref` in only when the analysis still describes the very text the finding was measured against, so a fresh row reads "PHM 1:4" and a row whose analysis has moved shows the raw offset instead. Nothing on this screen ever guesses a verse: a chapter and verse from another revision would name the wrong place with total confidence, which is the failure the two stamps exist to prevent.
+
+**Fix is offered only where it can be honoured.** The button appears when the finding carries a `fix` pointer, and pressing it computes `fixes.preview` on demand — a panel of four hundred findings resolves none of them until someone asks. A preview computed from text the book has since moved past is refused (`Stale`), and `fixes.apply` goes through `book.apply`, the one write path, so a fix from the panel is the same event a fix from the editor is. A book nobody has opened has no Book to apply to, and the panel says so rather than failing quietly.
+
 ## What fixes can and cannot do
 
 Sefer writes no USFM transformations. Onion attaches the edits to the diagnostic that found the problem, and `src/core/fixes/fixes.ts` only carries them to `book.apply(changes, 'fix', trustedBy('fix'))` — the one write path, so Undo, Save, Recovery and the panel all learn about the edit.
