@@ -55,6 +55,10 @@ Differs from Zed's multibuffer deliberately:
 - An **outline** beside the list: one row per book with its hit count ("PHM 3", "JUD 12"), in canonical order. Clicking a row scrolls the virtualized list to that book's sticky header; the row for the book currently in view is highlighted as the list scrolls. STET gets the same outline (per term, and per book inside a term).
 - Cross-project find stays the `/find` route with the same list.
 
+## No bulk rewrite actions
+
+Scripture is too valuable and fragile for replace-type actions. Find has no Replace or Replace all; History and Save & Review show diffs read-only with no Revert. The only way text changes is a person typing in an editor surface (the main editor, or an excerpt's Edit). The core `replace` and `revert` functions stay for future, deliberately-designed flows; nothing in the UI calls them.
+
 ## Diagnostics popovers
 
 Inline lint tooltips and gutter popovers use tokens (opaque surface, readable text in both themes) and show the fix as a button when the finding carries one.
