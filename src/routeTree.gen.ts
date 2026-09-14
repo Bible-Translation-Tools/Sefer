@@ -16,6 +16,8 @@ import { Route as HistoryRouteImport } from './routes/history'
 import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as DevFixtureRouteImport } from './routes/dev/fixture'
+import { Route as StartCreateRouteImport } from './routes/start/create'
+import { Route as StartFindRouteImport } from './routes/start/find'
 import { Route as ProjectIdIndexRouteImport } from './routes/project/$id/index'
 import { Route as ProjectIdBookBookRouteImport } from './routes/project/$id/book/$book'
 
@@ -54,6 +56,16 @@ const DevFixtureRoute = DevFixtureRouteImport.update({
   path: '/dev/fixture',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StartCreateRoute = StartCreateRouteImport.update({
+  id: '/start/create',
+  path: '/start/create',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StartFindRoute = StartFindRouteImport.update({
+  id: '/start/find',
+  path: '/start/find',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProjectIdIndexRoute = ProjectIdIndexRouteImport.update({
   id: '/project/$id/',
   path: '/project/$id/',
@@ -73,6 +85,8 @@ export interface FileRoutesByFullPath {
   '/projects': typeof ProjectsRoute
   '/settings': typeof SettingsRoute
   '/dev/fixture': typeof DevFixtureRoute
+  '/start/create': typeof StartCreateRoute
+  '/start/find': typeof StartFindRoute
   '/project/$id/': typeof ProjectIdIndexRoute
   '/project/$id/book/$book': typeof ProjectIdBookBookRoute
 }
@@ -84,6 +98,8 @@ export interface FileRoutesByTo {
   '/projects': typeof ProjectsRoute
   '/settings': typeof SettingsRoute
   '/dev/fixture': typeof DevFixtureRoute
+  '/start/create': typeof StartCreateRoute
+  '/start/find': typeof StartFindRoute
   '/project/$id': typeof ProjectIdIndexRoute
   '/project/$id/book/$book': typeof ProjectIdBookBookRoute
 }
@@ -96,6 +112,8 @@ export interface FileRoutesById {
   '/projects': typeof ProjectsRoute
   '/settings': typeof SettingsRoute
   '/dev/fixture': typeof DevFixtureRoute
+  '/start/create': typeof StartCreateRoute
+  '/start/find': typeof StartFindRoute
   '/project/$id/': typeof ProjectIdIndexRoute
   '/project/$id/book/$book': typeof ProjectIdBookBookRoute
 }
@@ -109,6 +127,8 @@ export interface FileRouteTypes {
     | '/projects'
     | '/settings'
     | '/dev/fixture'
+    | '/start/create'
+    | '/start/find'
     | '/project/$id/'
     | '/project/$id/book/$book'
   fileRoutesByTo: FileRoutesByTo
@@ -120,6 +140,8 @@ export interface FileRouteTypes {
     | '/projects'
     | '/settings'
     | '/dev/fixture'
+    | '/start/create'
+    | '/start/find'
     | '/project/$id'
     | '/project/$id/book/$book'
   id:
@@ -131,6 +153,8 @@ export interface FileRouteTypes {
     | '/projects'
     | '/settings'
     | '/dev/fixture'
+    | '/start/create'
+    | '/start/find'
     | '/project/$id/'
     | '/project/$id/book/$book'
   fileRoutesById: FileRoutesById
@@ -143,6 +167,8 @@ export interface RootRouteChildren {
   ProjectsRoute: typeof ProjectsRoute
   SettingsRoute: typeof SettingsRoute
   DevFixtureRoute: typeof DevFixtureRoute
+  StartCreateRoute: typeof StartCreateRoute
+  StartFindRoute: typeof StartFindRoute
   ProjectIdIndexRoute: typeof ProjectIdIndexRoute
   ProjectIdBookBookRoute: typeof ProjectIdBookBookRoute
 }
@@ -198,6 +224,20 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof DevFixtureRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/start/create': {
+      id: '/start/create'
+      path: '/start/create'
+      fullPath: '/start/create'
+      preLoaderRoute: typeof StartCreateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/start/find': {
+      id: '/start/find'
+      path: '/start/find'
+      fullPath: '/start/find'
+      preLoaderRoute: typeof StartFindRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/project/$id/': {
       id: '/project/$id/'
       path: '/project/$id'
@@ -223,6 +263,8 @@ const rootRouteChildren: RootRouteChildren = {
   ProjectsRoute: ProjectsRoute,
   SettingsRoute: SettingsRoute,
   DevFixtureRoute: DevFixtureRoute,
+  StartCreateRoute: StartCreateRoute,
+  StartFindRoute: StartFindRoute,
   ProjectIdIndexRoute: ProjectIdIndexRoute,
   ProjectIdBookBookRoute: ProjectIdBookBookRoute,
 }
