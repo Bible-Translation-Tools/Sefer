@@ -93,7 +93,6 @@ export function BookEditor(props: BookEditorProps) {
       });
       const created = view;
       const unbind = book.bindView(created);
-      created.dom.classList.add("cm-mode-regular");
       // The mountable half of the editor is added here rather than baked into
       // the seat, because the canonical state must also work headless.
       // The keystroke meter closes one gesture per DOM event and reports the
@@ -156,14 +155,17 @@ export function BookEditor(props: BookEditorProps) {
     () => ({ held: bound(), mode: shell.mode(), chapter: shell.chapter() }),
     ({ held, mode, chapter }) => {
       if (held === undefined) return;
+      // The mode class rides the compartment as an editor attribute, not a
+      // hand-added class: CodeMirror rewrites `view.dom`'s class attribute from
+      // its facets whenever focus changes, and a class it did not put there is
+      // wiped on the first click into the text.
       held.view.dispatch({
         effects: held.projection.reconfigure([
           assignment.of(projectionFor(mode)),
           modeFacet.of(cmMode(mode)),
+          EditorView.editorAttributes.of({ class: `cm-mode-${cmMode(mode)}` }),
         ]),
       });
-      held.view.dom.classList.toggle("cm-mode-usfm", cmMode(mode) === "usfm");
-      held.view.dom.classList.toggle("cm-mode-regular", cmMode(mode) === "regular");
       held.view.dispatch(pickChapter(held.view.state, chapter));
     },
   );
