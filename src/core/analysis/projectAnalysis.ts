@@ -46,6 +46,7 @@ import { Context, Duration, Effect, Latch, Layer, Option, PubSub, Scope, Stream 
 
 import type { Book, BookId } from "../book/book";
 import { fromAnalysis, fromSnapshot, type Finding } from "../findings/finding";
+import { EMPTY as EMPTY_INVENTORY, inventory, type Inventory } from "../findings/inventory";
 import {
   CorpusEngine,
   describesExactly,
@@ -137,6 +138,18 @@ export interface ProjectAnalysisService {
   /** Just the corpus-level half — the findings no single book could produce. */
   readonly crossBook: () => readonly Finding[];
 
+  /**
+   * The last publication's pattern table, pivoted per character — what the
+   * corpus does with its punctuation, and which sites were flagged.
+   *
+   * Memoised beside `findings()` and recomputed only when a publication lands,
+   * so it is off the keystroke path by construction: nothing recomputes it
+   * until the same event that replaces the snapshot. Empty until the first
+   * publication. The pattern indices inside it are indices into THAT snapshot
+   * and are never valid against another one.
+   */
+  readonly inventory: () => Inventory;
+
   /** Republishes `{ bookId, stamp }` after each re-analysis. */
   readonly watch: () => Stream.Stream<{ readonly bookId: BookId; readonly stamp: SourceStamp }>;
 }
@@ -213,6 +226,7 @@ const make = (
     let snapshot: FindingsSnapshot | undefined;
     let findingsCache: readonly Finding[] | undefined;
     let corpusCache: readonly Finding[] | undefined;
+    let inventoryCache: Inventory | undefined;
 
     const pubsub = yield* PubSub.unbounded<{
       readonly bookId: BookId;
@@ -226,6 +240,7 @@ const make = (
     const invalidateCaches = (): void => {
       findingsCache = undefined;
       corpusCache = undefined;
+      inventoryCache = undefined;
     };
 
     /** Synchronous, called from `book.changes`. Two numbers and a latch. */
@@ -359,6 +374,15 @@ const make = (
       if (corpusCache !== undefined) return corpusCache;
       corpusCache = snapshot === undefined ? [] : fromSnapshot(snapshot, resolveBook);
       return corpusCache;
+    };
+
+    const characters = (): Inventory => {
+      if (inventoryCache !== undefined) return inventoryCache;
+      inventoryCache =
+        snapshot === undefined
+          ? EMPTY_INVENTORY
+          : inventory(snapshot, (id) => resolveBook(id)?.bookId);
+      return inventoryCache;
     };
 
     const findings = (): readonly Finding[] => {
@@ -510,6 +534,7 @@ const make = (
       },
       findings,
       crossBook,
+      inventory: characters,
       watch: () => Stream.fromPubSub(pubsub),
     };
   });

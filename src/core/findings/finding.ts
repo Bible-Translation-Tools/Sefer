@@ -79,6 +79,17 @@ export interface Finding {
   readonly stamp: SourceStamp;
   readonly engine: EngineStamp;
   readonly fix?: FixRef;
+  /**
+   * Row in the publication's pattern table, for a Sous `Convention` finding
+   * only. It is NOT a durable identity — the next publication renumbers the
+   * table exactly as it renumbers findings — so it is only meaningful against
+   * the snapshot this finding was read from, which is the one ProjectAnalysis
+   * still holds. It is carried because the character inventory
+   * (`src/core/findings/inventory.ts`) is the pattern table's reader and the
+   * panel wants to say "the other sites of THIS pattern"; re-deriving it would
+   * mean re-walking the snapshot for every row.
+   */
+  readonly pattern?: number;
 }
 
 const identify = (
@@ -287,6 +298,7 @@ export const fromSnapshot = (
         to: finding.to,
         stamp: resolved.stamp,
         engine: resolved.engine,
+        ...(finding.kind === "Convention" ? { pattern: finding.convention.pattern } : {}),
       });
     }
   }
