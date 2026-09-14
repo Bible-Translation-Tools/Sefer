@@ -55,9 +55,13 @@ Differs from Zed's multibuffer deliberately:
 - An **outline** beside the list: one row per book with its hit count ("PHM 3", "JUD 12"), in canonical order. Clicking a row scrolls the virtualized list to that book's sticky header; the row for the book currently in view is highlighted as the list scrolls. STET gets the same outline (per term, and per book inside a term).
 - Cross-project find stays the `/find` route with the same list.
 
-## No bulk rewrite actions
+## No Replace in Find; Revert stays in Review
 
-Scripture is too valuable and fragile for replace-type actions. Find has no Replace or Replace all; History and Save & Review show diffs read-only with no Revert. The only way text changes is a person typing in an editor surface (the main editor, or an excerpt's Edit). The core `replace` and `revert` functions stay for future, deliberately-designed flows; nothing in the UI calls them.
+Scripture is too valuable and fragile for a blind Replace / Replace all, so Find has neither; edits happen in an editor surface (main editor or an excerpt's Edit). Review and History DO keep per-hunk and per-file Revert — a reviewer looking at a diff and choosing to undo one hunk is a deliberate, visible act, "nicer but similar to old editors" (proto's DiffModal). Review diffs against the last recorded version (the commit), never against the auto-written save baseline, or a dirty session reads as clean.
+
+## Editor palette
+
+The regular-mode editor is the prototype's look on our tokens — white card, on-surface ink, brand-primary verse and chapter numbers — not the sepia paper and warm ink inherited from the editor spike. USFM mode keeps a terminal palette.
 
 ## Diagnostics popovers
 
