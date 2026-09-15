@@ -3,40 +3,46 @@
  * ALONGSIDE, at the passage the editor is showing — and the one place a
  * reader binds one.
  *
- * Everything comes from `Library` (src/core/resources/library.ts): `resolve`
- * answers which resources a project binds to a role, `lookup` answers one
- * reference out of one of them, and `add`/`bind`/`unbind` are what the picker
- * below calls. All are Effects, so the column loads asynchronously and says
- * so — the editor never waits on a reference text.
+ * It used to be a stack of cards holding a regex-sliced passage. It is now a
+ * stack of READ-ONLY EDITORS (`ReferencePane`), one per bound resource, over
+ * the same book the reader has open, painted by the same projection as the
+ * editor beside them. That is the whole of Will's ask — "find reference text
+ * should basically be a readonly editor in same facet/mode with a splitter
+ * between it" — and it is a better answer than a card for a concrete reason: a
+ * card showed a passage with the markers stripped by a regex, so it could not
+ * show markup, could not be scrolled, and disagreed with the editor about what
+ * a verse looks like. A pane is the same `decoField` over the same
+ * `DocStructure`, so the two sides cannot drift.
  *
- * `source` and `reference` are two SLOTS and not one list, because the
- * distinction is the project's: a source is the text this translation is made
- * from and there is one of it, and references are everything else you keep
- * open beside it, of which there may be several. The source slot is shown
- * first for the same reason.
+ * What stays from the card round: `source` and `reference` are two SLOTS and
+ * not one list, because the distinction is the project's — a source is the
+ * text this translation is made from and there is one of it, references are
+ * everything else you keep open beside it. The source slot is shown first for
+ * the same reason. The picker is unchanged: every project on this device that
+ * is not the open one, registered with the Library if it is not already, then
+ * bound. A reference Bible on this device IS another project, so there is no
+ * second importer here and no second idea of what a resource is.
  *
- * Where the candidates come from: the project index the landing screen already
- * reads (`src/core/project/projectIndex.ts`, through `listProjects`), minus
- * the project that is open. A reference Bible on this device IS another
- * project — the same folder of USFM, imported the same way — so there is no
- * second importer here and no second idea of what a resource is. Choosing one
- * registers it with the Library if it is not registered already, then binds
- * it; the binding lives in `<appData>/library/library.json`, keyed by project.
+ * Why the stack is remounted rather than reconciled: `Resizable` registers its
+ * panels DURING render, in document order, and has no unregister — so a panel
+ * list that changes length has to be a new split. `<Show keyed>` over the
+ * entries array gives exactly that, and the only things that change it are
+ * binding, unbinding and opening a different book, each of which is already a
+ * reason to rebuild every pane.
  */
 
-import { Effect, Option, Result } from "effect";
+import { Effect, Result } from "effect";
 import BookMarked from "lucide-solid/icons/book-marked";
 import Plus from "lucide-solid/icons/plus";
-import X from "lucide-solid/icons/x";
 import { For, Show, createEffect, createSignal } from "solid-js";
 
-import type { Ref } from "../../../core/book/book";
 import type { Resource, Role } from "../../../core/resources/library";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import { listProjects, type ProjectSummary } from "../landing/summaries";
-import { Button, Card, EmptyState, IconButton, Popover, cx } from "../primitives";
+import { Button, EmptyState, Popover, Resizable } from "../primitives";
+import { ReferencePane } from "./ReferencePane";
 
 /** The roles the column shows, in the order it shows them. */
 const ROLES: readonly Role[] = ["source", "reference"];
@@ -44,36 +50,23 @@ const ROLES: readonly Role[] = ["source", "reference"];
 interface Entry {
   readonly resource: Resource;
   readonly role: Role;
-  /** The passage at the editor's current place; empty when there is none. */
-  readonly text: string;
 }
 
-/**
- * The passage as a person reads it.
- *
- * `Library.lookup` answers with the RAW USFM of the span — it slices on `\c`
- * and `\v` with a regex and says so, because the engine is not wired into it
- * yet (library.ts). A card is a place to read a verse, not to read markup, so
- * the markers are dropped here: a `\v 3` becomes a superscript-less "3 " and
- * every other marker goes. This is presentation and it belongs on this side of
- * the port; the day `lookup` returns spans the engine measured, this goes.
- */
-const readable = (usfm: string): string =>
-  usfm
-    .replaceAll(/\\v[ \t]+(\d+(?:[-–]\d+)?)[ \t]*/gu, "$1 ")
-    .replaceAll(/\\[a-z]+\d*\*?[ \t]*/giu, "")
-    .replaceAll(/[ \t]*\n[ \t]*/gu, " ")
-    .replaceAll(/[ \t]{2,}/gu, " ")
-    .trim();
+export interface ReferenceColumnProps {
+  /**
+   * How many resources are bound, reported as it changes. The ROUTE owns the
+   * split, and a split with nothing to show in it collapses to the picker —
+   * which is a layout decision about the row, so the row is told rather than
+   * asking the Library a second time.
+   */
+  readonly onBound?: (count: number) => void;
+}
 
-export function ReferenceColumn() {
+export function ReferenceColumn(props: ReferenceColumnProps) {
   const shell = useShell();
   const { services } = shell;
   const [entries, setEntries] = createSignal<readonly Entry[]>([], { name: "referenceEntries" });
   const [loading, setLoading] = createSignal(true, { name: "referenceLoading" });
-  const [expanded, setExpanded] = createSignal<string | undefined>(undefined, {
-    name: "referenceExpanded",
-  });
   /** Which slot's picker is open, if any. */
   const [picking, setPicking] = createSignal<Role | undefined>(undefined, {
     name: "referencePicking",
@@ -82,35 +75,27 @@ export function ReferenceColumn() {
     name: "referenceChoices",
   });
   const [busy, setBusy] = createSignal(false, { name: "referenceBusy" });
-  /** Raised by a bind or an unbind, so the cards re-resolve. */
+  /** Raised by a bind or an unbind, so the bindings re-resolve. */
   const [bound, setBound] = createSignal(0, { name: "referenceBound" });
 
-  /**
-   * What the column is showing: the focused book, and the chapter the reader
-   * is actually looking at.
-   *
-   * The CHAPTER NUMBER, read off the chapter row's own label rather than
-   * counted — the engine's first row is the front matter and carries no
-   * number, so an ordinal is not a chapter. `lastLocation().at` is what the
-   * editor measured for the location bar and wrote down (ProjectContext), so
-   * the cards follow a free scroll and not only a clip.
-   */
-  const place = (): Ref | undefined => {
-    const book = shell.focused();
-    const project = shell.project();
-    if (book === undefined || project === undefined) return undefined;
-    const ordinal = shell.lastLocation(project.root)?.at ?? shell.chapter() ?? 0;
-    const label = book.structure().chapters[ordinal]?.label ?? "";
-    const numbered = Number.parseInt(label, 10);
-    return { book: book.id, chapter: Number.isNaN(numbered) ? 1 : numbered };
-  };
+  // Named here rather than called from inside the resolve's `.then`, where a
+  // bare `props.onBound` is a reactive read the Solid lint flags — correctly,
+  // since a promise callback is not a tracked scope. The prop is a setter that
+  // never changes; this is the one-line way to say so.
+  const report = (count: number): void => props.onBound?.(count);
 
-  // One pass per project/place/binding: resolve the bindings, then look up the
-  // passage in each. Re-running on the place is the point — the cards follow
-  // the editor.
+  /**
+   * The BINDINGS, and nothing about the passage.
+   *
+   * This effect used to re-run on every scroll, because the cards it fed held
+   * one passage each and the passage followed the reader. A pane holds the
+   * whole book, so the only things that can change what is on screen here are
+   * the project, the open book and a bind or unbind — and each of those is a
+   * reason to rebuild the panes rather than to update them.
+   */
   createEffect(
-    () => ({ project: shell.project()?.id, at: place(), tick: bound() }),
-    ({ project, at }) => {
+    () => ({ project: shell.project()?.id, book: shell.focused()?.id, tick: bound() }),
+    ({ project }) => {
       if (project === undefined) {
         setEntries([]);
         setLoading(false);
@@ -120,33 +105,45 @@ export function ReferenceColumn() {
       void services
         .run(
           Effect.gen(function* () {
-            const library = services.library;
             const found: Entry[] = [];
-            for (const role of ROLES) {
-              for (const resource of yield* library.resolve(project, role)) {
-                // `Effect.result` rather than a failure channel: a resource
-                // with no file for this book is the ordinary case, and the
-                // card for it says so instead of taking the column down.
-                const looked =
-                  at === undefined
-                    ? undefined
-                    : yield* Effect.result(library.lookup(resource.id, at));
-                const passage =
-                  looked !== undefined && Result.isSuccess(looked)
-                    ? Option.getOrUndefined(looked.success)
-                    : undefined;
-                found.push({ resource, role, text: readable(passage?.text ?? "") });
-              }
-            }
+            for (const role of ROLES)
+              for (const resource of yield* services.library.resolve(project, role))
+                found.push({ resource, role });
             return found;
           }),
         )
         .then((found: readonly Entry[]) => {
           setEntries(found);
           setLoading(false);
+          report(found.length);
         });
     },
   );
+
+  /**
+   * Where the reader is, as a chapter NUMBER rather than an ordinal.
+   *
+   * The ordinal is an index into the OPEN book's chapter table, whose row 0 is
+   * the front matter; the reference is a different file of the same book and
+   * may count its rows differently. `\c`'s own label is the one thing the two
+   * texts are guaranteed to agree about, so it is what crosses the gap.
+   */
+  const numberAt = (ordinal: number | null | undefined): number | undefined => {
+    const book = shell.focused();
+    if (book === undefined || ordinal === undefined || ordinal === null) return undefined;
+    const label = book.structure().chapters[ordinal]?.label ?? "";
+    const numbered = Number.parseInt(label, 10);
+    return Number.isNaN(numbered) ? undefined : numbered;
+  };
+
+  /** The chapter at the top of the editor's viewport — the location watcher's reading. */
+  const at = (): number | undefined => {
+    const project = shell.project();
+    return project === undefined ? undefined : numberAt(shell.lastLocation(project.root)?.at);
+  };
+
+  /** The chapter the editor is CLIPPED to, if it is clipped at all. */
+  const clip = (): number | null => numberAt(shell.chapter()) ?? null;
 
   /**
    * Every project on this device that is not the open one.
@@ -220,9 +217,7 @@ export function ReferenceColumn() {
       });
   };
 
-  const slot = (role: Role): readonly Entry[] => entries().filter((entry) => entry.role === role);
-
-  const label = (role: Role): string => (role === "source" ? t("Source") : t("Reference"));
+  const hasSource = (): boolean => entries().some((entry) => entry.role === "source");
 
   /** The picker for one slot. A source holds one; references hold many. */
   const Picker = (pickerProps: { readonly role: Role }) => (
@@ -240,6 +235,7 @@ export function ReferenceColumn() {
         <Button
           variant="secondary"
           size="sm"
+          class="w-full"
           data-testid={`add-${pickerProps.role}`}
           disabled={busy()}
           icon={<Plus size={14} aria-hidden="true" />}
@@ -277,88 +273,79 @@ export function ReferenceColumn() {
     </Popover>
   );
 
-  return (
-    <aside
-      aria-label={t("Reference texts")}
-      class="flex h-full min-w-0 flex-col gap-3 overflow-y-auto p-4"
-      data-references={entries().length}
-    >
-      <For each={ROLES}>
-        {(role) => (
+  /**
+   * The panes, as one vertical split.
+   *
+   * Built from a plain `.map` and not a `<For>`: this component is remounted
+   * whenever the list changes (see the header), so the array is fixed for its
+   * whole life, and `Resizable.Panel` registers during render — which a `<For>`
+   * would re-run without a way to unregister what it replaced.
+   */
+  const Stack = (stackProps: { readonly list: readonly Entry[]; readonly book: string }) => (
+    <Resizable.Root orientation="vertical" class="min-h-0 flex-1">
+      <For each={stackProps.list}>
+        {(entry, index) => (
           <>
-            <For each={slot(role)}>
-              {(entry) => (
-                <Card
-                  data-resource={entry.resource.id}
-                  data-role={entry.role}
-                  class="cursor-pointer transition-colors hover:border-brand/40"
-                  onClick={() =>
-                    setExpanded((held) =>
-                      held === entry.resource.id ? undefined : entry.resource.id,
-                    )
-                  }
-                >
-                  <p
-                    class={cx(
-                      "font-scripture text-small text-on-surface-secondary",
-                      expanded() === entry.resource.id ? undefined : "line-clamp-4",
-                    )}
-                  >
-                    <Show when={entry.text !== ""} fallback={t("Nothing here for this passage.")}>
-                      {entry.text}
-                    </Show>
-                  </p>
-                  <hr class="my-3 border-surface-border" />
-                  <div class="flex items-start gap-2">
-                    <div class="min-w-0 flex-1">
-                      <p class="truncate text-small font-bold text-on-surface-primary">
-                        {entry.resource.title}
-                      </p>
-                      <p class="text-smallest text-on-surface-tertiary">
-                        {entry.resource.language === undefined
-                          ? label(entry.role)
-                          : t("{label} · {language}", {
-                              label: label(entry.role),
-                              language: entry.resource.language,
-                            })}
-                      </p>
-                    </div>
-                    {/* The × unbinds; it does not delete. The resource stays
-                        registered and every other project's binding to it is
-                        untouched — a role is a fact about THIS project. */}
-                    <IconButton
-                      size="sm"
-                      data-testid={`unbind-${entry.resource.id}`}
-                      label={t("Remove {title}", { title: entry.resource.title })}
-                      tooltipSide="left"
-                      icon={<X size={14} />}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        drop(entry);
-                      }}
-                    />
-                  </div>
-                </Card>
-              )}
-            </For>
-            {/* One source, as many references as you like. */}
-            <Show when={role !== "source" || slot("source").length === 0}>
-              <Picker role={role} />
+            <Show when={index() > 0}>
+              <Resizable.Handle label={t("Resize {title}", { title: entry.resource.title })} />
             </Show>
+            <Resizable.Panel class="flex min-h-0 flex-col">
+              <ReferencePane
+                resource={entry.resource}
+                role={entry.role}
+                bookId={stackProps.book}
+                at={at}
+                clip={clip}
+                onUnbind={() => drop(entry)}
+              />
+            </Resizable.Panel>
           </>
         )}
       </For>
+    </Resizable.Root>
+  );
 
-      <Show when={!loading() && entries().length === 0}>
-        <EmptyState
-          class="bg-surface-primary"
-          icon={<BookMarked size={22} />}
-          title={t("No reference texts yet")}
-          description={t(
-            "Choose another project on this device to read beside this one, at the passage you are in.",
-          )}
-        />
+  /** The split's identity: a new list, or a new book, is a new split. */
+  const stack = (): { readonly list: readonly Entry[]; readonly book: string } | undefined => {
+    const list = entries();
+    const book = shell.focused()?.id;
+    return list.length === 0 || book === undefined ? undefined : { list, book };
+  };
+
+  return (
+    <aside
+      aria-label={t("Reference texts")}
+      class="flex h-full min-w-0 flex-col gap-2 py-4 ps-1"
+      data-references={entries().length}
+    >
+      <Show
+        when={stack()}
+        keyed
+        fallback={
+          <Show when={!loading()}>
+            <EmptyState
+              class="bg-surface-primary"
+              icon={<BookMarked size={22} />}
+              title={t("No reference texts yet")}
+              description={t(
+                "Choose another project on this device to read beside this one, at the passage you are in.",
+              )}
+            />
+          </Show>
+        }
+      >
+        {(held) => <Stack list={held.list} book={held.book} />}
       </Show>
+
+      {/* One source, as many references as you like. The pickers live under
+          the panes rather than between them: a pane is a page of scripture,
+          and a button between two pages is a button in the reading. */}
+      <div class="flex shrink-0 flex-col gap-1.5">
+        <Show when={!hasSource()}>
+          <Picker role="source" />
+        </Show>
+        <Picker role="reference" />
+      </div>
     </aside>
   );
 }

@@ -48,6 +48,7 @@ import { registerProjectCommands } from "./projectCommands";
 import { composeServices, fixtureRequested, type Services } from "./services";
 import {
   shellKeys,
+  REFERENCE_WIDTH,
   SIDEBAR_WIDTH,
   type LastLocation,
   type LastLocations,
@@ -234,6 +235,14 @@ export interface Shell {
   readonly sidebarWidth: Accessor<number>;
   readonly setSidebarWidth: (fraction: number) => void;
   /**
+   * How wide the reference pane is on the book screen, as a fraction of the
+   * editor row; see `REFERENCE_WIDTH`. Same discipline as `sidebarWidth` — the
+   * signal moves at pointer speed and the file is written once the drag
+   * settles — because it is the same gesture on a different split.
+   */
+  readonly referenceWidth: Accessor<number>;
+  readonly setReferenceWidth: (fraction: number) => void;
+  /**
    * The project roots this device has opened, newest first — `shell.recentProjects`
    * read as a list. The landing screen writes the key as it opens a project;
    * the sidebar reads it so a window with nothing open still offers the way
@@ -399,6 +408,10 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
   const [sidebarWidth, setSidebarWidth] = createSignal(services.settings.get(keys.sidebarWidth), {
     name: "sidebarWidth",
   });
+  const [referenceWidth, setReferenceWidth] = createSignal(
+    services.settings.get(keys.referenceWidth),
+    { name: "referenceWidth" },
+  );
 
   // Where the reader was in each project. Same discipline as the two above —
   // this shell is the only writer, so a signal seeded once cannot fall behind
@@ -420,8 +433,10 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
   // rewrites the whole preferences file. So the SIGNAL moves at pointer speed
   // and the FILE is written once the drag settles.
   let widthWrite: ReturnType<typeof setTimeout> | undefined;
+  let referenceWrite: ReturnType<typeof setTimeout> | undefined;
   onCleanup(() => {
     if (widthWrite !== undefined) clearTimeout(widthWrite);
+    if (referenceWrite !== undefined) clearTimeout(referenceWrite);
   });
 
   // Is there a newer Sefer? One check, on the desktop host only, five seconds
@@ -831,6 +846,16 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
       widthWrite = setTimeout(() => {
         widthWrite = undefined;
         persist(keys.sidebarWidth, clamped);
+      }, 400);
+    },
+    referenceWidth,
+    setReferenceWidth: (fraction) => {
+      const clamped = Math.min(REFERENCE_WIDTH.max, Math.max(REFERENCE_WIDTH.min, fraction));
+      setReferenceWidth(clamped);
+      if (referenceWrite !== undefined) clearTimeout(referenceWrite);
+      referenceWrite = setTimeout(() => {
+        referenceWrite = undefined;
+        persist(keys.referenceWidth, clamped);
       }, 400);
     },
   };

@@ -180,9 +180,45 @@ does not implement collapsing: a collapsed pane is a different tree, so the
 sidebar panel is HIDDEN rather than unmounted, because unmounting it would
 renumber the split and rebuild the editor's `EditorView` beside it.
 
+### The book screen is a second split
+
+`src/routes/project/$id/book/$book.tsx` is its own `Resizable.Root`: the
+reference pane, a visible handle, then the editor. The pane is
+`ReferenceColumn`, and each bound resource inside it is a read-only
+`EditorView` over the same book (see [resources](resources.md), "A reference
+is a read-only editor, not a card"). Two or more references stack **vertically
+inside the pane** as a nested `Resizable.Root orientation="vertical"` with
+their own handles, so the reader decides how the pane is divided as well as
+how wide it is.
+
+The width is `workspace.referenceWidth`, a fraction of the editor row, with
+the same discipline as `workspace.sidebarWidth`: the signal moves at pointer
+speed and the file is written once the drag settles (400ms), so a drag is one
+write rather than one per frame. `REFERENCE_WIDTH` in `src/app/settings.ts`
+holds the default and the range a drag may reach. It is a preference and not
+session state, because reading beside a source is how a translator works all
+day and re-making that decision on every navigation is the kind of small tax
+that makes a pane not worth opening.
+
+**Collapsed** is the state with nothing bound: the panel takes a fixed narrow
+basis (`13rem`), the handle is hidden, and the editor takes the row back with
+an inline-beating `grow!`/`[flex-basis:auto]!`. Both the panel and the handle
+stay MOUNTED for the reason the sidebar's do — `Resizable` registers panels
+during render and has no unregister, so an unmounted panel renumbers the split.
+The route learns the count from the column's `onBound` callback rather than
+asking the Library a second time: the split is the route's, so the route is
+told.
+
+The panes themselves are remounted rather than reconciled whenever the binding
+set or the open book changes (`<Show keyed>` over the entries array), which is
+the same constraint said once more — a panel list that changes length has to
+be a new split, and each of those changes is already a reason to rebuild every
+pane.
+
 The chrome's own preferences, all declared in `src/app/settings.ts`:
-`workspace.sidebarOpen` (the reader's toggle) and `workspace.sidebarWidth` (a
-fraction of the row, written once the drag settles); `shell.theme`,
+`workspace.sidebarOpen` (the reader's toggle), `workspace.sidebarWidth` and
+`workspace.referenceWidth` (fractions of their row, written once the drag
+settles); `shell.theme`,
 `shell.fontSize` and `shell.zoom`, applied to `<html>` by
 `src/app/ui/theme.ts`; `editor.fontSize`, the scripture column's own size,
 applied by the same module as `--editor-font-size` and kept live by a fiber

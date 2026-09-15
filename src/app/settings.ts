@@ -211,10 +211,29 @@ export interface ShellKeys {
   readonly recentProjects: SettingKey<RecentProjects>;
   /** Project root → the book, the clip and the chapter the reader last had on screen. */
   readonly lastLocation: SettingKey<LastLocations>;
+  /**
+   * How wide the reference pane is on the book screen, as a FRACTION of the
+   * editor row — the same unit and for the same reason as `sidebarWidth`: a
+   * split conserves fractions, and a pixel width would have to be converted
+   * against a root nothing has measured when the panel first renders.
+   *
+   * It is a preference and not session state because reading beside a source
+   * is how a translator works all day: the width they settled on is a
+   * decision about their screen, and re-making it on every navigation is the
+   * kind of small tax that makes a pane not worth opening.
+   *
+   * Only obeyed while something is bound. With no reference the pane
+   * collapses to the picker alone at a fixed narrow width, which is a layout
+   * and not a preference — see `documentation/architecture/shell.md`.
+   */
+  readonly referenceWidth: SettingKey<number>;
 }
 
 /** The sidebar's share of the workspace row, and the range a drag may reach. */
 export const SIDEBAR_WIDTH = { default: 0.2, min: 0.15, max: 0.36 } as const;
+
+/** The reference pane's share of the editor row, and the range a drag may reach. */
+export const REFERENCE_WIDTH = { default: 0.34, min: 0.18, max: 0.6 } as const;
 
 /**
  * Registered once per `SettingsService`, and cached.
@@ -251,6 +270,11 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     editorFontSize: settings.register("editor.fontSize", Schema.Number, DEFAULT_EDITOR_FONT_SIZE),
     recentProjects: settings.register("shell.recentProjects", RecentProjects, {}),
     lastLocation: settings.register("workspace.lastLocation", LastLocations, {}),
+    referenceWidth: settings.register(
+      "workspace.referenceWidth",
+      Schema.Number,
+      REFERENCE_WIDTH.default,
+    ),
   };
   registered.set(settings, keys);
   return keys;

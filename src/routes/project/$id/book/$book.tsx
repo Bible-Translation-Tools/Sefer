@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/solid-router";
-import { Show, createEffect, untrack } from "solid-js";
+import { Show, createEffect, createSignal, untrack } from "solid-js";
 
 import { t } from "../../../../app/i18n";
 import { useShell } from "../../../../app/ProjectContext";
+import { REFERENCE_WIDTH } from "../../../../app/settings";
 import { BookEditor } from "../../../../app/ui/BookEditor";
-import { Resizable } from "../../../../app/ui/primitives";
+import { Resizable, cx } from "../../../../app/ui/primitives";
 import { RecoveryBanner } from "../../../../app/ui/recovery/RecoveryBanner";
 import { ShellGate } from "../../../../app/ui/ShellGate";
 import { bookName } from "../../../../app/ui/workspace/books";
@@ -29,17 +30,29 @@ import { Toolbar } from "../../../../app/ui/workspace/Toolbar";
  * subscription, and this component only reads what the shell already knows.
  */
 
-/** The reference column's share of the editor row, and the range a drag reaches. */
-const REFERENCE = { initial: 0.3, min: 0.18, max: 0.5 } as const;
-
 function BookPage(props: { readonly root: string; readonly bookId: string }) {
   const shell = useShell();
   // Plain variables: `Resizable.Panel` reads its three sizes once, during
   // registration, and a JSX expression there is a memo read outside a tracking
-  // scope — which Solid 2 warns about, correctly.
-  const referenceInitial = REFERENCE.initial;
-  const referenceMin = REFERENCE.min;
-  const referenceMax = REFERENCE.max;
+  // scope — which Solid 2 warns about, correctly. The initial width is the
+  // REMEMBERED one (`workspace.referenceWidth`); the split owns it from there
+  // and hands it back on every drag.
+  const referenceInitial = untrack(() => shell.referenceWidth());
+  const referenceMin = REFERENCE_WIDTH.min;
+  const referenceMax = REFERENCE_WIDTH.max;
+
+  /**
+   * How many references are bound, reported by the column.
+   *
+   * With none, the pane is not a pane — it is the picker, and the editor
+   * should have the rest of the row. The panel stays MOUNTED and takes a fixed
+   * narrow basis instead of being removed, for the reason `__root.tsx` gives
+   * about the sidebar: `Resizable` registers panels during render and has no
+   * unregister, so an unmounted panel renumbers the split and destroys the
+   * editor's view beside it.
+   */
+  const [references, setReferences] = createSignal(0, { name: "boundReferences" });
+  const collapsed = (): boolean => references() === 0;
 
   // Open the project and seat the book the URL names, and do it again whenever
   // the URL names a different one. Idempotent: `focus` runs
@@ -123,21 +136,40 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
           <>
             <Toolbar />
 
-            <Resizable.Root class="min-h-0 flex-1">
+            <Resizable.Root
+              class="min-h-0 flex-1"
+              onSizesChange={(sizes) => {
+                const first = sizes[0];
+                if (first !== undefined) shell.setReferenceWidth(first);
+              }}
+            >
               <Resizable.Panel
                 initialSize={referenceInitial}
                 minSize={referenceMin}
                 maxSize={referenceMax}
+                class={collapsed() ? "[flex-basis:13rem]!" : undefined}
               >
-                <ReferenceColumn />
+                <ReferenceColumn onBound={setReferences} />
               </Resizable.Panel>
-              <Resizable.Handle label={t("Resize the reference column")} />
+              {/* Hidden rather than unmounted, same reason as the panel. */}
+              <Resizable.Handle
+                label={t("Resize the reference pane")}
+                class={collapsed() ? "hidden" : undefined}
+              />
               {/* No `<Card>` around the editor: `.editor-host` (app.css) IS
                   the card — white, bordered, 12px radius — and the scripture's
                   own generous padding is inside the view, where CodeMirror can
                   keep the measure at 40rem and centre it. A second card would
                   be a second border around the same rectangle. */}
-              <Resizable.Panel class="flex flex-col gap-2 py-4 pe-1">
+              <Resizable.Panel
+                class={cx(
+                  "flex flex-col gap-2 py-4 pe-1",
+                  // With the pane collapsed the editor takes the row back; the
+                  // `!` is load-bearing because `Resizable.Panel` writes its
+                  // share as an inline `flex-basis`.
+                  collapsed() ? "grow! [flex-basis:auto]!" : undefined,
+                )}
+              >
                 {/* Keyed on the book id: a different book is a different
                     canonical state, so the view is rebuilt rather than
                     repointed. */}
