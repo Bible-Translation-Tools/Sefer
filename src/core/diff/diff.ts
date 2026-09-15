@@ -44,9 +44,7 @@ export interface BaselineLike {
  * A pure insertion has an empty baseline slice; a pure deletion has a
  * zero-width working range at the point the lines were removed from.
  */
-export interface Hunk {
-  readonly bookId: BookId;
-  readonly stamp: SourceStamp;
+export interface TextHunk {
   readonly from: number;
   readonly to: number;
   readonly baselineFrom: number;
@@ -54,6 +52,12 @@ export interface Hunk {
   readonly kind: "insert" | "delete" | "replace";
   readonly working: string;
   readonly baseline: string;
+}
+
+/** A `TextHunk` that knows which book it came from and at which revision. */
+export interface Hunk extends TextHunk {
+  readonly bookId: BookId;
+  readonly stamp: SourceStamp;
 }
 
 /**
@@ -153,6 +157,44 @@ const diffRuns = (baseline: readonly string[], working: readonly string[]): read
 };
 
 /**
+ * The differences between two plain texts, ascending in working-text order and
+ * non-overlapping — the whole of the line diff, with no Book and no stamp.
+ *
+ * `compare` below is this plus a book identity; `src/core/compare` is this
+ * between two arbitrary sources, neither of which need be a Book at all.
+ * Separating the texts function is what lets a comparison exist before either
+ * side has been seated.
+ *
+ * The equal spans BETWEEN the returned hunks are identical on both sides,
+ * which is what makes a merged text buildable by walking one side and
+ * substituting the chosen slice at each hunk.
+ */
+export const diffTexts = (baselineText: string, workingText: string): readonly TextHunk[] => {
+  const baselineLines = splitLines(baselineText);
+  const workingLines = splitLines(workingText);
+  const baselineOffsets = lineOffsets(baselineLines);
+  const workingOffsets = lineOffsets(workingLines);
+
+  return diffRuns(baselineLines, workingLines).map((run) => {
+    const from = workingOffsets[run.wStart];
+    const to = workingOffsets[run.wEnd];
+    const baselineFrom = baselineOffsets[run.bStart];
+    const baselineTo = baselineOffsets[run.bEnd];
+    const working = workingText.slice(from, to);
+    const baseline = baselineText.slice(baselineFrom, baselineTo);
+    return {
+      from,
+      to,
+      baselineFrom,
+      baselineTo,
+      kind: working === "" ? "delete" : baseline === "" ? "insert" : "replace",
+      working,
+      baseline,
+    } satisfies TextHunk;
+  });
+};
+
+/**
  * The differences between `baseline.text` and the book's current text, in
  * ascending working-text order and non-overlapping. Stamped with
  * `book.source().stamp`; empty when the texts are identical.
@@ -163,30 +205,9 @@ const diffRuns = (baseline: readonly string[], working: readonly string[]): read
  */
 export const compare = (book: Book, baseline: BaselineLike): readonly Hunk[] => {
   const source = book.source();
-  const baselineLines = splitLines(baseline.text);
-  const workingLines = splitLines(source.text);
-  const baselineOffsets = lineOffsets(baselineLines);
-  const workingOffsets = lineOffsets(workingLines);
-
-  return diffRuns(baselineLines, workingLines).map((run) => {
-    const from = workingOffsets[run.wStart];
-    const to = workingOffsets[run.wEnd];
-    const baselineFrom = baselineOffsets[run.bStart];
-    const baselineTo = baselineOffsets[run.bEnd];
-    const workingText = source.text.slice(from, to);
-    const baselineText = baseline.text.slice(baselineFrom, baselineTo);
-    return {
-      bookId: baseline.bookId,
-      stamp: source.stamp,
-      from,
-      to,
-      baselineFrom,
-      baselineTo,
-      kind: workingText === "" ? "delete" : baselineText === "" ? "insert" : "replace",
-      working: workingText,
-      baseline: baselineText,
-    } satisfies Hunk;
-  });
+  return diffTexts(baseline.text, source.text).map(
+    (hunk) => ({ ...hunk, bookId: baseline.bookId, stamp: source.stamp }) satisfies Hunk,
+  );
 };
 
 /**
