@@ -540,3 +540,65 @@ export const group = (
     })),
   };
 };
+
+// ---------------------------------------------------------------------------
+// References, as a feed
+// ---------------------------------------------------------------------------
+
+/**
+ * The source span of the verse a reference names, or `undefined`.
+ *
+ * This is the whole of the reference → project mapping, and it is arithmetic
+ * over Onion's table of contents rather than a lookup table: the guide that
+ * says "grace occurs at PHM 1:3" has never seen this project's text, and the
+ * only thing that can say where PHM 1:3 IS in it is the parse of the book.
+ *
+ * A bridge answers for every verse it spans, so a reference to `JUD 1:2` is
+ * found inside a `\v 1-2` the project happens to have — dropping it would be
+ * the one case where the reader most wants to see how the target differs.
+ */
+export const verseAnchor = (analysis: Analysis, ref: Ref): Mark | undefined => {
+  if (ref.verse === undefined) return undefined;
+  const wanted = ref.verse;
+  for (const span of verseSpans(analysis))
+    if (span.chapter === ref.chapter && wanted >= span.first && wanted <= span.last)
+      return { from: span.from, to: span.to };
+  return undefined;
+};
+
+/**
+ * A reference feed's hits: one ZERO-WIDTH occurrence at each verse of `refs`
+ * that this book actually has, in document order.
+ *
+ * Zero width is the honest span. A search hit knows which characters matched;
+ * a reference does not — the guide's highlight offsets index into the guide's
+ * OWN frozen reading, not into this project's wording, which may put the term
+ * somewhere else in the verse or not use it at all. So the target card is
+ * drawn with no highlight and the source card carries the guide's, and the
+ * excerpt's `focus` still dims the verses either side.
+ *
+ * References the book does not have are skipped rather than reported: a guide
+ * covers the whole canon and a project covers a few books, and every reference
+ * outside them is expected, not a failure. Two references landing in one verse
+ * bridge become one occurrence, because they are one card.
+ */
+export const refOccurrences = (book: BookText, refs: readonly Ref[]): readonly Occurrence[] => {
+  const spans = verseSpans(book.analysis);
+  const byVerse = new Map<string, number>();
+  for (const span of spans)
+    for (let verse = span.first; verse <= span.last; verse += 1)
+      byVerse.set(`${span.chapter}:${verse}`, span.from);
+
+  const found: number[] = [];
+  const seen = new Set<number>();
+  for (const ref of refs) {
+    if (ref.book !== book.bookId || ref.verse === undefined) continue;
+    const at = byVerse.get(`${ref.chapter}:${ref.verse}`);
+    if (at === undefined || seen.has(at)) continue;
+    seen.add(at);
+    found.push(at);
+  }
+  return found
+    .sort((left, right) => left - right)
+    .map((at) => ({ bookId: book.bookId, from: at, to: at }));
+};

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "guides": [
+    {
+      "locale": "en",
+      "displayName": "English ULB (en_ulb)",
+      "provenanceId": "8baaf2076f7813ac7ab5f3e7988627ec0f9d91dc",
+      "file": "en.json"
+    },
+    {
+      "locale": "es-419",
+      "displayName": "Spanish ULB (es-419_ulb)",
+      "provenanceId": "c54e36d1cc27ae58c6b8ae85238eb884d5f1a3d1",
+      "file": "es-419.json"
+    },
+    {
+      "locale": "pt-br",
+      "displayName": "Portuguese ULB (pt-br_ulb)",
+      "provenanceId": "f63e8b13f2cba842ce5acd6cfc4398c3ad250c40",
+      "file": "pt-br.json"
+    }
+  ]
+}
