@@ -21,7 +21,7 @@ import FolderClock from "lucide-solid/icons/folder-clock";
 import SearchIcon from "lucide-solid/icons/search";
 import SettingsIcon from "lucide-solid/icons/settings";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
-import { For, Show, createEffect, createSignal } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
@@ -72,26 +72,34 @@ export function ProjectSidebar() {
     void navigate({ to: to as never });
   };
 
-  const rows = (): readonly Row[] => {
-    shell.tick();
-    const project = shell.project();
-    if (project === undefined) return [];
-    const metadata = metadataOf(project);
-    const counted = new Map(
-      shell.services.projectAnalysis
-        .census(project)
-        .map((book) => [book.bookId, book.diagnostics] as const),
-    );
-    return project.books.map((book) => {
-      const diagnostics = counted.get(book.id);
-      return {
-        id: book.id,
-        name: bookName(book.id, metadata),
-        testament: testamentOf(book.id),
-        attention: (diagnostics?.errors ?? 0) + (diagnostics?.warnings ?? 0),
-      };
-    });
-  };
+  // A MEMO, not a plain function: `section()` below asks for it once per
+  // testament, so every keystroke walked the census twice and rebuilt one row
+  // per book each time. The tick is still the trigger — the answer genuinely
+  // changes when an edit moves a diagnostic count — but it is computed once
+  // per tick instead of once per reader.
+  const rows = createMemo(
+    (): readonly Row[] => {
+      shell.tick();
+      const project = shell.project();
+      if (project === undefined) return [];
+      const metadata = metadataOf(project);
+      const counted = new Map(
+        shell.services.projectAnalysis
+          .census(project)
+          .map((book) => [book.bookId, book.diagnostics] as const),
+      );
+      return project.books.map((book) => {
+        const diagnostics = counted.get(book.id);
+        return {
+          id: book.id,
+          name: bookName(book.id, metadata),
+          testament: testamentOf(book.id),
+          attention: (diagnostics?.errors ?? 0) + (diagnostics?.warnings ?? 0),
+        };
+      });
+    },
+    { name: "sidebarBooks" },
+  );
 
   const section = (testament: Testament): readonly Row[] =>
     rows().filter((row) => row.testament === testament);
@@ -108,29 +116,36 @@ export function ProjectSidebar() {
    * before this it was reachable from the palette and from nowhere a pointer
    * could go. It is offered only when the book actually has front matter, so a
    * book that starts at `\c 1` still shows a grid of chapters and nothing else.
+   *
+   * A memo for the same reason `rows` is one: the grid is asked for twice per
+   * render and the shell ticks on every keystroke, so a 150-chapter book was
+   * rebuilding 300 tiles per keypress.
    */
-  const chapters = (): readonly {
-    readonly index: number;
-    readonly label: string;
-    readonly intro: boolean;
-  }[] => {
-    shell.tick();
-    const book = shell.focused();
-    if (book === undefined) return [];
-    const rows: { index: number; label: string; intro: boolean }[] = [];
-    const table = book.structure().chapters;
-    table.forEach((chapter, index) => {
-      if (chapter.label !== "") {
-        rows.push({ index, label: chapter.label, intro: false });
-        return;
-      }
-      // The front matter row, and only if it holds something: an empty label
-      // on any row but the first is a malformed `\c`, not an introduction.
-      if (index === 0 && chapter.to > chapter.from)
-        rows.push({ index, label: t("Intro"), intro: true });
-    });
-    return rows;
-  };
+  const chapters = createMemo(
+    (): readonly {
+      readonly index: number;
+      readonly label: string;
+      readonly intro: boolean;
+    }[] => {
+      shell.tick();
+      const book = shell.focused();
+      if (book === undefined) return [];
+      const rows: { index: number; label: string; intro: boolean }[] = [];
+      const table = book.structure().chapters;
+      table.forEach((chapter, index) => {
+        if (chapter.label !== "") {
+          rows.push({ index, label: chapter.label, intro: false });
+          return;
+        }
+        // The front matter row, and only if it holds something: an empty label
+        // on any row but the first is a malformed `\c`, not an introduction.
+        if (index === 0 && chapter.to > chapter.from)
+          rows.push({ index, label: t("Intro"), intro: true });
+      });
+      return rows;
+    },
+    { name: "sidebarChapters" },
+  );
 
   const openBook = (bookId: string): void => {
     const project = shell.project();
