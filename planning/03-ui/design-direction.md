@@ -66,3 +66,16 @@ The regular-mode editor is the prototype's look on our tokens — white card, on
 ## Diagnostics popovers
 
 Inline lint tooltips and gutter popovers use tokens (opaque surface, readable text in both themes) and show the fix as a button when the finding carries one.
+
+## Decisions on the gap list (Will, 2026-09-14 evening)
+
+1. **Compare.** Build the two-sided compare with the decision map (future: taking in work from a remote). Start with ONE other source kind: another zip or folder (sharing over zips). Design rule: neither side is a hardcoded closure over the current project — both sides are a `CompareSource` port, so adding git checkpoint / other project / remote later is a new source, not a rewrite.
+2. **External-change detection at save.** Deferred. Keep the coordinator hooks; too speculative to surface now.
+3. **Cloud sync narrative.** Wanted. The old state machine (incoming plan, diverged squash, dual clocks, plain-language plan) was about right; port its shape.
+4. **Format.** Wanted, for a book or the project, from the kebab and the command palette; call it "Format". Match-formatting is NOT this — it needs an Onion overlay of two texts first (engine work), then show source text with the equivalent block highlighted.
+5. **Key terms.** Same data the old app used is fine for now. Find and Key terms are SEPARATE panes/routes with similar UI, not a mode toggle on one page.
+6. **Recovery.** Wanted: on project open, one IO check for backups; clear a backup when the disk file (normalized LF) matches it; otherwise Keep/Discard banner. Debounced journal, never per-keystroke writes, resilient.
+7. **Project index.** No Dexie. Don't rescan every project on open. A small JSON index updated on import/create/rename/delete/open, assumed correct, with cheap repair (names-only listing). Export as zip (fflate is now a dependency) and rename: yes.
+8. **Metadata page.** Deferred; to be reworked. Needed regardless: a pipeline hook that refreshes the burrito's md5 checksums on write (web needs a JS md5 — no SubtleCrypto md5).
+9. **i18n.** Evaluate Paraglide (see notes in the session).
+10. **Authoring.** Structured actions for `\v`, `\q`, `\p` and footnote insertion only; everything else is enforced by lint + typing rules. Front-matter as structured data entry like the spike's attribute editing. Chapter labels: Onion's job, later. Phone layout: later.
