@@ -92,7 +92,7 @@ const segmentsOf = (excerpt: Excerpt): readonly Segment[] => {
  * the excerpt, and the edge is what is being moved.
  */
 const expander =
-  "flex w-full cursor-pointer items-center justify-center border-surface-border py-0.5 text-on-surface-tertiary transition-colors hover:bg-surface-secondary hover:text-on-surface-secondary";
+  "flex w-full cursor-pointer items-center justify-center py-0.5 text-on-surface-tertiary transition-colors hover:bg-surface-secondary hover:text-on-surface-secondary";
 
 export function ExcerptCard(props: ExcerptCardProps) {
   const [book, setBook] = createSignal<EditorBook | undefined>(undefined, {
@@ -223,7 +223,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
           type="button"
           data-expand="down"
           aria-label={t("Show the verse below")}
-          class={expander}
+          class={`${expander} border-t border-surface-border`}
           onClick={() => props.onExpand?.(1)}
         >
           <ChevronsDownIcon size={12} aria-hidden="true" />
