@@ -285,8 +285,8 @@ export function ProjectSidebar() {
             size="sm"
             type="search"
             icon={<SearchIcon size={14} />}
-            aria-label={t("Go to a book or chapter")}
-            placeholder={t("Search 'Luke 1'…")}
+            aria-label={t("Go to")}
+            placeholder={t("Go to 'Luke 1'…")}
             value={query()}
             onInput={(event) => setQuery(event.currentTarget.value)}
             onKeyDown={(event) => {

@@ -43,14 +43,16 @@ Four insertions and one card. All of them build a `TransactionSpec` against the 
 | `insert.verse` | `Mod-Shift-v` | `\v N ` at the caret with **N selected**, so the first keystroke replaces it. `N` is the highest verse already opened in this chapter at or before the caret, plus one (a `\v 1-2` range answers 3). A caret inside a word moves forward to the word's far edge first — an aligned `\w …\w*` wrapper counts as one word. A leading space is supplied when the caret is hard against a glyph. |
 | `insert.paragraph` | `Mod-Shift-p` | at a block's content head, converts that block's marker to `\p`; anywhere else, splits the line: `\n\p ` at the caret. |
 | `insert.poetry` | `Mod-Shift-l` | the same two shapes with `\q1`, and **by repeat**: pressed inside a `\q1` it writes `\q2`. `insertPoetry(structureAt, 1 \| 2)` takes the level as an argument instead. |
-| `insert.footnote` | `Mod-Shift-f` | `\f + \ft …\f*` with the selection as the body, caret at the end of the `\ft` content. |
+| `insert.footnote` | `Mod-Shift-n` | `\f + \ft …\f*` with the selection as the body, caret at the end of the `\ft` content. |
 
 Two rulings worth knowing:
 
 - **A footnote never swallows markup.** A selection in regular mode is measured in source offsets, and the source between two visible glyphs may be a paragraph break and an `\s5` the reader never saw — one Shift-Right at the end of a line crosses all of it. So a run that contains a newline or a backslash is **not** wrapped: the note is anchored at the selection's start and the text is left where it is. Refusing to guess is the answer [Search](search.md) gives to a hit that straddles markup, for the same reason.
 - **Where the caret ends up is settlement's call.** In regular mode `note.markup` and `note.body` are elided, so a fresh footnote collapses to its caller as soon as it parses and the caret is pushed to the nearest legal stop beside it; editing the body is the note satellite's job. In USFM mode the caret stays inside the `\ft`.
 
-Each chord is bound **twice**: in `usfmKeys()` (so a press with the editor focused reaches the caret with no round trip) and on the shell command of the same name (so the palette lists it and so it works when focus is elsewhere). They cannot both fire — `installCommandKeys` skips a chord the editor already consumed, which is also what keeps `Mod-Shift-f` meaning "footnote" in the editor and "find in project" everywhere else.
+Each chord is bound **twice**: in `usfmKeys()` (so a press with the editor focused reaches the caret with no round trip) and on the shell command of the same name (so the palette lists it and so it works when focus is elsewhere). They cannot both fire — `installCommandKeys` skips a chord the editor already consumed.
+
+The footnote chord is `Mod-Shift-n`, for **n**ote. It used to be `Mod-Shift-f`, which is `search.open` — "find in project" — so one press meant two different things depending on where the focus was, and the editor silently won. Two commands that a reader thinks of separately do not share a chord.
 
 ### The front matter card
 

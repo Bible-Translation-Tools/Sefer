@@ -187,8 +187,8 @@ export const installCommandKeys = (target: Document): (() => void) => {
   const onKeyDown = (event: KeyboardEvent): void => {
     // A chord the editor already consumed is not the shell's. CodeMirror
     // preventDefaults a binding it ran, and the event still bubbles to the
-    // document — so without this line `Mod-Shift-f` would insert a footnote
-    // AND open project search on one press.
+    // document — so without this line `Mod-Shift-n` would insert a footnote
+    // AND fire the shell's registration of the same command on one press.
     if (event.defaultPrevented) return;
     for (const command of registry()) {
       if (command.keys === undefined || !matches(command.keys, event)) continue;
@@ -535,7 +535,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
     insertion("editor.insert.verse", t("Insert verse"), "Mod-Shift-v", "insert.verse"),
     insertion("editor.insert.paragraph", t("Insert paragraph"), "Mod-Shift-p", "insert.paragraph"),
     insertion("editor.insert.poetry", t("Insert poetry line"), "Mod-Shift-l", "insert.poetry"),
-    insertion("editor.insert.footnote", t("Insert footnote"), "Mod-Shift-f", "insert.footnote"),
+    insertion("editor.insert.footnote", t("Insert footnote"), "Mod-Shift-n", "insert.footnote"),
 
     registerCommand({
       id: "editor.frontmatter.edit",
