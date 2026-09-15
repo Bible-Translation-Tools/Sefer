@@ -1,37 +1,47 @@
 /**
  * The findings panel: every finding in the project, in one shape, through the
- * reader's filter.
+ * reader's filter — as the SAME multibuffer Find shows.
  *
- * `findings.list` does the ordering (severity, then position, within the
- * project's canonical book order), `findings/filter` does the subtraction and
- * the grouping, and `findings.stale` decides the badge. The fix preview is
- * computed on DEMAND — a panel showing four hundred findings pays for none of
- * them until someone asks — and `fixes.preview` refuses one computed from text
- * the book has since moved past, which is the mistake a panel like this
- * invites. `fixes.apply` then goes through `book.apply`, the one write path,
- * so a fix from this panel is the same event a fix from the editor is.
+ * Will, 2026-09-15, looking at the old list of rows: it must be the component
+ * the reader already knows from searching. Identical cards, identical chrome,
+ * the same expand-up/expand-down context arrows, the same outline column, the
+ * same sticky headers, the same Edit-as-satellite. The purpose is that someone
+ * scanning a place — a Sous finding about a comma, say — sees everything that
+ * might be wrong there, in the verse it is wrong in, with the workflow they
+ * already have. So this file draws no list of its own: `findingsFeed.ts` turns
+ * findings into occurrences and hands them to `createExcerptFeed`, exactly as
+ * `/find` hands it search hits, and what is left here is the toolbar, the
+ * header of each card, and the two things that can be done about a finding.
  *
- * The filter is subtractive and never authoritative: the header always says
- * "N of TOTAL shown" so a filtered panel can never read as a clean project
- * (vision §11.4), and the census, the inline marks and the corpus counts are
- * untouched by anything on this screen.
+ * What did NOT change is everything the page is answerable for.
  *
- * Two things make a long list readable without lying about it. A row names
- * WHERE it is — `navigateTarget(finding, analysis)` turns the offset into
- * "PHM 1:4", and only when the analysis in hand is the one the finding was
- * computed from; otherwise the row shows the raw offset, because a chapter
- * and verse from another revision would name the wrong place with total
- * confidence. And a run of consecutive rows with the SAME code and the same
- * message collapses to one row carrying "× 21", which expands on click. The
- * collapse is per group and purely visual: the header's count, the filter
- * counts and the census are all still over findings, never over rows.
+ * `findings.list` does the ordering, `findings/filter` does the subtraction,
+ * and the filter is subtractive and never authoritative: the header always
+ * says "N of TOTAL shown", so a filtered panel can never read as a clean
+ * project (vision §11.4), and the census, the inline marks and the corpus
+ * counts are untouched by anything on this screen.
+ *
+ * A card's reference is still DERIVED or not shown — an excerpt exists only
+ * because a parse of the text the finding was measured in placed it, so
+ * "Philemon 1:4" on a card is a fact and not a guess.
+ *
+ * A fix preview is still computed on DEMAND — a page of four hundred findings
+ * pays for none of them until someone asks — `fixes.preview` refuses one
+ * computed from text the book has since moved past, and `fixes.apply` goes
+ * through `book.apply`, the one write path, so a fix from this page is the
+ * same event a fix from the editor is.
+ *
+ * A run of identical findings inside one verse still folds to one line with
+ * "× N", which expands on click. It is purely presentational: every count on
+ * the page is over findings, never over lines.
  *
  * The keyboard cursor is LOCAL to this route, and deliberately so. The shell
  * has its own findings cursor over the unfiltered list (`editor.findings.next`
  * in the palette walks the whole project, which is what that command means);
  * a cursor here that honoured the filter but shared that state would make the
- * palette command jump according to a filter it never mentioned. Two cursors
- * with two scopes is the smaller lie, and it needs no change to the shell.
+ * palette command jump according to a filter it never mentioned. It walks
+ * CARDS now rather than rows, and the card it is on wears the ring Find puts
+ * on the card holding the current match.
  */
 
 import { useNavigate, useSearch } from "@tanstack/solid-router";
@@ -40,89 +50,40 @@ import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import CircleCheck from "lucide-solid/icons/circle-check";
 import Wrench from "lucide-solid/icons/wrench";
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
+import { For, Show, createEffect, createSignal, onCleanup, untrack } from "solid-js";
 
 import type { BookId } from "../../../core/book/book";
-import * as Excerpts from "../../../core/excerpts/excerpts";
+import type { Excerpt } from "../../../core/excerpts/excerpts";
 import * as Filter from "../../../core/findings/filter";
 import type { Finding } from "../../../core/findings/finding";
 import * as Findings from "../../../core/findings/findings";
 import * as Fixes from "../../../core/fixes/fixes";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
+import { ExcerptList, type ExcerptDecor } from "../excerpts";
 import {
   Badge,
   Button,
   Card,
+  cx,
   EmptyState,
   PanelHeader,
   SegmentedControl,
   severityTone,
-  VirtualList,
-  type VirtualSection,
 } from "../primitives";
-import { bookName } from "../workspace/books";
-import { metadataOf } from "../workspace/project";
+import {
+  createFindingsFeed,
+  foldRuns,
+  inMarkup,
+  markupSlice,
+  type FindingRun,
+  type FindingsRow,
+} from "./findingsFeed";
 import { createFindingsFilter, VIEWS, type FindingsView } from "./findingsFilter";
 import { FindingsFilters } from "./FindingsFilters";
 
-/** The one row look. A literal string: Tailwind scans source text, not values. */
-const ROW = [
-  "flex flex-col gap-1.5 px-3.5 py-2.5 transition-colors",
-  "hover:bg-surface-secondary data-[stale=true]:opacity-60",
-  "aria-[current=true]:bg-brand-light",
-  "aria-[current=true]:shadow-[inset_0.1875rem_0_0_0_var(--brand-base)]",
-].join(" ");
-
-/**
- * The height a row is assumed to have until it has been on screen once.
- *
- * One badge line plus a two-line quotation, at this list's width. It only has
- * to be close: the scrollbar is right from the first paint because of it, and
- * exact a frame later because a `ResizeObserver` corrects it.
- */
-const ROW_ESTIMATE = 78;
-
-/**
- * One displayed row. Ordinarily one finding; when `count` is greater than one
- * it stands for a run of identical findings and carries the toggle that opens
- * them. `id` is the cursor's identity — the finding's own semantic id, scoped
- * by the group, because the same finding appears in exactly one group per view
- * but the view can change under the cursor.
- */
-interface Row {
-  readonly id: string;
-  readonly finding: Finding;
-  readonly count: number;
-  /** Whether the run this row heads is currently showing its members. */
-  readonly open: boolean;
-}
-
-/** One section of the list: a group, as rows. */
-interface Section {
-  readonly key: string;
-  readonly count: number;
-  readonly rows: readonly Row[];
-}
-
-/**
- * Consecutive findings with the same code AND the same message are one thing
- * said N times — 76 rows of "\s5 is not a known marker" is a wall, not a
- * report. Only CONSECUTIVE ones fold, so the fold never re-orders and never
- * reaches across a group: `list` has already put them in position order, and
- * two runs separated by a different finding are two places to look.
- */
-const runs = (findings: readonly Finding[]): readonly (readonly Finding[])[] => {
-  const out: Finding[][] = [];
-  for (const finding of findings) {
-    const last = out.at(-1);
-    const head = last?.[0];
-    if (last !== undefined && head?.code === finding.code && head.message === finding.message)
-      last.push(finding);
-    else out.push([finding]);
-  }
-  return out;
-};
+/** One finding's line in a card header, before it has been measured. */
+const LINE_HEIGHT = 30;
 
 export function FindingsPanel() {
   const shell = useShell();
@@ -133,9 +94,23 @@ export function FindingsPanel() {
   });
   const [note, setNote] = createSignal("");
   const [cursor, setCursor] = createSignal(0, { name: "findingsCursor" });
-  /** The runs the reader has opened, by row id. Session state, like the view. */
-  const [expanded, setExpanded] = createSignal<ReadonlySet<string>>(new Set(), {
-    name: "findingsExpanded",
+  /**
+   * Has the reader moved the cursor yet?
+   *
+   * Until they have, there IS no current card: the ring and the scroll belong
+   * to a gesture somebody made, and a page that scrolled itself to its first
+   * card on arrival would take the top of the list away from the reader before
+   * they had read it. Find behaves the same — its ring appears when the match
+   * arrows are used.
+   */
+  const [walking, setWalking] = createSignal(false, { name: "findingsWalking" });
+  /** The folded runs the reader has opened, by line id. Session state. */
+  const [opened, setOpened] = createSignal<ReadonlySet<string>>(new Set(), {
+    name: "findingsOpened",
+  });
+  /** The markup slices the reader has pinned open — hover shows them anyway. */
+  const [pinned, setPinned] = createSignal<ReadonlySet<string>>(new Set(), {
+    name: "findingsSlices",
   });
 
   /**
@@ -203,171 +178,51 @@ export function FindingsPanel() {
   const shown = (): readonly Finding[] =>
     Filter.applyFilter(all(), filters.filter(), (finding) => isStale(finding));
 
-  /**
-   * What a group header says besides its key. Only the "by book" view has a
-   * human name to add — a code and a severity ARE their own words — and the
-   * name comes from the project's own metadata first, exactly as the sidebar's
-   * does, so the two cannot disagree about what a book is called.
-   */
-  const heading = (key: string): string | undefined => {
-    if (filters.view() !== "book") return undefined;
-    const name = bookName(key, metadataOf(shell.project()));
-    return name === key ? undefined : name;
-  };
-
   /** Every book in the project, so a clean book still offers its chip. */
   const books = (): readonly BookId[] => shell.project()?.books.map((book) => book.id) ?? [];
 
-  /**
-   * The list as sections. `flat` is one unlabelled section rather than a
-   * second rendering path — the row markup is the part worth having once.
-   */
-  const groups = (): readonly Filter.FindingGroup[] => {
-    const rows = shown();
-    const view = filters.view();
-    if (view === "flat")
-      return rows.length === 0 ? [] : [{ key: "", count: rows.length, findings: rows }];
-    return Filter.groupBy(rows, view);
-  };
+  const feed = createFindingsFeed({ findings: shown, view: filters.view });
 
-  /**
-   * The groups as rows: identical runs folded, opened ones unfolded. One memo
-   * so the row markup, the cursor and `scrollIntoView` all read the same list
-   * — and so a hundred rows do not each rebuild it.
-   */
-  const sections = createMemo(
-    (): readonly Section[] =>
-      groups().map((group) => {
-        const rows: Row[] = [];
-        for (const run of runs(group.findings)) {
-          const head = run[0];
-          if (head === undefined) continue;
-          const id = `${group.key}:${head.id}`;
-          if (run.length === 1) {
-            rows.push({ id, finding: head, count: 1, open: false });
-            continue;
-          }
-          rows.push({ id, finding: head, count: run.length, open: expanded().has(id) });
-          if (expanded().has(id))
-            for (const finding of run.slice(1))
-              rows.push({ id: `${group.key}:${finding.id}`, finding, count: 1, open: false });
-        }
-        return { key: group.key, count: group.count, rows };
-      }),
-    { name: "findingsSections" },
-  );
+  const at = (index: number): FindingsRow | undefined => feed.rows()[index];
 
-  /** Every row on screen, in reading order: what the cursor walks. */
-  const visible = createMemo((): readonly Row[] => sections().flatMap((section) => section.rows), {
-    name: "findingsVisibleRows",
-  });
-
-  const at = (index: number): Row | undefined => visible()[index];
-
-  /** The cursor's row id, once per change rather than once per row. */
-  const current = createMemo(() => at(cursor())?.id ?? "", { name: "findingsCursorId" });
-
-  /** Wraps, like the palette's own finding commands, over the VISIBLE rows. */
+  /** Wraps, like the palette's own finding commands, over the cards on screen. */
   const step = (delta: 1 | -1): void => {
     // A snapshot on purpose: the wrap is over the list as it is when the key
     // was pressed.
-    const staticCount = visible().length;
+    const staticCount = feed.rows().length;
     if (staticCount === 0) return;
+    setWalking(true);
     setCursor((held) => (held + delta + staticCount) % staticCount);
   };
 
-  const toggle = (id: string): void => {
-    setExpanded((held) => {
-      const next = new Set(held);
-      if (!next.delete(id)) next.add(id);
-      return next;
-    });
+  /** One id in or out of a set. Both sets below are session state. */
+  const flip = (held: ReadonlySet<string>, id: string): ReadonlySet<string> => {
+    const next = new Set(held);
+    if (!next.delete(id)) next.add(id);
+    return next;
+  };
+
+  const toggleRun = (id: string): void => {
+    setOpened((held) => flip(held, id));
+  };
+
+  const toggleSlice = (id: string): void => {
+    setPinned((held) => flip(held, id));
   };
 
   const analysisFor = (finding: Finding) =>
     Option.getOrUndefined(shell.services.projectAnalysis.analysis(finding.bookId));
 
   /**
-   * Where a finding points, as a person writes it. `navigateTarget` fills in
-   * the reference only when the analysis handed to it still describes the very
-   * text the finding was measured against — so a row either names a verse it
-   * can prove or shows the offset, and never guesses one in between.
-   */
-  const place = (finding: Finding): { readonly text: string; readonly exact: boolean } => {
-    const ref = Findings.navigateTarget(finding, analysisFor(finding)?.analysis).ref;
-    if (ref === undefined) return { text: `@${finding.from}`, exact: false };
-    // Chapter 0 is the matter before the first `\c` — an id line, a heading,
-    // a table of contents entry. "PHM 0" would read as a chapter nobody has.
-    if (ref.chapter < 1) return { text: t("front"), exact: true };
-    return {
-      text: ref.verse === undefined ? `${ref.chapter}` : `${ref.chapter}:${ref.verse}`,
-      exact: true,
-    };
-  };
-
-  const open = (finding: Finding): void => {
-    const project = shell.project();
-    if (project === undefined) return;
-    const target = Findings.navigateTarget(finding, analysisFor(finding)?.analysis);
-    // Leave the aim before navigating: the book route reads it to decide the
-    // opening clip (chapter preference) and the editor scrolls to it.
-    shell.aim(target.bookId, target.from);
-    void navigate({
-      to: "/project/$id/book/$book",
-      params: {
-        id: encodeURIComponent(project.root),
-        book: encodeURIComponent(target.bookId),
-      },
-    });
-  };
-
-  /** What Enter does: a folded run opens where a single row goes to the book. */
-  const activate = (row: Row): void => {
-    if (row.count > 1 && !row.open) {
-      toggle(row.id);
-      return;
-    }
-    open(row.finding);
-  };
-
-  /**
-   * `j`/`k` and the arrows move, Enter opens.
+   * Go: the main editor, aimed at this finding's own span.
    *
-   * Listened for on the document because the panel has no single focusable
-   * body, and guarded on the target: the text filter and every other field is
-   * a place where `j` means `j`. Modified chords are left to
-   * `src/app/commands.ts`, which owns the `Mod-` keymap.
+   * Through the feed, so it is the same navigation a card's "Open in editor"
+   * makes and the same span is measured — `openInEditor` leaves the aim before
+   * it navigates, because the book route reads it to decide the opening clip.
    */
-  {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
-      const target = event.target;
-      if (target instanceof HTMLElement) {
-        if (target.isContentEditable) return;
-        const tag = target.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      }
-      if (event.key === "j" || event.key === "ArrowDown") step(1);
-      else if (event.key === "k" || event.key === "ArrowUp") step(-1);
-      else if (event.key === "Enter") {
-        const held = at(cursor());
-        if (held !== undefined) activate(held);
-      } else return;
-      event.preventDefault();
-    };
-    // Components run once in Solid, so the body is the mount: no `onMount`
-    // wrapper, and `onCleanup` takes the listener off with the route.
-    document.addEventListener("keydown", onKeyDown);
-    onCleanup(() => {
-      document.removeEventListener("keydown", onKeyDown);
-    });
-  }
-
-  // The cursor brings itself into view, or `j` walks off the bottom of the
-  // screen. It is `VirtualList`'s `focus` that does it now, and that is not a
-  // tidying: the row the cursor lands on may not be RENDERED — that is the
-  // whole point of windowing — and a `scrollIntoView` on a DOM node that does
-  // not exist cannot work where a computed offset can.
+  const go = (finding: Finding): void => {
+    feed.excerpts.openInEditor(finding.bookId, finding.from, finding.to);
+  };
 
   const offer = (finding: Finding): void => {
     const book = shell.services.seated(finding.bookId);
@@ -403,102 +258,110 @@ export function FindingsPanel() {
     setPreview(undefined);
     shell.bump();
   };
-  /**
-   * The verse this finding is in, as the READING, with the finding's own span
-   * marked.
-   *
-   * `quote` (`core/excerpts`) projects a window around the span and places the
-   * span back inside it, so what a row shows is the sentence a translator would
-   * read rather than the USFM it is written in. When the span has no character
-   * in the projection at all — it is inside a marker name, an attribute, a
-   * control character — `projected` comes back false and the quotation is the
-   * raw slice instead, which the row says rather than quietly showing a
-   * different character.
-   *
-   * The analysis has to be the one the finding was measured against, and
-   * `ProjectAnalysis.analysis` is the only thing that holds it. A row whose
-   * analysis has moved on shows nothing here rather than quoting the wrong
-   * verse with total confidence — the same rule `place` follows for the
-   * reference.
-   */
-  const excerpt = (finding: Finding): Excerpts.Quotation | undefined => {
-    const held = analysisFor(finding);
-    if (held === undefined) return undefined;
-    if (
-      finding.engine.docLen !== held.analysis.docLen ||
-      finding.engine.sourceHash !== held.analysis.sourceHash
-    )
-      return undefined;
-    try {
-      return Excerpts.quote(held.analysis, finding.from, finding.to);
-    } catch {
-      return undefined;
-    }
-  };
 
   /**
-   * One row. Stale rows stay visible and stay dim — the badge says why, and
-   * hiding them is the reader's own choice ("Hide stale"), never the panel's.
-   * The cursor is `aria-current`, so a screen reader hears what the eye sees.
+   * `j`/`k` and the arrows move, Enter opens.
    *
-   * A row standing for a run carries the count as a toggle. Everything else on
-   * it — the reference, the code, the message — is the run's first member,
-   * which is what "identical" means here.
+   * Listened for on the document because the page has no single focusable
+   * body, and guarded on the target: the text filter and every other field is
+   * a place where `j` means `j`, and so is an open satellite. Modified chords
+   * are left to `src/app/commands.ts`, which owns the `Mod-` keymap.
    */
-  const row = (entry: Row) => {
-    const finding = entry.finding;
-    const quoted = () => excerpt(finding);
+  {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target;
+      if (target instanceof HTMLElement) {
+        if (target.isContentEditable) return;
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      }
+      if (event.key === "j" || event.key === "ArrowDown") step(1);
+      else if (event.key === "k" || event.key === "ArrowUp") step(-1);
+      else if (event.key === "Enter") {
+        // Enter before any movement takes the cursor rather than the reader:
+        // opening a book nobody pointed at is not what that key means here.
+        if (!walking()) setWalking(true);
+        else {
+          const finding = at(cursor())?.findings[0];
+          if (finding !== undefined) go(finding);
+        }
+      } else return;
+      event.preventDefault();
+    };
+    // Components run once in Solid, so the body is the mount: no `onMount`
+    // wrapper, and `onCleanup` takes the listener off with the route.
+    document.addEventListener("keydown", onKeyDown);
+    onCleanup(() => {
+      document.removeEventListener("keydown", onKeyDown);
+    });
+  }
+
+  /** The card the cursor is on, and the finding inside it that it names. */
+  const focused = (): string | undefined => (walking() ? at(cursor())?.key : undefined);
+  const focusedAt = (): number | undefined =>
+    walking() ? at(cursor())?.findings[0]?.from : undefined;
+
+  /**
+   * One finding, as a line in a card's header.
+   *
+   * `run` is present when this line stands for a fold; its members are drawn
+   * below it once the reader opens it. Everything on the line is the run's
+   * first member, which is what "identical" means here.
+   */
+  const line = (row: FindingsRow, finding: Finding, run?: FindingRun) => {
+    const id = `${row.key}|${finding.id}`;
+    const folded = (run?.members.length ?? 1) > 1;
+    const markup = inMarkup(row.excerpt, finding);
+    const stale = isStale(finding);
     return (
-      <Card
-        padded={false}
-        data-findings-row
+      <li
+        class="group/finding flex flex-col gap-0.5"
+        data-finding={finding.id}
         data-code={finding.code}
-        data-producer={finding.producer}
-        data-count={entry.count}
-        data-stale={isStale(finding) ? "true" : undefined}
-        aria-current={current() === entry.id ? "true" : undefined}
-        class={ROW}
+        data-severity={finding.severity}
+        data-markup={markup ? "true" : undefined}
       >
-        <div class="flex flex-wrap items-center gap-2.5">
+        <div class="flex flex-wrap items-center gap-2">
           <Badge tone={severityTone(finding.severity)}>{finding.severity}</Badge>
-          <strong class="text-small font-semibold whitespace-nowrap text-on-surface-primary">
-            {finding.bookId}{" "}
-            <Show
-              when={place(finding).exact}
-              fallback={
-                <span class="font-normal text-on-surface-tertiary" title={t("no fresh analysis")}>
-                  {place(finding).text}
-                </span>
-              }
-            >
-              <span class="tabular-nums text-on-surface-secondary">{place(finding).text}</span>
-            </Show>
-          </strong>
           <code class="font-mono text-smallest text-on-surface-tertiary">{finding.code}</code>
-          <span class="min-w-0 flex-1 truncate text-small text-on-surface-secondary">
-            {finding.message}
-          </span>
-          <Show when={entry.count > 1}>
+          <span class="min-w-0 flex-1 text-small text-on-surface-secondary">{finding.message}</span>
+          <Show when={markup}>
+            {/* The span has no character in the reading — it is inside a
+                marker name, an attribute, a control character. The card keeps
+                showing the verse, says so here, and offers the raw slice
+                rather than quietly marking a different character. */}
+            <button
+              type="button"
+              data-markup-toggle
+              aria-expanded={pinned().has(id) ? "true" : "false"}
+              class="cursor-pointer"
+              onClick={() => toggleSlice(id)}
+            >
+              <Badge tone="muted">{t("in markup")}</Badge>
+            </button>
+          </Show>
+          <Show when={stale}>
+            <Badge tone="muted">{t("stale")}</Badge>
+          </Show>
+          <Show when={folded}>
             <Button
               size="sm"
               variant="secondary"
-              aria-expanded={entry.open ? "true" : "false"}
+              aria-expanded={opened().has(id) ? "true" : "false"}
               aria-label={
-                entry.open
-                  ? t("Fold {count} identical findings", { count: entry.count })
-                  : t("Unfold {count} identical findings", { count: entry.count })
+                opened().has(id)
+                  ? t("Fold {count} identical findings", { count: run?.members.length ?? 0 })
+                  : t("Unfold {count} identical findings", { count: run?.members.length ?? 0 })
               }
               class="tabular-nums"
-              icon={entry.open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-              onClick={() => toggle(entry.id)}
+              icon={opened().has(id) ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+              onClick={() => toggleRun(id)}
             >
-              × {entry.count}
+              × {run?.members.length ?? 1}
             </Button>
           </Show>
-          <Show when={isStale(finding)}>
-            <Badge tone="muted">{t("stale")}</Badge>
-          </Show>
-          <Button size="sm" variant="tertiary" onClick={() => open(finding)}>
+          <Button size="sm" variant="tertiary" onClick={() => go(finding)}>
             {t("Go")}
           </Button>
           <Show when={finding.fix !== undefined}>
@@ -507,57 +370,110 @@ export function FindingsPanel() {
             </Button>
           </Show>
         </div>
-        <Show when={quoted()}>
-          {(quotation) => (
-            <p
-              data-findings-excerpt={quotation().projected ? "reading" : "markup"}
-              class={
-                quotation().projected
-                  ? "px-0.5 text-small leading-relaxed text-on-surface-secondary"
-                  : "px-0.5 font-mono text-smallest break-all text-on-surface-tertiary"
-              }
-            >
-              <span class="opacity-70">{quotation().before}</span>
-              <mark class="rounded-xs bg-brand/20 px-px font-semibold text-on-surface-primary">
-                {quotation().hit}
-              </mark>
-              <span class="opacity-70">{quotation().after}</span>
-            </p>
-          )}
+
+        <Show when={markup}>
+          {/* Hover shows it; a click pins it open. The same rule the inventory
+              follows: raw USFM is never the card's BODY, only the answer to
+              "what is there, then". */}
+          <p
+            data-markup-slice
+            class={cx(
+              "px-0.5 font-mono text-smallest break-all text-on-surface-tertiary",
+              pinned().has(id) ? "block" : "hidden group-hover/finding:block",
+            )}
+          >
+            <span class="opacity-70">{markupSlice(row.excerpt, finding).before}</span>
+            <mark class="rounded-xs bg-surface-warning px-px font-semibold text-on-surface-warning">
+              {markupSlice(row.excerpt, finding).hit}
+            </mark>
+            <span class="opacity-70">{markupSlice(row.excerpt, finding).after}</span>
+          </p>
         </Show>
-      </Card>
+
+        <Show when={folded && opened().has(id)}>
+          <ul class="ms-4 flex flex-col gap-0.5 border-s border-surface-border ps-2">
+            <For each={run?.members.slice(1) ?? []}>{(member) => line(row, member)}</For>
+          </ul>
+        </Show>
+      </li>
     );
   };
 
+  /** The findings this card is answering for, folded. */
+  const notes = (_excerpt: Excerpt, key: string) => {
+    const row = feed.row(key);
+    if (row === undefined) return undefined;
+    return (
+      <ul class="flex flex-col gap-1" data-findings-in={row.findings.length}>
+        <For each={foldRuns(row.findings)}>{(run) => line(row, run.head, run)}</For>
+      </ul>
+    );
+  };
+
+  const decor: ExcerptDecor = {
+    rowKey: (group, excerpt) => `${group.bookId}|${excerpt.sid}`,
+    outlineTitle: t("Groups with findings"),
+    outlineLabel: (row) => {
+      const head = feed.head(row.bookId);
+      if (head === undefined) return row.bookId;
+      return head.front ? t("{book} front", { book: head.label }) : head.label;
+    },
+    header: (group) => {
+      const head = feed.head(group.bookId);
+      return (
+        <>
+          <Show
+            when={filters.view() === "severity"}
+            fallback={
+              <strong
+                class={cx(
+                  "text-small font-semibold text-on-surface-primary",
+                  filters.view() === "code" && "font-mono",
+                )}
+              >
+                {head?.label ?? group.bookId}
+              </strong>
+            }
+          >
+            <Badge tone={severityTone(head?.label ?? "")}>{head?.label}</Badge>
+          </Show>
+          <Show when={head?.detail}>
+            {(detail) => <span class="text-small text-on-surface-secondary">{detail()}</span>}
+          </Show>
+          <span class="ms-auto text-smallest text-on-surface-tertiary">
+            {t("{count} findings", { count: head?.count ?? group.count })}
+          </span>
+        </>
+      );
+    },
+    // Chapter 0 is the matter before the first `\c` — an id line, a heading, a
+    // table of contents entry — and `core/excerpts` labels it "Genesis 0",
+    // which is a chapter nobody has.
+    label: (_excerpt, key) => {
+      const row = feed.row(key);
+      return row?.front === true ? t("{book} · front matter", { book: row.bookName }) : undefined;
+    },
+    markTone: (source, excerpt) => feed.toneOf(source, excerpt),
+    extraHeight: (_excerpt, key) => {
+      const row = feed.row(key);
+      return row === undefined ? 0 : 8 + LINE_HEIGHT * foldRuns(row.findings).length;
+    },
+    notes,
+  };
+
   /**
-   * The list as the virtualizer wants it: one section per group, one row per
-   * finding or folded run.
-   *
-   * Every row is rendered at an ESTIMATE first and corrected once it has been
-   * on screen, so a project with thousands of findings paints the rows in the
-   * viewport and nothing else. Before this the panel built every `<li>` on
-   * every keystroke of the text filter, which is what made a long list feel
-   * broken — see documentation/architecture/findings.md.
+   * The shell's mode, as the card's two-way choice — the same reduction Find
+   * makes. In USFM mode a card shows the raw slice with the span marked, which
+   * is the one place raw USFM is the body rather than the footnote.
    */
-  const feed = createMemo(
-    (): readonly VirtualSection<Row>[] =>
-      sections().map((section) => ({
-        key: section.key,
-        rows: section.rows.map((entry) => ({
-          key: entry.id,
-          item: entry,
-          estimate: ROW_ESTIMATE,
-        })),
-      })),
-    { name: "findingsFeed" },
-  );
+  const mode = (): "regular" | "usfm" => (shell.mode() === "usfm" ? "usfm" : "regular");
 
   return (
     <main class="flex h-screen min-w-0 flex-col gap-4 p-6" data-findings-panel>
       <PanelHeader
         title={t("Findings")}
         subtitle={t(
-          "j / k or the arrows move; Enter opens a row, or unfolds a repeated one. Filters hide rows; they never delete findings.",
+          "j / k or the arrows move between cards; Enter opens one in the editor. Filters hide cards; they never delete findings.",
         )}
         actions={
           <>
@@ -653,30 +569,24 @@ export function FindingsPanel() {
             </Show>
           }
         >
-          <VirtualList<Row>
-            sections={feed()}
-            focus={current()}
-            class="min-h-0 min-w-0 flex-1 overflow-y-auto pe-1"
-            header={(section, ref) => (
-              <Show when={section.key !== ""} fallback={<div ref={ref} />}>
-                <header
-                  ref={ref}
-                  data-group={section.key}
-                  class="sticky top-0 z-10 -mx-1 mb-1.5 flex items-baseline gap-2 bg-surface-secondary/95 px-1 py-2 backdrop-blur-xs"
-                >
-                  <h3 class="text-small font-semibold text-on-surface-primary">{section.key}</h3>
-                  <Show when={heading(section.key)}>
-                    {(name) => <span class="text-small text-on-surface-secondary">{name()}</span>}
-                  </Show>
-                  <Badge tone="muted">
-                    {t("{count} shown", {
-                      count: sections().find((entry) => entry.key === section.key)?.count ?? 0,
-                    })}
-                  </Badge>
-                </header>
-              </Show>
-            )}
-            row={(entry) => row(entry)}
+          <ExcerptList
+            groups={feed.groups()}
+            outline={feed.outline()}
+            onOpen={feed.excerpts.openInEditor}
+            seat={feed.excerpts.seat}
+            analyze={feed.excerpts.analyze}
+            onEdited={feed.excerpts.edited}
+            onExpand={feed.excerpts.expand}
+            focus={focused()}
+            activeHit={focusedAt()}
+            mode={mode()}
+            decor={decor}
+            empty={
+              <EmptyState
+                icon={<CircleCheck size={22} />}
+                title={t("Nothing to report in the books that are open.")}
+              />
+            }
           />
         </Show>
       </div>
