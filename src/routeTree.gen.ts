@@ -16,6 +16,7 @@ import { Route as HistoryRouteImport } from './routes/history'
 import { Route as InventoryRouteImport } from './routes/inventory'
 import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as DevFixtureRouteImport } from './routes/dev/fixture'
 import { Route as StartCreateRouteImport } from './routes/start/create'
 import { Route as StartFindRouteImport } from './routes/start/find'
@@ -57,6 +58,11 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DevFixtureRoute = DevFixtureRouteImport.update({
   id: '/dev/fixture',
   path: '/dev/fixture',
@@ -91,6 +97,7 @@ export interface FileRoutesByFullPath {
   '/inventory': typeof InventoryRoute
   '/projects': typeof ProjectsRoute
   '/settings': typeof SettingsRoute
+  '/terms': typeof TermsRoute
   '/dev/fixture': typeof DevFixtureRoute
   '/start/create': typeof StartCreateRoute
   '/start/find': typeof StartFindRoute
@@ -105,6 +112,7 @@ export interface FileRoutesByTo {
   '/inventory': typeof InventoryRoute
   '/projects': typeof ProjectsRoute
   '/settings': typeof SettingsRoute
+  '/terms': typeof TermsRoute
   '/dev/fixture': typeof DevFixtureRoute
   '/start/create': typeof StartCreateRoute
   '/start/find': typeof StartFindRoute
@@ -120,6 +128,7 @@ export interface FileRoutesById {
   '/inventory': typeof InventoryRoute
   '/projects': typeof ProjectsRoute
   '/settings': typeof SettingsRoute
+  '/terms': typeof TermsRoute
   '/dev/fixture': typeof DevFixtureRoute
   '/start/create': typeof StartCreateRoute
   '/start/find': typeof StartFindRoute
@@ -136,6 +145,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/projects'
     | '/settings'
+    | '/terms'
     | '/dev/fixture'
     | '/start/create'
     | '/start/find'
@@ -150,6 +160,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/projects'
     | '/settings'
+    | '/terms'
     | '/dev/fixture'
     | '/start/create'
     | '/start/find'
@@ -164,6 +175,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/projects'
     | '/settings'
+    | '/terms'
     | '/dev/fixture'
     | '/start/create'
     | '/start/find'
@@ -179,6 +191,7 @@ export interface RootRouteChildren {
   InventoryRoute: typeof InventoryRoute
   ProjectsRoute: typeof ProjectsRoute
   SettingsRoute: typeof SettingsRoute
+  TermsRoute: typeof TermsRoute
   DevFixtureRoute: typeof DevFixtureRoute
   StartCreateRoute: typeof StartCreateRoute
   StartFindRoute: typeof StartFindRoute
@@ -237,6 +250,13 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dev/fixture': {
       id: '/dev/fixture'
       path: '/dev/fixture'
@@ -283,6 +303,7 @@ const rootRouteChildren: RootRouteChildren = {
   InventoryRoute: InventoryRoute,
   ProjectsRoute: ProjectsRoute,
   SettingsRoute: SettingsRoute,
+  TermsRoute: TermsRoute,
   DevFixtureRoute: DevFixtureRoute,
   StartCreateRoute: StartCreateRoute,
   StartFindRoute: StartFindRoute,
