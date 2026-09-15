@@ -25,7 +25,7 @@ import type { Excerpt } from "../../../core/excerpts/excerpts";
 import type { Analysis } from "../../../core/galley";
 import type { EditorBook } from "../../../editor";
 import { t } from "../../i18n";
-import { Button, Card, IconButton } from "../primitives";
+import { Button, Card, cx, IconButton } from "../primitives";
 import { ExcerptEditor } from "./ExcerptEditor";
 
 export interface ExcerptCardProps {
@@ -48,11 +48,20 @@ export interface ExcerptCardProps {
    * not offer expanding, and the chevrons are not drawn.
    */
   readonly onExpand?: (direction: -1 | 1) => void;
+  /**
+   * The SOURCE offset of the match the find bar's cursor is on, when it is one
+   * of THIS excerpt's. That one highlight is painted stronger and the card
+   * takes a ring, so "3 of 62" names something the reader can see; the other
+   * matches keep the soft highlight they have when nothing is current.
+   */
+  readonly active?: number;
 }
 
 interface Segment {
   readonly text: string;
   readonly hit: boolean;
+  /** Is this the match the find bar's cursor is on? */
+  readonly current: boolean;
   readonly dim: boolean;
   /** A verse number to paint before this segment — `Excerpt.verses`. */
   readonly verse?: string;
@@ -67,7 +76,7 @@ interface Segment {
  * dropped — so it rides on the segment that STARTS at its offset, and the cut
  * it adds is what guarantees there is one.
  */
-const segmentsOf = (excerpt: Excerpt): readonly Segment[] => {
+const segmentsOf = (excerpt: Excerpt, active: number | undefined): readonly Segment[] => {
   const cuts = new Set<number>([0, excerpt.text.length]);
   for (const mark of excerpt.marks) {
     cuts.add(mark.from);
@@ -86,9 +95,11 @@ const segmentsOf = (excerpt: Excerpt): readonly Segment[] => {
     const to = bounds[index + 1]!;
     if (to <= from) continue;
     const verse = excerpt.verses.find((mark) => mark.at === from);
+    const covering = excerpt.marks.filter((mark) => mark.from <= from && mark.to >= to);
     out.push({
       text: excerpt.text.slice(from, to),
-      hit: excerpt.marks.some((mark) => mark.from <= from && mark.to >= to),
+      hit: covering.length > 0,
+      current: active !== undefined && covering.some((mark) => mark.source === active),
       dim: excerpt.focus !== null && (to <= excerpt.focus.from || from >= excerpt.focus.to),
       ...(verse === undefined ? {} : { verse: verse.label }),
     });
@@ -116,7 +127,12 @@ export function ExcerptCard(props: ExcerptCardProps) {
   // is the only thing on screen that can say otherwise.
   const [opening, setOpening] = createSignal(false, { name: "excerptOpening" });
   const [refused, setRefused] = createSignal(false, { name: "excerptRefused" });
-  const segments = createMemo(() => segmentsOf(props.excerpt), { name: "excerptSegments" });
+  const segments = createMemo(() => segmentsOf(props.excerpt, props.active), {
+    name: "excerptSegments",
+  });
+  /** Does the current match live here? Drives the card's ring. */
+  const current = (): boolean =>
+    props.active !== undefined && props.excerpt.hits.some((hit) => hit.from === props.active);
 
   const edit = (): void => {
     props.onEdit();
@@ -132,7 +148,12 @@ export function ExcerptCard(props: ExcerptCardProps) {
   };
 
   return (
-    <Card padded={false} data-sid={props.excerpt.sid} class="overflow-hidden">
+    <Card
+      padded={false}
+      data-sid={props.excerpt.sid}
+      data-current={current() ? "true" : undefined}
+      class={cx("overflow-hidden", current() && "ring-1 ring-brand")}
+    >
       <header class="flex items-center gap-2 border-b border-surface-border px-3 py-1.5">
         <strong class="text-small font-medium text-on-surface-primary">
           {props.excerpt.label}
@@ -206,13 +227,16 @@ export function ExcerptCard(props: ExcerptCardProps) {
                   </Show>
                   <span
                     class={
-                      segment.hit
-                        ? "rounded-xs bg-surface-highlight text-on-surface-highlight"
-                        : segment.dim
-                          ? "text-on-surface-tertiary"
-                          : undefined
+                      segment.current
+                        ? "rounded-xs bg-brand-light font-medium text-on-surface-primary ring-1 ring-brand"
+                        : segment.hit
+                          ? "rounded-xs bg-surface-highlight text-on-surface-highlight"
+                          : segment.dim
+                            ? "text-on-surface-tertiary"
+                            : undefined
                     }
                     data-hit={segment.hit ? "true" : undefined}
+                    data-current={segment.current ? "true" : undefined}
                   >
                     {segment.text}
                   </span>

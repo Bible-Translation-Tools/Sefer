@@ -219,6 +219,9 @@ function Find() {
     { name: "cursorSid" },
   );
 
+  /** The match the cursor is on, as its source offset — the card's `active`. */
+  const cursorAt = (): number | undefined => hits()[cursor()]?.from;
+
   const step = (delta: 1 | -1): void => {
     const total = hits().length;
     if (total === 0) return;
@@ -327,6 +330,7 @@ function Find() {
           onEdited={feed.edited}
           onExpand={feed.expand}
           focus={cursorSid()}
+          activeHit={cursorAt()}
           empty={
             <EmptyState
               icon={<SearchIcon size={22} />}

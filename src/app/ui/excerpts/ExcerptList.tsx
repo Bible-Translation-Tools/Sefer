@@ -57,6 +57,13 @@ export interface ExcerptListProps {
    * into view — this is what the find bar's "1/62" and its arrows drive.
    */
   readonly focus?: string;
+  /**
+   * The SOURCE offset of the match the find bar's cursor is on. Paired with
+   * `focus` — which excerpt — it says which of that excerpt's highlights is
+   * the current one, so stepping through matches inside one verse is visible
+   * without the list moving.
+   */
+  readonly activeHit?: number;
   /** STET's source verse for one excerpt. */
   readonly renderPair?: (excerpt: Excerpt) => JSX.Element;
   /**
@@ -375,6 +382,7 @@ export function ExcerptList(props: ExcerptListProps) {
                                     ? undefined
                                     : (direction) => props.onExpand?.(sid, direction)
                                 }
+                                active={props.focus === sid ? props.activeHit : undefined}
                               />
                             </div>
                           )}

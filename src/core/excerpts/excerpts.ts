@@ -59,6 +59,14 @@ export interface Occurrence {
 export interface Mark {
   readonly from: number;
   readonly to: number;
+  /**
+   * The SOURCE offset of the occurrence this mark came from, when it came from
+   * one. It is the mark's identity, not its position: one occurrence can
+   * produce several marks (a match that crossed markup), and the card needs to
+   * know which of the highlights on screen belong to the match the find bar's
+   * cursor is on. Absent on `Excerpt.focus`, which is a verse, not a match.
+   */
+  readonly source?: number;
 }
 
 /**
@@ -281,11 +289,12 @@ export const project = (analysis: Analysis, from: number, to: number): Projectio
  */
 const marksFor = (
   projection: Projection,
-  ranges: readonly { readonly from: number; readonly to: number }[],
+  ranges: readonly { readonly from: number; readonly to: number; readonly source?: number }[],
 ): readonly Mark[] => {
   const marks: Mark[] = [];
   const { src } = projection;
   for (const range of ranges) {
+    const owner = range.source === undefined ? {} : { source: range.source };
     let open = -1;
     for (let index = 0; index < src.length; index += 1) {
       // SAFETY: `index` is inside the typed array's own length.
@@ -293,11 +302,11 @@ const marksFor = (
       const inside = at >= range.from && at < range.to;
       if (inside && open < 0) open = index;
       else if (!inside && open >= 0) {
-        marks.push({ from: open, to: index });
+        marks.push({ from: open, to: index, ...owner });
         open = -1;
       }
     }
-    if (open >= 0) marks.push({ from: open, to: src.length });
+    if (open >= 0) marks.push({ from: open, to: src.length, ...owner });
   }
   marks.sort((a, b) => a.from - b.from || a.to - b.to);
   return marks;
@@ -373,10 +382,10 @@ const verseAt = (spans: readonly VerseSpan[], pos: number): number => {
 // Building
 // ---------------------------------------------------------------------------
 
-const rangesOf = (hit: Occurrence): readonly { from: number; to: number }[] =>
+const rangesOf = (hit: Occurrence): readonly { from: number; to: number; source: number }[] =>
   hit.pieces !== undefined && hit.pieces.length > 1
-    ? hit.pieces.map((piece) => ({ from: piece.from, to: piece.to }))
-    : [{ from: hit.from, to: hit.to }];
+    ? hit.pieces.map((piece) => ({ from: piece.from, to: piece.to, source: hit.from }))
+    : [{ from: hit.from, to: hit.to, source: hit.from }];
 
 /**
  * The excerpts of one book: one per verse that holds at least one occurrence,
