@@ -1,10 +1,10 @@
 /**
- * Appearance: the three preferences that are a fact about the DOCUMENT rather
- * than about a component — the colour scheme, the interface font size, and the
- * page zoom.
+ * Appearance: the preferences that are a fact about the DOCUMENT rather than
+ * about a component — the colour scheme, the interface font size, the page
+ * zoom, and the scripture surface's own size.
  *
- * They live here, outside any screen, because all three are written onto the
- * root element and every route reads them by simply existing. `tokens.css`
+ * They live here, outside any screen, because each is written onto the root
+ * element and every route reads them by simply existing. `tokens.css`
  * swaps the semantic names under `[data-theme="dark"]` and under
  * `prefers-color-scheme: dark` when no theme is stamped, so "system" is the
  * ABSENCE of the attribute and never a computed value: a computed one would
@@ -35,7 +35,20 @@ export const DEFAULT_APPEARANCE: Appearance = { theme: "system", fontSize: 16, z
 export const FONT_SIZE_RANGE = { min: 12, max: 24 } as const;
 export const ZOOM_RANGE = { min: 50, max: 200 } as const;
 
+/**
+ * The scripture surface's own size, in px, and its bounds.
+ *
+ * Separate from the interface size on purpose: the chrome and the text being
+ * translated are read at different distances, and a translator who wants
+ * larger scripture does not want a larger toolbar. It is not part of
+ * `Appearance` either, because `Appearance` is what `/settings` applies in one
+ * call and this one is applied by whoever writes it — see `applyEditorFontSize`.
+ */
+export const EDITOR_FONT_SIZE_RANGE = { min: 14, max: 32 } as const;
+export const DEFAULT_EDITOR_FONT_SIZE = 18;
+
 const CACHE_KEY = "sefer.appearance";
+const EDITOR_CACHE_KEY = "sefer.editorFontSize";
 
 /**
  * A stored string is whatever was there last; only a known name is a theme.
@@ -55,6 +68,38 @@ export const asFontSize = (value: number): number =>
   clamp(value, FONT_SIZE_RANGE.min, FONT_SIZE_RANGE.max);
 
 export const asZoom = (value: number): number => clamp(value, ZOOM_RANGE.min, ZOOM_RANGE.max);
+
+export const asEditorFontSize = (value: number): number =>
+  clamp(value, EDITOR_FONT_SIZE_RANGE.min, EDITOR_FONT_SIZE_RANGE.max);
+
+/**
+ * Writes `--editor-font-size` onto `<html>`, where `src/editor/editor.css`
+ * reads it for `.cm-mode-regular .cm-content`.
+ *
+ * A custom property rather than a root font size: the scripture column is the
+ * only thing that scales, and `rem` in the editor's own chrome must keep
+ * following the interface size.
+ */
+export const applyEditorFontSize = (px: number): void => {
+  if (typeof document === "undefined") return;
+  const size = asEditorFontSize(px);
+  document.documentElement.style.setProperty("--editor-font-size", `${size}px`);
+  try {
+    globalThis.localStorage?.setItem(EDITOR_CACHE_KEY, String(size));
+  } catch {
+    /* A cache that cannot be written is a slower first paint, not a failure. */
+  }
+};
+
+/** The cached scripture size, or the default. */
+export const cachedEditorFontSize = (): number => {
+  try {
+    const held = Number(globalThis.localStorage?.getItem(EDITOR_CACHE_KEY));
+    return Number.isFinite(held) && held > 0 ? asEditorFontSize(held) : DEFAULT_EDITOR_FONT_SIZE;
+  } catch {
+    return DEFAULT_EDITOR_FONT_SIZE;
+  }
+};
 
 /**
  * Writes the appearance onto `<html>`.
@@ -107,3 +152,4 @@ export const cachedAppearance = (): Appearance => {
 // settings screen re-applies from `Settings` once the composition is up, which
 // is the authoritative read; this one only has to be fast.
 applyAppearance(cachedAppearance());
+applyEditorFontSize(cachedEditorFontSize());

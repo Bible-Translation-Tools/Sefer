@@ -82,8 +82,10 @@
   --error-95: #f9edeb;
 
   --warning-20: #5c4200;
+  --warning-25: #5c4a15;
   --warning-30: #8a5e00;
   --warning-80: #fadf9e;
+  --warning-90: #fbeaa8;
   --warning-95: #fdf7e8;
 
   --success-20: #386336;
@@ -126,6 +128,13 @@
   --on-surface-error: var(--error-40);
   --surface-warning: var(--warning-95);
   --on-surface-warning: var(--warning-30);
+
+  /* A found match, wherever it is shown: the excerpt cards, the satellite
+     inside one, and the editor's own hit. It is NOT `surface-warning` — a
+     warning is a judgement about the text and a highlight is a place in it,
+     and the two had drifted into the same yellow. */
+  --surface-highlight: var(--warning-90);
+  --on-surface-highlight: var(--warning-20);
   --surface-success: var(--success-95);
   --on-surface-success: var(--success-40);
 
@@ -180,6 +189,8 @@
   --on-surface-error: var(--error-80);
   --surface-warning: var(--warning-20);
   --on-surface-warning: var(--warning-80);
+  --surface-highlight: var(--warning-25);
+  --on-surface-highlight: var(--warning-80);
   --surface-success: var(--success-20);
   --on-surface-success: var(--success-80);
 
@@ -221,6 +232,8 @@
     --on-surface-error: var(--error-80);
     --surface-warning: var(--warning-20);
     --on-surface-warning: var(--warning-80);
+    --surface-highlight: var(--warning-25);
+    --on-surface-highlight: var(--warning-80);
     --surface-success: var(--success-20);
     --on-surface-success: var(--success-80);
 
@@ -275,6 +288,7 @@
   --color-surface-overlay: var(--surface-overlay);
   --color-surface-error: var(--surface-error);
   --color-surface-warning: var(--surface-warning);
+  --color-surface-highlight: var(--surface-highlight);
   --color-surface-success: var(--surface-success);
 
   --color-on-surface-primary: var(--on-surface-primary);
@@ -282,6 +296,7 @@
   --color-on-surface-tertiary: var(--on-surface-tertiary);
   --color-on-surface-error: var(--on-surface-error);
   --color-on-surface-warning: var(--on-surface-warning);
+  --color-on-surface-highlight: var(--on-surface-highlight);
   --color-on-surface-success: var(--on-surface-success);
 
   --color-sidebar-surface: var(--sidebar-surface);

@@ -34,7 +34,9 @@ import {
   markedRanges,
   mountSatellite,
   readingLayer,
+  reclip,
   type EditorBook,
+  type Satellite,
 } from "../../../editor";
 
 import "../../../editor/editor.css";
@@ -48,9 +50,29 @@ export interface ExcerptEditorProps {
   readonly onDone: () => void;
 }
 
+/**
+ * The excerpt's span, snapped to whole lines and clamped to the document.
+ *
+ * `collapseOutside` replaces what is outside the range with block widgets,
+ * and a block replacement that does not start and end at a line boundary is
+ * not something CodeMirror will draw. `end` is the next verse's anchor, which
+ * sits at the START of its own line, so the last line is the one before it.
+ */
+const lineRange = (
+  doc: { length: number; lineAt: (at: number) => { from: number; to: number } },
+  span: { readonly from: number; readonly to: number },
+): { from: number; to: number } => {
+  const start = Math.max(0, Math.min(span.from, doc.length));
+  const end = Math.max(start, Math.min(span.to, doc.length));
+  return { from: doc.lineAt(start).from, to: doc.lineAt(Math.max(start, end - 1)).to };
+};
+
 export function ExcerptEditor(props: ExcerptEditorProps) {
   const [host, setHost] = createSignal<HTMLDivElement | undefined>(undefined, {
     name: "excerptHost",
+  });
+  const [live, setLive] = createSignal<Satellite | undefined>(undefined, {
+    name: "excerptSatellite",
   });
 
   // An effect rather than a render effect: the view measures itself, so it is
@@ -64,17 +86,7 @@ export function ExcerptEditor(props: ExcerptEditorProps) {
       const book = untrack(() => props.book);
       const excerpt = untrack(() => props.excerpt);
       const analyze = untrack(() => props.analyze);
-      const doc = book.state.doc;
-      const length = doc.length;
-
-      // Snap to lines, and clamp: the excerpt was built from a text the book
-      // may have moved past, and a range outside the document draws nothing.
-      const start = Math.max(0, Math.min(excerpt.span.from, length));
-      const end = Math.max(start, Math.min(excerpt.span.to, length));
-      // `end` is the next verse's anchor, which sits at the START of its own
-      // line; taking that line's end would pull the following verse into the
-      // excerpt, so the last line is the one before it.
-      const range = { from: doc.lineAt(start).from, to: doc.lineAt(Math.max(start, end - 1)).to };
+      const range = lineRange(book.state.doc, excerpt.span);
 
       const release = book.hold();
       const satellite = mountSatellite({
@@ -112,10 +124,24 @@ export function ExcerptEditor(props: ExcerptEditorProps) {
         satellite.view.dispatch({ selection: { anchor: first.from, head: first.to } });
       satellite.view.focus();
 
+      setLive(satellite);
+
       onCleanup(() => {
+        setLive(undefined);
         satellite.destroy();
         release();
       });
+    },
+  );
+
+  // An expanded excerpt is a WIDER WINDOW on the same book, so the live view
+  // is re-clipped rather than rebuilt: destroying it would lose the caret, the
+  // selection and the scroll of someone who asked to see one more verse.
+  createEffect(
+    () => ({ satellite: live(), span: props.excerpt.span }),
+    ({ satellite, span }) => {
+      if (satellite === undefined) return;
+      reclip(satellite.view, lineRange(satellite.view.state.doc, span));
     },
   );
 

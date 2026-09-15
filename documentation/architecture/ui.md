@@ -58,8 +58,31 @@ ground, and `.editor-host` — the CodeMirror frame, whose class
 `src/app/ui/BookEditor.tsx` writes itself. Before adding a rule there, answer
 which element could not have carried the class instead.
 
+### The highlight pair
+
+`--surface-highlight` / `--on-surface-highlight` is where a FOUND MATCH is
+painted: a soft yellow in light, a muted amber in dark. It is not
+`--surface-warning`, which the excerpt cards used to borrow — a warning is a
+judgement about the text and a highlight is a place in it, and one token
+serving both meant restyling a finding would have restyled every search hit.
+Everything that shows a match uses the pair: `bg-surface-highlight` on the
+read-only excerpt marks, `.cm-excerpt-hit` inside an excerpt's satellite, and
+`.cm-mode-regular .usfm-hit` in the page itself.
+
+`--editor-font-size` is the other value written onto `<html>` from outside a
+component: the scripture column's own size, applied by `src/app/ui/theme.ts`
+from the `editor.fontSize` preference, read by `.cm-mode-regular .cm-content`.
+
 `src/editor/editor.css` is a separate, hand-written CodeMirror theme owned by
-the editor module. It consumes the same tokens and is not part of this layer.
+the editor module. It is not part of this layer, but it is the same palette:
+the REGULAR projection derives every colour from the semantic tokens — paper
+is `--surface-primary`, ink `--on-surface-primary`, verse and chapter numbers
+`--brand-base`, selection a brand tint — so the page the reader edits is a
+white card among white cards and follows the theme without a second dark
+block. Four apparatus hues (footnote, cross-reference, nested editor) keep
+literal values, because the token set has no name for that distinction. USFM
+mode keeps its own terminal palette on purpose: a terminal is a terminal in
+both schemes.
 
 ## The primitives
 

@@ -35,10 +35,11 @@ export interface StetViewProps {
 
   readonly groups: readonly BookExcerpts[];
   readonly outline: readonly OutlineRow[];
-  readonly onOpen: (bookId: BookId, from: number) => void;
+  readonly onOpen: (bookId: BookId, from: number, to?: number) => void;
   readonly seat: (bookId: BookId) => Promise<EditorBook | undefined>;
   readonly analyze: (text: string) => Analysis;
   readonly onEdited?: () => void;
+  readonly onExpand?: (sid: string, direction: -1 | 1) => void;
 
   /** The source reading for one excerpt, when a source resource is bound. */
   readonly sourceOf?: (excerpt: Excerpt) => string | undefined;
@@ -143,6 +144,7 @@ export function StetView(props: StetViewProps) {
       <ExcerptList
         groups={props.groups}
         outline={props.outline}
+        onExpand={props.onExpand}
         onOpen={props.onOpen}
         seat={props.seat}
         analyze={props.analyze}

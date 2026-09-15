@@ -15,6 +15,8 @@
  */
 
 import type { JSX } from "@solidjs/web";
+import ChevronsDownIcon from "lucide-solid/icons/chevrons-down";
+import ChevronsUpIcon from "lucide-solid/icons/chevrons-up";
 import PencilIcon from "lucide-solid/icons/pencil";
 import SquareArrowOutUpRightIcon from "lucide-solid/icons/square-arrow-out-up-right";
 import { For, Show, createMemo, createSignal } from "solid-js";
@@ -41,6 +43,11 @@ export interface ExcerptCardProps {
   readonly analyze: (text: string) => Analysis;
   /** STET's source verse, rendered above the editable target. */
   readonly pair?: JSX.Element;
+  /**
+   * Show one more verse above (-1) or below (+1). Absent means the feed does
+   * not offer expanding, and the chevrons are not drawn.
+   */
+  readonly onExpand?: (direction: -1 | 1) => void;
 }
 
 interface Segment {
@@ -79,10 +86,22 @@ const segmentsOf = (excerpt: Excerpt): readonly Segment[] => {
   return out;
 };
 
+/**
+ * The strip a reader clicks for one more verse — Zed's multibuffer handles,
+ * as a full-width hairline rather than a floating control: it is the edge of
+ * the excerpt, and the edge is what is being moved.
+ */
+const expander =
+  "flex w-full cursor-pointer items-center justify-center py-0.5 text-on-surface-tertiary transition-colors hover:bg-surface-secondary hover:text-on-surface-secondary";
+
 export function ExcerptCard(props: ExcerptCardProps) {
   const [book, setBook] = createSignal<EditorBook | undefined>(undefined, {
     name: "excerptBook",
   });
+  // Pressed the moment the click lands, not when the route answers: opening a
+  // big book takes long enough to look like nothing happened, and the button
+  // is the only thing on screen that can say otherwise.
+  const [opening, setOpening] = createSignal(false, { name: "excerptOpening" });
   const [refused, setRefused] = createSignal(false, { name: "excerptRefused" });
   const segments = createMemo(() => segmentsOf(props.excerpt), { name: "excerptSegments" });
 
@@ -127,10 +146,29 @@ export function ExcerptCard(props: ExcerptCardProps) {
             size="sm"
             label={t("Open in editor")}
             icon={<SquareArrowOutUpRightIcon size={14} />}
-            onClick={() => props.onOpen()}
+            aria-pressed={opening() ? "true" : undefined}
+            onClick={() => {
+              setOpening(true);
+              props.onOpen();
+              // The card may still be here — the same book, already focused —
+              // so the pressed state is released rather than left on.
+              setTimeout(() => setOpening(false), 600);
+            }}
           />
         </div>
       </header>
+
+      <Show when={props.onExpand !== undefined && props.excerpt.more.up}>
+        <button
+          type="button"
+          data-expand="up"
+          aria-label={t("Show the verse above")}
+          class={expander}
+          onClick={() => props.onExpand?.(-1)}
+        >
+          <ChevronsUpIcon size={12} aria-hidden="true" />
+        </button>
+      </Show>
 
       <Show when={props.pair}>
         <div class="border-b border-surface-border bg-surface-secondary px-3 py-2">
@@ -147,7 +185,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
                 <span
                   class={
                     segment.hit
-                      ? "rounded-xs bg-surface-warning text-on-surface-warning"
+                      ? "rounded-xs bg-surface-highlight text-on-surface-highlight"
                       : segment.dim
                         ? "text-on-surface-tertiary"
                         : undefined
@@ -178,6 +216,18 @@ export function ExcerptCard(props: ExcerptCardProps) {
             />
           )}
         </Show>
+      </Show>
+
+      <Show when={props.onExpand !== undefined && props.excerpt.more.down}>
+        <button
+          type="button"
+          data-expand="down"
+          aria-label={t("Show the verse below")}
+          class={`${expander} border-t border-surface-border`}
+          onClick={() => props.onExpand?.(1)}
+        >
+          <ChevronsDownIcon size={12} aria-hidden="true" />
+        </button>
       </Show>
     </Card>
   );

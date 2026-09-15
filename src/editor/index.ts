@@ -118,6 +118,7 @@ export {
   clippedToScope,
   collapseOutside,
   markedRanges,
+  reclip,
   mountSatellite,
   repaintMarks,
   satelliteRange,
@@ -128,6 +129,9 @@ export {
 
 // Views (§3.6).
 export { pickChapter, projectionFor, type ProjectionName } from "./views";
+
+// Arriving somewhere: the brief mark that says the jump landed.
+export { flash, flashing, type FlashRange } from "./recipes/flash";
 
 // Diagnostics, sink 1 (editor-and-save §2).
 export {
