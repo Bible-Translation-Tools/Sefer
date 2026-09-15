@@ -21,6 +21,7 @@ import { Option } from "effect";
 import ExternalLink from "lucide-solid/icons/external-link";
 import { For, Show, createMemo } from "solid-js";
 
+import { quote, type Quotation } from "../../../core/excerpts/excerpts";
 import {
   codePointLabel,
   siteRef,
@@ -34,6 +35,7 @@ import {
   Badge,
   Button,
   Card,
+  cx,
   PanelHeader,
   Table,
   TableBody,
@@ -47,35 +49,28 @@ import { GlyphTile } from "./GlyphTile";
 /** Basis points as a percentage. `0.02%` is a real answer; `0%` is not. */
 export const share = (bp: number): string => `${(bp / 100).toFixed(2)}%`;
 
-/** How much text either side of the span the excerpt shows. */
-const BEFORE = 26;
-const AFTER = 34;
-
 /**
- * A one-line quotation around a span, in three parts so the flagged character
- * can be marked in place. The newlines are flattened so a row stays a row, and
- * the markup is left in: these are offsets into canonical USFM, and hiding the
- * markers would move the character away from what the engine actually saw.
+ * A one-line quotation around a span, from the raw USFM.
  *
- * Display only — the offsets a "Go" navigates by are the engine's, untouched.
+ * The fallback, not the rule: `quote` in `src/core/excerpts` runs the same
+ * projection the Find cards do and gives back the READING, which is what a
+ * translator recognises. This is what is left when there is no analysis of the
+ * book to project with — the newlines flattened so a row stays a row.
  */
-const excerptAt = (
-  text: string,
-  from: number,
-  to: number,
-): { readonly before: string; readonly hit: string; readonly after: string } => {
-  const start = Math.max(0, from - BEFORE);
-  const end = Math.min(text.length, to + AFTER);
+const rawAt = (text: string, from: number, to: number): Quotation => {
+  const start = Math.max(0, from - 26);
+  const end = Math.min(text.length, to + 34);
   const flat = (part: string): string => part.replace(/\s+/g, " ");
   return {
     before: `${start > 0 ? "…" : ""}${flat(text.slice(start, from))}`,
     hit: flat(text.slice(from, to)),
     after: `${flat(text.slice(to, end))}${end < text.length ? "…" : ""}`,
+    projected: false,
   };
 };
 
 /** What the excerpt reads when the book is no longer in the open Project. */
-const ABSENT = { before: "", hit: "", after: "" } as const;
+const ABSENT: Quotation = { before: "", hit: "", after: "", projected: true };
 
 /** A section that draws nothing when the engine measured nothing. */
 function Section(props: {
@@ -111,20 +106,34 @@ export function GlyphDetail(props: GlyphDetailProps) {
 
   const pooled = (): boolean => props.glyph.char === "";
 
-  /**
-   * The site quoted from the book's canonical text, read straight off the
-   * Project's seat — whichever Book holds it, plain or editor-backed. Nothing
-   * here subscribes: `tick()` is the shell's one signal over the Books and the
-   * excerpt re-reads with it, exactly as every other derived screen does.
-   */
-  const excerpt = (site: FlaggedSite) => {
-    shell.tick();
-    const text = shell.project()?.book(site.bookId)?.source().text;
-    return text === undefined ? ABSENT : excerptAt(text, site.from, site.to);
-  };
-
   const analysisOf = (bookId: string) =>
     Option.getOrUndefined(shell.services.projectAnalysis.analysis(bookId));
+
+  /**
+   * The site quoted as the READING, the way the Find cards quote a match.
+   *
+   * The engine convicts a character at a source offset, and quoting the raw
+   * USFM around it made every row read as markup — `…\v 12 word, word…` — for
+   * a page whose whole subject is how the translation punctuates its
+   * sentences. `quote` projects a window around the offset and keeps the mark
+   * on the projected character, so the row reads as the sentence it is in.
+   *
+   * When the convicted span is markup itself — inside a marker name, an
+   * attribute, a control character the reading drops — there is no projected
+   * character to mark, and `quote` says so: that row falls back to the raw
+   * slice and is labelled. One site's answer, not the page's.
+   *
+   * Nothing here subscribes: `tick()` is the shell's one signal over the Books
+   * and the excerpt re-reads with it, exactly as every other derived screen
+   * does.
+   */
+  const excerpt = (site: FlaggedSite): Quotation => {
+    shell.tick();
+    const analysis = analysisOf(site.bookId)?.analysis;
+    if (analysis !== undefined) return quote(analysis, site.from, site.to);
+    const text = shell.project()?.book(site.bookId)?.source().text;
+    return text === undefined ? ABSENT : rawAt(text, site.from, site.to);
+  };
 
   /**
    * Book and reference, from the analysis the site was measured against.
@@ -460,7 +469,19 @@ export function GlyphDetail(props: GlyphDetailProps) {
                     <Show when={stale(site)}>
                       <Badge tone="muted">{t("stale")}</Badge>
                     </Show>
-                    <span class="w-full min-w-0 truncate font-scripture text-small text-on-surface-secondary sm:w-auto sm:flex-1">
+                    <Show when={!quoted().projected}>
+                      <Badge tone="muted">{t("in markup")}</Badge>
+                    </Show>
+                    <span
+                      class={cx(
+                        "w-full min-w-0 truncate text-small text-on-surface-secondary sm:w-auto sm:flex-1",
+                        // The reading in the scripture face, the raw slice in
+                        // mono: the row says which one it is showing before it
+                        // is read, not only in the badge.
+                        quoted().projected ? "font-scripture" : "font-mono text-smallest",
+                      )}
+                      data-projected={quoted().projected ? "true" : "false"}
+                    >
                       {quoted().before}
                       <mark class="rounded-xs bg-surface-warning px-0.5 text-on-surface-warning">
                         {quoted().hit}

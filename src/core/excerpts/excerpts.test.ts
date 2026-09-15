@@ -21,7 +21,7 @@ import { describe, expect, it } from "vitest";
 import { NodeGalleyLive } from "../../platform/node/galley";
 import { toLf, type Analysis } from "../galley";
 import { Galley } from "../galley/galley";
-import { excerptsOf, project, type BookText } from "./excerpts";
+import { excerptsOf, project, quote, type BookText } from "./excerpts";
 
 const PHILEMON = toLf(
   readFileSync(
@@ -106,5 +106,26 @@ describe("the excerpt projection", () => {
     const hit = excerpt!.hits[0]!;
     const from = hit.from - excerpt!.span.from;
     expect(excerpt!.source.slice(from, from + "May grace".length)).toBe("May grace");
+  });
+});
+
+describe("quote", () => {
+  it("projects the site and marks the convicted character", async () => {
+    const analysis = await analyzed();
+    const at = PHILEMON.indexOf("May grace be to you") + 3;
+    const quoted = quote(analysis, at, at + 1);
+    expect(quoted.projected).toBe(true);
+    expect(quoted.hit).toBe(" ");
+    expect(quoted.before.endsWith("May")).toBe(true);
+    expect(quoted.after.startsWith("grace")).toBe(true);
+  });
+
+  it("falls back to the raw slice when the span is markup the reading drops", async () => {
+    const analysis = await analyzed();
+    // Inside the `\p` marker name: the projection has no character for it.
+    const at = PHILEMON.indexOf("\\p\n\\v 3") + 1;
+    const quoted = quote(analysis, at, at + 1);
+    expect(quoted.projected).toBe(false);
+    expect(quoted.hit).toBe("p");
   });
 });

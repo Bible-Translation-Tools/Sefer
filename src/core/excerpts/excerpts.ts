@@ -324,6 +324,101 @@ const marksFor = (
 };
 
 // ---------------------------------------------------------------------------
+// One site, quoted
+// ---------------------------------------------------------------------------
+
+/**
+ * A one-line quotation around a span, in three parts so the character in
+ * question can be marked in place.
+ *
+ * `projected` says which text the three parts are cut from, and it is the
+ * whole point of the shape:
+ *
+ *  - `true` — the READING. The span has characters in the projection, and the
+ *    quotation is what the page shows, so a flagged comma reads as a comma in
+ *    a sentence rather than as a comma between two backslashes.
+ *  - `false` — the RAW slice, because the span has no character in the
+ *    projection at all: it is inside a marker name, an attribute, or a control
+ *    character the reading drops. There is nothing honest to highlight in the
+ *    reading, and quoting the neighbouring words would mark the wrong thing.
+ *    A caller says so — "in markup" — rather than quietly showing a different
+ *    character.
+ *
+ * Display only, and it never moves an offset: what a "Go" navigates by is the
+ * engine's own span, untouched.
+ */
+export interface Quotation {
+  readonly before: string;
+  readonly hit: string;
+  readonly after: string;
+  /** Is this the reading, or the raw USFM? See above. */
+  readonly projected: boolean;
+}
+
+/** How much text either side of the span a quotation shows. */
+export interface QuoteWidth {
+  readonly before: number;
+  readonly after: number;
+}
+
+const QUOTE: QuoteWidth = { before: 26, after: 34 };
+
+/**
+ * How much SOURCE to project to be sure of finding `width` characters of
+ * reading either side. The projection drops markers, so the source window has
+ * to be the wider of the two by a margin that covers a verse's worth of them.
+ */
+const WINDOW = 240;
+
+const flat = (part: string): string => part.replace(/\s+/g, " ");
+
+const lead = (text: string, truncated: boolean): string => `${truncated ? "…" : ""}${text}`;
+
+/**
+ * Quote `[from, to)` of one book, from the reading when the reading has it.
+ *
+ * The window is projected rather than the whole book because a quotation is
+ * thirty characters and a book is a hundred thousand — and because `project`
+ * keeps one source offset per output character, the span is found in the
+ * result by the same arithmetic `marksFor` does for an excerpt's highlight.
+ */
+export const quote = (
+  analysis: Analysis,
+  from: number,
+  to: number,
+  width: QuoteWidth = QUOTE,
+): Quotation => {
+  const start = Math.max(0, from - (width.before + WINDOW));
+  const end = Math.min(analysis.docLen, to + (width.after + WINDOW));
+  const projection = project(analysis, start, end);
+  const marks = marksFor(projection, [{ from, to }]);
+  const first = marks[0];
+  const last = marks[marks.length - 1];
+
+  if (first === undefined || last === undefined) {
+    // Markup: no character of the reading came from this span.
+    const rawFrom = Math.max(0, from - width.before);
+    const rawTo = Math.min(analysis.docLen, to + width.after);
+    return {
+      before: lead(flat(analysis.text.slice(rawFrom, from)), rawFrom > 0),
+      hit: flat(analysis.text.slice(from, to)),
+      after: `${flat(analysis.text.slice(to, rawTo))}${rawTo < analysis.docLen ? "…" : ""}`,
+      projected: false,
+    };
+  }
+
+  const text = projection.text;
+  const beforeAt = Math.max(0, first.from - width.before);
+  const afterTo = Math.min(text.length, last.to + width.after);
+  return {
+    before: lead(text.slice(beforeAt, first.from), beforeAt > 0 || start > 0),
+    hit: text.slice(first.from, last.to),
+    after: `${text.slice(last.to, afterTo)}${afterTo < text.length || end < analysis.docLen ? "…" : ""}`,
+    projected: true,
+  };
+};
+
+// ---------------------------------------------------------------------------
 // Verses
 // ---------------------------------------------------------------------------
 

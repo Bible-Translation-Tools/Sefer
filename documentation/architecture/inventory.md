@@ -13,7 +13,7 @@ Two halves of the **same publication**, joined.
 | the **pattern table** | one row per `(glyph, channel, key)` with a numerator, a denominator, a share in basis points, a band and a book count | `FindingsSnapshot.patterns()` |
 | the **Convention findings** | one row per convicted site, each naming a row of that table | the snapshot's per-book findings, `kind === "Convention"` |
 
-Nothing else. The module never reads the project's text — the excerpt beside a flagged site is the only place text is touched, and that is the shell's, for display.
+Nothing else. The module never reads the project's text — the excerpt beside a flagged site is the only place text is touched, and that is the page's, for display (see [The flagged site's excerpt](#the-flagged-sites-excerpt)).
 
 `inventory(snapshot, resolveBook)` pivots the table into one `Glyph` per code point:
 
@@ -55,11 +55,21 @@ Its limits, plainly:
 
 - a filter row — a text box that accepts a character, a name or a `U+` code; an `All | Flagged | Quiet` lens; and a pool select over the engine's own eight names, classified from the code point (a glyph's own `PooledNeighbor` rows classify its *neighbours*, so the filter needs a classifier rather than a lookup);
 - the glyph table, most sites first, the character set in the scripture family in a tinted tile because a comma and a maqaf are three pixels apart in a UI sans;
-- the detail card, one sub-table per channel group, and the flagged sites with the convicted character marked inside a quotation of the canonical USFM.
+- the detail card, one sub-table per channel group, and the flagged sites with the convicted character marked inside a quotation of the reading.
 
 Each pattern row with convictions carries a toggle that narrows the flagged list to that one pattern; the secondary action hands the same question to `/findings` as `sous.convention.<Channel>`, through the router — an `<a href>` would be a full load, and the open Project would go with it.
 
 Three empty states, because they are three different sentences: no project; a project whose corpus has not been published yet ("Analyzing…", distinguished by the snapshot's own book count being zero); and a publication that carries no glyph patterns at all.
+
+## The flagged site's excerpt
+
+The quotation beside a flagged site is the **reading**, not the raw USFM — the same projection the Find cards show, through `quote` in [`src/core/excerpts/excerpts.ts`](../../src/core/excerpts/excerpts.ts).
+
+It quoted the canonical USFM until 2026-09-15, and that was the wrong text for this page in particular: every row read as `…\v 12 word, word…` on a page whose whole subject is how the translation punctuates its sentences. `quote` projects a window of source around the engine's offset, and because `project` keeps one source offset per output character, the `<mark>` lands on the projected character the engine actually convicted — no second measurement, no offset arithmetic in the component.
+
+**The fallback is per site, not per page.** When the convicted span has no character in the projection at all — it is inside a marker name, an attribute value, or a control character the reading drops — there is nothing honest to mark, and quoting the surrounding words would put the mark on the wrong thing. `Quotation.projected` is `false` for that row, and only that row: it falls back to the raw slice, is set in mono rather than the scripture face, and is labelled **in markup**. A reader can tell the two apart before reading either.
+
+The offsets themselves are never touched. "Go" still navigates by the engine's own span, and `siteRef` still refuses to name a chapter and verse unless the stamps agree.
 
 ## What the engine would need to publish for a full census
 
