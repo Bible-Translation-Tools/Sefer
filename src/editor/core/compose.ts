@@ -34,6 +34,7 @@ import type { ChangeRule, TransactionRule } from "./kernel";
 import { MARKUP_TOKEN_KINDS } from "./mapping";
 import { HOOK, PHASES, RULE_NAMES, type ParserPort, type PhaseRule, type RuleName } from "./phases";
 import { renderRangeField, renderWindow } from "./render";
+import { scrollGuard } from "./scroll";
 import { span } from "./timing";
 
 export type { ClipRange, RuleName };
@@ -281,6 +282,7 @@ export function viewLayer(options: ViewOptions = {}): Extension {
     EditorView.lineWrapping,
     ...(options.perLineDirection === false ? [] : [EditorView.perLineTextDirection.of(true)]),
     renderWindow,
+    scrollGuard,
     EditorView.atomicRanges.of((v) => v.state.field(decoField, false)?.atomic ?? Decoration.none),
     EditorView.bidiIsolatedRanges.of(
       (v) => v.state.field(decoField, false)?.isolates ?? Decoration.none,

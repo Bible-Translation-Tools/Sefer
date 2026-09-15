@@ -28,6 +28,8 @@ A bound view MUST route its transactions through `book.fromView(view, trs)`; tha
 
 Structure is **borrowed**, not recomputed: a window's `structureField` asks the `borrowedStructure` facet first and takes the canonical `Analysis` when `describesExactly` holds, so ten result cards over one book cost zero extra parses. The one turn a window pays for a parse of its own is between its submit and the answer.
 
+**History is the Book's, and a borrowing surface has none.** A satellite's `Mod-z` calls `funnel.undo()`, and the toolbar's button, the palette and the keymap all reach the same `EditorBook.history()` — so undo means one thing whichever surface has focus. The consequence to watch is that the command runs against the CANONICAL view: CodeMirror's history restores the selection that view held before the change and asks to scroll to it, which is right when the reader is in it and wrong when they are in a satellite. `withoutScrolling` (`core/scroll.ts`) refuses the scroll for the length of that one gesture, through CodeMirror's own `scrollHandler` facet, and only when the canonical view does not have focus. The edit lands and every surface hears it back through its `Funnel`; only the page is kept still. Pressing the toolbar's Undo while typing in a footnote used to throw the page from the apparatus at the foot of the chapter back up to the verse and destroy the note editor with the widget that held it.
+
 ## The phases
 
 `admission → normalization → protection → settlement`, listed as data in `core/phases.ts`. Admission runs as a `changeFilter` (it can veto ranges before a transaction exists); the rest run as `transactionFilter`s, which CodeMirror runs last-registered-first — `compose.install` is the only place that knows, and it reverses so registration order is the order rules see. Every rule is named, so `omit` can turn one off and a trace can say which door a keystroke went through — see [Instrumentation](#instrumentation).
@@ -84,13 +86,46 @@ Two rulings worth knowing:
 - **Its range is the note's CONTENT, not the whole note.** The `\f +` opener,
   the caller sigil and the `\f*` closer are markup, and renaming `\ft` to
   `\fq` is a USFM-mode edit — the same ruling the front matter card makes about
-  marker names. A note the engine could not close has no body part at all and
-  gets the whole note, which is the honest thing to show.
+  marker names. A note with no content parts at all — one the engine could not
+  close, and every note the moment `Insert footnote` makes it — gets a
+  ZERO-WIDTH window where its closer begins, which is where the body belongs.
+  It used to get the whole note, whose end is past `\f*`: the reader's first
+  keystroke in a fresh footnote landed outside the note, in the verse, and
+  with no body part to aim at the caret defaulted to offset 0 and the letter
+  appeared at the top of the book. The window is read LIVE from the
+  satellite's own scope, so a zero-width one grows with the first character
+  rather than hiding it.
 - **The write is `trusted`.** In regular mode the entire note is hidden markup,
   so `refuseKeystrokesInsideHiddenMarkup` guards every offset in it; an
   untrusted satellite there is a text box that silently refuses every key. The
   surface is narrow and its targets are hard-edged, which is the trade that
   argument rests on.
+
+Three more things the row has to get right, all of them learned the hard way:
+
+- **An empty body wears a placeholder.** An empty inline span is zero pixels
+  wide, so the one target in the row that means "let me write this" was
+  unclickable on exactly the note a reader had just made. `paintNoteBody`
+  writes "Add note text" into an empty body and marks it `usfm-note-empty`;
+  the placeholder IS the click target, which is why it is a class and not a
+  `::after` (the handler asks `closest(".usfm-note-body")`, and a
+  pseudo-element has no node to close over).
+- **`Insert footnote` opens the editor on the note it just made**, scrolling
+  to the apparatus block first when the row is not drawn yet — a row is a
+  widget and CodeMirror renders only what is on screen, so a note inserted
+  half a chapter above its own row had nothing to mount into. The recipe
+  notices the insertion by its `input.usfm.footnote` user event rather than
+  having the command say so, which keeps the command headless.
+- **A rebuilt row is a closed editor.** The apparatus block moves on every
+  keystroke in the chapter and CodeMirror rebuilds the widget when it does,
+  taking the mounted editor's parent element with it and leaving a view
+  attached to nothing. A row that has left the document is treated as closed
+  and the editor is mounted again on the new one, so the box survives.
+
+The box itself is the size of its contents: it takes the rest of the apparatus
+row, wraps, and grows the ROW rather than scrolling inside itself. It was a
+fixed `inline-block` of `12ch` with CodeMirror's own scroller in it, which made
+a note of two sentences a keyhole.
 
 The satellite installs `structureField` and NOT the whole `readingLayer`:
 `readingLayer` brings `decoField`, whose regular-mode projection is the one that

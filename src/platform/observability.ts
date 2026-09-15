@@ -76,8 +76,23 @@ const stderrSink = (runtime: NodeRuntime): ObservabilitySink | undefined => {
   };
 };
 
+/**
+ * The browser console, and only when asked for.
+ *
+ * It used to be on for every dev build, and it was the single most expensive
+ * thing on the keystroke path: a `console.debug` per note, plus the
+ * `JSON.stringify` the ring does to build a line whenever a sink exists at all
+ * — about a third of the JS work of a keystroke, measured. With DevTools open
+ * a console call is far more expensive again, which is exactly when a
+ * developer is looking at the number.
+ *
+ * Nothing is lost by turning it off: the ring holds every event either way and
+ * `__sefer.observability.recent()` / `.export()` are how a person or an agent
+ * reads what the running application did. The same `VITE_SEFER_LOG` /
+ * `SEFER_LOG` that turns the Node sink on turns this one on.
+ */
 const consoleSink = (): ObservabilitySink | undefined => {
-  if (!import.meta.env.DEV) return undefined;
+  if (!import.meta.env.DEV || !requested(undefined)) return undefined;
   return (event) => {
     if (event.kind !== "note") return;
     console.debug(`sefer ${event.name} ${event.verdict ?? ""} ${event.detail ?? ""}`.trimEnd());

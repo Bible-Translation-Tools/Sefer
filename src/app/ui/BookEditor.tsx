@@ -239,6 +239,11 @@ export function BookEditor(props: BookEditorProps) {
       // an animation frame by the recipe.
       const unwatch = watchLocation(created, (where) => {
         setAtTop(where === null ? undefined : where.ordinal);
+        // And it is written down. A book opens WHOLE, so the clip alone said
+        // nothing about where in it the reader had got to, and reopening a
+        // project landed on the top of the right book. This is the only place
+        // that knows the answer.
+        if (where !== null) shell.noteChapterAtTop(where.ordinal);
       });
 
       setBound({ view: created, projection });

@@ -43,36 +43,36 @@ export function LocationBar(props: LocationBarProps) {
   const [outline, setOutline] = createSignal(false, { name: "outlineOpen" });
 
   /**
-   * Every chapter row of the focused book, front matter included.
+   * The engine's chapter table for the focused book.
    *
-   * Read behind `shell.tick()` like every other derived product: the row list
-   * changes when the reader adds a `\c`, and nothing here subscribes to a Book.
+   * Read behind `shell.tick()` like every other derived product — the table
+   * changes when the reader adds a `\c`, and nothing here subscribes to a Book
+   * — but the memo hands back the ARRAY and builds nothing. That matters: the
+   * shell ticks on every keystroke, and this bar used to rebuild one labelled,
+   * translated row per chapter each time, behind a popover nobody had opened.
+   * On a book of 150 chapters that was 150 objects per keypress, on the
+   * gesture's critical path.
    */
-  const rows = createMemo(
+  const table = createMemo(
     () => {
       shell.tick();
-      const book = shell.focused();
-      if (book === undefined) return [];
-      return (
-        book
-          .structure()
-          .chapters.map((chapter) => ({
-            ordinal: chapter.ordinal,
-            label: chapter.label === "" ? t(INTRO_LABEL) : chapter.label,
-            intro: chapter.label === "",
-          }))
-          // A book with no front matter has no row 0 worth offering; a book with
-          // one has an Intro that is a real place (the identification, the table
-          // of contents) and is reachable nowhere else.
-          .filter((row, index) => !row.intro || index === 0)
-      );
+      return shell.focused()?.structure().chapters ?? [];
     },
-    { name: "outlineRows" },
+    { name: "chapterTable" },
   );
 
   const at = (): number => props.ordinal ?? shell.chapter() ?? 0;
 
-  const current = () => rows().find((row) => row.ordinal === at());
+  /**
+   * The crumb's own row, by index. A chapter's ordinal IS its index in the
+   * engine's table — `shell.showChapter` indexes it the same way — so the one
+   * row on screen costs a lookup, not a scan.
+   */
+  const current = () => {
+    const row = table()[at()];
+    if (row === undefined) return undefined;
+    return { ordinal: row.ordinal, label: row.label, intro: row.label === "" };
+  };
 
   const name = (): string => {
     const book = shell.focused();
@@ -82,18 +82,48 @@ export function LocationBar(props: LocationBarProps) {
   const where = (): string => {
     const row = current();
     if (row === undefined) return "";
-    return row.intro ? row.label : t("Chapter {label}", { label: row.label });
+    return row.intro ? t(INTRO_LABEL) : t("Chapter {label}", { label: row.label });
   };
 
+  /**
+   * The rows the outline lists, built ONLY while it is open.
+   *
+   * A book with no front matter has no row 0 worth offering; a book with one
+   * has an Intro that is a real place (the identification, the table of
+   * contents) and is reachable nowhere else. A later row with no label is a
+   * malformed `\c` and is not a place at all.
+   */
+  const listed = () =>
+    table()
+      .map((chapter) => ({
+        ordinal: chapter.ordinal,
+        label: chapter.label === "" ? t(INTRO_LABEL) : chapter.label,
+        intro: chapter.label === "",
+      }))
+      .filter((row, index) => !row.intro || index === 0);
+
+  const rows = createMemo(() => (outline() ? listed() : []), { name: "outlineRows" });
+
   const step = (delta: 1 | -1): void => {
-    const list = rows();
+    // Built on the click, not on every render: stepping is the one thing here
+    // that needs the whole list and it happens at pointer speed.
+    const list = listed();
     const index = list.findIndex((row) => row.ordinal === at());
     const next = list[(index < 0 ? 0 : index) + delta];
     if (next !== undefined) shell.showChapter(next.ordinal);
   };
 
-  const first = (): boolean => rows()[0]?.ordinal === at();
-  const last = (): boolean => rows()[rows().length - 1]?.ordinal === at();
+  const first = (): boolean => at() === 0;
+
+  /** The last row the outline would list: the last one that carries a label. */
+  const lastOrdinal = (): number => {
+    const list = table();
+    for (let index = list.length - 1; index > 0; index -= 1)
+      if (list[index]?.label !== "") return index;
+    return 0;
+  };
+
+  const last = (): boolean => at() === lastOrdinal();
 
   // `?books=1` because the project route forwards a plain arrival back to the
   // last location (item 15) — this crumb is the one door to the census, and a
@@ -106,10 +136,14 @@ export function LocationBar(props: LocationBarProps) {
   return (
     <div
       data-testid="location-bar"
-      /* Semi-transparent so the page reads through it while scrolling, and
-         backdrop-blurred so the text underneath stays legible. Both tokens,
-         so dark needs nothing here. */
-      class="sticky top-0 z-20 flex items-center gap-1 border-b border-surface-border bg-surface-primary/80 px-3 py-1 backdrop-blur-sm"
+      /* OPAQUE, and deliberately not blurred. It was
+         `bg-surface-primary/80 backdrop-blur-sm`, and `backdrop-filter` over a
+         sticky strip makes the compositor re-rasterize the scripture behind it
+         on every frame of a scroll AND after every keystroke — measurable, and
+         the worst kind of cost because it lands between the last state update
+         and the paint, where no JS profile shows it. A solid bar reads the
+         text underneath no worse: it covers it. The token carries dark. */
+      class="sticky top-0 z-20 flex items-center gap-1 border-b border-surface-border bg-surface-primary px-3 py-1"
     >
       <button
         type="button"

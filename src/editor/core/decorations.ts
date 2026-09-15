@@ -169,6 +169,28 @@ export function noteApparatusText(doc: string, note: NoteRange, part: number): s
   return out.replace(/\s+/g, " ").trim();
 }
 
+/** What an empty note body says, so that there is something to click. */
+export const EMPTY_NOTE_BODY = "Add note text";
+
+/**
+ * Paints one apparatus row's body span.
+ *
+ * A note with no text yet — which is every note the moment `Insert footnote`
+ * makes one — used to render as an EMPTY span. An empty inline span is zero
+ * pixels wide, so the one target in the row that means "let me write this" was
+ * unclickable exactly when a reader most wanted it: the note existed, the
+ * caller was in the text, and the body could not be reached by pointer at all.
+ * So an empty body wears a placeholder, and the placeholder is the click
+ * target. It is a class and not a `::after`, because the click handler asks
+ * `closest(".usfm-note-body")` and pseudo-elements have no node to close over.
+ */
+export const paintNoteBody = (el: HTMLElement, text: string): void => {
+  const empty = text === "";
+  el.className = empty ? "usfm-note-body usfm-note-empty" : "usfm-note-body";
+  const want = empty ? EMPTY_NOTE_BODY : text;
+  if (el.textContent !== want) el.textContent = want;
+};
+
 class NotesWidget extends WidgetType {
   readonly notes: { mark: string; ref: string; body: string; from: number }[];
   constructor(notes: { mark: string; ref: string; body: string; from: number }[]) {
@@ -203,13 +225,15 @@ class NotesWidget extends WidgetType {
       for (const [cls, text] of [
         ["usfm-note-mark", n.mark],
         ["usfm-note-ref", n.ref],
-        ["usfm-note-body", n.body],
       ] as const) {
         const el = document.createElement("span");
         el.className = cls;
         el.textContent = text;
         row.append(el);
       }
+      const body = document.createElement("span");
+      paintNoteBody(body, n.body);
+      row.append(body);
       const slot = document.createElement("span");
       slot.className = "usfm-note-edit";
       row.append(slot);
@@ -224,14 +248,15 @@ class NotesWidget extends WidgetType {
     this.notes.forEach((n, i) => {
       const row = rows[i];
       if (row.dataset.noteRow !== String(n.from)) return;
+      const open = row.querySelector(".usfm-note-edit")?.firstChild != null;
       const set = (cls: string, text: string) => {
         const el = row.querySelector<HTMLElement>(`.${cls}`);
-        if (el && el.textContent !== text && !row.querySelector(".usfm-note-edit")?.firstChild)
-          el.textContent = text;
+        if (el && el.textContent !== text && !open) el.textContent = text;
       };
       set("usfm-note-mark", n.mark);
       set("usfm-note-ref", n.ref);
-      set("usfm-note-body", n.body);
+      const body = row.querySelector<HTMLElement>(".usfm-note-body");
+      if (body !== null && !open) paintNoteBody(body, n.body);
     });
     return true;
   }

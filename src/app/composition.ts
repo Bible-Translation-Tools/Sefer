@@ -1,7 +1,13 @@
-import { Effect, FileSystem, Layer, ManagedRuntime, Option, Result } from "effect";
+import { Effect, Exit, FileSystem, Layer, ManagedRuntime, Option, Result } from "effect";
 
 import { boot, type BootError, type BootInfo } from "../core/boot";
-import { Observability, ObservabilityLive, type ObservabilityService } from "../core/observability";
+import {
+  Observability,
+  ObservabilityLive,
+  type ObservabilityEvent,
+  type ObservabilityService,
+  type ObservabilitySink,
+} from "../core/observability";
 import { detectHost } from "../platform/host";
 import { hostSink, installObservabilityDevSurface } from "../platform/observability";
 
@@ -56,20 +62,64 @@ const guardedFetch = (): typeof globalThis.fetch => {
 };
 
 /**
- * Traces and logs, and metrics only when asked for.
+ * The OTLP export, as a SINK on the ring.
  *
- * `Otlp.layerJson` installs all three exporters from one call, which is
- * convenient right up to the moment the collector accepts two of them: motel
- * takes `/v1/traces` and `/v1/logs` and answers `/v1/metrics` with nothing at
- * all, so every metrics interval produced a `POST /v1/metrics net::ERR_FAILED`
- * in the console of an application that had asked for tracing. The exporters
- * are installed one by one instead, and metrics are opt-in
- * (`VITE_SEFER_OTLP_METRICS=1`) because they are the one a collector is most
- * likely not to want.
+ * This is the whole of the fix for "motel export not working", and the reason
+ * it was not working is worth writing down: the exporters were installed
+ * correctly and had nothing whatever to export. Sefer's observability is the
+ * ring in `src/core/observability.ts` — `note()` and `span()` are plain
+ * function calls that push a record into a buffer — and OTLP's tracer and
+ * logger only ever see EFFECT-native spans and logs. `Effect.log` and
+ * `Effect.withSpan` appear nowhere in `src/`, so a run with
+ * `VITE_SEFER_OTLP_URL` set posted exactly nothing: no request at all, which
+ * is why it presented as silence rather than as an error.
+ *
+ * Worse, the two layers were fighting over the same two services. The ring's
+ * own layer installs a `Tracer.Tracer` and replaces `CurrentLoggers`, and
+ * merging the OTLP layer into it meant one of the two won and the other was
+ * discarded — a coin toss neither half could see.
+ *
+ * So the exporters get a runtime of their OWN, and the bridge between the two
+ * is the ring's existing sink seam, the same one `hostSink` uses. Every ring
+ * event is forwarded: a `note` and a `log` become an OTLP log record, a `span`
+ * becomes a real span with the duration the ring measured. The ring keeps its
+ * own tracer and logger untouched, and there is no loop, because this
+ * runtime's logger set is the OTLP one alone and never reaches the ring.
+ *
+ * Metrics stay opt-in (`VITE_SEFER_OTLP_METRICS=1`): motel takes `/v1/traces`
+ * and `/v1/logs` and answers `/v1/metrics` with nothing at all, so a metrics
+ * interval on a tracing collector is a console full of `net::ERR_FAILED`. Each
+ * signal also gets its OWN `guardedFetch`, so one endpoint the collector does
+ * not serve can no longer stop the two it does.
  */
-const telemetryLayer = async (): Promise<Layer.Layer<never> | undefined> => {
-  const url = (import.meta.env.VITE_SEFER_OTLP_URL ?? "").trim().replace(/\/+$/u, "");
-  if (!import.meta.env.DEV || url === "") return undefined;
+interface Telemetry {
+  readonly sink: ObservabilitySink;
+  readonly dispose: () => Promise<void>;
+}
+
+/** Milliseconds since the epoch, as the nanosecond bigint a span wants. */
+const nanos = (ms: number): bigint => BigInt(Math.round(ms * 1e6));
+
+/**
+ * Where the exporters post: a SAME-ORIGIN path the dev server proxies to the
+ * collector `VITE_SEFER_OTLP_URL` names.
+ *
+ * Posting to the collector directly is a cross-origin `application/json` POST,
+ * which the browser preflights — and motel answers `OPTIONS /v1/logs` with a
+ * bare 404 and no `Access-Control-Allow-Origin`, so the preflight fails and
+ * the POST is never made. That is silent: no request on the wire, no error the
+ * collector can report, which is exactly how "motel export not working"
+ * presented. The proxy is declared in `vite.config.ts`, beside the same
+ * literal and the same explanation.
+ */
+const OTLP_PROXY_PATH = "/__otlp";
+
+const telemetryBridge = async (): Promise<Telemetry | undefined> => {
+  const url = (import.meta.env.VITE_SEFER_OTLP_URL ?? "").trim();
+  // A browser, because the export goes through the dev server's proxy and a
+  // relative URL needs an origin to resolve against. The prerender pass and
+  // the dev server's own SSR render run here too, and neither has one.
+  if (!import.meta.env.DEV || url === "" || typeof location !== "object") return undefined;
   const [tracer, logger, metrics, serialization, http] = await Promise.all([
     import("effect/unstable/observability/OtlpTracer"),
     import("effect/unstable/observability/OtlpLogger"),
@@ -79,22 +129,85 @@ const telemetryLayer = async (): Promise<Layer.Layer<never> | undefined> => {
   ]);
 
   const resource = { serviceName: "sefer" };
-  const exporters = Layer.merge(
+  // One transport per signal, so one dead endpoint refuses only itself.
+  const transport = () =>
     Layer.merge(
-      tracer.layer({ url: `${url}/v1/traces`, resource }),
-      logger.layer({ url: `${url}/v1/logs`, resource }),
+      Layer.provide(http.layer, Layer.succeed(http.Fetch, guardedFetch())),
+      serialization.layerJson,
+    );
+
+  const exporters = Layer.mergeAll(
+    Layer.provide(tracer.layer({ url: `${OTLP_PROXY_PATH}/v1/traces`, resource }), transport()),
+    // `mergeWithExisting: false`: this runtime exists to export, and the
+    // default console logger inside it would print every ring note twice.
+    Layer.provide(
+      logger.layer({ url: `${OTLP_PROXY_PATH}/v1/logs`, resource, mergeWithExisting: false }),
+      transport(),
     ),
     import.meta.env.VITE_SEFER_OTLP_METRICS === "1"
-      ? metrics.layer({ url: `${url}/v1/metrics`, resource })
+      ? Layer.provide(
+          metrics.layer({ url: `${OTLP_PROXY_PATH}/v1/metrics`, resource }),
+          transport(),
+        )
       : Layer.empty,
   );
 
-  const transport = Layer.merge(
-    Layer.provide(http.layer, Layer.succeed(http.Fetch, guardedFetch())),
-    serialization.layerJson,
-  );
+  const runtime = ManagedRuntime.make(exporters);
 
-  return Layer.provide(exporters, transport);
+  const record = (event: ObservabilityEvent): Effect.Effect<void> => {
+    if (event.kind === "span") {
+      return Effect.gen(function* () {
+        const span = yield* Effect.makeSpan(event.name, {
+          root: true,
+          attributes: {
+            ...(event.detail === undefined ? {} : { detail: event.detail }),
+            ...(event.self === undefined ? {} : { "sefer.self_ms": event.self }),
+            ...(event.correlation === undefined ? {} : { "sefer.correlation": event.correlation }),
+          },
+        });
+        // The ring measured the duration; the span is ended that far after it
+        // began, so the trace shows the number the note shows.
+        const started = span.status.startTime;
+        span.end(started + nanos(event.ms ?? 0), Exit.succeed(undefined));
+      });
+    }
+    const line = `${event.name}${event.verdict === undefined ? "" : ` ${event.verdict}`}`;
+    const said = event.verdict === "failed" ? Effect.logError(line) : Effect.log(line);
+    return Effect.annotateLogs(said, {
+      "sefer.kind": event.kind,
+      ...(event.verdict === undefined ? {} : { "sefer.verdict": event.verdict }),
+      ...(event.detail === undefined ? {} : { "sefer.detail": event.detail }),
+      ...(event.correlation === undefined ? {} : { "sefer.correlation": event.correlation }),
+    });
+  };
+
+  return {
+    sink: (event) => {
+      runtime.runFork(record(event));
+    },
+    dispose: () => runtime.dispose(),
+  };
+};
+
+/**
+ * One sink out of several, each insulated from the others.
+ *
+ * The ring already counts a throwing sink as a drop, but it has ONE sink, so
+ * without this a console that refuses would take the OTLP export with it.
+ */
+const fanOut = (sinks: readonly ObservabilitySink[]): ObservabilitySink | undefined => {
+  if (sinks.length === 0) return undefined;
+  if (sinks.length === 1) return sinks[0];
+  return (event, line) => {
+    for (const sink of sinks) {
+      try {
+        sink(event, line);
+      } catch {
+        // The ring's `dropped` counter is for the sink it was given; a sink
+        // that throws here has already had its turn and the next one gets its.
+      }
+    }
+  };
 };
 
 interface Composed {
@@ -128,9 +241,11 @@ const program: Effect.Effect<Composed, never, Observability> = Effect.gen(functi
 export const composeApplication = async (
   options: CompositionOptions = {},
 ): Promise<Composition> => {
-  const telemetry = await telemetryLayer();
-  const observability = ObservabilityLive({ sink: hostSink() });
-  const recorded = telemetry === undefined ? observability : Layer.merge(observability, telemetry);
+  const telemetry = await telemetryBridge();
+  const sinks = [hostSink(), telemetry?.sink].filter(
+    (sink): sink is ObservabilitySink => sink !== undefined,
+  );
+  const recorded = ObservabilityLive({ sink: fanOut(sinks) });
   const withExtra = options.layers === undefined ? recorded : Layer.merge(recorded, options.layers);
   const layer =
     options.fileSystem === undefined ? withExtra : Layer.merge(withExtra, options.fileSystem);
@@ -143,6 +258,12 @@ export const composeApplication = async (
     ...composed,
     layer: Layer.succeedContext(context),
     runtime,
-    dispose: () => runtime.dispose(),
+    dispose: async () => {
+      await runtime.dispose();
+      // Last, and awaited: the exporters flush what they are holding when
+      // their scope closes, and a browser that has already torn the runtime
+      // down would otherwise lose the final batch.
+      if (telemetry !== undefined) await telemetry.dispose();
+    },
   };
 };
