@@ -32,6 +32,38 @@ Structure is **borrowed**, not recomputed: a window's `structureField` asks the 
 
 `admission → normalization → protection → settlement`, listed as data in `core/phases.ts`. Admission runs as a `changeFilter` (it can veto ranges before a transaction exists); the rest run as `transactionFilter`s, which CodeMirror runs last-registered-first — `compose.install` is the only place that knows, and it reverses so registration order is the order rules see. Every rule is named, so `omit` can turn one off and a trace can say which door a keystroke went through — see [Instrumentation](#instrumentation).
 
+## Structured entry
+
+Four insertions and one card. All of them build a `TransactionSpec` against the **current** selection and dispatch it through the ordinary kernel: admission may veto, normalization may straighten, settlement moves the caret onto a legal stop, and because each is one transaction each is one Undo step.
+
+`core/insert.ts` holds the four; `core/actions.ts` names them so the shell can ask for one without importing CodeMirror, and `EditorBook.perform(action)` runs it against whichever seat is canonical — the bound view when there is one, the held state when there is not. That is the same door `undo`/`redo` go through.
+
+| gesture | key | what it builds |
+|---|---|---|
+| `insert.verse` | `Mod-Shift-v` | `\v N ` at the caret with **N selected**, so the first keystroke replaces it. `N` is the highest verse already opened in this chapter at or before the caret, plus one (a `\v 1-2` range answers 3). A caret inside a word moves forward to the word's far edge first — an aligned `\w …\w*` wrapper counts as one word. A leading space is supplied when the caret is hard against a glyph. |
+| `insert.paragraph` | `Mod-Shift-p` | at a block's content head, converts that block's marker to `\p`; anywhere else, splits the line: `\n\p ` at the caret. |
+| `insert.poetry` | `Mod-Shift-q` | the same two shapes with `\q1`, and **by repeat**: pressed inside a `\q1` it writes `\q2`. `insertPoetry(structureAt, 1 \| 2)` takes the level as an argument instead. |
+| `insert.footnote` | `Mod-Shift-f` | `\f + \ft …\f*` with the selection as the body, caret at the end of the `\ft` content. |
+
+Two rulings worth knowing:
+
+- **A footnote never swallows markup.** A selection in regular mode is measured in source offsets, and the source between two visible glyphs may be a paragraph break and an `\s5` the reader never saw — one Shift-Right at the end of a line crosses all of it. So a run that contains a newline or a backslash is **not** wrapped: the note is anchored at the selection's start and the text is left where it is. Refusing to guess is the answer [Search](search.md) gives to a hit that straddles markup, for the same reason.
+- **Where the caret ends up is settlement's call.** In regular mode `note.markup` and `note.body` are elided, so a fresh footnote collapses to its caller as soon as it parses and the caret is pushed to the nearest legal stop beside it; editing the body is the note satellite's job. In USFM mode the caret stays inside the `\ft`.
+
+Each chord is bound **twice**: in `usfmKeys()` (so a press with the editor focused reaches the caret with no round trip) and on the shell command of the same name (so the palette lists it and so it works when focus is elsewhere). They cannot both fire — `installCommandKeys` skips a chord the editor already consumed, which is also what keeps `Mod-Shift-f` meaning "footnote" in the editor and "find in project" everywhere else.
+
+### The front matter card
+
+`core/frontmatter.ts` replaces the header lines — `\id \ide \usfm \h \toc1-3 \toca1-3 \mt*`, stopping at the first line that is neither blank nor one of those — with **one block widget** of labelled fields, in regular mode only. It is the aligned-word popover's idea at book scale, and it keeps that popover's discipline: the marker name is a locked label, because a marker is spec vocabulary and turning `\h` into `\toc2` is a USFM-mode edit.
+
+- A field writes exactly its own line's value span, `[contentFrom, to)`, as one change through the view — so it reaches `book.fromView`, publishes one receipt, and is one Undo step.
+- The write is **`trusted`**. Front matter sits before the first `\c`, so while the reader is clipped to a chapter `refuseEditsOutsideTheClip` would refuse every card edit. Same argument as the attrs popover: a structured surface with hard-edged targets says so rather than being silently inert.
+- The span is re-resolved from the current state at write time (by position in the row list), not taken from the offsets the widget was built with — between building the card and blurring a field, an edit elsewhere may have moved everything.
+- The widget updates its inputs **in place** (`updateDOM`, skipping whichever field has focus) instead of being rebuilt, because a rebuild between "type" and "blur" would drop the caret out of the field in use. Writing happens on `change` (blur or Enter), not per keystroke; Escape restores the value and returns focus to the document.
+- It is a block decoration computed from a facet, not a view plugin — CodeMirror does not allow block decorations from plugins — and it is mounted by `BookEditor`, not baked into the seat, so a headless state never pays for it.
+
+`editor.frontmatter.edit` dispatches a `focusFrontMatter` effect; a small view plugin picks it up and focuses the first field.
+
 ## Diagnostics, sink 1
 
 `recipes/lint.ts` turns `structureAt(state).analysis.diagnostics` into inline marks and gutter fix actions. Rebuilt from the current state every keystroke, so an inline mark cannot be stale. A finding whose whole span is inside hidden markup is dropped by default — that test reads the **paint index** (`PAINT_PORT.hidden`), not the decoration set. A fix carries the analysis's `EngineStamp` and is discarded if the document moved under it.
@@ -88,6 +120,7 @@ trace #7 key doc=3042 head=76 508.8ms
 | classification, then policy | `core/mapping.ts` → `core/registry.ts` |
 | the plan, owned targets, paint, stops | `core/plan.ts`, `owned.ts`, `paint.ts`, `stops.ts`, `exceptions.ts` |
 | rules and commands | `core/phases.ts`, `compose.ts`, `sealed.ts`, `clip.ts`, `input.ts`, `deletion.ts`, `caret.ts`, `kernel.ts` |
+| structured entry | `core/insert.ts`, `actions.ts`, `frontmatter.ts` |
 | rendering | `core/decorations.ts`, `render.ts`, `editorState.ts`, `editor.css` |
 | instruments | `core/instrument.ts`, `meter.ts`, `timing.ts`, `trace.ts`, `inspect.ts`, `../observability.ts` |
 | the Book, the funnel, windows, views | `book.ts`, `funnel.ts`, `window.ts`, `views.ts` |
