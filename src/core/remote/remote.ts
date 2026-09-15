@@ -10,7 +10,7 @@
  * (`src/platform/web/remote.ts`, `src/platform/tauri`), and `./gitea.ts` is
  * the account half — signing in and finding a repository to attach to.
  */
-import { Context, Data, Effect, Layer, type Option, Stream } from "effect";
+import { Context, Data, Effect, Layer, Option, Stream } from "effect";
 
 import type { Repo } from "../git/git";
 
@@ -57,6 +57,15 @@ export type CredentialLookup = (
 export interface RemoteService {
   /** Records `url` as the repository's origin. Does not transfer anything. */
   readonly attach: (repo: Repo, url: string) => Effect.Effect<void, RemoteError>;
+  /**
+   * The URL `attach` recorded, or `None` when this project has none.
+   *
+   * `attach`'s read counterpart, and the first question the sync surface asks:
+   * a project with no origin is `detached`, and that is a state to explain
+   * rather than a transfer to attempt. `None` rather than a failure, because
+   * "not attached yet" is the ordinary state of a project someone just made.
+   */
+  readonly origin: (repo: Repo) => Effect.Effect<Option.Option<string>, RemoteError>;
   readonly fetch: (repo: Repo) => Effect.Effect<Progress, RemoteError>;
   readonly pull: (repo: Repo) => Effect.Effect<Progress, RemoteError>;
   readonly push: (repo: Repo) => Effect.Effect<Progress, RemoteError>;
@@ -90,6 +99,8 @@ const unavailable = <A>(): Effect.Effect<A, RemoteError> =>
  */
 export const RemoteUnavailableLive: Layer.Layer<Remote> = Layer.succeed(Remote, {
   attach: () => unavailable(),
+  // `None`, not a refusal: nothing was ever attached, which is true.
+  origin: () => Effect.succeed(Option.none()),
   fetch: () => unavailable(),
   pull: () => unavailable(),
   push: () => unavailable(),

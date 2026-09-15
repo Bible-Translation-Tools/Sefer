@@ -104,6 +104,37 @@ export interface GitService {
   ) => Effect.Effect<CommitId, GitError>;
   /** Newest first. With `path`, only commits that touched that path. */
   readonly log: (repo: Repo, path?: string) => Effect.Effect<readonly Commit[], GitError>;
+  /**
+   * Commits reachable from `ref`, newest first — `log` for a ref that is not
+   * HEAD. The sync surface needs it for exactly one thing: the cloud's side of
+   * the comparison, read off `refs/remotes/origin/<branch>` after a fetch.
+   */
+  readonly logFrom: (repo: Repo, ref: string) => Effect.Effect<readonly Commit[], GitError>;
+  /**
+   * `ref` as a commit id, or `None` when the repository has no such ref.
+   *
+   * `None` is an ANSWER, not a failure: a project attached to a repository
+   * nobody has pushed to yet has no remote-tracking ref, and that is the
+   * ordinary "unpublished" state rather than something to report as broken.
+   */
+  readonly resolve: (repo: Repo, ref: string) => Effect.Effect<Option.Option<CommitId>, GitError>;
+  /** The branch HEAD is on; `None` on a detached or unborn HEAD. */
+  readonly branch: (repo: Repo) => Effect.Effect<Option.Option<string>, GitError>;
+  /**
+   * Repository-relative paths whose content differs between two revs, with the
+   * kind seen FROM `from` TO `to` — a path absent at `from` is `added`, one
+   * absent at `to` is `deleted`.
+   *
+   * This is what makes an incoming plan possible without transferring
+   * anything twice: after a fetch, the cloud's commits are already in the
+   * object database, so which books and chapters would change can be worked
+   * out and shown before a single byte of the work tree moves.
+   */
+  readonly changedPathsBetween: (
+    repo: Repo,
+    from: string,
+    to: string,
+  ) => Effect.Effect<readonly ChangedPath[], GitError>;
   /** The bytes of `path` at `rev` — a ref name or a commit id. */
   readonly show: (repo: Repo, rev: string, path: string) => Effect.Effect<Uint8Array, GitError>;
   /** The per-file history of `path`, newest first, bytes on demand. */

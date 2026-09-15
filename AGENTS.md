@@ -20,6 +20,7 @@ Read only the guidance relevant to the task:
 - [The landing screens](documentation/architecture/landing.md): the project list, what each import source needs per host, the Catalogue port, and where Create stops.
 - [Key terms (STET)](documentation/architecture/stet.md): read before touching `/terms`; covers the frozen catalogue and its `StetCatalog` port, the committed guide fixture, how a guide reference maps onto the project, and what is still a stand-in.
 - [Compare](documentation/architecture/compare.md): read before touching `/compare` or adding a side to a comparison; covers the `CompareSource` port, why both sides are sources, the decision map, and what Apply writes and refuses.
+- [Cloud sync](documentation/architecture/sync.md): read before touching `/cloud`, `src/core/sync` or the Remote port; covers the nine states, the two clocks, the incoming plan, and why scripture text is never merged automatically.
 
 `src/App.tsx` calls `composeApplication()` exactly once; services reach components through `useComposition()` (`src/app/CompositionContext.tsx`).
 

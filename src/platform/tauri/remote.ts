@@ -211,6 +211,13 @@ const makeTauriRemote = (
 
     return {
       attach,
+      // `git_remote_url` already answers `string | null`, so the read half of
+      // attach costs desktop no new Rust.
+      origin: (repo) =>
+        Effect.map(
+          call<string | null>("git_remote_url", { root: repo.root, name: ORIGIN }),
+          Option.fromNullishOr,
+        ),
       fetch: (repo) => transfer("git_fetch", repo),
       pull: (repo) => transfer("git_pull", repo),
       push: (repo) => transfer("git_push", repo),

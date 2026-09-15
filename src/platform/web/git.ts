@@ -12,6 +12,7 @@ import git from "isomorphic-git";
 import { nodeFsView } from "../../core/fileSystem/nodeView";
 import {
   type Author,
+  type ChangedPath,
   type Commit,
   type CommitId,
   Git,
@@ -162,6 +163,57 @@ const makeWebGit = (fileSystem: FileSystem.FileSystem): GitService => {
       }),
 
     log,
+
+    logFrom: (repo, ref) =>
+      Effect.map(
+        attempt("Conflict", () => git.log({ fs, dir: repo.root, ref })),
+        (entries) => entries.map(commitOf),
+      ),
+
+    // isomorphic-git throws `NotFoundError` for a ref that is not there, and
+    // "the cloud has nothing on this branch yet" is an answer rather than a
+    // fault — hence Option, and hence swallowing the throw here and only here.
+    resolve: (repo, ref) =>
+      Effect.orElseSucceed(
+        Effect.map(
+          attempt("Conflict", () => git.resolveRef({ fs, dir: repo.root, ref })),
+          Option.some<CommitId>,
+        ),
+        Option.none<CommitId>,
+      ),
+
+    branch: (repo) =>
+      Effect.map(
+        attempt("Io", () => git.currentBranch({ fs, dir: repo.root, fullname: false })),
+        (name) => (typeof name === "string" ? Option.some(name) : Option.none()),
+      ),
+
+    changedPathsBetween: (repo, from, to) =>
+      attempt("Conflict", () =>
+        git.walk({
+          fs,
+          dir: repo.root,
+          trees: [git.TREE({ ref: from }), git.TREE({ ref: to })],
+          // `git.walk`'s map runs per entry with one side possibly absent. A
+          // directory is not a change; two blobs with the same oid are not
+          // either, and comparing oids is why this needs no blob reads.
+          map: async (filepath, entries) => {
+            if (filepath === ".") return;
+            const before = entries?.[0] ?? null;
+            const after = entries?.[1] ?? null;
+            const beforeType = before === null ? undefined : await before.type();
+            const afterType = after === null ? undefined : await after.type();
+            if (beforeType === "tree" || afterType === "tree") return;
+            if (before === null && after === null) return;
+            if (before === null) return { path: filepath, kind: "added" } satisfies ChangedPath;
+            if (after === null) return { path: filepath, kind: "deleted" } satisfies ChangedPath;
+            const [beforeOid, afterOid] = await Promise.all([before.oid(), after.oid()]);
+            return beforeOid === afterOid
+              ? undefined
+              : ({ path: filepath, kind: "modified" } satisfies ChangedPath);
+          },
+        }),
+      ),
 
     show,
 
