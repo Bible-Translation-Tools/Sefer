@@ -439,9 +439,12 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     report(t("opened {name} ({count} books)", { name: ready.root, count: ready.books.length }));
   };
 
+  // A book with no adopted baseline was never opened this session: nothing on
+  // screen can differ from disk, so it is not "unsaved" — `dirty` alone would
+  // badge every untouched book on the project page.
   const unsaved = (book: Book): boolean => {
     tick();
-    return services.save.dirty(book);
+    return Option.isSome(services.save.baseline(book)) && services.save.dirty(book);
   };
 
   /**
@@ -462,7 +465,7 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
 
   const saveState = (book: Book): "unsaved" | "onDisk" | "recorded" => {
     tick();
-    if (services.save.dirty(book)) return "unsaved";
+    if (unsaved(book)) return "unsaved";
     return onDisk.has(book.id) ? "onDisk" : "recorded";
   };
 

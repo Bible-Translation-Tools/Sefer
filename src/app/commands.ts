@@ -26,7 +26,6 @@ import { Git } from "../core/git/git";
 import { makeMultiBook } from "../core/multibook/multibook";
 import type { Project } from "../core/project/project";
 import { Remote } from "../core/remote/remote";
-import { SaveCoordinator } from "../core/save/saveCoordinator";
 import type { EditorAction, EditorBook, ProjectionName } from "../editor";
 import { giteaHostFor } from "./env";
 import { t } from "./i18n";
@@ -342,18 +341,13 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
 
     registerCommand({
       id: "project.saveAll",
-      title: t("Save all"),
+      title: t("Record a version…"),
       keys: "Mod-Shift-s",
       when: hasProject,
+      // One door to disk: the file is written when a version is recorded, so
+      // this opens Save & Review like Mod-S rather than writing on its own.
       run: () => {
-        const project = bridge.project();
-        if (project === undefined) return;
-        return Effect.gen(function* () {
-          const coordinator = yield* SaveCoordinator;
-          const receipts = yield* coordinator.saveAll(project.books);
-          bridge.report(t("saved {count} book(s)", { count: receipts.length }));
-          bridge.bump();
-        });
+        bridge.go("/history?review=1");
       },
     }),
 
@@ -459,33 +453,12 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
 
     registerCommand({
       id: "git.commit",
-      title: t("Commit saved changes"),
+      title: t("Record a version…"),
       when: hasProject,
+      // Same door as Mod-S: writing and recording are one action on the
+      // review screen, never a palette side-effect.
       run: () => {
-        const project = bridge.project();
-        if (project === undefined) return;
-        return Effect.gen(function* () {
-          const git = yield* Git;
-          const coordinator = yield* SaveCoordinator;
-          // Only what Save actually wrote is committed — Git stages receipt
-          // paths and nothing else (see documentation/architecture/git.md).
-          const receipts = yield* coordinator.saveAll(project.books);
-          if (receipts.length === 0) {
-            bridge.report(t("nothing to commit"));
-            return;
-          }
-          const repo = yield* git.init(project.root);
-          const id = yield* git.commit(
-            repo,
-            receipts,
-            t("Edit {count} book(s)", {
-              count: receipts.length,
-            }),
-            { name: "Sefer", email: "sefer@localhost" },
-          );
-          bridge.report(t("committed {id}", { id: id.slice(0, 8) }));
-          bridge.bump();
-        });
+        bridge.go("/history?review=1");
       },
     }),
 
