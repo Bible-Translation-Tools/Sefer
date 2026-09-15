@@ -1,17 +1,16 @@
-import { createFileRoute } from "@tanstack/solid-router";
-import { Show } from "solid-js";
+import { createFileRoute, redirect } from "@tanstack/solid-router";
 
-import { HistoryPanel, SavePanel } from "../app/ui/panels";
+import { HistoryPanel } from "../app/ui/panels";
 import { ShellGate } from "../app/ui/ShellGate";
 
 /**
- * `/history` — the timeline, and `/history?review=1` — Save & Review.
+ * `/history` — the commit timeline.
  *
- * One route, two panels, because they are two views of one question: what has
- * changed since the last write, and what has been written since. Sharing the
- * URL keeps the back button meaningful (Save… → History is a navigation, not a
- * mode flag hidden in a signal) and keeps the sidebar's single History link
- * pointing at both.
+ * `?review=1` used to render Save & Review here, because the two were views of
+ * one question. They still are — which is why Save & Review and Compare became
+ * the single `/review` screen — so the search param survives as a REDIRECT
+ * rather than as a second panel: Mod-S, the toolbar and the command palette all
+ * still send `/history?review=1`, and they all land on the review.
  *
  * `review` is validated to `true` or absent rather than to a boolean, so the
  * history view's URL is the bare `/history` and never `?review=false`.
@@ -20,18 +19,12 @@ interface HistorySearch {
   readonly review?: true;
 }
 
-function HistoryRoute() {
-  const search = Route.useSearch();
-  return (
-    <Show when={search().review === true} fallback={<HistoryPanel />}>
-      <SavePanel />
-    </Show>
-  );
-}
-
 export const Route = createFileRoute("/history")({
   validateSearch: (search: Record<string, unknown>): HistorySearch =>
     search.review === true || search.review === "1" || search.review === 1 ? { review: true } : {},
+  beforeLoad: ({ search }) => {
+    if (search.review === true) throw redirect({ to: "/review" });
+  },
   head: () => ({ meta: [{ title: "Sefer — history" }] }),
-  component: () => <ShellGate>{() => <HistoryRoute />}</ShellGate>,
+  component: () => <ShellGate>{() => <HistoryPanel />}</ShellGate>,
 });

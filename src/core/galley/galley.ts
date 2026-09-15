@@ -31,12 +31,25 @@ import {
   initSync,
   type Knobs,
 } from "../../../vendor/galley/pkg-web/usfm_galley.js";
+// The whole namespace as well as the two names above: Onion's stateless doors
+// (diff, merge, format…) arrive as FREE FUNCTIONS on the module rather than as
+// methods on the handle, and `diff.ts` probes for them by name. The pinned
+// artifact has none of them, which is what `DIFF_DOOR` refuses about.
+import * as wasmModule from "../../../vendor/galley/pkg-web/usfm_galley.js";
 import {
   FindingsSnapshot,
   FORMAT_VERSION as SOUS_FORMAT_VERSION,
 } from "../../../vendor/galley/sous-reader";
 import { Observability, type ObservabilityService } from "../observability";
 import type { Analysis } from "./analysis";
+import {
+  engineDiff,
+  engineMerge,
+  type DecisionMap,
+  type DiffSkeleton,
+  type EngineDoorMissing,
+  type MergeSide,
+} from "./diff";
 
 // The VALUE, not just the type: the corpus half's other implementation
 // (`src/platform/tauri/corpus.ts`) opens a buffer the native engine produced,
@@ -353,6 +366,35 @@ export interface GalleyService {
   readonly residentBytes: () => number;
 
   /**
+   * Onion's decision-unit diff of two whole USFM documents.
+   *
+   * REFUSES today, by name: the pinned artifact has no diff door (see
+   * `DIFF_DOOR` in `diff.ts`, and `Fixes.FORMAT_DOOR` for the same shape).
+   * `src/core/diff/skeleton.ts` builds the same `DiffSkeleton` from Sefer's own
+   * verse alignment in the meantime, and `DiffSkeleton.engine` says which
+   * produced the one in hand.
+   */
+  readonly diff: (
+    baseline: string,
+    current: string,
+  ) => Result.Result<DiffSkeleton, EngineDoorMissing>;
+
+  /**
+   * The merged document under a decision map, `{unitId: "baseline"|"current"}`.
+   *
+   * `fallback` is what an undecided unit takes and is never defaulted here —
+   * that is the whole safety question of a merge and it belongs to the caller.
+   * An unknown unit id rejects loudly inside the engine rather than falling
+   * back fuzzily; the caller re-diffs.
+   */
+  readonly merge: (
+    baseline: string,
+    current: string,
+    decisions: DecisionMap,
+    fallback: MergeSide,
+  ) => Result.Result<string, EngineDoorMissing>;
+
+  /**
    * Free the wasm handle. IDEMPOTENT: the first call frees the pointer and
    * drops it, and every later call does nothing — the Layer's finalizer goes
    * through this same door, so a caller who disposes early does not double
@@ -564,6 +606,12 @@ const makeService = (
     updateReference: (id, text) => handle.updateReference(id, text),
     remove: (id) => handle.remove(id),
     publish: () => FindingsSnapshot.open(handle.publish()),
+    // Probed on the MODULE, where the stateless doors will land, so the day
+    // the artifact is regenerated these open with no version number for Sefer
+    // to keep in step. Until then they refuse, naming `DIFF_DOOR`.
+    diff: (baseline, current) => engineDiff(wasmModule, baseline, current),
+    merge: (baseline, current, decisions, fallback) =>
+      engineMerge(wasmModule, baseline, current, decisions, fallback),
     knobs,
     setKnobs,
     residentBytes: () => handle.residentBytes(),

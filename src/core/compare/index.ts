@@ -5,7 +5,7 @@
  * inside it — which is what keeps "a new source is a new file" true, since a
  * new source is then one more line in this barrel and nothing else.
  *
- * See documentation/architecture/compare.md.
+ * See documentation/architecture/review.md.
  */
 
 export {
@@ -21,6 +21,7 @@ export {
 export {
   allDecisionIds,
   applyPlan,
+  type ApplyOptions,
   bookCompleteness,
   completeness,
   decide,
@@ -38,6 +39,7 @@ export {
   type Plan,
 } from "./decisions";
 export { folderSource } from "./folderSource";
+export { recordedSource, savedSource, type RecordedTexts, type SavedText } from "./pastSources";
 export { currentProjectSource } from "./projectSource";
 export {
   CompareError,

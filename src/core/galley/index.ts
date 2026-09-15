@@ -5,4 +5,5 @@
 
 export * from "./analysis";
 export * from "./corpus";
+export * from "./diff";
 export * from "./galley";

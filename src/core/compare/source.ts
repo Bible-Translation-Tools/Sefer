@@ -12,7 +12,7 @@
 // Adding a third kind is therefore a NEW FILE beside `projectSource.ts` and
 // `folderSource.ts`, and no change to `compare.ts`, `decisions.ts` or the
 // screen. What a new source must supply is listed in
-// documentation/architecture/compare.md.
+// documentation/architecture/review.md.
 //
 // Effects here carry `R = never` on purpose: a source captures whatever it
 // needs (a Project, a FileSystem and a root) when it is CONSTRUCTED. The

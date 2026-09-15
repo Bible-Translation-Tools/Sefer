@@ -125,6 +125,7 @@ import from the directory, never from a file inside it.
 | `Resizable` | `.Root` (`orientation`, `onSizesChange`), `.Panel` (`initialSize`, `minSize`, `maxSize`), `.Handle` (`label`). |
 | `Kbd` | A keycap. Show the chord exactly as `src/app/commands.ts` spells it. |
 | `EmptyState` | `icon`, `title`, `description`, one `action`. |
+| `VirtualList` | `sections` (each a key plus keyed rows with a height estimate), `header(section, ref)`, `row(item, key)`, `pinned`, `focus`, `onActive`, `empty`, `ref(goTo)`. Sticky section headers over a windowed list. |
 | `toasts` + `Toaster` | `show`/`info`/`success`/`error`/`progress`/`update`/`dismiss`/`dismissAll` over a module-level list; `<Toaster />` is the viewport, mounted once in `src/routes/__root.tsx`. |
 
 Icons are `lucide-solid`, imported one at a time
@@ -145,6 +146,54 @@ asks for a size at index `-1` and dies. The package is not installed; the file
 keeps corvu's `Root`/`Panel`/`Handle` shape so that swapping back later is one
 import. Collapsing is deliberately not implemented: a collapsed sidebar is a
 different tree (an icon rail), not a zero-width panel.
+
+### The multibuffer: `virtual-core`, and why not `solid-virtual`
+
+`VirtualList` is the one windowed list in the product. Find, Key terms
+(`ExcerptList`) and `/findings` all render through it, which is what keeps two
+long lists in the same project from scrolling differently.
+
+**The geometry is TanStack's; the forty lines of Solid binding are ours.** Will
+asked for `@tanstack/solid-virtual` (2026-09-15) rather than the hand-rolled
+windowing that was inside `ExcerptList`, and the engine underneath it is what
+we took — but the published Solid binding does not run on Solid 2 and cannot be
+shimmed into running. The blocker is worth recording, because "it is a Solid 1
+package" is not the whole of it:
+
+`@tanstack/solid-virtual@3.13.40` declares `solid-js ^1.3.0`. Three of its
+imports are gone in Solid 2 — `mergeProps` (now `merge`), `onMount` and
+`createComputed` — and `solid-js/store` moved onto `solid-js`. All four are
+shimmable, exactly the way `lucide-solid` is (`tools/vite/lucideSolid.ts`), and
+a working shim was written. The one thing that is not shimmable is the SHAPE of
+its single `createComputed`: it reads its options and WRITES its item store in
+the same function, which is precisely what Solid 2 forbids
+(`REACTIVE_WRITE_IN_OWNED_SCOPE`) — and it is not a diagnostic to wave through,
+because Solid 2 split tracking from effects on purpose. The `ownedWrite` escape
+hatch the diagnostic names is a per-SIGNAL option, and the store being written
+is created inside the package. Splitting the function is not available from
+outside it either: only the package knows which of its reads are dependencies.
+The failure is loud and total — the write throws, TanStack Router reports an
+uncaught route error, and the whole shell tears down.
+
+So `VirtualList` depends on **`@tanstack/virtual-core`**, the framework-agnostic
+engine both wrappers sit on, which has no framework imports of its own. It is
+bound the way the Solid 1 wrapper binds it, with the writes in an effect's
+EFFECT phase where Solid 2 allows them. Measurement, the range, the scroll and
+resize observers and `scrollToIndex` are all the library's; nothing is
+reimplemented. Two Solid 2 details the binding had to get right, both of which
+the diagnostics caught:
+
+- **An effect's effect-phase is not a reactive owner.** An `onCleanup`
+  registered there never runs (`NO_OWNER_CLEANUP`), so the library's
+  `_didMount()` disposer is held at component scope and released by one
+  `onCleanup` in the body.
+- **A `ref` callback is not a tracking scope.** Reading a virtual item's index
+  inside one is `STRICT_READ_UNTRACKED`; the index at mount is the right one,
+  and the library re-measures on its own afterwards.
+
+`@tanstack/virtual-core` is in `optimizeDeps.include`. Discovering it when the
+first multibuffer route loads triggers a mid-session re-optimization, and a
+re-optimization reloads the page — which drops the open project.
 
 ### Two Solid 2 facts these wrappers had to learn
 

@@ -2,12 +2,12 @@
 
 The crash journal, and the one question it is allowed to ask. The mechanism —
 what a journal file is, when it is written, how `restore` replays it — is in
-[save and recovery](save.md); this document is the part that faces a person:
+[save and recovery](review.md); this document is the part that faces a person:
 what happens when a project is opened, and what the reader is asked.
 
 ## What the journal is for, now that nothing else writes
 
-Sefer writes the project file only when a version is recorded ([save](save.md)),
+Sefer writes the project file only when a version is recorded ([save](review.md)),
 which makes this journal the **only** automatic write in the product and the
 only thing standing between a crash and a lost session. It is the
 working-state backup: it holds what the editor holds, it is not the file, and

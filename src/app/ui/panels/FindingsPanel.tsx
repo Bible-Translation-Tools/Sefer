@@ -43,6 +43,7 @@ import Wrench from "lucide-solid/icons/wrench";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
 import type { BookId } from "../../../core/book/book";
+import * as Excerpts from "../../../core/excerpts/excerpts";
 import * as Filter from "../../../core/findings/filter";
 import type { Finding } from "../../../core/findings/finding";
 import * as Findings from "../../../core/findings/findings";
@@ -57,6 +58,8 @@ import {
   PanelHeader,
   SegmentedControl,
   severityTone,
+  VirtualList,
+  type VirtualSection,
 } from "../primitives";
 import { bookName } from "../workspace/books";
 import { metadataOf } from "../workspace/project";
@@ -65,11 +68,20 @@ import { FindingsFilters } from "./FindingsFilters";
 
 /** The one row look. A literal string: Tailwind scans source text, not values. */
 const ROW = [
-  "flex flex-wrap items-center gap-2.5 px-3.5 py-2.5 transition-colors",
+  "flex flex-col gap-1.5 px-3.5 py-2.5 transition-colors",
   "hover:bg-surface-secondary data-[stale=true]:opacity-60",
   "aria-[current=true]:bg-brand-light",
   "aria-[current=true]:shadow-[inset_0.1875rem_0_0_0_var(--brand-base)]",
 ].join(" ");
+
+/**
+ * The height a row is assumed to have until it has been on screen once.
+ *
+ * One badge line plus a two-line quotation, at this list's width. It only has
+ * to be close: the scrollbar is right from the first paint because of it, and
+ * exact a frame later because a `ResizeObserver` corrects it.
+ */
+const ROW_ESTIMATE = 78;
 
 /**
  * One displayed row. Ordinarily one finding; when `count` is greater than one
@@ -351,18 +363,11 @@ export function FindingsPanel() {
     });
   }
 
-  // A grouped list is taller than the viewport, so the cursor has to bring
-  // itself into view or `j` walks off the bottom of the screen. Queried rather
-  // than held in a ref: the row is re-created by `<For>` on every filter
-  // change, and `aria-current` already names exactly one of them.
-  createEffect(
-    () => `${cursor()}:${visible().length}`,
-    () => {
-      document
-        .querySelector('[data-findings-row][aria-current="true"]')
-        ?.scrollIntoView({ block: "nearest" });
-    },
-  );
+  // The cursor brings itself into view, or `j` walks off the bottom of the
+  // screen. It is `VirtualList`'s `focus` that does it now, and that is not a
+  // tidying: the row the cursor lands on may not be RENDERED — that is the
+  // whole point of windowing — and a `scrollIntoView` on a DOM node that does
+  // not exist cannot work where a computed offset can.
 
   const offer = (finding: Finding): void => {
     const book = shell.services.seated(finding.bookId);
@@ -398,6 +403,38 @@ export function FindingsPanel() {
     setPreview(undefined);
     shell.bump();
   };
+  /**
+   * The verse this finding is in, as the READING, with the finding's own span
+   * marked.
+   *
+   * `quote` (`core/excerpts`) projects a window around the span and places the
+   * span back inside it, so what a row shows is the sentence a translator would
+   * read rather than the USFM it is written in. When the span has no character
+   * in the projection at all — it is inside a marker name, an attribute, a
+   * control character — `projected` comes back false and the quotation is the
+   * raw slice instead, which the row says rather than quietly showing a
+   * different character.
+   *
+   * The analysis has to be the one the finding was measured against, and
+   * `ProjectAnalysis.analysis` is the only thing that holds it. A row whose
+   * analysis has moved on shows nothing here rather than quoting the wrong
+   * verse with total confidence — the same rule `place` follows for the
+   * reference.
+   */
+  const excerpt = (finding: Finding): Excerpts.Quotation | undefined => {
+    const held = analysisFor(finding);
+    if (held === undefined) return undefined;
+    if (
+      finding.engine.docLen !== held.analysis.docLen ||
+      finding.engine.sourceHash !== held.analysis.sourceHash
+    )
+      return undefined;
+    try {
+      return Excerpts.quote(held.analysis, finding.from, finding.to);
+    } catch {
+      return undefined;
+    }
+  };
 
   /**
    * One row. Stale rows stay visible and stay dim — the badge says why, and
@@ -410,8 +447,10 @@ export function FindingsPanel() {
    */
   const row = (entry: Row) => {
     const finding = entry.finding;
+    const quoted = () => excerpt(finding);
     return (
-      <li
+      <Card
+        padded={false}
         data-findings-row
         data-code={finding.code}
         data-producer={finding.producer}
@@ -420,58 +459,101 @@ export function FindingsPanel() {
         aria-current={current() === entry.id ? "true" : undefined}
         class={ROW}
       >
-        <Badge tone={severityTone(finding.severity)}>{finding.severity}</Badge>
-        <strong class="text-small font-semibold whitespace-nowrap text-on-surface-primary">
-          {finding.bookId}{" "}
-          <Show
-            when={place(finding).exact}
-            fallback={
-              <span class="font-normal text-on-surface-tertiary" title={t("no fresh analysis")}>
-                {place(finding).text}
-              </span>
-            }
-          >
-            <span class="tabular-nums text-on-surface-secondary">{place(finding).text}</span>
+        <div class="flex flex-wrap items-center gap-2.5">
+          <Badge tone={severityTone(finding.severity)}>{finding.severity}</Badge>
+          <strong class="text-small font-semibold whitespace-nowrap text-on-surface-primary">
+            {finding.bookId}{" "}
+            <Show
+              when={place(finding).exact}
+              fallback={
+                <span class="font-normal text-on-surface-tertiary" title={t("no fresh analysis")}>
+                  {place(finding).text}
+                </span>
+              }
+            >
+              <span class="tabular-nums text-on-surface-secondary">{place(finding).text}</span>
+            </Show>
+          </strong>
+          <code class="font-mono text-smallest text-on-surface-tertiary">{finding.code}</code>
+          <span class="min-w-0 flex-1 truncate text-small text-on-surface-secondary">
+            {finding.message}
+          </span>
+          <Show when={entry.count > 1}>
+            <Button
+              size="sm"
+              variant="secondary"
+              aria-expanded={entry.open ? "true" : "false"}
+              aria-label={
+                entry.open
+                  ? t("Fold {count} identical findings", { count: entry.count })
+                  : t("Unfold {count} identical findings", { count: entry.count })
+              }
+              class="tabular-nums"
+              icon={entry.open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+              onClick={() => toggle(entry.id)}
+            >
+              × {entry.count}
+            </Button>
           </Show>
-        </strong>
-        <code class="font-mono text-smallest text-on-surface-tertiary">{finding.code}</code>
-        <span class="min-w-0 flex-1 truncate text-small text-on-surface-secondary">
-          {finding.message}
-        </span>
-        <Show when={entry.count > 1}>
-          <Button
-            size="sm"
-            variant="secondary"
-            aria-expanded={entry.open ? "true" : "false"}
-            aria-label={
-              entry.open
-                ? t("Fold {count} identical findings", { count: entry.count })
-                : t("Unfold {count} identical findings", { count: entry.count })
-            }
-            class="tabular-nums"
-            icon={entry.open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-            onClick={() => toggle(entry.id)}
-          >
-            × {entry.count}
+          <Show when={isStale(finding)}>
+            <Badge tone="muted">{t("stale")}</Badge>
+          </Show>
+          <Button size="sm" variant="tertiary" onClick={() => open(finding)}>
+            {t("Go")}
           </Button>
+          <Show when={finding.fix !== undefined}>
+            <Button size="sm" icon={<Wrench size={12} />} onClick={() => offer(finding)}>
+              {t("Fix")}
+            </Button>
+          </Show>
+        </div>
+        <Show when={quoted()}>
+          {(quotation) => (
+            <p
+              data-findings-excerpt={quotation().projected ? "reading" : "markup"}
+              class={
+                quotation().projected
+                  ? "px-0.5 text-small leading-relaxed text-on-surface-secondary"
+                  : "px-0.5 font-mono text-smallest break-all text-on-surface-tertiary"
+              }
+            >
+              <span class="opacity-70">{quotation().before}</span>
+              <mark class="rounded-xs bg-brand/20 px-px font-semibold text-on-surface-primary">
+                {quotation().hit}
+              </mark>
+              <span class="opacity-70">{quotation().after}</span>
+            </p>
+          )}
         </Show>
-        <Show when={isStale(finding)}>
-          <Badge tone="muted">{t("stale")}</Badge>
-        </Show>
-        <Button size="sm" variant="tertiary" onClick={() => open(finding)}>
-          {t("Go")}
-        </Button>
-        <Show when={finding.fix !== undefined}>
-          <Button size="sm" icon={<Wrench size={12} />} onClick={() => offer(finding)}>
-            {t("Fix")}
-          </Button>
-        </Show>
-      </li>
+      </Card>
     );
   };
 
+  /**
+   * The list as the virtualizer wants it: one section per group, one row per
+   * finding or folded run.
+   *
+   * Every row is rendered at an ESTIMATE first and corrected once it has been
+   * on screen, so a project with thousands of findings paints the rows in the
+   * viewport and nothing else. Before this the panel built every `<li>` on
+   * every keystroke of the text filter, which is what made a long list feel
+   * broken — see documentation/architecture/findings.md.
+   */
+  const feed = createMemo(
+    (): readonly VirtualSection<Row>[] =>
+      sections().map((section) => ({
+        key: section.key,
+        rows: section.rows.map((entry) => ({
+          key: entry.id,
+          item: entry,
+          estimate: ROW_ESTIMATE,
+        })),
+      })),
+    { name: "findingsFeed" },
+  );
+
   return (
-    <main class="min-w-0 space-y-4 p-6">
+    <main class="flex h-screen min-w-0 flex-col gap-4 p-6" data-findings-panel>
       <PanelHeader
         title={t("Findings")}
         subtitle={t(
@@ -513,74 +595,49 @@ export function FindingsPanel() {
         </Show>
       </Card>
 
-      <div class="grid items-start gap-4">
-        <div class="min-w-0 space-y-3" data-findings={shown().length} data-view={filters.view()}>
-          <Show when={note() !== ""}>
-            <Card class="text-small text-on-surface-secondary">{note()}</Card>
-          </Show>
+      <Show when={note() !== ""}>
+        <Card class="text-small text-on-surface-secondary">{note()}</Card>
+      </Show>
 
-          <Show when={preview()}>
-            {(fix) => (
-              <Card class="space-y-2.5 border-brand/40">
-                <div class="flex flex-wrap items-center gap-2">
-                  <Wrench size={14} class="text-brand" aria-hidden="true" />
-                  <strong class="text-small font-semibold">{fix().label}</strong>
-                  <Button variant="primary" size="sm" class="ms-auto" onClick={() => apply(fix())}>
-                    {t("Apply")}
-                  </Button>
-                  <Button size="sm" onClick={() => setPreview(undefined)}>
-                    {t("Dismiss")}
-                  </Button>
-                </div>
-                <ul class="flex flex-col gap-1">
-                  <For each={fix().changes}>
-                    {(change) => (
-                      <li class="flex gap-3 rounded-sm bg-surface-secondary px-2 py-1 font-mono text-smallest">
-                        <code class="text-on-surface-tertiary">
-                          {change.from}–{change.to}
-                        </code>
-                        <code class="min-w-0 break-all">
-                          {change.insert === "" ? t("(delete)") : change.insert}
-                        </code>
-                      </li>
-                    )}
-                  </For>
-                </ul>
-              </Card>
-            )}
-          </Show>
+      <Show when={preview()}>
+        {(fix) => (
+          <Card class="space-y-2.5 border-brand/40">
+            <div class="flex flex-wrap items-center gap-2">
+              <Wrench size={14} class="text-brand" aria-hidden="true" />
+              <strong class="text-small font-semibold">{fix().label}</strong>
+              <Button variant="primary" size="sm" class="ms-auto" onClick={() => apply(fix())}>
+                {t("Apply")}
+              </Button>
+              <Button size="sm" onClick={() => setPreview(undefined)}>
+                {t("Dismiss")}
+              </Button>
+            </div>
+            <ul class="flex flex-col gap-1">
+              <For each={fix().changes}>
+                {(change) => (
+                  <li class="flex gap-3 rounded-sm bg-surface-secondary px-2 py-1 font-mono text-smallest">
+                    <code class="text-on-surface-tertiary">
+                      {change.from}–{change.to}
+                    </code>
+                    <code class="min-w-0 break-all">
+                      {change.insert === "" ? t("(delete)") : change.insert}
+                    </code>
+                  </li>
+                )}
+              </For>
+            </ul>
+          </Card>
+        )}
+      </Show>
 
-          <For each={sections()}>
-            {(section) => (
-              <Show
-                when={section.key !== ""}
-                fallback={
-                  <Card padded={false} class="overflow-hidden">
-                    <ul class="divide-y divide-surface-border">
-                      <For each={section.rows}>{row}</For>
-                    </ul>
-                  </Card>
-                }
-              >
-                <section data-group={section.key}>
-                  <header class="sticky top-0 z-10 -mx-1 mb-1.5 flex items-baseline gap-2 bg-surface-secondary/90 px-1 py-2 backdrop-blur-sm">
-                    <h3 class="text-small font-semibold text-on-surface-primary">{section.key}</h3>
-                    <Show when={heading(section.key)}>
-                      {(name) => <span class="text-small text-on-surface-secondary">{name()}</span>}
-                    </Show>
-                    <Badge tone="muted">{t("{count} shown", { count: section.count })}</Badge>
-                  </header>
-                  <Card padded={false} class="overflow-hidden">
-                    <ul class="divide-y divide-surface-border">
-                      <For each={section.rows}>{row}</For>
-                    </ul>
-                  </Card>
-                </section>
-              </Show>
-            )}
-          </For>
-
-          <Show when={shown().length === 0}>
+      <div
+        class="flex min-h-0 min-w-0 flex-1 flex-col"
+        data-findings={shown().length}
+        data-view={filters.view()}
+      >
+        <Show
+          when={shown().length > 0}
+          fallback={
             <Show
               when={all().length > 0}
               fallback={
@@ -594,8 +651,34 @@ export function FindingsPanel() {
                 title={t("{total} findings, all hidden by the filter.", { total: all().length })}
               />
             </Show>
-          </Show>
-        </div>
+          }
+        >
+          <VirtualList<Row>
+            sections={feed()}
+            focus={current()}
+            class="min-h-0 min-w-0 flex-1 overflow-y-auto pe-1"
+            header={(section, ref) => (
+              <Show when={section.key !== ""} fallback={<div ref={ref} />}>
+                <header
+                  ref={ref}
+                  data-group={section.key}
+                  class="sticky top-0 z-10 -mx-1 mb-1.5 flex items-baseline gap-2 bg-surface-secondary/95 px-1 py-2 backdrop-blur-xs"
+                >
+                  <h3 class="text-small font-semibold text-on-surface-primary">{section.key}</h3>
+                  <Show when={heading(section.key)}>
+                    {(name) => <span class="text-small text-on-surface-secondary">{name()}</span>}
+                  </Show>
+                  <Badge tone="muted">
+                    {t("{count} shown", {
+                      count: sections().find((entry) => entry.key === section.key)?.count ?? 0,
+                    })}
+                  </Badge>
+                </header>
+              </Show>
+            )}
+            row={(entry) => row(entry)}
+          />
+        </Show>
       </div>
     </main>
   );

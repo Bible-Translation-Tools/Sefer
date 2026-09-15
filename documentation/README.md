@@ -20,7 +20,7 @@ This folder holds durable project guidance for humans and agents. Root `AGENTS.m
 - Opening a folder of books, the four Book states, external changes: [project](./architecture/project.md).
 - Asking the host for paths, settings, credentials, or a dialog: [host capabilities](./architecture/host.md).
 - Working on the desktop app — Tauri plugins, the Rust commands, the updater, or a release: [desktop host](./architecture/desktop.md).
-- Saving, autosave, conflicts, and crash recovery: [save and recovery](./architecture/save.md).
+- Reviewing two copies, recording a version, reverting, conflicts, and the save model: [review](./architecture/review.md).
 - What a project open asks about unsaved work, and what the reader is offered: [recovery](./architecture/recovery.md).
 - Comparing against the saved baseline or running one command across books: [diff and multibook](./architecture/diff-and-multibook.md).
 - Finding text and replacing one match: [search](./architecture/search.md).

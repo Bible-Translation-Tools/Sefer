@@ -199,7 +199,7 @@ export const fixtureRequested = (): boolean => {
  *
  * `Layer.unwrap` rather than a plain merge because `SaveCoordinatorOptions`
  * takes the hasher as a FUNCTION, and the function needs the built Galley —
- * core computes no hash of its own (see documentation/architecture/save.md).
+ * core computes no hash of its own (see documentation/architecture/review.md).
  * The parse this costs is a per-save parse, never a per-keystroke one.
  */
 const saveLayer: Layer.Layer<

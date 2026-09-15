@@ -96,16 +96,24 @@ export const allDecisionIds = (result: CompareResult): readonly HunkId[] =>
  * never has to be walked, and an all-right map reproduces the right text
  * exactly because every span it contributes came from the right side.
  *
- * An undecided hunk keeps the left side. That is only ever a preview: `plan`
- * reports the undecided count and `applyPlan` refuses while it is above zero.
+ * An undecided hunk keeps `fallback`, which defaults to the left side and which
+ * `plan` sets to the side being WRITTEN. That is the only answer that reads
+ * right: "undecided" means nobody has asked for a change, so the target keeps
+ * what it holds. A fallback fixed at "left" would silently adopt the left text
+ * into a right-hand target — a merge tool quietly changing a document nobody
+ * touched, which is the single worst thing this module could do.
  */
-export const mergedText = (book: BookComparison, decisions: Decisions): string | undefined => {
+export const mergedText = (
+  book: BookComparison,
+  decisions: Decisions,
+  fallback: "left" | "right" = "left",
+): string | undefined => {
   if (book.presence !== "both") {
     const chosen = decisionFor(decisions, wholeBookHunkId(book.bookId));
     if (chosen === "right") return book.rightText;
     if (chosen === "left") return book.leftText;
     // Undecided: nothing changes, so the side that already holds it wins.
-    return book.leftText;
+    return fallback === "right" ? book.rightText : book.leftText;
   }
 
   const left = book.leftText ?? "";
@@ -113,7 +121,8 @@ export const mergedText = (book: BookComparison, decisions: Decisions): string |
   let out = "";
   for (const hunk of book.hunks) {
     out += left.slice(at, hunk.leftFrom);
-    out += decisionFor(decisions, hunk.id) === "right" ? hunk.right : hunk.left;
+    const chosen = decisionFor(decisions, hunk.id);
+    out += (chosen === "undecided" ? fallback : chosen) === "right" ? hunk.right : hunk.left;
     at = hunk.leftTo;
   }
   return out + left.slice(at);
@@ -162,7 +171,9 @@ export const plan = (
   const books: BookPlan[] = [];
   for (const book of result.books) {
     const undecided = bookCompleteness(book, decisions).undecided;
-    const text = mergedText(book, decisions);
+    // The TARGET is the fallback: an undecided difference leaves the side
+    // being written exactly as it is, whichever side that is.
+    const text = mergedText(book, decisions, target);
     const targetText = sideText(book, target);
     const operation: BookPlan["operation"] =
       text === undefined
@@ -215,15 +226,35 @@ export interface ApplyReport {
  * refused writes nothing at all. The writes themselves are sequential and one
  * per book: one apply, one revision, one Undo step each.
  */
+export interface ApplyOptions {
+  /**
+   * Let an undecided difference stand, instead of refusing `Incomplete`.
+   *
+   * Off by default, which is the contract a comparison between two people's
+   * work needs: half a decision map is not a text anybody asked for, and the
+   * reader has to say something about every difference before Sefer writes.
+   *
+   * On for a review against the reader's OWN past — the file on disk, the last
+   * recorded version — where "undecided" is not an unanswered question but the
+   * ordinary state of the ninety-nine units they are content with. Reverting
+   * one verse would otherwise mean deciding every other verse in the book
+   * first, which is not what Revert has ever meant. `plan` already makes this
+   * safe: an undecided difference keeps the TARGET's own text, so a plan full
+   * of them is a plan that writes nothing.
+   */
+  readonly allowUndecided?: boolean;
+}
+
 export const applyPlan = (
   plan_: Plan,
   target: CompareSource,
+  options: ApplyOptions = {},
 ): Effect.Effect<ApplyReport, CompareError> =>
   Effect.gen(function* () {
     const write = target.apply;
     if (!target.canApply || write === undefined)
       return yield* failCompare("ReadOnly", `${target.label} cannot be written`);
-    if (!plan_.complete)
+    if (!plan_.complete && options.allowUndecided !== true)
       return yield* failCompare("Incomplete", `${plan_.undecided} change(s) are still undecided`);
 
     for (const book of plan_.writes) {

@@ -17,6 +17,7 @@ import { Route as FindingsRouteImport } from './routes/findings'
 import { Route as HistoryRouteImport } from './routes/history'
 import { Route as InventoryRouteImport } from './routes/inventory'
 import { Route as ProjectsRouteImport } from './routes/projects'
+import { Route as ReviewRouteImport } from './routes/review'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as DevFixtureRouteImport } from './routes/dev/fixture'
@@ -65,6 +66,11 @@ const ProjectsRoute = ProjectsRouteImport.update({
   path: '/projects',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReviewRoute = ReviewRouteImport.update({
+  id: '/review',
+  path: '/review',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -110,6 +116,7 @@ export interface FileRoutesByFullPath {
   '/history': typeof HistoryRoute
   '/inventory': typeof InventoryRoute
   '/projects': typeof ProjectsRoute
+  '/review': typeof ReviewRoute
   '/settings': typeof SettingsRoute
   '/terms': typeof TermsRoute
   '/dev/fixture': typeof DevFixtureRoute
@@ -127,6 +134,7 @@ export interface FileRoutesByTo {
   '/history': typeof HistoryRoute
   '/inventory': typeof InventoryRoute
   '/projects': typeof ProjectsRoute
+  '/review': typeof ReviewRoute
   '/settings': typeof SettingsRoute
   '/terms': typeof TermsRoute
   '/dev/fixture': typeof DevFixtureRoute
@@ -145,6 +153,7 @@ export interface FileRoutesById {
   '/history': typeof HistoryRoute
   '/inventory': typeof InventoryRoute
   '/projects': typeof ProjectsRoute
+  '/review': typeof ReviewRoute
   '/settings': typeof SettingsRoute
   '/terms': typeof TermsRoute
   '/dev/fixture': typeof DevFixtureRoute
@@ -164,6 +173,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/inventory'
     | '/projects'
+    | '/review'
     | '/settings'
     | '/terms'
     | '/dev/fixture'
@@ -181,6 +191,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/inventory'
     | '/projects'
+    | '/review'
     | '/settings'
     | '/terms'
     | '/dev/fixture'
@@ -198,6 +209,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/inventory'
     | '/projects'
+    | '/review'
     | '/settings'
     | '/terms'
     | '/dev/fixture'
@@ -216,6 +228,7 @@ export interface RootRouteChildren {
   HistoryRoute: typeof HistoryRoute
   InventoryRoute: typeof InventoryRoute
   ProjectsRoute: typeof ProjectsRoute
+  ReviewRoute: typeof ReviewRoute
   SettingsRoute: typeof SettingsRoute
   TermsRoute: typeof TermsRoute
   DevFixtureRoute: typeof DevFixtureRoute
@@ -283,6 +296,13 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof ProjectsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/review': {
+      id: '/review'
+      path: '/review'
+      fullPath: '/review'
+      preLoaderRoute: typeof ReviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
@@ -344,6 +364,7 @@ const rootRouteChildren: RootRouteChildren = {
   HistoryRoute: HistoryRoute,
   InventoryRoute: InventoryRoute,
   ProjectsRoute: ProjectsRoute,
+  ReviewRoute: ReviewRoute,
   SettingsRoute: SettingsRoute,
   TermsRoute: TermsRoute,
   DevFixtureRoute: DevFixtureRoute,

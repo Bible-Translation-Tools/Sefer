@@ -23,7 +23,7 @@ The open `Project`, the focused book, the mode, the clipped chapter, the finding
 
 `shell.unsaved(book)` is exactly `SaveCoordinator.dirty(book)` plus a `tick()` read for reactivity. It
 used to add a revision check of its own, because a book opened from disk had no baseline and so read
-dirty untouched; the shell now tells Save what disk holds instead, with `adopt` at focus ([save](save.md)).
+dirty untouched; the shell now tells Save what disk holds instead, with `adopt` at focus ([save](review.md)).
 
 The context carries a stable handle — `useShellState()` (always available) and `useShell()` (only inside a `ShellGate`) — because a Solid 2 context value is read when the provider is created and cannot be swapped later.
 

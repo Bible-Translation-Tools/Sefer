@@ -58,7 +58,14 @@ export default defineConfig(({ mode }) => ({
     dedupe: ["@codemirror/state", "@codemirror/view"],
   },
   optimizeDeps: {
-    include: ["effect/unstable/http/FetchHttpClient", "effect/unstable/observability/Otlp"],
+    include: [
+      "effect/unstable/http/FetchHttpClient",
+      "effect/unstable/observability/Otlp",
+      // Pre-bundled at startup rather than discovered when the first
+      // multibuffer route loads: a mid-session re-optimization reloads the
+      // page, and a reload drops the open project.
+      "@tanstack/virtual-core",
+    ],
   },
   test: {
     projects: [
