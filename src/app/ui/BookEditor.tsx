@@ -40,6 +40,7 @@ import {
   assignment,
   flash,
   flashing,
+  frontMatterCard,
   showCorpusFindings,
   type CorpusFinding,
   modeFacet,
@@ -135,8 +136,16 @@ export function BookEditor(props: BookEditorProps) {
           return one === undefined ? "no trace recorded" : dumpTrace(one);
         },
       });
+      // The front matter card is mounted here and not baked into the seat for
+      // the same reason the meter is: it is a DOM surface, and the canonical
+      // state must still work headless.
       created.dispatch({
-        effects: StateEffect.appendConfig.of([projection.of([]), meter.extension, flashing()]),
+        effects: StateEffect.appendConfig.of([
+          projection.of([]),
+          meter.extension,
+          flashing(),
+          frontMatterCard(),
+        ]),
       });
 
       const supply = (): void => {
