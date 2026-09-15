@@ -38,14 +38,14 @@ git2 = { version = "0.20", features = ["https"] }
 # `tests/equivalence.rs` holds those published bytes against the serial map's.
 #
 # A PATH dependency to the sibling checkout, deliberately. The wasm artifact in
-# `vendor/galley/` was built from that SAME working tree — revision
-# 663403ac0f2bb2aa1b5dba9efd2601f35ffd28ac, recorded in
+# `vendor/galley/` was built from that SAME working tree — tag v0.1.0, revision
+# 4b9904789a65c95cd9bf90a4c57a33588103403c, recorded in
 # `vendor/galley/manifest.json` — which is what makes "one engine, two doors"
 # true rather than approximately true. The engine is not published yet; once it
 # is pushed these two lines become:
 #
-#   usfm_galley = { git = "https://github.com/WycliffeAssociates/scripture-kitchen.git", rev = "663403ac0f2bb2aa1b5dba9efd2601f35ffd28ac", features = ["parallel"] }
-#   sous-core   = { git = "https://github.com/WycliffeAssociates/scripture-kitchen.git", rev = "663403ac0f2bb2aa1b5dba9efd2601f35ffd28ac" }
+#   usfm_galley = { git = "https://github.com/WycliffeAssociates/scripture-kitchen.git", rev = "4b9904789a65c95cd9bf90a4c57a33588103403c", features = ["parallel"] }
+#   sous-core   = { git = "https://github.com/WycliffeAssociates/scripture-kitchen.git", rev = "4b9904789a65c95cd9bf90a4c57a33588103403c" }
 #
 # and the manifest revision stays the single source of that pin. Note the
 # absent `wasm` feature: the native door links no wasm-bindgen.

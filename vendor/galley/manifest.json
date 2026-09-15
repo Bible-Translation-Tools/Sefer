@@ -1,15 +1,17 @@
 {
   "engine": {
-    "spec": "../usfm_onion_2",
+    "spec": "../scripture-kitchen",
+    "package": "@wycliffeassociates/scripture-kitchen",
     "crate": "usfm_galley",
     "features": [
       "wasm"
     ],
     "target": "web",
-    "revision": "f3a2b0bfcae1b294abdbc41165f3d916c5eaecc8",
-    "revisionDate": "2026-09-08T13:37:39-05:00",
-    "subject": "Find crosses the wall: one buffer of hits, UTF-16, both coordinate spaces.",
-    "build": "wasm-pack build --target web --release -- --features wasm"
+    "tag": "v0.1.0",
+    "revision": "4b9904789a65c95cd9bf90a4c57a33588103403c",
+    "revisionDate": "2026-09-15T16:29:58-05:00",
+    "subject": "Match formatting: a target's skeleton made equal to a source's; diff takes a text mode; v0.1.0 packages.",
+    "build": "cd galley && wasm-pack build --target web --release -- --features wasm"
   },
   "wire": {
     "onion": {
@@ -19,15 +21,19 @@
     "sous": {
       "magic": 1398099795,
       "formatVersion": 1
+    },
+    "find": {
+      "magic": 1145981254,
+      "formatVersion": 1
     }
   },
   "artifacts": {
     "onion-reader.ts": "2c9bb7494d568d0437b6bcee1aed1b4ac871f8cd0c7864bc72fa65306cc538cc",
     "sous-reader.ts": "2b6548d90d4e9a93b7c490937f61f2359355ac50f651f3d58951e7cd535f2aa9",
     "diagnostics.json": "d4b067e4b3fb1076bbd11bc62eb1dfe975bdd3e76c78b737c37297c22b968d00",
-    "pkg-web/usfm_galley.js": "a0b5a5275296e4046645c996036cf93d836ef312155edc660b97e5667411a716",
-    "pkg-web/usfm_galley.d.ts": "2945e6c5134db8d340002ad4bbf78c9b58971e881122b3c6997219dda1ea893d",
-    "pkg-web/usfm_galley_bg.wasm": "2152bdf41d4a981d0371fcd6644842eaced758c861a3f5edcf661ca7557a91b8",
-    "pkg-web/usfm_galley_bg.wasm.d.ts": "90c03bf7edb272af1e82f5cb3137792766d9b0cb00696e8bf522a559ed6417e5"
+    "pkg-web/usfm_galley.js": "7e07f2eb121201bc2595dc0064cd60bb648e92759ffe694e6eaf69bcc56b118e",
+    "pkg-web/usfm_galley.d.ts": "6a1a9c8d3de8795af5ac25554b1f8e2b514090b825434a850dbfcc82951f55c8",
+    "pkg-web/usfm_galley_bg.wasm": "64f9ef435f25ef99a5f7ac11c5370bb33e68deb8ce5b0de0ff3fcec066276eba",
+    "pkg-web/usfm_galley_bg.wasm.d.ts": "6a862fce7ddae4efd78303fd29e90106e460d9305458ae009d914d6f5231c6fb"
   }
 }
