@@ -22,17 +22,79 @@ export interface CompositionOptions {
   readonly layers?: Layer.Layer<never> | undefined;
 }
 
+/**
+ * The `fetch` the OTLP exporters use, which stops trying after the first
+ * failure.
+ *
+ * A collector that is not there is the ordinary case in development, and an
+ * exporter that retries on every interval turns that into a console full of
+ * `net::ERR_FAILED` — hundreds of lines, none of them about the thing being
+ * debugged. The browser prints the failed request itself and we cannot stop
+ * it; what we can stop is asking again. So: one warning, then every later
+ * export is refused locally without a request.
+ *
+ * Deliberately one-way. Telemetry is a development convenience and re-probing
+ * a dead collector on a timer is the behaviour being fixed; restarting the
+ * collector is a page reload away.
+ */
+const guardedFetch = (): typeof globalThis.fetch => {
+  let stopped = false;
+  return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    if (stopped) throw new Error("telemetry export is stopped: the collector did not answer");
+    try {
+      return await globalThis.fetch(input, init);
+    } catch (cause) {
+      stopped = true;
+      console.warn(
+        "[sefer] telemetry export failed; not trying again this session.",
+        "Set VITE_SEFER_OTLP_URL to a reachable collector, or unset it.",
+        cause,
+      );
+      throw cause;
+    }
+  };
+};
+
+/**
+ * Traces and logs, and metrics only when asked for.
+ *
+ * `Otlp.layerJson` installs all three exporters from one call, which is
+ * convenient right up to the moment the collector accepts two of them: motel
+ * takes `/v1/traces` and `/v1/logs` and answers `/v1/metrics` with nothing at
+ * all, so every metrics interval produced a `POST /v1/metrics net::ERR_FAILED`
+ * in the console of an application that had asked for tracing. The exporters
+ * are installed one by one instead, and metrics are opt-in
+ * (`VITE_SEFER_OTLP_METRICS=1`) because they are the one a collector is most
+ * likely not to want.
+ */
 const telemetryLayer = async (): Promise<Layer.Layer<never> | undefined> => {
-  const url = import.meta.env.VITE_SEFER_OTLP_URL ?? "";
+  const url = (import.meta.env.VITE_SEFER_OTLP_URL ?? "").trim().replace(/\/+$/u, "");
   if (!import.meta.env.DEV || url === "") return undefined;
-  const [otlp, http] = await Promise.all([
-    import("effect/unstable/observability/Otlp"),
+  const [tracer, logger, metrics, serialization, http] = await Promise.all([
+    import("effect/unstable/observability/OtlpTracer"),
+    import("effect/unstable/observability/OtlpLogger"),
+    import("effect/unstable/observability/OtlpMetrics"),
+    import("effect/unstable/observability/OtlpSerialization"),
     import("effect/unstable/http/FetchHttpClient"),
   ]);
-  return Layer.provide(
-    otlp.layerJson({ baseUrl: url, resource: { serviceName: "sefer" } }),
-    http.layer,
+
+  const resource = { serviceName: "sefer" };
+  const exporters = Layer.merge(
+    Layer.merge(
+      tracer.layer({ url: `${url}/v1/traces`, resource }),
+      logger.layer({ url: `${url}/v1/logs`, resource }),
+    ),
+    import.meta.env.VITE_SEFER_OTLP_METRICS === "1"
+      ? metrics.layer({ url: `${url}/v1/metrics`, resource })
+      : Layer.empty,
   );
+
+  const transport = Layer.merge(
+    Layer.provide(http.layer, Layer.succeed(http.Fetch, guardedFetch())),
+    serialization.layerJson,
+  );
+
+  return Layer.provide(exporters, transport);
 };
 
 interface Composed {
