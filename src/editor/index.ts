@@ -166,6 +166,7 @@ export {
   type Finding,
   type HiddenTest,
 } from "./recipes/lint";
+export { HOVER_GRACE_MS, lintHoverGrace } from "./recipes/lintHover";
 
 // Clipboard and the attribute popover.
 export {

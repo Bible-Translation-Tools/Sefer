@@ -63,7 +63,14 @@ import {
   SaveCoordinatorLive,
   type SaveCoordinatorService,
 } from "../core/save/saveCoordinator";
-import { commandsLayer, editorBook, usfmLinter, viewLayer, type EditorBook } from "../editor";
+import {
+  commandsLayer,
+  editorBook,
+  lintHoverGrace,
+  usfmLinter,
+  viewLayer,
+  type EditorBook,
+} from "../editor";
 import { detectHost } from "../platform/host";
 import { WebDialogsLive } from "../platform/web/dialogs";
 import { OpfsFileSystemLive } from "../platform/web/fileSystem";
@@ -447,7 +454,7 @@ export const composeServices = async (
    */
   // The inline linter needs one @codemirror/state instance shared with
   // @codemirror/lint; vite.config.ts dedupes the package for that reason.
-  const mountable = [commandsLayer, viewLayer(), usfmLinter(), lintGutter()];
+  const mountable = [commandsLayer, viewLayer(), usfmLinter(), lintHoverGrace(), lintGutter()];
 
   const seats = new Map<BookId, EditorBook>();
   const seat: Seat = (plain) => {
