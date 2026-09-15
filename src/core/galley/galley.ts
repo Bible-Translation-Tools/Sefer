@@ -29,12 +29,12 @@ import {
 import {
   Galley as GalleyHandle,
   initSync,
-  type Knobs,
+  type SousSettings as SousSettingsHandle,
 } from "../../../vendor/galley/pkg-web/usfm_galley.js";
 // The whole namespace as well as the two names above: Onion's stateless doors
 // (diff, merge, format…) arrive as FREE FUNCTIONS on the module rather than as
-// methods on the handle, and `diff.ts` probes for them by name. The pinned
-// artifact has none of them, which is what `DIFF_DOOR` refuses about.
+// methods on the handle, and `diff.ts` and `format.ts` bind them by name off
+// this namespace. v0.1.0 is the build that carries them.
 import * as wasmModule from "../../../vendor/galley/pkg-web/usfm_galley.js";
 import {
   FindingsSnapshot,
@@ -49,7 +49,20 @@ import {
   type DiffSkeleton,
   type EngineDoorMissing,
   type MergeSide,
+  type TextMode,
 } from "./diff";
+import { engineFormatEdits, readEdits, type FormatEdits, type FormatOptions } from "./format";
+import {
+  decodeEquivalent,
+  decodeOverlay,
+  decodeBlockSkeleton,
+  overlayOptions,
+  type BlockAddress,
+  type Equivalent,
+  type OverlayEdits,
+  type OverlayOptions,
+  type Skeleton,
+} from "./overlay";
 
 // The VALUE, not just the type: the corpus half's other implementation
 // (`src/platform/tauri/corpus.ts`) opens a buffer the native engine produced,
@@ -89,7 +102,7 @@ export class EngineLoadError extends Data.TaggedError("EngineLoadError")<{
  * boot failure.
  */
 export class VersionMismatch extends Data.TaggedError("VersionMismatch")<{
-  readonly wire: "onion" | "sous";
+  readonly wire: "onion" | "sous" | "find";
   readonly found: number;
   readonly expected: number;
 }> {}
@@ -107,20 +120,30 @@ export class EngineInputError extends Data.TaggedError("EngineInputError")<{
 /** Engine identity, for the about box and for evidence in a bug report. */
 export interface EngineVersion {
   readonly engine: string;
+  /** The tag `vendor/galley` was taken from — `v0.1.0`. */
+  readonly tag: string;
   readonly revision: string;
   readonly onionFormat: number;
   readonly sousFormat: number;
+  readonly findFormat: number;
 }
 
 /**
- * The judging knobs, as a plain object.
+ * Sous's judging settings, as a plain object.
  *
- * The wasm `Knobs` is a handle that must be freed, and its field names are the
- * Rust config's — kept verbatim so this object and the engine's own
- * documentation read the same. Copies cross this boundary in both directions;
- * no caller ever holds a `Knobs`.
+ * The wasm `SousSettings` — `Knobs` before scripture-kitchen v0.1.0 — is a
+ * handle that must be freed, and its field names are the Rust config's, kept
+ * verbatim so this object and the engine's own documentation read the same.
+ * Copies cross this boundary in both directions; no caller ever holds the
+ * handle.
+ *
+ * `presence`, `source_copy` and `source_copy_min_run` are v0.1.0's three new
+ * lanes: presence judges verse coverage against a paired reference and is ON,
+ * source-copy counts consecutive words a target shares with its paired source
+ * verse and is OFF, because a legitimately borrowed name would otherwise be a
+ * finding in every verse that carries one.
  */
-export interface KnobValues {
+export interface SousSettings {
   readonly casing: boolean;
   readonly doubled: boolean;
   readonly doubles_productive_bp: number;
@@ -168,6 +191,17 @@ export interface FindQuery {
   readonly limit?: number;
 }
 
+/**
+ * Which registered books a project-wide find reads.
+ *
+ * `targets` is the project's own books and is the default. `references` is the
+ * Library-bound source and reference resources `ProjectAnalysis.attach`
+ * registered with their text (`updateReference(id, text, true)`); one
+ * registered without it retains nothing to search and is in no scope at all,
+ * which is why the Reference segment on `/find` is disabled until one is bound.
+ */
+export type FindScope = "targets" | "references" | "all";
+
 /** Half-open, in UTF-16 units. */
 export interface EngineRange {
   readonly from: number;
@@ -200,12 +234,33 @@ export interface EngineHit {
 }
 
 /**
+ * `FIND` in ASCII, read out of the buffer's first four bytes in order.
+ *
+ * New at scripture-kitchen v0.1.0 (`galley/src/find.rs`, `wire::MAGIC`), and
+ * the thing engine-asks item 5 asked for: the onion and sous buffers both lead
+ * with a magic and a version, and the find buffer did not, so a reordered
+ * record could only be caught by the nonsense it produced.
+ */
+export const FIND_MAGIC = 0x444e_4946;
+
+/** The layout `decodeHits` below knows. A buffer claiming another one stops. */
+export const FIND_FORMAT_VERSION = 1;
+
+/**
  * Decodes the find buffer both engine doors emit — the wasm handle here and
  * the native `Expediter` behind `src/platform/tauri/corpus.ts`.
  *
  * The layout is stated once, in `galley/src/wasm.md` ("The find buffer"):
- * little-endian `u32` throughout, UTF-16 offsets, the two length arrays before
- * the byte blob so every word stays four-byte aligned.
+ * magic and version, then `hitCount` and `bookCount`, then little-endian `u32`
+ * throughout, UTF-16 offsets, the two length arrays before the byte blob so
+ * every word stays four-byte aligned.
+ *
+ * THROWS `VersionMismatch` on a header it does not know, and does not try to
+ * read the rest: a find buffer decoded against the wrong layout yields hit
+ * ranges that look like offsets into scripture and are not, and an editor that
+ * acted on one would splice the wrong text. Thrown rather than returned
+ * because this is the same synchronous path `analyze` is on; the corpus port
+ * wraps it in `Effect.try` and reports `Engine`.
  *
  * Exported because the desktop door reads the same bytes off IPC; nothing
  * outside `src/core/galley` decodes an engine buffer.
@@ -214,9 +269,16 @@ export const decodeHits = (bytes: Uint8Array): readonly EngineHit[] => {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const word = (index: number): number => view.getUint32(index * 4, true);
 
-  const hitCount = word(0);
-  const bookCount = word(1);
-  let at = 2;
+  const magic = word(0);
+  if (magic !== FIND_MAGIC)
+    throw new VersionMismatch({ wire: "find", found: magic, expected: FIND_MAGIC });
+  const version = word(1);
+  if (version !== FIND_FORMAT_VERSION)
+    throw new VersionMismatch({ wire: "find", found: version, expected: FIND_FORMAT_VERSION });
+
+  const hitCount = word(2);
+  const bookCount = word(3);
+  let at = 4;
 
   // Pass one: the fixed-width hit records, whose width varies with the piece
   // count, so the id and preview tables cannot be found without walking them.
@@ -264,9 +326,9 @@ export const decodeHits = (bytes: Uint8Array): readonly EngineHit[] => {
   }));
 };
 
-type KnobKey = keyof KnobValues;
+type SettingKey = keyof SousSettings;
 
-const KNOB_KEYS: readonly KnobKey[] = [
+const SETTING_KEYS: readonly SettingKey[] = [
   "casing",
   "doubled",
   "doubles_productive_bp",
@@ -324,10 +386,16 @@ export interface GalleyService {
   readonly update: (id: string, text: string) => string;
 
   /**
-   * The same, as a declared source: verse lengths only, no text. A reference
-   * publishes no findings; it is the denominator a target is compared against.
+   * The same, as a declared source. A reference publishes no findings; it is
+   * the denominator a target is compared against.
+   *
+   * `keepText` — omitted is `false` — makes it retain the text, the mask and
+   * the UTF-16 table a target retains too, which is what `find`'s `references`
+   * scope and the overlay doors read. It costs what a target costs minus the
+   * resident analysis, so a reference nobody searches or overlays stays off it
+   * and remains verse lengths only.
    */
-  readonly updateReference: (id: string, text: string) => string;
+  readonly updateReference: (id: string, text: string, keepText?: boolean) => string;
 
   /** Drop a book and its cached rows. `false` when the id was never known. */
   readonly remove: (id: string) => boolean;
@@ -344,23 +412,25 @@ export interface GalleyService {
    *
    * Searches what the reader sees: a needle inside a footnote is not found,
    * and a needle that spans one comes back with one source range per
-   * contiguous piece. Synchronous, like `analyze`, and it throws the engine's
-   * error when `id` is not a registered book — a corpus that has not been
+   * contiguous piece. Since v0.1.0 ANY registered book that retains text may
+   * be searched — a target, or a reference registered with `keepText` — and it
+   * throws only when the book retains none, because a corpus that has not been
    * told about the book would otherwise report it clean.
    */
   readonly find: (id: string, query: FindQuery) => readonly EngineHit[];
 
   /**
-   * The same over every registered book, in canonical book order. Every hit
-   * carries its `bookId`, so no second call is needed to place one.
+   * The same over every searchable book in `scope`, in canonical book order.
+   * Every hit carries its `bookId`, so no second call is needed to place one.
+   * `scope` omitted is `targets`.
    */
-  readonly findAll: (query: FindQuery) => readonly EngineHit[];
+  readonly findAll: (query: FindQuery, scope?: FindScope) => readonly EngineHit[];
 
-  /** A copy of the knobs the next `publish` judges with. */
-  readonly knobs: () => KnobValues;
+  /** A copy of the settings the next `publish` judges with. */
+  readonly settings: () => SousSettings;
 
-  /** Replace some knobs. Costs a re-judge, not a re-map. */
-  readonly setKnobs: (patch: Partial<KnobValues>) => void;
+  /** Replace some settings. Costs a re-judge, not a re-map. */
+  readonly setSettings: (patch: Partial<SousSettings>) => void;
 
   /** Resident bytes across the whole handle: texts, products, cached rows. */
   readonly residentBytes: () => number;
@@ -368,15 +438,19 @@ export interface GalleyService {
   /**
    * Onion's decision-unit diff of two whole USFM documents.
    *
-   * REFUSES today, by name: the pinned artifact has no diff door (see
-   * `DIFF_DOOR` in `diff.ts`, and `Fixes.FORMAT_DOOR` for the same shape).
-   * `src/core/diff/skeleton.ts` builds the same `DiffSkeleton` from Sefer's own
-   * verse alignment in the meantime, and `DiffSkeleton.engine` says which
-   * produced the one in hand.
+   * `textMode` is the intra-unit grain a `modified` unit's word marks come
+   * back at, and it defaults to `words` because that is what the review screen
+   * shows. Spans are UTF-16 into each side's own document.
+   *
+   * It is still a `Result`: the door is a free function on the wasm module,
+   * probed by name, so an artifact that lost it refuses by name
+   * (`DIFF_DOOR`) instead of being quietly replaced by a second opinion about
+   * scripture structure. There is no interim diff any more — Will, 2026-09-15.
    */
   readonly diff: (
     baseline: string,
     current: string,
+    textMode?: TextMode,
   ) => Result.Result<DiffSkeleton, EngineDoorMissing>;
 
   /**
@@ -395,6 +469,91 @@ export interface GalleyService {
   ) => Result.Result<string, EngineDoorMissing>;
 
   /**
+   * Onion's formatter, as EDITS rather than a rewritten document.
+   *
+   * Edits, so the whole normalisation goes through `book.apply` as ONE
+   * transaction and Undo takes it back in one step — a replaced document would
+   * be one enormous change that no reviewer could read. Offsets are UTF-16
+   * always: `formatEdits` converts on the way out, and the unit is a property
+   * of the call, not of the engine.
+   *
+   * `opts` is omitted by every caller today; the formatter's defaults are the
+   * engine's `FormatOptions::default`, and choosing among a dozen switches is a
+   * settings surface Sefer has not designed.
+   */
+  readonly formatEdits: (
+    text: string,
+    opts?: FormatOptions,
+  ) => Result.Result<FormatEdits, EngineDoorMissing>;
+
+  /**
+   * One registered book's block structure — the verses and the block markers
+   * hanging off them, addressed so the two sides of an overlay can be matched
+   * in TypeScript.
+   *
+   * Offsets are UTF-16, like everything else that reaches a screen. Throws
+   * when the book retains no text (`updateReference` without `keepText`).
+   */
+  readonly skeleton: (id: string, opts?: OverlayOptions) => Skeleton;
+
+  /**
+   * The edits that make `targetId`'s skeleton `sourceId`'s, exactly — MATCH
+   * FORMATTING, as one applicable transaction plus the report of what it did.
+   *
+   * A source block the target lacks is inserted; an inside block arrives EMPTY
+   * (`report.inserted[].empty`), because where a verse's text splits is
+   * unknowable across languages and the translator pastes each line into place.
+   * A target block the source lacks is removed and its text joins the block
+   * before it. Offsets are UTF-16.
+   *
+   * An overlay is a SUGGESTION applied on request, never a finding.
+   */
+  readonly overlay: (targetId: string, sourceId: string, opts?: OverlayOptions) => OverlayEdits;
+
+  /**
+   * Where one SOURCE block's address lands in the target: the node that is
+   * already there, where the overlay would put one, or the news that the verse
+   * itself has no pair. `address.marker` is required and a stale one THROWS
+   * rather than answering about a different node.
+   */
+  readonly targetNodeFor: (
+    targetId: string,
+    sourceId: string,
+    address: BlockAddress,
+    opts?: OverlayOptions,
+  ) => Equivalent;
+
+  /** The mirror: a TARGET block's address, answered in the source. */
+  readonly sourceNodeFor: (
+    targetId: string,
+    sourceId: string,
+    address: BlockAddress,
+    opts?: OverlayOptions,
+  ) => Equivalent;
+
+  /**
+   * Has this registered book's text moved since it was last registered?
+   *
+   * `undefined` when the id is not registered, which is the question a caller
+   * asks before deciding to register it. Cheaper than a re-parse and cheaper
+   * than a hash of the whole document: the answer is chunk membership, so a
+   * chapter that only moved is not reported as rework.
+   */
+  readonly changedSinceUpdate: (id: string, text: string) => boolean | undefined;
+
+  /**
+   * How many declared sources the last publication's source-copy lane wanted
+   * to read and could not, because they were registered while the lane was off
+   * and so kept no word lane.
+   *
+   * A count, which is what the engine keeps — nonzero means "re-send those
+   * references' text", not "nothing was found". It is a LIBRARY note, never a
+   * finding about scripture: the bindings cannot answer the lane they were
+   * bound for, and that is a fact about the project's setup.
+   */
+  readonly wordlessReferences: () => number;
+
+  /**
    * Free the wasm handle. IDEMPOTENT: the first call frees the pointer and
    * drops it, and every later call does nothing — the Layer's finalizer goes
    * through this same door, so a caller who disposes early does not double
@@ -410,15 +569,22 @@ export interface EngineManifest {
   readonly wire: {
     readonly onion: { readonly formatVersion: number };
     readonly sous: { readonly formatVersion: number };
+    readonly find: { readonly magic: number; readonly formatVersion: number };
   };
 }
 
 /**
  * Does this build's readers speak the artifact's wire formats?
  *
- * Compared against the readers' own `FORMAT_VERSION` constants rather than a
- * number written here, so a regenerated `onion-reader.ts` and a stale
- * `manifest.json` disagree loudly instead of agreeing with a copy of neither.
+ * The onion and sous versions are compared against the READERS' own
+ * `FORMAT_VERSION` constants rather than numbers written here, so a
+ * regenerated reader and a stale `manifest.json` disagree loudly instead of
+ * agreeing with a copy of neither.
+ *
+ * The find buffer has no generated reader — `decodeHits` in this file is it —
+ * so its magic and version are compared against this module's own constants,
+ * which is the same discipline with the reader and the constant in one place.
+ * v0.1.0 is where the find buffer acquired a header at all (engine-asks 5).
  */
 export const accepts = (artifact: EngineManifest): Result.Result<void, VersionMismatch> => {
   if (artifact.wire.onion.formatVersion !== ONION_FORMAT_VERSION) {
@@ -439,47 +605,64 @@ export const accepts = (artifact: EngineManifest): Result.Result<void, VersionMi
       }),
     );
   }
+  if (artifact.wire.find.magic !== FIND_MAGIC) {
+    return Result.fail(
+      new VersionMismatch({ wire: "find", found: artifact.wire.find.magic, expected: FIND_MAGIC }),
+    );
+  }
+  if (artifact.wire.find.formatVersion !== FIND_FORMAT_VERSION) {
+    return Result.fail(
+      new VersionMismatch({
+        wire: "find",
+        found: artifact.wire.find.formatVersion,
+        expected: FIND_FORMAT_VERSION,
+      }),
+    );
+  }
   return Result.succeed(undefined);
 };
 
 const engineVersion = (): EngineVersion => ({
   engine: manifest.engine.crate,
+  tag: manifest.engine.tag,
   revision: manifest.engine.revision,
   onionFormat: manifest.wire.onion.formatVersion,
   sousFormat: manifest.wire.sous.formatVersion,
+  findFormat: manifest.wire.find.formatVersion,
 });
 
-const readKnobs = (knobs: Knobs): KnobValues => ({
-  casing: knobs.casing,
-  doubled: knobs.doubled,
-  doubles_productive_bp: knobs.doubles_productive_bp,
-  exact_neighbor: knobs.exact_neighbor,
-  lengths_enabled: knobs.lengths_enabled,
-  letter_runs: knobs.letter_runs,
-  min_verses: knobs.min_verses,
-  placement: knobs.placement,
-  pooled_neighbor: knobs.pooled_neighbor,
-  presence: knobs.presence,
-  rarity: knobs.rarity,
-  run_shape: knobs.run_shape,
-  sentence_start: knobs.sentence_start,
-  sentence_start_upper_bp: knobs.sentence_start_upper_bp,
-  source_copy: knobs.source_copy,
-  source_copy_min_run: knobs.source_copy_min_run,
-  support_floor: knobs.support_floor,
-  terminal_upper_share_bp: knobs.terminal_upper_share_bp,
-  word_length: knobs.word_length,
-  word_length_sigma: knobs.word_length_sigma,
-  word_support_floor: knobs.word_support_floor,
-  z_long: knobs.z_long,
-  z_short: knobs.z_short,
+const readSettings = (held: SousSettingsHandle): SousSettings => ({
+  casing: held.casing,
+  doubled: held.doubled,
+  doubles_productive_bp: held.doubles_productive_bp,
+  exact_neighbor: held.exact_neighbor,
+  lengths_enabled: held.lengths_enabled,
+  letter_runs: held.letter_runs,
+  min_verses: held.min_verses,
+  placement: held.placement,
+  pooled_neighbor: held.pooled_neighbor,
+  presence: held.presence,
+  rarity: held.rarity,
+  run_shape: held.run_shape,
+  sentence_start: held.sentence_start,
+  sentence_start_upper_bp: held.sentence_start_upper_bp,
+  source_copy: held.source_copy,
+  source_copy_min_run: held.source_copy_min_run,
+  support_floor: held.support_floor,
+  terminal_upper_share_bp: held.terminal_upper_share_bp,
+  word_length: held.word_length,
+  word_length_sigma: held.word_length_sigma,
+  word_support_floor: held.word_support_floor,
+  z_long: held.z_long,
+  z_short: held.z_short,
 });
 
-const writeKnobs = (knobs: Knobs, patch: Partial<KnobValues>): void => {
-  // SAFETY: every KNOB_KEYS entry is a declared mutable field of `Knobs` (see
-  // pkg-web/usfm_galley.d.ts), and `KnobValues` gives each the same type.
-  const target = knobs as Record<KnobKey, boolean | number>;
-  for (const key of KNOB_KEYS) {
+const writeSettings = (held: SousSettingsHandle, patch: Partial<SousSettings>): void => {
+  // SAFETY: every SETTING_KEYS entry is a declared mutable field of
+  // `SousSettings` (see pkg-web/usfm_galley.d.ts), and Sefer's own
+  // `SousSettings` gives each the same type.
+  const target = held as Record<SettingKey, boolean | number>;
+  for (const key of SETTING_KEYS) {
     const value = patch[key];
     if (value !== undefined) target[key] = value;
   }
@@ -534,7 +717,13 @@ const makeService = (
     }
     const done = observe?.span("analyze");
     const started = performance.now();
-    const dish = deserialize(handle.parse(text, true, true, true));
+    // `parseText`, not `parse`: since v0.1.0 the plain name takes a registered
+    // book's ID and answers off its retained text, and the loose-text door is
+    // the one with `Text` on the end. The chunk cache keys on content, so an
+    // unregistered copy of a registered book still hits it; what this costs
+    // over the id door is the string crossing the wall, which the keystroke
+    // path pays because the editor's text is the authority, not the corpus's.
+    const dish = deserialize(handle.parseText(text, true, true, true));
     const engineMs = Math.round((performance.now() - started) * 1000) / 1000;
     done?.();
     // Counts and codes only — a diagnostic's message quotes the document.
@@ -560,20 +749,41 @@ const makeService = (
     };
   };
 
-  const knobs = (): KnobValues => {
+  const settings = (): SousSettings => {
     const held = handle.config();
     try {
-      return readKnobs(held);
+      return readSettings(held);
     } finally {
       held.free();
     }
   };
 
-  const setKnobs = (patch: Partial<KnobValues>): void => {
+  const setSettings = (patch: Partial<SousSettings>): void => {
     const held = handle.config();
     try {
-      writeKnobs(held, patch);
+      writeSettings(held, patch);
       handle.setConfig(held);
+    } finally {
+      held.free();
+    }
+  };
+
+  /**
+   * One overlay call's edits, read out and freed.
+   *
+   * `overlay` answers the same `Edits` class `formatEdits` does, which is the
+   * whole point of the shape: an editor applies an overlay exactly as it
+   * applies a fix, through one `book.apply`.
+   */
+  const overlayEdits = (
+    targetId: string,
+    sourceId: string,
+    opts?: OverlayOptions,
+  ): OverlayEdits => {
+    const wire = overlayOptions(opts);
+    const held = handle.overlay(targetId, sourceId, wire);
+    try {
+      return decodeOverlay(readEdits(held), handle.overlayReport(targetId, sourceId, wire));
     } finally {
       held.free();
     }
@@ -593,27 +803,50 @@ const makeService = (
           query.limit ?? 0,
         ),
       ),
-    findAll: (query) =>
+    findAll: (query, scope) =>
       decodeHits(
         handle.findAll(
           query.text,
           query.caseSensitive === true,
           query.wholeWord === true,
           query.limit ?? 0,
+          scope ?? "targets",
         ),
       ),
     update: (id, text) => handle.update(id, text),
-    updateReference: (id, text) => handle.updateReference(id, text),
+    updateReference: (id, text, keepText) => handle.updateReference(id, text, keepText === true),
     remove: (id) => handle.remove(id),
     publish: () => FindingsSnapshot.open(handle.publish()),
-    // Probed on the MODULE, where the stateless doors will land, so the day
-    // the artifact is regenerated these open with no version number for Sefer
-    // to keep in step. Until then they refuse, naming `DIFF_DOOR`.
-    diff: (baseline, current) => engineDiff(wasmModule, baseline, current),
+    // Probed on the MODULE, where the stateless doors live: they are free
+    // functions, not handle methods, so an artifact that is not the vendored
+    // build refuses by name rather than throwing a `TypeError` about
+    // `undefined`.
+    diff: (baseline, current, textMode) => engineDiff(wasmModule, baseline, current, textMode),
     merge: (baseline, current, decisions, fallback) =>
       engineMerge(wasmModule, baseline, current, decisions, fallback),
-    knobs,
-    setKnobs,
+    formatEdits: (text, opts) => engineFormatEdits(wasmModule, text, opts),
+    skeleton: (id, opts) => decodeBlockSkeleton(handle.skeleton(id, overlayOptions(opts), true)),
+    overlay: overlayEdits,
+    targetNodeFor: (targetId, sourceId, address, opts) =>
+      decodeEquivalent(
+        handle.targetNodeFor(targetId, sourceId, address, overlayOptions(opts), true),
+      ),
+    sourceNodeFor: (targetId, sourceId, address, opts) =>
+      decodeEquivalent(
+        handle.sourceNodeFor(targetId, sourceId, address, overlayOptions(opts), true),
+      ),
+    // `undefined` is "not registered", which is the question a caller asks
+    // before deciding to register it; an empty range list is "registered and
+    // unchanged". The two are different answers and neither is a boolean on
+    // its own, which is why the engine's `Uint32Array | undefined` is narrowed
+    // here rather than upstream.
+    changedSinceUpdate: (id, text) => {
+      const changed = handle.changedSinceUpdate(id, text);
+      return changed === undefined ? undefined : changed.length > 0;
+    },
+    wordlessReferences: () => handle.lastWordlessReferences(),
+    settings,
+    setSettings,
     residentBytes: () => handle.residentBytes(),
     dispose,
   };
