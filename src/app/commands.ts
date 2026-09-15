@@ -176,6 +176,16 @@ const matches = (keys: string, event: KeyboardEvent): boolean => {
   return event.key.toLowerCase() === key.toLowerCase();
 };
 
+/** Is the keystroke being typed INTO something — a box, or the editor itself? */
+const editing = (target: EventTarget | null): boolean => {
+  if (target === null || !(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  // `.cm-content` is a contenteditable, so the editor is covered by the same
+  // question and needs no name of its own here.
+  return target.isContentEditable;
+};
+
 /**
  * Installs the shell's global keymap; returns the uninstall.
  *
@@ -190,6 +200,13 @@ export const installCommandKeys = (target: Document): (() => void) => {
     // document — so without this line `Mod-Shift-n` would insert a footnote
     // AND fire the shell's registration of the same command on one press.
     if (event.defaultPrevented) return;
+    // A binding with no modifier is a plain keystroke, and a plain keystroke
+    // belongs to whatever the reader is typing into. Escape closing a panel is
+    // worth having; Escape closing a panel while someone is mid-word in the
+    // scripture, or in the palette's own search box, is not. Every other
+    // binding holds Mod, so this rule costs them nothing.
+    const bare = !(event.metaKey || event.ctrlKey || event.altKey);
+    if (bare && editing(event.target)) return;
     for (const command of registry()) {
       if (command.keys === undefined || !matches(command.keys, event)) continue;
       if (!command.available()) continue;

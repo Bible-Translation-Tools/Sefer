@@ -7,6 +7,7 @@ import { ProjectProvider, readyShell, useShell, useShellState } from "../app/Pro
 import { SIDEBAR_WIDTH } from "../app/settings";
 import { CommandPalette } from "../app/ui/CommandPalette";
 import { Kbd, Resizable, Toaster } from "../app/ui/primitives";
+import { BackToEditor } from "../app/ui/workspace/BackToEditor";
 import { IconRail } from "../app/ui/workspace/IconRail";
 import { ProjectSidebar } from "../app/ui/workspace/ProjectSidebar";
 // The appearance applier, imported for its side effect and imported HERE: it
@@ -71,8 +72,14 @@ function Workspace() {
           inline `flex-basis`, and with the sidebar hidden the routed content
           has to take the whole row back. */}
       <Resizable.Panel class={shell.sidebarShowing() ? undefined : "[flex-basis:100%]!"}>
-        <div class="h-full overflow-y-auto">
-          <Outlet />
+        {/* `relative`, and the door OUTSIDE the scroller: a full-page screen
+            scrolls its own content, and a button that scrolled away with it
+            would be a door you have to go back to the top to find. */}
+        <div class="relative h-full">
+          <BackToEditor />
+          <div class="h-full overflow-y-auto">
+            <Outlet />
+          </div>
         </div>
       </Resizable.Panel>
     </Resizable.Root>
