@@ -51,7 +51,6 @@ import {
   EmptyState,
   PanelHeader,
   Select,
-  cx,
   toasts,
 } from "../primitives";
 import { BookReview } from "./BookReview";
@@ -63,6 +62,25 @@ const CANNOT_ADD_OR_REMOVE = true;
 /** The first book worth looking at: the first that differs. */
 const firstChanged = (result: CompareResult): BookId | undefined =>
   result.books.find((book) => !book.identical)?.bookId;
+
+/**
+ * One option of the book dropdown. A `<select>` takes text and not markup, so
+ * everything the old list carried in badges has to fit in one line — which it
+ * does, because there were only ever three things to say.
+ */
+const bookLabel = (
+  book: BookComparison,
+  done: { readonly decided: number; readonly total: number },
+): string => {
+  if (book.presence === "left") return t("{book} — only in this project", { book: book.bookId });
+  if (book.presence === "right") return t("{book} — only in the other copy", { book: book.bookId });
+  if (book.identical) return t("{book} — same", { book: book.bookId });
+  return t("{book} — {decided}/{total} decided", {
+    book: book.bookId,
+    decided: done.decided,
+    total: done.total,
+  });
+};
 
 export function ComparePanel() {
   const shell = useShell();
@@ -112,6 +130,18 @@ export function ComparePanel() {
 
   const chosenRight = (): SourceChoice | undefined =>
     rightChoices().find((choice) => choice.id === rightKind());
+
+  /**
+   * What to call the other copy in a sentence or on a button — "the zip", "the
+   * folder". The screen never says "left" or "right": red and green and
+   * compass directions are both ways of telling a reader which side is correct,
+   * and neither side of a comparison between two copies of someone's own work
+   * is correct. See `BookReview` for the same thought applied to the colours.
+   */
+  const theirsShort = (): string => chosenRight()?.shortLabel ?? t("the other copy");
+
+  /** The name at the top of the second column: what the picked source calls itself. */
+  const theirsLabel = (): string => right()?.label ?? theirsShort();
 
   const pickRight = (): void => {
     const choice = chosenRight();
@@ -244,8 +274,10 @@ export function ComparePanel() {
       <Card class="space-y-3">
         <div class="grid gap-3 sm:grid-cols-2">
           <div class="space-y-1">
-            <span class="text-smallest font-medium text-on-surface-tertiary">{t("Left")}</span>
-            <p class="text-small font-semibold text-on-surface-primary" data-compare-left>
+            <span class="text-smallest font-medium text-on-surface-tertiary">
+              {t("This project")}
+            </span>
+            <p class="text-small font-semibold text-brand" data-compare-left>
               {left()?.label ?? t("No project is open")}
             </p>
             <p class="text-smallest text-on-surface-tertiary">
@@ -254,7 +286,9 @@ export function ComparePanel() {
           </div>
 
           <div class="space-y-1">
-            <span class="text-smallest font-medium text-on-surface-tertiary">{t("Right")}</span>
+            <span class="text-smallest font-medium text-on-surface-tertiary">
+              {t("The other copy")}
+            </span>
             <div class="flex items-center gap-2">
               <Select
                 size="sm"
@@ -320,8 +354,15 @@ export function ComparePanel() {
               <Badge tone="brand">
                 {t("{count} books differ", { count: found().changedBooks })}
               </Badge>
-              <Badge tone="warning">{t("{count} only here", { count: found().leftOnly })}</Badge>
-              <Badge tone="success">{t("{count} only there", { count: found().rightOnly })}</Badge>
+              <Badge tone="brand">
+                {t("{count} only in this project", { count: found().leftOnly })}
+              </Badge>
+              <Badge tone="neutral">
+                {t("{count} only in {source}", {
+                  count: found().rightOnly,
+                  source: theirsShort(),
+                })}
+              </Badge>
               <span class="text-small text-on-surface-secondary" data-compare-decided>
                 {t("{decided} decided of {total}", {
                   decided: totals()?.decided ?? 0,
@@ -330,10 +371,10 @@ export function ComparePanel() {
               </span>
               <div class="ms-auto flex items-center gap-1">
                 <Button size="sm" variant="tertiary" onClick={() => stampAll("left")}>
-                  {t("Keep all left")}
+                  {t("Keep all of this project's")}
                 </Button>
                 <Button size="sm" variant="tertiary" onClick={() => stampAll("right")}>
-                  {t("Take all right")}
+                  {t("Take all of {source}'s", { source: theirsShort() })}
                 </Button>
                 <Button size="sm" variant="tertiary" onClick={() => stampAll("undecided")}>
                   {t("Clear")}
@@ -363,120 +404,93 @@ export function ComparePanel() {
               </Show>
               <p class="text-smallest text-on-surface-tertiary">
                 {t("{label} is only read; Apply writes into this project.", {
-                  label: found().right.label,
+                  label: theirsLabel(),
                 })}
               </p>
             </div>
 
-            <div class="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
-              <Card padded={false} class="overflow-hidden">
-                <h2 class="border-b border-surface-border px-3 py-2 text-smallest font-semibold uppercase tracking-wide text-on-surface-tertiary">
-                  {t("Books")}
-                </h2>
-                <ul class="max-h-[32rem] overflow-y-auto">
-                  <For each={found().books}>
-                    {(book) => {
-                      const done = () => bookCompleteness(book, decisions());
-                      return (
-                        <li>
-                          <button
-                            type="button"
-                            data-compare-book={book.bookId}
-                            data-presence={book.presence}
-                            data-changes={book.identical ? 0 : book.decisions}
-                            aria-current={selected() === book.bookId ? "true" : undefined}
-                            class={cx(
-                              "flex w-full items-center gap-2 border-b border-surface-border px-3 py-2 text-start text-small",
-                              selected() === book.bookId
-                                ? "bg-brand-light font-semibold text-brand"
-                                : "text-on-surface-secondary hover:bg-surface-secondary",
-                            )}
-                            onClick={() => setSelected(book.bookId)}
-                          >
-                            <span class="min-w-0 flex-1 truncate">{book.bookId}</span>
-                            <Show when={book.presence === "left"}>
-                              <Badge tone="warning" size="sm">
-                                {t("only here")}
-                              </Badge>
-                            </Show>
-                            <Show when={book.presence === "right"}>
-                              <Badge tone="success" size="sm">
-                                {t("only there")}
-                              </Badge>
-                            </Show>
-                            <Show when={book.presence === "both"}>
-                              <span class="shrink-0 text-smallest tabular-nums text-on-surface-tertiary">
-                                {book.identical
-                                  ? t("same")
-                                  : t("{decided}/{total}", {
-                                      decided: done().decided,
-                                      total: done().total,
-                                    })}
-                              </span>
-                            </Show>
-                          </button>
-                        </li>
-                      );
-                    }}
-                  </For>
-                </ul>
-              </Card>
-
-              <div class="min-w-0 space-y-2" data-compare-hunks>
-                <Show
-                  when={current()}
-                  fallback={
-                    <Card>
-                      <EmptyState title={t("Choose a book to review.")} />
-                    </Card>
-                  }
+            <div class="min-w-0 space-y-2" data-compare-hunks>
+              {/* A dropdown, not a column of 66 rows. The books are already
+                  summarised above and a picker that took a third of the screen
+                  left the thing being reviewed in a gutter; each option carries
+                  its own state, so nothing is lost by folding it away. */}
+              <label class="flex flex-wrap items-center gap-2">
+                <span class="text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase">
+                  {t("Book")}
+                </span>
+                <Select
+                  size="sm"
+                  wrapperClass="min-w-0"
+                  data-compare-books={found().books.length}
+                  aria-label={t("Which book to review")}
+                  value={selected() ?? ""}
+                  onChange={(event) => setSelected(event.currentTarget.value)}
                 >
+                  <For each={found().books}>
+                    {(book) => (
+                      <option value={book.bookId}>
+                        {bookLabel(book, bookCompleteness(book, decisions()))}
+                      </option>
+                    )}
+                  </For>
+                </Select>
+                <Show when={current()}>
                   {(book) => (
-                    <>
-                      <div class="flex flex-wrap items-center gap-2">
-                        <h2 class="text-small font-semibold text-on-surface-primary">
-                          {book().bookId}
-                        </h2>
-                        <span class="text-smallest text-on-surface-tertiary">
-                          {t("{decided} decided of {total}", {
-                            decided: bookCompleteness(book(), decisions()).decided,
-                            total: bookCompleteness(book(), decisions()).total,
-                          })}
-                        </span>
-                        <Show when={book().presence === "both" && !book().identical}>
-                          <div class="ms-auto flex items-center gap-1">
-                            <span class="text-smallest text-on-surface-tertiary">
-                              {t("Whole book:")}
-                            </span>
-                            <Button
-                              size="sm"
-                              variant="tertiary"
-                              onClick={() => stampBook(book(), "left")}
-                            >
-                              {t("Keep left")}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="tertiary"
-                              onClick={() => stampBook(book(), "right")}
-                            >
-                              {t("Take right")}
-                            </Button>
-                          </div>
-                        </Show>
-                      </div>
-                      <BookReview
-                        book={book()}
-                        decisions={decisions()}
-                        leftLabel={found().left.label}
-                        rightLabel={found().right.label}
-                        cannotAdd={CANNOT_ADD_OR_REMOVE}
-                        onDecide={decideOne}
-                      />
-                    </>
+                    <span class="text-smallest text-on-surface-tertiary">
+                      {t("{decided} decided of {total}", {
+                        decided: bookCompleteness(book(), decisions()).decided,
+                        total: bookCompleteness(book(), decisions()).total,
+                      })}
+                    </span>
                   )}
                 </Show>
-              </div>
+                <Show when={current()?.presence === "both" && current()?.identical === false}>
+                  <div class="ms-auto flex items-center gap-1">
+                    <span class="text-smallest text-on-surface-tertiary">{t("Whole book:")}</span>
+                    <Button
+                      size="sm"
+                      variant="tertiary"
+                      onClick={() => {
+                        const book = current();
+                        if (book !== undefined) stampBook(book, "left");
+                      }}
+                    >
+                      {t("Keep this project's")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="tertiary"
+                      onClick={() => {
+                        const book = current();
+                        if (book !== undefined) stampBook(book, "right");
+                      }}
+                    >
+                      {t("Take {source}'s", { source: theirsShort() })}
+                    </Button>
+                  </div>
+                </Show>
+              </label>
+
+              <Show
+                when={current()}
+                fallback={
+                  <Card>
+                    <EmptyState title={t("Choose a book to review.")} />
+                  </Card>
+                }
+              >
+                {(book) => (
+                  <BookReview
+                    book={book()}
+                    decisions={decisions()}
+                    mineLabel={found().left.label}
+                    theirsLabel={theirsLabel()}
+                    theirsShort={theirsShort()}
+                    cannotAdd={CANNOT_ADD_OR_REMOVE}
+                    onDecide={decideOne}
+                  />
+                )}
+              </Show>
             </div>
 
             <Dialog

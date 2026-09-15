@@ -133,12 +133,42 @@ A book whose result equals what the target already holds is not written at all.
 
 ## The screen
 
-`/compare` renders inside `ShellGate`. The source card holds both sides —
-left from the same `SourceChoice` table as the right — and a Compare button.
-Then a summary row (books differing, only here, only there, "N decided of M",
-the bulk stamps and Apply), a book list with change counts and only-here /
-only-there badges, and the selected book's hunks with Keep left / Take right
-per hunk (`aria-pressed`, because undecided is neither).
+`/compare` renders inside `ShellGate`. The source card holds both sides — the
+open project from the same `SourceChoice` table as the other copy — and a
+Compare button. Then a summary row (books differing, only in this project, only
+in the other copy, "N decided of M", the bulk stamps and Apply), a **book
+dropdown** naming each book and its state, and the selected book's hunks with
+Keep this project's / Take the zip's per hunk (`aria-pressed`, because
+undecided is neither).
+
+### The screen never says "left" or "right"
+
+`left` and `right` are the model's words — `CompareHunk`, `Decision` and `plan`
+keep them, and should, because the model has two sides and no opinion about
+them. The SCREEN says **This project** and whatever the other source calls
+itself, and each `SourceChoice` carries a `shortLabel` ("this project", "the
+zip", "the folder") so a button can read "Take the zip's" rather than "Take
+right". A reader choosing between two copies of their own work is not reading a
+coordinate system.
+
+The colours follow the same thought, and this is why they are not red and
+green. Red/green is a judgement — it says one side is a deletion and the other
+an addition, which is true of a diff against your own past and false of a
+comparison between two people's work. So the tint is by SIDE: the brand tint
+for this project, a neutral tint for the other, each with a start-edge rule so
+the pair still reads for someone who cannot separate the hues. A
+`compare.colours: "sideTint" | "redGreen"` setting (default `sideTint`) is the
+intended way to let a reader who prefers the old scheme have it; **it is not
+registered yet** — nothing reads it, and the side tint is unconditional.
+
+Inside a hunk, `src/core/diff/inline.ts` says which CHARACTERS differ and the
+renderer marks those more strongly on both sides. It is a guarded character
+LCS — common prefix and suffix trimmed first, a wholesale swap past the cap —
+computed once per hunk and split back onto lines, never once per line. The
+vendored engine readers were checked first and carry no diff or alignment of
+any kind: the onion reader has a tree, tokens, diagnostics and a table of
+contents, the sous reader a findings snapshot and a pattern table. Save &
+Review's own views use the same module.
 
 Apply is offered because `result.left.canApply` says so, names the books it is
 about to write in a confirmation Dialog, and leaves a receipt line. It then
@@ -149,7 +179,10 @@ describe the text before the write are worse than none.
 
 - Adding or removing a book (see `Unsupported` above).
 - A chapter view — the hunks rendered in place in the chapter's projected text.
-  The list view is what exists.
+  The list view is what exists. (Save & Review has one, over verse-aligned rows
+  from `src/core/diff/verses.ts`; bringing it here is a matter of feeding it a
+  `CompareHunk` list rather than a `Baseline`.)
+- `compare.colours`, the setting named above.
 - More sources: a git checkpoint, another local project, remote latest. The
   port is the point; each is a new file.
 - The incoming-remote reconciliation narrative (auto-accept scopes, diverged
