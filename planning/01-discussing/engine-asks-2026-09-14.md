@@ -9,6 +9,13 @@ Everything in this file was asked for in the UI build-out and either is not poss
 **Change:** re-export `formatEdits(text, opts)` (edits, not a rewritten string — Sefer applies edits through the Book so Undo is one step) on the `Galley` handle, regenerate the artifact, move the Cargo pin in the same commit.
 **Sefer side ready:** `Fixes.formatBook` (refuses today with `Fixes.FORMAT_DOOR` naming this exact ask), `format.book` / `format.project` commands, `MultiBook.runAcrossBooks`. Only `formatBook` changes when the door lands.
 
+## 1b. Diff and merge — re-export Onion's decision-unit diff from galley wasm
+
+**Asked:** word-level diff inside Save & Review / Compare, and the decision map for taking in work.
+**State:** `onion/src/diff.rs` is a full diff engine: `DecisionUnit`s addressed by `Addr { book, chapter, first..last verse, kind }`, `MergeSide::{Baseline, Current}`, slots/anchors, dup contexts; `onion-wasm/src/lib.rs` binds `diff(baseline, current) -> JSON` (UTF-16 spans into each side) and takes `{"unitId": "baseline"|"current"}` decisions back to merge. `galley/src/wasm.rs` does not re-export any of it, so the pinned artifact has no diff door.
+**Change:** re-export `diff` and the merge-with-decisions door on the `Galley` handle (same commit as the format re-export; regenerate the artifact and move the Cargo pin).
+**Sefer side:** the unified Review/Compare screen is being shaped around `DecisionUnit`s now (`src/core/galley` gets a `diff`/`merge` door that refuses until the artifact carries it; a TS line/word diff feeds the same types in the meantime and is labelled interim). Intra-unit word marks come from the engine's unit spans once the door lands.
+
 ## 2. Sous — a real character census, not only convictions
 
 **Asked:** a character-by-character inventory page (occurrences, spread, neighbours, placement, clusters) with "show the other places this character appears".
