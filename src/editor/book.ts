@@ -46,6 +46,7 @@ import {
 import type { ObservabilityService } from "../core/observability";
 import type { Seat, Seated } from "../core/project/project";
 import type { Change, Source, SourceStamp } from "../core/source/source";
+import { actionCommand, type EditorAction } from "./core/actions";
 import type { Analyze } from "./core/analyzer";
 import { historyLayer, usfmEditorHeadless } from "./core/compose";
 import { docText, structureAt, type DocStructure } from "./core/docStructure";
@@ -79,6 +80,16 @@ export interface EditorBook extends Book {
   attached(): number;
   /** A non-view attachment (a `ClipWindow`, a satellite). Release to let go. */
   hold(): () => void;
+  /**
+   * Runs one named editor gesture — an insertion, focusing the front matter
+   * card — against whichever seat is canonical, and reports whether it ran.
+   *
+   * The gesture builds its own transaction from the CURRENT selection and
+   * dispatches it, so the phases judge it exactly as they judge a keystroke
+   * and it lands as one Undo step. Named rather than passed as a function
+   * because the caller is the shell, and the shell does not import CodeMirror.
+   */
+  perform(action: EditorAction): boolean;
   /** Publication in CodeMirror's own vocabulary, for borrowing surfaces. */
   attach(receive: Receive): () => void;
   /** This book as the port satellites and windows submit through. */
@@ -270,6 +281,8 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
     },
 
     changes: listeners.add,
+
+    perform: (action) => command(actionCommand(action)),
 
     attach: (receive) => {
       receivers.add(receive);

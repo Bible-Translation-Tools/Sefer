@@ -41,6 +41,25 @@ export {
   type PhaseRule,
 } from "./core/phases";
 
+// Structured entry: the named insert gestures, and the front matter card.
+export { EDITOR_ACTIONS, actionCommand, type EditorAction } from "./core/actions";
+export {
+  insertBlock,
+  insertFootnote,
+  insertParagraph,
+  insertPoetry,
+  insertVerse,
+  nextPoetryLevel,
+  nextVerseNumber,
+  wordBoundaryAt,
+} from "./core/insert";
+export {
+  focusFrontMatter,
+  frontMatterCard,
+  frontMatterRows,
+  type FrontRow,
+} from "./core/frontmatter";
+
 // Policy as data: which class paints how, under which projection.
 export { PROJECTIONS, assignment, type AssignmentDelta } from "./core/registry";
 export {

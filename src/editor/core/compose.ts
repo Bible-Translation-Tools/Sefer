@@ -28,6 +28,7 @@ import {
   usfmModeProjection,
 } from "./editorState";
 import { guardedEnter, setBlockMarker } from "./input";
+import { insertFootnote, insertParagraph, insertPoetry, insertVerse } from "./insert";
 import { traceFor, type Verdict } from "./instrument";
 import type { ChangeRule, TransactionRule } from "./kernel";
 import { MARKUP_TOKEN_KINDS } from "./mapping";
@@ -256,6 +257,16 @@ export function usfmKeys(): readonly KeyBinding[] {
     { key: "Ctrl-h", run: backspace() },
     { key: "Mod-Alt-1", run: traced("setBlockMarker", setBlockMarker(structureAt, "q1")) },
     { key: "Mod-Alt-0", run: traced("setBlockMarker", setBlockMarker(structureAt, "p")) },
+    // The structured insertions (`core/insert.ts`). Bound here as well as in
+    // the shell's command registry: this copy reaches the caret the reader is
+    // looking at with no round trip, and the registry's copy is what the
+    // palette lists and what fires when focus is outside the editor. They
+    // cannot both run — the shell's document listener skips a chord the
+    // editor already consumed (`installCommandKeys`).
+    { key: "Mod-Shift-v", run: traced("insertVerse", insertVerse(structureAt)) },
+    { key: "Mod-Shift-p", run: traced("insertParagraph", insertParagraph(structureAt)) },
+    { key: "Mod-Shift-q", run: traced("insertPoetry", insertPoetry(structureAt)) },
+    { key: "Mod-Shift-f", run: traced("insertFootnote", insertFootnote()) },
   ];
 }
 
