@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as CloudRouteImport } from './routes/cloud'
 import { Route as FindRouteImport } from './routes/find'
 import { Route as FindingsRouteImport } from './routes/findings'
 import { Route as HistoryRouteImport } from './routes/history'
@@ -25,6 +26,11 @@ import { Route as ProjectIdBookBookRouteImport } from './routes/project/$id/book
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CloudRoute = CloudRouteImport.update({
+  id: '/cloud',
+  path: '/cloud',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FindRoute = FindRouteImport.update({
@@ -85,6 +91,7 @@ const ProjectIdBookBookRoute = ProjectIdBookBookRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/cloud': typeof CloudRoute
   '/find': typeof FindRoute
   '/findings': typeof FindingsRoute
   '/history': typeof HistoryRoute
@@ -99,6 +106,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/cloud': typeof CloudRoute
   '/find': typeof FindRoute
   '/findings': typeof FindingsRoute
   '/history': typeof HistoryRoute
@@ -114,6 +122,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/cloud': typeof CloudRoute
   '/find': typeof FindRoute
   '/findings': typeof FindingsRoute
   '/history': typeof HistoryRoute
@@ -130,6 +139,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/cloud'
     | '/find'
     | '/findings'
     | '/history'
@@ -144,6 +154,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/cloud'
     | '/find'
     | '/findings'
     | '/history'
@@ -158,6 +169,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/cloud'
     | '/find'
     | '/findings'
     | '/history'
@@ -173,6 +185,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CloudRoute: typeof CloudRoute
   FindRoute: typeof FindRoute
   FindingsRoute: typeof FindingsRoute
   HistoryRoute: typeof HistoryRoute
@@ -193,6 +206,13 @@ declare module '@tanstack/solid-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cloud': {
+      id: '/cloud'
+      path: '/cloud'
+      fullPath: '/cloud'
+      preLoaderRoute: typeof CloudRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/find': {
@@ -277,6 +297,7 @@ declare module '@tanstack/solid-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CloudRoute: CloudRoute,
   FindRoute: FindRoute,
   FindingsRoute: FindingsRoute,
   HistoryRoute: HistoryRoute,
