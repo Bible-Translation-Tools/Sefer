@@ -66,7 +66,7 @@ Everything else on the corpus path is off the JS thread on desktop.
 
 ### Where the native engine comes from
 
-`src-tauri/Cargo.toml` names `usfm_galley` (and `sous-core`, for the `Brigade` pass galley does not re-export) as a **path** dependency on the sibling `usfm_onion_2/` checkout, with `features = ["parallel"]` and deliberately without `wasm`. That is the same working tree the vendored wasm was built from — revision `f3a2b0bfcae1b294abdbc41165f3d916c5eaecc8`, recorded in `vendor/galley/manifest.json` — which is what makes "one engine, two doors" true rather than approximately true. When the engine is pushed, those two lines become `git = "…/scripture-kitchen.git", rev = "<the manifest revision>"`, and regenerating the wasm artifact means moving the Cargo pin in the same commit.
+`src-tauri/Cargo.toml` names `usfm_galley` (and `sous-core`, for the `Brigade` pass galley does not re-export) as a **path** dependency on the sibling `scripture-kitchen/` checkout, with `features = ["parallel"]` and deliberately without `wasm`. That is the same working tree the vendored wasm was built from — revision `f3a2b0bfcae1b294abdbc41165f3d916c5eaecc8`, recorded in `vendor/galley/manifest.json` — which is what makes "one engine, two doors" true rather than approximately true. When the engine is pushed, those two lines become `git = "…/scripture-kitchen.git", rev = "<the manifest revision>"`, and regenerating the wasm artifact means moving the Cargo pin in the same commit.
 
 ## Loading it
 

@@ -49,10 +49,10 @@ git2 = { version = "0.20", features = ["https"] }
 #
 # and the manifest revision stays the single source of that pin. Note the
 # absent `wasm` feature: the native door links no wasm-bindgen.
-usfm_galley = { path = "../../usfm_onion_2/galley", features = ["parallel"] }
+usfm_galley = { path = "../../scripture-kitchen/galley", features = ["parallel"] }
 # `Brigade` — the concrete `ChapterPass` the Expediter is parameterised over —
 # lives in sous-core and galley does not re-export it, so it is named directly.
-sous-core = { path = "../../usfm_onion_2/sous-chef/core" }
+sous-core = { path = "../../scripture-kitchen/sous-chef/core" }
 
 [dev-dependencies]
 # Temp work trees for `src/git.rs`'s unit tests. Already in the lock file as a

@@ -1,6 +1,6 @@
 # Engine asks: what Sefer needs from Onion, Sous and Galley (2026-09-14)
 
-Everything in this file was asked for in the UI build-out and either is not possible with the pinned engine (`vendor/galley/manifest.json`, revision `f3a2b0b`) or needs a change upstream in `../usfm_onion_2`. Sefer-side code is already shaped for each; the item names the one door that is missing. Ordered by how much product it unblocks.
+Everything in this file was asked for in the UI build-out and either is not possible with the pinned engine (`vendor/galley/manifest.json`, revision `f3a2b0b`) or needs a change upstream in `../scripture-kitchen`. Sefer-side code is already shaped for each; the item names the one door that is missing. Ordered by how much product it unblocks.
 
 ## 1. Format — re-export `format_edits` from the galley wasm crate
 
