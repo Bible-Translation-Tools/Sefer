@@ -11,7 +11,7 @@ dialogs, OS paths and locale, native git, an OS keychain, and self-update. Each 
 | -------------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------- |
 | `effect/FileSystem`                    | `TauriFileSystemLive`               | `@tauri-apps/plugin-fs`; `watch` is a real `Stream`, `rename` replaces atomically |
 | `HostInfo`                             | `TauriHostInfoLive(build)`          | `@tauri-apps/api/path` + `plugin-os`; all capabilities true                       |
-| `Dialogs`                              | `TauriDialogsLive`                  | `plugin-dialog`; returns real absolute paths, unlike the Web pickers              |
+| `Dialogs`                              | `TauriDialogsLive`                  | `plugin-dialog`; returns real absolute paths, unlike the Web pickers. `pickSaveFile` is desktop-only in practice — Web answers `None` and downloads instead |
 | `Credentials`                          | `TauriCredentialsLive`              | `credentials_*` commands over the `keyring` crate, service `org.wycliffe.sefer`   |
 | `Git`                                  | `TauriGitLive`                      | `git_*` commands over `git2`                                                      |
 | `Remote`                               | `TauriRemoteLive({ giteaHost })`    | `git_ensure_remote/fetch/pull/push`; `publish` needs `Gitea` for repo creation    |
@@ -27,7 +27,9 @@ bundle. `pnpm build` currently emits them as their own chunk that a browser neve
 
 `fs`, `dialog`, `os`, `opener` on every target; `updater`, `process`, `window-state` on desktop only
 (mobile ships through app stores). `src-tauri/capabilities/default.json` enables the fs commands the
-FileSystem layer calls and grants their paths ONCE through `fs:scope`, over `$APPDATA`,
+FileSystem layer calls (and `dialog:allow-save`, which the export flow needs and which
+`dialog:default` already carried — it is named anyway so a reader can see what a command needs
+without opening the plugin) and grants their paths ONCE through `fs:scope`, over `$APPDATA`,
 `$APPLOCALDATA`, `$DOCUMENT` and `$HOME`. Each base is listed four times — bare, `/**`, `/**/.*` and
 `/**/.*/**` — because a glob does not match a leading dot and every project contains a `.git`.
 Projects live in the user's own folders on desktop, so the scope is broad; it is still explicit, and a
@@ -35,17 +37,69 @@ path outside it comes back as `PermissionDenied` rather than as a silent empty r
 
 ## Rust commands
 
-`git_open/init/status/commit/log/previous_versions/show` answer the `Git` port;
-`git_ensure_remote/remote_url/fetch/pull/push` answer `Remote`; `credentials_get/set/clear` answer
-`Credentials`; `install_update_from_endpoint` serves the manual version switch.
+`credentials_get/set/clear` answer `Credentials`; `install_update_from_endpoint` serves the manual
+version switch; `corpus_*` are the native engine ([galley.md](galley.md)). The git2 half is one
+command per port member, and the whole `Git` port is answered — no member refuses by name any more:
+
+| Rust command                 | TS member                             | Port     |
+| ---------------------------- | ------------------------------------- | -------- |
+| `git_open`                   | `Git.open`                            | `Git`    |
+| `git_init`                   | `Git.init`                            | `Git`    |
+| `git_status`                 | `Git.status`                          | `Git`    |
+| `git_commit`                 | `Git.commit`                          | `Git`    |
+| `git_log`                    | `Git.log`                             | `Git`    |
+| `git_previous_versions`      | `Git.previousVersions`                | `Git`    |
+| `git_show`                   | `Git.show`                            | `Git`    |
+| `git_log_from`               | `Git.logFrom`                         | `Git`    |
+| `git_resolve_ref`            | `Git.resolve`                         | `Git`    |
+| `git_current_branch`         | `Git.branch`                          | `Git`    |
+| `git_changed_paths_between`  | `Git.changedPathsBetween`             | `Git`    |
+| `git_ensure_remote`          | `Remote.attach`                       | `Remote` |
+| `git_remote_url`             | `Remote.origin`                       | `Remote` |
+| `git_fetch`                  | `Remote.fetch`                        | `Remote` |
+| `git_pull`                   | `Remote.pull`                         | `Remote` |
+| `git_push`                   | `Remote.push`, and `publish`'s second half | `Remote` |
+| `git_move_branch`            | `Remote.moveBranch`                   | `Remote` |
+| `git_abort_merge`            | `Remote.abortMerge`                   | `Remote` |
 
 Every command returns `Result<T, String>` where the string is `"<Reason>: <detail>"` — the vocabulary
 is in `src-tauri/src/errors.rs` (`NotARepository`, `Io`, `Conflict`, `Refused`, `AuthFailed`,
 `Offline`, `Rejected`). The TS adapters read only the prefix, so libgit2's prose can change without
 breaking the mapping. `remote_callbacks_for_token` and the transport classifier are ported from the v1
-app. `commit` stages exactly the receipt paths — no `add_all` — and both sides check the path is
-inside the work tree. `pull` fast-forwards or reports `Conflict`: Sefer never merges USFM behind a
-translator's back.
+app. `pull` fast-forwards or reports `Conflict`: Sefer never merges USFM behind a translator's back.
+
+### What the Rust side promises
+
+These are the semantics the two hosts must agree on, and where they are enforced:
+
+- **The receipts rule.** `git_commit` stages exactly the paths it was given — no `add_all` — and
+  `relative_path` re-checks each one is inside the work tree. The TS adapter has already run core's
+  `repositoryPath`; Rust checks again because this process can write anywhere the user can.
+- **Nothing to commit is refused.** An empty path list is `Refused` in the Web layer's own words, and
+  so is a list whose paths all turn out to be deletions of things never recorded. Without that, an
+  unborn HEAD produced an empty root commit — a first version holding no scripture.
+- **Committing an unchanged tree is not an error.** It returns the existing HEAD id rather than
+  adding an empty version to the timeline a translator reads.
+- **`resolve` and `branch` answer `None`, not a failure.** "Nobody has pushed to this yet" and "HEAD
+  is detached" are states. An unborn HEAD still NAMES its branch, because that is the branch a first
+  push must create, and `git.currentBranch` answers the same way on the Web.
+- **Rename detection is off** in `git_changed_paths_between`. libgit2 would report a moved book as one
+  rename; the Web layer's tree walk reports a delete and an add. The plan a translator reads is about
+  paths, so both hosts say delete-and-add.
+- **`git_move_branch` is a forced checkout** and refuses any branch that is not the one HEAD is on.
+  **`git_abort_merge` refuses when nothing is in progress** — it is a hard reset underneath, and on a
+  clean repository that would discard unsaved work rather than undo a transfer.
+
+`src/core/git/contract.ts` is the acceptance suite, and it cannot reach this Layer: `invoke` needs a
+Tauri runtime and a Node harness has none. So the contract's own case — init, empty status, one saved
+file, one commit, then `log`/`show`/`previousVersions` agreeing — plus one case per command lives as
+`#[cfg(test)] mod tests` in `src-tauri/src/git.rs`, against real repositories in temp directories.
+`cargo test` in `src-tauri/` runs them. That is not the repository's "no tests" rule being bent: the
+rule is about locking UI behaviour while the surfaces move, and nothing there renders anything.
+
+The commit identity goes through one function, `author_signature`. Sefer has no author setting yet —
+`src/app/commands.ts` passes a fixed "Sefer <sefer@localhost>" on both hosts — so that function is
+the single place a real identity has to land.
 
 ## The updater
 
