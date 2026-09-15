@@ -67,7 +67,7 @@ For evaluating the new app by hand. One line per thing a person can do. Tags:
 - **Edit from a result** — changed: excerpts are read-only until Edit, which swaps in a satellite editor over the canonical book; Done collapses it.
 - **Open in editor** — same (aims and scrolls the main editor).
 - **Replace / Replace all** — removed on purpose (scripture too fragile). Core functions kept.
-- **Search the reference project** — absent. *undecided.*
+- **Search the reference project** — absent; engine ask (references are registered as verse lengths only). See engine-asks 3b.
 - **Sort "case mismatches first"** — absent.
 
 ## Key terms (STET)

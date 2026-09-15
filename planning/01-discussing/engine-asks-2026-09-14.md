@@ -23,6 +23,13 @@ Everything in this file was asked for in the UI build-out and either is not poss
 **Change:** an Onion (or galley) call taking two texts (or two parsed dishes) and returning aligned block spans keyed by verse sid — "this `\q1` in the source corresponds to this span in the target" — with a diff of block markers per verse.
 **Sefer side:** `src/app/workflows/stet.ts` `matchFormatting` is an `Effect.die` stub with this signature in mind; the excerpt list already renders source/target pairs per sid.
 
+## 3b. Find over a reference project
+
+**Asked:** Will: "Find on reference project I think doable in galley."
+**State:** `CorpusEngine.updateReference(id, text)` registers a reference as **verse lengths only, no text** — it is the denominator for length proportionality. `CorpusEngine.find` searches the retained verse-text projections of *targets*, so a reference contributes no hits.
+**Change:** let a reference retain its verse-text projection too (or an `updateReferenceText` door), and let `find` take a scope: targets, references, or a named reference id. Same hit shape (book, from/to, projected preview) so Sefer's excerpt list needs no change beyond a scope control "This book | Whole project | Reference".
+**Sefer side ready:** the Library resolves `source`/`reference` resources per project; `ProjectAnalysis.attach` is where they would be registered.
+
 ## 4. Chapter labels — Onion's job
 
 **Asked (old app had):** a chapter-label picker rewriting `\cl` / `\cp`.
