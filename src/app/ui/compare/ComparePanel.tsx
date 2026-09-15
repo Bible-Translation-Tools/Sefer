@@ -59,9 +59,17 @@ import { describe, sourceChoices, type SourceChoice } from "./sources";
 /** Adding or removing a whole book is refused by `applyPlan`; see compare.md. */
 const CANNOT_ADD_OR_REMOVE = true;
 
-/** The first book worth looking at: the first that differs. */
+/**
+ * The first book worth looking at: the first that differs, and the first book
+ * at all when nothing does.
+ *
+ * The fallback matters now that the picker is a dropdown: a `<select>` whose
+ * value matches no option renders blank, so a comparison that found nothing
+ * would show an empty control beside "0 books differ" and read as broken
+ * rather than as clean.
+ */
 const firstChanged = (result: CompareResult): BookId | undefined =>
-  result.books.find((book) => !book.identical)?.bookId;
+  (result.books.find((book) => !book.identical) ?? result.books[0])?.bookId;
 
 /**
  * One option of the book dropdown. A `<select>` takes text and not markup, so

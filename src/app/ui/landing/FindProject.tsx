@@ -26,7 +26,7 @@ import Download from "lucide-solid/icons/download";
 import Globe from "lucide-solid/icons/globe";
 import Plus from "lucide-solid/icons/plus";
 import SearchIcon from "lucide-solid/icons/search";
-import { For, Show, createMemo, createProjection, createSignal } from "solid-js";
+import { For, Show, createMemo, createSignal } from "solid-js";
 
 import { cloneRepository } from "../../../core/remote/clone";
 import { catalogueFor, type CatalogueEntry, type ProjectType } from "../../catalogue";
@@ -64,12 +64,29 @@ const lastSegment = (path: string): string => path.slice(path.lastIndexOf("/") +
 /**
  * One row, with every value the table draws already computed.
  *
- * The whole point of this shape: a row must not read a signal. The live
- * catalogue is six thousand rows, and `nameOf(entry)` inside the `<For>` body
- * made every one of them a subscriber of the name-style signal — six thousand
- * scopes re-run to change one segmented control, which is what the
- * `HUGE_FAN_OUT` diagnostic was reporting. The derivation happens once, in a
- * memo; the rows take plain strings.
+ * The whole point of this shape: **a row must not read a signal.** The live
+ * catalogue is thousands of rows, and `nameOf(entry)` inside the `<For>` body
+ * made every one of them a subscriber of the name-style signal — thousands of
+ * scopes re-running to move one segmented control, which is what the
+ * `HUGE_FAN_OUT` diagnostic was reporting. The derivation happens once, in the
+ * `rows` memo; a row receives plain values, `busy` included.
+ *
+ * Two things were measured against a 1,333-row catalogue before this shape was
+ * settled on, and both are worth writing down because both look right:
+ *
+ *   * a per-key store `createProjection` keyed by row id — the repair the
+ *     diagnostic's own text suggests — measured WORSE (13,000 subscribers
+ *     against 6,500), because a store read still registers a node per row;
+ *   * a memo returning fresh row objects with an unkeyed `<For>` measured
+ *     worse for the same reason: every flip tore down and rebuilt all 1,333
+ *     rows. Hence `keyed={(row) => row.entry.id}` below.
+ *
+ * What is left is NOT ours and cannot be fixed here: at 1,333 rows the page
+ * still reports ~6,500 subscribers on one unnamed signal, and the same number
+ * appears when the row is five instances of a five-line component that reads
+ * nothing at all. It is one subscriber per COMPONENT INSTANCE in Solid
+ * 2.0.0-rc.6 — raw `<tr>`/`<td>` elements report zero. Nothing in this file,
+ * or in `primitives/Table.tsx`, moves it.
  */
 interface CatalogueRow {
   readonly entry: CatalogueEntry;
@@ -77,6 +94,8 @@ interface CatalogueRow {
   readonly name: string;
   /** Empty when Download is offered; otherwise why it is not. */
   readonly refusal: string;
+  /** True while this row's clone is running. A value, never a signal read. */
+  readonly downloading: boolean;
 }
 
 export function FindProject(props: { readonly onDownloaded: () => void }) {
@@ -181,28 +200,17 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
    * receives plain strings.
    */
   const rows = createMemo(
-    (): readonly CatalogueRow[] =>
-      sorted().map((entry) => ({
+    (): readonly CatalogueRow[] => {
+      const running = busy();
+      return sorted().map((entry) => ({
         entry,
         name: nameOf(entry),
         refusal: downloadReason(entry),
-      })),
+        downloading: entry.id === running,
+      }));
+    },
     { name: "catalogueRows" },
   );
-
-  /**
-   * Which row is downloading, as a per-key projection rather than a signal
-   * every row compares itself against. A store tracks reads per property, so
-   * `downloading[id]` subscribes one row to one key: starting a download
-   * re-runs that row and its predecessor, not the whole table. This is the
-   * `createSelector`-shaped fix the Solid diagnostic prescribes for
-   * `HUGE_FAN_OUT`, in the form Solid 2 offers.
-   */
-  const downloading = createProjection<Record<string, boolean>>((draft) => {
-    const id = busy();
-    for (const key of Object.keys(draft)) if (key !== id && draft[key]) draft[key] = false;
-    if (id !== "") draft[id] = true;
-  }, {});
 
   const sortOf = (key: Column): SortDirection => (column() === key ? direction() : "none");
 
@@ -385,8 +393,15 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
               </TableRow>
             </TableHead>
             <TableBody>
+              {/* Keyed by the row's own id, so a row is UPDATED rather than
+                  torn down and rebuilt when the memo produces a fresh object —
+                  which it does on every name-style flip. The callback takes an
+                  accessor, and `<For>` gives each row its own: that is the
+                  per-key projection the HUGE_FAN_OUT diagnostic asks for, done
+                  by the list itself rather than by a store beside it. */}
               <For
                 each={rows()}
+                keyed={(row) => row.entry.id}
                 fallback={
                   <TableRow>
                     <TableCell colspan={5} class="py-8 text-center text-on-surface-tertiary">
@@ -397,48 +412,51 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
                   </TableRow>
                 }
               >
-                {(row) => (
-                  <TableRow data-entry={row.entry.id}>
-                    <TableCell class="font-mono text-smallest text-on-surface-tertiary">
-                      {row.entry.code}
-                    </TableCell>
-                    <TableCell>
-                      <strong class="font-medium text-on-surface-primary">{row.name}</strong>
-                      <span class="ms-2 text-smallest text-on-surface-tertiary">
-                        {row.entry.owner}/{row.entry.repo}
-                      </span>
-                    </TableCell>
-                    <TableCell class="text-on-surface-secondary">
-                      {row.entry.region ?? "—"}
-                    </TableCell>
-                    <TableCell class="text-on-surface-secondary">
-                      {formatDate(row.entry.updated) || "—"}
-                    </TableCell>
-                    <TableCell class="text-end">
-                      <Show
-                        when={row.refusal === ""}
-                        fallback={
-                          <Tooltip label={row.refusal}>
-                            <span class="inline-flex cursor-not-allowed items-center gap-1 text-smallest text-on-surface-tertiary opacity-60">
-                              <Download size={13} aria-hidden="true" />
-                              {t("Download")}
-                            </span>
-                          </Tooltip>
-                        }
-                      >
-                        <Button
-                          size="sm"
-                          variant="tertiary"
-                          loading={downloading[row.entry.id] === true}
-                          icon={<Download size={13} aria-hidden="true" />}
-                          onClick={() => download(row.entry)}
+                {(row) => {
+                  const entry = () => row().entry;
+                  return (
+                    <TableRow data-entry={entry().id}>
+                      <TableCell class="font-mono text-smallest text-on-surface-tertiary">
+                        {entry().code}
+                      </TableCell>
+                      <TableCell>
+                        <strong class="font-medium text-on-surface-primary">{row().name}</strong>
+                        <span class="ms-2 text-smallest text-on-surface-tertiary">
+                          {entry().owner}/{entry().repo}
+                        </span>
+                      </TableCell>
+                      <TableCell class="text-on-surface-secondary">
+                        {entry().region ?? "—"}
+                      </TableCell>
+                      <TableCell class="text-on-surface-secondary">
+                        {formatDate(entry().updated) || "—"}
+                      </TableCell>
+                      <TableCell class="text-end">
+                        <Show
+                          when={row().refusal === ""}
+                          fallback={
+                            <Tooltip label={row().refusal}>
+                              <span class="inline-flex cursor-not-allowed items-center gap-1 text-smallest text-on-surface-tertiary opacity-60">
+                                <Download size={13} aria-hidden="true" />
+                                {t("Download")}
+                              </span>
+                            </Tooltip>
+                          }
                         >
-                          {t("Download")}
-                        </Button>
-                      </Show>
-                    </TableCell>
-                  </TableRow>
-                )}
+                          <Button
+                            size="sm"
+                            variant="tertiary"
+                            loading={row().downloading}
+                            icon={<Download size={13} aria-hidden="true" />}
+                            onClick={() => download(entry())}
+                          >
+                            {t("Download")}
+                          </Button>
+                        </Show>
+                      </TableCell>
+                    </TableRow>
+                  );
+                }}
               </For>
             </TableBody>
           </Table>

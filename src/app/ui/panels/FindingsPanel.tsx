@@ -40,7 +40,7 @@ import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import CircleCheck from "lucide-solid/icons/circle-check";
 import Wrench from "lucide-solid/icons/wrench";
-import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
 import type { BookId } from "../../../core/book/book";
 import * as Filter from "../../../core/findings/filter";
@@ -157,7 +157,12 @@ export function FindingsPanel() {
     () => search().code,
     (code) => {
       if (typeof code !== "string" || code === "") return;
-      filters.update({ codes: [code] });
+      // `untrack`: `update` reads the current filter to merge the patch onto
+      // it, and a read inside an effect callback is the one Solid warns about
+      // — it would not track, and here it must not.
+      untrack(() => {
+        filters.update({ codes: [code] });
+      });
     },
   );
 
