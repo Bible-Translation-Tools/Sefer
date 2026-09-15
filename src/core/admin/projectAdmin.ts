@@ -19,8 +19,10 @@ import {
   type PlatformError,
   Result,
 } from "effect";
+import { zipSync } from "fflate";
 
-import { writeFileStringAtomic } from "../fileSystem/atomic";
+import { writeFileAtomic, writeFileStringAtomic } from "../fileSystem/atomic";
+import { joinPath } from "../fileSystem/path";
 import { type BurritoMetadata, decodeBurritoMetadata } from "../resources/burrito";
 
 /** Scripture Burrito's own name for the file; not ours to choose. */
@@ -71,6 +73,15 @@ export interface ProjectAdminService {
   readonly metadata: (root: string) => Effect.Effect<Option.Option<BurritoMetadata>, AdminError>;
   /** Merges, re-validates through the schema, and refuses rather than writing something invalid. */
   readonly updateMetadata: (root: string, patch: MetadataPatch) => Effect.Effect<void, AdminError>;
+  /**
+   * The project as a zip, in memory — the bytes `export("usfm-zip")` writes.
+   *
+   * Separate from `export` because a browser has nowhere to write a file the
+   * person can find: the Web host hands these bytes to a download instead of
+   * naming a path (see documentation/architecture/landing.md). A host with a
+   * real filesystem uses `export`.
+   */
+  readonly archive: (root: string) => Effect.Effect<Uint8Array, AdminError>;
   /** Returns the path that was written. */
   readonly export: (
     root: string,
@@ -96,6 +107,25 @@ const nameLocale = (metadata: BurritoMetadata): string => {
   const existing = Object.keys(metadata.identification.name).at(0);
   return existing ?? "en";
 };
+
+/**
+ * What a shared copy of a project does NOT carry.
+ *
+ * `.sefer/` is Sefer's own corner — provenance, a fallback name — and it
+ * describes this device's history with the project, not the project. A
+ * `.sefer-tmp` sibling is an atomic write that was interrupted. `.git` is a
+ * repository, which is a transfer of its own (`Remote`), not a folder to zip.
+ */
+const isPrivatePath = (name: string): boolean =>
+  name === ".sefer" ||
+  name.startsWith(".sefer/") ||
+  name.includes("/.sefer/") ||
+  name.endsWith(".sefer-tmp") ||
+  name === ".git" ||
+  name.startsWith(".git/") ||
+  name.includes("/.git/");
+
+const lastSegment = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
 
 const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminService => {
   const metadataPath = (root: string): string => `${root}/${METADATA_FILE}`;
@@ -153,6 +183,44 @@ const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminServic
       decoded.success,
     );
   };
+
+  /**
+   * The project folder as a zip, in memory.
+   *
+   * Every entry is under the project's own folder name, so unzipping produces
+   * the folder and not a heap of loose files in whatever directory the reader
+   * was in — and so the archive imports straight back through
+   * `platform/web/intake.ts`, whose `stripCommonRoot` expects exactly that
+   * shape. Sefer's private files are left out (`isPrivatePath`).
+   *
+   * In memory rather than streamed: a whole-Bible Burrito is a few megabytes
+   * of text, `fflate`'s streaming API costs a worker to use properly, and the
+   * import side of the same trade already reads archives this way.
+   */
+  const archive = (root: string): Effect.Effect<Uint8Array, AdminError> =>
+    Effect.gen(function* () {
+      const names = yield* Effect.mapError(
+        fileSystem.readDirectory(root, { recursive: true }),
+        ioFailure,
+      );
+      const folder = lastSegment(root) || "project";
+      const entries: Record<string, Uint8Array> = {};
+      for (const name of names) {
+        if (isPrivatePath(name)) continue;
+        const path = joinPath(root, name);
+        const info = yield* Effect.mapError(fileSystem.stat(path), ioFailure);
+        if (info.type !== "File") continue;
+        entries[`${folder}/${name}`] = yield* Effect.mapError(fileSystem.readFile(path), ioFailure);
+      }
+      if (Object.keys(entries).length === 0)
+        return yield* Effect.fail(
+          new AdminError({ reason: "NotFound", description: `${root} holds no files to export` }),
+        );
+      return yield* Effect.try({
+        try: () => zipSync(entries, { level: 6 }),
+        catch: (error) => new AdminError({ reason: "Io", description: String(error) }),
+      });
+    });
 
   const metadata = (root: string): Effect.Effect<Option.Option<BurritoMetadata>, AdminError> =>
     Effect.flatMap(rawMetadata(root), (raw) =>
@@ -225,17 +293,23 @@ const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminServic
         yield* writeMetadata(root, { ...raw.value, ...patch });
       }),
 
+    archive,
+
     export: (root, format, to) =>
       format === "usfm-zip"
-        ? // TODO(seam): a USFM zip needs a zip writer, and Sefer has no archive
-          // dependency yet. Which one (and whether the desktop host should do it
-          // in Rust instead) is a decision for whoever needs the format; until
-          // then this refuses rather than writing a folder and calling it a zip.
-          Effect.fail(
-            new AdminError({
-              reason: "Unsupported",
-              description: "usfm-zip export needs an archive writer that is not chosen yet",
-            }),
+        ? Effect.flatMap(archive(root), (bytes) =>
+            Effect.as(
+              Effect.mapError(
+                Effect.flatMap(
+                  fileSystem.makeDirectory(to.slice(0, Math.max(to.lastIndexOf("/"), 0)) || "/", {
+                    recursive: true,
+                  }),
+                  () => writeFileAtomic(fileSystem, to, bytes),
+                ),
+                ioFailure,
+              ),
+              to,
+            ),
           )
         : Effect.as(Effect.mapError(fileSystem.copy(root, to), ioFailure), to),
   };
