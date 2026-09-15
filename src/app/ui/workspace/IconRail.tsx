@@ -26,6 +26,7 @@
 import { useNavigate, useRouterState } from "@tanstack/solid-router";
 import Bell from "lucide-solid/icons/bell";
 import BookOpen from "lucide-solid/icons/book-open";
+import CloudIcon from "lucide-solid/icons/cloud";
 import Code from "lucide-solid/icons/code";
 import FolderOpen from "lucide-solid/icons/folder-open";
 import GitCompare from "lucide-solid/icons/git-compare";
@@ -143,6 +144,13 @@ export function IconRail() {
             aria-pressed={at("/compare")}
             icon={<GitCompare size={18} />}
             onClick={() => go("/compare")}
+          />
+          <IconButton
+            label={t("Cloud")}
+            tooltipSide="right"
+            aria-pressed={at("/cloud")}
+            icon={<CloudIcon size={18} />}
+            onClick={() => go("/cloud")}
           />
         </Show>
 
