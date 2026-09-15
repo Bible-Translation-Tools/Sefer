@@ -19,9 +19,10 @@
  */
 
 import { lintGutter } from "@codemirror/lint";
-import { Effect, FileSystem, Layer, ManagedRuntime, Result, Scope } from "effect";
+import { Effect, FileSystem, Layer, ManagedRuntime, Option, Result, Scope } from "effect";
 
 import {
+  ingredientFor,
   ProjectAdmin,
   ProjectAdminLive,
   type ProjectAdminService,
@@ -196,10 +197,31 @@ export const fixtureRequested = (): boolean => {
  * core computes no hash of its own (see documentation/architecture/save.md).
  * The parse this costs is a per-save parse, never a per-keystroke one.
  */
-const saveLayer: Layer.Layer<SaveCoordinator, never, FileSystem.FileSystem | Galley> = Layer.unwrap(
+const saveLayer: Layer.Layer<
+  SaveCoordinator,
+  never,
+  FileSystem.FileSystem | Galley | ProjectAdmin
+> = Layer.unwrap(
   Effect.gen(function* () {
     const galley = yield* Galley;
-    return SaveCoordinatorLive({ hasher: (text) => galley.analyze(text).sourceHash });
+    const admin = yield* ProjectAdmin;
+    const fileSystem = yield* FileSystem.FileSystem;
+    return SaveCoordinatorLive({
+      hasher: (text) => galley.analyze(text).sourceHash,
+      // The one thing that is wrong the moment a book is written: a Scripture
+      // Burrito's ingredient carries the md5 and the size of the file it
+      // names. Save must not know what a burrito is, and ProjectAdmin must not
+      // know when a save happened, so composition is where the two meet.
+      // `ingredientFor` answers both questions at once — which project this
+      // path belongs to, and what the ingredient is called inside it — and a
+      // path under no `metadata.json` is a folder of loose USFM, not an error.
+      onSaved: (receipt) =>
+        Effect.flatMap(ingredientFor(fileSystem, receipt.path), (found) =>
+          Option.isNone(found)
+            ? Effect.void
+            : Effect.asVoid(admin.refreshChecksums(found.value.root, [found.value.name])),
+        ),
+    });
   }),
 );
 
@@ -285,9 +307,13 @@ const domainLayer = (
   // last write: `SaveCoordinatorLive` takes Recovery through `serviceOption`,
   // so it is only journalled when Recovery is IN ITS OWN context — hence
   // provideMerge rather than a sibling merge.
+  // ProjectAdmin joins Recovery under Save for the same reason Recovery is
+  // there: `SaveCoordinatorLive`'s `onSaved` refreshes the burrito's ingredient
+  // checksums, and it can only do that with ProjectAdmin IN ITS OWN context.
+  // Both come back out of the merge, so ProjectAdmin is still one instance.
   const saveAndRecovery = Layer.provideMerge(
     saveLayer,
-    RecoveryLive({ journalRoot: paths.appData }),
+    Layer.merge(RecoveryLive({ journalRoot: paths.appData }), ProjectAdminLive),
   );
 
   const modules = Layer.mergeAll(
@@ -310,8 +336,7 @@ const domainLayer = (
           giteaHost: env.giteaWebHost,
         })
       : tauri.TauriRemoteLive({ giteaHost: env.giteaDesktopHost }),
-    // Rename, delete, metadata, export.
-    ProjectAdminLive,
+    // Save, Recovery, and — rename, delete, metadata, export — ProjectAdmin.
     saveAndRecovery,
   );
 

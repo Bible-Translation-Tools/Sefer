@@ -22,8 +22,9 @@ import {
 import { zipSync } from "fflate";
 
 import { writeFileAtomic, writeFileStringAtomic } from "../fileSystem/atomic";
-import { joinPath } from "../fileSystem/path";
+import { joinPath, parentPath } from "../fileSystem/path";
 import { type BurritoMetadata, decodeBurritoMetadata } from "../resources/burrito";
+import { refreshIngredientChecksums } from "../resources/checksum";
 
 /** Scripture Burrito's own name for the file; not ours to choose. */
 export const METADATA_FILE = "metadata.json";
@@ -73,6 +74,20 @@ export interface ProjectAdminService {
   readonly metadata: (root: string) => Effect.Effect<Option.Option<BurritoMetadata>, AdminError>;
   /** Merges, re-validates through the schema, and refuses rather than writing something invalid. */
   readonly updateMetadata: (root: string, patch: MetadataPatch) => Effect.Effect<void, AdminError>;
+  /**
+   * Recomputes `checksum.md5` and `size` for the named ingredients (every one,
+   * when `names` is omitted) from the files on disk, and writes the metadata
+   * back through the same schema gate as every other edit. Returns the names
+   * that moved — empty means nothing was written.
+   *
+   * A project with no `metadata.json` has no ingredients to refresh and
+   * succeeds with nothing changed: the caller is a save hook, and a folder of
+   * loose USFM is not an error.
+   */
+  readonly refreshChecksums: (
+    root: string,
+    names?: readonly string[],
+  ) => Effect.Effect<readonly string[], AdminError>;
   /**
    * The project as a zip, in memory — the bytes `export("usfm-zip")` writes.
    *
@@ -126,6 +141,35 @@ const isPrivatePath = (name: string): boolean =>
   name.includes("/.git/");
 
 const lastSegment = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
+
+/**
+ * The burrito root a file belongs to: the nearest ancestor holding
+ * `metadata.json`, and the name the file goes by inside it — which is exactly
+ * the ingredient key the metadata uses.
+ *
+ * `None` when there is none within `depth` levels, which is the ordinary
+ * answer for a folder of loose USFM. The save hook asks this about every book
+ * it writes, so the walk is bounded rather than open-ended: a burrito's
+ * ingredients live at the root or a folder or two below it, never further up
+ * a stranger's directory tree.
+ */
+export const ingredientFor = (
+  fileSystem: FileSystem.FileSystem,
+  path: string,
+  depth = 4,
+): Effect.Effect<Option.Option<{ readonly root: string; readonly name: string }>> =>
+  Effect.gen(function* () {
+    let directory = parentPath(path);
+    for (let level = 0; level < depth && directory !== "" && directory !== "/"; level += 1) {
+      const present = yield* Effect.orElseSucceed(
+        fileSystem.exists(joinPath(directory, METADATA_FILE)),
+        () => false,
+      );
+      if (present) return Option.some({ root: directory, name: path.slice(directory.length + 1) });
+      directory = parentPath(directory);
+    }
+    return Option.none();
+  });
 
 const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminService => {
   const metadataPath = (root: string): string => `${root}/${METADATA_FILE}`;
@@ -291,6 +335,25 @@ const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminServic
           );
         }
         yield* writeMetadata(root, { ...raw.value, ...patch });
+      }),
+
+    refreshChecksums: (root, names) =>
+      Effect.gen(function* () {
+        const raw = yield* rawMetadata(root);
+        if (Option.isNone(raw)) return [];
+        const current = yield* metadata(root);
+        if (Option.isNone(current)) return [];
+        const refreshed = yield* refreshIngredientChecksums(
+          current.value,
+          (name) =>
+            Effect.map(Effect.result(fileSystem.readFile(joinPath(root, name))), (read) =>
+              Result.isFailure(read) ? Option.none() : Option.some(read.success),
+            ),
+          names,
+        );
+        if (refreshed.changed.length === 0) return [];
+        yield* writeMetadata(root, { ...raw.value, ingredients: refreshed.ingredients });
+        return refreshed.changed;
       }),
 
     archive,
