@@ -1,32 +1,32 @@
 /**
- * Save & Review: what has changed, and the one button that records it.
+ * Save & Review: what has changed, and the one button that writes and records
+ * it.
  *
- * Three things keep your work, they are not the same thing, and this screen
- * never lets them share a word.
+ * This screen is the ONLY thing in Sefer that writes a project file. Nothing
+ * saves on a timer any more; two things keep your work between presses, and
+ * neither of them is the file:
  *
- *   * The FILE is written on its own. `SaveCoordinator.autosave`, armed per
- *     book by the shell with `DEFAULT_AUTOSAVE_POLICY`, writes the book to
- *     disk shortly after typing pauses (and at most 15 s into a long burst).
- *     Nobody presses anything for that, so this page must never claim the
- *     work is unwritten until someone does.
- *   * The WORKING-STATE BACKUP is the crash journal (`core/recovery`), kept
- *     while you type. It is not the file and it is not a version: it exists
- *     so a session that ended badly can be replayed into the editor.
- *   * A VERSION is what this screen adds, and only on a deliberate press:
- *     `SaveCoordinator.saveAll` writes anything still pending and `Git.commit`
- *     records exactly those paths under the message you wrote.
+ *   * The WORKING-STATE BACKUP is the crash journal (`core/recovery`), written
+ *     a moment after typing pauses ("Back up work after" in Settings). It is
+ *     not the file and it is not a version: it exists so a session that ended
+ *     badly can be replayed into the editor.
+ *   * A VERSION is what "Record a version" makes, and it is one action in two
+ *     halves: `SaveCoordinator.saveAll` writes the files, then `Git.commit`
+ *     records exactly those paths under the message you wrote. A write that
+ *     fails records nothing. A commit that fails after a write that succeeded
+ *     is reported as exactly that — the files ARE on disk, no version holds
+ *     them — because telling someone their work was lost when it is in the
+ *     file would be a lie, and telling them it was recorded when no commit
+ *     exists would be a worse one.
  *
  * The summary is `core/diff` against the last RECORDED version — the blob at
- * HEAD, read by `recorded.ts` — and NOT against the Save baseline. The disk
- * baseline moves on its own about a second after typing stops, so a review
- * built on it shows an empty diff for a session full of work. The Save
- * baseline is kept for exactly one thing on this screen: the muted line that
- * says whether anything is still to be written.
+ * HEAD, read by `recorded.ts` — and NOT against the Save baseline. Under
+ * explicit-only saving the two usually agree, and where they do not (a write
+ * whose commit failed) it is the version that a review is about. The Save
+ * baseline is kept for one thing here: the muted line that says whether
+ * anything is still to be written.
  *
- * Git is allowed to be absent. A commit that fails is reported on its own,
- * after a save that succeeded is reported as a success: the bytes reached the
- * disk either way, and telling someone their save failed because a repository
- * does not exist would be a lie.
+ * Git is allowed to be absent — a browser fixture has never run `git init`.
  */
 
 import { useNavigate } from "@tanstack/solid-router";
@@ -83,11 +83,19 @@ export function SavePanel() {
 
   const version = createRecordedVersion(shell);
 
+  // Mod-S lands on this screen, so the caret lands in the message: it is the
+  // only thing left to supply, and Enter on it records. By id rather than a
+  // ref because the field is inside a primitive that spreads its props.
+  createEffect(
+    () => shell.project()?.id,
+    () => {
+      document.getElementById("commit-message")?.focus();
+    },
+  );
+
   /**
    * The review, against the last RECORDED version — never against the disk.
-   * `autosave` writes about a second after typing stops, so a review built on
-   * the disk baseline reports an empty session's worth of work as nothing at
-   * all. See `changes.ts` for the two baselines.
+   * See `changes.ts` for the two baselines and what each one answers.
    */
   const changed = () => recordedChanges(shell, version.recorded());
 
@@ -262,6 +270,9 @@ export function SavePanel() {
       Effect.result(shell.services.save.saveAll(project.books)),
     );
     if (Result.isFailure(saved)) {
+      // Nothing is recorded when nothing is written. The review still stands
+      // and the backup still holds the work; the reader fixes the disk and
+      // presses again.
       toasts.update(notice, {
         tone: "error",
         title: t("Could not write to disk"),
@@ -301,6 +312,12 @@ export function SavePanel() {
       ),
     );
     if (Result.isFailure(recorded)) {
+      // The one state the new save model can leave behind, and the status line
+      // has a name for it: the bytes are in the file, no version holds them.
+      shell.noteWritten(
+        review.map((book) => book.bookId),
+        false,
+      );
       toasts.update(notice, {
         tone: "error",
         autoClose: false,
@@ -311,6 +328,10 @@ export function SavePanel() {
         }),
       });
     } else {
+      shell.noteWritten(
+        review.map((book) => book.bookId),
+        true,
+      );
       toasts.update(notice, {
         tone: "success",
         title: t("Recorded {count} book(s) as {hash}", {
@@ -332,7 +353,7 @@ export function SavePanel() {
       <PanelHeader
         title={t("Save & Review")}
         subtitle={t(
-          "Your books are written to disk on their own. This is where a version goes into the project's history.",
+          "This is the only place Sefer writes your books to disk, and it records the version at the same time.",
         )}
         actions={
           <Button
@@ -359,7 +380,7 @@ export function SavePanel() {
                 </span>
               }
               subtitle={t(
-                "Sefer found a working-state backup from an earlier session that was never recorded. Restoring puts it back in the editor, where the ordinary idle write picks it up.",
+                "Sefer found a working-state backup from an earlier session that was never recorded. Restoring puts it back in the editor, where it stays unsaved until you record a version.",
               )}
             />
             <ul class="divide-y divide-surface-border">
@@ -465,6 +486,11 @@ export function SavePanel() {
                 placeholder={defaultMessage()}
                 value={message()}
                 onInput={(event) => setMessage(event.currentTarget.value)}
+                onKeyDown={(event: KeyboardEvent) => {
+                  if (event.key !== "Enter" || event.isComposing) return;
+                  event.preventDefault();
+                  if (changed().length > 0) void commit();
+                }}
               />
               <Button
                 variant="primary"
@@ -474,16 +500,16 @@ export function SavePanel() {
                 disabled={changed().length === 0}
                 onClick={() => void commit()}
               >
-                {t("Record this version")}
+                {t("Record a version")}
               </Button>
               <p class="text-smallest text-on-surface-tertiary">
                 {t(
-                  "A book is written to disk shortly after you stop typing, and a working-state backup is kept while you type. Neither is a version: this button is what puts one in the history, under your message.",
+                  "Nothing is written to disk on a timer. This button writes the files and records the version together, under your message; until you press it, a working-state backup is what holds your work.",
                 )}
               </p>
               <p class="text-smallest text-on-surface-tertiary" data-pending={pending().length}>
                 <Show when={pending().length > 0} fallback={t("Every book is written to disk.")}>
-                  {t("{count} book(s) still to be written to disk; recording writes them first.", {
+                  {t("{count} book(s) not yet written to disk; recording writes them first.", {
                     count: pending().length,
                   })}
                 </Show>

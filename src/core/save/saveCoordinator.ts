@@ -10,7 +10,7 @@
 //   * `save` — snapshot-bound. The stamp and the text are captured ONCE; the
 //     receipt and the baseline name that exact text, so edits that land during
 //     the write stay dirty instead of being silently promoted.
-//   * `serialize(path)` — one queue per path. Autosave, an explicit save and a
+//   * `serialize(path)` — one queue per path. Two explicit saves and a
 //     `saveAll` cannot interleave writes to the same file.
 //   * the baselines — one per successful write, plus the one `adopt` seeds
 //     when a book is opened from disk; the contract Diff consumes and
@@ -19,12 +19,17 @@
 //     blocks saving that book until the user resolves it. Sefer surfaces
 //     external changes; it never auto-merges.
 //
-// Serialisation style (open question 2 of the editor-and-save seams): Sefer
-// ALWAYS writes canonical LF. `decode` normalises on the way in and `Source`
-// deliberately does not remember the file's original newline style, so
-// preserving it would mean carrying a second identity for the same text.
-// Remembering the disk style is deferred; when it arrives it belongs here,
-// next to `encode`, not in `Source`.
+// Serialisation style (open question 2 of the editor-and-save seams, now
+// closed): Sefer writes back the DOMINANT form it read. `decode` records the
+// file's majority line ending and whether it carried a byte order mark on
+// `Source.form`, the text in memory stays canonical LF, and `encode` re-applies
+// the form on the way out. The form is never an identity: baselines, diffs,
+// stamps and external-change comparison all speak canonical text, so a book
+// saved as CRLF is the same text as the same book saved as LF.
+//
+// Nothing here writes on its own. The only automatic write in the product is
+// Recovery's journal, which is a backup and not the file; the project file is
+// written by an explicit `save`/`saveAll` — which today means Save & Review.
 //
 // The engine hash is optional throughout: core computes no hash. Composition
 // passes `hasher` once `src/core/galley` exposes the engine's xxh3, and from
@@ -40,7 +45,6 @@ import {
   Option,
   PlatformError,
   Result,
-  Scope,
   Semaphore,
   Stream,
 } from "effect";
@@ -49,7 +53,6 @@ import { trustedBy, type Book, type BookId } from "../book/book";
 import { writeFileAtomic } from "../fileSystem/atomic";
 import { Observability } from "../observability";
 import { Recovery } from "../recovery/recovery";
-import { debounced, type DebouncePolicy } from "../schedule/debounce";
 import { decode, encode, type SourceStamp } from "../source/source";
 import type { Baseline } from "./baseline";
 
@@ -61,7 +64,7 @@ export interface SaveReceipt {
   readonly stamp: SourceStamp;
   /** The engine hash of that text, when a hasher was configured. */
   readonly hash?: bigint;
-  /** Byte length of the UTF-8 LF encoding. */
+  /** Byte length of the bytes actually written, in the file's own form. */
   readonly bytes: number;
   readonly at: number;
 }
@@ -139,16 +142,6 @@ export interface SaveCoordinatorService {
    */
   readonly dirty: (book: Book) => boolean;
   /**
-   * Saves the book after edits go quiet, until the Scope closes. Debounced off
-   * the keystroke path: the listener arms a timer and returns, so nothing runs
-   * inside `apply`. Failures are noted, never raised — an autosave that cannot
-   * write must not tear down the editor.
-   */
-  readonly autosave: (
-    book: Book,
-    policy: DebouncePolicy,
-  ) => Effect.Effect<void, never, Scope.Scope>;
-  /**
    * The external changes that REALLY differ from what we wrote: each candidate
    * is read back and compared against the baseline, so a save of our own bytes
    * (or a touch that changed nothing) is dropped rather than shown. Every
@@ -191,15 +184,13 @@ export interface SaveCoordinatorOptions {
    * (`src/core/resources/checksum.ts`), which are wrong the moment a book is
    * saved and which Save itself must not know about.
    *
-   * Every autosave goes through `save`, which is why this is an option here
-   * rather than a decorator around the service: a wrapper outside would see
-   * the explicit saves and miss the ones that matter most. A failure is
-   * ignored — the project's own bytes are already written.
+   * Every write goes through `save`, which is why this is an option here
+   * rather than a decorator around the service: a wrapper outside could be
+   * bypassed by the one caller that matters. A failure is ignored — the
+   * project's own bytes are already written.
    */
   readonly onSaved?: (receipt: SaveReceipt) => Effect.Effect<void, unknown>;
 }
-
-export const DEFAULT_AUTOSAVE_POLICY: DebouncePolicy = { idleMs: 1200, maxIntervalMs: 15000 };
 
 /**
  * `effect/FileSystem` normalises host errors into a fixed set of tags that has
@@ -306,7 +297,7 @@ const make = (
         const source = book.source();
         const stamp = source.stamp;
         const text = source.text;
-        // 2 canonical LF out (see the header note on serialisation style).
+        // 2 out in the form it came in (see the header note on serialisation).
         const bytes = encode(source);
         const hash = hasher?.(text);
 
@@ -363,21 +354,6 @@ const make = (
         // 8 what composition hangs off a completed write (see `onSaved`).
         if (options.onSaved !== undefined) yield* Effect.ignore(options.onSaved(receipt));
         return receipt;
-      });
-
-    /** Autosave's body: skip a clean book, swallow and note a failure. */
-    const saveQuietly = (book: Book): Effect.Effect<void> =>
-      Effect.suspend(() => {
-        if (!dirty(book)) return Effect.void;
-        return Effect.map(Effect.result(save(book)), (written) => {
-          if (Result.isFailure(written))
-            observability?.note(
-              "save.autosave",
-              "failed",
-              `${book.id} ${written.failure.reason}`,
-              book.id,
-            );
-        });
       });
 
     /** Reads the file back and says whether it differs from what we wrote. */
@@ -439,16 +415,6 @@ const make = (
       adopt,
       baseline: (book) => Option.fromUndefinedOr(baselines.get(book.id)),
       dirty,
-
-      autosave: (book, policy) =>
-        Effect.gen(function* () {
-          remember(book);
-          const arm = yield* debounced(policy, saveQuietly(book));
-          const unsubscribe = book.changes(() => {
-            arm();
-          });
-          yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
-        }),
 
       externalChanges: (source) =>
         Stream.tap(

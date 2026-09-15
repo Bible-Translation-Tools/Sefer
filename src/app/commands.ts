@@ -326,20 +326,17 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
 
     registerCommand({
       id: "book.save",
-      title: t("Save book"),
+      title: t("Save & Review…"),
       keys: "Mod-s",
-      when: hasBook,
+      when: hasProject,
+      /**
+       * Mod-S no longer writes anything. The file is written when a version is
+       * recorded, so the save key opens the one screen that does both, with
+       * the message field focused and Enter on it recording — the same two
+       * keystrokes the old shortcut cost, with a diff in between.
+       */
       run: () => {
-        const book = bridge.focused();
-        if (book === undefined) return;
-        return Effect.gen(function* () {
-          const coordinator = yield* SaveCoordinator;
-          const receipt = yield* coordinator.save(book);
-          bridge.report(
-            t("saved {path} ({bytes} bytes)", { path: receipt.path, bytes: receipt.bytes }),
-          );
-          bridge.bump();
-        });
+        bridge.go("/history?review=1");
       },
     }),
 

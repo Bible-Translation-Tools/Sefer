@@ -37,8 +37,8 @@ import { navigateTarget } from "../core/findings/findings";
 import * as Fixes from "../core/fixes/fixes";
 import type { SettingKey } from "../core/host/settings";
 import { openProject as openProjectEffect, type Project } from "../core/project/project";
-import { Recovery } from "../core/recovery/recovery";
-import { DEFAULT_AUTOSAVE_POLICY, SaveCoordinator } from "../core/save/saveCoordinator";
+import { DEFAULT_JOURNAL_POLICY, Recovery } from "../core/recovery/recovery";
+import { SaveCoordinator } from "../core/save/saveCoordinator";
 import type { EditorBook, ProjectionName } from "../editor";
 import { detectHost } from "../platform/host";
 import { registerShellCommands, type ShellBridge } from "./commands";
@@ -61,13 +61,38 @@ export interface Shell {
   readonly focus: (bookId: BookId | undefined) => Promise<void>;
 
   /**
-   * Has this book changed since it was opened or last saved?
+   * Has this book changed since it was opened or last written?
    *
    * Exactly `SaveCoordinator.dirty` — the coordinator adopts a baseline when
    * the shell opens a book, so "no baseline" no longer means "just opened".
    * Reading `tick()` is what makes the answer reactive.
    */
   readonly unsaved: (book: Book) => boolean;
+
+  /**
+   * The three states a book can be in, now that the file is written only when
+   * a version is recorded.
+   *
+   *   * `unsaved` — the text on screen is not the text in the file.
+   *   * `recorded` — the file holds this text and a version holds the file.
+   *   * `onDisk` — the file holds this text and NO version does. Reachable
+   *     only when a write succeeded and the commit after it did not, which is
+   *     the one case a reader has to be told about by name.
+   *
+   * `recorded` is inferred rather than read from git, and that is the point of
+   * the save model: writing the file and recording the version are one action,
+   * so a book that matches the file matches the last version too. The one
+   * exception is the failed commit, and `noteWritten` is how Save & Review
+   * reports it.
+   */
+  readonly saveState: (book: Book) => "unsaved" | "onDisk" | "recorded";
+  /**
+   * Save & Review's report after it wrote files: which books reached the disk,
+   * and whether a version was recorded for them. Nothing else may call it —
+   * the disk is the only other writer of this fact, and it has no opinion
+   * about versions.
+   */
+  readonly noteWritten: (bookIds: readonly BookId[], recorded: boolean) => void;
 
   readonly mode: Accessor<ProjectionName>;
   readonly setMode: (mode: ProjectionName) => void;
@@ -253,6 +278,25 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     Effect.runFork(Fiber.interrupt(watching));
   });
 
+  // The working-state backup's timing — the ONE automatic write left in the
+  // product, now that the file is written only when a version is recorded.
+  // Pushed into Recovery rather than read by it: the journal's debounce fiber
+  // is built with the layer, below the settings service, and its two bounds
+  // are re-read on every pass, so moving the stepper re-times the next burst.
+  const retime = (idleMs: number): Effect.Effect<void> =>
+    services.recovery.setPolicy({
+      idleMs,
+      maxIntervalMs: Math.max(idleMs * 10, DEFAULT_JOURNAL_POLICY.maxIntervalMs),
+    });
+  const backing = services.runtime.runFork(
+    Effect.flatMap(retime(services.settings.get(keys.backupIdleMs)), () =>
+      Stream.runForEach(services.settings.changes(keys.backupIdleMs), retime),
+    ),
+  );
+  onCleanup(() => {
+    Effect.runFork(Fiber.interrupt(backing));
+  });
+
   // The scripture size. Applied to the document rather than held for a
   // component to read: `src/editor/editor.css` reads `--editor-font-size` for
   // every `.cm-mode-regular` surface, so one write resizes the open book, the
@@ -401,6 +445,28 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
   };
 
   /**
+   * Books whose bytes are on disk with no version behind them: a `saveAll`
+   * that succeeded under a `git.commit` that did not. A plain Set rather than
+   * a signal because every reader of it already reads `tick()`, and Save &
+   * Review bumps after both halves of a record.
+   */
+  const onDisk = new Set<BookId>();
+
+  const noteWritten = (bookIds: readonly BookId[], recorded: boolean): void => {
+    for (const bookId of bookIds) {
+      if (recorded) onDisk.delete(bookId);
+      else onDisk.add(bookId);
+    }
+    bump();
+  };
+
+  const saveState = (book: Book): "unsaved" | "onDisk" | "recorded" => {
+    tick();
+    if (services.save.dirty(book)) return "unsaved";
+    return onDisk.has(book.id) ? "onDisk" : "recorded";
+  };
+
+  /**
    * The chapter a book opens on.
    *
    * `null` — the whole book — unless the reader asked for chapter view. A
@@ -416,11 +482,6 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     for (const chapter of chapters) if (chapter.from <= at) found = chapter.ordinal;
     return found;
   };
-
-  // One autosave fiber per book, in the application scope. `focus` is
-  // idempotent, so without this a second visit to the same book would arm a
-  // second timer over the same text.
-  const armed = new Set<BookId>();
 
   const focus = async (bookId: BookId | undefined): Promise<void> => {
     // Another deliberate snapshot: we seat a book in the project that was open
@@ -444,10 +505,6 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
         // nothing to recover, and the journal fiber belongs to the app scope.
         const recovery = yield* Recovery;
         yield* recovery.attach(book.success, staticProject.id);
-        if (!armed.has(bookId)) {
-          armed.add(bookId);
-          yield* coordinator.autosave(book.success, DEFAULT_AUTOSAVE_POLICY);
-        }
         return book.success;
       }),
     );
@@ -530,6 +587,8 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     focused,
     focus,
     unsaved,
+    saveState,
+    noteWritten,
     mode,
     setMode: (next) => {
       setMode(next);

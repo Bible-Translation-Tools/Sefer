@@ -3,12 +3,12 @@
  * screen may use.
  *
  * Why this exists at all: `SaveCoordinator.baseline` is the last write to
- * DISK, and the shell arms `autosave` per book, so about a second after typing
- * stops the disk baseline has already caught up with the editor. A review
- * built on it therefore shows an empty diff for a session full of work — the
- * bytes are safe, and nothing has been recorded. "What has changed" on a Save
- * or History screen means "since the last version", so the baseline has to be
- * the blob at HEAD.
+ * DISK, and the disk is not the history. Recording writes and commits in one
+ * action, so the two usually agree — but a write whose commit failed leaves
+ * bytes on disk that no version holds, and a review built on the disk baseline
+ * would report that work as nothing at all. "What has changed" on a Save or
+ * History screen means "since the last version", so the baseline is the blob
+ * at HEAD.
  *
  * The blobs are read once per HEAD and cached against that commit id: `tick()`
  * moves on every keystroke and the recorded version does not move at all until

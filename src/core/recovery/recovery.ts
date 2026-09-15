@@ -7,6 +7,11 @@
 // is unsaved work: `pending()` offers it, `restore()` replays it, `discard()`
 // throws it away, and `compact()` drops what a successful save made obsolete.
 //
+// Since the file itself is written only when a version is recorded, this
+// journal is the ONLY automatic write in the product. It is the working-state
+// backup: it holds what the editor holds, it is not the project file, and it
+// is not a version.
+//
 // Two rules shape the whole module:
 //
 //   * Recovery never writes the project file. It writes only its own journal;
@@ -120,6 +125,16 @@ export interface RecoveryService {
    * is removed. Save calls this in step 7 of `save`.
    */
   readonly compact: (bookId: BookId, stamp: SourceStamp) => Effect.Effect<void, RecoveryError>;
+  /**
+   * Re-times the backup. The shell calls it with the reader's "Back up work
+   * after" preference once settings are readable and again whenever it moves.
+   *
+   * A setter rather than a Layer option because the debounce fiber is built
+   * with the layer and the preference is read from a service above it; the
+   * timer re-reads the two bounds on every pass, so a change lands on the next
+   * burst without restarting anything.
+   */
+  readonly setPolicy: (policy: DebouncePolicy) => Effect.Effect<void>;
 }
 
 export class Recovery extends Context.Service<Recovery, RecoveryService>()("Recovery") {}
@@ -278,7 +293,20 @@ const make = (
       }
     });
 
-    const arm = yield* debounced(options.policy ?? DEFAULT_JOURNAL_POLICY, flush);
+    // The live bounds. `debounced` re-reads them each pass, so `setPolicy`
+    // only has to move the numbers.
+    let policy: DebouncePolicy = options.policy ?? DEFAULT_JOURNAL_POLICY;
+    const arm = yield* debounced(
+      {
+        get idleMs() {
+          return policy.idleMs;
+        },
+        get maxIntervalMs() {
+          return policy.maxIntervalMs;
+        },
+      },
+      flush,
+    );
 
     /** Synchronous half of `journal`: what a `book.changes` listener may do. */
     const record = (
@@ -458,6 +486,11 @@ const make = (
           unwritten.delete(id);
           yield* remove(id);
           observability?.note("recovery.discard", "consumed", id, id);
+        }),
+
+      setPolicy: (next) =>
+        Effect.sync(() => {
+          policy = next;
         }),
 
       compact: (bookId, stamp) =>

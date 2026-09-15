@@ -7,6 +7,12 @@
  * every journal whose work the file already holds. What is left is work that
  * exists nowhere else, and that is what this banner offers.
  *
+ * Explicit-only saving makes the offer the ordinary case rather than the rare
+ * one: the file is written when a version is recorded, so a journal that
+ * outlived its session almost always differs from disk. The rule does not
+ * change — a journal the file already holds is still deleted without asking,
+ * which is what keeps the banner worth reading when it does appear.
+ *
  * Two rules the surface must keep:
  *
  *   * **Keep restores through the Book.** `project.instantiate(bookId)` seats
@@ -108,7 +114,9 @@ export function RecoveryBanner() {
         forget(journal);
         toasts.success({
           title: t("Restored {book}", { book: journal.bookId }),
-          message: t("The work is in the editor, unsaved — undo still reaches behind it."),
+          message: t(
+            "The work is in the editor, unsaved — record a version to write it. Undo still reaches behind it.",
+          ),
         });
         shell.bump();
       });
@@ -148,7 +156,7 @@ export function RecoveryBanner() {
             </span>
           }
           subtitle={t(
-            "Edits from an earlier session that never reached disk. Keep puts them back in the book; Discard throws them away.",
+            "Edits from an earlier session that were never recorded. Keep puts them back in the book, where they stay unsaved until you record a version; Discard throws them away.",
           )}
         />
         <ul class="space-y-2">

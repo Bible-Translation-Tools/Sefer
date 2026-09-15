@@ -79,9 +79,10 @@ For evaluating the new app by hand. One line per thing a person can do. Tags:
 
 ## Saving, versions, cloud
 
-- **Automatic write to disk** — new. The book is written ~1.2 s after typing pauses (Settings: "Write to disk after"). Old wrote only on explicit save. *Evaluate whether you want explicit-only.*
-- **Working-state backup (crash journal)** — same purpose. Debounced journal, never per keystroke.
-- **Save & Review** — changed. Old: save + diff modal. New: "Record a version": book list with counts, unified diff against the last recorded version, per-hunk and per-file Revert (confirm dialog), commit message. Diff is against the last commit, not the disk write.
+- **Automatic write to disk** — removed (Will, 2026-09-14: "I'd rather old model"). Nothing writes the project file on a timer. The old model is back and it is now the only model: the file is written when a version is recorded, and at no other time.
+- **Working-state backup (crash journal)** — same purpose, and now the ONLY automatic write. Debounced journal, never per keystroke; the idle bound is a visible preference ("Back up work after", default 500 ms). It is not the file and it is not a version.
+- **Save & Review** — changed. Old: save + diff modal. New: "Record a version": book list with counts, unified diff against the last recorded version, per-hunk and per-file Revert (confirm dialog), commit message. Mod-S opens this screen with the message field focused and Enter records. The primary writes the files and commits them as ONE action — a failed write records nothing; a failed commit says the files are on disk with no version behind them. Diff is against the last commit.
+- **Line endings** — new. A file's dominant line ending (and a UTF-8 byte order mark) is remembered at read and re-applied at write, so a CRLF project stays CRLF. In memory everything is canonical LF. A file that mixed styles becomes uniform in its majority form the first time it is recorded.
 - **History** — same idea: commit list with books changed, diff of a commit against the working text, Revert from a commit's diff. *partial:* no "open an older version" browsing mode; no diff between two arbitrary commits.
 - **Compare two copies** — new (old had a bigger 18-module version). This project vs a zip or folder; per hunk Keep left / Take right; Apply writes the chosen text (undoable); whole-book add/remove refused for now. Git checkpoint, another project, remote sources are the next files to add.
 - **Print changes** — absent. *undecided.*
@@ -89,11 +90,11 @@ For evaluating the new app by hand. One line per thing a person can do. Tags:
 - **Cloud: pull / push with a plan** — changed/partial. New Sync screen: state (detached … diverged … offline), two clocks, incoming plan in sentences, one primary action. Combine (squash mine onto theirs) and Resolve refuse until the branch-move verb lands (in progress).
 - **Conflicts** — changed: books changed on both sides route to Compare; text is never auto-merged.
 - **Offline indicator** — new-ish: sync state shows offline.
-- **Someone else changed the file on disk since I opened it** — deferred (hooks exist, not surfaced). Today the auto write overwrites.
+- **Someone else changed the file on disk since I opened it** — deferred (hooks exist, not surfaced). With no auto write there is no longer a timer racing the other editor; recording still overwrites without asking.
 
 ## Recovery
 
-- **Banner on reopen after a crash: Keep / Discard** — same idea. *changed:* checked once on project open; a backup whose text already reached disk is deleted silently; Keep restores through the Book (undoable) and stays unsaved until the next write.
+- **Banner on reopen after a crash: Keep / Discard** — same idea. *changed:* checked once on project open; a backup whose text already reached disk is deleted silently; Keep restores through the Book (undoable) and leaves the book **unsaved** until somebody records a version — nothing writes it later on its own. With explicit-only saving the banner is now the ordinary outcome of an interrupted session rather than a rarity.
 - **Forced review of conflicted chapters** — absent. *undecided.*
 - **"Auto-accept my work on save" setting** — absent.
 
