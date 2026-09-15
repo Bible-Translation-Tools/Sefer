@@ -86,6 +86,7 @@
       ]
     },
     "dialog:default",
+    "dialog:allow-save",
     "os:default",
     "opener:default",
     "opener:allow-open-path",

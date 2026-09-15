@@ -29,6 +29,21 @@ export interface DialogsService {
   readonly pickFolder: (title: string) => Effect.Effect<Option.Option<string>>;
   /** Empty when cancelled or unsupported; never fails. */
   readonly pickFiles: (filters: readonly FileFilter[]) => Effect.Effect<readonly string[]>;
+  /**
+   * Where to WRITE a file the person will look for later — the save half of
+   * `pickFiles`. `None` when they cancelled, and `None` on a host that has no
+   * such place: a browser cannot name a path, so Web answers `None` and the
+   * caller hands the same bytes to a download instead.
+   *
+   * That is the whole reason this is a separate member rather than a flag on
+   * `pickFiles`: "pick a file that exists" and "name a file that does not"
+   * are different questions, and only one of them has a Web answer.
+   */
+  readonly pickSaveFile: (
+    title: string,
+    suggestedName: string,
+    filters: readonly FileFilter[],
+  ) => Effect.Effect<Option.Option<string>>;
   /** `false` is the safe answer, so an absent dialog declines rather than proceeds. */
   readonly confirm: (message: string, options?: ConfirmOptions) => Effect.Effect<boolean>;
 }
@@ -43,6 +58,7 @@ export class Dialogs extends Context.Service<Dialogs, DialogsService>()("Dialogs
 export interface DialogAnswers {
   readonly folder?: string | undefined;
   readonly files?: readonly string[] | undefined;
+  readonly savePath?: string | undefined;
   readonly confirm?: boolean | undefined;
 }
 
@@ -50,5 +66,6 @@ export const HeadlessDialogsLive = (answers: DialogAnswers = {}): Layer.Layer<Di
   Layer.succeed(Dialogs, {
     pickFolder: () => Effect.succeed(Option.fromUndefinedOr(answers.folder)),
     pickFiles: () => Effect.succeed(answers.files ?? []),
+    pickSaveFile: () => Effect.succeed(Option.fromUndefinedOr(answers.savePath)),
     confirm: () => Effect.succeed(answers.confirm ?? false),
   });
