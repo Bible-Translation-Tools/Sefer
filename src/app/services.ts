@@ -43,11 +43,7 @@ import {
   type VersionMismatch,
 } from "../core/galley";
 import { Git, type GitService } from "../core/git/git";
-import {
-  Credentials,
-  SessionCredentialsLive,
-  type CredentialsService,
-} from "../core/host/credentials";
+import { Credentials, type CredentialsService } from "../core/host/credentials";
 import { Dialogs, type DialogsService } from "../core/host/dialogs";
 import { HostInfo, type HostInfoService, type HostPaths } from "../core/host/hostInfo";
 import { Settings, SettingsLive, type SettingsService } from "../core/host/settings";
@@ -65,6 +61,7 @@ import {
 } from "../core/save/saveCoordinator";
 import { commandsLayer, editorBook, usfmLinter, viewLayer, type EditorBook } from "../editor";
 import { detectHost } from "../platform/host";
+import { WebCredentialsLive } from "../platform/web/credentials";
 import { WebDialogsLive } from "../platform/web/dialogs";
 import { OpfsFileSystemLive } from "../platform/web/fileSystem";
 import { WebGalleyLive } from "../platform/web/galley";
@@ -251,20 +248,23 @@ const domainLayer = (
       : tauri.TauriFileSystemLive;
 
   // The host capabilities layer: the pinned wasm engine, the folder/file
-  // pickers, and a session-lifetime credential store (the Web host has no
-  // secure store, so tokens deliberately do not survive a reload).
+  // pickers, and a credential store.
   // Gitea sits in the host ring, not the module ring, because it needs the
   // credential store and the browser's `fetch` — core names neither. The
-  // token it mints is called `sefer-web-<date>`, which is the only string
-  // Sefer ever writes into someone's Gitea account.
+  // token it mints is called `sefer-web-<yyyymmddThhmmss>`, which is the only
+  // string Sefer ever writes into someone's Gitea account; the timestamp is
+  // to the second because Gitea refuses a duplicate token NAME, and a
+  // day-granular one made a second sign-in from one device impossible.
   const account = Layer.provideMerge(
     GiteaLive({
       fetch: (input, init) => globalThis.fetch(input, init),
       platform: tauri === undefined ? "web" : "desktop",
     }),
-    // Desktop persists tokens in the OS keychain; the Web host cannot, and
-    // says so by keeping them for the session only.
-    tauri === undefined ? SessionCredentialsLive : tauri.TauriCredentialsLive,
+    // Desktop persists tokens in the OS keychain. The Web host has no secure
+    // store and persists to `localStorage` anyway, deliberately: a session
+    // that did not survive a reload was not a session. The trade is written
+    // out in `src/platform/web/credentials.ts`.
+    tauri === undefined ? WebCredentialsLive : tauri.TauriCredentialsLive,
   );
 
   /**

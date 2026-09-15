@@ -81,13 +81,17 @@ What persists and what does not (vision §11.4: "category and severity filters s
 | `books` | a session signal | a remembered book set hides the book you just opened |
 | the view (by book, by code, by severity, or flat) | a session signal | a way of looking at what is on screen now |
 
-`findings.filter` is a `Schema.Struct`, and the `/settings` form draws one widget per `kind` (`boolean | string | number`) — so the key is registered in `shellKeys` but deliberately left out of `shellSettings`. Its editor is the panel's own chip row (`src/app/ui/FindingsFilters.tsx`), which seeds from `Settings.get`, writes through `Settings.set` on every click (no debounce — a click is a deliberate act) and stays live on a fiber over `settings.changes`, exactly as `ProjectContext` does for `editor.preferChapterView`.
+`findings.filter` is a `Schema.Struct`, and the `/settings` form draws one widget per `kind` (`boolean | string | number`) — so the key is registered in `shellKeys` but deliberately left out of `shellSettings`. Its editor is the panel's own filter toolbar (`src/app/ui/panels/FindingsFilters.tsx`), which seeds from `Settings.get`, writes through `Settings.set` on every click (no debounce — a click is a deliberate act) and stays live on a fiber over `settings.changes`, exactly as `ProjectContext` does for `editor.preferChapterView`.
 
 Core cannot navigate. `navigateTarget` returns a value; the shell calls `project.instantiate(bookId)`, mounts a view and scrolls the semantic span into place. The span stays exact even when visual mode hides the markup it covers (vision §11.3) — a presentation anchor is the view's decision, never a substitution here, because the same span is what a fix would edit.
 
 ## The panel
 
-`/findings` is sink 2 on screen: `src/app/ui/panels/FindingsPanel.tsx`, the chip row beside it, and nothing else. Four decisions are worth stating.
+`/findings` is sink 2 on screen: `src/app/ui/panels/FindingsPanel.tsx`, the filter toolbar above it, and nothing else. Six decisions are worth stating.
+
+**The filters are dropdowns, in one row.** Severity, Producer, Books and Codes each fold into a Popover; the text filter and "Hide stale" stay inline, because a text filter is the control a reader reaches for without planning to and a search box behind a menu is a search box nobody uses. Each trigger says what its group is narrowed to ("Severity 2 of 3", "Books all") and wears the brand tint when it is hiding something — a folded filter that does not say it is filtering is exactly how a reader comes to believe a project is clean. They were four open chip groups down the left of the page, and on a sixty-six-book project the book chips alone pushed the findings below the fold.
+
+**`?code=` and `?pattern=` are accepted, and neither is authoritative.** `/inventory` links here with "the other sites of this convention"; the link was already being sent and was silently dropped, because a route that does not validate a search param does not receive it. `code` seeds the Codes filter — a seed, not a lock: the chips are still the reader's and "All codes" clears it. `pattern` is different and deliberately is NOT a `FindingsFilter` field: it is an address another screen hands over for one visit, not a preference anybody sets, so it narrows the list the panel calls "all" and the header's "N of TOTAL shown" stays honest about the question that was asked. A banner says the list is narrowed and offers the way out.
 
 **Grouping is the view, and the count is always over findings.** `groupBy` returns the sections; "flat" is one unlabelled section rather than a second rendering path, because the row markup is the part worth having once. A "by book" header shows the id and the human name beside it (`bookName`, which reads the project's own metadata first, exactly as the sidebar does), and the header's badge counts FINDINGS, never rows.
 

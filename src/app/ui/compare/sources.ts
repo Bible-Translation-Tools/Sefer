@@ -24,6 +24,13 @@ export interface SourceChoice {
   readonly id: string;
   /** The name in the picker: "This project", "A zip", "A folder". */
   readonly label: string;
+  /**
+   * The same thing named so it can be said inside a sentence or on a button:
+   * "this project", "the zip", "the folder". The screen writes "Take the
+   * zip's", never "Take right" — a reader choosing between two copies of their
+   * own work is not reading a coordinate system.
+   */
+  readonly shortLabel: string;
   /** The one line under it, or the reason this host cannot offer it. */
   readonly explainer: string;
   readonly sides: readonly Side[];
@@ -62,6 +69,7 @@ export const sourceChoices = (
     {
       id: "project",
       label: t("This project"),
+      shortLabel: t("this project"),
       explainer:
         project === undefined
           ? t("No project is open.")
@@ -73,6 +81,7 @@ export const sourceChoices = (
     {
       id: "zip",
       label: t("A zip"),
+      shortLabel: t("the zip"),
       explainer: web
         ? t("A .zip somebody shared. It is unpacked here, in the page, and only read.")
         : t("This host opens folders directly; unzip it first."),
@@ -91,6 +100,7 @@ export const sourceChoices = (
     {
       id: "folder",
       label: t("A folder"),
+      shortLabel: t("the folder"),
       explainer: nativeFolder
         ? t("Any folder of books on this disk. It is only read.")
         : t("The browser copies the folder's files in so Sefer can read them."),
@@ -117,29 +127,10 @@ export const sourceChoices = (
 };
 
 /**
- * A rejection as one line. Ported from `ImportHub` for the same reason it
- * exists there: `services.run` rejects with the fiber's failure, which is as
- * often a tagged error with `reason`/`description` as it is an `Error`.
+ * A rejection as one line.
+ *
+ * Re-exported rather than written a third time: `src/app/describe.ts` is the
+ * one renderer of a tagged failure, and the two copies that used to live here
+ * and in the cloud screen had already drifted apart.
  */
-export const describe = (cause: unknown): string => {
-  if (typeof cause === "string") return cause;
-  if (cause !== null && typeof cause === "object") {
-    // SAFETY: every field of the asserted shape is `unknown` and checked with
-    // `typeof` before it is used — the assertion names what might be there,
-    // and proves nothing.
-    const shape = cause as {
-      readonly message?: unknown;
-      readonly reason?: unknown;
-      readonly description?: unknown;
-      readonly cause?: unknown;
-    };
-    const reason = typeof shape.reason === "string" ? shape.reason : "";
-    const description = typeof shape.description === "string" ? shape.description : "";
-    if (reason !== "" || description !== "")
-      return [reason, description].filter((part) => part !== "").join(": ");
-    if (typeof shape.message === "string" && shape.message !== "") return shape.message;
-    if (shape.cause !== undefined && shape.cause !== cause) return describe(shape.cause);
-  }
-  const text = String(cause);
-  return text === "" || text === "[object Object]" ? "no detail" : text;
-};
+export { describe } from "../../describe";

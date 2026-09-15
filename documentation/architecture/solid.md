@@ -21,3 +21,38 @@ Use these whenever you are debugging reactivity (something doesn't update, updat
   - `{"method":"costs"}` — running cost tables for the open session
 
 Name your signals/memos/effects (the `{ name: "..." }` option) — attribution reports scopes by name.
+
+## Measured: `HUGE_FAN_OUT` on a long list (2026-09-15)
+
+`/start/find` drew the live catalogue — thousands of rows — and reported
+`HUGE_FAN_OUT`. The findings below are measurements against a 1,333-row
+catalogue on Solid `2.0.0-rc.6`, not readings of the code, and they are written
+down because two of the three obvious repairs made it worse.
+
+**What was ours, and is fixed.** Every row read the name-style signal
+(`nameOf(entry)` inside the `<For>` body) and the busy-row signal. Both are
+folded into one `createMemo` now, and a row receives plain values
+(`src/app/ui/landing/FindProject.tsx`). No application signal is read per row
+on that screen any more.
+
+**What looked right and was not.**
+
+- A per-key store `createProjection` keyed by row id — the repair the
+  diagnostic's own message suggests — measured **worse**: 13,000 subscribers
+  against 6,500. A store read still registers a node per row.
+- A memo returning fresh row objects under an unkeyed `<For>` also measured
+  worse, for a different reason: each flip tore down and rebuilt all 1,333
+  rows. `<For keyed={(row) => row.id}>` fixes that, and the callback then takes
+  an accessor — which is the per-key projection, done by the list itself.
+
+**What is not ours.** At 1,333 rows the page still reports ~6,500 subscribers
+on one unnamed signal, and the identical number appears when each row is five
+instances of a five-line component that reads nothing at all. It is one
+subscriber per COMPONENT INSTANCE; raw `<tr>`/`<td>` elements report zero.
+Nothing in the screen or in `primitives/Table.tsx` moves it — the only lever is
+rendering fewer components per row (or virtualising the list, which this table
+will want anyway at six thousand rows).
+
+The lesson for the next long list: **name your signals**. The diagnostic prints
+the name, and "signal" with no name was the whole of the evidence that the
+remaining fan-out belonged to the framework rather than to us.

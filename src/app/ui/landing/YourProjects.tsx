@@ -246,21 +246,27 @@ export function YourProjects(props: { readonly reload: number }) {
                       </code>
                     </TableCell>
                     <TableCell class="text-on-surface-secondary">
-                      {/* A project whose metadata declares no language still has
-                          an identity on disk, and the folder id is it — more use
-                          than a dash, and muted so nobody reads it as a tag. */}
+                      {/* The NAME, as the column heading promises. The tag rides
+                          under it, muted, and a project that declares neither
+                          gets an em dash — its folder name is not its language,
+                          and printing one there was the bug. */}
                       <Show
-                        when={row.language !== ""}
+                        when={row.language !== "" || row.languageTag !== ""}
                         fallback={
                           <span
                             class="text-on-surface-tertiary"
                             title={t("No language declared in this project's metadata.")}
                           >
-                            {row.folder}
+                            —
                           </span>
                         }
                       >
-                        {row.language}
+                        <span class="block">{row.language || row.languageTag}</span>
+                        <Show when={row.language !== "" && row.languageTag !== ""}>
+                          <code class="font-mono text-smallest text-on-surface-tertiary">
+                            {row.languageTag}
+                          </code>
+                        </Show>
                       </Show>
                     </TableCell>
                     <TableCell class="tabular-nums text-on-surface-secondary">

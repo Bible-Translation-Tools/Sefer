@@ -30,6 +30,17 @@ export interface SeferEnv {
   readonly languageApiUrl: string | null;
   /** Dev-only OTLP endpoint; see composition.ts. */
   readonly otlpUrl: string | null;
+  /**
+   * Dev-only: send OTLP METRICS as well as traces and logs.
+   *
+   * Off by default, and that is the fix rather than the default. A collector
+   * that takes traces and logs and not metrics (motel, which is what we
+   * develop against) answered every metrics interval with `net::ERR_FAILED`,
+   * so a build that had asked for tracing got a console full of a thing it had
+   * not asked for. Set `VITE_SEFER_OTLP_METRICS=1` when the collector wants
+   * them.
+   */
+  readonly otlpMetrics: boolean;
 }
 
 export const env: SeferEnv = {
@@ -40,6 +51,7 @@ export const env: SeferEnv = {
   gitProxyRequestedWith: read(import.meta.env.VITE_SEFER_GIT_PROXY_X_REQUESTED_WITH),
   languageApiUrl: read(import.meta.env.VITE_SEFER_LANGUAGE_API_URL),
   otlpUrl: read(import.meta.env.VITE_SEFER_OTLP_URL),
+  otlpMetrics: import.meta.env.VITE_SEFER_OTLP_METRICS === "1",
 };
 
 /** The Gitea host for the host we are running on. */

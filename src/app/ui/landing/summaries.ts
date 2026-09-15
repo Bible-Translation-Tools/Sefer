@@ -22,12 +22,13 @@
 import { Effect, FileSystem, Option, Result } from "effect";
 
 import { ProjectAdmin } from "../../../core/admin/projectAdmin";
+import { HostInfo } from "../../../core/host/hostInfo";
 import {
   recordProject,
   repairProjectIndex,
   type ProjectRow,
 } from "../../../core/project/projectIndex";
-import type { BurritoMetadata } from "../../../core/resources/burrito";
+import { languageName, languageTag, projectDisplayName } from "../../language";
 import type { Domain } from "../../services";
 
 export interface ProjectSummary {
@@ -35,8 +36,13 @@ export interface ProjectSummary {
   /** The folder's own name — the identity when metadata has none. */
   readonly folder: string;
   readonly name: string;
-  /** "English (en)" when metadata declares a language; empty when it does not. */
+  /**
+   * The language's NAME — "English", not "en" and never the folder. Empty when
+   * the project's metadata declares no language at all.
+   */
   readonly language: string;
+  /** The BCP-47 tag beside it, for the muted second line. Empty with the name. */
+  readonly languageTag: string;
   /** `.usfm` files under the root, at any depth. */
   readonly books: number;
   /** ISO-8601, or undefined when this root has never been opened here. */
@@ -46,26 +52,6 @@ export interface ProjectSummary {
 }
 
 const lastSegment = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
-
-/**
- * A localized Burrito string, preferring the project's own default locale.
- * Burrito stores every name under a locale key, and there is no guarantee the
- * reader's locale is one of them, so "any value at all" beats "nothing".
- */
-const localized = (
-  values: Readonly<Record<string, string>>,
-  preferred: string | undefined,
-): string => {
-  if (preferred !== undefined && values[preferred] !== undefined) return values[preferred];
-  return Object.values(values).at(0) ?? "";
-};
-
-const languageOf = (metadata: BurritoMetadata): string => {
-  const language = metadata.languages.at(0);
-  if (language === undefined) return "";
-  const name = localized(language.name, metadata.meta.defaultLocale);
-  return name === "" ? language.tag : `${name} (${language.tag})`;
-};
 
 const isUsfm = (path: string): boolean => path.toLowerCase().endsWith(".usfm");
 
@@ -82,6 +68,7 @@ export const summarize = (
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const admin = yield* ProjectAdmin;
+    const host = yield* HostInfo;
 
     const entries = yield* Effect.orElseSucceed(
       fileSystem.readDirectory(root, { recursive: true }),
@@ -90,16 +77,18 @@ export const summarize = (
     const metadata = yield* Effect.map(Effect.result(admin.metadata(root)), (result) =>
       Result.isSuccess(result) ? Option.getOrUndefined(result.success) : undefined,
     );
+    // The second answer for a name, and the only one a project with no burrito
+    // has: what `ProjectAdmin.rename` wrote into `.sefer/project.json`.
+    const recorded = yield* Effect.map(admin.recordedName(root), Option.getOrUndefined);
 
     const folder = lastSegment(root);
+    const locale = host.locale();
     return {
       root,
       folder,
-      name:
-        metadata === undefined
-          ? folder
-          : localized(metadata.identification.name, metadata.meta.defaultLocale) || folder,
-      language: metadata === undefined ? "" : languageOf(metadata),
+      name: projectDisplayName(metadata, locale) || recorded || folder,
+      language: languageName(metadata, locale),
+      languageTag: languageTag(metadata),
       books: entries.filter(isUsfm).length,
       lastOpened,
       fixture,
@@ -111,6 +100,7 @@ export const asRow = (summary: ProjectSummary): ProjectRow => ({
   root: summary.root,
   name: summary.name,
   language: summary.language,
+  ...(summary.languageTag === "" ? {} : { languageTag: summary.languageTag }),
   books: summary.books,
   ...(summary.lastOpened === undefined ? {} : { lastOpened: summary.lastOpened }),
 });
@@ -121,6 +111,7 @@ const asSummary = (row: ProjectRow, lastOpened: string | undefined): ProjectSumm
   folder: lastSegment(row.root),
   name: row.name,
   language: row.language,
+  languageTag: row.languageTag ?? "",
   books: row.books,
   lastOpened: row.lastOpened ?? lastOpened,
   fixture: false,

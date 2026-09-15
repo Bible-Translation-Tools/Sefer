@@ -30,6 +30,7 @@ import { For, Show, createMemo, createSignal } from "solid-js";
 
 import { cloneRepository } from "../../../core/remote/clone";
 import { catalogueFor, type CatalogueEntry, type ProjectType } from "../../catalogue";
+import { describe } from "../../describe";
 import { env, giteaHostFor } from "../../env";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
@@ -60,8 +61,42 @@ const ALL_REGIONS = "*";
 
 const lastSegment = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
 
-const describe = (cause: unknown): string =>
-  cause instanceof Error ? cause.message : String(cause);
+/**
+ * One row, with every value the table draws already computed.
+ *
+ * The whole point of this shape: **a row must not read a signal.** The live
+ * catalogue is thousands of rows, and `nameOf(entry)` inside the `<For>` body
+ * made every one of them a subscriber of the name-style signal — thousands of
+ * scopes re-running to move one segmented control, which is what the
+ * `HUGE_FAN_OUT` diagnostic was reporting. The derivation happens once, in the
+ * `rows` memo; a row receives plain values, `busy` included.
+ *
+ * Two things were measured against a 1,333-row catalogue before this shape was
+ * settled on, and both are worth writing down because both look right:
+ *
+ *   * a per-key store `createProjection` keyed by row id — the repair the
+ *     diagnostic's own text suggests — measured WORSE (13,000 subscribers
+ *     against 6,500), because a store read still registers a node per row;
+ *   * a memo returning fresh row objects with an unkeyed `<For>` measured
+ *     worse for the same reason: every flip tore down and rebuilt all 1,333
+ *     rows. Hence `keyed={(row) => row.entry.id}` below.
+ *
+ * What is left is NOT ours and cannot be fixed here: at 1,333 rows the page
+ * still reports ~6,500 subscribers on one unnamed signal, and the same number
+ * appears when the row is five instances of a five-line component that reads
+ * nothing at all. It is one subscriber per COMPONENT INSTANCE in Solid
+ * 2.0.0-rc.6 — raw `<tr>`/`<td>` elements report zero. Nothing in this file,
+ * or in `primitives/Table.tsx`, moves it.
+ */
+interface CatalogueRow {
+  readonly entry: CatalogueEntry;
+  /** The language as this reader asked to see it — natural or anglicized. */
+  readonly name: string;
+  /** Empty when Download is offered; otherwise why it is not. */
+  readonly refusal: string;
+  /** True while this row's clone is running. A value, never a signal read. */
+  readonly downloading: boolean;
+}
 
 export function FindProject(props: { readonly onDownloaded: () => void }) {
   const shell = useShell();
@@ -152,6 +187,31 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
     { name: "catalogueSorted" },
   );
 
+  const downloadReason = (entry: CatalogueEntry): string => {
+    if (entry.cloneUrl === "") return t("Sample data — this row names no repository to download.");
+    if (!transfersConfigured)
+      return t("Transfers are not configured for this build: set VITE_SEFER_GIT_CORS_PROXY_URL.");
+    return "";
+  };
+
+  /**
+   * The rows the table draws. Every reactive read the rows used to make — the
+   * name style, the two filters, the sort — happens HERE, once, and each row
+   * receives plain strings.
+   */
+  const rows = createMemo(
+    (): readonly CatalogueRow[] => {
+      const running = busy();
+      return sorted().map((entry) => ({
+        entry,
+        name: nameOf(entry),
+        refusal: downloadReason(entry),
+        downloading: entry.id === running,
+      }));
+    },
+    { name: "catalogueRows" },
+  );
+
   const sortOf = (key: Column): SortDirection => (column() === key ? direction() : "none");
 
   const toggleSort = (key: Column): void => {
@@ -163,13 +223,14 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
     setDirection(direction() === "asc" ? "desc" : "asc");
   };
 
-  const downloadReason = (entry: CatalogueEntry): string => {
-    if (entry.cloneUrl === "") return t("Sample data — this row names no repository to download.");
-    if (!transfersConfigured)
-      return t("Transfers are not configured for this build: set VITE_SEFER_GIT_CORS_PROXY_URL.");
-    return "";
-  };
-
+  /**
+   * A download that fails must SAY SO. `services.run` rejects with the tagged
+   * failure itself, whose `toString` is the bare tag — so the reason and the
+   * description are read structurally (`src/app/describe.ts`), the toast keeps
+   * the error tone, it never auto-closes, and it carries an × like every other
+   * one. The previous version of this handler produced a toast that said
+   * "RemoteError" and could not be dismissed.
+   */
   const download = (entry: CatalogueEntry): void => {
     const into = `${services.projectsRoot}/${lastSegment(entry.cloneUrl.replace(/\.git$/u, ""))}`;
     setBusy(entry.id);
@@ -186,7 +247,7 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
       })
       .catch((cause: unknown) =>
         toasts.update(toast, {
-          title: t("Download failed"),
+          title: t("Could not download {name}", { name: entry.repo }),
           message: describe(cause),
           tone: "error",
           autoClose: false,
@@ -298,7 +359,7 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
           <Show when={entries()}>
             {(all) => (
               <span class="ms-auto">
-                {t("{shown} of {total}", { shown: sorted().length, total: all().length })}
+                {t("{shown} of {total}", { shown: rows().length, total: all().length })}
               </span>
             )}
           </Show>
@@ -311,7 +372,7 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
         </Show>
 
         <Card padded={false} class="overflow-hidden">
-          <Table data-catalogue={sorted().length}>
+          <Table data-catalogue={rows().length}>
             <TableHead>
               <TableRow>
                 <TableHeader sort={sortOf("code")} onSort={() => toggleSort("code")}>
@@ -332,8 +393,15 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
               </TableRow>
             </TableHead>
             <TableBody>
+              {/* Keyed by the row's own id, so a row is UPDATED rather than
+                  torn down and rebuilt when the memo produces a fresh object —
+                  which it does on every name-style flip. The callback takes an
+                  accessor, and `<For>` gives each row its own: that is the
+                  per-key projection the HUGE_FAN_OUT diagnostic asks for, done
+                  by the list itself rather than by a store beside it. */}
               <For
-                each={sorted()}
+                each={rows()}
+                keyed={(row) => row.entry.id}
                 fallback={
                   <TableRow>
                     <TableCell colspan={5} class="py-8 text-center text-on-surface-tertiary">
@@ -344,46 +412,51 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
                   </TableRow>
                 }
               >
-                {(entry) => (
-                  <TableRow data-entry={entry.id}>
-                    <TableCell class="font-mono text-smallest text-on-surface-tertiary">
-                      {entry.code}
-                    </TableCell>
-                    <TableCell>
-                      <strong class="font-medium text-on-surface-primary">{nameOf(entry)}</strong>
-                      <span class="ms-2 text-smallest text-on-surface-tertiary">
-                        {entry.owner}/{entry.repo}
-                      </span>
-                    </TableCell>
-                    <TableCell class="text-on-surface-secondary">{entry.region ?? "—"}</TableCell>
-                    <TableCell class="text-on-surface-secondary">
-                      {formatDate(entry.updated) || "—"}
-                    </TableCell>
-                    <TableCell class="text-end">
-                      <Show
-                        when={downloadReason(entry) === ""}
-                        fallback={
-                          <Tooltip label={downloadReason(entry)}>
-                            <span class="inline-flex cursor-not-allowed items-center gap-1 text-smallest text-on-surface-tertiary opacity-60">
-                              <Download size={13} aria-hidden="true" />
-                              {t("Download")}
-                            </span>
-                          </Tooltip>
-                        }
-                      >
-                        <Button
-                          size="sm"
-                          variant="tertiary"
-                          loading={busy() === entry.id}
-                          icon={<Download size={13} aria-hidden="true" />}
-                          onClick={() => download(entry)}
+                {(row) => {
+                  const entry = () => row().entry;
+                  return (
+                    <TableRow data-entry={entry().id}>
+                      <TableCell class="font-mono text-smallest text-on-surface-tertiary">
+                        {entry().code}
+                      </TableCell>
+                      <TableCell>
+                        <strong class="font-medium text-on-surface-primary">{row().name}</strong>
+                        <span class="ms-2 text-smallest text-on-surface-tertiary">
+                          {entry().owner}/{entry().repo}
+                        </span>
+                      </TableCell>
+                      <TableCell class="text-on-surface-secondary">
+                        {entry().region ?? "—"}
+                      </TableCell>
+                      <TableCell class="text-on-surface-secondary">
+                        {formatDate(entry().updated) || "—"}
+                      </TableCell>
+                      <TableCell class="text-end">
+                        <Show
+                          when={row().refusal === ""}
+                          fallback={
+                            <Tooltip label={row().refusal}>
+                              <span class="inline-flex cursor-not-allowed items-center gap-1 text-smallest text-on-surface-tertiary opacity-60">
+                                <Download size={13} aria-hidden="true" />
+                                {t("Download")}
+                              </span>
+                            </Tooltip>
+                          }
                         >
-                          {t("Download")}
-                        </Button>
-                      </Show>
-                    </TableCell>
-                  </TableRow>
-                )}
+                          <Button
+                            size="sm"
+                            variant="tertiary"
+                            loading={row().downloading}
+                            icon={<Download size={13} aria-hidden="true" />}
+                            onClick={() => download(entry())}
+                          >
+                            {t("Download")}
+                          </Button>
+                        </Show>
+                      </TableCell>
+                    </TableRow>
+                  );
+                }}
               </For>
             </TableBody>
           </Table>

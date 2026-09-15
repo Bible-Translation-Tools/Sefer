@@ -277,6 +277,38 @@ const base64 = (value: string): string => {
 const otpWanted = (response: HttpResponse, body: string): boolean =>
   response.headers.get("x-gitea-otp") !== null || /otp|one[- ]time|two[- ]factor/iu.test(body);
 
+/**
+ * `20260915T124233` — the moment the token was minted, to the second.
+ *
+ * Gitea refuses a token whose NAME already exists (`400 access token name has
+ * been used already`), so this granularity is not cosmetic: a name good only
+ * to the day meant that signing in twice from one device on one day — after a
+ * page reload, most obviously — failed with a message about a token the person
+ * had never heard of and could not act on.
+ *
+ * Built by hand rather than with a locale formatter: core has no `Intl`
+ * contract and the string must be identical on every host, since a person
+ * comparing two devices' token lists is reading it as an identifier.
+ */
+const stamp = (at: Date = new Date()): string => {
+  const pad = (value: number, width = 2): string => String(value).padStart(width, "0");
+  return [
+    pad(at.getUTCFullYear(), 4),
+    pad(at.getUTCMonth() + 1),
+    pad(at.getUTCDate()),
+    "T",
+    pad(at.getUTCHours()),
+    pad(at.getUTCMinutes()),
+    pad(at.getUTCSeconds()),
+  ].join("");
+};
+
+/** Four characters that make a name nothing can already hold. Not a secret. */
+const suffix = (): string =>
+  Math.floor(Math.random() * 0x10000)
+    .toString(36)
+    .padStart(4, "0");
+
 const bodyOf = (response: HttpResponse): Effect.Effect<string> =>
   Effect.orElseSucceed(
     Effect.tryPromise(() => response.text()),
@@ -428,23 +460,52 @@ const makeGitea = (options: {
     login: ({ host, username, password, otp }) =>
       Effect.gen(function* () {
         const key = normaliseHost(host);
+        const basic = `Basic ${base64(`${username}:${password}`)}`;
+        const tokensUrl = url(key, `/api/v1/users/${encodeURIComponent(username)}/tokens`);
+        const headers = {
+          Authorization: basic,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          ...(otp === undefined || otp === "" ? {} : { "X-Gitea-OTP": otp }),
+        };
+
+        const mint = (name: string): Effect.Effect<HttpResponse, GiteaError> =>
+          request(tokensUrl, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ name, scopes: [...SESSION_TOKEN_SCOPES] }),
+          });
+
         // The token name carries where it was minted and when, so a user
         // looking at their Gitea token list can tell one device from another
-        // and revoke just that one.
-        const tokenName = `sefer-${options.platform}-${new Date().toISOString().slice(0, 10)}`;
-        const response = yield* request(
-          url(key, `/api/v1/users/${encodeURIComponent(username)}/tokens`),
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Basic ${base64(`${username}:${password}`)}`,
-              "Content-Type": "application/json",
-              Accept: "application/json",
-              ...(otp === undefined || otp === "" ? {} : { "X-Gitea-OTP": otp }),
-            },
-            body: JSON.stringify({ name: tokenName, scopes: [...SESSION_TOKEN_SCOPES] }),
-          },
-        );
+        // and revoke just that one. To the SECOND, not to the day: Gitea
+        // refuses a duplicate name with `400 access token name has been used
+        // already`, and a day-granular name meant the second sign-in from one
+        // device — after a reload, say — could not sign in at all.
+        const tokenName = `sefer-${options.platform}-${stamp()}`;
+        let response = yield* mint(tokenName);
+
+        // The recovery, for a name that somehow collides anyway (two windows
+        // in the same second, or a stale token from a build that used the old
+        // day-granular name). We hold the password for exactly this call,
+        // which is the only moment Gitea's token endpoints — which refuse
+        // token auth — can be reached at all: delete the token wearing OUR
+        // name and try once more, and if the instance will not allow that,
+        // mint under a name nothing can already hold.
+        //
+        // The body is read ONCE and carried, because a response body can only
+        // be consumed once and `refuse` below needs it to say what went wrong.
+        if (response.status === 400) {
+          const body = yield* bodyOf(response);
+          if (!/used already/iu.test(body))
+            return yield* Effect.fail(failed("Refused", `400 ${body}`.trim()));
+          const removed = yield* request(`${tokensUrl}/${encodeURIComponent(tokenName)}`, {
+            method: "DELETE",
+            headers: { Authorization: basic, Accept: "application/json" },
+          });
+          response = yield* mint(removed.ok ? tokenName : `${tokenName}-${suffix()}`);
+        }
+
         if (!response.ok) return yield* refuse(response);
         const decoded = decodeCreatedToken(yield* json(response));
         if (decoded._tag === "Failure") {

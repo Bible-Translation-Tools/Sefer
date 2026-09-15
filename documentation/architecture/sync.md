@@ -262,6 +262,32 @@ The screen holds no domain state. The session lives in `Credentials` (through `G
 attachment lives in the repository's own `origin`, the state is derived fresh by the pure machine —
 so a reload or a second window shows the same truth rather than a copy of it.
 
+### The session, and why it survives a reload
+
+Two facts about a Gitea session had to change together, because each made the other unrecoverable.
+
+**The token name is granular to the second.** `login` mints `sefer-<platform>-<yyyymmddThhmmss>`.
+It used to be granular to the day, and Gitea refuses a token whose NAME already exists with
+`400 access token name has been used already` — so a second sign-in from one device on one day
+could not sign in at all. The recovery is in `login` too: on that specific 400 it deletes the token
+wearing our own name (the only moment the password is in hand, and Gitea's token endpoints refuse
+token auth) and mints again under the same name; if the instance will not allow the delete, it mints
+under `…-<suffix>` instead. `src/core/remote/gitea.test.ts` drives both branches against a mocked
+instance — there is no real host in the test suite.
+
+**The Web host persists the token.** `src/platform/web/credentials.ts` was a re-export of the
+session-only store, on the reasoning that a browser has nowhere trustworthy to keep a secret. True,
+and it made every reload a sign-out. It is now `localStorage`, with the trade written out in the
+file: origin-scoped, readable by any script on the origin, therefore as safe as the page itself —
+which is the bargain every browser application that stays signed in makes, and is survivable only
+because the token is scoped (no `write:admin`), named after the device and the minute, and revocable
+from Gitea's own settings page. Every call is wrapped: a private window or blocked site data falls
+back to memory, which is exactly the old behaviour. Desktop still uses the OS keychain.
+
+A token revoked on the server still reads as a session here until the next call fails
+`Unauthorized`; the account card surfaces that, and a boot-time validation request is deliberately
+not made.
+
 `createAccount` and `AccountCard` (`src/app/ui/cloud/account.ts`) are shared with the project page's
 `CloudPanel`, which keeps the attach-and-publish half. The two surfaces cannot disagree about what
 "signed in" means because there is one implementation of it.

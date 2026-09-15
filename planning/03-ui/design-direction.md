@@ -57,7 +57,7 @@ Differs from Zed's multibuffer deliberately:
 
 ## No Replace in Find; Revert stays in Review
 
-Scripture is too valuable and fragile for a blind Replace / Replace all, so Find has neither; edits happen in an editor surface (main editor or an excerpt's Edit). Review and History DO keep per-hunk and per-file Revert — a reviewer looking at a diff and choosing to undo one hunk is a deliberate, visible act, "nicer but similar to old editors" (proto's DiffModal). Review diffs against the last recorded version (the commit), never against the auto-written save baseline, or a dirty session reads as clean.
+Scripture is too valuable and fragile for a blind Replace / Replace all, so Find has neither; edits happen in an editor surface (main editor or an excerpt's Edit). Review and History DO keep per-hunk and per-file Revert — a reviewer looking at a diff and choosing to undo one hunk is a deliberate, visible act, "nicer but similar to old editors" (proto's DiffModal). ~~Review diffs against the last recorded version (the commit), never against the auto-written save baseline, or a dirty session reads as clean.~~ **Superseded by decision 6 (2026-09-15).** That rule was written while the file was still auto-written, which is what made the save baseline useless as a review baseline. Under explicit-only saving the baseline IS the file, the file is exactly what nobody has agreed to change, and diffing against it is the only way an untouched project reads as untouched — diffing against the commit made a 66-book project with no repository offer to record all 66. Review diffs against `SaveCoordinator.baseline`; History keeps the commit diffs.
 
 ## Editor palette
 

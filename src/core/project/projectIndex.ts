@@ -48,8 +48,10 @@ const Row = Schema.Struct({
   /** The project's root path — its identity in the index. */
   root: Schema.String,
   name: Schema.String,
-  /** "English (en)", or empty when the project's metadata declares none. */
+  /** The language's NAME ("English"), or empty when the metadata declares none. */
   language: Schema.String,
+  /** Its BCP-47 tag ("en"), beside the name rather than folded into it. */
+  languageTag: Schema.optionalKey(Schema.String),
   books: Schema.Number,
   /** ISO-8601; absent until this device opens the project. */
   lastOpened: Schema.optionalKey(Schema.String),
@@ -62,8 +64,18 @@ export type ProjectRow = typeof Row.Type;
  * finds `v: 1` knows what it is looking at — and a reader that finds a version
  * it does not know treats the file as absent and repairs, which is exactly
  * what the unreadable case already does.
+ *
+ * `v: 2` is that day. Version 1 stored the language as the single string
+ * "English (en)" and let a project with no declared language fall back to its
+ * FOLDER NAME, so the table's Language column could read `small-nt`. The name
+ * and the tag are two fields now, and there is no folder fallback — so every
+ * v1 row is a row whose language may be wrong. Refusing the old file is how a
+ * wrong value is corrected without a migration nobody can test: the repair
+ * below re-describes each project from disk exactly once.
  */
-const Index = Schema.Struct({ v: Schema.Literal(1), rows: Schema.Array(Row) });
+const INDEX_VERSION = 2;
+
+const Index = Schema.Struct({ v: Schema.Literal(INDEX_VERSION), rows: Schema.Array(Row) });
 
 const decodeIndex = Schema.decodeUnknownResult(Index);
 
@@ -105,7 +117,7 @@ export const writeProjectIndex = (
       writeFileStringAtomic(
         fileSystem,
         projectIndexPath(projectsRoot),
-        `${JSON.stringify({ v: 1, rows }, null, 2)}\n`,
+        `${JSON.stringify({ v: INDEX_VERSION, rows }, null, 2)}\n`,
       ),
   );
 

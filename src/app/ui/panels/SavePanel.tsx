@@ -1,6 +1,6 @@
 /**
- * Save & Review: what has changed, and the one button that writes and records
- * it.
+ * Save & Review: what is not in the file yet, and the one button that writes
+ * and records it.
  *
  * This screen is the ONLY thing in Sefer that writes a project file. Nothing
  * saves on a timer any more; two things keep your work between presses, and
@@ -19,12 +19,34 @@
  *     file would be a lie, and telling them it was recorded when no commit
  *     exists would be a worse one.
  *
- * The summary is `core/diff` against the last RECORDED version — the blob at
- * HEAD, read by `recorded.ts` — and NOT against the Save baseline. Under
- * explicit-only saving the two usually agree, and where they do not (a write
- * whose commit failed) it is the version that a review is about. The Save
- * baseline is kept for one thing here: the muted line that says whether
- * anything is still to be written.
+ * ## The baseline is the FILE
+ *
+ * The review is `core/diff` against `SaveCoordinator.baseline` — the bytes on
+ * disk — and not against the blob at HEAD. That follows from explicit-only
+ * saving: the file is exactly the text nobody has agreed to change, so the
+ * books that differ from it are the books this press is about, and a project
+ * somebody merely opened differs from its files in nothing.
+ *
+ * It used to diff against the last commit, which was right when the file moved
+ * on its own and is wrong now. A 66-book project with no repository has no
+ * HEAD, so every book read as "recorded for the first time" and the screen
+ * offered to record 66 untouched books with a diff of 92,208 lines. The last
+ * commit is still the right baseline for HISTORY, which is the screen about
+ * what has happened rather than what is about to; `recorded.ts` belongs to it
+ * alone now.
+ *
+ * A project with no repository gets one on the first record (`Git.init` before
+ * `commit`), and that first commit holds the books that were actually changed
+ * — not the whole project restated as a change.
+ *
+ * ## The two views
+ *
+ * **Side by side** is the default and the one built for scripture: the file on
+ * the left, the editor on the right, verse-aligned rows under a heading per
+ * chapter, with the characters that differ marked inside the verse. **Unified**
+ * is the line diff, for a structural change that is not verse-shaped. Revert
+ * is offered per row and per file in both, and is the same `diff.revert` in
+ * both — one trusted change through `book.apply`, which Undo reaches.
  *
  * Git is allowed to be absent — a browser fixture has never run `git init`.
  */
@@ -32,25 +54,41 @@
 import { useNavigate } from "@tanstack/solid-router";
 import { Effect, Option, Result } from "effect";
 import Check from "lucide-solid/icons/check";
+import Columns2 from "lucide-solid/icons/columns-2";
 import History from "lucide-solid/icons/history";
 import LifeBuoy from "lucide-solid/icons/life-buoy";
+import Rows3 from "lucide-solid/icons/rows-3";
 import Save from "lucide-solid/icons/save";
 import Undo2 from "lucide-solid/icons/undo-2";
-import { For, Show, createEffect, createSignal } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
 import type { BookId } from "../../../core/book/book";
 import * as Diff from "../../../core/diff/diff";
+import { alignVerses, hunkOf, type VerseRow } from "../../../core/diff/verses";
 import type { Restorable } from "../../../core/recovery/recovery";
 import type { SourceStamp } from "../../../core/source/source";
+import { describe } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { Badge, Button, Card, Dialog, EmptyState, Input, PanelHeader, toasts } from "../primitives";
+import {
+  Badge,
+  Button,
+  Card,
+  Dialog,
+  EmptyState,
+  Input,
+  PanelHeader,
+  SegmentedControl,
+  Switch,
+  toasts,
+} from "../primitives";
 import { bookName } from "../workspace/books";
 import { metadataOf } from "../workspace/project";
-import { recordedChanges, unsavedChanges, type BookChanges } from "./changes";
+import { unsavedChanges, type BookChanges } from "./changes";
 import { DiffView } from "./DiffView";
 import { ago, exact } from "./format";
-import { createRecordedVersion } from "./recorded";
+import { SideBySide } from "./SideBySide";
+import { verseSpans } from "./verses";
 
 /** A row in the book list; the look is shared with the history timeline. */
 const ROW = [
@@ -67,6 +105,8 @@ interface Confirmation {
   readonly run: () => void;
 }
 
+type ReviewView = "columns" | "unified";
+
 /** The author every Sefer commit carries until accounts reach this screen. */
 const AUTHOR = { name: "Sefer", email: "sefer@localhost" } as const;
 
@@ -77,11 +117,11 @@ export function SavePanel() {
   const [busy, setBusy] = createSignal(false, { name: "saving" });
   const [journals, setJournals] = createSignal<readonly Restorable[]>([], { name: "journals" });
   const [picked, setPicked] = createSignal<BookId | undefined>(undefined, { name: "reviewBook" });
+  const [view, setView] = createSignal<ReviewView>("columns", { name: "reviewView" });
+  const [context, setContext] = createSignal(false, { name: "reviewContext" });
   const [confirming, setConfirming] = createSignal<Confirmation | undefined>(undefined, {
     name: "confirmRevert",
   });
-
-  const version = createRecordedVersion(shell);
 
   // Mod-S lands on this screen, so the caret lands in the message: it is the
   // only thing left to supply, and Enter on it records. By id rather than a
@@ -94,13 +134,10 @@ export function SavePanel() {
   );
 
   /**
-   * The review, against the last RECORDED version — never against the disk.
-   * See `changes.ts` for the two baselines and what each one answers.
+   * The review: every book whose text differs from its file. See the header —
+   * the file is the baseline, and `changes.ts` holds the other question.
    */
-  const changed = () => recordedChanges(shell, version.recorded());
-
-  /** The status-line answer: what has not reached the file yet. */
-  const pending = () => unsavedChanges(shell);
+  const changed = () => unsavedChanges(shell);
 
   /** What a person calls a book, as the sidebar and the history call it. */
   const nameOf = (bookId: BookId): string => bookName(bookId, metadataOf(shell.project()));
@@ -115,6 +152,33 @@ export function SavePanel() {
     return rows.find((row) => row.bookId === picked()) ?? rows[0];
   };
 
+  /**
+   * The selected book's verses, the file's beside the editor's.
+   *
+   * Both sides are addressed the same way — `Galley.analyze(...).dish.toc`,
+   * through `verses.ts`, which caches by the text itself — so the columns stay
+   * level when a paragraph is added on one side. The line diff underneath is
+   * untouched: this is a second reading of the same two texts, not a second
+   * idea of what changed.
+   */
+  const rows = createMemo(
+    (): readonly VerseRow[] => {
+      const book = current();
+      if (book === undefined) return [];
+      const baseline = shell.services.save.baseline(book.book);
+      if (Option.isNone(baseline)) return [];
+      const galley = shell.services.galley;
+      const working = book.book.source().text;
+      return alignVerses(
+        baseline.value.text,
+        verseSpans(galley, baseline.value.text),
+        working,
+        verseSpans(galley, working),
+      );
+    },
+    { name: "reviewRows" },
+  );
+
   const announce = (done: Result.Result<unknown, { readonly reason: string }>): void => {
     if (Result.isFailure(done)) {
       toasts.error({ title: t("Revert refused"), message: t(done.failure.reason) });
@@ -128,10 +192,31 @@ export function SavePanel() {
     setConfirming({
       title: t("Revert this change?"),
       label: t("Revert"),
-      description: t("{book} goes back to the recorded version for this one hunk.", {
+      description: t("{book} goes back to what the file on disk holds, for this one hunk.", {
         book: nameOf(changes.bookId),
       }),
       run: () => announce(Diff.revert(hunk, changes.book)),
+    });
+  };
+
+  /**
+   * One verse back to the file. The row already carries both ranges and both
+   * texts, so it becomes an ordinary `Hunk` and goes through the same
+   * `diff.revert` — which refuses a stale one rather than splicing at offsets
+   * that have moved.
+   */
+  const revertRow = (changes: BookChanges, row: VerseRow): void => {
+    setConfirming({
+      title: t("Revert {reference}?", { reference: row.reference }),
+      label: t("Revert"),
+      description: t("{book} {reference} goes back to what the file on disk holds.", {
+        book: nameOf(changes.bookId),
+        reference: row.reference,
+      }),
+      run: () =>
+        announce(
+          Diff.revert(hunkOf(row, changes.bookId, changes.book.source().stamp), changes.book),
+        ),
     });
   };
 
@@ -213,7 +298,12 @@ export function SavePanel() {
             // The replay needs a Book to apply onto, and a book nobody opened
             // has none — so it is instantiated first, through the Project that
             // owns its lifetime.
-            yield* project.instantiate(journal.bookId);
+            const book = yield* project.instantiate(journal.bookId);
+            // Its text is the bytes on disk and its revision is still 0, so
+            // this is the one moment the disk baseline can be learned for
+            // free. The review above is against that baseline; without it the
+            // restored work comes back invisible to this very screen.
+            yield* shell.services.save.adopt(book);
             return yield* shell.services.recovery.restore(journal.id, (bookId) =>
               shell.services.seated(bookId),
             );
@@ -224,7 +314,7 @@ export function SavePanel() {
         if (Result.isFailure(done)) {
           toasts.error({
             title: t("Could not restore {book}", { book: journal.bookId }),
-            message: done.failure.description,
+            message: describe(done.failure),
           });
           return;
         }
@@ -243,7 +333,7 @@ export function SavePanel() {
       .run(Effect.result(shell.services.recovery.discard(journal.id)))
       .then((done) => {
         if (Result.isFailure(done)) {
-          toasts.error({ title: t("Could not discard"), message: done.failure.description });
+          toasts.error({ title: t("Could not discard"), message: describe(done.failure) });
           return;
         }
         toasts.info({ title: t("Discarded the backup for {book}", { book: journal.bookId }) });
@@ -263,9 +353,9 @@ export function SavePanel() {
     setBusy(true);
     const notice = toasts.progress({ title: t("Recording…") });
 
-    // The file has to hold the text before a commit can stage it. Usually
-    // there is nothing left to do here — the idle write got there first — so
-    // an empty receipt list is the ordinary case, not a reason to stop.
+    // The file has to hold the text before a commit can stage it. `saveAll`
+    // writes the dirty books and no others, which is exactly this review's
+    // list — the two ask `SaveCoordinator` the same question.
     const saved = await shell.services.run(
       Effect.result(shell.services.save.saveAll(project.books)),
     );
@@ -276,7 +366,7 @@ export function SavePanel() {
       toasts.update(notice, {
         tone: "error",
         title: t("Could not write to disk"),
-        message: saved.failure.description,
+        message: describe(saved.failure),
         autoClose: false,
       });
       setBusy(false);
@@ -306,6 +396,9 @@ export function SavePanel() {
     const recorded = await shell.services.run(
       Effect.result(
         Effect.gen(function* () {
+          // A project with no repository gets one here, on its first record —
+          // and because the review is against the FILE, that first commit
+          // holds the books that changed rather than the whole project.
           const repo = yield* shell.services.git.init(project.root);
           return yield* shell.services.git.commit(repo, receipts, staticMessage, AUTHOR);
         }),
@@ -322,10 +415,7 @@ export function SavePanel() {
         tone: "error",
         autoClose: false,
         title: t("On disk, but not recorded"),
-        message: t("{reason}: {description}", {
-          reason: recorded.failure.reason,
-          description: recorded.failure.description ?? t("no detail"),
-        }),
+        message: describe(recorded.failure),
       });
     } else {
       shell.noteWritten(
@@ -341,9 +431,6 @@ export function SavePanel() {
         message: staticMessage,
       });
       setMessage("");
-      // The version moved, so the baseline every summary on this screen is
-      // measured against moved with it.
-      version.refresh();
     }
     setBusy(false);
   };
@@ -430,8 +517,8 @@ export function SavePanel() {
                   <div class="p-3">
                     <EmptyState
                       icon={<Check size={20} />}
-                      title={t("Everything is already in the latest version.")}
-                      description={t("Nothing has changed since the last one was recorded.")}
+                      title={t("Nothing to record.")}
+                      description={t("Every book matches the file on disk.")}
                     />
                   </div>
                 }
@@ -450,17 +537,8 @@ export function SavePanel() {
                             <strong class="min-w-0 flex-1 truncate text-small font-semibold text-on-surface-primary">
                               {nameOf(book.bookId)}
                             </strong>
-                            <Show
-                              when={book.firstTime === true}
-                              fallback={
-                                <>
-                                  <Badge tone="success">+{book.added}</Badge>
-                                  <Badge tone="error">−{book.removed}</Badge>
-                                </>
-                              }
-                            >
-                              <Badge tone="brand">{t("new")}</Badge>
-                            </Show>
+                            <Badge tone="success">+{book.added}</Badge>
+                            <Badge tone="error">−{book.removed}</Badge>
                           </span>
                           <span class="w-full truncate font-mono text-smallest text-on-surface-tertiary">
                             {book.path}
@@ -507,13 +585,6 @@ export function SavePanel() {
                   "Nothing is written to disk on a timer. This button writes the files and records the version together, under your message; until you press it, a working-state backup is what holds your work.",
                 )}
               </p>
-              <p class="text-smallest text-on-surface-tertiary" data-pending={pending().length}>
-                <Show when={pending().length > 0} fallback={t("Every book is written to disk.")}>
-                  {t("{count} book(s) not yet written to disk; recording writes them first.", {
-                    count: pending().length,
-                  })}
-                </Show>
-              </p>
               <p class="text-smallest text-on-surface-tertiary" data-backup="last">
                 <Show
                   when={lastBackup()}
@@ -547,7 +618,21 @@ export function SavePanel() {
                     title={nameOf(book().bookId)}
                     subtitle={book().path}
                     actions={
-                      <Show when={book().firstTime !== true}>
+                      <>
+                        <SegmentedControl<ReviewView>
+                          label={t("How to show the changes")}
+                          size="sm"
+                          value={view()}
+                          onChange={setView}
+                          items={[
+                            {
+                              value: "columns",
+                              label: t("Side by side"),
+                              icon: <Columns2 size={13} />,
+                            },
+                            { value: "unified", label: t("Unified"), icon: <Rows3 size={13} /> },
+                          ]}
+                        />
                         <Button
                           size="sm"
                           variant="tertiary"
@@ -556,21 +641,35 @@ export function SavePanel() {
                         >
                           {t("Revert file")}
                         </Button>
-                      </Show>
+                      </>
                     }
                   />
+                  <Show when={view() === "columns"}>
+                    <Switch
+                      id="review-context"
+                      checked={context()}
+                      onChange={setContext}
+                      label={t("Show unchanged verses")}
+                    />
+                  </Show>
                   <Show
-                    when={book().firstTime !== true}
+                    when={view() === "columns"}
                     fallback={
-                      <EmptyState
-                        title={t("Recorded for the first time.")}
-                        description={t("{count} line(s) go into the first version of this book.", {
-                          count: book().added,
-                        })}
+                      <DiffView
+                        hunks={book().hunks}
+                        onRevert={(hunk) => revertHunk(book(), hunk)}
+                        emptyTitle={t("This book matches the file on disk.")}
                       />
                     }
                   >
-                    <DiffView hunks={book().hunks} onRevert={(hunk) => revertHunk(book(), hunk)} />
+                    <SideBySide
+                      rows={rows()}
+                      leftLabel={t("On disk")}
+                      rightLabel={t("In the editor")}
+                      showUnchanged={context()}
+                      onRevert={(row) => revertRow(book(), row)}
+                      emptyTitle={t("This book matches the file on disk.")}
+                    />
                   </Show>
                 </div>
               )}
