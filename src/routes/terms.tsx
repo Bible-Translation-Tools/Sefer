@@ -4,18 +4,22 @@ import { createEffect, createMemo, createSignal, Show } from "solid-js";
 
 import { t } from "../app/i18n";
 import { useShell } from "../app/ProjectContext";
-import { createExcerptFeed, StetView } from "../app/ui/excerpts";
-import { PanelHeader } from "../app/ui/primitives";
+import { createExcerptFeed, MatchFormattingView, StetView } from "../app/ui/excerpts";
+import { PanelHeader, SegmentedControl } from "../app/ui/primitives";
 import { ShellGate } from "../app/ui/ShellGate";
+import * as References from "../app/workflows/references";
 import {
   keyTermGuides,
   keyTerms,
+  matchFormatting,
   occurrenceRef,
   sourceReadings,
+  type MatchFormatting,
   type SourceReading,
 } from "../app/workflows/stet";
-import type { Ref } from "../core/book/book";
+import { trustedBy, type Ref } from "../core/book/book";
 import { refOccurrences, type BookText, type Occurrence } from "../core/excerpts/excerpts";
+import { chaptersTouched } from "../core/galley";
 import { describesExactly } from "../core/galley";
 import { DEFAULT_LOCALE } from "../core/stet/fixture";
 import type { Guide, Term } from "../core/stet/stet";
@@ -55,10 +59,26 @@ import type { Guide, Term } from "../core/stet/stet";
  * that is not being recorded.
  */
 
+/**
+ * The two things this route shows.
+ *
+ * `terms` is the multibuffer above. `format` is MATCH FORMATTING — the same
+ * pair of texts, asked a different question: not "is this term rendered well
+ * here" but "does this book have the source's shape". They share a route
+ * because they share a premise (a source bound to this project) and a reader
+ * moves between them in one sitting; they are a segmented control rather than
+ * two routes because neither is a destination anybody links to directly.
+ */
+type View = "terms" | "format";
+
+/** The last path segment of a reference id, which is its whole file path. */
+const fileName = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
+
 interface TermsSearch {
   readonly term?: string;
   readonly q?: string;
   readonly locale?: string;
+  readonly view?: View;
 }
 
 function Terms() {
@@ -68,6 +88,7 @@ function Terms() {
 
   const locale = (): string => params().locale ?? DEFAULT_LOCALE;
   const filter = (): string => params().q ?? "";
+  const view = (): View => params().view ?? "terms";
 
   /** One navigation, merged over what the URL already says. */
   const ask = (next: TermsSearch): void => {
@@ -179,6 +200,92 @@ function Terms() {
     },
   );
 
+  // -------------------------------------------------------------------------
+  // Match formatting
+  //
+  // The source is a LIBRARY resource, not a project book, so the pair is found
+  // by book code: the focused book's id against the reference file whose name
+  // carries the same code. That is the same loose rule `Library.lookup` uses,
+  // and it is loose on purpose — resource layouts vary and the manifest that
+  // would answer authoritatively is YAML.
+  // -------------------------------------------------------------------------
+
+  const [bound, setBound] = createSignal(References.EMPTY, { name: "boundReferences" });
+  const [sourceText, setSourceText] = createSignal("", { name: "matchSourceText" });
+  const [sourceId, setSourceId] = createSignal("", { name: "matchSourceId" });
+
+  createEffect(
+    () => ({ root: shell.project()?.root, book: shell.focused()?.id, want: view() }),
+    (now) => {
+      if (now.want !== "format" || now.root === undefined) return;
+      void shell.services.run(References.bindReferences(now.root)).then((found) => {
+        setBound(found);
+        const book = now.book;
+        const match =
+          book === undefined
+            ? undefined
+            : found.ids.find((id) =>
+                id
+                  .slice(id.lastIndexOf("/") + 1)
+                  .toLowerCase()
+                  .includes(book.toLowerCase()),
+              );
+        setSourceId(match ?? "");
+        if (match === undefined) {
+          setSourceText("");
+          return;
+        }
+        void shell.services
+          .run(References.textOfReference(match))
+          .then((text) => setSourceText(text ?? ""));
+      });
+    },
+  );
+
+  const target = (): { readonly id: string; readonly text: string } | undefined => {
+    shell.tick();
+    const book = shell.focused();
+    return book === undefined ? undefined : { id: book.id, text: book.source().text };
+  };
+
+  /**
+   * Both skeletons and the transaction, recomputed when either text moves.
+   *
+   * Synchronous: these are wasm calls on the handle this process already holds,
+   * and the whole point of fetching both skeletons at once is that the
+   * highlight then costs nothing per cursor move.
+   */
+  const matched = createMemo(
+    (): MatchFormatting | undefined => {
+      const side = target();
+      const text = sourceText();
+      const id = sourceId();
+      if (side === undefined || id === "" || text === "") return undefined;
+      try {
+        return matchFormatting(shell.services.galley, side, { id, text });
+      } catch {
+        // A book the overlay refuses — a stale address, a text the engine will
+        // not parse — is not a crash on this screen: the view says there is
+        // nothing to match and the reader picks another book.
+        return undefined;
+      }
+    },
+    { name: "matchFormatting" },
+  );
+
+  const applyOverlay = (): void => {
+    const found = matched();
+    const book = shell.focused();
+    if (found === undefined || book === undefined) return;
+    const applied = book.apply(found.overlay.edits, "format", trustedBy("format"));
+    shell.report(
+      Result.isFailure(applied)
+        ? t("match formatting refused: {reason}", { reason: applied.failure.description })
+        : t("matched {book} to the source's formatting", { book: book.id }),
+    );
+    shell.bump();
+  };
+
   const note = (): string =>
     t(
       "Key terms come from the committed {locale} guide; nothing records which occurrences are settled, so every count is 0.",
@@ -187,7 +294,21 @@ function Terms() {
 
   return (
     <main class="flex h-screen min-w-0 flex-col gap-4 p-6">
-      <PanelHeader title={t("Key terms")} />
+      <PanelHeader
+        title={view() === "format" ? t("Match formatting") : t("Key terms")}
+        actions={
+          <SegmentedControl
+            label={t("View")}
+            size="sm"
+            value={view()}
+            onChange={(next) => ask({ view: next === "format" ? "format" : "terms" })}
+            items={[
+              { value: "terms", label: t("Key terms") },
+              { value: "format", label: t("Match formatting") },
+            ]}
+          />
+        }
+      />
 
       <Show
         when={shell.project()}
@@ -199,27 +320,51 @@ function Terms() {
           </p>
         </Show>
 
-        <StetView
-          terms={terms()}
-          selected={selected()?.id ?? ""}
-          onSelect={(id) => ask({ term: id })}
-          filter={filter()}
-          onFilter={(text) => ask({ q: text })}
-          guides={guides()}
-          locale={locale()}
-          onLocale={(next) => ask({ locale: next, term: undefined })}
-          loading={loading()}
-          note={note()}
-          groups={feed.groups()}
-          outline={feed.outline()}
-          onOpen={feed.openInEditor}
-          seat={feed.seat}
-          analyze={feed.analyze}
-          onEdited={feed.edited}
-          onExpand={feed.expand}
-          mode={shell.mode() === "usfm" ? "usfm" : "regular"}
-          sourceOf={(excerpt) => readings().get(excerpt.sid)}
-        />
+        <Show when={view() === "format"}>
+          <MatchFormattingView
+            found={matched()}
+            targetText={target()?.text ?? ""}
+            sourceText={sourceText()}
+            targetLabel={shell.focused()?.id ?? t("no book open")}
+            sourceLabel={
+              sourceId() === "" ? t("no source bound for this book") : fileName(sourceId())
+            }
+            chapters={matched() === undefined ? [] : chaptersTouched(matched()!.overlay.report)}
+            appliable={shell.focused() !== undefined && sourceId() !== ""}
+            onApply={applyOverlay}
+            empty={
+              bound().resources.length === 0
+                ? t("Bind a source or reference resource to this project first.")
+                : shell.focused() === undefined
+                  ? t("Open the book you want to match.")
+                  : t("No reference file matches this book's code.")
+            }
+          />
+        </Show>
+
+        <Show when={view() === "terms"}>
+          <StetView
+            terms={terms()}
+            selected={selected()?.id ?? ""}
+            onSelect={(id) => ask({ term: id })}
+            filter={filter()}
+            onFilter={(text) => ask({ q: text })}
+            guides={guides()}
+            locale={locale()}
+            onLocale={(next) => ask({ locale: next, term: undefined })}
+            loading={loading()}
+            note={note()}
+            groups={feed.groups()}
+            outline={feed.outline()}
+            onOpen={feed.openInEditor}
+            seat={feed.seat}
+            analyze={feed.analyze}
+            onEdited={feed.edited}
+            onExpand={feed.expand}
+            mode={shell.mode() === "usfm" ? "usfm" : "regular"}
+            sourceOf={(excerpt) => readings().get(excerpt.sid)}
+          />
+        </Show>
       </Show>
     </main>
   );
@@ -234,6 +379,7 @@ export const Route = createFileRoute("/terms")({
     ...(typeof search["locale"] === "string" && search["locale"] !== ""
       ? { locale: search["locale"] }
       : {}),
+    ...(search["view"] === "format" ? { view: "format" as const } : {}),
   }),
   head: () => ({ meta: [{ title: "Sefer — key terms" }] }),
   component: () => <ShellGate>{() => <Terms />}</ShellGate>,

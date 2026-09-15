@@ -79,6 +79,29 @@ const booksOf = (
   });
 
 /**
+ * One registered reference's text, read back off disk.
+ *
+ * The id IS the path — that is what `booksOf` registered it as — so this is a
+ * read and not a lookup. `undefined` when the file is gone or will not decode,
+ * which a caller shows as "no source for this book" rather than as an error:
+ * the binding is still valid, this one file is not readable right now.
+ *
+ * Read rather than kept: the corpus holds the text for its own purposes, and a
+ * second copy in a Solid signal per screen is a copy that can go stale against
+ * the file without anything noticing.
+ */
+export const textOfReference = (
+  id: string,
+): Effect.Effect<string | undefined, never, FileSystem.FileSystem> =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const read = yield* Effect.result(fileSystem.readFile(id));
+    if (Result.isFailure(read)) return undefined;
+    const source = decode(read.success);
+    return Result.isFailure(source) ? undefined : source.success.text;
+  });
+
+/**
  * Resolve the project's `source` and `reference` bindings and register every
  * book of them with the corpus, keeping their text.
  *
