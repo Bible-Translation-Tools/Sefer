@@ -21,6 +21,7 @@ export {
 export {
   allDecisionIds,
   applyPlan,
+  type ApplyOptions,
   bookCompleteness,
   completeness,
   decide,
@@ -38,6 +39,7 @@ export {
   type Plan,
 } from "./decisions";
 export { folderSource } from "./folderSource";
+export { recordedSource, savedSource, type RecordedTexts, type SavedText } from "./pastSources";
 export { currentProjectSource } from "./projectSource";
 export {
   CompareError,

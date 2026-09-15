@@ -1,17 +1,16 @@
-import { createFileRoute } from "@tanstack/solid-router";
-
-import { ComparePanel } from "../app/ui/compare";
-import { ShellGate } from "../app/ui/ShellGate";
+import { createFileRoute, redirect } from "@tanstack/solid-router";
 
 /**
- * `/compare` — the symmetric review, gated on the shell.
+ * `/compare` — kept as a REDIRECT to `/review`.
  *
- * Everything the screen does lives in `src/app/ui/compare/`; this file exists
- * to name the URL and to say that the page needs services. The comparison
- * itself is not a search param: a picked zip has no address to put in one, and
- * a frozen comparison is session state, not a place.
+ * Compare and Save & Review became one screen (Will, 2026-09-15: "yes on one
+ * screen"). The URL stays because the icon rail, the command palette and any
+ * bookmark still name it, and a route that 404s is a worse answer than a route
+ * that takes you where the screen went. It carries no component: the redirect
+ * happens before anything renders.
  */
 export const Route = createFileRoute("/compare")({
-  head: () => ({ meta: [{ title: "Sefer — compare" }] }),
-  component: () => <ShellGate>{() => <ComparePanel />}</ShellGate>,
+  beforeLoad: () => {
+    throw redirect({ to: "/review" });
+  },
 });

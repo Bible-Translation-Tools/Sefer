@@ -1,12 +1,18 @@
 /**
  * Where the verses of a text are, asked of the engine.
  *
- * `src/core/diff/verses.ts` aligns two books verse by verse and is deliberately
- * engine-free; this is the half that knows what a `\v` is, which in Sefer means
- * the half that calls `Galley.analyze`. It is the only new engine call the
- * review screen makes, and it makes it for the DISK text — the working text has
- * been parsed already, but the bytes in the file have not, and a side-by-side
- * view needs both sides addressed the same way.
+ * `verses.ts` beside this file aligns two books verse by verse and is
+ * deliberately engine-free; this is the half that knows what a `\v` is, which
+ * in Sefer means the half that calls `Galley.analyze`. It is the only new
+ * engine call the review screen makes, and it makes it for the OTHER SIDE's
+ * text — the working text has been parsed already, but the bytes in the file
+ * (or in the zip, or at HEAD) have not, and a side-by-side view needs both
+ * sides addressed the same way.
+ *
+ * It lives in core rather than in the shell because `diffSkeleton`
+ * (`skeleton.ts`) needs it to build the interim skeleton, and the interim has
+ * to be reachable from anything that can reach the engine — not only from a
+ * component.
  *
  * One parse per text, memoised by the caller against the text itself. `analyze`
  * is synchronous and per-gesture by design (see `src/core/galley/galley.ts`),
@@ -14,8 +20,8 @@
  * render and never one per keystroke.
  */
 
-import type { VerseSpan } from "../../../core/diff/verses";
-import type { GalleyService } from "../../../core/galley";
+import type { GalleyService } from "../galley";
+import type { VerseSpan } from "./verses";
 
 /**
  * The last few texts asked about, by their own content.
