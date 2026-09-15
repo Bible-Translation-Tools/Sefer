@@ -42,7 +42,7 @@ Four insertions and one card. All of them build a `TransactionSpec` against the 
 |---|---|---|
 | `insert.verse` | `Mod-Shift-v` | `\v N ` at the caret with **N selected**, so the first keystroke replaces it. `N` is the highest verse already opened in this chapter at or before the caret, plus one (a `\v 1-2` range answers 3). A caret inside a word moves forward to the word's far edge first — an aligned `\w …\w*` wrapper counts as one word. A leading space is supplied when the caret is hard against a glyph. |
 | `insert.paragraph` | `Mod-Shift-p` | at a block's content head, converts that block's marker to `\p`; anywhere else, splits the line: `\n\p ` at the caret. |
-| `insert.poetry` | `Mod-Shift-q` | the same two shapes with `\q1`, and **by repeat**: pressed inside a `\q1` it writes `\q2`. `insertPoetry(structureAt, 1 \| 2)` takes the level as an argument instead. |
+| `insert.poetry` | `Mod-Shift-l` | the same two shapes with `\q1`, and **by repeat**: pressed inside a `\q1` it writes `\q2`. `insertPoetry(structureAt, 1 \| 2)` takes the level as an argument instead. |
 | `insert.footnote` | `Mod-Shift-f` | `\f + \ft …\f*` with the selection as the body, caret at the end of the `\ft` content. |
 
 Two rulings worth knowing:
