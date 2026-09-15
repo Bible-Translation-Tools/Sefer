@@ -17,15 +17,17 @@
  * its port; a command that navigates calls `bridge.go`.
  */
 
-import { Effect, Option, type Scope } from "effect";
+import { Effect, Option, Result, type Scope } from "effect";
 import { createSignal } from "solid-js";
 
-import type { Book } from "../core/book/book";
+import { trustedBy, type Book } from "../core/book/book";
+import { FORMAT_DOOR, formatBook } from "../core/fixes/fixes";
 import { Git } from "../core/git/git";
+import { makeMultiBook } from "../core/multibook/multibook";
 import type { Project } from "../core/project/project";
 import { Remote } from "../core/remote/remote";
 import { SaveCoordinator } from "../core/save/saveCoordinator";
-import type { ProjectionName } from "../editor";
+import type { EditorAction, EditorBook, ProjectionName } from "../editor";
 import { giteaHostFor } from "./env";
 import { t } from "./i18n";
 import type { Domain, Services } from "./services";
@@ -39,7 +41,12 @@ export type CommandResult =
 export interface CommandSpec {
   readonly id: string;
   readonly title: string;
-  readonly run: () => CommandResult;
+  /**
+   * `argument` is whatever `runCommand(id, argument)` was given. Almost every
+   * command ignores it; the two that do not (`project.rename`) would otherwise
+   * need a surface of their own to ask one question.
+   */
+  readonly run: (argument?: unknown) => CommandResult;
   /** False hides the command from the palette and makes `runCommand` a no-op. */
   readonly when?: () => boolean;
   /** CodeMirror's key notation, e.g. `Mod-s`, `Mod-Shift-f`. */
@@ -134,10 +141,10 @@ export const findCommand = (id: string): Command | undefined =>
  * no-op: the palette and the keymap both offer commands that may have become
  * impossible between render and press, and that is not an error.
  */
-export const runCommand = (id: string): void => {
+export const runCommand = (id: string, argument?: unknown): void => {
   const command = findCommand(id);
   if (command === undefined || !command.available()) return;
-  const outcome = command.run();
+  const outcome = command.run(argument);
   if (outcome === undefined) return;
   if (Effect.isEffect(outcome)) {
     if (runner === undefined)
@@ -179,6 +186,11 @@ const matches = (keys: string, event: KeyboardEvent): boolean => {
  */
 export const installCommandKeys = (target: Document): (() => void) => {
   const onKeyDown = (event: KeyboardEvent): void => {
+    // A chord the editor already consumed is not the shell's. CodeMirror
+    // preventDefaults a binding it ran, and the event still bubbles to the
+    // document — so without this line `Mod-Shift-f` would insert a footnote
+    // AND open project search on one press.
+    if (event.defaultPrevented) return;
     for (const command of registry()) {
       if (command.keys === undefined || !matches(command.keys, event)) continue;
       if (!command.available()) continue;
@@ -215,6 +227,40 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
 
   const hasProject = (): boolean => bridge.project() !== undefined;
   const hasBook = (): boolean => bridge.focused() !== undefined;
+
+  /**
+   * The focused Book as the editor-backed one the seat made for it.
+   *
+   * `perform` is what an editor-backed Book adds over a plain one — a named
+   * gesture run against the caret — and `services.seated` is how the shell
+   * reaches one from a `Book` port with no assertion. A book with no seat has
+   * no caret, so an insert command is simply unavailable, which is what `when`
+   * reports.
+   */
+  const seated = (): EditorBook | undefined => {
+    const book = bridge.focused();
+    return book === undefined ? undefined : services.seated(book.id);
+  };
+
+  /** One structured insertion, registered the same way four times. */
+  const insertion = (id: string, title: string, keys: string, action: EditorAction) =>
+    registerCommand({
+      id,
+      title,
+      keys,
+      when: () => seated() !== undefined,
+      run: () => {
+        seated()?.perform(action);
+      },
+    });
+
+  /**
+   * The Undo offer for a cross-book operation lives on ONE MultiBook, so there
+   * is one here rather than one per invocation. `books` is a thunk, which is
+   * what `makeMultiBook` wants: Project instantiates and releases books as the
+   * reader opens and closes them, and MultiBook must never hold one alive.
+   */
+  const multibook = makeMultiBook(() => bridge.project()?.books ?? []);
 
   /**
    * Pull and push differ by one word, so they share this. The project's
@@ -504,6 +550,135 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       run: () => {
         bridge.go("/history");
       },
+    }),
+
+    // ---------------------------------------------------------------------
+    // Structured entry. Each of these builds a TransactionSpec against the
+    // caret in the focused book and dispatches it through the editor's own
+    // kernel — the phases judge it like a keystroke, and it is one Undo step.
+    // The same four chords are ALSO bound inside CodeMirror (`usfmKeys`), so
+    // a press with the editor focused never makes the round trip; these
+    // registrations are what the palette lists and what fires when focus is
+    // somewhere else on the page.
+    // ---------------------------------------------------------------------
+
+    insertion("editor.insert.verse", t("Insert verse"), "Mod-Shift-v", "insert.verse"),
+    insertion("editor.insert.paragraph", t("Insert paragraph"), "Mod-Shift-p", "insert.paragraph"),
+    insertion("editor.insert.poetry", t("Insert poetry line"), "Mod-Shift-q", "insert.poetry"),
+    insertion("editor.insert.footnote", t("Insert footnote"), "Mod-Shift-f", "insert.footnote"),
+
+    registerCommand({
+      id: "editor.frontmatter.edit",
+      title: t("Edit front matter"),
+      when: () => seated() !== undefined && bridge.mode() !== "usfm",
+      run: () => {
+        seated()?.perform("frontmatter.edit");
+      },
+    }),
+
+    // ---------------------------------------------------------------------
+    // Format. Registered, and refusing — see `src/core/fixes/fixes.ts`. The
+    // shape is the shape it will keep: one `book.apply(…, 'format')` per book,
+    // so a formatted book is one Undo step and a formatted project is one per
+    // book. Only `Fixes.formatBook` changes when the engine grows the door.
+    // ---------------------------------------------------------------------
+
+    registerCommand({
+      id: "format.book",
+      title: t("Format book"),
+      when: hasBook,
+      run: () => {
+        const book = bridge.focused();
+        if (book === undefined) return;
+        const previewed = formatBook(book);
+        if (Result.isFailure(previewed)) {
+          bridge.report(previewed.failure.description);
+          return;
+        }
+        // Trusted, like a fix: the edits are the engine's own and they rewrite
+        // markup the keyboard guards would refuse. Still ONE `apply`, so it is
+        // one Undo step and every subscriber hears one receipt.
+        const applied = book.apply(previewed.success.changes, "format", trustedBy("format"));
+        bridge.report(
+          Result.isFailure(applied)
+            ? t("format refused: {reason}", { reason: applied.failure.description })
+            : t("formatted {book}", { book: book.id }),
+        );
+        bridge.bump();
+      },
+    }),
+
+    registerCommand({
+      id: "format.project",
+      title: t("Format every book"),
+      when: hasProject,
+      run: () => {
+        let refused = 0;
+        const operation = multibook.runAcrossBooks("format", (book) => {
+          const previewed = formatBook(book);
+          if (Result.isFailure(previewed)) {
+            refused += 1;
+            return null;
+          }
+          return previewed.success.changes;
+        });
+        if (operation === null) {
+          bridge.report(
+            refused === 0
+              ? t("nothing to format")
+              : t("Format needs an engine door: {door}", { door: FORMAT_DOOR }),
+          );
+          return;
+        }
+        bridge.report(t("formatted {count} book(s)", { count: operation.books.length }));
+        bridge.bump();
+      },
+    }),
+
+    // ---------------------------------------------------------------------
+    // Project administration. Thin: `ProjectAdmin` (slice 31) owns the rules,
+    // and these two are the palette's way in.
+    // ---------------------------------------------------------------------
+
+    registerCommand({
+      id: "project.export",
+      title: t("Export project…"),
+      when: hasProject,
+      run: () =>
+        Effect.gen(function* () {
+          const project = bridge.project();
+          if (project === undefined) return;
+          const picked = yield* services.dialogs.pickFolder(t("Export to"));
+          if (Option.isNone(picked)) {
+            bridge.report(t("no folder chosen"));
+            return;
+          }
+          const written = yield* services.admin.export(project.root, "burrito", picked.value);
+          bridge.report(t("exported to {path}", { path: written }));
+        }),
+    }),
+
+    registerCommand({
+      id: "project.rename",
+      // TODO(ui): the landing dialog that asks for the name is another slice's
+      // surface. Until it exists the name arrives as the command's argument —
+      // `runCommand("project.rename", "New name")` — and a bare press says so
+      // rather than renaming the project to something nobody typed.
+      title: t("Rename project…"),
+      when: hasProject,
+      run: (argument) =>
+        Effect.gen(function* () {
+          const project = bridge.project();
+          if (project === undefined) return;
+          const name = typeof argument === "string" ? argument.trim() : "";
+          if (name === "") {
+            bridge.report(t("rename needs a name: the landing dialog is not built yet"));
+            return;
+          }
+          yield* services.admin.rename(project.root, name);
+          bridge.report(t("renamed to {name}", { name }));
+          bridge.bump();
+        }),
     }),
   ];
 
