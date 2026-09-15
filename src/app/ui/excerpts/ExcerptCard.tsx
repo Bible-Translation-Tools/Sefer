@@ -84,7 +84,7 @@ export interface ExcerptCardProps {
    * findings list marks an error and a warning differently, and the colour is
    * the only thing in the body that says which is which.
    */
-  readonly markTone?: (source: number | undefined) => MarkTone | undefined;
+  readonly markTone?: (source: number | undefined, excerpt: Excerpt) => MarkTone | undefined;
 }
 
 /**
@@ -148,7 +148,7 @@ const segmentsOf = (
     if (to <= from) continue;
     const verse = excerpt.verses.find((mark) => mark.at === from);
     const covering = excerpt.marks.filter((mark) => mark.from <= from && mark.to >= to);
-    const tone = covering.length === 0 ? undefined : markTone?.(covering[0]?.source);
+    const tone = covering.length === 0 ? undefined : markTone?.(covering[0]?.source, excerpt);
     out.push({
       text: excerpt.text.slice(from, to),
       hit: covering.length > 0,
@@ -204,7 +204,7 @@ const usfmSegmentsOf = (
     const to = bounds[index + 1]!;
     if (to <= from) continue;
     const covering = ranges.filter((range) => range.from <= from && range.to >= to);
-    const tone = covering.length === 0 ? undefined : markTone?.(covering[0]?.source);
+    const tone = covering.length === 0 ? undefined : markTone?.(covering[0]?.source, excerpt);
     out.push({
       text: excerpt.source.slice(from, to),
       hit: covering.length > 0,
@@ -290,7 +290,10 @@ export function ExcerptCard(props: ExcerptCardProps) {
         <strong class="text-small font-medium text-on-surface-primary">
           {props.label ?? props.excerpt.label}
         </strong>
-        <Show when={props.excerpt.hits.length > 1}>
+        {/* Not when the card carries notes: findings list themselves line by
+            line under this header, and "2 matches" above them would be the
+            same count said twice in another vocabulary. */}
+        <Show when={props.notes === undefined && props.excerpt.hits.length > 1}>
           <span class="text-smallest text-on-surface-tertiary">
             {t("{count} matches", { count: props.excerpt.hits.length })}
           </span>

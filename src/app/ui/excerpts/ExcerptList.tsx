@@ -99,7 +99,7 @@ export interface ExcerptDecor {
   /** A block between a card's header and its reading. */
   readonly notes?: (excerpt: Excerpt, key: string) => JSX.Element;
   /** What a highlight means — see `ExcerptCardProps.markTone`. */
-  readonly markTone?: (source: number | undefined) => MarkTone | undefined;
+  readonly markTone?: (source: number | undefined, excerpt: Excerpt) => MarkTone | undefined;
   /** Pixels this card carries beyond the verse, before it has been measured. */
   readonly extraHeight?: (excerpt: Excerpt, key: string) => number;
 }
@@ -129,11 +129,13 @@ export function ExcerptList(props: ExcerptListProps) {
       props.groups.map((group) => ({
         key: group.bookId,
         rows: group.excerpts.map((excerpt) => {
-          const key = keyOf(group, excerpt);
+          // `static`: the memo is the tracking scope, and the key is read here
+          // rather than by a function that outlives it.
+          const staticKey = keyOf(group, excerpt);
           return {
-            key,
+            key: staticKey,
             item: excerpt,
-            estimate: estimate(excerpt) + (props.decor?.extraHeight?.(excerpt, key) ?? 0),
+            estimate: estimate(excerpt) + (props.decor?.extraHeight?.(excerpt, staticKey) ?? 0),
           };
         }),
       })),
