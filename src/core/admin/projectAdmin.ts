@@ -72,6 +72,20 @@ export interface ProjectAdminService {
   readonly delete: (root: string, confirm: Confirm) => Effect.Effect<void, AdminError>;
   /** `None` when the project carries no `metadata.json`; `Invalid` when it does but it is broken. */
   readonly metadata: (root: string) => Effect.Effect<Option.Option<BurritoMetadata>, AdminError>;
+  /**
+   * The name a `rename` recorded for a project that has no burrito to carry
+   * one — `.sefer/project.json`'s `name`, and `None` when there is no such
+   * file or it says nothing.
+   *
+   * It exists because `rename` has always WRITTEN this file and nothing has
+   * ever read it: renaming a folder of loose USFM reported success and changed
+   * nothing anybody could see. The burrito is still the first answer; this is
+   * the second, and the folder's own name is the third.
+   *
+   * Never fails. A project whose private corner is unreadable is a project
+   * with no recorded name, which is the ordinary case anyway.
+   */
+  readonly recordedName: (root: string) => Effect.Effect<Option.Option<string>>;
   /** Merges, re-validates through the schema, and refuses rather than writing something invalid. */
   readonly updateMetadata: (root: string, patch: MetadataPatch) => Effect.Effect<void, AdminError>;
   /**
@@ -325,6 +339,28 @@ const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminServic
       }),
 
     metadata,
+
+    recordedName: (root) =>
+      Effect.gen(function* () {
+        const text = yield* Effect.result(
+          fileSystem.readFileString(`${root}/${SEFER_PROJECT_FILE}`),
+        );
+        if (Result.isFailure(text)) return Option.none<string>();
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(text.success);
+        } catch {
+          return Option.none<string>();
+        }
+        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
+          return Option.none<string>();
+        // SAFETY: the guard above leaves only a plain object; `name` is read as
+        // `unknown` and narrowed before it is used.
+        const name = (parsed as Record<string, unknown>).name;
+        return typeof name === "string" && name.trim() !== ""
+          ? Option.some(name.trim())
+          : Option.none<string>();
+      }),
 
     updateMetadata: (root, patch) =>
       Effect.gen(function* () {

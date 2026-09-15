@@ -24,6 +24,12 @@ export interface Toast {
   readonly message?: string;
   /** A spinner instead of the tone icon; progress toasts never auto-close. */
   readonly loading: boolean;
+  /**
+   * Whether the × is offered. It always is, unless a caller deliberately says
+   * otherwise: an error toast never auto-closes, so the close button is the
+   * only way out of one, and a download that failed behind a progress toast
+   * used to leave a permanent undismissable card on the screen.
+   */
   readonly dismissible: boolean;
 }
 
@@ -87,13 +93,27 @@ export const success = (options: ToastOptions): string => show({ ...options, ton
 export const error = (options: ToastOptions): string =>
   show({ ...options, tone: "error", autoClose: options.autoClose ?? false });
 
-/** A toast that stays and spins until `update` or `dismiss` ends it. */
-export const progress = (options: ToastOptions): string =>
-  show({ ...options, dismissible: options.dismissible ?? false }, true);
+/**
+ * A toast that stays and spins until `update` or `dismiss` ends it. It is
+ * closable like every other one: a spinner the reader cannot get rid of is a
+ * permanent card on the screen the first time a transfer fails.
+ */
+export const progress = (options: ToastOptions): string => show(options, true);
 
-/** Replaces a raised toast in place, keeping its position in the list. */
+/**
+ * Replaces a raised toast in place, keeping its position in the list.
+ *
+ * A toast the reader already closed is RE-RAISED when the update is an error,
+ * and only then. Dismissing a spinner is a reasonable thing to do while a
+ * clone runs; having done so must not be the reason the failure is never
+ * reported. Anything else stays dismissed — a success nobody is waiting for is
+ * not worth putting back on screen.
+ */
 export const update = (id: string, options: Omit<ToastOptions, "id">): void => {
-  if (!list().some((each) => each.id === id)) return;
+  if (!list().some((each) => each.id === id)) {
+    if (options.tone === "error") error({ ...options, id });
+    return;
+  }
   setList((held) =>
     held.map((each) =>
       each.id === id
@@ -103,11 +123,13 @@ export const update = (id: string, options: Omit<ToastOptions, "id">): void => {
             title: options.title,
             message: options.message,
             loading: false,
+            // Whatever it was while it spun, a settled toast can be closed.
+            dismissible: options.dismissible ?? true,
           }
         : each,
     ),
   );
-  arm(id, options.autoClose);
+  arm(id, options.tone === "error" ? (options.autoClose ?? false) : options.autoClose);
 };
 
 export const dismiss = (id: string): void => {

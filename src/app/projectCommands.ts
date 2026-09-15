@@ -23,17 +23,15 @@ import { Effect, Option, Result } from "effect";
 
 import type { AdminError } from "../core/admin/projectAdmin";
 import { registerCommand } from "./commands";
+import { describe } from "./describe";
 import { t } from "./i18n";
+import { noteRenamed } from "./projectNames";
 import type { Services } from "./services";
 import { downloadBytes } from "./ui/landing/download";
 import { rememberProject } from "./ui/landing/summaries";
 import { toasts } from "./ui/primitives";
 
 const lastSegment = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
-
-/** An `AdminError` as one line, without leaning on `Error.message`. */
-const describe = (failure: { readonly reason: string; readonly description?: string }): string =>
-  failure.description ?? failure.reason;
 
 /** The one filter list both hosts show for a project archive. */
 const ZIP_FILTERS = [{ name: "Zip archive", extensions: ["zip"] }] as const;
@@ -110,6 +108,11 @@ export const exportProjectZip = async (services: Services, root: string): Promis
  * correct. The index does: it is where the name in the projects table comes
  * from, and it is re-read rather than patched because a burrito rename may
  * land in a different locale than the one we displayed.
+ *
+ * `noteRenamed` is the third reader, and the reason a rename used to show a
+ * green toast and change nothing on screen: the OPEN project holds the
+ * metadata it decoded when it was opened, and nothing re-reads a burrito
+ * mid-session. The overlay makes the sidebar header move with the table.
  */
 export const renameProject = async (
   services: Services,
@@ -129,6 +132,7 @@ export const renameProject = async (
     toasts.error({ title: t("Could not rename"), message: describe(done.failure) });
     return false;
   }
+  noteRenamed(root, name);
   toasts.success({ title: t("Renamed to {name}", { name }) });
   return true;
 };
