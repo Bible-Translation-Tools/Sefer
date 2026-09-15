@@ -52,6 +52,7 @@ import { historyLayer, usfmEditorHeadless } from "./core/compose";
 import { docText, structureAt, type DocStructure } from "./core/docStructure";
 import { clearRefusal, lastRefusal, localTracer, tracer } from "./core/instrument";
 import { trusted } from "./core/kernel";
+import { withoutScrolling } from "./core/scroll";
 import { changesOf, fromCanonical, type Funnel, type Receive } from "./funnel";
 import { observabilityTracer } from "./observability";
 
@@ -227,7 +228,17 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
     run: (target: { state: EditorState; dispatch: (tr: Transaction) => void }) => boolean,
   ): boolean => {
     const bound = view;
-    if (bound !== null) return run(bound);
+    if (bound !== null) {
+      // The book's history is the book's, so undo and redo run HERE whichever
+      // surface asked — the toolbar's buttons, the palette, `Mod-z` inside an
+      // open note editor. When the reader is not in this view, its own
+      // restored selection is not a place they are looking at, and scrolling
+      // to it threw them somewhere else and destroyed the satellite they were
+      // typing in (see core/scroll.ts). The edit lands either way; only the
+      // page is kept still.
+      if (bound.hasFocus) return run(bound);
+      return withoutScrolling(() => run(bound));
+    }
     // A one-slot box rather than a `let`: the command dispatches from inside a
     // callback, and an array reads back without an assertion.
     const landed: Transaction[] = [];

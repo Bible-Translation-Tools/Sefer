@@ -27,7 +27,13 @@
  * satellite is the surface that wears it.
  */
 
-import { EditorState, StateEffect, StateField, type Extension } from "@codemirror/state";
+import {
+  EditorState,
+  StateEffect,
+  StateField,
+  type Extension,
+  type Transaction,
+} from "@codemirror/state";
 import { EditorView, ViewPlugin, keymap } from "@codemirror/view";
 
 import { trustedBy } from "../../core/book/book";
@@ -37,20 +43,45 @@ import { analyzer } from "../core/analyzer";
 import {
   buildNoteApparatus,
   noteApparatusText,
+  paintNoteBody,
   setNoteToggler,
   type NoteGesture,
 } from "../core/decorations";
 import { docText, structureAt, structureField } from "../core/docStructure";
 import { planAt } from "../core/editorState";
-import { mountSatellite, type Satellite } from "./satellite";
+import { mountSatellite, satelliteRange, type Satellite } from "./satellite";
 
 /** Which note the reader is editing, as a document offset, or nothing. */
 const setEditing = StateEffect.define<number | null>();
+
+/**
+ * The offset of the note a transaction just inserted, if it was one.
+ *
+ * `insertFootnote` writes `input.usfm.footnote` (core/insert.ts) and the whole
+ * insertion is one change, so the note begins where that change begins in the
+ * NEW document. Reading it here rather than having the command say so keeps
+ * the command headless: it runs against a state and knows nothing about rows,
+ * satellites or the DOM.
+ */
+const insertedNote = (tr: Transaction): number | null => {
+  if (!tr.isUserEvent("input.usfm.footnote")) return null;
+  let at: number | null = null;
+  tr.changes.iterChanges((_fromA, _toA, fromB) => {
+    at ??= fromB;
+  });
+  return at;
+};
 
 const editingField = StateField.define<number | null>({
   create: () => null,
   update(held, tr) {
     for (const effect of tr.effects) if (effect.is(setEditing)) return effect.value;
+    // A note you have just made is a note you are about to write, so
+    // `Insert footnote` opens its editor. Without this the gesture ended with
+    // a caller in the text, an empty row at the foot of the chapter, and no
+    // hint that either was the same note.
+    const made = insertedNote(tr);
+    if (made !== null) return made;
     // A note whose caller moved is still the same note; one that was deleted
     // outright closes the editor rather than pointing at the text beside it.
     if (held === null || !tr.docChanged) return held;
@@ -105,8 +136,9 @@ const flashRow = (view: EditorView, at: number, tries = 12): void => {
  * marker names — so the satellite is given the origin and the body and nothing
  * else. `buildNoteApparatus` hides whatever is left on the line around it.
  *
- * A note the engine could not close (the `99-BAD` fixture has one) has no body
- * part at all; it gets the whole note, which is the honest thing to show.
+ * A note with no content parts at all — a note the engine could not close (the
+ * `99-BAD` fixture has one), and every note the moment `Insert footnote` makes
+ * it — gets a zero-width window where its body belongs. See below.
  */
 const spanOf = (view: EditorView, at: number): { from: number; to: number } | null => {
   const note = structureAt(view.state).notes.find((row) => row.from === at);
@@ -116,15 +148,39 @@ const spanOf = (view: EditorView, at: number): { from: number; to: number } | nu
   );
   const first = content[0];
   const last = content[content.length - 1];
-  if (first === undefined || last === undefined) return { from: note.from, to: note.to };
-  return { from: first.from, to: last.to };
+  if (first !== undefined && last !== undefined) return { from: first.from, to: last.to };
+  // A note with NOTHING in it — which is every note the moment `Insert
+  // footnote` makes one — has no origin part and no body part, so there is no
+  // content to point at. The whole note was returned instead, and its end is
+  // past the closing `\f*`: the reader's first keystroke landed OUTSIDE the
+  // note, in the verse. The empty body's position is where the closer begins,
+  // so that is the span — a zero-width window at exactly the place the text
+  // belongs. Found by the closer's own extent rather than by spelling `\f*`
+  // here, which is the engine's word and not the editor's.
+  const closer = note.parts.findLast(
+    (part) => part.kind === NOTE_PART.MARKUP && part.to === note.to,
+  );
+  const empty = closer?.from ?? note.to;
+  return { from: empty, to: empty };
 };
 
-/** Where the caret goes when the editor opens: the start of the note's text. */
-const caretFor = (view: EditorView, at: number): number | null => {
+/**
+ * Where the caret goes when the editor opens: the start of the note's text.
+ *
+ * Clamped into `span`, and never null — and that is not defensive tidying, it
+ * was a bug with teeth. A note with nothing in it yet has no BODY part at all,
+ * so this answered "nowhere", the satellite kept CodeMirror's default
+ * selection of 0, and its first keystroke was submitted as an edit at offset
+ * ZERO: the reader typed into a fresh footnote and the letter appeared at the
+ * top of the book. The note then mapped one character to the right, its row no
+ * longer matched, and the editor closed itself. The end of the span is the
+ * honest fallback: it is where the body would be.
+ */
+const caretFor = (view: EditorView, at: number, span: { from: number; to: number }): number => {
   const note = structureAt(view.state).notes.find((row) => row.from === at);
   const body = note?.parts.find((part) => part.kind === NOTE_PART.BODY);
-  return body === undefined ? null : body.from;
+  const wanted = body === undefined ? span.to : body.from;
+  return Math.min(span.to, Math.max(span.from, wanted));
 };
 
 /**
@@ -150,13 +206,50 @@ class NoteSurfaces {
 
   #sync(): void {
     const want = editingNote(this.#view.state);
-    if (this.#open?.at === want) return;
+    // A row is a WIDGET, and CodeMirror rebuilds one when the block it lives
+    // in moves — which an apparatus block does on every keystroke inside the
+    // chapter, and which an undo forces outright. A rebuilt row takes the
+    // mounted editor's parent element with it, leaving a view attached to
+    // nothing: the reader's box vanished mid-note and this object went on
+    // believing it was open. So a row that has left the document is not open,
+    // whatever is held here, and the editor is mounted again on the new one.
+    const orphaned = this.#open !== null && !this.#open.row.isConnected;
+    if (this.#open?.at === want && !orphaned) return;
     this.#close();
     if (want === null) return;
     // After the update, not during it: the row's DOM is a widget CodeMirror may
-    // not have drawn yet, and mounting a view measures.
+    // not have drawn yet, mounting a view measures, and a plugin may not
+    // dispatch into the update that is running it. Retried for a few frames for
+    // the same reason `flashRow` is — a scrolled-to block is drawn
+    // asynchronously, and the first frame after the dispatch has no row yet.
+    this.#mountWhenDrawn(want, 20, true);
+  }
+
+  /**
+   * Waits for the row to exist, scrolling to it once if it does not.
+   *
+   * The row is a widget in the apparatus block at the FOOT of the chapter, and
+   * CodeMirror renders only what is on screen. A note reached by clicking its
+   * own row is on screen by definition; one opened because the reader just
+   * INSERTED it is half a chapter above its row, and there was nothing to
+   * mount into — which is why a fresh footnote could not be typed in.
+   */
+  #mountWhenDrawn(at: number, tries: number, mayScroll: boolean): void {
     requestAnimationFrame(() => {
-      if (editingNote(this.#view.state) === want && this.#open === null) this.#mount(want);
+      if (editingNote(this.#view.state) !== at || this.#open !== null) return;
+      if (rowFor(this.#view, at) === null) {
+        let scrolled = false;
+        if (mayScroll) {
+          const block = apparatusAt(this.#view, at);
+          if (block !== null) {
+            this.#view.dispatch({ effects: EditorView.scrollIntoView(block, { y: "end" }) });
+            scrolled = true;
+          }
+        }
+        if (tries > 0) this.#mountWhenDrawn(at, tries - 1, mayScroll && !scrolled);
+        return;
+      }
+      this.#mount(at);
     });
   }
 
@@ -200,8 +293,15 @@ class NoteSurfaces {
         structureField,
         // The one note, unhidden: markup elided, the origin as `usfm-fr` and
         // the body as `usfm-ft`, which is the apparatus row's own vocabulary.
+        //
+        // The LIVE window, not the range this mount was given. The satellite
+        // maps its own scope through every edit (`satellite.ts`), and a note
+        // that started empty is a zero-width window that has to GROW with the
+        // first character typed into it. Reading the closed-over `span` meant
+        // the window stayed where it was and the reader's own text was hidden
+        // from them the instant they wrote it.
         EditorView.decorations.compute(["doc"], (state) =>
-          buildNoteApparatus(docText(state), structureAt(state), span),
+          buildNoteApparatus(docText(state), structureAt(state), satelliteRange(state) ?? span),
         ),
         keymap.of([{ key: "Escape", run: () => (close(), true) }]),
       ],
@@ -217,9 +317,9 @@ class NoteSurfaces {
     };
     row.append(done);
     row.classList.add("usfm-note-editing");
-    const caret = caretFor(this.#view, at);
-    if (caret !== null && caret >= span.from && caret <= span.to)
-      satellite.view.dispatch({ selection: { anchor: caret } });
+    // Always, never conditionally: a satellite with no selection of its own
+    // starts at offset 0, which in this view is the top of the whole book.
+    satellite.view.dispatch({ selection: { anchor: caretFor(this.#view, at, span) } });
     satellite.view.focus();
 
     this.#open = { at, satellite, row, slot };
@@ -254,7 +354,8 @@ class NoteSurfaces {
       if (span !== null && span.textContent !== text) span.textContent = text;
     };
     set("usfm-note-ref", noteApparatusText(doc, note, NOTE_PART.ORIGIN));
-    set("usfm-note-body", noteApparatusText(doc, note, NOTE_PART.BODY));
+    const body = row.querySelector<HTMLElement>(".usfm-note-body");
+    if (body !== null) paintNoteBody(body, noteApparatusText(doc, note, NOTE_PART.BODY));
   }
 }
 

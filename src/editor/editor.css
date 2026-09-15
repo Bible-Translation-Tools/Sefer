@@ -302,6 +302,13 @@
   color: var(--editor-faint);
   white-space: nowrap;
 }
+/* A note with no text yet. An empty inline span is zero pixels wide, so the
+   one target that means "let me write this" was unclickable on exactly the
+   note a reader had just made; the placeholder IS the click target. */
+.cm-mode-regular .usfm-note-empty {
+  color: var(--editor-faint);
+  font-style: italic;
+}
 .cm-mode-usfm .usfm-notes {
   display: none;
 }
@@ -606,8 +613,16 @@
 .cm-mode-regular .usfm-note-edit {
   display: none;
 }
+/* The open note editor takes the rest of the ROW, and grows down with what is
+   typed into it. It was an `inline-block` of `min-width: 12ch` that never grew
+   and scrolled internally, so a note of two sentences was a keyhole. `flex: 1`
+   keeps the apparatus row's own width (the mark and the reference are the
+   other two flex items), `height: auto` on the scroller lets CodeMirror size
+   to its content, and `overflow: visible` means one line is one line and ten
+   are ten — the row grows, never the box's own scrollbar. */
 .cm-mode-regular .usfm-note-editing .usfm-note-edit {
-  display: inline-block;
+  display: block;
+  flex: 1 1 auto;
   min-width: 12ch;
   vertical-align: top;
 }
@@ -618,6 +633,10 @@
 }
 
 .cm-mode-regular .usfm-note-done {
+  /* The editor beside it takes the rest of the row, so this must not be
+     squeezed into "Do / ne". */
+  flex: 0 0 auto;
+  white-space: nowrap;
   margin-left: 8px;
   padding: 1px 8px;
   font: 500 10px/1.6 var(--font-ui);
@@ -640,8 +659,14 @@
   border-radius: 2px;
 }
 
+/* The box grows with what is typed into it, and never scrolls inside itself.
+   It was a fixed `inline-block` with CodeMirror's own scroller in it, so a
+   note of two sentences was a keyhole with a scrollbar. `height: auto` lets
+   the view size to its content and `overflow: visible` lets the APPARATUS ROW
+   take the height instead — one line is one line, and ten are ten. */
 .cm-mode-regular .usfm-note-edit .cm-editor {
   background: transparent;
+  height: auto;
 }
 .cm-mode-regular .usfm-note-edit .cm-editor.cm-focused {
   outline: none;
@@ -649,9 +674,15 @@
 .cm-mode-regular .usfm-note-edit .cm-scroller {
   line-height: inherit;
   font-family: inherit;
+  height: auto;
+  overflow: visible;
 }
 .cm-mode-regular .usfm-note-edit .cm-content {
   padding: 0;
+  /* One line minimum, so an empty note is still a place to click. */
+  min-height: 1.55em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .cm-mode-regular .usfm-note-edit .cm-line {
   padding: 0;
