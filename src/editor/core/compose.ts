@@ -265,7 +265,7 @@ export function usfmKeys(): readonly KeyBinding[] {
     // editor already consumed (`installCommandKeys`).
     { key: "Mod-Shift-v", run: traced("insertVerse", insertVerse(structureAt)) },
     { key: "Mod-Shift-p", run: traced("insertParagraph", insertParagraph(structureAt)) },
-    { key: "Mod-Shift-q", run: traced("insertPoetry", insertPoetry(structureAt)) },
+    { key: "Mod-Shift-l", run: traced("insertPoetry", insertPoetry(structureAt)) },
     { key: "Mod-Shift-f", run: traced("insertFootnote", insertFootnote()) },
   ];
 }

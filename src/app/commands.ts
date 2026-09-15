@@ -564,7 +564,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
 
     insertion("editor.insert.verse", t("Insert verse"), "Mod-Shift-v", "insert.verse"),
     insertion("editor.insert.paragraph", t("Insert paragraph"), "Mod-Shift-p", "insert.paragraph"),
-    insertion("editor.insert.poetry", t("Insert poetry line"), "Mod-Shift-q", "insert.poetry"),
+    insertion("editor.insert.poetry", t("Insert poetry line"), "Mod-Shift-l", "insert.poetry"),
     insertion("editor.insert.footnote", t("Insert footnote"), "Mod-Shift-f", "insert.footnote"),
 
     registerCommand({
