@@ -1,58 +1,48 @@
 // diff.ts
 //
-// The DIFF DOOR: Onion's decision-unit diff, as Sefer's types, and the one
-// constant that names what the pinned artifact is missing.
+// The DIFF DOOR: Onion's decision-unit diff, as Sefer's types.
 //
-// Onion already has the diff Sefer wants. `onion/src/diff.rs` is a whole
-// engine: it cuts each side into BLOCKS at its own table-of-contents anchors
-// (front matter, chapter open, verse), pairs them by a deliberately loose key
-// (book + chapter + verse START, so a rebridged or moved verse still pairs and
-// a renumbered one reads as a delete plus an add), and hands back a
-// `DiffSkeleton` — an interleave of slots plus a list of `DecisionUnit`s, each
-// addressed by a re-derivable sid rather than a minted id. `onion-wasm`
-// already binds `diff(baseline, current) -> JSON` with UTF-16 spans into each
-// side's own document, and takes `{"unitId": "baseline"|"current"}` back to
-// `merge`.
+// It is OPEN. scripture-kitchen v0.1.0 re-exports `diff`, `merge` and
+// `mergeSplices` as free functions on the galley wasm module, and this is the
+// only diff `/review` has: the interim verse-key skeleton that stood in for it
+// is deleted (Will, 2026-09-15 — "the engine is the only diff"). `DIFF_DOOR`
+// stays as the refusal an artifact that somehow lost the export produces,
+// because the alternative is a screen that silently shows a second opinion
+// about scripture structure.
 //
-// What is missing is one re-export. Sefer pins the GALLEY wasm crate, and
-// `galley/src/wasm.rs` does not carry the diff surface, so
-// `vendor/galley/pkg-web/usfm_galley.d.ts` exports the `Galley` class, `Knobs`
-// and the init glue and nothing else. That is the same shape as the format ask
-// (`Fixes.FORMAT_DOOR`), and it is answered the same way: the types are here,
-// the call is here, and the call REFUSES BY NAME until the artifact carries it.
-// A silent fallback inside this module would mean nobody could tell which diff
-// they were reading.
+// `onion/src/diff.rs` is a whole engine: it cuts each side into BLOCKS at its
+// own table-of-contents anchors (front matter, chapter open, verse), pairs them
+// by a deliberately loose key (book + chapter + verse START, so a rebridged or
+// moved verse still pairs and a renumbered one reads as a delete plus an add),
+// and hands back a `DiffSkeleton` — an interleave of slots plus a list of
+// `DecisionUnit`s, each addressed by a re-derivable sid rather than a minted
+// id. The wire carries UTF-16 spans into each side's own document, and takes
+// `{"unitId": "baseline"|"current"}` back to `merge`.
 //
-// ## Where the door will be: the MODULE, not the handle
+// ## The doors are on the MODULE, not on the handle
 //
-// Will's shape for the next galley build (2026-09-15): Onion's stateless doors
-// come across as FREE FUNCTIONS on the wasm module, under onion-wasm's own
-// names — `diff`, `merge`, `mergeSplices`, `format`, `formatEdits`,
-// `formatEditsIn`, `toByte`, `toUtf16`, `locate`, plus the `FormatOpts`,
-// `Edits` and `Splices` classes. They are stateless, so a handle method would
-// be a claim about ownership that is not true; the `Galley` handle keeps the
-// things that DO hold state — the corpus, the chunk cache, the knobs.
+// Onion's stateless doors arrive as FREE FUNCTIONS on the wasm module, under
+// onion-wasm's own names — `diff`, `merge`, `mergeSplices`, `format`,
+// `formatEdits`, `formatEditsIn`, `toByte`, `toUtf16`, `locate`, plus the
+// `FormatOpts`, `Edits` and `Splices` classes. They are stateless, so a handle
+// method would be a claim about ownership that is not true; the `Galley` handle
+// keeps the things that DO hold state — the corpus, the chunk cache, the
+// settings. So the probes below are on the MODULE NAMESPACE.
 //
-// So the probe below is on the MODULE NAMESPACE, not on the handle: the day the
-// artifact is regenerated, `typeof module.diff === "function"` becomes true and
-// the door opens with nothing else in Sefer to change.
+// ## The third argument is a TEXT MODE, not a utf16 flag
 //
-// ## Offsets: ask for UTF-16
+// `diff(baseline, current, textMode)` where `textMode` is `"none" | "words" |
+// "chars"`: the intra-verse grain a `modified` unit's marks come back at, at
+// UAX-29 word or grapheme level. The engine REJECTS a typo rather than falling
+// back, and `"none"` computes nothing — no CST, no mask. Sefer asks for
+// `"words"`, which is what the review screen draws.
 //
-// The new wire reports BYTE offsets unless a `utf16` flag is passed. Sefer
-// speaks UTF-16 everywhere — `Analysis.docLen` is `text.length`, every `Change`
-// and every `Book.apply` range is a JavaScript string index, and the find
-// buffer is already decoded as UTF-16 — so this module passes `utf16: true` on
-// every offset-bearing call and never converts. A byte offset that reached a
-// `book.apply` would splice inside a character, which is the worst bug
-// available here and one no type would catch.
-//
-// The interim lives one directory over, in `src/core/diff/skeleton.ts`, and
-// builds these very same types from the line/verse diff Sefer already had. The
-// screen therefore has one shape to render, whichever half produced it, and
-// `DiffSkeleton.engine` says which — because a reader deciding what to keep is
-// entitled to know whether the alignment came from a USFM parser or from a
-// verse-key walk.
+// The diff's own spans are UTF-16 into each side's own document, always; there
+// is no unit to choose. (The overlay doors are the ones with a `utf16` flag.)
+// Sefer speaks UTF-16 everywhere — `Analysis.docLen` is `text.length`, every
+// `Change` and every `Book.apply` range is a JavaScript string index — and a
+// byte offset that reached a `book.apply` would splice inside a character,
+// which is the worst bug available here and one no type would catch.
 
 import { Data, Result } from "effect";
 
@@ -129,10 +119,9 @@ export interface TextRun {
  * Word or grapheme runs inside one unit, over the READER-VISIBLE text of each
  * side (`onion::diff::unit_text_diff`, `ReaderText`/`Filter::reader_text`).
  *
- * Not on the wasm wire today — `onion-wasm`'s `diff` serialises the skeleton
- * alone — so this is optional and the interim fills it. It is typed here
- * because the shape is the engine's and Sefer should not invent a second one
- * for the same fact.
+ * Present whenever the diff was asked for a text mode other than `"none"`,
+ * which is every call Sefer makes. Optional on the type because `"none"` is a
+ * legal ask and a unit the engine judged `unchanged` carries no runs.
  */
 export interface UnitTextDiff {
   /** Kinds: `unchanged` | `removed`. */
@@ -192,9 +181,11 @@ export interface Slot {
 /**
  * The whole diff of two documents.
  *
- * `engine` is false for the interim skeleton built in `src/core/diff`. It is
- * on the value rather than known by the caller because the two travel together
- * through the screen, and "which diff is this" must never be a guess.
+ * `engine` is always true and is kept as a field rather than removed: it is
+ * what the review screen's badge reads, and while there is only one producer
+ * today, a screen that states which alignment it is showing is a screen a
+ * reviewer can check. It was false for the interim verse-key skeleton, which
+ * is gone.
  */
 export interface DiffSkeleton {
   readonly units: readonly DecisionUnit[];
@@ -204,6 +195,16 @@ export interface DiffSkeleton {
   readonly engine: boolean;
 }
 
+/**
+ * The intra-unit grain a `modified` unit's marks come back at.
+ *
+ * `"words"` is UAX-29 word segmentation and is what Sefer asks for; `"chars"`
+ * is grapheme clusters; `"none"` computes nothing and is byte-identical to the
+ * output the door had before runs existed. The engine rejects anything else
+ * rather than guessing.
+ */
+export type TextMode = "none" | "words" | "chars";
+
 /** `{unitId: side}` — the consumer contract, verbatim. Absent reads as the default. */
 export type DecisionMap = ReadonlyMap<string, MergeSide>;
 
@@ -212,10 +213,14 @@ export type DecisionMap = ReadonlyMap<string, MergeSide>;
 // ---------------------------------------------------------------------------
 
 /**
- * The pinned engine does not expose the operation. Loud on purpose, exactly as
- * `Fixes.Unsupported` is: a silent fall back to the interim would read to a
- * reviewer as "the engine aligned this", which is the one thing they cannot
- * check for themselves.
+ * The artifact in hand does not expose the operation. Loud on purpose: there
+ * is no second implementation to fall back to, and a screen that quietly
+ * showed one would be claiming "the engine aligned this", which is the one
+ * thing a reviewer cannot check for themselves.
+ *
+ * This is the shape `Fixes.Unsupported` had for format before v0.1.0. It is
+ * kept because the doors are probed by name off the wasm module: a
+ * mis-vendored artifact is a real failure mode and it should say so.
  */
 export class EngineDoorMissing extends Data.TaggedError("EngineDoorMissing")<{
   readonly operation: string;
@@ -224,26 +229,23 @@ export class EngineDoorMissing extends Data.TaggedError("EngineDoorMissing")<{
 }> {}
 
 /**
- * The one sentence naming the door, so the code, the error and the
+ * The one sentence naming the doors, so the code, the error and the
  * documentation all say the same thing.
  *
- * The diff EXISTS: `onion/src/diff.rs` is a complete decision-unit differ and
- * `onion-wasm/src/lib.rs` binds `diff`, `merge` and `mergeSplices` on top of
- * it. What is missing is the re-export on the artifact Sefer pins — the galley
- * wasm built from `galley/src/wasm.rs` (`vendor/galley/manifest.json`,
- * revision `f3a2b0b`), which exports the `Galley` class and the init glue and
- * no stateless Onion doors at all. One file upstream, not a new feature — the
- * same shape as `Fixes.FORMAT_DOOR`, and asked for beside it
- * (`planning/01-discussing/engine-asks-2026-09-14.md`, items 1 and 1b).
+ * They are present in scripture-kitchen v0.1.0 (`vendor/galley/manifest.json`).
+ * Seeing this string means the vendored artifact is not that build.
  */
 export const DIFF_DOOR =
-  "the module-level diff(baseline, current, utf16) and " +
-  "merge(baseline, current, decisions, default) exports of the galley wasm — " +
-  "onion::diff has the decision-unit differ and onion-wasm binds both, but " +
-  "galley/src/wasm.rs does not re-export them, so the pinned artifact has no " +
-  "diff door";
+  "the module-level diff(baseline, current, textMode), " +
+  "merge(baseline, current, decisions, default) and formatEdits(text, opts) " +
+  "exports of the galley wasm — present since scripture-kitchen v0.1.0, so an " +
+  "artifact without them is not the vendored build";
 
-const missing = (operation: string): EngineDoorMissing =>
+/**
+ * The refusal, named. Exported because `format.ts` and `overlay.ts` refuse
+ * about the same artifact for the same reason and there is one sentence for it.
+ */
+export const doorMissing = (operation: string): EngineDoorMissing =>
   new EngineDoorMissing({
     operation,
     reason: "NoEngineDoor",
@@ -504,7 +506,7 @@ export const encodeDecisions = (decisions: DecisionMap): string => {
  * the artifact.
  */
 export interface DiffCapableModule {
-  readonly diff?: (baseline: string, current: string, utf16: boolean) => string;
+  readonly diff?: (baseline: string, current: string, textMode: string) => string;
   readonly merge?: (
     baseline: string,
     current: string,
@@ -527,16 +529,16 @@ const hasMerge = (module: unknown): module is Required<Pick<DiffCapableModule, "
  * `galley.ts` stays the one place the module is held, and this file stays the
  * one place the wire is read.
  *
- * `utf16: true` on every call. See the header — Sefer has no byte offsets and
- * must never acquire one.
+ * `textMode` defaults to `"words"` — the marks the review screen draws.
  */
 export const engineDiff = (
   module: unknown,
   baseline: string,
   current: string,
+  textMode: TextMode = "words",
 ): Result.Result<DiffSkeleton, EngineDoorMissing> => {
-  if (!hasDiff(module)) return Result.fail(missing("diff"));
-  return Result.succeed(decodeSkeleton(module.diff(baseline, current, true)));
+  if (!hasDiff(module)) return Result.fail(doorMissing("diff"));
+  return Result.succeed(decodeSkeleton(module.diff(baseline, current, textMode)));
 };
 
 /**
@@ -560,6 +562,6 @@ export const engineMerge = (
   decisions: DecisionMap,
   fallback: MergeSide,
 ): Result.Result<string, EngineDoorMissing> => {
-  if (!hasMerge(module)) return Result.fail(missing("merge"));
+  if (!hasMerge(module)) return Result.fail(doorMissing("merge"));
   return Result.succeed(module.merge(baseline, current, encodeDecisions(decisions), fallback));
 };

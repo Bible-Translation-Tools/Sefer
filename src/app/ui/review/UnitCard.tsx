@@ -163,25 +163,40 @@ export interface UnitCardProps {
   readonly baselineShort: string;
   /** Off when neither side can be written: the review is reading only. */
   readonly decidable: boolean;
+  /**
+   * The header's toggle: are the two columns showing USFM source or the
+   * reading? It decides where the word marks come from — see `marked` below.
+   */
+  readonly markup: boolean;
   readonly onDecide: (side: MergeSide | undefined) => void;
 }
 
 export function UnitCard(props: UnitCardProps) {
   /**
-   * The word diff of this unit, once. A memo because it is the expensive part
-   * of drawing the list and a decision click must not recompute it.
+   * The word marks inside this unit, once. A memo because it is the expensive
+   * part of drawing the list and a decision click must not recompute it.
    *
-   * The engine's own runs are preferred when it supplied them
-   * (`DecisionUnit.text`, `onion::diff::unit_text_diff` over the reader-visible
-   * bytes); the interim computes them here from the two strings actually on
-   * screen, which is also what makes the marks follow the markup toggle.
+   * WHICH SIDE OF THE TOGGLE DECIDES WHERE THEY COME FROM, and this is the one
+   * place the engine is not the only answer:
+   *
+   *  - **The reading** is what `DecisionUnit.text` marks. The engine's runs
+   *    (`onion::diff::unit_text_diff`, UAX-29 words over its own reader-text
+   *    mask) are over the same string the columns are showing, so they are used
+   *    verbatim and nothing here re-diffs.
+   *  - **The markup view** shows raw USFM, which the engine's runs do not
+   *    describe — they never mention a marker. There is no engine answer for
+   *    "which characters of this `\q1 …` line changed", so the columns are
+   *    marked by the word LCS in `core/diff/inline.ts`. It is not a second
+   *    opinion about the DIFF: the alignment, the units and the decisions are
+   *    all the engine's, and this only tints characters inside one unit the
+   *    engine already paired.
    */
   const marked = createMemo(
     () => {
       const left = props.currentText;
       const right = props.baselineText;
       if (left === undefined || right === undefined) return undefined;
-      const engine = props.unit.text;
+      const engine = props.markup ? undefined : props.unit.text;
       if (engine !== undefined)
         return {
           current: segmentLines(

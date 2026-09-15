@@ -3,12 +3,11 @@
 // Slice 15: applying the engine's OWN repairs, and nothing else.
 //
 // Sefer writes no USFM transformations. Onion attaches the edits to the
-// diagnostic that found the problem; this module's whole job is to carry them
-// from the parse to `book.apply` without letting a stale one through. There is
-// deliberately no second JS formatter here and no generic command language —
-// when the pinned engine cannot do something (whole-book formatting today),
-// this module fails with a typed error naming what the engine would need,
-// rather than reimplementing it.
+// diagnostic that found the problem, and since scripture-kitchen v0.1.0 it
+// also hands over a whole-book format transaction; this module's job is to
+// carry both from the engine to `book.apply` without letting a stale one
+// through. There is deliberately no second JS formatter here and no generic
+// command language.
 //
 // The freshness discipline is the reason the module exists. A `FixRef` is a
 // row index into one parse, and its edits are offsets into one text. Applying
@@ -36,6 +35,7 @@ import {
   diagnosticName,
   type Analysis,
   type EngineStamp,
+  type GalleyService,
 } from "../galley";
 import type { Change, SourceStamp } from "../source/source";
 
@@ -66,8 +66,11 @@ export class NoFix extends Data.TaggedError("NoFix")<{
 }> {}
 
 /**
- * The pinned engine does not expose the operation. Loud on purpose: a silent
- * no-op would read to the user as "the document was already formatted".
+ * The artifact in hand does not expose the operation. Loud on purpose: a silent
+ * no-op would read to the user as "the document was already formatted", which
+ * is a different sentence and one this module CAN say honestly (`FormatPreview.
+ * empty`). Since scripture-kitchen v0.1.0 this is only reachable from an
+ * artifact that is not the vendored build.
  */
 export class Unsupported extends Data.TaggedError("Unsupported")<{
   readonly operation: string;
@@ -206,58 +209,81 @@ export const applyAll = (
 };
 
 /**
- * What the engine would have to expose before `formatBook` can do anything,
- * in the engine's own vocabulary. One string, so the command, the toast and
- * the documentation all say the same thing.
+ * A whole book's normalisation, stamped with the text it was computed against.
  *
- * The formatter EXISTS: `onion/src/format.rs` has `format`, `format_edits` and
- * `format_edits_in`, and `onion-wasm/src/lib.rs` binds all three. What is
- * missing is the door on the artifact Sefer is pinned to — the `Galley` handle
- * built from `galley/src/wasm.rs` (`vendor/galley/pkg-web/usfm_galley.d.ts`),
- * whose whole surface is `parse`/`parseText`, `lint`, `update`, `publish`,
- * `find`/`findAll`, `verseText`, `structureText` and the cache counters. So
- * this is a re-export on one file upstream, not a new feature.
+ * Not a `FixPreview`: there is no finding behind it. Format is not a repair
+ * offered at a site, it is one transaction over the document, and giving it a
+ * fabricated `Finding` so it could share a type would be a lie in the shape of
+ * a convenience. What it DOES share is the vocabulary a caller needs — the
+ * changes, and the stamp that says which text they are offsets into.
  */
-export const FORMAT_DOOR =
-  "formatEdits(text, opts) on the Galley handle — onion::format::format_edits " +
-  "exists and onion-wasm binds it, but galley/src/wasm.rs does not re-export it, " +
-  "so the pinned artifact has no format";
+export interface FormatPreview {
+  readonly bookId: string;
+  /** In before-text coordinates, ascending and non-overlapping, UTF-16. */
+  readonly changes: readonly Change[];
+  readonly stamp: SourceStamp;
+  /** The document is already formatted. `changes` is empty; say so, do not apply. */
+  readonly empty: boolean;
+}
 
 /**
- * Whole-book normalisation as one preview and one Undo unit (slice 15
- * increment 2).
+ * Whole-book normalisation as one preview and one Undo unit.
  *
- * NOT AVAILABLE, and deliberately not faked. Two routes were considered and
- * both refused:
+ * ONE call to the engine and no second opinion. `onion::format` merges two edit
+ * sets — the lint rows flagged `formatter`, and the FORM channel that lint
+ * never reaches — with a first-writer-wins collision rule, and a TypeScript
+ * whitespace pass would reproduce the first half and silently diverge on the
+ * second. "The two formatters disagree about scripture" is the worst bug
+ * available here, so there is no TypeScript formatter and never will be.
  *
- *  - **A second formatter in TypeScript.** Out of scope by the slice's own
- *    words ("avoid implementing a second JS formatter"), and the reason is not
- *    tidiness: `onion::format` merges two edit sets — the lint rows flagged
- *    `formatter`, and the FORM channel (`Severity::Form`) that lint never
- *    reaches — with a first-writer-wins collision rule. A TypeScript
- *    whitespace pass would reproduce the first half and silently diverge on
- *    the second, and "the two formatters disagree about scripture" is the
- *    worst bug available here.
- *  - **A whitespace-only normalisation proven lossless by re-parsing.** The
- *    proof is not available either: the handle gives a token stream whose
- *    offsets all move when whitespace moves, so "same tokens, only whitespace
- *    differs" cannot be checked without writing the alignment the engine
- *    already owns — and the interesting half of format (`\v` breaks, blank
- *    line collapse, marker-owns-its-line) is not whitespace-only anyway.
+ * The edits come back as a transaction, which is the whole reason Sefer asks
+ * for `formatEdits` rather than `format`: `apply` puts them through ONE
+ * `book.apply(…, 'format')`, so a formatted book is one revision, one receipt
+ * and one Undo step. A replaced document would undo correctly too and be
+ * unreadable in a diff.
  *
- * So it fails loudly, naming the door. A silent no-op would read to the user
- * as "the document was already formatted".
- *
- * TODO(seam): see `FORMAT_DOOR`. When it lands this becomes one
- * `Galley.formatEdits(text, opts)` call plus the same stamp checks `preview`
- * makes; `apply` already handles the rest (origin `'format'`), and
- * `format.project` in `src/app/commands.ts` already runs it across books
- * through `MultiBook.runAcrossBooks`.
+ * `opts` is not offered to callers here: the engine's own defaults are what
+ * "Format" means, and a dozen switches is a settings surface nobody has
+ * designed. The refusal is kept for an artifact that is not the vendored build
+ * — see `DIFF_DOOR`.
  */
-export const formatBook = (book: Book): Result.Result<FixPreview, Unsupported> =>
-  Result.fail(
-    new Unsupported({
-      operation: "formatBook",
-      description: `Format needs an engine door: ${FORMAT_DOOR} (${book.id})`,
-    }),
-  );
+export const formatBook = (
+  galley: GalleyService,
+  book: Book,
+): Result.Result<FormatPreview, Unsupported> => {
+  const source = book.source();
+  const edits = galley.formatEdits(source.text);
+  if (Result.isFailure(edits))
+    return Result.fail(
+      new Unsupported({ operation: "formatBook", description: edits.failure.description }),
+    );
+  return Result.succeed({
+    bookId: book.id,
+    changes: edits.success.edits.map((edit) => ({
+      from: edit.from,
+      to: edit.to,
+      insert: edit.insert,
+    })),
+    stamp: source.stamp,
+    empty: edits.success.empty,
+  });
+};
+
+/**
+ * Apply a format preview. Refuses when the Book moved since it was computed,
+ * exactly as a fix preview does and for exactly the same reason: the offsets
+ * would land in text nobody looked at.
+ *
+ * Trusted, like a fix — the edits are the engine's own and they rewrite markup
+ * the keyboard guards would refuse — and still through the one write path, so
+ * Undo, Save, Recovery and the findings panel all learn about it.
+ */
+export const applyFormat = (
+  preview: FormatPreview,
+  book: Book,
+): Result.Result<Receipt, Refusal> => {
+  const current = book.source().stamp;
+  if (current.revision !== preview.stamp.revision)
+    return Result.fail(staleRefusal(book, preview.stamp, current));
+  return book.apply(preview.changes, "format", trustedBy("format"));
+};

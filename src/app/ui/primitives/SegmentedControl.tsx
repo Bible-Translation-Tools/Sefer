@@ -20,6 +20,12 @@ export interface Segment<T extends string> {
   readonly label: string;
   readonly icon?: JSX.Element;
   readonly disabled?: boolean;
+  /**
+   * The native tooltip, which is also the only way a DISABLED segment can say
+   * why it is disabled — a segment nobody can press cannot explain itself
+   * through a label without growing longer than the row.
+   */
+  readonly title?: string;
 }
 
 export interface SegmentedControlProps<T extends string> {
@@ -62,6 +68,7 @@ export function SegmentedControl<T extends string>(props: SegmentedControlProps<
             role="radio"
             aria-checked={item.value === props.value ? "true" : "false"}
             disabled={item.disabled}
+            title={item.title}
             tabindex={item.value === props.value ? 0 : -1}
             class={cx(
               "inline-flex items-center gap-1.5 rounded-md px-2.5 font-medium transition-colors",

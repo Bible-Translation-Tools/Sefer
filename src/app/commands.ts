@@ -20,8 +20,8 @@
 import { Effect, Option, Result, type Scope } from "effect";
 import { createSignal } from "solid-js";
 
-import { trustedBy, type Book } from "../core/book/book";
-import { FORMAT_DOOR, formatBook } from "../core/fixes/fixes";
+import type { Book } from "../core/book/book";
+import { applyFormat, formatBook } from "../core/fixes/fixes";
 import { Git } from "../core/git/git";
 import { makeMultiBook } from "../core/multibook/multibook";
 import type { Project } from "../core/project/project";
@@ -564,10 +564,9 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
     }),
 
     // ---------------------------------------------------------------------
-    // Format. Registered, and refusing — see `src/core/fixes/fixes.ts`. The
-    // shape is the shape it will keep: one `book.apply(…, 'format')` per book,
-    // so a formatted book is one Undo step and a formatted project is one per
-    // book. Only `Fixes.formatBook` changes when the engine grows the door.
+    // Format. One `book.apply(…, 'format')` per book, so a formatted book is
+    // one Undo step and a formatted project is one per book. The edits are
+    // Onion's own (`Fixes.formatBook`); Sefer has no formatter.
     // ---------------------------------------------------------------------
 
     registerCommand({
@@ -577,15 +576,16 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       run: () => {
         const book = bridge.focused();
         if (book === undefined) return;
-        const previewed = formatBook(book);
+        const previewed = formatBook(bridge.services.galley, book);
         if (Result.isFailure(previewed)) {
           bridge.report(previewed.failure.description);
           return;
         }
-        // Trusted, like a fix: the edits are the engine's own and they rewrite
-        // markup the keyboard guards would refuse. Still ONE `apply`, so it is
-        // one Undo step and every subscriber hears one receipt.
-        const applied = book.apply(previewed.success.changes, "format", trustedBy("format"));
+        if (previewed.success.empty) {
+          bridge.report(t("{book} is already formatted", { book: book.id }));
+          return;
+        }
+        const applied = applyFormat(previewed.success, book);
         bridge.report(
           Result.isFailure(applied)
             ? t("format refused: {reason}", { reason: applied.failure.description })
@@ -600,21 +600,17 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       title: t("Format every book"),
       when: hasProject,
       run: () => {
-        let refused = 0;
+        let refusal = "";
         const operation = multibook.runAcrossBooks("format", (book) => {
-          const previewed = formatBook(book);
+          const previewed = formatBook(bridge.services.galley, book);
           if (Result.isFailure(previewed)) {
-            refused += 1;
+            refusal = previewed.failure.description;
             return null;
           }
           return previewed.success.changes;
         });
         if (operation === null) {
-          bridge.report(
-            refused === 0
-              ? t("nothing to format")
-              : t("Format needs an engine door: {door}", { door: FORMAT_DOOR }),
-          );
+          bridge.report(refusal === "" ? t("nothing to format") : refusal);
           return;
         }
         bridge.report(t("formatted {count} book(s)", { count: operation.books.length }));

@@ -120,16 +120,18 @@ const openHits = (payload: unknown): Effect.Effect<readonly EngineHit[], CorpusE
 const nativeCorpus: CorpusEngineService = {
   kind: "native",
   update: (id, text) => call<string>("corpus_update", { id, text }),
-  updateReference: (id, text) => call<string>("corpus_update_reference", { id, text }),
+  updateReference: (id, text, keepText) =>
+    call<string>("corpus_update_reference", { id, text, keepText: keepText === true }),
   remove: (id) => call<boolean>("corpus_remove", { id }),
   publish: () => Effect.flatMap(call<unknown>("corpus_publish"), openSnapshot),
-  find: (query) =>
+  find: (query, scope) =>
     Effect.flatMap(
       call<unknown>("corpus_find", {
         needle: query.text,
         caseSensitive: query.caseSensitive === true,
         wholeWord: query.wholeWord === true,
         limit: query.limit ?? 0,
+        scope: scope ?? "targets",
       }),
       openHits,
     ),

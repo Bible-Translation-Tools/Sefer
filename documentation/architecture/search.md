@@ -2,12 +2,13 @@
 
 `src/core/search/search.ts` is project-wide Find and the Replace behind it (seams §3.10). It takes `readonly Book[]` rather than a Project so the result browser, a satellite window and a script can each call it with whatever books they hold.
 
-## Two doors, one `Hit`
+## Three doors, two shapes
 
 - `findProjected(corpus, books, query, options?)` — **the default.** Searches the engine's verse-text projection, what the reader sees in visual mode, and places every hit back in the source. Asynchronous, because the corpus is (on desktop it is a different process).
 - `find(books, query, options?)` — the raw scan of canonical USFM text. Pure, synchronous, no engine. Kept for the two things the projection cannot answer: a **regex** query, and a search meant to reach the markup itself.
+- `findInReferences(corpus, query, options?)` — the project's **bound** source and reference resources, through the engine's `references` scope.
 
-Both produce the same `Hit`, so `resolveHit`, `replace`, `replaceInBook` and `planReplace` are written once and neither door has a private replace path.
+The first two produce the same `Hit`, so `resolveHit`, `replace`, `replaceInBook` and `planReplace` are written once and neither door has a private replace path. The third produces a `ReferenceHit`, and the difference is the point — see below.
 
 Which door: regex → raw, always (the engine's find is literal `memmem`; `findProjected` refuses a `regex` query as `InvalidRegex` rather than silently searching for the pattern's characters). Deliberate markup search → raw. Everything a translator means by "find" → projected.
 
@@ -21,6 +22,16 @@ Which door: regex → raw, always (the engine's find is literal `memmem`; `findP
 - The books given are what binds the result: a hit for a book not in `books` is dropped, and each hit carries the stamp its book holds at the time of the call, exactly as a raw hit does.
 - The corpus must have been told about the books. `ProjectAnalysis.attach` registers every book of a project as it opens, so a find on an open project sees them all; a book the corpus never received simply has no hits.
 - `SearchError { reason: "Engine" }` carries a corpus failure's reason and description — one error type, because a caller shows both the same way.
+
+## Find, in the project's references
+
+`findInReferences(corpus, query, options?) → Effect<readonly ReferenceHit[], SearchError>`. Engine-asks item 3b, closed by scripture-kitchen v0.1.0: `findAll` takes a scope, and a reference registered with `keepText` retains the text, the mask and the projection a target does, so it can be searched at all.
+
+`ReferenceHit { source, projected, preview }` is a **separate shape from `Hit`, deliberately.** A `Hit` carries a `SourceStamp` and offsets into a Book's canonical text, so a card can refuse when the book has moved and an edit can land exactly where the match was. A reference has none of that available and needs none of it: there is no Book, no revision to compare against, and nothing to edit. So a `ReferenceHit` carries what a reader can use — which resource file it came from, where in the reading the match sits, and the projected text around it — and deliberately **no offset into any text Sefer could write to**. A reference hit that could be mistaken for an editable one is the bug this separation exists to prevent. `/find` renders them as readings rather than excerpts for the same reason: no Edit, no Open in editor, no staleness badge.
+
+**Registration is not automatic.** `ProjectAnalysis.attachReferences(refs)` registers the books, and `src/app/workflows/references.ts` is what resolves the Library's `source` and `reference` bindings into texts and calls it. It is separate from `attach` because a reference is a Library binding and the Library and the FileSystem are the shell's services; requiring them inside ProjectAnalysis would put two host-facing Layers behind every composition of it for a feature two screens use. The set is REPLACED on each call and cleared when a project is attached — a resource bound to the project we just left is not a reference for the one we just opened.
+
+A project with nothing bound has no Reference scope at all: the segment on `/find` is disabled with the reason as its tooltip, because a scope with nothing in it answers "no matches" to a question it never asked.
 
 ## Find, raw
 
@@ -69,6 +80,6 @@ Every replacement goes through `book.apply(changes, "replace", UNTRUSTED)` — t
 
 ## Not yet
 
-Searching source/reference resources by role needs Project's resource roles, which is not wired. There is no scope narrower than "these books", and no search-and-replace history. Replacing a hit that spans markup is refused rather than offered as a choice between "keep the markup" and "drop it"; that choice belongs to the editor, not to a result card.
+There is no scope narrower than "these books", and no search-and-replace history. A reference hit cannot be opened anywhere — there is no reader for a resource that is not a project book, so a hit is a preview and a file name. Replacing a hit that spans markup is refused rather than offered as a choice between "keep the markup" and "drop it"; that choice belongs to the editor, not to a result card.
 
 `refAt` still reads `\c`/`\v` markers rather than the TOC, on both doors.

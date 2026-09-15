@@ -89,6 +89,20 @@ export interface HeldAnalysis {
   readonly stamp: SourceStamp;
 }
 
+/**
+ * One book of a Library-bound source or reference resource, as text.
+ *
+ * The TEXT, not a path: this module reads no files. Whoever resolved the
+ * binding did the reading — `src/app/workflows/references.ts` — because the
+ * Library and the FileSystem are the shell's to reach and a core module that
+ * required both would make every composition of ProjectAnalysis carry them.
+ */
+export interface ReferenceText {
+  /** The caller's own id, unique across the project. The resource path serves. */
+  readonly id: string;
+  readonly text: string;
+}
+
 export interface ProjectAnalysisService {
   /**
    * Subscribe to a Project: analyze every book once, register the corpus, and
@@ -110,6 +124,33 @@ export interface ProjectAnalysisService {
    * scheduler pass, so a keystroke costs no wasm call beyond the editor's own.
    */
   readonly supply: (bookId: BookId, analysis: Analysis) => void;
+
+  /**
+   * Register the project's bound source and reference books WITH THEIR TEXT,
+   * so Find's "Reference" scope and the overlay doors have something to read.
+   *
+   * Separate from `attach` on purpose. A reference is a Library binding, and
+   * the Library and the FileSystem are the shell's services: making this
+   * module require them would put two host-facing Layers behind every
+   * composition of it, for a feature two screens use. So the shell resolves
+   * the binding and hands the text in, exactly as the editor hands its
+   * analysis in through `supply`.
+   *
+   * REPLACES the set: a reference registered by a previous call and absent
+   * from this one is dropped from the corpus, because a binding the project no
+   * longer has must not keep answering searches. Succeeds with the ids that
+   * are now registered — a caller uses it to decide whether to offer the scope
+   * at all.
+   *
+   * Idempotent per id: the same text costs a checksum, so a screen may call
+   * this every time it opens.
+   */
+  readonly attachReferences: (
+    references: readonly ReferenceText[],
+  ) => Effect.Effect<readonly string[]>;
+
+  /** The reference ids currently registered, in the order they were given. */
+  readonly references: () => readonly string[];
 
   /**
    * The project census, from the analyses currently held. Synchronous: every
@@ -222,6 +263,8 @@ const make = (
     /** Analyses handed in by the editor, keyed by book; consumed by the pass. */
     const supplied = new Map<BookId, Analysis>();
     const pending = new Set<BookId>();
+    /** Bound source/reference books registered with their text, in order. */
+    let referenceIds: readonly string[] = [];
     let attached: Project | undefined;
     let snapshot: FindingsSnapshot | undefined;
     let findingsCache: readonly Finding[] | undefined;
@@ -397,8 +440,12 @@ const make = (
     const attach = (project: Project): Effect.Effect<void, never, Scope.Scope> =>
       Effect.gen(function* () {
         // One project at a time. Re-attaching drops the previous corpus rather
-        // than judging two projects as one.
+        // than judging two projects as one — the bound references included,
+        // because a resource bound to the project we are leaving is not a
+        // reference for the one we are opening.
         for (const bookId of entries.keys()) yield* Effect.ignore(corpus.remove(bookId));
+        for (const id of referenceIds) yield* Effect.ignore(corpus.remove(id));
+        referenceIds = [];
         entries.clear();
         supplied.clear();
         pending.clear();
@@ -490,8 +537,46 @@ const make = (
         yield* Effect.forkScoped(loop);
       });
 
+    /**
+     * `keepText: true` on every one of them. A reference registered without it
+     * retains verse lengths and nothing else, which is all the length lane
+     * needs and nothing a search or an overlay can read — and this door exists
+     * precisely for the two callers that read.
+     *
+     * A registration that fails is reported and skipped, not thrown: one
+     * unreadable reference must not cost the others their scope.
+     */
+    const attachReferences = (
+      references: readonly ReferenceText[],
+    ): Effect.Effect<readonly string[]> =>
+      Effect.gen(function* () {
+        const wanted = new Set(references.map((reference) => reference.id));
+        for (const id of referenceIds) if (!wanted.has(id)) yield* Effect.ignore(corpus.remove(id));
+        const registered: string[] = [];
+        for (const reference of references) {
+          const done = yield* Effect.catch(
+            Effect.as(corpus.updateReference(reference.id, reference.text, true), true),
+            (error) =>
+              Effect.sync(() => {
+                observability?.note(
+                  "analyze.reference",
+                  "failed",
+                  `${reference.id} ${error.reason}`,
+                );
+                return false;
+              }),
+          );
+          if (done) registered.push(reference.id);
+        }
+        referenceIds = registered;
+        observability?.note("analyze.reference", "ready", `${registered.length} books`);
+        return registered;
+      });
+
     return {
       attach,
+      attachReferences,
+      references: () => referenceIds,
       supply: (bookId, analysis) => {
         supplied.set(bookId, analysis);
         arm(bookId);

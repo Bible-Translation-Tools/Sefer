@@ -445,7 +445,9 @@ export const composeServices = async (
   composition.observability.note(
     "shell.services",
     "ready",
-    `${storageKind} galley ${version.engine}`,
+    // The tag and the short revision, not just the crate name: which engine
+    // this build actually vendored is the first thing a bug report needs.
+    `${storageKind} galley ${version.engine} ${version.tag} ${version.revision.slice(0, 7)}`,
   );
 
   /**

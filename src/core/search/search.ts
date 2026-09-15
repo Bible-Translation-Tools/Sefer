@@ -428,6 +428,90 @@ export const findProjected = (
 };
 
 // ---------------------------------------------------------------------------
+// Find, in the project's bound references
+// ---------------------------------------------------------------------------
+
+/**
+ * One hit in a book this project does not own.
+ *
+ * A separate shape from `Hit`, and the difference is the whole point. A `Hit`
+ * carries a `SourceStamp` and offsets into a Book's canonical text, so that a
+ * card can refuse when the book has moved and an edit can land exactly where
+ * the match was. A reference has NONE of that available and needs none of it:
+ * there is no Book, no revision to compare against, and nothing to edit. It is
+ * something to read.
+ *
+ * So this carries what a reader can use — which resource file it came from,
+ * where in the reading the match sits, and the projected text around it — and
+ * deliberately no offset into any text Sefer could write to. A reference hit
+ * that could be confused for an editable one is the bug this separation exists
+ * to prevent.
+ */
+export interface ReferenceHit {
+  /** The registered id, which is the resource's own file path. */
+  readonly source: string;
+  /** Where the hit sits in that book's verse-text projection. */
+  readonly projected: { readonly from: number; readonly to: number };
+  /** Display text around the match. Ellipsed; never parsed back to offsets. */
+  readonly preview: string;
+}
+
+/**
+ * Literal find over the project's BOUND REFERENCES — the `source` and
+ * `reference` resources registered with their text.
+ *
+ * `src/app/workflows/references.ts` is what registers them, through
+ * `ProjectAnalysis.attachReferences`. A project with no binding, or one whose
+ * references were registered without their text, simply has no hits: the
+ * engine's `references` scope enumerates only books that retain a projection.
+ *
+ * Literal only, like `findProjected` and for the same reason — the engine's
+ * find is `memmem` over the projection and there is no regex on that side.
+ */
+export const findInReferences = (
+  corpus: CorpusEngineService,
+  query: Query,
+  options?: Options,
+): Effect.Effect<readonly ReferenceHit[], SearchError> => {
+  if (query.text === "") return Effect.succeed([]);
+  if (query.regex === true)
+    return Effect.fail(
+      new SearchError({
+        reason: "InvalidRegex",
+        description: "the engine's find is literal; a regex query must use the raw scan",
+      }),
+    );
+  const limit = options?.limit ?? DEFAULT_LIMIT;
+  if (limit <= 0) return Effect.succeed([]);
+  return corpus
+    .find(
+      {
+        text: query.text,
+        caseSensitive: query.caseSensitive,
+        wholeWord: query.wholeWord,
+        limit,
+      },
+      "references",
+    )
+    .pipe(
+      Effect.mapError(
+        (error) =>
+          new SearchError({
+            reason: "Engine",
+            description: `${error.reason}: ${error.description}`,
+          }),
+      ),
+      Effect.map((found): readonly ReferenceHit[] =>
+        found.map((hit) => ({
+          source: hit.bookId ?? "",
+          projected: hit.projected,
+          preview: hit.preview,
+        })),
+      ),
+    );
+};
+
+// ---------------------------------------------------------------------------
 // Replace
 // ---------------------------------------------------------------------------
 

@@ -93,7 +93,84 @@ The Library pass runs only over what the guide did not answer, and short-circuit
 - **`done` counts are always 0.** Marking an occurrence settled needs a store that survives a reload, and nothing in Sefer keeps one yet. The term list says so in a muted line rather than showing progress that is not being recorded.
 - **The guide is a fixture.** A key-terms guide is properly a Library resource under the `glossary` role, or a remote guides API. The port exists so that swapping the layer is the only change.
 - **No replace, no in-editor highlight.** The same non-goals the previous application had. An edit happens through a card's Edit button, in the satellite, where the editing phases judge it like any other keystroke.
-- **`matchFormatting` and `stetCompare` still die.** The alignment rules are the domain owner's: which markers transfer, what happens at a verse the target has split or merged, and how a mismatch is reported.
+- **`stetCompare` still dies.** The read-only comparison against a Library resource has no screen asking for it yet.
+
+## Match formatting
+
+`/terms?view=format` is the second view on this route. It shares the premise (a
+source bound to this project) and a reader moves between the two in one
+sitting; it is a segmented control rather than a route because neither half is
+somewhere anybody links to directly.
+
+The job is the reverse of drafting. The words are already right; what has to
+cross is the SHAPE — where the paragraphs break, which lines are poetry, how far
+each is indented — from the source the translator worked from to a target that
+came back as one undifferentiated run.
+
+**It is the engine's, and that is the point.** `matchFormatting` was an
+`Effect.die` stub whose note said the alignment rules were the domain owner's
+and this file must not invent them. It still must not, and since
+scripture-kitchen v0.1.0 it does not have to: the overlay doors answer which
+markers transfer, what happens at a verse the target split or merged, and how a
+mismatch is reported (engine-asks item 3, closed). What is left for the
+workflow is the join — register both sides, ask for both skeletons and the
+transaction. See [galley.md](galley.md), "Match formatting".
+
+### Two columns, one address
+
+The two texts have different words and different lengths, so nothing about them
+can be matched by offset. What they share is a **block address** —
+`(sid, where, ordinal)`: which verse, whether the block leads the verse or sits
+inside it, and which one of those it is. Selecting a block on either side
+highlights the block at the same address on the other.
+
+The **marker is deliberately not part of the match.** A `\q1` here against a
+`\q2` there is precisely the difference a translator opened this view to see,
+and matching on the name would hide it by never pairing them. A block with no
+counterpart is marked instead.
+
+Both skeletons are fetched once per edit (~0.4 ms each) and matched in
+TypeScript, so the highlight costs nothing per cursor move.
+`targetNodeFor`/`sourceNodeFor` are for one-off questions and are an order of
+magnitude dearer.
+
+### What Apply says before it writes
+
+`overlayReport` is not decoration. Three of its four lists change what a reader
+should expect, and the summary row says all three:
+
+- **inserted, empty.** A block the source has INSIDE a verse arrives with no
+  words, because where a verse's text splits is unknowable across languages.
+  The file gets an empty block and the translator moves the line into it.
+  Nothing is invented — and a reader who was not told would read that as a
+  failed transfer.
+- **removed.** A block the target has and the source does not is taken out, and
+  its text joins the block above it. No words are lost; the shape is.
+- **unpaired.** A verse with no counterpart — absent, bridged, ambiguous — is
+  left alone entirely.
+
+The confirm dialog names the **chapters** rather than counting the edits: "this
+will change 14 places" is not a sentence anyone can act on. Apply is one
+`book.apply(edits, 'format', trustedBy('format'))` — one revision, one receipt,
+one Undo step. An overlay a reader regrets is one keystroke from gone, which is
+the only reason it is safe to offer.
+
+### What it needs, and what it does not have
+
+A bound `source` or `reference` resource whose file name carries the open
+book's code. `src/app/workflows/references.ts` resolves the binding;
+`fixtures/small-nt` has none, so the dev fixture shows the empty state until a
+resource is imported and bound.
+
+The source is paired to the target **by book code in the file name**, the same
+loose rule `Library.lookup` uses. Resource layouts vary and the manifest that
+would answer authoritatively is YAML.
+
+Registration goes to the wasm **handle**, not through the `CorpusEngine` port.
+On Web those are the same object; on desktop the corpus is a separate process
+and the handle has never been told about either book, so without this the view
+would work on Web and quietly not on desktop. It costs the source's text being
+resident twice on desktop, for a view a translator opens deliberately.
 
 ## Where things are
 
@@ -106,5 +183,8 @@ The Library pass runs only over what the guide did not answer, and short-circuit
 | `src/core/excerpts/excerpts.ts` | `verseAnchor`, `refOccurrences` — the reference → project mapping. |
 | `src/app/ui/excerpts/feed.ts` | `createExcerptFeed`, shared by Find and Key terms. |
 | `src/app/ui/excerpts/StetView.tsx` | The two-column view and the source/target pair. |
-| `src/app/workflows/stet.ts` | `keyTerms`, `keyTermGuides`, `sourceReadings`; the formatting stubs. |
+| `src/app/ui/excerpts/MatchFormattingView.tsx` | The two block columns, the report badges, the confirm dialog. |
+| `src/app/workflows/stet.ts` | `keyTerms`, `keyTermGuides`, `sourceReadings`, `matchFormatting`. |
+| `src/app/workflows/references.ts` | Library bindings → texts → `ProjectAnalysis.attachReferences`. |
+| `src/core/galley/overlay.ts` | The overlay wire: addresses, skeletons, the report. |
 | `fixtures/stet/` | The four committed guide files and their provenance. |

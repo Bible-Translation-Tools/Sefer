@@ -1,39 +1,45 @@
-# Re-vendor galley to the next scripture-kitchen tag — checklist
+# Re-vendor galley to scripture-kitchen v0.1.0 — DONE (2026-09-15)
 
-Will built the next engine on 2026-09-15 (both committed packages byte-identical, 1,028,904 bytes, sha dc076233…). Sefer is pinned at `f3a2b0b`. When the tag is pushed, one round does all of this in one commit series; nothing here is started yet.
+Sefer was pinned at `f3a2b0b` and is now on **v0.1.0** (`4b99047`). One round did
+all of it; the commits are on the branch this checklist was worked in.
 
-## Breaking, must change in Sefer
+## Breaking, done in Sefer
 
-- `Knobs` → `SousSettings`. `config()`/`setConfig()` unchanged; new fields `source_copy`, `source_copy_min_run`, `presence`. Update `src/core/galley` types and any settings plumbing.
-- Handle door renames: `parse(text)` → `parseText`, `verseText(text)` → `verseTextOf`, `structureText(text)` → `structureTextOf`. The new by-id doors (`parse(id, diagnostics, toc, utf16)`, `lint(id…)`) answer off retained text and error on a Reference without text.
-- **Find wire buffer** now leads with magic `0x444E4946` ("FIND") and a version word, then bookCount. `src/core/galley` find decoder must skip both and refuse a mismatch (this closes engine-asks 5).
-- `find(id, …)` no longer errors on a Reference; it searches any book that retains text, erroring only when none was kept.
-- Package shape: root `@wycliffeassociates/scripture-kitchen` — `.`/`./web` are galley's build (superset); onion-wasm at `./onion`, `./onion/web`; `./reader` (onion), `./sous-reader` (sous), `./schema`, `./diagnostics.json`. Inner `usfm-galley`: `.`, `./web`, `./web/wasm`, `./sous-reader`. Update `vendor/galley/` layout, `manifest.json`, `accepts(manifest)`, the Cargo pin, and the release workflow's checkout step.
+- [x] `Knobs` → `SousSettings`, and Sefer's own copy with it; `knobs()`/`setKnobs()` read `settings()`/`setSettings()`. The three new fields (`presence`, `source_copy`, `source_copy_min_run`) were already typed.
+- [x] Door renames: `analyze` calls `parseText`; `verseTextOf`/`structureTextOf` are typed and unused, because Sefer's authority for a book's text is the Book and not the corpus.
+- [x] **Find wire buffer.** `decodeHits` skips the magic and the version and THROWS `VersionMismatch` on either. `accepts(manifest)` checks the same two at boot from `wire.find`, against `galley.ts`'s own constants — there is no generated reader for this buffer. Engine-asks 5, closed. (The handoff's decimal for the magic was a typo; `0x444E4946` is 1145981254.)
+- [x] `find(id, …)` on a reference: the type says so, and the `references` scope is what Sefer actually uses.
+- [x] Package shape: `vendor/galley/` takes the committed `galley/pkg-web/`, `onion-wasm/reader.ts`, `galley/sous-reader.ts`, `onion-wasm/diagnostics.json`. The two readers and the catalogue were byte-identical at this tag and were re-copied anyway, because a hash that was not recomputed is a hash nobody checked. `manifest.json`, `accepts`, the Cargo path pin and `vendor/galley/README.md` all moved; the release workflow already reads `engine.revision` out of the manifest, so it needed nothing.
 
-## New doors Sefer wants, and where they land
+## New doors, where they landed
 
-| door | Sefer consumer |
-|---|---|
-| module `format`, `formatEdits`, `formatEditsIn`, `FormatOpts`, `Edits` | `Fixes.formatBook` (replace `FORMAT_DOOR` refusal) → `format.book` / `format.project` |
-| module `diff`, `merge`, `mergeSplices`, `Splices` | `Galley.diff`/`Galley.merge` door (review round builds it against module exports; offsets bytes unless `utf16=true`) → `/review` decision units |
-| module `toByte`, `toUtf16`, `locate` | offset conversions for the above |
-| module `attrs`, `trResolve`, `book`, `parse`, `mask` | attrs popover / excerpts may simplify |
-| handle `updateReference(id, text, keepText=true)` | Library-bound source/reference resources register with text so they can be searched and overlaid |
-| handle `findAll(needle, caseSensitive, wholeWord, limit, scope)` scope `targets`/`references`/`all` | Find gets a scope control "This book · Whole project · Reference" (closes engine-asks 3b) |
-| handle `skeleton(id, opts, utf16?)`, `overlay(targetId, sourceId, opts)` → `OverlayEdits { spans, lens, text, overlayText, overlayReport, targetNodeFor, sourceNodeFor }` | **Match formatting** (`src/app/workflows/stet.ts` `matchFormatting` stub) — source text with the equivalent block highlighted (closes engine-asks 3) |
-| handle `fingerprint(text)` → `differsFrom`, `changedChunk…`; `changedSinceUpdate(id, text)` | cheaper staleness checks in ProjectAnalysis / Recovery |
-| handle `lastWordlessReferences()` | Library diagnostics for bound references that carry no text |
+| door | Sefer consumer | state |
+|---|---|---|
+| `formatEdits`, `FormatOpts`, `Edits` | `Fixes.formatBook` / `applyFormat` | done; `FORMAT_DOOR` deleted |
+| `diff`, `merge`, `mergeSplices` | `Galley.diff`/`merge` → `/review` | done; the interim skeleton is **deleted**, not a fallback |
+| `updateReference(id, text, keepText)` | `ProjectAnalysis.attachReferences` | done |
+| `findAll(…, scope)` | `Search.findInReferences` → `/find` scope control | done |
+| `skeleton`, `overlay`, `overlayReport`, `targetNodeFor`, `sourceNodeFor` | `matchFormatting` → `/terms?view=format` | done |
+| `fingerprint`, `changedSinceUpdate` | staleness in ProjectAnalysis | **not used** — see below |
+| `lastWordlessReferences()` | a Library note | exposed as `Galley.wordlessReferences()`, not surfaced — see below |
+| `toByte`, `toUtf16`, `locate`, `attrs`, `attrResolve`, `book`, `mask`, `parse` | nothing yet | not wired |
 
-## Sous behaviour changes to absorb
+### The two that were skipped, and why
 
-- Two new wire codes; 4 presence rows; source-copy rows off by default; lowercase-after-terminal and sticky-key channels on by default. `src/core/findings/finding.ts` `corpusCode` / `corpusSeverity` must name them; the inventory's channel list grows.
-- Snapshot id in the header changes when settings change — `ProjectAnalysis` cache keys that assume id == text must include settings.
+- **`fingerprint` / `changedSinceUpdate` for staleness.** They would not simplify anything. `ProjectAnalysis` answers "has this book moved" by comparing two integers it already holds (the Book's revision); replacing that with a wasm call that hashes chunks is slower and answers a question nobody asked. `changedSinceUpdate` IS wired through the Galley service, because "is the corpus's copy of this book out of date" is a different and real question — it currently has no asker.
+- **`lastWordlessReferences()` as a Library note.** It is a COUNT, not a list of ids, and it is only ever nonzero while `source_copy` is on — which is off in the engine's defaults and has no settings surface to turn on. A note nothing can produce is dead UI. The door is exposed as `Galley.wordlessReferences()` so the note is one line whenever the settings surface lands.
 
-## Still open on the engine side (engine-asks)
+## Sous behaviour
 
-- 2 · Sous census (per-glyph totals for every glyph, sites-by-glyph API).
-- 7 · corpus panic → Result on malformed input.
+- [x] Two new wire codes and two new channels. `corpusCode`/`corpusSeverity` and the inventory's channel lists already named all four — the vendored readers were unchanged at this tag, so the previous round had absorbed them ahead of time. Presence is a `warning`; source-copy is `info` and off by default.
+- [x] Snapshot id changes with settings. Nothing to do today: ProjectAnalysis' caches are keyed on nothing and are dropped wholesale on every publication and every book change. A settings surface that flips a lane WITHOUT touching text must invalidate them by hand; the note is in `documentation/architecture/findings.md`.
 
-## Verification when done
+## Still open on the engine side
 
-`pnpm check`; open the fixture; Format book applies and undoes; `/review` shows engine units with word marks; Find scope "Reference" returns hits from a bound reference; match formatting shows the overlay; `cargo check` in src-tauri against `../scripture-kitchen` at the tag.
+- 2 · Sous census (per-glyph totals for every glyph, sites-by-glyph API). Deliberately not built.
+- 4 · Chapter labels (`\cl` / `\cp`).
+- 7 · corpus panic → `Result` on malformed input, and Sefer's respawn beside it.
+
+## Verification
+
+`pnpm check` and `pnpm boundaries` green. `cargo check` in `src-tauri` green against `../scripture-kitchen` at the tag. Browser evidence is in the commit round's report.
