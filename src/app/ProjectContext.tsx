@@ -44,6 +44,7 @@ import { detectHost } from "../platform/host";
 import { registerShellCommands, type ShellBridge } from "./commands";
 import { useComposition } from "./CompositionContext";
 import { t } from "./i18n";
+import { registerProjectCommands } from "./projectCommands";
 import { composeServices, fixtureRequested, type Services } from "./services";
 import { shellKeys, SIDEBAR_WIDTH, type RecentProjects } from "./settings";
 import { applyEditorFontSize } from "./ui/theme";
@@ -589,6 +590,16 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
   };
 
   onCleanup(registerShellCommands(bridge));
+  // `project.export` / `project.rename` live for the shell's lifetime. Rename
+  // needs a dialog and the landing owns it, so `ask` navigates there with the
+  // root in the URL and the landing opens its dialog on arrival.
+  onCleanup(
+    registerProjectCommands({
+      services,
+      root: () => project()?.root,
+      ask: (root) => go(`/projects?rename=${encodeURIComponent(root)}`),
+    }),
+  );
   return shell;
 };
 

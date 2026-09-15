@@ -634,52 +634,6 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
         bridge.bump();
       },
     }),
-
-    // ---------------------------------------------------------------------
-    // Project administration. Thin: `ProjectAdmin` (slice 31) owns the rules,
-    // and these two are the palette's way in.
-    // ---------------------------------------------------------------------
-
-    registerCommand({
-      id: "project.export",
-      title: t("Export project…"),
-      when: hasProject,
-      run: () =>
-        Effect.gen(function* () {
-          const project = bridge.project();
-          if (project === undefined) return;
-          const picked = yield* services.dialogs.pickFolder(t("Export to"));
-          if (Option.isNone(picked)) {
-            bridge.report(t("no folder chosen"));
-            return;
-          }
-          const written = yield* services.admin.export(project.root, "burrito", picked.value);
-          bridge.report(t("exported to {path}", { path: written }));
-        }),
-    }),
-
-    registerCommand({
-      id: "project.rename",
-      // TODO(ui): the landing dialog that asks for the name is another slice's
-      // surface. Until it exists the name arrives as the command's argument —
-      // `runCommand("project.rename", "New name")` — and a bare press says so
-      // rather than renaming the project to something nobody typed.
-      title: t("Rename project…"),
-      when: hasProject,
-      run: (argument) =>
-        Effect.gen(function* () {
-          const project = bridge.project();
-          if (project === undefined) return;
-          const name = typeof argument === "string" ? argument.trim() : "";
-          if (name === "") {
-            bridge.report(t("rename needs a name: the landing dialog is not built yet"));
-            return;
-          }
-          yield* services.admin.rename(project.root, name);
-          bridge.report(t("renamed to {name}", { name }));
-          bridge.bump();
-        }),
-    }),
   ];
 
   return () => {

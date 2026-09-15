@@ -19,18 +19,18 @@
  * the import does — a write to the index and a re-read of this list.
  */
 
-import { useNavigate } from "@tanstack/solid-router";
+import { useNavigate, useSearch } from "@tanstack/solid-router";
 import { Effect, FileSystem, Result } from "effect";
 import Download from "lucide-solid/icons/download";
 import FolderOpen from "lucide-solid/icons/folder-open";
 import MoreVertical from "lucide-solid/icons/more-vertical";
 import PencilLine from "lucide-solid/icons/pencil-line";
 import Trash2 from "lucide-solid/icons/trash-2";
-import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
+import { For, Show, createEffect, createSignal } from "solid-js";
 
 import { forgetProject, touchProject } from "../../../core/project/projectIndex";
 import { t } from "../../i18n";
-import { exportProjectZip, registerProjectCommands, renameProject } from "../../projectCommands";
+import { exportProjectZip, renameProject } from "../../projectCommands";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import {
@@ -97,23 +97,20 @@ export function YourProjects(props: { readonly reload: number }) {
     setChanged((held) => held + 1);
   };
 
-  /**
-   * `project.export` and `project.rename`, for as long as this screen is
-   * mounted — the palette's copy of the two kebab items, acting on the OPEN
-   * project. They are registered here rather than in `registerShellCommands`
-   * because rename has to raise a dialog and this is the screen that owns one;
-   * `src/app/projectCommands.ts` says where they belong permanently.
-   */
-  onCleanup(
-    registerProjectCommands({
-      services,
-      root: () => shell.project()?.root,
-      ask: (root) => {
-        const row = (rows() ?? []).find((held) => held.root === root);
-        setNewName(row?.name ?? "");
-        if (row !== undefined) setRenaming(row);
-      },
-    }),
+  // `project.rename` (registered by the shell) lands here with the root in
+  // the URL; the dialog opens once the rows are known.
+  // SAFETY: `strict: false` gives the union of every route's search; only
+  // `rename` is read, and a missing or non-string value is treated as absent.
+  const search = useSearch({ strict: false }) as () => { readonly rename?: unknown };
+  createEffect(
+    () => ({ target: search().rename, held: rows() }),
+    ({ target, held }) => {
+      if (typeof target !== "string" || held === undefined) return;
+      const row = held.find((candidate) => candidate.root === target);
+      if (row === undefined) return;
+      setNewName(row.name);
+      setRenaming(row);
+    },
   );
 
   /** Most recently opened first; never-opened projects fall to the bottom. */
