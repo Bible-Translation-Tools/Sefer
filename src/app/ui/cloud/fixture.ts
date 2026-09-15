@@ -18,8 +18,15 @@ import type { Commit } from "../../../core/git/git";
 import { emptyPlan, incomingPlan, type SyncReading, type SyncState } from "../../../core/sync";
 import type { SyncFacts } from "./reading";
 
-/** A fixed clock, so two screenshots of the same state look the same. */
-const NOW = Date.UTC(2026, 8, 14, 9, 0, 0);
+/**
+ * The clock the fixture's versions hang off: when the module loaded.
+ *
+ * Relative rather than absolute so the clock lines read the way they will in
+ * real use — "25 minutes ago", not "eight months ago". A screenshot taken
+ * twice therefore differs by the minute, which is the right trade: the point
+ * of the fixture is to show what a translator would see.
+ */
+const NOW = Date.now();
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 
@@ -83,8 +90,19 @@ const attached: SyncReading = {
   lastFailure: undefined,
 };
 
+/**
+ * The fixtures' names: every state, plus one extra.
+ *
+ * `diverged` and `diverged-apart` are the same STATE and two different
+ * screens, which is the whole point of routing on the plan as well as the
+ * state: when the two sides touched the same book the primary action is
+ * Compare, and when they touched different ones it is Combine. A fixture list
+ * that only had "diverged" would never show the second.
+ */
+export type FixtureName = SyncState | "diverged-apart";
+
 /** Every state the screen can be in, as the facts that produce it. */
-const FIXTURES: Readonly<Record<SyncState, SyncFacts>> = {
+const FIXTURES: Readonly<Record<FixtureName, SyncFacts>> = {
   detached: {
     reading: {
       ...attached,
@@ -103,6 +121,11 @@ const FIXTURES: Readonly<Record<SyncState, SyncFacts>> = {
   ahead: { reading: { ...attached, ahead: mine }, plan: emptyPlan },
   behind: { reading: { ...attached, behind: theirs }, plan: planFor(false) },
   diverged: { reading: { ...attached, ahead: mine, behind: theirs }, plan: planFor(true) },
+  // Both sides moved, but on different books: the safe combine is available.
+  "diverged-apart": {
+    reading: { ...attached, ahead: mine, behind: theirs },
+    plan: planFor(false),
+  },
   conflicted: {
     reading: { ...attached, ahead: mine, behind: theirs, mergeInProgress: true, uncommitted: 2 },
     plan: planFor(true),
@@ -114,20 +137,20 @@ const FIXTURES: Readonly<Record<SyncState, SyncFacts>> = {
   },
 };
 
-// SAFETY: FIXTURES is typed `Record<SyncState, SyncFacts>`, so its keys are
-// exactly the members of `SyncState` — the assertion recovers what
+// SAFETY: FIXTURES is typed `Record<FixtureName, SyncFacts>`, so its keys are
+// exactly the members of `FixtureName` — the assertion recovers what
 // `Object.keys` widens to `string[]`, and a missing state is a type error at
 // the literal above rather than a wrong list here.
-const NAMES = Object.keys(FIXTURES) as readonly SyncState[];
+const NAMES = Object.keys(FIXTURES) as readonly FixtureName[];
 
 /** `?syncState=diverged`, honoured only in a dev build. */
-export const fixtureStateRequested = (): SyncState | undefined => {
+export const fixtureStateRequested = (): FixtureName | undefined => {
   if (!import.meta.env.DEV || typeof location !== "object") return undefined;
   const asked = new URLSearchParams(location.search).get("syncState");
   return NAMES.find((name) => name === asked);
 };
 
-export const fixtureFacts = (state: SyncState): SyncFacts => FIXTURES[state];
+export const fixtureFacts = (state: FixtureName): SyncFacts => FIXTURES[state];
 
 /** The whole list, for the dev switcher the screen shows beside the fixture. */
 export const fixtureStates = NAMES;

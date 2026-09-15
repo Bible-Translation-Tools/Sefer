@@ -6,7 +6,11 @@ USFM bytes on disk; git records what Save already wrote.
 ## The port
 
 `src/core/git/git.ts` defines `Git` (`Context.Service`) as the intersection of the user's jobs, not the
-union of two libraries' APIs: `open`, `init`, `status`, `commit`, `log`, `show`, `previousVersions`. A
+union of two libraries' APIs: `open`, `init`, `status`, `commit`, `log`, `logFrom`, `resolve`,
+`branch`, `changedPathsBetween`, `show`, `previousVersions`. The last four exist for the sync
+surface — the cloud's side of a comparison, whether it exists at all, what to call the tracking
+ref, and which paths differ between two revisions — and desktop refuses them by name until
+`git.rs` grows the matching git2 commands ([sync.md](sync.md)). A
 `Repo` is just its work-tree `root`. Every method fails with `GitError`, whose `reason` is
 `NotARepository`, `Io`, `Conflict`, or `Refused` — a read that could not fail would force a host layer
 to lie. `Version` pairs a `Commit` with `bytes()`, so a history list stays cheap and content is read
@@ -73,9 +77,10 @@ no proxy is involved.
 
 Configuration is `src/app/env.ts` only (see [configuration.md](configuration.md)):
 `VITE_SEFER_GITEA_WEB_HOST`, `VITE_SEFER_GITEA_DESKTOP_HOST`, `VITE_SEFER_GIT_CORS_PROXY_URL`,
-`VITE_SEFER_GIT_PROXY_X_REQUESTED_WITH`. `src/app/ui/CloudPanel.tsx` is the surface — configured host,
-sign-in with OTP, the writable-repo list, create-and-publish, Push, Pull, and one progress line — and
-the commands are `remote.login`, `remote.pull`, `remote.push`. `RemoteUnavailableLive` remains for a
+`VITE_SEFER_GIT_PROXY_X_REQUESTED_WITH`. The SURFACE is `/cloud` (`src/app/ui/cloud/`), which owns the state, the two clocks, the incoming
+plan and the one right button — see [sync.md](sync.md). `src/app/ui/CloudPanel.tsx` keeps the
+attach-and-publish half beside a project and shares the account half with it; the commands are
+`remote.login`, `remote.pull`, `remote.push`. `RemoteUnavailableLive` remains for a
 host with no transport.
 
 ## ProjectAdmin

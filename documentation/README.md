@@ -24,6 +24,7 @@ This folder holds durable project guidance for humans and agents. Root `AGENTS.m
 - Comparing against the saved baseline or running one command across books: [diff and multibook](./architecture/diff-and-multibook.md).
 - Finding text and replacing one match: [search](./architecture/search.md).
 - Committing receipts, reading history, project admin: [git](./architecture/git.md).
+- Sharing a project online, reading the two clocks, or deciding what a Receive would change: [cloud sync](./architecture/sync.md).
 - Composing the services, adding a command, a route, or a design token: [application shell](./architecture/shell.md).
 - Building a screen, a reusable component, or reaching for a colour: [the UI layer](./architecture/ui.md).
 - Using shared product terms: [glossary](./glossary.md).

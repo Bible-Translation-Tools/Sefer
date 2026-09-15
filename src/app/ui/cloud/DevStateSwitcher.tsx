@@ -13,16 +13,15 @@
 
 import { For } from "solid-js";
 
-import type { SyncState } from "../../../core/sync";
 import { t } from "../../i18n";
 import { Button, Card } from "../primitives";
-import { fixtureStates } from "./fixture";
+import { fixtureStates, type FixtureName } from "./fixture";
 
 export function DevStateSwitcher(props: {
-  readonly value: SyncState | undefined;
-  readonly onChange: (state: SyncState | undefined) => void;
+  readonly value: FixtureName | undefined;
+  readonly onChange: (state: FixtureName | undefined) => void;
 }) {
-  const select = (state: SyncState | undefined): void => {
+  const select = (state: FixtureName | undefined): void => {
     props.onChange(state);
     if (typeof history !== "object" || typeof location !== "object") return;
     const url = new URL(location.href);

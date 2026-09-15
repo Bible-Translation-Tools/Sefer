@@ -20,7 +20,7 @@ import type { IncomingBook, IncomingPlan } from "../../../core/sync";
 import { t } from "../../i18n";
 import { Badge, Card, PanelHeader } from "../primitives";
 import { bookName } from "../workspace/books";
-import { chapterList, planSummary } from "./copy";
+import { chapterList, planSummary, plural } from "./copy";
 
 /**
  * The link to the Compare screen, as a path string.
@@ -109,7 +109,11 @@ export function IncomingPlanCard(props: { readonly plan: IncomingPlan }) {
       <Show when={props.plan.commits.length > 0}>
         <details class="text-small text-on-surface-tertiary">
           <summary class="cursor-pointer">
-            {t("{count} version(s) in the shared project", { count: props.plan.commits.length })}
+            {plural(
+              props.plan.commits.length,
+              "{count} version in the shared project",
+              "{count} versions in the shared project",
+            )}
           </summary>
           <ul class="mt-2 space-y-1 ps-4">
             <For each={props.plan.commits}>

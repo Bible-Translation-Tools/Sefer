@@ -23,8 +23,20 @@
 
 import type { IncomingPlan, SyncActionId, SyncState } from "../../../core/sync";
 import { FRONT_MATTER } from "../../../core/sync";
-import { t } from "../../i18n";
+import { t, type Params } from "../../i18n";
 import type { BadgeTone } from "../primitives";
+import { bookName } from "../workspace/books";
+
+/**
+ * One or many, as two whole messages rather than an "(s)".
+ *
+ * `src/app/i18n.ts` is interpolation only — no plural rules yet — so the two
+ * forms are written out and chosen here. Both are literals, so the extractor
+ * that replaces `t` later finds both, and no language is left with the English
+ * assumption that one form plus an "s" covers it.
+ */
+export const plural = (count: number, one: string, many: string, params: Params = {}): string =>
+  t(count === 1 ? one : many, { count, ...params });
 
 /** What the badge, the heading and the paragraph say for one state. */
 export interface StateCopy {
@@ -156,29 +168,34 @@ export const narrate = (
     case "attach":
       return t("Records which shared project this one belongs to. Nothing is transferred yet.");
     case "publish":
-      return t(
-        "Creates the project online and sends the {ahead} version(s) on this device. Nothing here changes.",
-        { ahead: counts.ahead },
+      return plural(
+        counts.ahead,
+        "Creates the project online and sends the {count} version on this device. Nothing here changes.",
+        "Creates the project online and sends the {count} versions on this device. Nothing here changes.",
       );
     case "pull":
-      return t(
-        "Applies the shared project's {behind} version(s) to this device. You see the plan first, and nothing is applied until you confirm it.",
-        { behind: counts.behind },
+      return plural(
+        counts.behind,
+        "Applies the shared project's {count} version to this device. You see the plan first, and nothing is applied until you confirm it.",
+        "Applies the shared project's {count} versions to this device. You see the plan first, and nothing is applied until you confirm it.",
       );
     case "push":
-      return t(
-        "Sends your {ahead} version(s) to the shared project. Nothing on this device changes.",
-        { ahead: counts.ahead },
+      return plural(
+        counts.ahead,
+        "Sends your {count} version to the shared project. Nothing on this device changes.",
+        "Sends your {count} versions to the shared project. Nothing on this device changes.",
       );
     case "combine":
-      return t(
-        "Puts the shared project's {behind} version(s) underneath, then keeps your work as one version on top. No scripture text is merged.",
-        { behind: counts.behind },
+      return plural(
+        counts.behind,
+        "Puts the shared project's {count} version underneath, then keeps your work as one version on top. No scripture text is merged.",
+        "Puts the shared project's {count} versions underneath, then keeps your work as one version on top. No scripture text is merged.",
       );
     case "compare":
-      return t(
-        "Opens the {contested} book(s) you both changed, side by side, so you decide what to keep. Nothing changes until you do.",
-        { contested: counts.contested },
+      return plural(
+        counts.contested,
+        "Opens the book you both changed, side by side, so you decide what to keep. Nothing changes until you do.",
+        "Opens the {count} books you both changed, side by side, so you decide what to keep. Nothing changes until you do.",
       );
     case "resolve":
       return t("Finishes the transfer that stopped. Your text is untouched until you choose.");
@@ -210,15 +227,25 @@ export const planSummary = (plan: IncomingPlan): string => {
   if (plan.chapterCount === 0) {
     return t("Nothing in your books changes; the updates are elsewhere in the project.");
   }
-  const books = plan.books.length;
+  // "3 chapters of Mark" reads better than "3 chapters across 1 book", and a
+  // single-book plan is the common one, so it gets its own sentence.
+  const where =
+    plan.books.length === 1
+      ? t("of {book}", { book: bookName(plan.books[0]?.bookId ?? "") })
+      : plural(plan.books.length, "across {count} book", "across {count} books");
+  const changed = plural(
+    plan.chapterCount,
+    "{count} chapter {where} changed in the shared project",
+    "{count} chapters {where} changed in the shared project",
+    { where },
+  );
   if (plan.overlapCount === 0) {
-    return t(
-      "{chapters} chapter(s) across {books} book(s) changed in the shared project, and none of them changed here.",
-      { chapters: plan.chapterCount, books },
-    );
+    return t("{changed}, and none of them changed here.", { changed });
   }
-  return t(
-    "{chapters} chapter(s) across {books} book(s) changed in the shared project; {overlap} of them also changed here.",
-    { chapters: plan.chapterCount, books, overlap: plan.overlapCount },
+  return plural(
+    plan.overlapCount,
+    "{changed}; {count} of them also changed here.",
+    "{changed}; {count} of them also changed here.",
+    { changed },
   );
 };

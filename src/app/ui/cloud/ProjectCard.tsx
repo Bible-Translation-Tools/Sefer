@@ -18,7 +18,7 @@ import type { Clock, Sync } from "../../../core/sync";
 import { t } from "../../i18n";
 import { ago, exact } from "../panels/format";
 import { Badge, Card, PanelHeader } from "../primitives";
-import { stateCopy } from "./copy";
+import { plural, stateCopy } from "./copy";
 
 /** The repository, as a person reads it: `owner/name`, not a clone URL. */
 const shortOrigin = (url: string): string => {
@@ -98,9 +98,11 @@ export function ProjectCard(props: { readonly sync: Sync; readonly projectName: 
           unshared={
             local().unshared === 0
               ? t("nothing waiting to be sent")
-              : t("{count} version(s) the shared project does not have", {
-                  count: local().unshared,
-                })
+              : plural(
+                  local().unshared,
+                  "{count} version the shared project does not have",
+                  "{count} versions the shared project does not have",
+                )
           }
         />
         <ClockLine
@@ -110,16 +112,21 @@ export function ProjectCard(props: { readonly sync: Sync; readonly projectName: 
           unshared={
             shared().unshared === 0
               ? t("nothing waiting to be received")
-              : t("{count} version(s) this device does not have", { count: shared().unshared })
+              : plural(
+                  shared().unshared,
+                  "{count} version this device does not have",
+                  "{count} versions this device does not have",
+                )
           }
         />
       </div>
 
       <Show when={props.sync.reading.uncommitted > 0}>
         <p class="text-small text-on-surface-tertiary" data-cloud="uncommitted">
-          {t(
-            "{count} file(s) here have been written but not recorded as a version yet — they are not part of either count.",
-            { count: props.sync.reading.uncommitted },
+          {plural(
+            props.sync.reading.uncommitted,
+            "{count} file here has been written but not recorded as a version yet — it is not part of either count.",
+            "{count} files here have been written but not recorded as a version yet — they are not part of either count.",
           )}
         </p>
       </Show>

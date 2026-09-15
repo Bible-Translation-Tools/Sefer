@@ -41,7 +41,7 @@ import { fixtureFacts, fixtureStateRequested } from "./fixture";
 import { IncomingPlanCard } from "./IncomingPlanCard";
 import { createNetworkStatus } from "./network";
 import { ProjectCard } from "./ProjectCard";
-import { readSync, type SyncFacts } from "./reading";
+import { readSync, type ReadSyncOptions, type SyncFacts } from "./reading";
 
 /** A project's folder name, which is what a person calls it. */
 const projectName = (root: string): string => root.slice(root.lastIndexOf("/") + 1);
@@ -87,6 +87,18 @@ export function CloudScreen() {
   const [fixtureState, setFixtureState] = createSignal(fixtureStateRequested(), {
     name: "syncFixture",
   });
+  // The param is read at mount; a later `history.pushState` to a different
+  // `?syncState=` (which is how an agent drives this screen) has to be heard
+  // too, or the URL and the screen disagree. Dev only, like everything else
+  // about the fixture.
+  if (import.meta.env.DEV && typeof window === "object") {
+    const follow = (): void => {
+      setFixtureState(fixtureStateRequested());
+    };
+    window.addEventListener("popstate", follow);
+    onCleanup(() => window.removeEventListener("popstate", follow));
+  }
+
   const fixtured = (): SyncFacts | undefined => {
     if (!import.meta.env.DEV) return undefined;
     const asked = fixtureState();
@@ -101,32 +113,57 @@ export function CloudScreen() {
   };
   const plan = (): IncomingPlan => shown()?.plan ?? emptyPlan;
 
-  /** One pass over the repository, with the device's own answers folded in. */
-  const refresh = (): void => {
+  /**
+   * What to call the project on screen, and whether there is one at all.
+   *
+   * A fixture stands in for an open project deliberately: every state has to
+   * be reachable in a dev build without importing a repository first, and the
+   * cards below are the ones a real project renders — only the facts differ.
+   */
+  const named = (): string | undefined => {
     const project = shell.project();
-    if (project === undefined || fixtured() !== undefined) return;
+    if (project !== undefined) return projectName(project.root);
+    return fixtured() === undefined ? undefined : t("Mark project (fixture)");
+  };
+
+  /**
+   * Everything one reading depends on, gathered by READING THE SIGNALS.
+   *
+   * It is a function rather than five arguments because it is called from two
+   * places with opposite tracking rules: inside the effect's compute (where
+   * reading a signal is what subscribes to it) and inside a transfer's
+   * continuation (where it is a deliberate one-shot snapshot). Solid 2 runs an
+   * effect's CALLBACK untracked, so gathering there would both fail to
+   * subscribe and trip `STRICT_READ_UNTRACKED`.
+   */
+  const ask = (): ReadSyncOptions | undefined => {
+    const project = shell.project();
+    // Reading the session subscribes this to signing in and out, which changes
+    // the answer even though the value is not passed through.
+    account.session();
+    if (project === undefined || fixtureState() !== undefined) return undefined;
+    return {
+      root: project.root,
+      host: account.host,
+      online: network.online(),
+      lastFailure: network.lastFailure(),
+      fetchedAt: fetchedAt(),
+    };
+  };
+
+  /** One pass over the repository. */
+  const load = (options: ReadSyncOptions | undefined): void => {
+    if (options === undefined) return;
     void services
-      .run(
-        readSync({
-          root: project.root,
-          host: account.host,
-          online: network.online(),
-          lastFailure: network.lastFailure(),
-          fetchedAt: fetchedAt(),
-        }),
-      )
+      .run(readSync(options))
       .then(setFacts)
       .catch((cause: unknown) => setProblem(describe(cause)));
   };
 
-  // A sign-in, a network change or a different project all change the answer.
-  // Solid 2 has no `onMount`; an effect over what the reading depends on runs
-  // once on mount and again whenever one of them moves, which is the same
-  // thing plus the reason to re-run.
-  createEffect(
-    () => [shell.project()?.root, account.session()?.username, network.online()] as const,
-    () => refresh(),
-  );
+  // Solid 2 has no `onMount`; an effect whose compute gathers the reading's
+  // inputs runs once at mount and again whenever one of them moves — which is
+  // the same thing, plus the reason to re-run.
+  createEffect(ask, load);
 
   // The progress line. A forked fiber rather than an awaited effect, because
   // the stream never completes; it is interrupted when the screen unmounts.
@@ -184,7 +221,7 @@ export function CloudScreen() {
       .finally(() => {
         setBusy(false);
         setPhase("");
-        refresh();
+        load(ask());
       });
   };
 
@@ -279,7 +316,7 @@ export function CloudScreen() {
       <AccountCard account={account} />
 
       <Show
-        when={shell.project()}
+        when={named()}
         fallback={
           <Card data-cloud-card="no-project">
             <EmptyState
@@ -290,11 +327,11 @@ export function CloudScreen() {
           </Card>
         }
       >
-        {(project) => (
+        {(name) => (
           <Show when={current()} fallback={<Card>{t("Reading this project…")}</Card>}>
             {(held) => (
               <>
-                <ProjectCard sync={held()} projectName={projectName(project().root)} />
+                <ProjectCard sync={held()} projectName={name()} />
 
                 <Show when={wantsPlan(held().state) && plan().books.length > 0}>
                   <IncomingPlanCard plan={plan()} />
