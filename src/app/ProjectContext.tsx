@@ -162,8 +162,20 @@ export interface Shell {
   readonly showChapter: (ordinal: number) => void;
 
   /**
-   * Where the reader last was in `root` — the book and the clip — or undefined
-   * if this device has never had one open there.
+   * The editor reporting which chapter is at the TOP of its viewport, so that
+   * the next open can land back on it.
+   *
+   * Only `BookEditor` calls it, from the one `watchLocation` subscription it
+   * already has for the location bar. The shell keeps no viewport state of its
+   * own — this is written straight into the remembered location and read
+   * nowhere else.
+   */
+  readonly noteChapterAtTop: (ordinal: number) => void;
+
+  /**
+   * Where the reader last was in `root` — the book, the clip and the chapter
+   * that was at the top of the page — or undefined if this device has never
+   * had one open there.
    *
    * Written by `focus` and by every chapter change, read by the project route
    * (which sends an Open straight back to the work rather than to a census)
@@ -539,6 +551,9 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     return found;
   };
 
+  /** The aim an earlier `focus` already answered; see the read of it below. */
+  let honoured: Reveal | undefined;
+
   const focus = async (bookId: BookId | undefined): Promise<void> => {
     // Another deliberate snapshot: we seat a book in the project that was open
     // when the call was made. Closing a project clears the focus anyway.
@@ -573,13 +588,51 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     }
     setFocused(editing);
     // The aim, if one was left for this book, decides the opening chapter and
-    // then stays put for the editor surface to scroll to.
+    // then stays put for the editor surface to scroll to. An aim is a REQUEST
+    // — a finding, a search hit, a chapter click — and a request is answered
+    // ONCE: without `honoured`, re-opening the book an aim named scrolled back
+    // to it forever, which is precisely what put the remembered place out of
+    // reach.
     const aimed = reveal();
-    const at = aimed?.bookId === bookId ? aimed.from : undefined;
-    if (aimed !== undefined && aimed.bookId !== bookId) setReveal(undefined);
+    const fresh = aimed !== undefined && aimed !== honoured && aimed.bookId === bookId;
+    const at = fresh ? aimed.from : undefined;
+    if (!fresh) setReveal(undefined);
+    else honoured = aimed;
+
+    /**
+     * Where the reader last WAS in this book, when nothing else asked for a
+     * place.
+     *
+     * The aim wins when there is a live one; a remembered scroll position is
+     * only the absence of a request. Reopening a project used to land on the
+     * top of the right book however far down it the reader had been, because
+     * the only thing written down was the CLIP — and a book opens whole.
+     */
+    const held = lastLocation(staticProject.root);
+    const resume = at === undefined && held?.bookId === bookId ? held.at : undefined;
+
     const opening = openingChapter(editing, at);
+    if (preferChapterView() && resume !== undefined) {
+      // Chapter view narrows to a chapter, so resuming IS the clip.
+      setChapter(resume);
+      remember(bookId, resume, resume);
+      return;
+    }
     setChapter(opening);
-    remember(bookId, opening);
+    if (resume !== undefined && resume > 0) {
+      // Whole-book view scrolls instead: the `\c` anchor of the remembered
+      // chapter goes to the top of the viewport, which is exactly what a
+      // chapter click does. Marked honoured as it is made, so the next open of
+      // the same book asks the remembered location again rather than replaying
+      // this scroll.
+      const chapter = editing.structure().chapters[resume];
+      if (chapter !== undefined) {
+        const resumeAim: Reveal = { bookId, from: anchorFrom(chapter), at: "top" };
+        setReveal(resumeAim);
+        honoured = resumeAim;
+      }
+    }
+    remember(bookId, opening, resume);
   };
 
   /**
@@ -594,16 +647,46 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     if (locationWrite !== undefined) clearTimeout(locationWrite);
   });
 
-  const remember = (bookId: BookId | undefined, ordinal: number | null): void => {
+  const remember = (bookId: BookId | undefined, ordinal: number | null, at?: number): void => {
     const root = project()?.root;
     if (root === undefined || bookId === undefined) return;
-    const next: LastLocations = { ...locations(), [root]: { bookId, chapter: ordinal } };
+    const held = locations()[root];
+    // The scrolled-to chapter is carried forward when the caller has no
+    // opinion about it: a clip change and a scroll are two different facts,
+    // and the one that did not happen must not be erased by the one that did.
+    const carried = held?.bookId === bookId ? held.at : undefined;
+    const where = at ?? carried;
+    const next: LastLocations = {
+      ...locations(),
+      [root]: { bookId, chapter: ordinal, ...(where === undefined ? {} : { at: where }) },
+    };
     setLocations(next);
     if (locationWrite !== undefined) clearTimeout(locationWrite);
     locationWrite = setTimeout(() => {
       locationWrite = undefined;
       persist(keys.lastLocation, next);
     }, 400);
+  };
+
+  /**
+   * The chapter at the top of the viewport, reported by the editor as the
+   * reader scrolls.
+   *
+   * The shell does not measure it and could not: it is a fact about a
+   * VIEWPORT, and `watchLocation` (src/editor/recipes/whereAmI.ts) already
+   * reads it for the location bar. All that is added here is writing it down,
+   * so the next open can land on it. The write is the same debounced one every
+   * other location change uses, and a scroll is already coalesced into one
+   * animation frame before it gets here.
+   */
+  const noteChapterAtTop = (ordinal: number): void => {
+    const book = focused();
+    if (book === undefined) return;
+    const root = project()?.root;
+    if (root === undefined) return;
+    const held = locations()[root];
+    if (held?.bookId === book.id && held.at === ordinal) return;
+    remember(book.id, untrack(chapter), ordinal);
   };
 
   const lastLocation = (root: string): LastLocation | undefined => locations()[root];
@@ -629,7 +712,10 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
   const showChapter = (ordinal: number): void => {
     const book = focused();
     if (book === undefined) return;
-    remember(book.id, preferChapterView() ? ordinal : null);
+    // `ordinal` is written as the scrolled-to chapter as well as the clip:
+    // asking for a chapter IS being at it, and waiting for the scroll watcher
+    // to say so would lose the answer for a reader who leaves immediately.
+    remember(book.id, preferChapterView() ? ordinal : null, ordinal);
     if (preferChapterView()) {
       setChapter(ordinal);
       return;
@@ -716,6 +802,7 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     aim,
     reveal,
     showChapter,
+    noteChapterAtTop,
     lastLocation,
     landingPath,
     finding,

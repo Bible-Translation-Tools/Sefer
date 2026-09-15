@@ -131,12 +131,24 @@ export type RecentProjects = typeof RecentProjects.Type;
  * is the CLIP — `null` for the whole book, which is the ordinary case — and it
  * is only obeyed when the book it names is still in the project.
  *
+ * `at` is the other half of the answer, and the reason the clip alone was not
+ * enough: a book opens WHOLE by default, so a reader who scrolled down to
+ * Psalm 3 had a clip of `null` and came back to the top of the book. It is the
+ * chapter ordinal at the TOP OF THE VIEWPORT, which the editor already
+ * measures for the location bar, written as the reader scrolls. Optional
+ * because a preferences file written by an older build has no such field, and
+ * a location with no `at` still names the right book.
+ *
  * Left out of `shellSettings` like `recentProjects`: there is no `kind` for a
  * record, and a settings form is not where you edit a history.
  */
 const LastLocations = Schema.Record(
   Schema.String,
-  Schema.Struct({ bookId: Schema.String, chapter: Schema.NullOr(Schema.Number) }),
+  Schema.Struct({
+    bookId: Schema.String,
+    chapter: Schema.NullOr(Schema.Number),
+    at: Schema.optionalKey(Schema.Number),
+  }),
 );
 
 export type LastLocations = typeof LastLocations.Type;
@@ -197,7 +209,7 @@ export interface ShellKeys {
   readonly editorFontSize: SettingKey<number>;
   /** Project root → ISO-8601 of the last open. See `RecentProjects`. */
   readonly recentProjects: SettingKey<RecentProjects>;
-  /** Project root → the book and clip the reader last had open there. */
+  /** Project root → the book, the clip and the chapter the reader last had on screen. */
   readonly lastLocation: SettingKey<LastLocations>;
 }
 
