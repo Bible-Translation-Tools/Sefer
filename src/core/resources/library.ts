@@ -117,6 +117,26 @@ export interface LibraryService {
     projectId: string,
   ) => Effect.Effect<readonly { readonly role: Role; readonly resource: Resource }[]>;
   /**
+   * The WHOLE canonical text of one book of a registered resource — the bytes
+   * of its `.usfm` file, decoded the one way `src/core/source/source.ts`
+   * decodes anything.
+   *
+   * `lookup` answers a passage and slices it with a regex; a reference pane
+   * that paints the reference the way the editor paints the project needs the
+   * document itself, because the engine parses a book and not a fragment. So
+   * this is the door beside `lookup` rather than a widening of it: same file
+   * resolution, no slicing, no interpretation.
+   *
+   * `none` when the resource is not registered or holds no file for `bookId`
+   * — a reference Bible that simply lacks Philemon is the ordinary case and
+   * the pane says so. Fails `Io` only when a file that exists cannot be read
+   * or does not decode.
+   */
+  readonly readBook: (
+    resourceId: string,
+    bookId: string,
+  ) => Effect.Effect<Option.Option<string>, LibraryError>;
+  /**
    * Reference text for `ref` from a registered resource. `none` when the
    * resource, its book file, or the chapter/verse is not there; fails `Io` only
    * when a file that exists cannot be read.
@@ -418,6 +438,23 @@ const makeLibrary = (
               .map((resource) => ({ role, resource })),
           ),
         ),
+
+      readBook: (resourceId, bookId) =>
+        Effect.gen(function* () {
+          const resource = find(resourceId);
+          if (resource === undefined) return Option.none<string>();
+          const files = yield* usfmFilesUnder(fileSystem, resource.root);
+          const file = bookFileFor(files, bookId);
+          if (file === undefined) return Option.none<string>();
+          const bytes = yield* Effect.mapError(
+            fileSystem.readFile(joinPath(resource.root, file)),
+            failure,
+          );
+          const source = decode(bytes);
+          if (Result.isFailure(source))
+            return yield* Effect.fail(refuse("Io", `${file}: ${source.failure.description}`));
+          return Option.some(source.success.text);
+        }),
 
       lookup: (resourceId, ref) =>
         Effect.gen(function* () {

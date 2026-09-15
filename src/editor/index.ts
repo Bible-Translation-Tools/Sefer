@@ -149,6 +149,9 @@ export {
 // Views (§3.6).
 export { pickChapter, projectionFor, type ProjectionName } from "./views";
 
+// The read-only reference pane: another resource's book, same projection.
+export { mountReference, type ReferenceMount, type ReferenceOptions } from "./recipes/reference";
+
 // Arriving somewhere: the brief mark that says the jump landed.
 export { flash, flashing, type FlashRange } from "./recipes/flash";
 
