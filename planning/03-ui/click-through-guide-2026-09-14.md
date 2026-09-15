@@ -50,7 +50,7 @@ For evaluating the new app by hand. One line per thing a person can do. Tags:
 - **Format / prettify** — stubbed. Format book / Format project refuse until galley re-exports Onion's format door (planning/01-discussing/engine-asks-2026-09-14.md).
 - **Match formatting from source** — stubbed, needs an Onion overlay.
 - **Text size / zoom** — same (Settings: interface size, scripture size, zoom).
-- **CRLF preserved** — changed: files are written canonical LF.
+- **CRLF preserved** — same. A file is written back in the dominant line ending and byte order mark it was read with, so a CRLF project stays CRLF and a marked file keeps its mark. Canonical LF is INTERNAL only: it is what the text is in memory, which is what makes a UTF-16 offset mean the same thing to CodeMirror, to the engine and to a stamp. See [Save](../../documentation/architecture/save.md) and the "Line endings" line below.
 
 ## Findings and lint
 
@@ -110,7 +110,7 @@ For evaluating the new app by hand. One line per thing a person can do. Tags:
 
 - **Web (OPFS + isomorphic-git)** — same.
 - **Desktop (Tauri)** — same for files, dialogs, updater; git port being completed now; native save dialog for export in progress.
-- **Off-main-thread analysis** — changed: desktop runs the corpus natively (rayon); Web runs wasm on the main thread; the old app mirrored the workspace into a worker.
+- **Off-main-thread analysis** — changed, and narrower than it sounds. The HOT path — per-book `analyze` on the keystroke — is synchronous wasm in the webview on BOTH hosts, and always will be: a fiber per keystroke is a budget Sefer does not have. What moves off the main thread on desktop is the debounced whole-corpus Sous publish, which runs in the native process (rayon, `src-tauri/src/corpus.rs`); on Web that publish is still main-thread and a Worker is the next step. The old app mirrored the whole workspace into a worker.
 - **Reveal in file explorer** — absent.
 - **System fonts** — absent.
 
