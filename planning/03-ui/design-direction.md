@@ -69,7 +69,7 @@ Inline lint tooltips and gutter popovers use tokens (opaque surface, readable te
 
 ## Decisions on the gap list (Will, 2026-09-14 evening)
 
-1. **Compare.** Build the two-sided compare with the decision map (future: taking in work from a remote). Start with ONE other source kind: another zip or folder (sharing over zips). Design rule: neither side is a hardcoded closure over the current project — both sides are a `CompareSource` port, so adding git checkpoint / other project / remote later is a new source, not a rewrite.
+1. **Compare / Review are one screen.** Both sides are pickers over the same `CompareSource` list (in the editor · on disk · last recorded · a zip · a folder; later git checkpoint, other project, remote). Left defaults to the editor, right to on disk; neither side is hard-coded, so zip vs zip is allowed. Apply / Record / Revert are offered only when one side is this project's working text (that side is the target); when neither can apply the screen is read-only and says so. Same source on both sides is disallowed. Units come from Onion's diff skeleton once galley re-exports it (engine-asks 1b); until then a TS diff feeds the same shapes, labelled interim.
 2. **External-change detection at save.** Deferred. Keep the coordinator hooks; too speculative to surface now.
 3. **Cloud sync narrative.** Wanted. The old state machine (incoming plan, diverged squash, dual clocks, plain-language plan) was about right; port its shape.
 4. **Format.** Wanted, for a book or the project, from the kebab and the command palette; call it "Format". Match-formatting is NOT this — it needs an Onion overlay of two texts first (engine work), then show source text with the equivalent block highlighted.
