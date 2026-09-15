@@ -227,3 +227,39 @@ export const intake = (
       files: [...written].sort(),
     } satisfies Staged;
   });
+
+/** A directory in the FileSystem port that now holds what somebody picked. */
+export interface Intaken {
+  /** The archive's or folder's own name, for a label. */
+  readonly name: string;
+  /** The path to read it back through the port. */
+  readonly root: string;
+}
+
+/**
+ * Pick a zip or a folder and leave it somewhere the port can read, for a
+ * caller that wants a PATH rather than an import.
+ *
+ * Compare is that caller (`src/app/ui/compare`): the other side of a
+ * comparison is a folder of books, and a zip becomes one by being unpacked
+ * into a scratch directory. Nothing is classified and nothing is committed —
+ * the bytes land under `scratchRoot` and the path comes back, so a comparison
+ * can be a read of a directory and never a second reading of an archive.
+ *
+ * `undefined` means the reader closed the picker, which is not a failure.
+ */
+export const pickInto = (
+  fileSystem: FileSystem.FileSystem,
+  scratchRoot: string,
+  source: "zip" | "folder",
+): Effect.Effect<Intaken | undefined> =>
+  Effect.flatMap(
+    Effect.promise(() => (source === "zip" ? pickZip() : pickFolder())),
+    (picked) =>
+      picked === undefined
+        ? Effect.succeed(undefined)
+        : Effect.map(intake(fileSystem, scratchRoot, picked), (staged) => ({
+            name: picked.name,
+            root: staged.root,
+          })),
+  );

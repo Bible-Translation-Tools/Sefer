@@ -59,16 +59,26 @@ export const currentProjectSource = (project: Project, label?: string): CompareS
     }),
 
   apply: (bookId: BookId, text: string) =>
-    Effect.suspend(() => {
-      const book = project.book(bookId);
-      if (book === undefined)
-        return failCompare(
+    Effect.gen(function* () {
+      if (project.book(bookId) === undefined)
+        return yield* failCompare(
           "Unsupported",
           `${bookId} is not in this project; Compare cannot add a book yet`,
         );
+
+      // Seat the book first, so the write lands in the editor-backed Book and
+      // therefore in its history: "apply what they chose" and "and let me undo
+      // it" are the same request. A project with no seat (a headless run) is
+      // refused the seat and written plainly, which is still one revision
+      // through the one write path — just with nothing to undo it with.
+      yield* Effect.orElseSucceed(project.instantiate(bookId), () => undefined);
+      const book = project.book(bookId);
+      if (book === undefined)
+        return yield* failCompare("Absent", `${bookId} left the project mid-apply`);
+
       const current = book.source();
       if (current.text === text)
-        return failCompare("Refused", `${bookId} already holds exactly this text`);
+        return yield* failCompare("Refused", `${bookId} already holds exactly this text`);
 
       // `diffTexts(current, next)`: the baseline side is the book's text, so
       // the baseline offsets ARE the before-text coordinates `apply` wants,
@@ -81,10 +91,10 @@ export const currentProjectSource = (project: Project, label?: string): CompareS
 
       const receipt = book.apply(changes, "compare", trustedBy("compare"));
       return Result.isFailure(receipt)
-        ? failCompare(
+        ? yield* failCompare(
             "Refused",
             `${bookId}: ${receipt.failure.rule} refused (${receipt.failure.reason})`,
           )
-        : Effect.succeed(receipt.success);
+        : receipt.success;
     }),
 });
