@@ -136,6 +136,12 @@ network request per render.
 
 An Effect-returning command is run on the app runtime by the runner `registerShellCommands` installs.
 
+`runCommand(id, argument?)` passes the argument straight to `run`. Almost nothing reads it; `project.rename` does, because the dialog that would ask for a name is another slice's surface and renaming a project to something nobody typed is not an option. Pressed with nothing, it says so.
+
+**The editor's chords are bound twice.** `editor.insert.verse` / `.paragraph` / `.poetry` / `.footnote` are registered here with `Mod-Shift-v/p/q/f` *and* inside CodeMirror's own keymap (`usfmKeys`), because an insertion needs the caret. The document listener skips an event the editor already consumed (`event.defaultPrevented`), so a chord fires once: with the editor focused `Mod-Shift-f` inserts a footnote, and everywhere else it opens project search. `editor.frontmatter.edit` has no chord and focuses the front matter card's first field. See [the editor](editor.md), "Structured entry".
+
+`format.book` and `format.project` are registered and **refusing**, with the engine door named in the message — see [findings](findings.md), "Format needs one door". `format.project` is the shell's only `MultiBook`: one instance over a thunk of the project's books, so the cross-book Undo offer has somewhere to live when the door lands.
+
 ## Routes and tokens
 
 `/projects`, `/start/create`, `/start/find`, `/project/$id`, `/project/$id/book/$book`, `/find`, `/findings`, `/history`, `/inventory`, `/settings`, plus `/` and the dev-only `/dev/fixture`. `/find` owns its search params (`q`, `mode`, `scope`) and derives its whole state from them, so a link into it from the rail or the toolbar changes the screen that is already mounted. The rail and the toolbar also point at `/terms` and `/compare`, which are being built alongside the chrome; until they land the router answers them through the root's not-found boundary. File routes under `src/routes`; `src/routeTree.gen.ts` is generated — never edit it.

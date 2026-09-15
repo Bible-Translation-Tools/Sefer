@@ -842,3 +842,51 @@
 .cm-excerpt .cm-scroller {
   overflow: hidden;
 }
+
+/* ---------------------------------------------------------------------------
+   The front matter card (`core/frontmatter.ts`).
+
+   A block widget standing in for `\id`, `\h`, `\toc1-3` and `\mt*` in regular
+   mode: marker name as a locked label, value as the one editable field. Same
+   tokens and the same locked-key discipline as the attribute popover above,
+   because it is the same idea at book scale.
+   --------------------------------------------------------------------------- */
+.usfm-front {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  align-items: baseline;
+  max-width: 40rem;
+  margin: 0 auto 1.5rem;
+  padding: 12px 14px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+}
+.usfm-front-row {
+  display: contents;
+}
+.usfm-front-label {
+  color: var(--on-surface-tertiary);
+  font: 400 11px/1.8 var(--font-ui);
+  white-space: nowrap;
+  cursor: default;
+}
+.usfm-front-input {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--on-surface-primary);
+  font: 400 13px/1.4 var(--font-ui);
+  padding: 2px 6px;
+  width: 100%;
+  min-width: 0;
+}
+.usfm-front-input:hover {
+  border-color: var(--surface-border);
+}
+.usfm-front-input:focus {
+  outline: none;
+  background: var(--surface-primary);
+  border-color: var(--brand-base);
+}

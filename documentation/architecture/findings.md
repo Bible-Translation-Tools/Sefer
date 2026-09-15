@@ -104,6 +104,42 @@ Sefer writes no USFM transformations. Onion attaches the edits to the diagnostic
 - `preview` refuses `Stale` unless the analysis `describesExactly` the Book's current text **and** matches the finding's engine stamp **and** the diagnostic at that index still carries the same code. Three checks because they catch different mistakes; a same-length edit passes a length check alone.
 - `apply` refuses `Stale` if the Book's revision moved since the preview. `applyAll(previews, book)` puts one book's set through a single `apply` — one Undo step, one receipt — and one stale or foreign member refuses the whole set rather than applying it partially.
 - Whether the edit is admissible at all is the Book's business: an editor-backed Book runs its phases, and a fix that would break structure is refused by the rules, not by a check here.
-- `formatBook` **fails** with `Unsupported`. The pinned artifact exposes no `format`/`formatEdits` (see [Galley](galley.md), "What the handle cannot do yet"), and reimplementing the formatter in TypeScript is out of scope. The ask goes upstream to the engine's wasm surface.
+- `formatBook` **fails** with `Unsupported`, and the message is the ask — see [Format needs one door](#format-needs-one-door) below.
 - Sous findings never carry edits — they measure. `preview` refuses them `NotEngineFix`, and sink 1 offers them no button for the same reason.
 - Inside the editor the door is the bound view, not `fixes.apply`: `applyFix` dispatches the engine's edits with `trusted.of('lint-fix')`, and because the view was bound with `dispatchTransactions: (trs) => book.fromView(view, trs)` that IS `book.apply` — the same phases, the same receipt. The freshness check is the engine stamp rather than the revision: the editor re-analyzes the live document and compares hashes, so a same-length edit made while the tooltip was open is caught. `fixes.preview`/`apply` remain the door for a surface with no view, which is the panel.
+
+## Format needs one door
+
+`format.book` and `format.project` are **registered and refusing**. The refusal says exactly what is missing, in the engine's own vocabulary, because "Format book" greyed out with no reason is indistinguishable from "this book is already formatted".
+
+> Format needs an engine door: `formatEdits(text, opts)` on the Galley handle — `onion::format::format_edits` exists and `onion-wasm` binds it, but `galley/src/wasm.rs` does not re-export it, so the pinned artifact has no format.
+
+That sentence is one constant, `Fixes.FORMAT_DOOR`, so the command, the status line and this page cannot drift apart.
+
+### What the engine actually has
+
+The formatter is written and tested upstream. `onion/src/format.rs` is "the OPT-IN prettifier — one transaction of byte edits, no rewriter", and it exports three functions:
+
+| upstream | what it gives |
+|---|---|
+| `onion::format::format_edits(source, opts) -> Vec<Edit>` | the whole-book transaction as byte edits — **this is the one Sefer wants** |
+| `onion::format::format_edits_in(source, from, to, opts)` | the same, clipped to a byte range: the "format this chapter" button of slice 15 increment 3 |
+| `onion::format::format(source, opts) -> Vec<u8>` | the applied result, which Sefer would have to diff back into edits |
+
+`onion-wasm/src/lib.rs` already binds all three (`format_edits`, `format_edits_in`, `format`). What Sefer is pinned to is a *different* wasm crate: `galley`, whose `wasm.rs` re-exports `parse`/`parseText`, `lint`, `update`/`updateReference`/`remove`, `publish`, `find`/`findAll`, `verseText`, `structureText`, `fingerprint` and the cache counters — and no format. `vendor/galley/pkg-web/usfm_galley.d.ts` is the proof: the whole handle surface is in that file.
+
+So the ask upstream is a re-export on one file, not a feature: put `format_edits` (and `format_edits_in`) on the `Galley` handle with `FormatOptions` as a plain settings object, the way `Knobs` already crosses.
+
+### Why Sefer does not write it instead
+
+Two routes were considered and both were refused.
+
+- **A second formatter in TypeScript.** Slice 15 rules it out by name ("avoid implementing a second JS formatter"), and the reason is structural: `onion::format` merges **two** edit sets — the lint rows flagged `formatter` in the catalogue, and the FORM channel (`Severity::Form`) that `lint` never reaches — colliding them by row order, first writer wins. Sefer can see the first half (a diagnostic's own `fix()` edits, and the catalogue's `formatter` flag is in `vendor/galley/diagnostics.json`) and cannot see the second at all. A TypeScript pass would reproduce half of format and silently diverge on the rest, and two formatters that disagree about scripture is worse than no format button.
+- **Whitespace-only normalisation, proven lossless by re-parsing.** The proof is not available. The handle hands back a token stream whose every offset moves when whitespace moves, so "same tokens, only whitespace differs" would need the alignment the engine already owns. And the interesting half of format is not whitespace-only anyway: `VerseBreaks`, `collapse_blank_lines`, `block_marker_own_line` and `remove_markers` all change what is on which line, and `repairs` inserts closers.
+
+### The shape that is already wired
+
+Only `Fixes.formatBook` has to change when the door lands. Everything around it is built and exercised:
+
+- `format.book` → `Fixes.formatBook(book)` → one `book.apply(changes, 'format', trustedBy('format'))`. One `apply`, therefore one transaction, therefore **one Undo step**, and one receipt for Save, Recovery, ProjectAnalysis and the panel.
+- `format.project` → `MultiBook.runAcrossBooks('format', book => …)` (`src/core/multibook/multibook.ts`). One `apply` per book with origin `project.format`, which the editor-backed Book isolates in its history — so Undo takes back that book's share of the operation and nothing the reader typed around it — one receipt each, and one summary on the status line.

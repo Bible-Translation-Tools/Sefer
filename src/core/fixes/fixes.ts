@@ -206,26 +206,58 @@ export const applyAll = (
 };
 
 /**
+ * What the engine would have to expose before `formatBook` can do anything,
+ * in the engine's own vocabulary. One string, so the command, the toast and
+ * the documentation all say the same thing.
+ *
+ * The formatter EXISTS: `onion/src/format.rs` has `format`, `format_edits` and
+ * `format_edits_in`, and `onion-wasm/src/lib.rs` binds all three. What is
+ * missing is the door on the artifact Sefer is pinned to — the `Galley` handle
+ * built from `galley/src/wasm.rs` (`vendor/galley/pkg-web/usfm_galley.d.ts`),
+ * whose whole surface is `parse`/`parseText`, `lint`, `update`, `publish`,
+ * `find`/`findAll`, `verseText`, `structureText` and the cache counters. So
+ * this is a re-export on one file upstream, not a new feature.
+ */
+export const FORMAT_DOOR =
+  "formatEdits(text, opts) on the Galley handle — onion::format::format_edits " +
+  "exists and onion-wasm binds it, but galley/src/wasm.rs does not re-export it, " +
+  "so the pinned artifact has no format";
+
+/**
  * Whole-book normalisation as one preview and one Undo unit (slice 15
  * increment 2).
  *
- * NOT AVAILABLE. The pinned artifact exposes no stateless Onion doors: there
- * is no `format` and no `formatEdits` on the handle, so there is nothing to
- * turn into a `FixPreview` — see `documentation/architecture/galley.md`, "What
- * the handle cannot do yet". Reimplementing the formatter in TypeScript is
- * explicitly out of scope (slice 15: "avoid implementing a second JS
- * formatter"), so this fails loudly instead.
+ * NOT AVAILABLE, and deliberately not faked. Two routes were considered and
+ * both refused:
  *
- * TODO(seam): needs `formatEdits(text) -> FixEdit[]` (or a `format(text)`
- * whose result Sefer diffs) on the wasm surface. The ask is recorded at
- * /Users/willkelly/Documents/Work/Code/usfm_onion_2/galley/src/wasm.md; when it
- * lands, this becomes a `Galley.formatEdits` call plus the same stamp checks
- * `preview` makes, and `apply` already handles the rest (origin `'format'`).
+ *  - **A second formatter in TypeScript.** Out of scope by the slice's own
+ *    words ("avoid implementing a second JS formatter"), and the reason is not
+ *    tidiness: `onion::format` merges two edit sets — the lint rows flagged
+ *    `formatter`, and the FORM channel (`Severity::Form`) that lint never
+ *    reaches — with a first-writer-wins collision rule. A TypeScript
+ *    whitespace pass would reproduce the first half and silently diverge on
+ *    the second, and "the two formatters disagree about scripture" is the
+ *    worst bug available here.
+ *  - **A whitespace-only normalisation proven lossless by re-parsing.** The
+ *    proof is not available either: the handle gives a token stream whose
+ *    offsets all move when whitespace moves, so "same tokens, only whitespace
+ *    differs" cannot be checked without writing the alignment the engine
+ *    already owns — and the interesting half of format (`\v` breaks, blank
+ *    line collapse, marker-owns-its-line) is not whitespace-only anyway.
+ *
+ * So it fails loudly, naming the door. A silent no-op would read to the user
+ * as "the document was already formatted".
+ *
+ * TODO(seam): see `FORMAT_DOOR`. When it lands this becomes one
+ * `Galley.formatEdits(text, opts)` call plus the same stamp checks `preview`
+ * makes; `apply` already handles the rest (origin `'format'`), and
+ * `format.project` in `src/app/commands.ts` already runs it across books
+ * through `MultiBook.runAcrossBooks`.
  */
 export const formatBook = (book: Book): Result.Result<FixPreview, Unsupported> =>
   Result.fail(
     new Unsupported({
       operation: "formatBook",
-      description: `the pinned engine exposes no formatEdits, so ${book.id} cannot be formatted`,
+      description: `Format needs an engine door: ${FORMAT_DOOR} (${book.id})`,
     }),
   );
