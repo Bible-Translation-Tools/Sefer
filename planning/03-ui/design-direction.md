@@ -80,3 +80,7 @@ Inline lint tooltips and gutter popovers use tokens (opaque surface, readable te
 9. **Metadata page.** Deferred; to be reworked. Needed regardless: a pipeline hook that refreshes the burrito's md5 checksums on write (web needs a JS md5 — no SubtleCrypto md5).
 10. **i18n.** Evaluate Paraglide (see notes in the session).
 11. **Authoring.** Structured actions for `\v`, `\q`, `\p` and footnote insertion only; everything else is enforced by lint + typing rules. Front-matter as structured data entry like the spike's attribute editing. Chapter labels: Onion's job, later. Phone layout: later.
+
+## Diff is sid-aligned, never line-based (todo, no action yet)
+
+Will, 2026-09-15: no line diff anywhere, and nothing native to CodeMirror's merge/diff. Every comparison in Sefer aligns by verse sid through Onion's decision units — that alignment is scripture's advantage and the whole point. Remaining line-diff users to move onto the engine skeleton when the docket allows: History's commit-vs-working view (`panels/DiffView`, `changes.ts`), `core/compare/compare.ts`'s hunk model and `projectSource`, and `core/diff/diff.ts` itself once nothing reads it. The word LCS in `core/diff/inline.ts` (markup view only) goes with them.
