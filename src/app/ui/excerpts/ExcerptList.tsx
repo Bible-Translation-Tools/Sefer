@@ -22,7 +22,7 @@ import type { Analysis } from "../../../core/galley";
 import type { EditorBook } from "../../../editor";
 import { t } from "../../i18n";
 import { cx, VirtualList, type VirtualSection } from "../primitives";
-import { ExcerptCard } from "./ExcerptCard";
+import { ExcerptCard, type MarkTone } from "./ExcerptCard";
 
 export interface ExcerptListProps {
   readonly groups: readonly BookExcerpts[];
@@ -61,6 +61,47 @@ export interface ExcerptListProps {
    */
   readonly onExpand?: (sid: string, direction: -1 | 1) => void;
   readonly empty?: JSX.Element;
+  /**
+   * What a screen adds to the shared multibuffer. Absent — Find, STET — is the
+   * list exactly as it was.
+   */
+  readonly decor?: ExcerptDecor;
+}
+
+/**
+ * The decorations a screen hangs on the multibuffer.
+ *
+ * Findings is the reason this exists. It shows the SAME cards Find shows, over
+ * the same model, and differs in four ways that are all presentation: its
+ * sections are not always books (by code, by severity, flat, and a book's
+ * front matter as its own section), so a row's key has to carry the section;
+ * a card's header names findings rather than matches; a mark is coloured by
+ * severity rather than by being a hit; and a card is taller than the verse it
+ * holds, which the height estimate has to know before the row is measured.
+ *
+ * Every field is optional and every default is what Find already did.
+ */
+export interface ExcerptDecor {
+  /**
+   * A row's key, when the sid alone is not unique. Grouping by code puts one
+   * verse in two sections, and a virtualizer keyed on a repeated string
+   * positions the second one on top of the first. Defaults to `excerpt.sid`.
+   */
+  readonly rowKey?: (group: BookExcerpts, excerpt: Excerpt) => string;
+  /** The sticky header's contents. Defaults to the book id, name and count. */
+  readonly header?: (group: BookExcerpts) => JSX.Element;
+  /** The outline column's own label, when its rows are not books. */
+  readonly outlineTitle?: string;
+  /** One outline row's text. Defaults to the section key. */
+  readonly outlineLabel?: (row: OutlineRow) => string;
+  /** Replaces a card's reference. */
+  readonly label?: (excerpt: Excerpt, key: string) => JSX.Element;
+  /** A block between a card's header and its reading. */
+  readonly notes?: (excerpt: Excerpt, key: string) => JSX.Element;
+  /** What a highlight means — see `ExcerptCardProps.markTone`. */
+  readonly markTone?: (source: number | undefined) => MarkTone | undefined;
+  /** Pixels this card carries beyond the verse, before it has been measured. */
+  readonly extraHeight?: (excerpt: Excerpt, key: string) => number;
 }
 
 /** Roughly one line of the scripture serif at the list's width. */
@@ -80,21 +121,34 @@ export function ExcerptList(props: ExcerptListProps) {
   });
   let goTo: ((bookId: string) => void) | undefined;
 
+  const keyOf = (group: BookExcerpts, excerpt: Excerpt): string =>
+    props.decor?.rowKey?.(group, excerpt) ?? excerpt.sid;
+
   const sections = createMemo(
     (): readonly VirtualSection<Excerpt>[] =>
       props.groups.map((group) => ({
         key: group.bookId,
-        rows: group.excerpts.map((excerpt) => ({
-          key: excerpt.sid,
-          item: excerpt,
-          estimate: estimate(excerpt),
-        })),
+        rows: group.excerpts.map((excerpt) => {
+          const key = keyOf(group, excerpt);
+          return {
+            key,
+            item: excerpt,
+            estimate: estimate(excerpt) + (props.decor?.extraHeight?.(excerpt, key) ?? 0),
+          };
+        }),
       })),
     { name: "excerptSections" },
   );
 
   const nameOf = (bookId: string): BookExcerpts | undefined =>
     props.groups.find((group) => group.bookId === bookId);
+
+  /** The screen's own header for one section, when it draws its own. */
+  const decorated = (key: string): JSX.Element | undefined => {
+    const draw = props.decor?.header;
+    const group = nameOf(key);
+    return draw === undefined || group === undefined ? undefined : draw(group);
+  };
 
   const done = (): void => {
     setEditing(undefined);
@@ -106,7 +160,7 @@ export function ExcerptList(props: ExcerptListProps) {
   return (
     <div class="flex min-h-0 flex-1 gap-4">
       <nav
-        aria-label={t("Books with results")}
+        aria-label={props.decor?.outlineTitle ?? t("Books with results")}
         class="hidden w-40 shrink-0 flex-col gap-0.5 overflow-y-auto md:flex"
       >
         <For each={props.outline}>
@@ -123,7 +177,7 @@ export function ExcerptList(props: ExcerptListProps) {
                   : "text-on-surface-secondary hover:bg-surface-secondary",
               )}
             >
-              <span class="truncate">{row.bookId}</span>
+              <span class="truncate">{props.decor?.outlineLabel?.(row) ?? row.bookId}</span>
               <span class="ms-auto text-smallest tabular-nums text-on-surface-tertiary">
                 {row.count}
               </span>
@@ -147,18 +201,26 @@ export function ExcerptList(props: ExcerptListProps) {
             data-book={section.key}
             class="sticky top-0 z-10 flex items-baseline gap-2 border-b border-surface-border bg-surface-secondary/95 px-1 py-1.5 backdrop-blur-xs"
           >
-            <strong class="text-small font-semibold text-on-surface-primary">{section.key}</strong>
-            <span class="text-small text-on-surface-secondary">{nameOf(section.key)?.name}</span>
-            <span class="ms-auto text-smallest text-on-surface-tertiary">
-              {t("{count} hits", { count: nameOf(section.key)?.count ?? 0 })}
-            </span>
+            {decorated(section.key) ?? (
+              <>
+                <strong class="text-small font-semibold text-on-surface-primary">
+                  {section.key}
+                </strong>
+                <span class="text-small text-on-surface-secondary">
+                  {nameOf(section.key)?.name}
+                </span>
+                <span class="ms-auto text-smallest text-on-surface-tertiary">
+                  {t("{count} hits", { count: nameOf(section.key)?.count ?? 0 })}
+                </span>
+              </>
+            )}
           </header>
         )}
-        row={(excerpt, sid) => (
+        row={(excerpt, key) => (
           <ExcerptCard
             excerpt={excerpt}
-            editing={editing() === sid}
-            onEdit={() => setEditing(sid)}
+            editing={editing() === key}
+            onEdit={() => setEditing(key)}
             onDone={done}
             onOpen={() =>
               props.onOpen(
@@ -173,10 +235,16 @@ export function ExcerptList(props: ExcerptListProps) {
             onExpand={
               props.onExpand === undefined
                 ? undefined
-                : (direction) => props.onExpand?.(sid, direction)
+                : // The EXTENT is keyed by sid, which is the verse — a section
+                  // key in front of it is about where the card is on screen,
+                  // and an expansion is about the verse wherever it is shown.
+                  (direction) => props.onExpand?.(excerpt.sid, direction)
             }
-            active={props.focus === sid ? props.activeHit : undefined}
+            active={props.focus === key ? props.activeHit : undefined}
             mode={props.mode ?? "regular"}
+            label={props.decor?.label?.(excerpt, key)}
+            notes={props.decor?.notes?.(excerpt, key)}
+            markTone={props.decor?.markTone}
           />
         )}
       />
