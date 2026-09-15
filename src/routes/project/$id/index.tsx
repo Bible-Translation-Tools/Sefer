@@ -48,6 +48,12 @@ function ProjectPage(props: { readonly root: string }) {
 
   return (
     <main class="min-w-0 space-y-4 p-6">
+      {/* RecoveryBanner mounts here after merge —
+          `<RecoveryBanner root={props.root} />` from
+          `src/app/ui/recovery/RecoveryBanner.tsx`, which is being built on
+          another branch. It goes ABOVE the header on purpose: an unsaved
+          backup found on open is the first thing to answer, before the census
+          says how the project looks (design-direction.md, gap list 6). */}
       <PanelHeader title={t("Project")} subtitle={props.root} />
 
       <Show

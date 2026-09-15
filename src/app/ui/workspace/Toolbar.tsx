@@ -4,16 +4,21 @@
  *
  * Every action is a `runCommand` — the toolbar is one of the three callers
  * every command in `src/app/commands.ts` is required to have, alongside the
- * keystroke and the palette, and it holds no logic of its own. Where a command
- * does not exist yet the menu item is DISABLED and says why, rather than being
- * absent: "Format book" is a real intention the engine cannot serve yet
- * (`src/core/fixes/fixes.ts` refuses it by name), and hiding it would lose that.
+ * keystroke and the palette, and it holds no logic of its own.
+ *
+ * The kebab's items are NOT gated on `findCommand(id)`. `runCommand` already
+ * answers for an id it does not hold — an unknown command, or one whose
+ * `when()` refuses, is a documented no-op — so the menu names the intention
+ * and the registry decides whether it happens. That matters while the
+ * registry is being filled in by other work: a menu that hid or disabled
+ * every id it could not yet see would be the toolbar guessing at the
+ * registry's answer instead of asking for it. The one exception is Save,
+ * whose `can()` is a real "there is nothing to save right now".
  *
  * The mode control has three segments and not four. Form is not built, so it
  * has no segment (planning/03-ui/design-direction.md); Key terms is a
  * NAVIGATION dressed as a mode, because that is what the mockup shows and what
- * the reader means — it is the same corpus seen as a term list, on its own
- * route.
+ * the reader means — it is the same corpus seen as a term list, on `/terms`.
  */
 
 import { useNavigate } from "@tanstack/solid-router";
@@ -78,7 +83,7 @@ export function Toolbar() {
 
   const pick = (value: Segment): void => {
     if (value === "stet") {
-      go("/find", { mode: "stet" });
+      go("/terms");
       return;
     }
     shell.setMode(value === "usfm" ? "usfm" : "default");
@@ -206,10 +211,57 @@ export function Toolbar() {
           >
             {t("Character inventory")}
           </button>
-          {/* Disabled, with the reason: the pinned engine exposes no
-              `formatEdits`, so `Fixes.formatBook` refuses every call. */}
-          <button type="button" class={item} disabled title={t("The engine cannot format yet.")}>
+
+          <span aria-hidden="true" class="my-1 block h-px bg-surface-border" />
+
+          {/* Format, for a book or the whole project ("call it 'Format'" —
+              design-direction.md, gap list 4). Not match-formatting, which
+              needs an Onion overlay of two texts first. */}
+          <button
+            type="button"
+            class={item}
+            onClick={() => {
+              setMenuOpen(false);
+              runCommand("format.book");
+            }}
+          >
             {t("Format book")}
+          </button>
+          <button
+            type="button"
+            class={item}
+            onClick={() => {
+              setMenuOpen(false);
+              runCommand("format.project");
+            }}
+          >
+            {t("Format project")}
+          </button>
+
+          <span aria-hidden="true" class="my-1 block h-px bg-surface-border" />
+
+          {/* Project-wide, and here rather than on `/project/$id` because the
+              editor is where someone is when they decide to hand the work on
+              or rename it (gap list 7: "Export as zip … and rename: yes"). */}
+          <button
+            type="button"
+            class={item}
+            onClick={() => {
+              setMenuOpen(false);
+              runCommand("project.export");
+            }}
+          >
+            {t("Export as zip")}
+          </button>
+          <button
+            type="button"
+            class={item}
+            onClick={() => {
+              setMenuOpen(false);
+              runCommand("project.rename");
+            }}
+          >
+            {t("Rename project")}
           </button>
         </Popover>
       </Card>

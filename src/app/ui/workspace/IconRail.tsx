@@ -8,17 +8,27 @@
  * `Resizable` deliberately does not implement collapsing — a collapsed pane is
  * a different tree, not a zero-width one (primitives/Resizable.tsx).
  *
- * The mode tiles appear only while a project is open: a projection is
- * something you apply to a book, and offering one with nothing open is an
- * affordance that answers nothing. **Form is not built and has no icon here**
- * — an offered mode that cannot be entered is worse than an absent one
+ * The project tiles appear only while a project is open: a projection, a
+ * term list, a character census and a comparison are all things you apply to
+ * a project, and offering one with nothing open is an affordance that answers
+ * nothing. **Form is not built and has no icon here** — an offered mode that
+ * cannot be entered is worse than an absent one
  * (planning/03-ui/design-direction.md).
+ *
+ * The project-wide screens the rail reaches — `/terms`, `/compare`,
+ * `/inventory` — are ROUTES, lit from the pathname, not signals. Key terms
+ * used to be `/find?mode=stet`, a mode on the search screen; it is its own
+ * pane now ("Find and Key terms are SEPARATE panes/routes with similar UI,
+ * not a mode toggle on one page" — design-direction.md, gap list 5), so the
+ * tile is a plain navigation and the URL is the whole of its state.
  */
 
 import { useNavigate, useRouterState } from "@tanstack/solid-router";
 import Bell from "lucide-solid/icons/bell";
 import BookOpen from "lucide-solid/icons/book-open";
 import Code from "lucide-solid/icons/code";
+import FolderOpen from "lucide-solid/icons/folder-open";
+import GitCompare from "lucide-solid/icons/git-compare";
 import HistoryIcon from "lucide-solid/icons/history";
 import ListChecks from "lucide-solid/icons/list-checks";
 import PanelLeft from "lucide-solid/icons/panel-left";
@@ -38,10 +48,11 @@ export function IconRail() {
   const shell = useShell();
 
   const go = (to: string, search?: Readonly<Record<string, string>>): void => {
-    // SAFETY: these are route literals the generated tree knows; the cast is
-    // only needed because one of them (`/find?mode=stet`) is owned by a route
-    // still being built and its search schema is not declared yet. A path the
-    // router cannot resolve goes through its own not-found boundary.
+    // SAFETY: the cast is the usual typed-route one. Some of these paths
+    // (`/terms`, `/compare`) belong to routes being built alongside this one,
+    // so the generated tree does not know them yet and the literal union
+    // refuses them. A path the router cannot resolve goes through its own
+    // not-found boundary, so an unmerged tile is a 404 page, never a crash.
     void navigate({ to: to as never, search: search as never });
   };
 
@@ -53,19 +64,9 @@ export function IconRail() {
   // projects screen's second half and must not read as somewhere else.
   const path = useRouterState({ select: (state) => state.location.pathname });
   const at = (prefix: string): "true" | "false" => (path().startsWith(prefix) ? "true" : "false");
-  // `/find` in key-terms mode is the tile's own screen, and the mode is in the
-  // URL — which is why the route derives it from the search params rather than
-  // seeding a signal from them (src/routes/find.tsx).
-  const searchMode = useRouterState({
-    select: (state) => {
-      // SAFETY: the router types this union over every route's own search
-      // schema, and only `/find` declares `mode`. The property is read, never
-      // called, and the `startsWith` below is what makes the read meaningful.
-      const search = state.location.search as { readonly mode?: string };
-      return search.mode;
-    },
-  });
-  const stet = (): boolean => path().startsWith("/find") && searchMode() === "stet";
+  /** Is the reader on the projects side — the list, or bringing one in? */
+  const choosing = (): "true" | "false" =>
+    path().startsWith("/projects") || path().startsWith("/start") ? "true" : "false";
 
   return (
     <nav
@@ -99,8 +100,8 @@ export function IconRail() {
           label={t("Key terms")}
           tooltipSide="right"
           icon={<ListChecks size={18} />}
-          aria-pressed={stet() ? "true" : "false"}
-          onClick={() => go("/find", { mode: "stet" })}
+          aria-pressed={at("/terms")}
+          onClick={() => go("/terms")}
         />
         <IconButton
           label={t("USFM")}
@@ -112,8 +113,22 @@ export function IconRail() {
       </Show>
 
       <div class="mt-auto flex flex-col items-center gap-1">
-        {/* Which characters this project actually uses. A project question,
-            so the tile is only offered while one is open. */}
+        {/* The way back out of a project, and the only tile here that means
+            something with nothing open. Lit on `/start/*` as well as
+            `/projects`: bringing a project in is the chooser's second half,
+            and marking only the list would make the rail disagree with the
+            screen (`ProjectSidebar` reads the same two prefixes). */}
+        <IconButton
+          label={t("Projects")}
+          tooltipSide="right"
+          aria-pressed={choosing()}
+          icon={<FolderOpen size={18} />}
+          onClick={() => go("/projects")}
+        />
+
+        {/* Which characters this project actually uses, and this project
+            against another source. Both are project questions, so the tiles
+            are only offered while one is open. */}
         <Show when={shell.project() !== undefined}>
           <IconButton
             label={t("Character inventory")}
@@ -121,6 +136,13 @@ export function IconRail() {
             aria-pressed={at("/inventory")}
             icon={<TypeIcon size={18} />}
             onClick={() => go("/inventory")}
+          />
+          <IconButton
+            label={t("Compare")}
+            tooltipSide="right"
+            aria-pressed={at("/compare")}
+            icon={<GitCompare size={18} />}
+            onClick={() => go("/compare")}
           />
         </Show>
 
