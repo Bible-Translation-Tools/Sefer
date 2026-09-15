@@ -47,7 +47,8 @@ it costs one clause: a translator's first fear, always, is losing a morning's wo
 ## The state machine
 
 `src/core/sync/state.ts` is pure. No Effect, no Git, no fetch: one `SyncReading` in, one `SyncState`
-out. The shell does the IO (`src/app/ui/cloud/reading.ts`) and hands the facts in. That is what
+out. The shell does the IO (`src/app/ui/cloud/reading.ts`, over core's `survey.ts`) and hands the
+facts in. That is what
 makes every state reachable from a dev fixture with no Gitea instance, and it is why the whole
 policy fits in one ladder.
 
@@ -146,7 +147,9 @@ changed here" — with one row per book. A contested row shows a link to
 own lifetime, and this card must not depend on it having been built.
 
 Receiving takes two presses. The plan card is the first; the confirmation is the second. Nothing is
-applied before the plan has been on screen.
+applied before the plan has been on screen. Combining takes two as well, for a stronger reason: it
+rewrites the work tree, so the second press is a dialog naming the books that keep this device's
+version.
 
 ## Diverged, and Combine
 
@@ -161,12 +164,64 @@ When a book IS contested, the primary action becomes Compare instead. Replaying 
 moved on both sides would either conflict or silently pick a winner, and both are worse than a
 screen where a person looks at the two texts.
 
-**Half wired.** The branch move exists now: `Remote.moveBranch(repo, branch, toCommit)` is `writeRef`
-+ a forced `checkout` on the Web and `git_move_branch` over git2 on desktop. What is still missing is
-the replay around it — read this device's books out of HEAD, move onto the cloud's head, write them
-back, record ONE version, push. That is policy and belongs beside `combinePlan` in `src/core/sync`,
-not in a button handler, so the Combine button still says plainly that it is not wired rather than
-running a merge nobody asked for.
+**Wired.** `src/core/sync/combine.ts` is the move, as an Effect program over the Git, Remote and
+FileSystem ports and nothing else. Seven steps:
+
+1. `remote.fetch` — the cloud's head as of this second, not as of the screen. A combine onto a stale
+   head is the one way this move could lose somebody else's version.
+2. `git.resolve(repo, refs/remotes/origin/<branch>)` — the base to sit on.
+3. `git.show(HEAD, path)` for every path this device changed since the merge base, read while they
+   are still reachable.
+4. `remote.moveBranch(repo, branch, cloudHead)` — `writeRef` + a forced `checkout` on the Web,
+   `git_move_branch` over git2 on desktop. The work tree becomes the cloud's.
+5. write those bytes back over it.
+6. `git.commit(repo, receipts, "Combine: <n> books on top of the cloud", author)` — ONE version.
+7. `remote.push`.
+
+The file is in two halves and the split is the point. `planCombine` is PURE — one survey of facts
+in, one decision out — so every refusal is a unit test with no repository (`combine.test.ts`), and
+the ladder's ORDER is policy the same way `syncStateOf`'s is:
+
+| Refusal | What it means |
+| --- | --- |
+| `no-branch` | HEAD is detached or unborn; there is no branch to move. |
+| `no-work-here` | No versions on this device to replay. |
+| `no-cloud-copy` | The shared project has no copy of this branch. Publish first. |
+| `no-shared-version` | No version in common, so no base to measure "what I changed" against. |
+| `not-diverged` | Only one side moved: send or receive instead. |
+| `contested` | Both sides changed the same file. Never merged; compared. |
+| `unrecorded-work` | Files written but not recorded. The move is forced — they would be discarded. |
+| `deletion` | `Git.commit` stages receipts, and a receipt cannot say "this file is gone". |
+| `nothing-to-replay` | This device's versions changed no file. |
+
+`contested` outranks every mechanical objection below it: when two people wrote the same book, that
+is the thing to say, not that some third file happens to be unsaved. It is decided per FILE as well
+as per book — `combinePlan` settles scripture, and a straight path intersection catches a manifest
+or a versification file both sides touched, where "keep mine" would otherwise be a silent decision.
+
+**The transaction.** Everything that can refuse happens before step 4, and every failure after it is
+undone: the branch goes back to the version it was on and `moveBranch`'s forced checkout restores
+the work tree. `CombineError.state` says which of three situations the repository is in — `untouched`
+(a refusal, or anything up to and including the move), `restored` (put back; nothing reached the
+cloud), or `stranded` (the move happened and the restore failed too). That last one is the only one
+that needs a person, which is why it has a word rather than a stack trace.
+
+**Two presses.** The first runs `previewCombine` — reads only, no network — and puts the books that
+would keep this device's version into a confirmation dialog. The second runs `combine`, which
+fetches and decides again, so a shared project that moved while the dialog was open is caught by the
+program rather than trusted from the screen.
+
+**Proved end to end.** `src/platform/web/combine.test.ts` runs the seven steps over real git
+objects: two repositories in one in-memory file system, and a transport that copies loose objects
+between them, because isomorphic-git speaks smart HTTP and nothing else — there is no local or
+`file://` transport to point a second repository at. It asserts the three outcomes that matter: one
+version on top of theirs with both books right, a contested book refused with the repository
+untouched, and a failed send rolled back to the version and the work tree it started from.
+
+**One survey, two callers.** `src/core/sync/survey.ts` reads the three revisions of every file the
+cloud touched and hands them to `incomingPlan`. It lives in core because both the screen's reading
+and the combine ask the same question, and if they computed "contested" separately the screen could
+offer a move the program then refuses.
 
 **Finish the transfer is wired.** `Remote.abortMerge(repo)` — isomorphic-git's `abortMerge` on the
 Web, `git_abort_merge` over git2 on desktop — puts the work tree back to HEAD and clears the merge
@@ -243,4 +298,9 @@ they touched the same one it is Compare. A list with only `diverged` would never
 
 The fixture lives in `src/app/ui/cloud/fixture.ts`, is reached only inside an `import.meta.env.DEV`
 branch, and changes nothing about the application's composition — `src/app/services.ts` does not
-know it exists.
+know it exists. `diverged-apart` also carries a `CombineReplay`, so the confirmation dialog is
+reachable with no repository the way every other card is; the real one comes from `previewCombine`.
+
+Combine runs on the Web today. On desktop it stops at the same place `/cloud` does — the four `Git`
+methods `src/platform/tauri/git.ts` refuses by name — so there is no cloud head to move onto until
+those land.
