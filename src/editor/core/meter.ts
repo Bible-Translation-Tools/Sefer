@@ -39,7 +39,7 @@ import { Prec, type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 import { analyzeCount } from "./analyzer";
-import { type Gesture, closeGesture, openGesture } from "./timing";
+import { closeGesture, openGesture, type Gesture } from "./timing";
 
 export interface Measured {
   /** DOM event to the last state update — the JS work, in milliseconds. */
@@ -59,8 +59,6 @@ export interface Meter {
   extension: Extension;
   open(): void;
 }
-
-const NOTHING: Gesture = new Map();
 
 /** Milliseconds, one decimal — the precision a person reads at. */
 const ms = (value: number): string => value.toFixed(1);
@@ -114,7 +112,13 @@ export function keystrokeMeter(sink: (m: Measured) => void): Meter {
   const settle = () => {
     if (!live) return;
     live = false;
-    const totals = closeGesture() ?? NOTHING;
+    const totals = closeGesture();
+    // The span ring's gesture bucket is one module-level slot, so if two views
+    // are metered at once the second to settle finds it already taken. A meter
+    // that did not own the bucket cannot attribute anything, and a second line
+    // reading `other=<the whole gesture>` would be a worse answer than none —
+    // so it says nothing and lets the meter that DID own it report.
+    if (totals === null) return;
     if (!(updates && (fromEvent || docChanged))) return;
     // Everything the paint callback needs is read HERE: a second gesture may
     // open before the frame lands, and it resets every one of these.

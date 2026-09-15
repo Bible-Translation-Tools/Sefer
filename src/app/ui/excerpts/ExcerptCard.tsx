@@ -307,7 +307,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
                   <span
                     class={
                       segment.current
-                        ? "rounded-xs bg-brand-light font-medium text-on-surface-primary ring-1 ring-brand"
+                        ? "rounded-xs bg-brand-light font-medium text-brand ring-1 ring-brand"
                         : segment.hit
                           ? "rounded-xs bg-surface-highlight text-on-surface-highlight"
                           : segment.marker
