@@ -227,6 +227,14 @@ const makeTauriRemote = (
           yield* attach(repo, url);
           yield* transfer("git_push", repo);
         }),
+      // The two local moves. No origin, no credential, no transport — git2
+      // does the whole thing, and the refusals (a branch that is not checked
+      // out, a repository with no merge in progress) are enforced in Rust.
+      moveBranch: (repo, branch, toCommit) =>
+        call<void>("git_move_branch", { root: repo.root, branch, toCommit }),
+
+      abortMerge: (repo) => call<void>("git_abort_merge", { root: repo.root }),
+
       progress: () => Stream.fromPubSub(events),
     } satisfies RemoteService;
   });

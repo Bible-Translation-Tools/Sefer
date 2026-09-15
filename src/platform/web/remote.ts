@@ -317,6 +317,41 @@ const makeWebRemote = (
           );
         }),
 
+      /**
+       * Combine's branch move: `writeRef` then a forced `checkout`, which is
+       * exactly what v1 did. Refused unless `branch` is the checked-out one,
+       * so the two hosts refuse the same thing — git2 checks it in Rust.
+       */
+      moveBranch: (repo, branch, toCommit) =>
+        Effect.gen(function* () {
+          const head = yield* branchOf(repo);
+          if (head !== branch) {
+            return yield* Effect.fail(
+              fail(
+                "Rejected",
+                `HEAD is on ${head}, not ${branch}; cannot move a branch that is not checked out`,
+              ),
+            );
+          }
+          yield* attempt(() =>
+            git.writeRef({
+              fs,
+              dir: repo.root,
+              ref: `refs/heads/${branch}`,
+              value: toCommit,
+              force: true,
+            }),
+          );
+          // Forced, because the point is to make the work tree BE the base the
+          // replay sits on. The caller has already committed what it replays.
+          yield* attempt(() => git.checkout({ fs, dir: repo.root, ref: branch, force: true }));
+        }),
+
+      // isomorphic-git throws when there is no `MERGE_HEAD`, which is the
+      // refusal the port promises: a reset with nothing in progress would be
+      // a silent discard rather than an undo.
+      abortMerge: (repo) => Effect.asVoid(attempt(() => git.abortMerge({ fs, dir: repo.root }))),
+
       progress: () => Stream.fromPubSub(events),
     } satisfies RemoteService;
 
