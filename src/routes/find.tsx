@@ -6,7 +6,7 @@ import ChevronUpIcon from "lucide-solid/icons/chevron-up";
 import RegexIcon from "lucide-solid/icons/regex";
 import SearchIcon from "lucide-solid/icons/search";
 import WholeWordIcon from "lucide-solid/icons/whole-word";
-import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
 import { t } from "../app/i18n";
 import { useShell } from "../app/ProjectContext";
@@ -21,6 +21,7 @@ import {
   SegmentedControl,
 } from "../app/ui/primitives";
 import { ShellGate } from "../app/ui/ShellGate";
+import * as Workflows from "../app/workflows/references";
 import type { BookId } from "../core/book/book";
 import { CorpusEngine } from "../core/galley";
 import * as Search from "../core/search/search";
@@ -63,7 +64,26 @@ import * as Search from "../core/search/search";
  * being typed, the three matching toggles, and the match cursor.
  */
 
-type Scope = "book" | "project";
+/**
+ * Where to look. The first two are this project's own books; `reference` is
+ * the Library's `source` and `reference` bindings, registered with their text
+ * so the engine can search them (`src/app/workflows/references.ts`).
+ *
+ * A reference hit is NOT an excerpt and is not offered as one: there is no
+ * Book behind it, nothing to seat, and nothing to edit. It renders as a
+ * reading — the resource it came from and the text around the match — because
+ * that is honestly all it is.
+ */
+type Scope = "book" | "project" | "reference";
+
+/**
+ * The last path segment of a registered reference id.
+ *
+ * The id is the resource file's whole path, which is right for the engine and
+ * unreadable on a card. The file name is what a translator recognises —
+ * `58-PHM.usfm` — and the full path is on the element for anyone debugging.
+ */
+const fileName = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
 
 interface FindSearch {
   readonly q?: string;
@@ -93,8 +113,37 @@ function Find() {
   const [wholeWord, setWholeWord] = createSignal(false, { name: "wholeWord" });
 
   const [hits, setHits] = createSignal<readonly Search.Hit[]>([], { name: "hits" });
+  const [referenceHits, setReferenceHits] = createSignal<readonly Search.ReferenceHit[]>([], {
+    name: "referenceHits",
+  });
   const [problem, setProblem] = createSignal("", { name: "problem" });
   const [cursor, setCursor] = createSignal(0, { name: "cursor" });
+
+  /**
+   * The project's bound references, registered with the corpus.
+   *
+   * Resolved once when the screen mounts and whenever the project changes,
+   * rather than before each search: registration is idempotent per id and
+   * unchanged text costs a checksum, but reading every reference book off disk
+   * is not something to do on each Enter. It is also what decides whether the
+   * Reference segment is offered at all — a scope with nothing in it is worse
+   * than no scope, because it answers "no matches" to a question it never
+   * asked.
+   */
+  const [bound, setBound] = createSignal(Workflows.EMPTY, { name: "boundReferences" });
+
+  createEffect(
+    () => shell.project()?.root,
+    (root) => {
+      if (root === undefined) {
+        setBound(Workflows.EMPTY);
+        return;
+      }
+      void shell.services.run(Workflows.bindReferences(root)).then(setBound);
+    },
+  );
+
+  const hasReference = (): boolean => bound().ids.length > 0;
 
   /**
    * What the next search should look for.
@@ -133,13 +182,36 @@ function Find() {
     if (project === undefined) return;
     const books = project.books;
     const staticQuery = query(over);
-    const only = (over?.scope ?? scope()) === "book" ? focusedBook() : undefined;
+    const want = over?.scope ?? scope();
+    const only = want === "book" ? focusedBook() : undefined;
     const options = { limit: 500, ...(only === undefined ? {} : { books: [only] }) };
     if (staticQuery.text === "") {
       setHits([]);
+      setReferenceHits([]);
       setProblem("");
       return;
     }
+
+    // The reference scope is a different door and a different result shape —
+    // read-only hits in books this project does not own — so it is answered
+    // here rather than folded into the excerpt path below.
+    if (want === "reference") {
+      const found = await shell.services.run(
+        Effect.flatMap(CorpusEngine, (corpus) =>
+          Effect.result(Search.findInReferences(corpus, staticQuery, options)),
+        ),
+      );
+      setHits([]);
+      if (Result.isFailure(found)) {
+        setProblem(found.failure.description);
+        setReferenceHits([]);
+        return;
+      }
+      setProblem("");
+      setReferenceHits(found.success);
+      return;
+    }
+
     const found =
       staticQuery.regex === true
         ? Search.find(books, staticQuery, options)
@@ -148,6 +220,7 @@ function Find() {
               Effect.result(Search.findProjected(corpus, books, staticQuery, options)),
             ),
           );
+    setReferenceHits([]);
     if (Result.isFailure(found)) {
       setProblem(found.failure.description);
       setHits([]);
@@ -287,10 +360,24 @@ function Find() {
               label={t("Scope")}
               size="sm"
               value={scope()}
-              onChange={(next) => ask({ scope: next === "book" ? "book" : "project" })}
+              onChange={(next) =>
+                ask({
+                  scope: next === "book" ? "book" : next === "reference" ? "reference" : "project",
+                })
+              }
               items={[
                 { value: "book", label: t("This book"), disabled: focusedBook() === undefined },
                 { value: "project", label: t("Whole project") },
+                {
+                  value: "reference",
+                  label: t("Reference"),
+                  disabled: !hasReference(),
+                  title: hasReference()
+                    ? t("{count} reference book(s) bound to this project", {
+                        count: bound().ids.length,
+                      })
+                    : t("Bind a source or reference resource to this project to search it."),
+                },
               ]}
             />
 
@@ -301,11 +388,13 @@ function Find() {
             <div class="ms-auto flex items-center gap-1">
               <span
                 class="text-small tabular-nums text-on-surface-tertiary"
-                data-count={hits().length}
+                data-count={scope() === "reference" ? referenceHits().length : hits().length}
               >
-                {hits().length === 0
-                  ? t("0 results")
-                  : t("{at}/{total}", { at: cursor() + 1, total: hits().length })}
+                {scope() === "reference"
+                  ? t("{count} result(s)", { count: referenceHits().length })
+                  : hits().length === 0
+                    ? t("0 results")
+                    : t("{at}/{total}", { at: cursor() + 1, total: hits().length })}
               </span>
               <IconButton
                 size="sm"
@@ -331,29 +420,66 @@ function Find() {
           </p>
         </Show>
 
-        <ExcerptList
-          groups={feed.groups()}
-          outline={feed.outline()}
-          onOpen={feed.openInEditor}
-          seat={feed.seat}
-          analyze={feed.analyze}
-          onEdited={feed.edited}
-          onExpand={feed.expand}
-          focus={cursorSid()}
-          activeHit={cursorAt()}
-          mode={mode()}
-          empty={
-            <EmptyState
-              icon={<SearchIcon size={22} />}
-              title={
-                hits().length === 0 && text() !== "" ? t("No matches") : t("Nothing searched yet")
+        {/* The reference scope's own results: a reading, not a multibuffer.
+            No Edit, no Open in editor, no staleness badge — none of those mean
+            anything for a book this project does not own. */}
+        <Show when={scope() === "reference"}>
+          <div class="min-h-0 flex-1 overflow-auto" data-find-references>
+            <Show
+              when={referenceHits().length > 0}
+              fallback={
+                <EmptyState
+                  icon={<SearchIcon size={22} />}
+                  title={text() === "" ? t("Nothing searched yet") : t("No matches")}
+                  description={t("Searching {count} reference book(s), read-only.", {
+                    count: bound().ids.length,
+                  })}
+                />
               }
-              description={t(
-                "Results are grouped by verse, one card each, read-only until you edit.",
-              )}
-            />
-          }
-        />
+            >
+              <ul class="flex flex-col gap-2">
+                <For each={referenceHits()}>
+                  {(hit) => (
+                    <li>
+                      <Card class="flex flex-col gap-1" data-reference-hit={hit.source}>
+                        <p class="truncate text-smallest text-on-surface-tertiary">
+                          {fileName(hit.source)}
+                        </p>
+                        <p class="text-small break-words text-on-surface-primary">{hit.preview}</p>
+                      </Card>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </Show>
+          </div>
+        </Show>
+
+        <Show when={scope() !== "reference"}>
+          <ExcerptList
+            groups={feed.groups()}
+            outline={feed.outline()}
+            onOpen={feed.openInEditor}
+            seat={feed.seat}
+            analyze={feed.analyze}
+            onEdited={feed.edited}
+            onExpand={feed.expand}
+            focus={cursorSid()}
+            activeHit={cursorAt()}
+            mode={mode()}
+            empty={
+              <EmptyState
+                icon={<SearchIcon size={22} />}
+                title={
+                  hits().length === 0 && text() !== "" ? t("No matches") : t("Nothing searched yet")
+                }
+                description={t(
+                  "Results are grouped by verse, one card each, read-only until you edit.",
+                )}
+              />
+            }
+          />
+        </Show>
       </Show>
     </main>
   );
@@ -362,7 +488,9 @@ function Find() {
 export const Route = createFileRoute("/find")({
   validateSearch: (search: Record<string, unknown>): FindSearch => ({
     ...(typeof search["q"] === "string" && search["q"] !== "" ? { q: search["q"] } : {}),
-    ...(search["scope"] === "book" ? { scope: "book" as const } : {}),
+    ...(search["scope"] === "book" || search["scope"] === "reference"
+      ? { scope: search["scope"] }
+      : {}),
   }),
   /**
    * `/find?mode=stet` is a link to a screen this route no longer has. It is

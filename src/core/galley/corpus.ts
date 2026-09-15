@@ -25,13 +25,19 @@
  * `galley/tests/equivalence.rs` holds the parallel chapter map against the
  * serial one. `FindingsSnapshot.open` reads either.
  *
- * `Galley` still owns the knobs and `analyze`. This port is deliberately narrow:
+ * `Galley` still owns the settings and `analyze`. This port is deliberately narrow:
  * the five calls ProjectAnalysis makes off the keystroke path, and nothing else.
  */
 
 import { Context, Data, Effect, Layer } from "effect";
 
-import { Galley, type EngineHit, type FindQuery, type FindingsSnapshot } from "./galley";
+import {
+  Galley,
+  type EngineHit,
+  type FindQuery,
+  type FindScope,
+  type FindingsSnapshot,
+} from "./galley";
 
 /**
  * Which door a publication went through. Carried in telemetry only — the
@@ -72,11 +78,21 @@ export interface CorpusEngineService {
   readonly update: (id: string, text: string) => Effect.Effect<string, CorpusError>;
 
   /**
-   * The same, as a declared source: verse lengths only, no text. A reference
-   * publishes no findings of its own; it is the denominator a target's verses
-   * are compared against.
+   * The same, as a declared source. A reference publishes no findings of its
+   * own; it is the denominator a target's verses are compared against.
+   *
+   * `keepText` — omitted is `false`, which is verse lengths and nothing else —
+   * makes it retain the text, the mask and the projection a target retains, so
+   * that `find`'s `references` scope and the overlay doors can read it. It is
+   * a real cost per reference, which is why it is asked for rather than
+   * assumed: a project binds a source to be compared against, and only some of
+   * those are also searched or overlaid.
    */
-  readonly updateReference: (id: string, text: string) => Effect.Effect<string, CorpusError>;
+  readonly updateReference: (
+    id: string,
+    text: string,
+    keepText?: boolean,
+  ) => Effect.Effect<string, CorpusError>;
 
   /** Drop a book and its cached rows. `false` when the id was never known. */
   readonly remove: (id: string) => Effect.Effect<boolean, CorpusError>;
@@ -102,9 +118,17 @@ export interface CorpusEngineService {
    *
    * A book the corpus was never told about contributes no hits. Registration
    * is `ProjectAnalysis.attach`'s job, which registers every book of a project
-   * as it opens, so a find on an open project sees all of them.
+   * as it opens, so a find on an open project sees all of them — and
+   * `attachReferences`' for a bound source or reference, which is what the
+   * `references` scope reads.
+   *
+   * `scope` omitted is `targets`, so every existing caller searches exactly
+   * what it searched before.
    */
-  readonly find: (query: FindQuery) => Effect.Effect<readonly EngineHit[], CorpusError>;
+  readonly find: (
+    query: FindQuery,
+    scope?: FindScope,
+  ) => Effect.Effect<readonly EngineHit[], CorpusError>;
 
   /** Resident bytes on whichever side of the seam the corpus lives. */
   readonly residentBytes: () => Effect.Effect<number, CorpusError>;
@@ -137,11 +161,12 @@ export const WasmCorpusLive: Layer.Layer<CorpusEngine, never, Galley> = Layer.ef
       kind: "wasm",
       update: (id, text) =>
         Effect.try({ try: () => galley.update(id, text), catch: engineFailure }),
-      updateReference: (id, text) =>
-        Effect.try({ try: () => galley.updateReference(id, text), catch: engineFailure }),
+      updateReference: (id, text, keepText) =>
+        Effect.try({ try: () => galley.updateReference(id, text, keepText), catch: engineFailure }),
       remove: (id) => Effect.try({ try: () => galley.remove(id), catch: engineFailure }),
       publish: () => Effect.try({ try: () => galley.publish(), catch: engineFailure }),
-      find: (query) => Effect.try({ try: () => galley.findAll(query), catch: engineFailure }),
+      find: (query, scope) =>
+        Effect.try({ try: () => galley.findAll(query, scope), catch: engineFailure }),
       residentBytes: () => Effect.sync(() => galley.residentBytes()),
     };
   }),

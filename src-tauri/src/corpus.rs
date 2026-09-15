@@ -148,24 +148,32 @@ pub async fn corpus_update(
     .await?
 }
 
-/// The same, as a declared source: one projected grapheme length per verse and
-/// no text at all. A reference publishes no findings of its own; it is the
-/// denominator the length lane compares a target's verses against.
+/// The same, as a declared source. A reference publishes no findings of its
+/// own; it is the denominator the length lane compares a target's verses
+/// against.
+///
+/// `keep_text` decides what is retained. `false` — the default and the cheap
+/// case — is one projected grapheme length per verse and no text at all.
+/// `true` keeps the text, the mask and the projection a target keeps, which is
+/// what `corpus_find`'s `references` scope reads and what the overlay doors
+/// need. It costs what a target costs minus the resident analysis, so a
+/// reference nobody searches should stay off it.
 #[tauri::command]
 pub async fn corpus_update_reference(
     state: tauri::State<'_, CorpusState>,
     id: String,
     text: String,
+    keep_text: Option<bool>,
 ) -> Result<String, String> {
+    let retain = if keep_text.unwrap_or(false) {
+        Retain::Text
+    } else {
+        Retain::ProductsOnly
+    };
     ask(&state, move |sous| {
-        sous.update_with(
-            id.as_str(),
-            Role::Reference,
-            Retain::ProductsOnly,
-            text.as_str(),
-        )
-        .map(|key| key.to_string())
-        .map_err(|error| fail(ENGINE, error.to_string()))
+        sous.update_with(id.as_str(), Role::Reference, retain, text.as_str())
+            .map(|key| key.to_string())
+            .map_err(|error| fail(ENGINE, error.to_string()))
     })
     .await?
 }
@@ -214,6 +222,12 @@ pub async fn corpus_publish(state: tauri::State<'_, CorpusState>) -> Result<Resp
 ///
 /// `limit` bounds hits across the whole corpus, not per book; `0` means no
 /// bound. Literal only: there is no regex on this side of the wall.
+///
+/// `scope` is `"targets"` (the default), `"references"` or `"all"`, and it
+/// resolves to the same role list the wasm door's `find_all` resolves it to —
+/// one meaning for the word on both sides of the seam. A reference registered
+/// without `keep_text` retains no projection, so it is in no scope at all:
+/// `books_with_text` is what enumerates each role, not `books`.
 #[tauri::command]
 pub async fn corpus_find(
     state: tauri::State<'_, CorpusState>,
@@ -221,15 +235,15 @@ pub async fn corpus_find(
     case_sensitive: bool,
     whole_word: bool,
     limit: u32,
+    scope: Option<String>,
 ) -> Result<Response, String> {
+    let roles = scope_roles(scope.as_deref())?;
     let bytes = ask(&state, move |sous| {
         // Collected before the search so the registry's borrow ends: `find`
         // takes the Pantry mutably to read each book's retained projection.
-        let ids: Vec<BookId> = sous
-            .pantry()
-            .books(Role::Target)
+        let ids: Vec<BookId> = roles
             .iter()
-            .map(|(id, _)| id.clone())
+            .flat_map(|role| sous.pantry().books_with_text(*role))
             .collect();
         let find = Find::literal(needle.as_str())
             .case_insensitive(!case_sensitive)
@@ -238,6 +252,22 @@ pub async fn corpus_find(
     })
     .await?;
     Ok(Response::new(bytes))
+}
+
+/// A find scope as the roles it names. An unknown word is REFUSED rather than
+/// defaulted: "targets" is a meaningful default for an absent scope and a
+/// silent one for a misspelled scope, and the second would quietly search the
+/// wrong books.
+fn scope_roles(scope: Option<&str>) -> Result<Vec<Role>, String> {
+    match scope.unwrap_or("targets") {
+        "targets" => Ok(vec![Role::Target]),
+        "references" => Ok(vec![Role::Reference]),
+        "all" => Ok(vec![Role::Target, Role::Reference]),
+        other => Err(fail(
+            ENGINE,
+            format!("{other} is not a find scope: targets, references or all"),
+        )),
+    }
 }
 
 /// Resident bytes across the whole handle: the Pantry's texts and products, and
