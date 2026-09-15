@@ -60,7 +60,7 @@ export function ProjectSidebar() {
         .focused()
         ?.structure()
         .chapters.findIndex((chapter) => chapter.label === String(want.chapter));
-      if (at !== undefined && at >= 0) shell.setChapter(at);
+      if (at !== undefined && at >= 0) shell.showChapter(at);
     },
   );
 
@@ -101,17 +101,33 @@ export function ProjectSidebar() {
    *
    * `index` is carried rather than derived, because the engine's chapter table
    * begins with the FRONT MATTER: everything before the first chapter marker is
-   * its own row with an empty label. That row is a real clip target — it is
-   * what the identification and the table of contents live in — but it is not a
-   * chapter, so the grid drops it and keeps the index the editor clips by.
+   * its own row, with an empty label.
+   *
+   * That row gets a tile of its own, called "Intro". It is a real place — the
+   * identification, the table of contents, the main title all live there — and
+   * before this it was reachable from the palette and from nowhere a pointer
+   * could go. It is offered only when the book actually has front matter, so a
+   * book that starts at `\c 1` still shows a grid of chapters and nothing else.
    */
-  const chapters = (): readonly { readonly index: number; readonly label: string }[] => {
+  const chapters = (): readonly {
+    readonly index: number;
+    readonly label: string;
+    readonly intro: boolean;
+  }[] => {
     shell.tick();
     const book = shell.focused();
     if (book === undefined) return [];
-    const rows: { index: number; label: string }[] = [];
-    book.structure().chapters.forEach((chapter, index) => {
-      if (chapter.label !== "") rows.push({ index, label: chapter.label });
+    const rows: { index: number; label: string; intro: boolean }[] = [];
+    const table = book.structure().chapters;
+    table.forEach((chapter, index) => {
+      if (chapter.label !== "") {
+        rows.push({ index, label: chapter.label, intro: false });
+        return;
+      }
+      // The front matter row, and only if it holds something: an empty label
+      // on any row but the first is a malformed `\c`, not an introduction.
+      if (index === 0 && chapter.to > chapter.from)
+        rows.push({ index, label: t("Intro"), intro: true });
     });
     return rows;
   };
@@ -179,9 +195,15 @@ export function ProjectSidebar() {
                   <button
                     type="button"
                     data-chapter={chapter.index}
+                    data-testid={`chapter-tile-${chapter.intro ? "intro" : chapter.label}`}
                     data-current={shell.chapter() === chapter.index ? "" : undefined}
                     class="w-full cursor-pointer rounded-md border py-1 text-center text-smallest tabular-nums transition-colors data-current:border-brand data-current:bg-brand-light data-current:font-semibold data-current:text-brand not-data-current:border-surface-border not-data-current:bg-surface-primary not-data-current:text-on-surface-secondary not-data-current:hover:bg-sidebar-surface-hover"
-                    onClick={() => shell.setChapter(chapter.index)}
+                    /* Not `setChapter`. Clicking a chapter CLIPS only when the
+                       reader asked for one chapter at a time; otherwise it
+                       scrolls that chapter's `\c` anchor to the top and leaves
+                       the book whole. `showChapter` is where that is decided,
+                       once, for this grid and the location bar alike. */
+                    onClick={() => shell.showChapter(chapter.index)}
                   >
                     {chapter.label}
                   </button>

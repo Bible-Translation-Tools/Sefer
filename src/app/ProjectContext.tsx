@@ -39,7 +39,7 @@ import type { SettingKey } from "../core/host/settings";
 import { openProject as openProjectEffect, type Project } from "../core/project/project";
 import { DEFAULT_JOURNAL_POLICY, Recovery } from "../core/recovery/recovery";
 import { SaveCoordinator } from "../core/save/saveCoordinator";
-import type { EditorBook, ProjectionName } from "../editor";
+import { anchorFrom, type EditorBook, type ProjectionName } from "../editor";
 import { detectHost } from "../platform/host";
 import { registerShellCommands, type ShellBridge } from "./commands";
 import { useComposition } from "./CompositionContext";
@@ -48,6 +48,24 @@ import { registerProjectCommands } from "./projectCommands";
 import { composeServices, fixtureRequested, type Services } from "./services";
 import { shellKeys, SIDEBAR_WIDTH, type RecentProjects } from "./settings";
 import { applyEditorFontSize } from "./ui/theme";
+
+/**
+ * Where the editor should put the aimed-at offset.
+ *
+ * `centre` is what a finding or a search hit wants — the thing is a point in
+ * the middle of a page. `top` is what a chapter wants: arriving at Chapter 3
+ * means Chapter 3's heading is the first line you read, with the rest of the
+ * book below it.
+ */
+export type RevealAt = "top" | "centre";
+
+/** What the next open of `bookId` should scroll to, and how. */
+export interface Reveal {
+  readonly bookId: BookId;
+  readonly from: number;
+  readonly to?: number;
+  readonly at?: RevealAt;
+}
 
 export interface Shell {
   readonly services: Services;
@@ -121,10 +139,21 @@ export interface Shell {
    * does — and it is what the editor marks on arrival; without it there is a
    * position to scroll to and nothing to point at.
    */
-  readonly aim: (bookId: BookId, from: number, to?: number) => void;
-  readonly reveal: Accessor<
-    { readonly bookId: BookId; readonly from: number; readonly to?: number } | undefined
-  >;
+  readonly aim: (bookId: BookId, from: number, to?: number, at?: RevealAt) => void;
+  readonly reveal: Accessor<Reveal | undefined>;
+
+  /**
+   * Go to a chapter of the focused book — the sidebar's grid, the location
+   * bar's arrows and its outline all mean this.
+   *
+   * What "go to" means is the READER's preference, not the caller's: with
+   * "Open books one chapter at a time" on it CLIPS to the chapter, and with it
+   * off — the default, because a book is one document — it scrolls the
+   * chapter's `\c` anchor to the top of the viewport and leaves the rest of
+   * the book where it is. Every caller asks for the same thing and this is the
+   * one place that decides.
+   */
+  readonly showChapter: (ordinal: number) => void;
 
   /** The finding the "next/previous finding" commands point at. */
   readonly finding: Accessor<Finding | undefined>;
@@ -254,11 +283,7 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
   const [status, setStatus] = createSignal("", { name: "status" });
   const [paletteOpen, setPaletteOpen] = createSignal(false, { name: "paletteOpen" });
   const [cursor, setCursor] = createSignal(0, { name: "findingCursor" });
-  const [reveal, setReveal] = createSignal<
-    { bookId: BookId; from: number; to?: number } | undefined
-  >(undefined, {
-    name: "reveal",
-  });
+  const [reveal, setReveal] = createSignal<Reveal | undefined>(undefined, { name: "reveal" });
 
   // The one preference the shell reads outside the settings screen. Held in a
   // signal, and kept in step with a forked fiber over `settings.changes`, so
@@ -527,8 +552,23 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     setChapter(openingChapter(editing, at));
   };
 
-  const aim = (bookId: BookId, from: number, to?: number): void => {
-    setReveal(to === undefined ? { bookId, from } : { bookId, from, to });
+  const aim = (bookId: BookId, from: number, to?: number, at?: RevealAt): void => {
+    setReveal({ bookId, from, to, at });
+  };
+
+  const showChapter = (ordinal: number): void => {
+    const book = focused();
+    if (book === undefined) return;
+    if (preferChapterView()) {
+      setChapter(ordinal);
+      return;
+    }
+    const chapter = book.structure().chapters[ordinal];
+    if (chapter === undefined) return;
+    // A scroll is not a clip, and arriving at a chapter must not silently
+    // narrow the book: whatever clip was in force is dropped first.
+    setChapter(null);
+    aim(book.id, anchorFrom(chapter), undefined, "top");
   };
 
   const stepFinding = (delta: 1 | -1): void => {
@@ -603,6 +643,7 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     preferChapterView,
     aim,
     reveal,
+    showChapter,
     finding,
     tick,
     bump,

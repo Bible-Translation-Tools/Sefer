@@ -28,14 +28,27 @@
 
 @layer components {
   /* The CodeMirror frame: a white card the view fills. `.cm-host` (in
-     `src/editor/editor.css`) owns what happens inside it. */
+     `src/editor/editor.css`) owns what happens inside it.
+
+     A column of two, not one box: the location bar is pinned at the top of the
+     card and the view scrolls under it (`src/app/ui/workspace/LocationBar.tsx`).
+     The card clips rather than scrolls — CodeMirror's own scroller is what
+     moves — so the bar cannot be scrolled out of its own frame. */
   .editor-host {
+    display: flex;
     flex: 1;
+    flex-direction: column;
     background: var(--surface-primary);
     border: var(--border-thin) solid var(--surface-border);
     border-radius: var(--radius-lg);
-    overflow: auto;
+    overflow: hidden;
     min-block-size: 0;
+  }
+
+  .editor-host > .cm-host {
+    flex: 1;
+    min-block-size: 0;
+    overflow: auto;
   }
 
   .editor-host[data-mode="usfm"] .cm-editor {
