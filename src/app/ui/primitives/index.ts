@@ -42,5 +42,11 @@ export {
   type TableHeaderProps,
 } from "./Table";
 export { Toaster } from "./Toaster";
+export {
+  VirtualList,
+  type VirtualListProps,
+  type VirtualRow,
+  type VirtualSection,
+} from "./VirtualList";
 export { Tooltip, type TooltipProps, type TooltipSide } from "./Tooltip";
 export * as toasts from "./toasts";

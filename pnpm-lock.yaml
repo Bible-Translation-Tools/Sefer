@@ -136,6 +136,9 @@ importers:
       '@tanstack/solid-router':
         specifier: ^2.0.0-rc.4
         version: 2.0.0-rc.4(@solidjs/web@2.0.0-rc.6(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6)
+      '@tanstack/virtual-core':
+        specifier: ^3.17.11
+        version: 3.17.11
       '@tauri-apps/api':
         specifier: ^2.11.1
         version: 2.11.1
@@ -1238,6 +1241,9 @@ packages:
     peerDependencies:
       '@solidjs/web': '>=2.0.0-0 <3.0.0'
       solid-js: '>=2.0.0-0 <3.0.0'
+
+  '@tanstack/virtual-core@3.17.11':
+    resolution: {integrity: sha512-+ILjvtHup6Y2hzQ6YzwMgX1Q+oQpxEGOXCEsCNaPoIP0VxMbizIBTmYTDtkerkIQS8/CbP1BRuyt8V/8BCsy1g==}
 
   '@tanstack/virtual-file-routes@1.162.0':
     resolution: {integrity: sha512-uhOeFyxLcU41HzvrxsGpiWdcMbScY1EDgbZ5K7DVRMYInbLYWAC0EA/kx9wXAoSM8q82bUG2hRl8+EAjE6XAbA==}
@@ -3767,6 +3773,8 @@ snapshots:
       '@tanstack/router-core': 1.171.22
       isbot: 5.2.2
       solid-js: 2.0.0-rc.6
+
+  '@tanstack/virtual-core@3.17.11': {}
 
   '@tanstack/virtual-file-routes@1.162.0': {}
 

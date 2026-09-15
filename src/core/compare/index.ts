@@ -5,7 +5,7 @@
  * inside it — which is what keeps "a new source is a new file" true, since a
  * new source is then one more line in this barrel and nothing else.
  *
- * See documentation/architecture/compare.md.
+ * See documentation/architecture/review.md.
  */
 
 export {

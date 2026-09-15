@@ -17,7 +17,7 @@
 //
 // ## Freshness: live, and deliberately
 //
-// `compare.md` asks a source to be a SNAPSHOT, so a side cannot move under a
+// `review.md` asks a source to be a SNAPSHOT, so a side cannot move under a
 // decision already made. `currentProjectSource` already breaks that on purpose
 // (it reads `project.book(id)` on every call, which is what makes a comparison
 // of an open book show unsaved keystrokes), and `savedSource` does the same:
@@ -55,7 +55,7 @@ export interface SavedText {
  * touched the book at all — its text IS the bytes on disk. Reporting such a
  * book as absent would put all sixty-six books of a project somebody merely
  * opened on the "only in the editor" side, which is the exact bug the review's
- * baseline rule exists to prevent (documentation/architecture/save.md).
+ * baseline rule exists to prevent (documentation/architecture/review.md).
  */
 export const savedSource = (
   project: Project,

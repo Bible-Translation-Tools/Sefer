@@ -13,7 +13,7 @@ What is new is that `decode` no longer *forgets* what it normalised. It records 
 - **`eol`** — the file's DOMINANT line ending. CRLF and bare LF each get a vote and the majority wins; a tie, including a file with no line ending at all, is `lf`. A bare CR (classic Mac) is normalised to LF on the way in and does not vote. `dominantEol(text)` is exported for anyone who needs the same answer about a string.
 - **`bom`** — whether the file began with a UTF-8 byte order mark. The mark is stripped from the text and put back by `encode`.
 
-`apply` carries the form through unchanged, and so do both Book implementations: the form belongs to the bytes, not to the edit. Two Sources with the same text and different forms are **the same text** — the form is never part of any comparison, only of `encode`. A file that mixed line endings becomes uniform in its majority form the first time it is written; see [save](save.md) for what that means to a reader.
+`apply` carries the form through unchanged, and so do both Book implementations: the form belongs to the bytes, not to the edit. Two Sources with the same text and different forms are **the same text** — the form is never part of any comparison, only of `encode`. A file that mixed line endings becomes uniform in its majority form the first time it is written; see [save](review.md) for what that means to a reader.
 
 A byte order mark and a mixed-newline file used to be refusals. They are read now, because refusing them meant a project Sefer could list and not open.
 
@@ -55,4 +55,4 @@ A `Receipt` is `{ before, after, origin }`: the stamp on each side of the edit a
 
 Readers cannot tell the two apart, which is the point: Save, Recovery, ProjectAnalysis and the UI subscribe once, through the port, and trust that they saw every edit. A view bound with `bindView` **must** route its transactions through `fromView`; a view that dispatched on its own would make publication silently incomplete, so `apply` throws rather than report a receipt nobody heard.
 
-See [the editor](editor.md) for the phases and [save](save.md) for what subscribes.
+See [the editor](editor.md) for the phases and [save](review.md) for what subscribes.
