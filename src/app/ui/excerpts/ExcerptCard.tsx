@@ -54,11 +54,18 @@ interface Segment {
   readonly text: string;
   readonly hit: boolean;
   readonly dim: boolean;
+  /** A verse number to paint before this segment — `Excerpt.verses`. */
+  readonly verse?: string;
 }
 
 /**
  * The excerpt's text cut at every boundary the model named, so one pass of
- * `<For>` renders highlight and context without nesting or overlap logic.
+ * `<For>` renders highlight, context and verse numbers without nesting or
+ * overlap logic.
+ *
+ * A verse number is not a slice of the text — it is markup the projection
+ * dropped — so it rides on the segment that STARTS at its offset, and the cut
+ * it adds is what guarantees there is one.
  */
 const segmentsOf = (excerpt: Excerpt): readonly Segment[] => {
   const cuts = new Set<number>([0, excerpt.text.length]);
@@ -66,6 +73,7 @@ const segmentsOf = (excerpt: Excerpt): readonly Segment[] => {
     cuts.add(mark.from);
     cuts.add(mark.to);
   }
+  for (const verse of excerpt.verses) cuts.add(verse.at);
   if (excerpt.focus !== null) {
     cuts.add(excerpt.focus.from);
     cuts.add(excerpt.focus.to);
@@ -77,14 +85,19 @@ const segmentsOf = (excerpt: Excerpt): readonly Segment[] => {
     const from = bounds[index]!;
     const to = bounds[index + 1]!;
     if (to <= from) continue;
+    const verse = excerpt.verses.find((mark) => mark.at === from);
     out.push({
       text: excerpt.text.slice(from, to),
       hit: excerpt.marks.some((mark) => mark.from <= from && mark.to >= to),
       dim: excerpt.focus !== null && (to <= excerpt.focus.from || from >= excerpt.focus.to),
+      ...(verse === undefined ? {} : { verse: verse.label }),
     });
   }
   return out;
 };
+
+/** The editor's `.usfm-verse`, in the card's vocabulary. */
+const VERSE = "align-super font-sans text-[0.66em] font-bold text-brand select-none";
 
 /**
  * The strip a reader clicks for one more verse — Zed's multibuffer handles,
@@ -182,18 +195,28 @@ export function ExcerptCard(props: ExcerptCardProps) {
           <p class="px-3 py-2 font-scripture text-body leading-relaxed text-on-surface-primary">
             <For each={segments()}>
               {(segment) => (
-                <span
-                  class={
-                    segment.hit
-                      ? "rounded-xs bg-surface-highlight text-on-surface-highlight"
-                      : segment.dim
-                        ? "text-on-surface-tertiary"
-                        : undefined
-                  }
-                  data-hit={segment.hit ? "true" : undefined}
-                >
-                  {segment.text}
-                </span>
+                <>
+                  <Show when={segment.verse}>
+                    {(label) => (
+                      <span class={VERSE} data-verse={label()}>
+                        {label()}
+                        {"\u2009"}
+                      </span>
+                    )}
+                  </Show>
+                  <span
+                    class={
+                      segment.hit
+                        ? "rounded-xs bg-surface-highlight text-on-surface-highlight"
+                        : segment.dim
+                          ? "text-on-surface-tertiary"
+                          : undefined
+                    }
+                    data-hit={segment.hit ? "true" : undefined}
+                  >
+                    {segment.text}
+                  </span>
+                </>
               )}
             </For>
           </p>

@@ -81,6 +81,12 @@ export interface Excerpt {
   readonly text: string;
   readonly marks: readonly Mark[];
   /**
+   * The verse numbers to paint over `text`, in order — `Projection.verses` for
+   * exactly this span. The card draws them superscript, as the editor does in
+   * regular mode, so three verses of context read as three verses.
+   */
+  readonly verses: readonly VerseMark[];
+  /**
    * Where the excerpt's OWN verse sits in `text` — the rest is the verse
    * either side. A card dims the context with it, so the reader can see which
    * sentence the reference names without a second reference per line.
@@ -163,6 +169,26 @@ const sidOf = (bookId: BookId, chapter: number, first: number, last: number): st
 export interface Projection {
   readonly text: string;
   readonly src: Int32Array;
+  /**
+   * Where each verse of the span begins in `text`, in order.
+   *
+   * The projection drops `\v 4` with every other marker — it is markup, not
+   * the reading — and a page that then shows three verses as one paragraph has
+   * lost the only thing a reader navigates by. So the ANCHORS come back as
+   * their own segment kind: no character of `text` is one, nothing indexes
+   * into `text` differently because of them, and a caller that ignores the
+   * field gets exactly the string it got before. The editor paints the same
+   * marks the same way in regular mode (`.usfm-verse` in `editor.css`).
+   */
+  readonly verses: readonly VerseMark[];
+}
+
+/** One verse number to paint, and the offset in the projected text it sits at. */
+export interface VerseMark {
+  /** An offset into `Projection.text` — the first character of the verse. */
+  readonly at: number;
+  /** `4`, or `4-5` for a bridge. What the page shows, not a number. */
+  readonly label: string;
 }
 
 const isSpace = (code: number): boolean => code === 32 || code === 9 || code === 10 || code === 13;
@@ -179,6 +205,18 @@ const isSpace = (code: number): boolean => code === 32 || code === 9 || code ===
 export const project = (analysis: Analysis, from: number, to: number): Projection => {
   const out: number[] = [];
   const map: number[] = [];
+  // The verse anchors inside the span, in order, consumed as the output passes
+  // them. From the TOC, which is the only thing that knows where a verse
+  // begins — the `\v` token itself is about to be dropped.
+  const anchors = analysis.dish.toc
+    .verses()
+    .filter((row) => row.at >= from && row.at < to)
+    .map((row) => ({
+      at: row.at,
+      label: row.first === row.last ? `${row.first}` : `${row.first}-${row.last}`,
+    }));
+  const verses: VerseMark[] = [];
+  let anchor = 0;
   // Note bodies are dropped whole: `\f + \ft …\f*` is apparatus, not the
   // reading, and the engine's own find agrees (galley/src/find.md).
   let note = 0;
@@ -216,6 +254,12 @@ export const project = (analysis: Analysis, from: number, to: number): Projectio
         map.push(gapAt);
         gapAt = -1;
       }
+      // After the separating space and before the character: the space belongs
+      // to the verse that ended, the number to the verse that starts here.
+      while (anchor < anchors.length && anchors[anchor]!.at <= at) {
+        verses.push({ at: out.length, label: anchors[anchor]!.label });
+        anchor += 1;
+      }
       out.push(code);
       map.push(at);
     }
@@ -228,7 +272,7 @@ export const project = (analysis: Analysis, from: number, to: number): Projectio
   for (let at = 0; at < out.length; at += 4096)
     text += String.fromCharCode(...out.slice(at, at + 4096));
 
-  return { text, src: Int32Array.from(map) };
+  return { text, src: Int32Array.from(map), verses };
 };
 
 /**
@@ -424,6 +468,7 @@ const buildExcerpt = (
     hits: held,
     text: projection.text,
     marks: marksFor(projection, held.flatMap(rangesOf)),
+    verses: projection.verses,
     focus:
       verse === undefined
         ? null
