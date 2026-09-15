@@ -184,6 +184,19 @@ export interface SaveCoordinatorOptions {
    * computes no hash; without this, identity is the revision only.
    */
   readonly hasher?: (text: string) => bigint;
+  /**
+   * Run after a successful write, on the same fiber, once the bytes are on
+   * disk. Composition's hook for the things that describe a file rather than
+   * contain it — today the Scripture Burrito ingredient checksums
+   * (`src/core/resources/checksum.ts`), which are wrong the moment a book is
+   * saved and which Save itself must not know about.
+   *
+   * Every autosave goes through `save`, which is why this is an option here
+   * rather than a decorator around the service: a wrapper outside would see
+   * the explicit saves and miss the ones that matter most. A failure is
+   * ignored — the project's own bytes are already written.
+   */
+  readonly onSaved?: (receipt: SaveReceipt) => Effect.Effect<void, unknown>;
 }
 
 export const DEFAULT_AUTOSAVE_POLICY: DebouncePolicy = { idleMs: 1200, maxIntervalMs: 15000 };
@@ -347,6 +360,8 @@ const make = (
               book.id,
             );
         }
+        // 8 what composition hangs off a completed write (see `onSaved`).
+        if (options.onSaved !== undefined) yield* Effect.ignore(options.onSaved(receipt));
         return receipt;
       });
 

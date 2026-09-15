@@ -315,12 +315,22 @@ const make = (
         (text) => Effect.fromResult(parseJournal(id, text)),
       );
 
-    /** Every journal id on disk, `<projectId>/<bookId>`; empty when there is no root. */
+    /**
+     * Every journal id on disk, `<projectId>/<bookId>`; empty when there is no
+     * root.
+     *
+     * At least two segments, not exactly two: a `ProjectId` is a PATH (plus a
+     * `#primary` suffix when the folder is a burrito), so a journal for
+     * `/sefer/projects/small-nt` lands four directories down and an
+     * exactly-two rule listed none of them — which is to say `pending` found
+     * nothing on either real host. The id is only a handle; a journal's
+     * identity is the header it carries, which is what `pending` reads.
+     */
     const listIds = Effect.map(
       Effect.orElseSucceed(fileSystem.readDirectory(root, { recursive: true }), () => []),
       (names) =>
         names
-          .filter((name) => name.endsWith(JOURNAL_SUFFIX) && name.split("/").length === 2)
+          .filter((name) => name.endsWith(JOURNAL_SUFFIX) && name.split("/").length >= 2)
           .map((name) => name.slice(0, -JOURNAL_SUFFIX.length)),
     );
 

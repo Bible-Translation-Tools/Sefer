@@ -7,13 +7,26 @@
  * directory listing (a book count). Both degrade — a folder with no
  * `metadata.json` is still a project, it is just one whose name is its folder.
  *
- * `lastOpened` comes from `shell.recentProjects`, which `open()` writes. It is
- * the only field the filesystem cannot answer.
+ * Those two cheap things are still two reads per project per visit, which is
+ * why the answers are written down: `src/core/project/projectIndex.ts` holds
+ * one row per project and `listProjects` below reads THAT, calling `summarize`
+ * only for a folder the index has never heard of. The index is the list; this
+ * file is how a row is first learned and how the fixture — which is in memory
+ * and belongs in no index — joins it.
+ *
+ * `lastOpened` is the one field the filesystem cannot answer. It lives in the
+ * index, written as a project is opened, and falls back to the
+ * `shell.recentProjects` preference for a row written before this build.
  */
 
 import { Effect, FileSystem, Option, Result } from "effect";
 
 import { ProjectAdmin } from "../../../core/admin/projectAdmin";
+import {
+  recordProject,
+  repairProjectIndex,
+  type ProjectRow,
+} from "../../../core/project/projectIndex";
 import type { BurritoMetadata } from "../../../core/resources/burrito";
 import type { Domain } from "../../services";
 
@@ -93,21 +106,64 @@ export const summarize = (
     };
   });
 
-/** Every project root under `projectsRoot`, plus the fixture when seeded. */
-export const listProjectRoots = (
+/** A summary as the index stores it: the four facts, minus how we drew them. */
+export const asRow = (summary: ProjectSummary): ProjectRow => ({
+  root: summary.root,
+  name: summary.name,
+  language: summary.language,
+  books: summary.books,
+  ...(summary.lastOpened === undefined ? {} : { lastOpened: summary.lastOpened }),
+});
+
+/** A row as the table draws it. `folder` is derived; the index need not store it. */
+const asSummary = (row: ProjectRow, lastOpened: string | undefined): ProjectSummary => ({
+  root: row.root,
+  folder: lastSegment(row.root),
+  name: row.name,
+  language: row.language,
+  books: row.books,
+  lastOpened: row.lastOpened ?? lastOpened,
+  fixture: false,
+});
+
+/**
+ * The projects list, from the index — one file read — repaired against the
+ * folder names actually present, and with the seeded fixture in front of it.
+ *
+ * `recent` is `shell.recentProjects`, used only where the index has no
+ * `lastOpened` of its own: an index row written before this build knows the
+ * project but not when it was last visited, and the preference still does.
+ */
+export const listProjects = (
   projectsRoot: string,
   fixtureRoot: string | undefined,
-): Effect.Effect<readonly { readonly root: string; readonly fixture: boolean }[], never, Domain> =>
+  recent: Readonly<Record<string, string>>,
+): Effect.Effect<readonly ProjectSummary[], never, Domain> =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
-    const names = yield* Effect.orElseSucceed(
-      fileSystem.readDirectory(projectsRoot),
-      (): readonly string[] => [],
+    const rows = yield* repairProjectIndex(fileSystem, projectsRoot, (root) =>
+      // Only ever called for a folder with no row: the first sight of a
+      // project Sefer did not import (a sync client, a copy, an older build).
+      Effect.map(summarize(root, recent[root], false), asRow),
     );
-    const roots = [...names]
-      .sort()
-      .map((name) => ({ root: `${projectsRoot}/${name}`, fixture: false }));
-    return fixtureRoot === undefined ? roots : [{ root: fixtureRoot, fixture: true }, ...roots];
+    const listed = rows.map((row) => asSummary(row, recent[row.root]));
+    if (fixtureRoot === undefined) return listed;
+    // The fixture lives in memory, per page. It belongs in no index — writing
+    // it down would leave a row for a project that vanishes on reload.
+    const fixture = yield* summarize(fixtureRoot, recent[fixtureRoot], true);
+    return [fixture, ...listed];
+  });
+
+/** Adds or refreshes one project's row — import, create and rename all end here. */
+export const rememberProject = (
+  projectsRoot: string,
+  root: string,
+  lastOpened: string | undefined,
+): Effect.Effect<void, never, Domain> =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const summary = yield* summarize(root, lastOpened, false);
+    yield* Effect.ignore(recordProject(fileSystem, projectsRoot, asRow(summary)));
   });
 
 /** Human date for the table; an absent value is the caller's em dash. */
