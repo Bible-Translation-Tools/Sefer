@@ -5,12 +5,18 @@
  * here rather than one being mistaken for the other:
  *
  *   * `unsavedChanges` is against the last write to DISK
- *     (`SaveCoordinator.baseline`). Nothing writes on a timer, so this is
- *     non-empty for as long as there is unrecorded work. It is a status line,
- *     not a review.
+ *     (`SaveCoordinator.baseline`) — what the file holds right now. This is
+ *     the REVIEW answer: under explicit-only saving the file is exactly the
+ *     thing a reader has not yet agreed to change, and the books that differ
+ *     from it are the books they are about to record.
  *   * `recordedChanges` is against the last recorded VERSION (the blob at
- *     HEAD, read by `recorded.ts`). This is what a review screen means by
- *     "what has changed", and the only one a commit should be built from.
+ *     HEAD, read by `recorded.ts`). That is HISTORY's question — "what has
+ *     happened since the last commit" — and it is the wrong one for Save &
+ *     Review. It was the right one when the file was written on a timer,
+ *     because then the file was not a decision; it is not any more, and using
+ *     it cost an untouched 66-book project a review reading "66 books to
+ *     record, diff of 92208" the first time it was opened without a
+ *     repository.
  *
  * Nothing here subscribes to anything — the caller reads `shell.tick()` to
  * make the answer reactive, which is the single-subscription rule the shell
@@ -104,15 +110,19 @@ export const recordedChanges = (shell: Shell, recorded: Recorded): readonly Book
 };
 
 /**
- * Every open book whose working text differs from what was last WRITTEN.
+ * Every book whose working text differs from the bytes in its FILE.
  *
- * The status-line answer, not the review one. Under explicit-only saving it
- * usually agrees with `recordedChanges` — writing the file and recording the
- * version are one action — and the two part company in exactly one case: a
- * write that succeeded under a commit that did not. A book with no baseline is
- * skipped rather than reported as wholly new — Save adopts a baseline where
- * the shell opens a book, so "no baseline" means this book was never opened in
- * this session and there is nothing on screen to diff.
+ * The review answer. "Differs" is decided by the diff itself — LF-normalised
+ * canonical text on both sides, because that is the only form a `Baseline`
+ * ever holds — so a book whose line endings or byte order mark differ from
+ * ours is not a change and does not list.
+ *
+ * A book with no baseline is skipped rather than reported as wholly new. Save
+ * adopts a baseline wherever the shell opens a book (`ProjectContext.focus`)
+ * and wherever Recovery replays one, so "no baseline" means nothing has
+ * touched this book in this session — its text IS the file's, and listing all
+ * 66 books of a project somebody merely opened is the bug this rule exists to
+ * prevent.
  */
 export const unsavedChanges = (shell: Shell): readonly BookChanges[] => {
   shell.tick();
