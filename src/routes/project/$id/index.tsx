@@ -1,5 +1,5 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/solid-router";
-import { For, Show, createEffect, createSignal } from "solid-js";
+import { For, Show, createEffect, createSignal, untrack } from "solid-js";
 
 import { runCommand } from "../../../app/commands";
 import { t } from "../../../app/i18n";
@@ -41,7 +41,10 @@ function ProjectPage(props: { readonly root: string; readonly census: boolean })
     () => ({ root: props.root, census: props.census, held: shell.project() }),
     ({ root, census, held }) => {
       if (census || held === undefined || held.root !== root) return;
-      const where = shell.lastLocation(root);
+      // Untracked: an effect's callback does not track in Solid 2, and asking
+      // it to would be wrong anyway — this reads where the reader WAS at the
+      // moment the project opened, not a place that then follows them around.
+      const where = untrack(() => shell.lastLocation(root));
       if (where === undefined || !held.books.some((book) => book.id === where.bookId)) return;
       void navigate({
         to: "/project/$id/book/$book",
@@ -58,7 +61,7 @@ function ProjectPage(props: { readonly root: string; readonly census: boolean })
   createEffect(
     () => props.root,
     (root) => {
-      if (shell.project()?.root === root) return;
+      if (untrack(() => shell.project()?.root) === root) return;
       setOpening(true);
       void shell.openProject(root).finally(() => setOpening(false));
     },

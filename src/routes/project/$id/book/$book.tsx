@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/solid-router";
-import { Show, createEffect } from "solid-js";
+import { Show, createEffect, untrack } from "solid-js";
 
 import { t } from "../../../../app/i18n";
 import { useShell } from "../../../../app/ProjectContext";
@@ -47,7 +47,13 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
   createEffect(
     () => ({ root: props.root, bookId: props.bookId }),
     ({ root, bookId }) => {
-      const opened = shell.project()?.root === root ? Promise.resolve() : shell.openProject(root);
+      // `untrack`, and not merely a read: an effect's callback is an untracked
+      // scope in Solid 2, so a bare `shell.project()` here is a read the
+      // runtime warns about (STRICT_READ_UNTRACKED) rather than a subscription.
+      // It is a deliberate one-time question — is the project this URL names
+      // already open — and saying so to the compiler is the whole fix.
+      const open = untrack(() => shell.project()?.root);
+      const opened = open === root ? Promise.resolve() : untrack(() => shell.openProject(root));
       void opened.then(() => shell.focus(bookId));
     },
   );

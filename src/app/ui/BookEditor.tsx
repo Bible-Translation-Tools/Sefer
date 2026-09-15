@@ -6,7 +6,8 @@
  * not hold a second copy of it. So:
  *
  *  - The view is created ONCE, over `book.state`, and destroyed in
- *    `onCleanup`. Solid never re-renders it — components run once, and the
+ *    the mount effect's returned cleanup. Solid never re-renders it — a
+ *    component runs once, and the
  *    document is CodeMirror's business from here down. A different book means
  *    a different component instance (the route keys on the book id).
  *  - Every transaction goes through `book.fromView`, which is where a keystroke
@@ -33,7 +34,7 @@ import { Compartment, StateEffect } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { useNavigate } from "@tanstack/solid-router";
 import { Effect, Fiber, Stream } from "effect";
-import { createEffect, createRenderEffect, createSignal, onCleanup } from "solid-js";
+import { createEffect, createRenderEffect, createSignal, untrack } from "solid-js";
 
 import { stale } from "../../core/findings/finding";
 import type { SourceStamp } from "../../core/source/source";
@@ -94,6 +95,8 @@ interface Bound {
 
 export function BookEditor(props: BookEditorProps) {
   const shell = useShell();
+  // The book this instance is for, read once — see the mount effect below.
+  const bookId = untrack(() => props.book.id);
   const navigate = useNavigate();
   const go = (to: string): void => {
     // SAFETY: the project path is built at runtime from a root, which no route
@@ -119,7 +122,12 @@ export function BookEditor(props: BookEditorProps) {
     () => host(),
     (parent) => {
       if (parent === undefined) return;
-      const book = props.book;
+      // A deliberate one-time read, said so the runtime believes it: an
+      // effect's callback is an untracked scope in Solid 2, and a bare
+      // `props.book` there is a read it warns about. This component is keyed on
+      // the book id (see the route), so a different book is a different
+      // instance and this prop cannot change under a mounted view.
+      const book = untrack(() => props.book);
 
       let view: EditorView | undefined;
       view = new EditorView({
@@ -239,7 +247,12 @@ export function BookEditor(props: BookEditorProps) {
 
       setBound({ view: created, projection });
 
-      onCleanup(() => {
+      // RETURNED, not `onCleanup`. A Solid 2 effect's cleanup is its return
+      // value; `onCleanup` inside an effect callback is called outside any
+      // owner and never runs at all (NO_OWNER_CLEANUP, which the dev build says
+      // out loud). Everything below was leaking: the view was never destroyed,
+      // the book stayed bound, and the analysis fiber outlived the screen.
+      return () => {
         unwatch();
         unname();
         Effect.runFork(Fiber.interrupt(watching));
@@ -247,7 +260,7 @@ export function BookEditor(props: BookEditorProps) {
         unbind();
         created.destroy();
         setBound(undefined);
-      });
+      };
     },
   );
 
@@ -282,7 +295,7 @@ export function BookEditor(props: BookEditorProps) {
   createEffect(
     () => ({ held: bound(), aimed: shell.reveal() }),
     ({ held, aimed }) => {
-      if (held === undefined || aimed === undefined || aimed.bookId !== props.book.id) return;
+      if (held === undefined || aimed === undefined || aimed.bookId !== bookId) return;
       const length = held.view.state.doc.length;
       const at = Math.min(aimed.from, length);
       const end = Math.min(aimed.to ?? at, length);
@@ -293,7 +306,7 @@ export function BookEditor(props: BookEditorProps) {
         effects: EditorView.scrollIntoView(at, { y: aimed.at === "top" ? "start" : "center" }),
       });
       const cancel = flash(held.view, { from: at, to: end });
-      onCleanup(cancel);
+      return cancel;
     },
   );
 
