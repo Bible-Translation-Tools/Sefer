@@ -18,6 +18,7 @@ Read only the guidance relevant to the task:
 - [Character inventory](documentation/architecture/inventory.md): read before touching `/inventory` or the Sous pattern table; covers what "occurrences" means and why the table is not a census of the project's characters.
 - [Findings](documentation/architecture/findings.md): the one `Finding` shape, the two stamps, what ProjectAnalysis holds, the filters, and the panel.
 - [The landing screens](documentation/architecture/landing.md): the project list, what each import source needs per host, the Catalogue port, and where Create stops.
+- [Compare](documentation/architecture/compare.md): read before touching `/compare` or adding a side to a comparison; covers the `CompareSource` port, why both sides are sources, the decision map, and what Apply writes and refuses.
 
 `src/App.tsx` calls `composeApplication()` exactly once; services reach components through `useComposition()` (`src/app/CompositionContext.tsx`).
 
