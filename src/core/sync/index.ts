@@ -1,8 +1,11 @@
 /**
- * The sync module's one door: the pure state machine and the incoming plan.
+ * The sync module's one door: the pure state machine, the incoming plan, and
+ * the one move that writes — Combine.
  *
- * Nothing in here does IO. See documentation/architecture/sync.md for the
- * states, the two clocks, and why scripture text is never merged automatically.
+ * Everything but `./combine.ts` and `./survey.ts` is pure; those two are
+ * Effect programs over the Git, Remote and FileSystem ports and nothing else.
+ * See documentation/architecture/sync.md for the states, the two clocks, and
+ * why scripture text is never merged automatically.
  */
 
 export {
@@ -34,3 +37,20 @@ export {
   type IncomingFile,
   type IncomingPlan,
 } from "./plan";
+
+export {
+  combine,
+  CombineError,
+  combineMessage,
+  planCombine,
+  previewCombine,
+  type CombineDecision,
+  type CombineOptions,
+  type CombineRefusal,
+  type CombineReplay,
+  type CombineResult,
+  type CombineState,
+  type CombineSurvey,
+} from "./combine";
+
+export { mergeBase, surveyIncoming, type IncomingSurvey, type SurveyOptions } from "./survey";
