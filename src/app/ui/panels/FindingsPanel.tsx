@@ -34,7 +34,7 @@
  * with two scopes is the smaller lie, and it needs no change to the shell.
  */
 
-import { useNavigate } from "@tanstack/solid-router";
+import { useNavigate, useSearch } from "@tanstack/solid-router";
 import { Option, Result } from "effect";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";
@@ -126,9 +126,52 @@ export function FindingsPanel() {
     name: "findingsExpanded",
   });
 
+  /**
+   * `?code=` and `?pattern=`, from the inventory's "the other sites of this
+   * pattern" link. They were already being sent and were silently dropped —
+   * a route that does not validate a search param does not receive it — and
+   * `/findings` validates them now.
+   */
+  // SAFETY: `strict: false` gives the union of every route's search; both
+  // fields are read as `unknown` and each is narrowed before it is used.
+  const search = useSearch({ strict: false }) as () => {
+    readonly code?: unknown;
+    readonly pattern?: unknown;
+  };
+
+  /** The pattern the link named, when it named one this list could be about. */
+  const pattern = (): number | undefined => {
+    const held = search().pattern;
+    return typeof held === "number" && Number.isInteger(held) && held >= 0 ? held : undefined;
+  };
+
+  /**
+   * Seeds the code filter from the URL, once per distinct code.
+   *
+   * A seed and not a lock: the chips are still the reader's, and "All codes"
+   * clears it. In an effect rather than at construction because the filter is
+   * restored from Settings first, and a write on the same tick as that read
+   * would be lost.
+   */
+  createEffect(
+    () => search().code,
+    (code) => {
+      if (typeof code !== "string" || code === "") return;
+      filters.update({ codes: [code] });
+    },
+  );
+
   const all = (): readonly Finding[] => {
     shell.tick();
-    return shell.project() === undefined ? [] : Findings.list(shell.services.projectAnalysis);
+    if (shell.project() === undefined) return [];
+    const listed = Findings.list(shell.services.projectAnalysis);
+    const only = pattern();
+    // A pattern is not one of `FindingsFilter`'s fields and should not become
+    // one: it is an address another screen hands over for one visit, not a
+    // preference anybody sets. So it narrows the list this panel calls "all",
+    // which keeps the header's "N of TOTAL shown" honest about the question
+    // that was actually asked.
+    return only === undefined ? listed : listed.filter((finding) => finding.pattern === only);
   };
 
   const isStale = (finding: Finding): boolean => {
@@ -445,14 +488,27 @@ export function FindingsPanel() {
         }
       />
 
-      <div class="grid items-start gap-4 lg:grid-cols-[17rem_minmax(0,1fr)]">
-        <FindingsFilters
-          state={filters}
-          facets={facets()}
-          books={books()}
-          class="lg:sticky lg:top-6"
-        />
+      {/* One toolbar row, not a column: the filters are four questions asked
+          rarely, and on a project of sixty-six books the book chips alone used
+          to push the findings below the fold. */}
+      <Card class="space-y-2">
+        <FindingsFilters state={filters} facets={facets()} books={books()} />
+        <Show when={pattern() !== undefined}>
+          <p class="flex flex-wrap items-center gap-2 text-smallest text-on-surface-tertiary">
+            <Badge tone="brand">{t("one pattern")}</Badge>
+            {t("Showing only the sites of the pattern /inventory sent over.")}
+            <Button
+              size="sm"
+              variant="tertiary"
+              onClick={() => void navigate({ to: "/findings", search: {} })}
+            >
+              {t("Show every finding")}
+            </Button>
+          </p>
+        </Show>
+      </Card>
 
+      <div class="grid items-start gap-4">
         <div class="min-w-0 space-y-3" data-findings={shown().length} data-view={filters.view()}>
           <Show when={note() !== ""}>
             <Card class="text-small text-on-surface-secondary">{note()}</Card>
