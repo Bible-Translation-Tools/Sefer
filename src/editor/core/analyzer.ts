@@ -17,6 +17,7 @@
 import { Facet } from "@codemirror/state";
 
 import type { Analysis } from "../../core/galley";
+import { span } from "./timing";
 
 /** One parse of one text. Canonical LF; the engine refuses a `\r`. */
 export type Analyze = (text: string) => Analysis;
@@ -50,7 +51,13 @@ let lastRevision = -1;
  * over-count; it is a meter, not a ledger.
  */
 export const analyzed = (analyze: Analyze, text: string): Analysis => {
+  // Timed as well as counted, so the keystroke meter's breakdown adds up to
+  // its gesture: the parse is the largest thing a keystroke does that is not
+  // one of the derivation spans, and unattributed time is the one bucket a
+  // reader cannot act on.
+  const done = span("analyze");
   const analysis = analyze(text);
+  done();
   if (analysis.revision !== lastRevision) {
     lastRevision = analysis.revision;
     parses += 1;

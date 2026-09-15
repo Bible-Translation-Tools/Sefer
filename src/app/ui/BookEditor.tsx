@@ -109,17 +109,13 @@ export function BookEditor(props: BookEditorProps) {
       // The mountable half of the editor is added here rather than baked into
       // the seat, because the canonical state must also work headless.
       // The keystroke meter closes one gesture per DOM event and reports the
-      // wall time from event to last update, the analyzes it cost, and the
-      // per-span totals. The ring gets one bounded note per gesture; the dev
+      // JS work, the time to paint, the analyzes it cost, and the per-span
+      // totals — which sum to the JS work. The line itself is the meter's
+      // (`Measured.note`), so the format lives beside the arithmetic that
+      // makes it add up. The ring gets one bounded note per gesture; the dev
       // surface keeps the last fifty measurements whole.
       const meter = keystrokeMeter((measured) => {
-        const totals = Array.from(measured.totals, ([name, t]) => `${name}=${t.ms.toFixed(1)}`);
-        observability.note(
-          "keystroke",
-          "ready",
-          `${measured.ms.toFixed(1)}ms analyzes=${measured.analyzes} ${totals.join(" ")}`,
-          book.id,
-        );
+        observability.note("keystroke", "ready", measured.note, book.id);
         keystrokes.push(measured);
         if (keystrokes.length > 50) keystrokes.shift();
       });

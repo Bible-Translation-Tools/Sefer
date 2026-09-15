@@ -102,7 +102,23 @@ Keep the application schema independent of the native writer. Tauri JSONL preser
 
 ## The keystroke meter
 
-When a book is mounted, the editor's `keystrokeMeter` closes one gesture per DOM event and writes one bounded note per gesture: `keystroke · ready · <wall ms> analyzes=<n> <span>=<ms> …`, correlated by book id. The wall time is DOM event to last CodeMirror update; the per-span totals (`phase:*`, `scan`, `index`, `decorate`, `paint`) come from the editor's own timing ring, and the engine's `analyze` span lands in this ring separately under the Galley adapter. In a dev build `globalThis.__sefer.editor` exposes `keystrokes()` (the last fifty measurements whole), `spans()` and `summary()` from that ring, plus `traces()` and `trace()` from the pipeline instrument.
+When a book is mounted, the editor's `keystrokeMeter` closes one gesture per DOM event and writes one bounded note per gesture, correlated by book id:
+
+```text
+keystroke · ready · gesture=4.6ms render=21.3ms analyzes=1 analyze=2.1 decorate=1.0 scan=0.7 paint=0.3 phase:admission=0.1 other=0.4
+```
+
+Read it left to right:
+
+- **`gesture`** — the JS work: the DOM event to the LAST state update of the gesture. This is the part Sefer's own code owns.
+- **`render`** — the same event to after the browser painted, measured by waiting a frame and then a macrotask inside it (a `requestAnimationFrame` callback runs *before* the paint). Omitted entirely when no frame was observed — a headless state, a background tab — rather than printed as a guess. It is always larger than `gesture` and it is not a sum: between the last update and the paint sit CodeMirror's measure pass, style and layout.
+- **`analyzes`** — parses the gesture actually caused, counted by `Analysis.revision` moving, so a memo hit is not counted.
+- **the per-span totals** — exclusive milliseconds per span inside the gesture, biggest first: `analyze` (the engine parse, timed in `core/analyzer.ts`), the derivation spans `scan`, `index`, `decorate`, `paint`, and one `phase:<name>` per editing phase that cost anything. Buckets under 0.05 ms are dropped from the line.
+- **`other`** — gesture milliseconds no span accounted for.
+
+**The arithmetic closes:** every printed span plus `other` sums to `gesture`. That is why the meter opens no span of its own — the old note printed a `keystroke=` wrapper span whose exclusive time ran past the last update to the macrotask that closed it, so the numbers added up to nothing in particular and the one wall number was ambiguous between JS work and time to paint.
+
+In a dev build `globalThis.__sefer.editor` exposes `keystrokes()` (the last fifty measurements whole — `{ gesture, render, analyzes, totals, other, note }`), `spans()` and `summary()` from the editor's timing ring, plus `traces()` and `trace()` from the pipeline instrument. The engine's own `analyze` span lands in this ring separately, under the Galley adapter.
 
 The editor's per-transaction instrument (`src/editor/core/instrument.ts`) writes this ring through `observabilityTracer`, which reads the level ONCE when a trace begins. At `verdicts` it writes one note per transaction, and only when a stage did not pass — the first such stage, which is the one a `Refusal` names; a paragraph of ordinary typing writes nothing. At `spans` and `all` it also writes a span per pipeline frame (`editor.phase.<name>`, `editor.command.<name>`) and a note per frame verdict, in pipeline order, so `recent()` reads as the keystroke's flow through the rules. Every one carries the correlation `<bookId>#<trace seq>`. Derivation spans (`scan`, `index`, `decorate`, `paint`) never cross: they run several times per keystroke and the meter's one note already carries their exclusive totals. See [Editor › Instrumentation](editor.md#instrumentation).
 

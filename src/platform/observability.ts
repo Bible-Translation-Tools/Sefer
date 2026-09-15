@@ -27,6 +27,16 @@ export interface DevState {
  * an agent reading the running app, not for code.
  */
 export interface EditorDevSurface {
+  /**
+   * The last fifty gestures, whole: `{ gesture, render, analyzes, totals,
+   * other, note }` each. `gesture` is the JS work in milliseconds (DOM event
+   * to the last state update), `render` the same event to after the browser
+   * painted (`null` when no frame was observed), `totals` the exclusive
+   * per-span time inside the gesture, and `other` what no span accounted for
+   * — `totals` plus `other` equals `gesture`. `note` is the one line the
+   * Observability ring got, and `__sefer.observability.recent()` shows it
+   * beside everything else the same keystroke did.
+   */
   readonly keystrokes: () => readonly unknown[];
   readonly spans: () => readonly unknown[];
   readonly summary: () => readonly unknown[];
