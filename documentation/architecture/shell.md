@@ -67,11 +67,25 @@ RAIL answers "where in Sefer am I", the SIDEBAR answers "where in this project
 am I", and the TOOLBAR answers "what am I looking at".
 
 - **`IconRail`** is permanent and one tile wide. Its panel toggle collapses the
-  sidebar and never itself. The mode tiles (Refine, Key terms, USFM) appear
-  only while a project is open; Key terms is a navigation to `/find?mode=stet`
-  and is lit from the URL, not from a signal. Findings, History and Settings
-  are lit by a `pathname` prefix, which is also why `/start/*` lights the
-  project chooser: it is the projects screen's second half.
+  sidebar and never itself. Everything below the toggle is lit from the
+  `pathname`, not from a signal, and every tile but three is a plain
+  navigation.
+
+  The mode tiles (Refine, Key terms, USFM) and the project screens (Character
+  inventory, Compare) appear only while a project is open: each is something
+  you apply to a project, and offering one with nothing open is an affordance
+  that answers nothing. Key terms goes to **`/terms`** — its own pane, not
+  `/find?mode=stet`, because Find and Key terms are separate routes with
+  similar UI rather than a mode toggle on one screen
+  (`planning/03-ui/design-direction.md`, gap list 5). Projects, Findings,
+  History and Settings are always offered; Projects is lit on `/start/*` as
+  well as `/projects`, because bringing a project in is the chooser's second
+  half and `ProjectSidebar` reads the same two prefixes.
+
+  `/terms` and `/compare` are navigated to with the usual typed-route cast:
+  the generated tree does not hold them yet, so until those routes land the
+  tiles answer through the root's not-found boundary, which is a 404 page and
+  not a crash.
 - **`ProjectSidebar`** is the book list, the review pills from
   `ProjectAnalysis.census`, and the chapter grid of the FOCUSED book — the one
   place a chapter is chosen. There is no chapter `<select>` on the editor page.
@@ -83,7 +97,15 @@ am I", and the TOOLBAR answers "what am I looking at".
   the reader left it.
 - **`Toolbar`** names the book — "Philemon (small-nt)" whole, "Philemon 1
   (small-nt)" clipped, "Philemon front (small-nt)" in the front matter — and
-  every action on it is a `runCommand`.
+  every action on it is a `runCommand`. Its kebab holds Save, Save & Review,
+  Character inventory, Format book, Format project, Export as zip and Rename
+  project. Those last four are NOT gated on `findCommand(id)`: `runCommand`
+  already answers for an id the registry does not hold — an unknown command,
+  or one whose `when()` refuses, is a documented no-op — so the menu names the
+  intention and the registry decides whether it happens. A menu that hid or
+  disabled every id it could not see would be the toolbar guessing at the
+  registry's answer instead of asking for it. Save is the exception, because
+  its `can()` is a real "there is nothing to save right now".
 
 The split itself is `Resizable` (`src/app/ui/primitives/Resizable.tsx`), which
 does not implement collapsing: a collapsed pane is a different tree, so the
@@ -116,7 +138,7 @@ An Effect-returning command is run on the app runtime by the runner `registerShe
 
 ## Routes and tokens
 
-`/projects`, `/start/create`, `/start/find`, `/project/$id`, `/project/$id/book/$book`, `/find`, `/findings`, `/history`, `/settings`, plus `/` and the dev-only `/dev/fixture`. `/find` owns its search params (`q`, `mode`, `scope`) and derives its whole state from them, so a link into it from the rail or the toolbar changes the screen that is already mounted. File routes under `src/routes`; `src/routeTree.gen.ts` is generated — never edit it.
+`/projects`, `/start/create`, `/start/find`, `/project/$id`, `/project/$id/book/$book`, `/find`, `/findings`, `/history`, `/inventory`, `/settings`, plus `/` and the dev-only `/dev/fixture`. `/find` owns its search params (`q`, `mode`, `scope`) and derives its whole state from them, so a link into it from the rail or the toolbar changes the screen that is already mounted. The rail and the toolbar also point at `/terms` and `/compare`, which are being built alongside the chrome; until they land the router answers them through the root's not-found boundary. File routes under `src/routes`; `src/routeTree.gen.ts` is generated — never edit it.
 
 `src/app/ui/tokens.css` is the design system as plain custom properties, ported from the v1 editor's vanilla-extract contract so the two read as one product, and it is also the Tailwind v4 configuration: an `@theme` block mints a utility from every semantic name. Components use the semantic names (`bg-surface-primary`), never the ramps. Dark is a token swap under `[data-theme="dark"]` and `prefers-color-scheme`, never Tailwind's `dark:` variant. The reusable components live in `src/app/ui/primitives/`, which is the only place corvu is imported. `src/app/ui/app.css` is the one global stylesheet and holds only the `<body>` ground and the CodeMirror frame. See [the UI layer](ui.md).
 

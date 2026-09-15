@@ -604,8 +604,12 @@
 .usfm-note-done:hover {
   background: var(--button-secondary-surface-hover);
 }
+/* The note being edited. The one literal colour the palette port left behind
+   in regular mode: a hard-coded amber that stayed light-mode amber on a dark
+   card. It is the warning line at half strength, so it follows the theme like
+   every other ring on this surface. */
 .cm-mode-regular .usfm-note-editing {
-  outline: 1px solid rgb(217 119 6 / 0.5);
+  outline: 1px solid color-mix(in srgb, var(--editor-warn-line) 50%, transparent);
   border-radius: 2px;
 }
 

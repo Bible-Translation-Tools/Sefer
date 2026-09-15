@@ -80,9 +80,25 @@ is `--surface-primary`, ink `--on-surface-primary`, verse and chapter numbers
 `--brand-base`, selection a brand tint — so the page the reader edits is a
 white card among white cards and follows the theme without a second dark
 block. Four apparatus hues (footnote, cross-reference, nested editor) keep
-literal values, because the token set has no name for that distinction. USFM
-mode keeps its own terminal palette on purpose: a terminal is a terminal in
-both schemes.
+literal values, because the token set has no name for that distinction, and
+they are the ONLY literals left in the regular projection — a fifth, the amber
+ring on the note being edited, stayed light-mode amber on a dark card and is
+now the warning line at half strength. USFM mode keeps its own terminal
+palette on purpose: a terminal is a terminal in both schemes.
+
+Checked against the prototype role by role
+(`../scripture-editor-proto-2/src/app/ui/styles/modules/usfm.css.ts` and
+`designSystem.css.ts`), the projection matches on every value the two share:
+paper `surface-primary` (neutral-100 / neutral-20), ink `on-surface-primary`
+(neutral-5 / neutral-90), verse and chapter numbers `brand-base` (brand-40 /
+brand-70) and bold, chapter in the serif, poetry on the 16/32/64/96px ladder.
+Three roles differ on purpose. Our verse number is SUPERSCRIPT, which is what
+the designer's mockup asks for, and a superscript at 0.66em carries the same
+weight on the page as the prototype's 0.85em inline number. Poetry is not
+italicised, because the mockup asks only that it be indented. The footnote
+BLOCK — a rule and then "a. Philemon 1:4 …" at the foot — has no prototype
+counterpart at all: the prototype keeps notes inline in nested editors, and
+the block is the mockup's.
 
 ## The primitives
 
