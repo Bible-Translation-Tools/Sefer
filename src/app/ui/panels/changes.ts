@@ -5,9 +5,9 @@
  * here rather than one being mistaken for the other:
  *
  *   * `unsavedChanges` is against the last write to DISK
- *     (`SaveCoordinator.baseline`). The shell arms `autosave`, so this is
- *     empty about a second after typing stops. It is a status line, not a
- *     review.
+ *     (`SaveCoordinator.baseline`). Nothing writes on a timer, so this is
+ *     non-empty for as long as there is unrecorded work. It is a status line,
+ *     not a review.
  *   * `recordedChanges` is against the last recorded VERSION (the blob at
  *     HEAD, read by `recorded.ts`). This is what a review screen means by
  *     "what has changed", and the only one a commit should be built from.
@@ -72,8 +72,9 @@ export const changesOf = (
 /**
  * Every book whose working text differs from the last RECORDED version.
  *
- * This is the review answer, and it does not care what is on disk: the disk
- * caught up on its own, the history did not. A book HEAD has never seen is
+ * This is the review answer, and it does not care what is on disk: a file
+ * written by a commit that then failed is still not in the history. A book
+ * HEAD has never seen is
  * reported as `firstTime`, so "nothing recorded yet" reads as five books about
  * to be recorded rather than as a clean project.
  */
@@ -105,12 +106,13 @@ export const recordedChanges = (shell: Shell, recorded: Recorded): readonly Book
 /**
  * Every open book whose working text differs from what was last WRITTEN.
  *
- * The status-line answer, not the review one: an idle pause writes on its own,
- * so this is empty most of the time and its emptiness says nothing about the
- * history. A book with no baseline is skipped rather than reported as wholly
- * new — Save adopts a baseline where the shell opens a book, so "no baseline"
- * means this book was never opened in this session and there is nothing on
- * screen to diff.
+ * The status-line answer, not the review one. Under explicit-only saving it
+ * usually agrees with `recordedChanges` — writing the file and recording the
+ * version are one action — and the two part company in exactly one case: a
+ * write that succeeded under a commit that did not. A book with no baseline is
+ * skipped rather than reported as wholly new — Save adopts a baseline where
+ * the shell opens a book, so "no baseline" means this book was never opened in
+ * this session and there is nothing on screen to diff.
  */
 export const unsavedChanges = (shell: Shell): readonly BookChanges[] => {
   shell.tick();

@@ -5,10 +5,25 @@ what a journal file is, when it is written, how `restore` replays it — is in
 [save and recovery](save.md); this document is the part that faces a person:
 what happens when a project is opened, and what the reader is asked.
 
+## What the journal is for, now that nothing else writes
+
+Sefer writes the project file only when a version is recorded ([save](save.md)),
+which makes this journal the **only** automatic write in the product and the
+only thing standing between a crash and a lost session. It is the
+working-state backup: it holds what the editor holds, it is not the file, and
+it is not a version.
+
+That raises the stakes on the debounce and changes what the banner means. The
+backup's timing is now a preference a reader can see — "Back up work after" on
+`/settings`, `shell.backupIdleMs`, pushed into `Recovery.setPolicy` by the
+shell — because it is exactly the question "how much work may a crash cost me".
+The debounce fiber re-reads its two bounds on every pass, so moving the stepper
+lands on the next burst.
+
 ## The rule that comes first: never on the keystroke path
 
-`DEFAULT_JOURNAL_POLICY` is 500 ms of quiet, 5 s maximum, and it stays that
-way. `Recovery.attach` subscribes to `book.changes`, and its listener does two
+`DEFAULT_JOURNAL_POLICY` is 500 ms of quiet, 5 s maximum: the idle bound is
+what the preference moves, and the default is where it starts. `Recovery.attach` subscribes to `book.changes`, and its listener does two
 things only — push an entry into memory and arm a timer. The write happens on a
 fiber tied to the layer's Scope, never inside `apply`.
 
@@ -19,8 +34,8 @@ the journal free to the typist, and the two bounds are what stop continuous
 typing from starving it — `maxIntervalMs` fires from the first edit of a burst
 however long the burst runs.
 
-Changing the policy is a decision about how much unsaved work a crash may cost,
-and it belongs here, not in a call site.
+Changing the policy is a decision about how much unsaved work a crash may cost.
+It belongs here and on the settings screen — never in a call site.
 
 ## Recovery on open: one IO check, against disk
 
@@ -35,13 +50,22 @@ So the open-time question is asked against **disk**, by
 
 1. list the journals for this project (`pending`, with no baselines);
 2. read each journal's book file once, decoded the way `Source.decode` decodes
-   every file Sefer reads — canonical LF, no BOM, valid UTF-8 — so the
-   comparison is against canonical text and not against bytes;
+   every file Sefer reads — canonical LF, with the byte order mark and the line
+   endings set aside as `Source.form` — so the comparison is against canonical
+   text and not against bytes, and a CRLF file still matches an LF journal;
 3. **match** → `discard` the journal silently, and note it. The work reached
    disk; the journal is a duplicate of the project's own bytes.
 4. **mismatch** → offer it.
 
 That is one directory listing plus one read per journal, once per project open.
+
+Explicit-only saving inverts how often each branch is taken. The file used to
+catch up on its own, so a journal that outlived its session usually matched
+disk and was dropped; now the file holds the last recorded version, so a
+journal that outlived its session usually differs and the banner appears. The
+rule does not change, and the silent half is what keeps the noisy half worth
+reading — a banner that also offered work already in the file would teach
+people to dismiss it.
 
 `reachedDisk(text, journal)` is the comparison, and it is deliberately modest.
 A `SourceStamp` carries a revision and a length and no content hash, so length
@@ -69,10 +93,12 @@ project's id, not on `shell.tick()`, because an edit cannot change the answer.
   — the funnel — so the text arrives as ordinary applied changes: it is in the
   undo history, the editor sees it, Save sees the book as dirty, and a journal
   written under an older rule set is **re-judged by today's rules** rather than
-  trusted. Restoring does not save: autosave arms on the next change, so the
-  recovered work reaches disk when the book is edited again or saved
-  explicitly. Until then the journal stays, which is the conservative order —
-  the work exists in two places rather than none.
+  trusted. Restoring does not save, and nothing will save it later on its own:
+  the book comes back **dirty** and stays that way until somebody records a
+  version. That is the correct outcome — recovered text is a proposal, and
+  writing it into the file unasked would be Sefer making the decision. Until it
+  is recorded the journal stays, which is the conservative order: the work
+  exists in two places rather than none.
 - **Discard** removes the journal.
 
 Both answers remove the row, and the card disappears with the last one: an

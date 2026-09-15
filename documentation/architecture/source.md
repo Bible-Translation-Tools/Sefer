@@ -1,8 +1,21 @@
 # Source and Book
 
-A **Source** is one book's canonical text plus the stamp that identifies it: `{ text, stamp }`, where `SourceStamp` is `{ revision, length }`. It is a plain value — synchronous, immutable, and owning no lifetime.
+A **Source** is one book's canonical text, the stamp that identifies it, and the form the file arrived in: `{ text, stamp, form }`, where `SourceStamp` is `{ revision, length }` and `SourceForm` is `{ eol: "lf" | "crlf"; bom: boolean }`. It is a plain value — synchronous, immutable, and owning no lifetime.
 
-`src/core/source/source.ts` is the whole of it. `decode(bytes)` returns a `Result<Source, SourceDecodeError>`: it refuses a UTF-8 byte order mark, refuses bytes that are not valid UTF-8 rather than replacing them, and refuses a file that mixes CRLF, CR and LF. A file with one uniform newline style is accepted and normalised to LF, so canonical text is always LF. `encode(source)` writes that canonical text back as UTF-8. `apply(source, change)` returns a `Result<Source, SourceChangeError>` — see the admission rules below. The disk serialisation style is not remembered yet; that belongs with save (slice 10).
+`src/core/source/source.ts` is the whole of it. `decode(bytes)` returns a `Result<Source, SourceDecodeError>` whose only refusal is `InvalidUtf8`: bytes that are not valid UTF-8 are refused rather than replaced with U+FFFD. Everything else is read and remembered. `encode(source)` writes the canonical text back as UTF-8 **in the source's own form**. `apply(source, change)` returns a `Result<Source, SourceChangeError>` — see the admission rules below.
+
+## Canonical text, and the form it came in
+
+Canonical text is always LF and never carries a byte order mark. That has not changed, and everything derived from a Source — stamps, baselines, diffs, hashes, search offsets — speaks it.
+
+What is new is that `decode` no longer *forgets* what it normalised. It records two facts about the bytes on `Source.form`:
+
+- **`eol`** — the file's DOMINANT line ending. CRLF and bare LF each get a vote and the majority wins; a tie, including a file with no line ending at all, is `lf`. A bare CR (classic Mac) is normalised to LF on the way in and does not vote. `dominantEol(text)` is exported for anyone who needs the same answer about a string.
+- **`bom`** — whether the file began with a UTF-8 byte order mark. The mark is stripped from the text and put back by `encode`.
+
+`apply` carries the form through unchanged, and so do both Book implementations: the form belongs to the bytes, not to the edit. Two Sources with the same text and different forms are **the same text** — the form is never part of any comparison, only of `encode`. A file that mixed line endings becomes uniform in its majority form the first time it is written; see [save](save.md) for what that means to a reader.
+
+A byte order mark and a mixed-newline file used to be refusals. They are read now, because refusing them meant a project Sefer could list and not open.
 
 Core computes no content hash. Content identity is Galley's job: the engine hashes the source (xxh3-64) on every analyze and hands it back in the analysis header, so the Galley adapter attaches that hash to every derived product. Within one Book's lifetime the stamp's revision is the identity; across lifetimes and between products the engine's hash is.
 
@@ -12,7 +25,7 @@ Core computes no content hash. Content identity is Galley's job: the engine hash
 
 - `RangeOutOfBounds` — `from` or `to` is not a non-negative integer, `from > to`, or `to` is past the end of the text.
 - `SplitsSurrogatePair` — `from` or `to` lands between a high and a low surrogate. UTF-16 offsets are not character offsets, and slicing inside an astral character (an emoji, most historic scripts) leaves a lone surrogate on each side.
-- `CarriageReturn` — `insert` contains `\r`. Canonical text is LF; `decode` already refuses CR on the way in, and `apply` refuses to reintroduce it.
+- `CarriageReturn` — `insert` contains `\r`. Canonical text is LF; `decode` normalises CR and CRLF away on the way in (remembering which it saw), and `apply` refuses to reintroduce either.
 
 An admitted change produces a new `Source` with `revision + 1` and the new length. `Book.apply(changes, origin, trust?)` returns `Result<Receipt, Refusal>`, and these rules are the floor under both implementations: a refused change is not an edit, so the book stays on its current revision and publishes nothing to subscribers.
 
@@ -37,8 +50,8 @@ A `Receipt` is `{ before, after, origin }`: the stamp on each side of the edit a
 
 ### Two implementations, one port
 
-- **The plain Book** (`makeBook(path, source, observability?)`, and `openBook(path)` which reads through the `FileSystem` service and decodes): text held as a `Source`, no admission rules beyond Source's own, no history. It serves the census, project analysis, search and multi-book operations over books nobody is editing. `openBook` fails with `PlatformError` or `SourceDecodeError`, and captures `Observability` through `Effect.serviceOption` at open time, which is what keeps `apply` synchronous: each accepted apply emits one `book.apply` note when the Layer was in context, and nothing when it was not.
-- **The editor-backed Book** (`editorBook(plain, { analyze, extensions?, observability? })` in `src/editor/book.ts`): the canonical text is a CodeMirror `EditorState`, and `apply` runs the editing phases before accepting. It continues the plain book's revision rather than restarting it, so a Save baseline or a Recovery journal taken while the book was plain still compares against what the seat reports. It adds what only a state can answer — `state`, `structure()`, `bindView(view)`/`fromView(view, trs)`, `attached()`/`hold()`, `attach(receive)`, `funnel()`, `close()` — and its `history()` is real.
+- **The plain Book** (`makeBook(path, source, observability?)`, and `openBook(path)` which reads through the `FileSystem` service and decodes): text held as a `Source`, no admission rules beyond Source's own, no history. It serves the census, project analysis, search and multi-book operations over books nobody is editing. `openBook` fails with `PlatformError` or `SourceDecodeError` (which now means invalid UTF-8 and nothing else), and captures `Observability` through `Effect.serviceOption` at open time, which is what keeps `apply` synchronous: each accepted apply emits one `book.apply` note when the Layer was in context, and nothing when it was not.
+- **The editor-backed Book** (`editorBook(plain, { analyze, extensions?, observability? })` in `src/editor/book.ts`): the canonical text is a CodeMirror `EditorState`, and `apply` runs the editing phases before accepting. It continues the plain book's revision rather than restarting it, so a Save baseline or a Recovery journal taken while the book was plain still compares against what the seat reports, and it carries the plain book's `form` beside the state — CodeMirror holds canonical text only, and Save must still write the file back the way it was read. It adds what only a state can answer — `state`, `structure()`, `bindView(view)`/`fromView(view, trs)`, `attached()`/`hold()`, `attach(receive)`, `funnel()`, `close()` — and its `history()` is real.
 
 Readers cannot tell the two apart, which is the point: Save, Recovery, ProjectAnalysis and the UI subscribe once, through the port, and trust that they saw every edit. A view bound with `bindView` **must** route its transactions through `fromView`; a view that dispatched on its own would make publication silently incomplete, so `apply` throws rather than report a receipt nobody heard.
 

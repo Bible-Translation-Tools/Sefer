@@ -17,10 +17,10 @@
  *
  * The top row is what has not been recorded, because "where am I now" is the
  * question people come to a history for first. Its baseline is the blob at
- * HEAD (`recorded.ts`), NOT `SaveCoordinator.baseline`: the disk baseline
- * moves on its own about a second after typing stops, so a row built on it
- * would report a session full of work as nothing at all. What the disk
- * baseline still answers is the small "not yet written" note beside it.
+ * HEAD (`recorded.ts`), NOT `SaveCoordinator.baseline`: the disk is not the
+ * history, and a write whose commit failed would otherwise report as recorded.
+ * What the disk baseline still answers is the small "not yet written" note
+ * beside it.
  */
 
 import { useNavigate } from "@tanstack/solid-router";
@@ -46,10 +46,10 @@ import { DiffView } from "./DiffView";
 import { ago, exact } from "./format";
 import { createRecordedVersion } from "./recorded";
 
-/** The uncommitted row's id in the selection. A commit id is 40 hex digits. */
+/** The not-yet-recorded row's id in the selection. A commit id is 40 hex digits. */
 const WORKING = "working";
 
-/** The one row look, shared by the uncommitted row and every commit row. */
+/** The one row look, shared by the top row and every commit row. */
 const ROW = [
   "flex w-full cursor-pointer flex-col gap-1 px-3.5 py-3 text-start transition-colors",
   "hover:bg-surface-secondary",
@@ -312,7 +312,7 @@ export function HistoryPanel() {
                         aria-hidden="true"
                       />
                       <span class="min-w-0 flex-1 truncate text-small font-semibold text-on-surface-primary">
-                        {t("Not recorded yet")}
+                        {t("Not yet recorded")}
                       </span>
                       <Show when={notRecorded().length > 0}>
                         <Badge tone="warning">{notRecorded().length}</Badge>
@@ -389,7 +389,7 @@ export function HistoryPanel() {
               level={3}
               title={
                 selected() === WORKING
-                  ? t("Not recorded yet")
+                  ? t("Not yet recorded")
                   : (selectedCommit()?.message ?? t("Selected version"))
               }
               subtitle={

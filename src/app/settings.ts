@@ -16,6 +16,7 @@ import { Schema } from "effect";
 
 import { PRODUCERS, SEVERITIES } from "../core/findings/filter";
 import type { SettingKey, SettingsService } from "../core/host/settings";
+import { DEFAULT_JOURNAL_POLICY } from "../core/recovery/recovery";
 import { DEFAULT_EDITOR_FONT_SIZE, EDITOR_FONT_SIZE_RANGE } from "./ui/theme";
 
 /**
@@ -124,7 +125,13 @@ export type RecentProjects = typeof RecentProjects.Type;
 export interface ShellKeys {
   readonly theme: SettingKey<string>;
   readonly startInUsfmMode: SettingKey<boolean>;
-  readonly autosaveIdleMs: SettingKey<number>;
+  /**
+   * How long typing must pause before the WORKING-STATE BACKUP is written.
+   * Not the file: the file is written only when a version is recorded, so this
+   * is the one automatic write left in the product and the only timing a
+   * reader can trade away crash-safety with.
+   */
+  readonly backupIdleMs: SettingKey<number>;
   /**
    * Off by default, and that default is a decision: a book is ONE document,
    * so the editor shows the whole of it and scrolls. Turning this on clips the
@@ -189,7 +196,11 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
   const keys: ShellKeys = {
     theme: settings.register("shell.theme", Schema.String, "system"),
     startInUsfmMode: settings.register("shell.startInUsfmMode", Schema.Boolean, false),
-    autosaveIdleMs: settings.register("shell.autosaveIdleMs", Schema.Number, 1200),
+    backupIdleMs: settings.register(
+      "shell.backupIdleMs",
+      Schema.Number,
+      DEFAULT_JOURNAL_POLICY.idleMs,
+    ),
     preferChapterView: settings.register("editor.preferChapterView", Schema.Boolean, false),
     findingsFilter: settings.register(
       "findings.filter",
@@ -271,9 +282,10 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
       group: "editor",
     },
     {
-      key: keys.autosaveIdleMs,
-      label: "Write to disk after",
-      description: "How long typing must pause before a book is written to disk.",
+      key: keys.backupIdleMs,
+      label: "Back up work after",
+      description:
+        "How long typing must pause before the working-state backup is written. The file itself is written only when you record a version.",
       kind: "number",
       group: "advanced",
       min: 200,

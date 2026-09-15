@@ -24,7 +24,9 @@ export interface Baseline {
   readonly stamp: SourceStamp;
   /** The engine hash of that text, when a hasher was available. */
   readonly hash?: bigint;
-  /** The exact canonical LF text that was written, for diffing and revert. */
+  /** The exact canonical LF text that was written, for diffing and revert.
+   * Canonical, not the bytes: the file may hold CRLF and a byte order mark
+   * (`Source.form`), and none of that is part of the text's identity. */
   readonly text: string;
   /** Wall clock of the successful write, `Date.now()` milliseconds. */
   readonly savedAt: number;

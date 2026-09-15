@@ -147,11 +147,14 @@ export const applyAll = (
     if (Result.isFailure(next)) return Result.fail(refuse(next.failure));
     // Each splice counts one revision in Source; a Book edit is one revision,
     // so the loop keeps the text and lets the caller stamp it once below.
-    current = { text: next.success.text, stamp: source.stamp };
+    current = { text: next.success.text, stamp: source.stamp, form: source.form };
   }
   return Result.succeed({
     text: current.text,
     stamp: { revision: source.stamp.revision + 1, length: current.text.length },
+    // The disk form is a property of the bytes, not of the edit: it survives
+    // every apply and is only ever set by `decode`.
+    form: source.form,
   });
 };
 

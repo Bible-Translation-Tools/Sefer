@@ -132,6 +132,10 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
   // a Save baseline or a Recovery journal taken while the book was plain must
   // still compare against what the seat reports.
   let revision = plain.source().stamp.revision;
+  // The disk form the file arrived in. CodeMirror holds canonical text only,
+  // so the form travels beside the state rather than in it, and Save writes
+  // the seat's bytes back the way it read them.
+  const form = plain.source().form;
   let holds = 0;
   let closed = false;
 
@@ -249,7 +253,7 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
       return state();
     },
 
-    source: (): Source => ({ text: docText(state()), stamp: stamp() }),
+    source: (): Source => ({ text: docText(state()), stamp: stamp(), form }),
 
     structure: () => structureAt(state()),
 
