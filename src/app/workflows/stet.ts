@@ -38,6 +38,15 @@ import {
   type Passage,
   type Resource,
 } from "../../core/resources/library";
+import { StetCatalogFixtureLive } from "../../core/stet/fixture";
+import {
+  StetCatalog,
+  type Guide,
+  type Span,
+  type StetError,
+  type Term,
+  type TermOccurrence,
+} from "../../core/stet/stet";
 
 /** Per-reference agreement between a project book and a reference resource. */
 export interface Comparison {
@@ -65,45 +74,94 @@ export const stetCompare = (_project: Project, _resource: Resource): Effect.Effe
 // The other half of STET, and the one the design calls a multibuffer: a list
 // of terms on the left, and on the right one pair of cards per occurrence —
 // the source verse with the term highlighted, and the target verse, which is
-// the editable one (design-direction.md, "Key terms / STET").
+// the editable one (design-direction.md, "Key terms / STET"). It has its own
+// route, `/terms`, because Will asked for two panes rather than a toggle.
 //
-// What is real here is the SHAPE and the seam. A term list is a resource — a
-// Translation Words container bound to the project under the `glossary` role —
-// and the occurrences of a term in the source are that resource's business,
-// not this file's. Neither is decoded yet, so `SAMPLE_TERMS` stands in and
-// says so, and the occurrences are found by searching the project's own text.
-// The moment a glossary is bound, `terms` is the function that changes and
-// nothing above it is.
+// This file is the join, and only the join. `src/core/stet` owns the
+// catalogue — the schema, the guides, the occurrences — and knows nothing
+// about a project; `src/core/excerpts` owns the mapping from a reference onto
+// the project's own text. What is left for a workflow is deciding which
+// source reading to show for an occurrence, and that is a decision with three
+// answers in a fixed order: the guide's frozen reading, then a resource bound
+// to the project under the `source` role, then nothing at all — said in as
+// many words rather than papered over with the project's own text.
 // ---------------------------------------------------------------------------
 
-/** One key term, as the left-hand list shows it. */
-export interface Term {
-  /** Stable within a list. The term itself, today. */
-  readonly id: string;
-  readonly term: string;
-  /** "This word can mean:" — the gloss bullets under an expanded term. */
-  readonly glosses: readonly string[];
-  /**
-   * Occurrences the reviewer has already settled. There is no state store for
-   * this yet; it is 0 until one exists, rather than a number we invented.
-   */
-  readonly done: number;
+/**
+ * The catalogue, with the fixture layer provided.
+ *
+ * Provided HERE rather than in `src/app/services.ts` on purpose: a guide is
+ * megabytes of committed JSON behind a dynamic import, and nothing about the
+ * application's boot should depend on it. Swapping the fixture for a Library
+ * resource or a remote guides API is this one `Effect.provide`.
+ */
+const withCatalog = <A, E>(effect: Effect.Effect<A, E, StetCatalog>): Effect.Effect<A, E> =>
+  Effect.provide(effect, StetCatalogFixtureLive);
+
+/** The guides that can be loaded, named without loading any of them. */
+export const keyTermGuides = (): Effect.Effect<readonly Guide[], StetError> =>
+  withCatalog(Effect.flatMap(StetCatalog, (catalog) => catalog.guides()));
+
+/** Every key term of one guide, occurrences attached. */
+export const keyTerms = (locale?: string): Effect.Effect<readonly Term[], StetError> =>
+  withCatalog(Effect.flatMap(StetCatalog, (catalog) => catalog.terms(locale)));
+
+/** The reference an occurrence names, in the vocabulary the shell navigates by. */
+export const occurrenceRef = (occurrence: TermOccurrence): Ref => ({
+  book: occurrence.book,
+  chapter: occurrence.chapter,
+  verse: occurrence.verse,
+});
+
+/** What the source card shows for one occurrence, and where it came from. */
+export interface SourceReading {
+  readonly text: string;
+  /** Highlight ranges into `text`. The guide's; a bound resource has none. */
+  readonly spans?: readonly Span[];
+  readonly origin: "guide" | "library";
 }
 
 /**
- * A stand-in term list, used when the project has no glossary bound.
+ * The source reading for every occurrence that has one, keyed by sid.
  *
- * Deliberately visible as a stand-in in the UI: a reviewer must never mistake
- * six hard-coded English words for their project's key terms.
+ * Resolved once per term rather than per card because the card renders
+ * synchronously and a lookup is an Effect. The guide answers for almost
+ * everything — its whole point is that the readings are baked — so the Library
+ * pass runs only over what is left, and short-circuits entirely when no source
+ * resource is bound, which is the dev fixture's case.
  */
-export const SAMPLE_TERMS: readonly Term[] = [
-  { id: "God", term: "God", glosses: ["the one true God", "a god of the nations"], done: 0 },
-  { id: "grace", term: "grace", glosses: ["undeserved favour", "a gift"], done: 0 },
-  { id: "faith", term: "faith", glosses: ["trust in God", "the body of belief"], done: 0 },
-  { id: "love", term: "love", glosses: ["steadfast commitment", "affection"], done: 0 },
-  { id: "brother", term: "brother", glosses: ["a male sibling", "a fellow believer"], done: 0 },
-  { id: "holy", term: "holy", glosses: ["set apart for God", "morally pure"], done: 0 },
-];
+export const sourceReadings = (
+  library: LibraryService,
+  projectId: string,
+  occurrences: readonly TermOccurrence[],
+): Effect.Effect<ReadonlyMap<string, SourceReading>> =>
+  Effect.gen(function* () {
+    const out = new Map<string, SourceReading>();
+    const missing: TermOccurrence[] = [];
+    for (const occurrence of occurrences) {
+      if (occurrence.sourceText === undefined) {
+        missing.push(occurrence);
+        continue;
+      }
+      out.set(occurrence.sid, {
+        text: occurrence.sourceText,
+        origin: "guide",
+        ...(occurrence.spans === undefined ? {} : { spans: occurrence.spans }),
+      });
+    }
+    if (missing.length === 0) return out;
+
+    const resource = yield* sourceResource(library, projectId);
+    if (Option.isNone(resource)) return out;
+    for (const occurrence of missing) {
+      const passage = yield* library
+        .lookup(resource.value.id, occurrenceRef(occurrence))
+        .pipe(Effect.orElseSucceed(() => Option.none<Passage>()));
+      if (Option.isSome(passage))
+        out.set(occurrence.sid, { text: passage.value.text, origin: "library" });
+    }
+    return out;
+  });
 
 /**
  * The resource this project reads as its SOURCE, or `none` when nothing is
@@ -119,15 +177,3 @@ export const sourceResource = (
     const first = found[0];
     return first === undefined ? Option.none<Resource>() : Option.some(first);
   });
-
-/** The source reading of one reference, when a source resource is bound. */
-export const sourcePassage = (
-  library: LibraryService,
-  projectId: string,
-  ref: Ref,
-): Effect.Effect<Option.Option<Passage>> =>
-  Effect.flatMap(sourceResource(library, projectId), (resource) =>
-    Option.isNone(resource)
-      ? Effect.succeed(Option.none())
-      : library.lookup(resource.value.id, ref).pipe(Effect.orElseSucceed(() => Option.none())),
-  );
