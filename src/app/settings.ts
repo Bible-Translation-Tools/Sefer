@@ -272,8 +272,8 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
     },
     {
       key: keys.autosaveIdleMs,
-      label: "Autosave idle",
-      description: "How long typing must pause before a book is written, in milliseconds.",
+      label: "Write to disk after",
+      description: "How long typing must pause before a book is written to disk.",
       kind: "number",
       group: "advanced",
       min: 200,
