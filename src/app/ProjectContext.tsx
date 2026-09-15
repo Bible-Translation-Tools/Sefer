@@ -39,15 +39,39 @@ import type { SettingKey } from "../core/host/settings";
 import { openProject as openProjectEffect, type Project } from "../core/project/project";
 import { DEFAULT_JOURNAL_POLICY, Recovery } from "../core/recovery/recovery";
 import { SaveCoordinator } from "../core/save/saveCoordinator";
-import type { EditorBook, ProjectionName } from "../editor";
+import { anchorFrom, type EditorBook, type ProjectionName } from "../editor";
 import { detectHost } from "../platform/host";
 import { registerShellCommands, type ShellBridge } from "./commands";
 import { useComposition } from "./CompositionContext";
 import { t } from "./i18n";
 import { registerProjectCommands } from "./projectCommands";
 import { composeServices, fixtureRequested, type Services } from "./services";
-import { shellKeys, SIDEBAR_WIDTH, type RecentProjects } from "./settings";
+import {
+  shellKeys,
+  SIDEBAR_WIDTH,
+  type LastLocation,
+  type LastLocations,
+  type RecentProjects,
+} from "./settings";
 import { applyEditorFontSize } from "./ui/theme";
+
+/**
+ * Where the editor should put the aimed-at offset.
+ *
+ * `centre` is what a finding or a search hit wants — the thing is a point in
+ * the middle of a page. `top` is what a chapter wants: arriving at Chapter 3
+ * means Chapter 3's heading is the first line you read, with the rest of the
+ * book below it.
+ */
+export type RevealAt = "top" | "centre";
+
+/** What the next open of `bookId` should scroll to, and how. */
+export interface Reveal {
+  readonly bookId: BookId;
+  readonly from: number;
+  readonly to?: number;
+  readonly at?: RevealAt;
+}
 
 export interface Shell {
   readonly services: Services;
@@ -121,10 +145,34 @@ export interface Shell {
    * does — and it is what the editor marks on arrival; without it there is a
    * position to scroll to and nothing to point at.
    */
-  readonly aim: (bookId: BookId, from: number, to?: number) => void;
-  readonly reveal: Accessor<
-    { readonly bookId: BookId; readonly from: number; readonly to?: number } | undefined
-  >;
+  readonly aim: (bookId: BookId, from: number, to?: number, at?: RevealAt) => void;
+  readonly reveal: Accessor<Reveal | undefined>;
+
+  /**
+   * Go to a chapter of the focused book — the sidebar's grid, the location
+   * bar's arrows and its outline all mean this.
+   *
+   * What "go to" means is the READER's preference, not the caller's: with
+   * "Open books one chapter at a time" on it CLIPS to the chapter, and with it
+   * off — the default, because a book is one document — it scrolls the
+   * chapter's `\c` anchor to the top of the viewport and leaves the rest of
+   * the book where it is. Every caller asks for the same thing and this is the
+   * one place that decides.
+   */
+  readonly showChapter: (ordinal: number) => void;
+
+  /**
+   * Where the reader last was in `root` — the book and the clip — or undefined
+   * if this device has never had one open there.
+   *
+   * Written by `focus` and by every chapter change, read by the project route
+   * (which sends an Open straight back to the work rather than to a census)
+   * and by the rail's panel toggle (which is the way back into a project from
+   * a full-page screen). Held as a preference, so it survives a restart.
+   */
+  readonly lastLocation: (root: string) => LastLocation | undefined;
+  /** The path an Open of `root` should land on: the remembered book, or the census. */
+  readonly landingPath: (root: string) => string;
 
   /** The finding the "next/previous finding" commands point at. */
   readonly finding: Accessor<Finding | undefined>;
@@ -254,11 +302,7 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
   const [status, setStatus] = createSignal("", { name: "status" });
   const [paletteOpen, setPaletteOpen] = createSignal(false, { name: "paletteOpen" });
   const [cursor, setCursor] = createSignal(0, { name: "findingCursor" });
-  const [reveal, setReveal] = createSignal<
-    { bookId: BookId; from: number; to?: number } | undefined
-  >(undefined, {
-    name: "reveal",
-  });
+  const [reveal, setReveal] = createSignal<Reveal | undefined>(undefined, { name: "reveal" });
 
   // The one preference the shell reads outside the settings screen. Held in a
   // signal, and kept in step with a forked fiber over `settings.changes`, so
@@ -343,6 +387,15 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
   const [sidebarWidth, setSidebarWidth] = createSignal(services.settings.get(keys.sidebarWidth), {
     name: "sidebarWidth",
   });
+
+  // Where the reader was in each project. Same discipline as the two above —
+  // this shell is the only writer, so a signal seeded once cannot fall behind
+  // the file — and the same `equals: false` as `recentProjects`, because the
+  // value is a record replaced wholesale.
+  const [locations, setLocations] = createSignal<LastLocations>(
+    services.settings.get(keys.lastLocation),
+    { name: "lastLocations", equals: false },
+  );
 
   const persist = <S,>(key: SettingKey<S>, value: S): void => {
     // `Effect.result` because a rejected preference is a note, not a crash:
@@ -524,11 +577,69 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     const aimed = reveal();
     const at = aimed?.bookId === bookId ? aimed.from : undefined;
     if (aimed !== undefined && aimed.bookId !== bookId) setReveal(undefined);
-    setChapter(openingChapter(editing, at));
+    const opening = openingChapter(editing, at);
+    setChapter(opening);
+    remember(bookId, opening);
   };
 
-  const aim = (bookId: BookId, from: number, to?: number): void => {
-    setReveal(to === undefined ? { bookId, from } : { bookId, from, to });
+  /**
+   * Remembers where the reader is, so an Open lands back on it.
+   *
+   * Called on every focus and every chapter change, which is often — so the
+   * write goes through the same debounce the sidebar width uses rather than
+   * rewriting the whole preferences file per click.
+   */
+  let locationWrite: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => {
+    if (locationWrite !== undefined) clearTimeout(locationWrite);
+  });
+
+  const remember = (bookId: BookId | undefined, ordinal: number | null): void => {
+    const root = project()?.root;
+    if (root === undefined || bookId === undefined) return;
+    const next: LastLocations = { ...locations(), [root]: { bookId, chapter: ordinal } };
+    setLocations(next);
+    if (locationWrite !== undefined) clearTimeout(locationWrite);
+    locationWrite = setTimeout(() => {
+      locationWrite = undefined;
+      persist(keys.lastLocation, next);
+    }, 400);
+  };
+
+  const lastLocation = (root: string): LastLocation | undefined => locations()[root];
+
+  /**
+   * Where an Open of `root` should land.
+   *
+   * The remembered book when there is one, and the project's census otherwise.
+   * The book is NOT checked against the project here — the project may not be
+   * open yet when this is asked — so the route that lands falls back to the
+   * census when the book turns out to be gone.
+   */
+  const landingPath = (root: string): string => {
+    const held = lastLocation(root);
+    if (held === undefined) return `/project/${encodeURIComponent(root)}`;
+    return `/project/${encodeURIComponent(root)}/book/${encodeURIComponent(held.bookId)}`;
+  };
+
+  const aim = (bookId: BookId, from: number, to?: number, at?: RevealAt): void => {
+    setReveal({ bookId, from, to, at });
+  };
+
+  const showChapter = (ordinal: number): void => {
+    const book = focused();
+    if (book === undefined) return;
+    remember(book.id, preferChapterView() ? ordinal : null);
+    if (preferChapterView()) {
+      setChapter(ordinal);
+      return;
+    }
+    const chapter = book.structure().chapters[ordinal];
+    if (chapter === undefined) return;
+    // A scroll is not a clip, and arriving at a chapter must not silently
+    // narrow the book: whatever clip was in force is dropped first.
+    setChapter(null);
+    aim(book.id, anchorFrom(chapter), undefined, "top");
   };
 
   const stepFinding = (delta: 1 | -1): void => {
@@ -599,10 +710,14 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     chapter,
     setChapter: (ordinal) => {
       setChapter(ordinal);
+      remember(focused()?.id, ordinal);
     },
     preferChapterView,
     aim,
     reveal,
+    showChapter,
+    lastLocation,
+    landingPath,
     finding,
     tick,
     bump,

@@ -26,7 +26,25 @@ export interface TooltipProps {
 
 export function Tooltip(props: TooltipProps) {
   return (
-    <CorvuTooltip placement={props.side ?? "top"} openDelay={250} closeDelay={80}>
+    <CorvuTooltip
+      placement={props.side ?? "top"}
+      openDelay={250}
+      closeDelay={80}
+      // The tooltip does NOT close on pointerdown, and that is the fix for the
+      // double-click every icon button in the product used to want.
+      //
+      // corvu's default is to close it on the press. Closing is a state change
+      // on the trigger — `aria-describedby` and `data-open` come off it — and
+      // Solid rebuilds a `Dynamic`'s subtree when the props it spreads move, so
+      // the caller's own `<button>` was taken out of the DOM and put back
+      // BETWEEN pointerdown and pointerup. Chrome does not fire `click` when the
+      // pressed node left the document, so the first press did nothing and the
+      // second one worked — the tooltip was already closed by then.
+      //
+      // Leaving it open through the press is also the better behaviour: the hint
+      // stays while the button is held and goes when the pointer leaves.
+      closeOnPointerDown={false}
+    >
       {/* The trigger is a wrapper around the caller's own element, and it has
           to have a BOX: corvu measures `getBoundingClientRect()` on it to build
           the pointer's safe area, and a `display: contents` wrapper measures

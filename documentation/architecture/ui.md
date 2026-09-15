@@ -158,6 +158,35 @@ different tree (an icon rail), not a zero-width panel.
   rect to build the pointer's safe area, so a contents-display wrapper measures
   zero and the tooltip never opens. `Tooltip` wraps in `inline-flex` instead.
 
+## `data-testid`: how a driver finds a control
+
+A screen is driven by an agent or a Playwright script long before it is driven
+by a test suite, and both need a handle that survives a reworded label and a
+retranslated one. `data-testid` is that handle.
+
+**The rule.** Kebab-case, `<area>-<thing>`, and the area is the piece of chrome
+a reader would name: `rail-findings`, `sidebar-book-PHM`, `toolbar-undo`,
+`kebab-export-zip`, `chapter-tile-3`, `location-next`, `palette-input`,
+`status-commands`, `editor-host`. A book id or a chapter label keeps its own
+spelling (`sidebar-book-3JN`, `chapter-tile-intro`) — it is an identifier, not
+prose, and lower-casing it would make the selector disagree with the URL.
+
+**Every primitive already forwards it.** `Button`, `IconButton`, `Input`,
+`Select` and `Switch` spread the props they do not consume onto the element
+they render, so `data-testid` is an ordinary prop with no support needed from
+the primitive. Nothing generates one: a control gets an id when something
+drives it, and an id nothing uses is a name to keep in step for no reader.
+
+**What has one today**: the rail and each of its tiles, the sidebar with its
+project button, its Go-to box, each book row and each chapter tile; the
+toolbar, its search box, Undo, Redo, Findings, the kebab and each of the
+kebab's items; the location bar with its two crumbs and its two arrows; the
+command palette and its input; the status line and its Commands button; and
+the editor card and the CodeMirror host inside it.
+
+There are still no UI tests (see below). These ids exist so that a verification
+run can be written the same way twice.
+
 ## Building a screen
 
 Compose primitives and utilities; do not add a stylesheet. The page shape the

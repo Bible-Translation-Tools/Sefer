@@ -11,7 +11,7 @@
  * does not want, and would put its open state in two places.
  */
 
-import { For, Show, createSignal } from "solid-js";
+import { For, Show, createEffect, createSignal } from "solid-js";
 
 import { availableCommands, runCommand } from "../commands";
 import { t } from "../i18n";
@@ -24,6 +24,30 @@ export interface PaletteProps {
 
 export function CommandPalette(props: PaletteProps) {
   const [query, setQuery] = createSignal("");
+  const [box, setBox] = createSignal<HTMLInputElement | undefined>(undefined, {
+    name: "paletteInput",
+  });
+
+  /**
+   * The input takes focus every time the palette opens.
+   *
+   * `autofocus` is not enough and never was: the attribute is honoured when the
+   * browser PARSES an element, and this one is created by Solid long after the
+   * page loaded, so it did nothing at all. A palette you have to click before
+   * you can type is a palette that failed at the one thing it is for.
+   *
+   * `props.open` is read in an effect rather than in a ref callback because the
+   * element outlives one opening: `<Show>` keeps it mounted while open, and the
+   * reader may close and reopen without the component being rebuilt.
+   */
+  createEffect(
+    () => ({ open: props.open, input: box() }),
+    ({ open, input }) => {
+      if (!open || input === undefined) return;
+      input.focus();
+      input.select();
+    },
+  );
 
   const shown = () =>
     availableCommands().filter((command) =>
@@ -41,8 +65,17 @@ export function CommandPalette(props: PaletteProps) {
       <div
         class="fixed inset-0 z-40 flex justify-center bg-surface-overlay pt-[12vh]"
         role="presentation"
+        data-testid="palette"
         onClick={(event) => {
           if (event.target === event.currentTarget) props.onClose();
+        }}
+        /* Escape closes from anywhere inside the palette, not only from the
+           input: arrowing into the list moves focus onto a button, and a reader
+           who then presses Escape means the same thing. */
+        onKeyDown={(event) => {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          props.onClose();
         }}
       >
         <div
@@ -52,13 +85,13 @@ export function CommandPalette(props: PaletteProps) {
         >
           <input
             type="search"
-            autofocus
+            ref={setBox}
+            data-testid="palette-input"
             class="border-b border-surface-border bg-transparent px-4 py-3 text-h4 text-on-surface-primary placeholder:text-on-surface-tertiary focus:outline-none"
             placeholder={t("Type a command…")}
             value={query()}
             onInput={(event) => setQuery(event.currentTarget.value)}
             onKeyDown={(event) => {
-              if (event.key === "Escape") props.onClose();
               if (event.key !== "Enter") return;
               const first = shown()[0];
               if (first !== undefined) choose(first.id);

@@ -151,10 +151,10 @@ class CallerWidget extends WidgetType {
     const s = document.createElement("span");
     s.className = `usfm-caller usfm-caller-${this.kind}`;
     s.textContent = this.mark;
-    s.title = "click to edit this note in the apparatus";
+    s.title = "click to read this note at the foot of the chapter";
     s.onmousedown = (e) => {
       e.preventDefault();
-      toggleNote(view, this.at);
+      toggleNote(view, this.at, "caller");
     };
     return s;
   }
@@ -188,13 +188,17 @@ class NotesWidget extends WidgetType {
       const row = document.createElement("div");
       row.className = "usfm-note";
       row.dataset.noteRow = String(n.from);
-      row.title = "click to edit this note here";
+      row.title = "click the note to edit it, or its number to go back to the text";
       row.onmousedown = (e) => {
         // SAFETY: a mousedown on a rendered row always targets an element
         // inside it; `closest` is the only thing read from it.
-        if ((e.target as HTMLElement).closest(".usfm-note-edit")) return;
+        const target = e.target as HTMLElement;
+        // An open editor owns its own clicks, and so does the Done button.
+        if (target.closest(".usfm-note-edit") || target.closest(".usfm-note-done")) return;
         e.preventDefault();
-        toggleNote(view, n.from, true);
+        // The BODY is the note itself, so clicking it means "let me write
+        // this"; the mark and the reference are the pointer back to the text.
+        toggleNote(view, n.from, target.closest(".usfm-note-body") === null ? "back" : "edit");
       };
       for (const [cls, text] of [
         ["usfm-note-mark", n.mark],
@@ -237,7 +241,16 @@ class NotesWidget extends WidgetType {
   }
 }
 
-export let toggleNote: (view: EditorView, at: number, scroll?: boolean) => void = () => {};
+/**
+ * What a reader meant by clicking a note.
+ *
+ * `caller` is a click on the superscript in the text — follow it down to the
+ * apparatus. `back` is a click on a row's mark or its reference — go back up to
+ * the caller. `edit` is a click on a row's BODY — open it for typing.
+ */
+export type NoteGesture = "caller" | "back" | "edit";
+
+export let toggleNote: (view: EditorView, at: number, how: NoteGesture) => void = () => {};
 export function setNoteToggler(fn: typeof toggleNote) {
   toggleNote = fn;
 }

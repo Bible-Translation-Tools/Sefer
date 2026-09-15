@@ -116,7 +116,10 @@ function Chrome() {
             It is the shell's only permanent readout — which storage this
             composition got, what the last operation said, and the one chord
             that reaches everything else. */}
-        <footer class="flex items-center gap-3 border-t border-sidebar-border bg-surface-primary px-3 py-1 text-smallest text-on-surface-tertiary">
+        <footer
+          data-testid="status-line"
+          class="flex items-center gap-3 border-t border-sidebar-border bg-surface-primary px-3 py-1 text-smallest text-on-surface-tertiary"
+        >
           <Show when={shell()} fallback={<span>{t("starting…")}</span>}>
             {(ready) => (
               <>
@@ -124,6 +127,7 @@ function Chrome() {
                 <span class="truncate">{ready().status()}</span>
                 <button
                   type="button"
+                  data-testid="status-commands"
                   class="ms-auto flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 transition-colors hover:bg-surface-secondary hover:text-on-surface-secondary"
                   onClick={() => runCommand("palette.open")}
                 >

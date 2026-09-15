@@ -6,7 +6,8 @@
  * not hold a second copy of it. So:
  *
  *  - The view is created ONCE, over `book.state`, and destroyed in
- *    `onCleanup`. Solid never re-renders it — components run once, and the
+ *    the mount effect's returned cleanup. Solid never re-renders it — a
+ *    component runs once, and the
  *    document is CodeMirror's business from here down. A different book means
  *    a different component instance (the route keys on the book id).
  *  - Every transaction goes through `book.fromView`, which is where a keystroke
@@ -31,8 +32,9 @@
 
 import { Compartment, StateEffect } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import { useNavigate } from "@tanstack/solid-router";
 import { Effect, Fiber, Stream } from "effect";
-import { createEffect, createRenderEffect, createSignal, onCleanup } from "solid-js";
+import { createEffect, createRenderEffect, createSignal, untrack } from "solid-js";
 
 import { stale } from "../../core/findings/finding";
 import type { SourceStamp } from "../../core/source/source";
@@ -55,13 +57,26 @@ import {
   dumpTrace,
   traces as editorTraces,
   type Measured,
+  noteBookIs,
+  watchLocation,
 } from "../../editor";
 import { installEditorDevSurface } from "../../platform/observability";
 import { useComposition } from "../CompositionContext";
 import { useShell } from "../ProjectContext";
+import { LocationBar } from "./workspace/LocationBar";
 
 // Last measurements for the dev surface; one module-level ring is enough.
 const keystrokes: Measured[] = [];
+
+/**
+ * Which books have already had the mountable half of the editor appended to
+ * their canonical state, and the projection compartment that went in with it.
+ *
+ * Module-level and weak, because the fact being remembered is a fact about the
+ * BOOK and not about this component: `appendConfig` dispatched through a bound
+ * view lands in the Book's state and stays there after the view is destroyed.
+ */
+const mountedConfig = new WeakMap<EditorBook, Compartment>();
 
 // The editor's own stylesheet. It ships with the editor module and is imported
 // where the view mounts, so a route that never opens a book never loads it.
@@ -80,12 +95,26 @@ interface Bound {
 
 export function BookEditor(props: BookEditorProps) {
   const shell = useShell();
+  // The book this instance is for, read once — see the mount effect below.
+  const bookId = untrack(() => props.book.id);
+  const navigate = useNavigate();
+  const go = (to: string): void => {
+    // SAFETY: the project path is built at runtime from a root, which no route
+    // literal union can spell. An unresolvable path goes through the router's
+    // own not-found boundary, never a crash — the same trade every other
+    // navigation in the shell makes.
+    void navigate({ to: to as never });
+  };
   const observability = useComposition().observability;
   const [stamp, setStamp] = createSignal<SourceStamp | undefined>(undefined, { name: "stamp" });
   const [bound, setBound] = createSignal<Bound | undefined>(undefined, { name: "boundView" });
   const [host, setHost] = createSignal<HTMLDivElement | undefined>(undefined, {
     name: "editorHost",
   });
+  // Which chapter is at the TOP of the viewport. A fact about the scroll
+  // position, not about the document, so it lives here beside the view rather
+  // than in the shell: two views over one book can honestly disagree.
+  const [atTop, setAtTop] = createSignal<number | undefined>(undefined, { name: "chapterAtTop" });
 
   // An effect, not a render effect: the view measures itself, so it must be
   // constructed after its parent is in the document.
@@ -93,9 +122,13 @@ export function BookEditor(props: BookEditorProps) {
     () => host(),
     (parent) => {
       if (parent === undefined) return;
-      const book = props.book;
+      // A deliberate one-time read, said so the runtime believes it: an
+      // effect's callback is an untracked scope in Solid 2, and a bare
+      // `props.book` there is a read it warns about. This component is keyed on
+      // the book id (see the route), so a different book is a different
+      // instance and this prop cannot change under a mounted view.
+      const book = untrack(() => props.book);
 
-      const projection = new Compartment();
       let view: EditorView | undefined;
       view = new EditorView({
         state: book.state,
@@ -106,19 +139,10 @@ export function BookEditor(props: BookEditorProps) {
       });
       const created = view;
       const unbind = book.bindView(created);
-      // The mountable half of the editor is added here rather than baked into
-      // the seat, because the canonical state must also work headless.
-      // The keystroke meter closes one gesture per DOM event and reports the
-      // JS work, the time to paint, the analyzes it cost, and the per-span
-      // totals — which sum to the JS work. The line itself is the meter's
-      // (`Measured.note`), so the format lives beside the arithmetic that
-      // makes it add up. The ring gets one bounded note per gesture; the dev
-      // surface keeps the last fifty measurements whole.
-      const meter = keystrokeMeter((measured) => {
-        observability.note("keystroke", "ready", measured.note, book.id);
-        keystrokes.push(measured);
-        if (keystrokes.length > 50) keystrokes.shift();
-      });
+      // The note editor mounts a satellite over this book, and a satellite is
+      // built from a `Funnel` — which comes from the Book, not from the view.
+      // This is the one place that knows both.
+      const unname = noteBookIs(created, book);
       installEditorDevSurface({
         keystrokes: () => keystrokes,
         spans: editorSpans,
@@ -132,17 +156,44 @@ export function BookEditor(props: BookEditorProps) {
           return one === undefined ? "no trace recorded" : dumpTrace(one);
         },
       });
-      // The front matter card is mounted here and not baked into the seat for
-      // the same reason the meter is: it is a DOM surface, and the canonical
-      // state must still work headless.
-      created.dispatch({
-        effects: StateEffect.appendConfig.of([
-          projection.of([]),
-          meter.extension,
-          flashing(),
-          frontMatterCard(),
-        ]),
-      });
+      // The mountable half of the editor, appended ONCE PER BOOK.
+      //
+      // Once, because `appendConfig` goes through the view and the view is
+      // bound to the Book — so the extension lands in the Book's CANONICAL
+      // state and outlives this component. Mounting a second view over the
+      // same book (leave the route, come back) used to append the whole set
+      // again: two `editorAttributes` writing `cm-mode-regular`, two keystroke
+      // meters, two notes per keypress, two front matter cards. The compartment
+      // is remembered with it, because a compartment that is not in the config
+      // is a reconfigure that does nothing.
+      //
+      // It is added here rather than baked into the seat because the canonical
+      // state must also work headless: the meter and the front matter card are
+      // DOM surfaces, and a Book in Node has no DOM.
+      let projection = mountedConfig.get(book);
+      if (projection === undefined) {
+        projection = new Compartment();
+        mountedConfig.set(book, projection);
+        // The keystroke meter closes one gesture per DOM event and reports the
+        // JS work, the time to paint, the analyzes it cost, and the per-span
+        // totals — which sum to the JS work. The line itself is the meter's
+        // (`Measured.note`), so the format lives beside the arithmetic that
+        // makes it add up. The ring gets one bounded note per gesture; the dev
+        // surface keeps the last fifty measurements whole.
+        const meter = keystrokeMeter((measured) => {
+          observability.note("keystroke", "ready", measured.note, book.id);
+          keystrokes.push(measured);
+          if (keystrokes.length > 50) keystrokes.shift();
+        });
+        created.dispatch({
+          effects: StateEffect.appendConfig.of([
+            projection.of([]),
+            meter.extension,
+            flashing(),
+            frontMatterCard(),
+          ]),
+        });
+      }
 
       const supply = (): void => {
         const analysis = structureAt(book.state).analysis;
@@ -184,15 +235,28 @@ export function BookEditor(props: BookEditorProps) {
         Stream.runForEach(shell.services.projectAnalysis.watch(), () => Effect.sync(corpus)),
       );
 
+      // The location bar's reading. One passive scroll listener, coalesced into
+      // an animation frame by the recipe.
+      const unwatch = watchLocation(created, (where) => {
+        setAtTop(where === null ? undefined : where.ordinal);
+      });
+
       setBound({ view: created, projection });
 
-      onCleanup(() => {
+      // RETURNED, not `onCleanup`. A Solid 2 effect's cleanup is its return
+      // value; `onCleanup` inside an effect callback is called outside any
+      // owner and never runs at all (NO_OWNER_CLEANUP, which the dev build says
+      // out loud). Everything below was leaking: the view was never destroyed,
+      // the book stayed bound, and the analysis fiber outlived the screen.
+      return () => {
+        unwatch();
+        unname();
         Effect.runFork(Fiber.interrupt(watching));
         unsubscribe();
         unbind();
         created.destroy();
         setBound(undefined);
-      });
+      };
     },
   );
 
@@ -227,22 +291,34 @@ export function BookEditor(props: BookEditorProps) {
   createEffect(
     () => ({ held: bound(), aimed: shell.reveal() }),
     ({ held, aimed }) => {
-      if (held === undefined || aimed === undefined || aimed.bookId !== props.book.id) return;
+      if (held === undefined || aimed === undefined || aimed.bookId !== bookId) return;
       const length = held.view.state.doc.length;
       const at = Math.min(aimed.from, length);
       const end = Math.min(aimed.to ?? at, length);
-      held.view.dispatch({ effects: EditorView.scrollIntoView(at, { y: "center" }) });
+      // A finding or a search hit is a point in the middle of a page, so it is
+      // centred; a CHAPTER is the first line you read, so it goes to the top
+      // with the rest of the book below it.
+      held.view.dispatch({
+        effects: EditorView.scrollIntoView(at, { y: aimed.at === "top" ? "start" : "center" }),
+      });
       const cancel = flash(held.view, { from: at, to: end });
-      onCleanup(cancel);
+      return cancel;
     },
   );
 
+  // The card is the frame; the location bar is pinned inside it and the
+  // CodeMirror host scrolls under it. `.editor-host` is the card (app.css) and
+  // `.cm-host` is what CodeMirror fills, which is why they are two elements now
+  // and were one before.
   return (
     <div
-      class="editor-host cm-host shadow-small"
+      class="editor-host shadow-small"
+      data-testid="editor-card"
       data-mode={shell.mode()}
       data-revision={(stamp() ?? props.book.source().stamp).revision}
-      ref={setHost}
-    />
+    >
+      <LocationBar ordinal={atTop()} go={go} />
+      <div class="cm-host" data-testid="editor-host" ref={setHost} />
+    </div>
   );
 }

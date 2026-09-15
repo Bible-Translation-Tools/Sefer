@@ -18,6 +18,22 @@
  * cross-reference and a nested editor are different KINDS of thing, and the
  * semantic set has no name for that distinction. Those four keep a hue each,
  * light and dark.
+ *
+ * ## Every rule that paints the PAGE is scoped to a mode
+ *
+ * `.cm-mode-regular` and `.cm-mode-usfm` are on the editor element, written by
+ * `EditorView.editorAttributes` (see `src/app/ui/BookEditor.tsx` for why it is
+ * a facet and not a hand-added class). A `.usfm-*` rule written without one of
+ * those prefixes applies in BOTH projections, and the two projections do not
+ * share a vocabulary: regular mode paints line classes like `usfm-p` and
+ * `usfm-q2`, USFM mode paints `usfm-src-p` and token marks like
+ * `cm-usfm-marker`. An unprefixed rule is therefore always either dead or a
+ * leak — a paragraph indent showing up in the source view.
+ *
+ * The exceptions, and they are the only ones: `.cm-host …` (the frame, which
+ * is not the page), `.cm-excerpt …` (a satellite card, which undoes the page's
+ * chrome on purpose) and `.usfm-attr* ` (the aligned-word popover, which is a
+ * tooltip over either projection). Everything else takes a mode.
  * ------------------------------------------------------------------------- */
 
 :root {
@@ -79,21 +95,6 @@
   }
 }
 
-.usfm-line {
-  margin: 0;
-  font:
-    12px/21px ui-monospace,
-    SFMono-Regular,
-    monospace;
-  color: #e4e4e7;
-  white-space: pre-wrap;
-  min-height: 21px;
-}
-.usfm-line:empty::after {
-  content: "";
-  display: inline-block;
-}
-
 .cm-host .cm-editor {
   height: 100%;
 }
@@ -103,7 +104,7 @@
 .cm-host .cm-scroller {
   overflow: auto;
 }
-.usfm-join {
+.cm-mode-regular .usfm-join {
   white-space: pre;
 }
 
@@ -576,6 +577,32 @@
   font-style: normal;
 }
 
+/* The row a followed caller landed on. A brief tint, not a permanent mark:
+   it answers "which one" and then gets out of the way. */
+.cm-mode-regular .usfm-note-found {
+  background: var(--surface-highlight);
+  border-radius: 4px;
+  transition: background 220ms ease-out;
+}
+
+/* The note being edited in place: a satellite over the note's own span, in the
+   row's slot. It has no card of its own — the row IS the card — so the view
+   inside it drops the page's chrome the way an excerpt does. */
+.cm-mode-regular .cm-note .cm-content {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  caret-color: var(--editor-accent);
+}
+.cm-mode-regular .cm-note .cm-line {
+  padding: 0;
+}
+.cm-mode-regular .cm-note .cm-scroller {
+  overflow: visible;
+}
+
 .cm-mode-regular .usfm-note-edit {
   display: none;
 }
@@ -590,7 +617,7 @@
   display: none;
 }
 
-.usfm-note-done {
+.cm-mode-regular .usfm-note-done {
   margin-left: 8px;
   padding: 1px 8px;
   font: 500 10px/1.6 var(--font-ui);
@@ -601,7 +628,7 @@
   cursor: pointer;
   vertical-align: top;
 }
-.usfm-note-done:hover {
+.cm-mode-regular .usfm-note-done:hover {
   background: var(--button-secondary-surface-hover);
 }
 /* The note being edited. The one literal colour the palette port left behind
@@ -851,7 +878,7 @@
    tokens and the same locked-key discipline as the attribute popover above,
    because it is the same idea at book scale.
    --------------------------------------------------------------------------- */
-.usfm-front {
+.cm-mode-regular .usfm-frontcard {
   display: grid;
   grid-template-columns: max-content 1fr;
   gap: 4px 12px;
@@ -863,16 +890,16 @@
   border: 1px solid var(--surface-border);
   border-radius: 8px;
 }
-.usfm-front-row {
+.cm-mode-regular .usfm-front-row {
   display: contents;
 }
-.usfm-front-label {
+.cm-mode-regular .usfm-front-label {
   color: var(--on-surface-tertiary);
   font: 400 11px/1.8 var(--font-ui);
   white-space: nowrap;
   cursor: default;
 }
-.usfm-front-input {
+.cm-mode-regular .usfm-front-input {
   background: transparent;
   border: 1px solid transparent;
   border-radius: 4px;
@@ -882,10 +909,10 @@
   width: 100%;
   min-width: 0;
 }
-.usfm-front-input:hover {
+.cm-mode-regular .usfm-front-input:hover {
   border-color: var(--surface-border);
 }
-.usfm-front-input:focus {
+.cm-mode-regular .usfm-front-input:focus {
   outline: none;
   background: var(--surface-primary);
   border-color: var(--brand-base);
