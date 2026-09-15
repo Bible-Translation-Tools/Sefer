@@ -75,7 +75,7 @@ choose the opening chapter, and `shell.reveal()` keeps it for the editor surface
 ## Where you were: `workspace.lastLocation`
 
 Opening a project lands on the WORK, not on a census. `workspace.lastLocation` is a preference keyed by
-project root holding `{ bookId, chapter }`; `focus` and every chapter change write it (debounced, like
+project root holding `{ bookId, chapter, at }`; `focus` and every chapter change write it (debounced, like
 the sidebar width — a record rewrite per click is a file write per click), and two places read it:
 
 - **`/project/$id`** forwards to `shell.landingPath(root)` as soon as the project is open, unless the
@@ -88,6 +88,40 @@ the sidebar width — a record rewrite per click is a file write per click), and
 
 The census is reachable from the location bar's book crumb, which navigates with `?books=1` — a door
 that bounced you straight back out would not be one.
+
+`chapter` is the CLIP and `at` is the chapter that was at the top of the viewport. Both are needed,
+because a book opens WHOLE by default: a reader who had scrolled down to Psalm 3 had a clip of `null`
+and came back to the top of Psalms, which is landing on the right book and the wrong place.
+`BookEditor` writes `at` through `shell.noteChapterAtTop`, from the one `watchLocation` subscription
+the location bar already has — the shell keeps no viewport state of its own, because a viewport is a
+fact about a view and two views over one book may honestly disagree. On open, `focus` scrolls that
+chapter's `\c` anchor to the top, or clips to it when `editor.preferChapterView` is on.
+
+An AIM still wins over a remembered place, because a finding or a search hit is a request and a
+remembered scroll position is only the absence of one — but an aim is answered ONCE. Re-opening the
+book an aim had named used to replay that scroll forever, which is what kept the remembered place out
+of reach even after it was written down.
+
+## The way back: `editor.back`
+
+Every full-page route — findings, history, review, compare, find, terms, inventory, cloud, settings,
+the projects list — replaces the editor entirely. The rail's panel tile is one way back and reads as a
+panel toggle, so there is an explicit one as well: `src/app/ui/workspace/BackToEditor.tsx`, one
+`data-testid="back-to-editor"` button pinned to the top-right of the routed content, naming the book it
+returns to.
+
+It is rendered ONCE, by the root chrome above the `<Outlet/>` and outside the scroller, rather than by
+each page: a screen added later gets the door without knowing it exists, no page can forget it or spell
+it differently, and it does not scroll away with the content. The same component registers the
+`editor.back` command, so the palette lists it and Escape performs it — registered there and not in the
+shell's core set, because "is this a full-page screen" is the ROUTE's question and `ShellBridge`
+deliberately carries no pathname. All three doors go to `shell.landingPath(root)`, so they cannot
+disagree.
+
+Escape works because `installCommandKeys` now skips a binding with no modifier while the reader is
+typing into an input, a text area or a contenteditable — which is what `.cm-content` is, so the editor
+and the palette's own search box are covered by one rule. Every other binding holds Mod, so the rule
+costs them nothing.
 
 The recovery banner is mounted on the book route as well as the project route, for the same reason:
 unsaved work found on open is the first thing to answer, and after this change the project page is not
