@@ -72,6 +72,8 @@ Everything else on the corpus path is off the JS thread on desktop.
 
 `GalleyLive(bytes)` is a scoped Layer: it checks the handshake, instantiates the module once, opens the handle, and frees it in a finalizer. It takes bytes rather than fetching them so core stays free of both `node:fs` and `fetch`; the hosts supply them.
 
+`dispose()` is **idempotent**, and the finalizer goes through it rather than round it: the service holds the handle in one slot, takes it out before calling `free()`, and a later call finds nothing to free. `wasm-bindgen`'s `free()` zeroes the pointer and unregisters the finalizer, so a second free of the same object is a double free of the Rust allocation — which is what a caller who obeyed the old doc and disposed early would have caused when the Layer's scope closed. One owner, one free. `galley.test.ts` pins it.
+
 - `src/platform/web/galley.ts` — `WebGalleyLive`, the wasm as a `?url` asset, fetched. The Tauri webview shares this path.
 - `src/platform/node/galley.ts` — `NodeGalleyLive`, read with `node:fs`. Tests and tooling only.
 

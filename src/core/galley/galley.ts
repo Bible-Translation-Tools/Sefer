@@ -353,8 +353,10 @@ export interface GalleyService {
   readonly residentBytes: () => number;
 
   /**
-   * Free the wasm handle. The Layer's finalizer calls this; callers do not.
-   * Every method above is undefined behaviour afterwards.
+   * Free the wasm handle. IDEMPOTENT: the first call frees the pointer and
+   * drops it, and every later call does nothing — the Layer's finalizer goes
+   * through this same door, so a caller who disposes early does not double
+   * free. Every method above is undefined behaviour afterwards.
    */
   readonly dispose: () => void;
 }
@@ -466,6 +468,22 @@ const makeService = (
   const observe = Option.getOrUndefined(observability);
   let revision = 0;
 
+  /**
+   * The handle, until it is freed. `dispose` takes it out of this slot before
+   * calling `free()`, so the pointer is released exactly once however many
+   * times dispose is called: `wasm-bindgen`'s `free()` zeroes the pointer and
+   * unregisters the finalizer, so a second call on the same object is a double
+   * free of the Rust allocation. One owner, one free — and the Layer's
+   * finalizer goes through this same door rather than round it.
+   */
+  let live: GalleyHandle | null = handle;
+
+  const dispose = (): void => {
+    const held = live;
+    live = null;
+    held?.free();
+  };
+
   const analyze = (text: string): Analysis => {
     if (text.includes("\r")) {
       throw new EngineInputError({
@@ -549,7 +567,7 @@ const makeService = (
     knobs,
     setKnobs,
     residentBytes: () => handle.residentBytes(),
-    dispose: () => handle.free(),
+    dispose,
   };
 };
 
@@ -575,7 +593,12 @@ export const GalleyLive = (
         catch: (cause) =>
           new EngineLoadError({ reason: "the engine handle would not open", cause }),
       });
-      yield* Effect.addFinalizer(() => Effect.sync(() => handle.free()));
-      return makeService(handle, observability);
+      const service = makeService(handle, observability);
+      // The finalizer frees through the service, not through the handle: that
+      // is the one door that knows whether the pointer is still ours, so a
+      // caller who disposed early and the scope closing afterwards free once
+      // between them.
+      yield* Effect.addFinalizer(() => Effect.sync(() => service.dispose()));
+      return service;
     }),
   );

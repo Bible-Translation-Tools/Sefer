@@ -39,11 +39,7 @@ Everything in this file was asked for in the UI build-out and either is not poss
 
 **From the build-out review (2026-09-13):** the `find` wire buffer (`galley/src/find.rs`, `wire::encode`) carries no magic/version word, unlike the onion and sous buffers, so `accepts(manifest)` cannot catch a reordered record. Add both so a regenerated reader beside a stale manifest fails loudly.
 
-## 6. Galley handle — `dispose` versus the finalizer
-
-**From the review:** `Galley.dispose` is public and the finalizer also calls `handle.free()`; a caller obeying the doc double-frees. Either make dispose idempotent on the wasm side or drop one of the two. Sefer-side fix is possible too; noting it here because the contract belongs to the handle.
-
-## 7. Native corpus thread — no respawn after a panic
+## 6. Native corpus thread — no respawn after a panic
 
 **From the review, Sefer's `src-tauri/src/corpus.rs`, but it wraps the engine:** a panic inside `job(&mut sous)` (including inside rayon) kills the owner thread and every later command answers "the corpus thread is not answering" for the process lifetime. Ask for the engine side: `sous` calls that can panic on malformed input should return `Result` instead; Sefer side: respawn the thread and re-register books.
 
@@ -53,3 +49,4 @@ Everything in this file was asked for in the UI build-out and either is not poss
 - Export on Tauri needs a save picker on Sefer's `Dialogs` port.
 - Create project needs `ProjectAdmin.create`.
 - Verse-by-sid grouping, projection coordinates and the table of contents that Find, Key terms and Compare rely on all work with the current engine; nothing is needed there.
+- `Galley.dispose` versus the Layer's finalizer was item 6 here and is not an engine ask: `wasm-bindgen`'s `free()` zeroes the pointer and unregisters the finalizer, so one guard on Sefer's side is the whole fix. Done — `dispose` frees once and ignores later calls (`documentation/architecture/galley.md`, "Loading it").
