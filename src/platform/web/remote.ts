@@ -268,6 +268,14 @@ const makeWebRemote = (
     return {
       attach,
 
+      // The read half of `attach`. `None` is "nothing attached", which is the
+      // ordinary state of a project that has never been published.
+      origin: (repo) =>
+        Effect.map(
+          attempt(() => git.listRemotes({ fs, dir: repo.root })),
+          (remotes) => Option.fromNullishOr(remotes.find((entry) => entry.remote === ORIGIN)?.url),
+        ),
+
       // A bare fetch: it updates the remote-tracking refs and touches no file
       // in the work tree, which is what makes it the safe thing to offer
       // someone who wants to know whether anything arrived.

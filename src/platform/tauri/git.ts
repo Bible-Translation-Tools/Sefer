@@ -145,6 +145,29 @@ export const TauriGitLive: Layer.Layer<Git> = Layer.succeed(Git, {
       return entries.map(commitOf);
     }),
 
+  /**
+   * TODO(seam): the four sync reads below need four git2 commands that
+   * `src-tauri/src/git.rs` does not have yet — `git_log_from(root, ref)`,
+   * `git_resolve_ref(root, ref) -> Option<String>`, `git_current_branch(root)
+   * -> Option<String>` and `git_changed_paths_between(root, from, to) ->
+   * Vec<GitChangedPath>`. All four are a handful of lines of libgit2
+   * (`Revwalk::push_ref`, `Repository::revparse_single`, `Repository::head`,
+   * `Repository::diff_tree_to_tree`), but this file may not invent commands
+   * the Rust side does not export.
+   *
+   * Refusing by name is the honest stub: `/cloud` shows the refusal and says
+   * the desktop host cannot read the cloud clock yet, rather than reporting a
+   * project as up to date with a remote it never compared against.
+   */
+  logFrom: (_repo, ref) => refuse(`git_log_from is not implemented on desktop yet (ref ${ref})`),
+
+  resolve: (_repo, ref) => refuse(`git_resolve_ref is not implemented on desktop yet (ref ${ref})`),
+
+  branch: () => refuse("git_current_branch is not implemented on desktop yet"),
+
+  changedPathsBetween: (_repo, from, to) =>
+    refuse(`git_changed_paths_between is not implemented on desktop yet (${from}..${to})`),
+
   show,
 
   previousVersions: (repo, path) =>
