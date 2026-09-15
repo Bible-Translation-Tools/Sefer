@@ -103,6 +103,21 @@ export const WebDialogsLive: Layer.Layer<Dialogs> = Layer.effect(
           return picked.map((handle) => handle.name);
         }),
 
+      /**
+       * Always `None`, and that is the honest Web answer rather than a gap.
+       *
+       * A browser has no path to hand back: `showSaveFilePicker` would give us
+       * a handle, and the OPFS `FileSystem` layer cannot write through one.
+       * Web saves a copy by downloading it (`src/app/projectCommands.ts`), so
+       * the caller reads `None` as "use the download" — which is why this
+       * notes `declined` rather than looking for a picker it could not use.
+       */
+      pickSaveFile: (_title, suggestedName) =>
+        Effect.sync(() => {
+          note("declined", `pickSaveFile unsupported: ${suggestedName} goes to a download`);
+          return Option.none();
+        }),
+
       confirm: (message) =>
         Effect.sync(() => {
           const ask = pickers().confirm;

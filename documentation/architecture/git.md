@@ -7,11 +7,10 @@ USFM bytes on disk; git records what Save already wrote.
 
 `src/core/git/git.ts` defines `Git` (`Context.Service`) as the intersection of the user's jobs, not the
 union of two libraries' APIs: `open`, `init`, `status`, `commit`, `log`, `logFrom`, `resolve`,
-`branch`, `changedPathsBetween`, `show`, `previousVersions`. The last four exist for the sync
-surface — the cloud's side of a comparison, whether it exists at all, what to call the tracking
-ref, and which paths differ between two revisions — and desktop refuses them by name until
-`git.rs` grows the matching git2 commands ([sync.md](sync.md)). A
-`Repo` is just its work-tree `root`. Every method fails with `GitError`, whose `reason` is
+`branch`, `changedPathsBetween`, `show`, `previousVersions`. The four in the middle exist for the
+sync surface — the cloud's side of a comparison, whether it exists at all, what to call the tracking
+ref, and which paths differ between two revisions ([sync.md](sync.md)) — and BOTH hosts answer them
+now. A `Repo` is just its work-tree `root`. Every method fails with `GitError`, whose `reason` is
 `NotARepository`, `Io`, `Conflict`, or `Refused` — a read that could not fail would force a host layer
 to lie. `Version` pairs a `Commit` with `bytes()`, so a history list stays cheap and content is read
 only when something displays or diffs it. Core names no library; `repositoryPath(root, path)` is the one
@@ -34,20 +33,32 @@ The owner's decision (2026-09-06) is one implementation per host, not one librar
   It installs the `Buffer` global from the `buffer` package at module load, for the reason
   [storage.md](storage.md) records; translates `statusMatrix` counters to the port's four `ChangeKind`s;
   and maps every thrown error to `GitError`.
-- `TauriGitLive` (`src/platform/tauri/git.ts`) — a stub whose every method fails with `Refused`. Desktop
-  will use git2 in Rust behind one Tauri command per port method, with Specta-generated bindings; the
-  file's `TODO(seam)` header carries the shape. `@tauri-apps/api` is deliberately not imported, so the
-  stub does not make the dependency look needed.
+- `TauriGitLive` (`src/platform/tauri/git.ts`) — `Layer<Git>` over one git2 command per port member in
+  `src-tauri/src/git.rs`. It is translation only: it runs `repositoryPath` before every call and reads
+  the Rust error's reason prefix, and Rust re-checks the path because that process can write anywhere
+  the user can. The command table and the semantics both hosts agree on are in
+  [desktop.md](desktop.md).
 
 `gitContract(name, makeLayer, makeFileSystemLayer?)` in `src/core/git/contract.ts` is the acceptance
 suite both must pass: init, empty status, a file written through `FileSystem`, a commit from one receipt,
 then `log`, `show`, and `previousVersions` agreeing on it. It is exported and registered nowhere — the
-tier each Layer belongs to is the registration site's decision.
+tier each Layer belongs to is the registration site's decision. The desktop Layer cannot be registered
+against it at all — `invoke` needs a Tauri runtime — so the same case, plus one per command, is
+restated as Rust unit tests in `git.rs` and run by `cargo test`.
+
+The one behaviour the two implementations reached differently and had to be brought together: the Web
+layer refuses an empty receipt list, and `git_commit` did not — on an unborn HEAD it produced an empty
+root commit. It refuses now, in the same words.
 
 ## Remote
 
-`src/core/remote/remote.ts` defines the port — `attach`, `fetch`, `pull`, `push`, `publish`, and
-`progress(): Stream<Progress>`. Its four reasons (`Unavailable`, `Unauthorized`, `Network`, `Rejected`)
+`src/core/remote/remote.ts` defines the port — `attach`, `origin`, `fetch`, `pull`, `push`,
+`publish`, `moveBranch`, `abortMerge`, and `progress(): Stream<Progress>`. The last two transfer
+nothing: `moveBranch(repo, branch, toCommit)` points a branch at a commit and makes the work tree
+match (Combine's base), and `abortMerge(repo)` throws away a half-finished merge (Resolve). They
+live here rather than on `Git` because the sync surface is the only caller either will ever have,
+and both refuse the same things on both hosts — a branch that is not checked out, and an abort with
+nothing in progress. Its four reasons (`Unavailable`, `Unauthorized`, `Network`, `Rejected`)
 exist because only one of them is worth retrying unchanged. Cloning is not a fifth method:
 `cloneRepository(url, into)` in `src/core/remote/clone.ts` is `Git.init` → `attach` → `pull`, in core
 because the ORDER is policy — a project on disk always knows where its bytes came from, even if the
@@ -97,5 +108,9 @@ project rather than its text; `AdminError` reasons are `NotFound`, `Invalid`, `R
   through `decodeBurritoMetadata`, so an edit cannot leave the file invalid for the next reader.
 - `delete(root, confirm)` asks first, always; `confirm` is a plain port (composition passes
   `Dialogs.confirm`) and a `false` answer is `Refused`.
-- `export(root, "burrito", to)` copies the folder and returns the path written. `"usfm-zip"` is
-  `Unsupported`: there is no archive dependency, and choosing one belongs to whoever needs the format.
+- `export(root, format, to)` returns the path written: `"burrito"` copies the folder, `"usfm-zip"`
+  writes `archive`'s bytes atomically, creating the parent folder if the person named one that does
+  not exist yet. `archive(root)` is the same zip in memory, for a host with nowhere to put a file.
+  `src/app/projectCommands.ts` chooses between them on `HostInfo.capabilities().nativeDisk`: with
+  disk, `Dialogs.pickSaveFile` names a path and `export` writes it; without, the bytes go to a
+  download.

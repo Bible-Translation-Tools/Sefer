@@ -33,11 +33,13 @@ a hand-edited file cannot stop the application from starting.
 **Credentials** is keyed by remote name. Web is session-only by design: a browser has nowhere
 trustworthy to persist a token, so it is never written to project files or settings.
 
-**Dialogs** is the three questions every open, import and destructive flow needs. Web uses
+**Dialogs** is the four questions every open, import, save and destructive flow needs. Web uses
 `confirm` and the File System Access pickers when present, and answers `None`/`[]`/`false` with a note
 when not. Its pickers yield handle names, not paths; mapping a picked handle to a path an OPFS
 `FileSystem` can read belongs to the project/library slice, and is marked `TODO(seam)` in
-`src/platform/web/dialogs.ts`.
+`src/platform/web/dialogs.ts`. `pickSaveFile(title, suggestedName, filters)` is the one member Web
+answers `None` to on purpose rather than for want of a browser feature: a browser has no path to
+give back, so the caller downloads the same bytes instead ([git.md](git.md), ProjectAdmin).
 
 **Updater** is how a running Sefer replaces itself. Only the desktop host can, so the Web Layer is a
 real implementation that refuses: `check()` answers `Unavailable` with a reason to display, and every

@@ -11,6 +11,11 @@
  * is the receipts rule — a receipt path becomes repository-relative through
  * core's `repositoryPath` or it is `Refused` — and Rust re-checks it, because
  * this process can write anywhere the user can.
+ *
+ * Every member of the port is answered; nothing here refuses by name any more.
+ * `src/core/git/contract.ts` is the spec, and it cannot be run against this
+ * Layer from Node — `invoke` needs a Tauri runtime — so the same case, plus one
+ * per command, lives as `#[cfg(test)] mod tests` in `src-tauri/src/git.rs`.
  */
 import { invoke } from "@tauri-apps/api/core";
 import { Effect, Layer, Option } from "effect";
@@ -146,27 +151,44 @@ export const TauriGitLive: Layer.Layer<Git> = Layer.succeed(Git, {
     }),
 
   /**
-   * TODO(seam): the four sync reads below need four git2 commands that
-   * `src-tauri/src/git.rs` does not have yet — `git_log_from(root, ref)`,
-   * `git_resolve_ref(root, ref) -> Option<String>`, `git_current_branch(root)
-   * -> Option<String>` and `git_changed_paths_between(root, from, to) ->
-   * Vec<GitChangedPath>`. All four are a handful of lines of libgit2
-   * (`Revwalk::push_ref`, `Repository::revparse_single`, `Repository::head`,
-   * `Repository::diff_tree_to_tree`), but this file may not invent commands
-   * the Rust side does not export.
+   * The four sync reads. None of them touches a file: after a fetch the
+   * cloud's commits are already in the object database, so the whole
+   * comparison — how far ahead, how far behind, which books would change — is
+   * worked out before a byte of the work tree moves.
    *
-   * Refusing by name is the honest stub: `/cloud` shows the refusal and says
-   * the desktop host cannot read the cloud clock yet, rather than reporting a
-   * project as up to date with a remote it never compared against.
+   * `Refused` is gone from all four; `git.rs` exports the matching commands
+   * and `cargo test` holds them to the same answers the Web layer gives.
    */
-  logFrom: (_repo, ref) => refuse(`git_log_from is not implemented on desktop yet (ref ${ref})`),
+  logFrom: (repo, ref) =>
+    Effect.map(
+      call<readonly WireCommit[]>("git_log_from", { root: repo.root, rev: ref }),
+      (entries) => entries.map(commitOf),
+    ),
 
-  resolve: (_repo, ref) => refuse(`git_resolve_ref is not implemented on desktop yet (ref ${ref})`),
+  // `None` is an ANSWER: a project attached to a repository nobody has pushed
+  // to yet has no tracking ref, and that is the ordinary unpublished state.
+  resolve: (repo, ref) =>
+    Effect.map(
+      call<string | null>("git_resolve_ref", { root: repo.root, rev: ref }),
+      Option.fromNullishOr,
+    ),
 
-  branch: () => refuse("git_current_branch is not implemented on desktop yet"),
+  branch: (repo) =>
+    Effect.map(
+      call<string | null>("git_current_branch", { root: repo.root }),
+      Option.fromNullishOr,
+    ),
 
-  changedPathsBetween: (_repo, from, to) =>
-    refuse(`git_changed_paths_between is not implemented on desktop yet (${from}..${to})`),
+  changedPathsBetween: (repo, from, to) =>
+    Effect.map(
+      call<readonly WireChangedPath[]>("git_changed_paths_between", {
+        root: repo.root,
+        from,
+        to,
+      }),
+      (changed): readonly ChangedPath[] =>
+        changed.map((entry) => ({ path: entry.path, kind: changeKindOf(entry.kind) })),
+    ),
 
   show,
 

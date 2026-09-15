@@ -19,8 +19,9 @@
  * projects table calls `exportProjectZip` directly.
  */
 
-import { Effect, Result } from "effect";
+import { Effect, Option, Result } from "effect";
 
+import type { AdminError } from "../core/admin/projectAdmin";
 import { registerCommand } from "./commands";
 import { t } from "./i18n";
 import type { Services } from "./services";
@@ -34,32 +35,68 @@ const lastSegment = (path: string): string => path.slice(path.lastIndexOf("/") +
 const describe = (failure: { readonly reason: string; readonly description?: string }): string =>
   failure.description ?? failure.reason;
 
+/** The one filter list both hosts show for a project archive. */
+const ZIP_FILTERS = [{ name: "Zip archive", extensions: ["zip"] }] as const;
+
 /**
  * Saves the project at `root` as a zip.
  *
- * On the Web host that means a download: OPFS is Sefer's own storage, nothing
- * outside the page can see it, and the `Dialogs` port has no save picker to
- * name a real path with. On a host that HAS one, this is where
- * `ProjectAdmin.export(root, "usfm-zip", picked)` belongs instead — the bytes
- * are the same either way, and `archive` is the half both share.
+ * Two endings, one set of bytes. On a host with real disk the person names a
+ * file and `ProjectAdmin.export(root, "usfm-zip", picked)` writes it through
+ * the `FileSystem` port — the same atomic write everything else uses. On the
+ * Web the bytes go to a download instead: OPFS is Sefer's own storage, nothing
+ * outside the page can see it, and `Dialogs.pickSaveFile` answers `None`
+ * because a browser has no path to give back.
+ *
+ * `capabilities().nativeDisk` picks between them, not a host name — the
+ * question is "can a file be put somewhere the person will find it", and that
+ * is what the capability means.
  */
 export const exportProjectZip = async (services: Services, root: string): Promise<void> => {
   const name = lastSegment(root) || "project";
+  const fileName = `${name}.zip`;
+
+  // Asked BEFORE the archive is built, deliberately: a cancelled dialog should
+  // not have cost a zip of the whole project first.
+  const destination = services.hostInfo.capabilities().nativeDisk
+    ? await services.run(
+        services.dialogs.pickSaveFile(t("Save {name}", { name: fileName }), fileName, ZIP_FILTERS),
+      )
+    : Option.none<string>();
+  if (services.hostInfo.capabilities().nativeDisk && Option.isNone(destination)) return;
+
+  // One job, two shapes of answer: `export` returns the path it wrote,
+  // `archive` returns the bytes that still need a home.
+  const job: Effect.Effect<string | Uint8Array, AdminError> = Option.isNone(destination)
+    ? services.admin.archive(root)
+    : services.admin.export(root, "usfm-zip", destination.value);
+
   const notice = toasts.progress({ title: t("Preparing {name}", { name }) });
-  const made = await services.run(Effect.result(services.admin.archive(root)));
-  if (Result.isFailure(made)) {
+  const written = await services.run(Effect.result(job));
+  if (Result.isFailure(written)) {
     toasts.update(notice, {
       title: t("Could not export {name}", { name }),
-      message: describe(made.failure),
+      message: describe(written.failure),
       tone: "error",
       autoClose: false,
     });
     return;
   }
-  downloadBytes(`${name}.zip`, made.success);
+
+  // `export` answers the path it wrote; `archive` answers the bytes, which
+  // still have to be handed somewhere the person can reach them.
+  if (typeof written.success === "string") {
+    toasts.update(notice, {
+      title: t("Exported {name}", { name }),
+      message: written.success,
+      tone: "success",
+    });
+    return;
+  }
+  downloadBytes(fileName, written.success);
   toasts.update(notice, {
     title: t("Exported {name}", { name }),
-    message: t("{size} KB", { size: Math.max(1, Math.round(made.success.length / 1024)) }),
+    message: t("{size} KB", { size: Math.max(1, Math.round(written.success.length / 1024)) }),
     tone: "success",
   });
 };

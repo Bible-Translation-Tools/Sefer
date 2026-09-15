@@ -10,7 +10,7 @@
  * refusing answer (`None` / `[]` / `false`) rather than a failure: a cancelled
  * dialog and a broken dialog lead to the same place, which is "do nothing".
  */
-import { confirm as tauriConfirm, open } from "@tauri-apps/plugin-dialog";
+import { confirm as tauriConfirm, open, save } from "@tauri-apps/plugin-dialog";
 import { Effect, Layer, Option } from "effect";
 
 import { Dialogs } from "../../core/host/dialogs";
@@ -41,6 +41,26 @@ export const TauriDialogsLive: Layer.Layer<Dialogs> = Layer.succeed(Dialogs, {
         (picked): readonly string[] => (Array.isArray(picked) ? picked : []),
       ),
       () => [],
+    ),
+
+  /**
+   * The save half, and the thing Web cannot do: a real absolute path, chosen
+   * by the person, that the `FileSystem` layer can then write through. The
+   * plugin already warns about overwriting, so nothing here asks twice.
+   *
+   * `defaultPath` carries the suggested name rather than a folder, which is
+   * how the plugin pre-fills the name field and lets the OS remember where
+   * this kind of thing was last saved.
+   */
+  pickSaveFile: (title, suggestedName, filters) =>
+    Effect.orElseSucceed(
+      Effect.map(
+        Effect.tryPromise(() =>
+          save({ title, defaultPath: suggestedName, filters: asFilters(filters) }),
+        ),
+        (picked) => (typeof picked === "string" ? Option.some(picked) : Option.none<string>()),
+      ),
+      () => Option.none<string>(),
     ),
 
   // `false` is the safe answer, so a dialog that will not open declines.

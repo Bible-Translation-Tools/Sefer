@@ -161,10 +161,18 @@ When a book IS contested, the primary action becomes Compare instead. Replaying 
 moved on both sides would either conflict or silently pick a winner, and both are worse than a
 screen where a person looks at the two texts.
 
-**Not wired yet.** The combine needs a branch move onto the remote head, which neither host's Layer
-exposes: v1 did it with `writeRef` + `checkout` + replay. The button says so plainly rather than
-running a merge nobody asked for. Same for Finish the transfer. Those are the two honest gaps in
-this surface, and they are named in the UI, not only here.
+**Half wired.** The branch move exists now: `Remote.moveBranch(repo, branch, toCommit)` is `writeRef`
++ a forced `checkout` on the Web and `git_move_branch` over git2 on desktop. What is still missing is
+the replay around it — read this device's books out of HEAD, move onto the cloud's head, write them
+back, record ONE version, push. That is policy and belongs beside `combinePlan` in `src/core/sync`,
+not in a button handler, so the Combine button still says plainly that it is not wired rather than
+running a merge nobody asked for.
+
+**Finish the transfer is wired.** `Remote.abortMerge(repo)` — isomorphic-git's `abortMerge` on the
+Web, `git_abort_merge` over git2 on desktop — puts the work tree back to HEAD and clears the merge
+state, and the Resolve button runs it through the same `transfer` path as every other press. It
+REFUSES when nothing is in progress, deliberately: it is a hard reset underneath, and on a clean
+repository that would discard a translator's unsaved morning instead of undoing a transfer.
 
 ## Offline
 

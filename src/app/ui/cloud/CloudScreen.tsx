@@ -249,6 +249,21 @@ export function CloudScreen() {
     });
 
   /**
+   * Resolve: throw away the merge a transfer left half-finished, so the work
+   * tree is HEAD again and the next press is an ordinary one.
+   *
+   * `abortMerge` refuses when nothing is in progress — it is a hard reset
+   * underneath — so pressing this on a healthy project says so rather than
+   * discarding a morning's writing.
+   */
+  const abortMerge = (root: string) =>
+    Effect.gen(function* () {
+      const git = yield* Git;
+      const remote = yield* Remote;
+      return yield* remote.abortMerge(yield* git.open(root));
+    });
+
+  /**
    * The primary button, dispatched by the action the state machine chose.
    *
    * `attach` and `publish` are not run from here: choosing a repository needs
@@ -275,10 +290,12 @@ export function CloudScreen() {
         transfer(pull);
         return;
       case "combine":
-        // The combine is a squash onto the cloud's versions and it needs a
-        // git operation neither host exposes yet (see documentation/
-        // architecture/sync.md, "Combine"). Saying so is better than a
-        // button that quietly runs a merge.
+        // Both hosts now expose the branch move Combine needs
+        // (`Remote.moveBranch`), but the move is only half of it: the squash
+        // has to read this device's books out of HEAD, move onto the cloud's
+        // head, write them back and record ONE version. That replay is policy
+        // and belongs beside `combinePlan` in `src/core/sync`, not in a button
+        // handler — see documentation/architecture/sync.md, "Combine".
         setProblem(
           t(
             "Combine is not wired to a transfer yet. Until it is, receive the updates into a fresh copy or compare the books by hand.",
@@ -286,11 +303,7 @@ export function CloudScreen() {
         );
         return;
       case "resolve":
-        setProblem(
-          t(
-            "Finish the unfinished transfer outside Sefer for now, then come back and check for changes.",
-          ),
-        );
+        transfer(abortMerge);
         return;
       case "sign-in":
       case "attach":
