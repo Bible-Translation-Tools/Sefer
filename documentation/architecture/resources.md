@@ -11,6 +11,35 @@ Both model a subset — the fields the previous application actually read, plus 
 
 A refusal is a `Schema.SchemaError` whose `message` names the failing path, for example `Missing key` followed by `at ["identification"]`. Fixtures live in `fixtures/resources/`; see that folder's README for what is real and what is constructed.
 
+## Checksums
+
+A Burrito ingredient carries the md5 and the size of the file it names, which
+means every save of a book makes `metadata.json` wrong about that book.
+`src/core/resources/checksum.ts` is what makes it right again, and it holds an
+md5 of Sefer's own: Web Crypto deliberately does not implement md5 — it is
+broken as a security primitive and the browsers will not grow it — and core may
+not import `node:crypto`. Burrito uses md5 as a content FINGERPRINT, not as a
+signature, so the weakness is not ours to fix; we only have to produce the same
+digits every other Burrito reader produces. RFC 1321 is sixty lines of
+arithmetic, and a package for it would be a supply-chain surface for nothing.
+
+`refreshIngredientChecksums(metadata, readBytes, names?)` is the policy: it
+recomputes the named ingredients (every one by default) through a reader the
+caller supplies, leaves an ingredient whose bytes it cannot read exactly as it
+is — a missing file is a fact about the project, not a reason to invent a
+checksum — and reports which rows moved, so nothing is written when nothing
+changed.
+
+Where it is called: `ProjectAdmin.refreshChecksums(root, names?)` wraps it over
+the `FileSystem` port and writes through the same schema gate as every other
+metadata edit, and composition hangs that off `SaveCoordinatorOptions.onSaved`
+(`src/app/services.ts`). Save must not know what a burrito is and ProjectAdmin
+must not know when a save happened, so the two meet in composition;
+`ingredientFor(fileSystem, path)` answers which project a written path belongs
+to and what the ingredient is called inside it, by walking up at most four
+levels to the nearest `metadata.json`. A path under none is a folder of loose
+USFM, and nothing happens.
+
 ## Import and Library
 
 Two modules sit on top of those schemas. Neither redefines what a Burrito or a Resource Container is; both decide things _about_ a folder of files, through the `effect/FileSystem` port only.

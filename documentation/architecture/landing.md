@@ -14,13 +14,37 @@ Where a project comes from, and what each host can actually do about it. Everyth
 
 `ProjectsLanding` and `/start/find` share `LandingHeader`: the muted breadcrumb, then the two-way segmented control. The two halves are two ROUTES, not two signals — one lists this device and the other browses a service on the internet, and a reader who bookmarks the catalogue or presses Back should land where they expect. The trail ends in the tab, so it reads "Sefer / Projects / Find project" and the crumbs a screen passes are the ones ABOVE it.
 
-The only state on the landing page is `reload`: a counter the import hub raises and `YourProjects` reads. That is the whole subscription between them — an import that finished shows up in the list without either component knowing what the other is.
+The only state on the landing page is `reload`: a counter the import hub raises and `YourProjects` reads. That is the whole subscription between them — an import that finished shows up in the list without either component knowing what the other is. `YourProjects` keeps a second counter of its own for the writes it makes itself (a rename, a delete), read in the same effect.
+
+Above the list sits the [recovery](recovery.md) banner, rendered only when a project is open and only when that project has work in the journal that never reached disk.
 
 ## Your projects
 
-`summaries.ts` answers what a row needs WITHOUT opening the project: opening one parses every book, seats it and attaches an analysis, and a list must not do that once per row. So it reads the two cheap things — the Burrito metadata (a name, a language) and a recursive directory listing (a `.usfm` count) — and degrades honestly: a folder with no `metadata.json` is still a project, and its name is its folder. `lastOpened` is the one field the filesystem cannot answer; it comes from the `shell.recentProjects` preference, which `open()` writes BEFORE it navigates, because a project you tried to open is one you were working on whether or not it opened.
+### The index
+
+The table is drawn from `<projectsRoot>/.sefer/projects.json` — one row per project, `{ root, name, language, books, lastOpened }`, decoded through the Effect Schema in `src/core/project/projectIndex.ts`. One file read draws the whole screen.
+
+The index is written at the moments a project's identity changes and at no other time: `recordProject` after an import or a clone, `touchProject` on open (beside the `shell.recentProjects` write the sidebar reads), `recordProject` again after a rename, `forgetProject` after a delete. It is then **assumed correct** — it is not a cache with an invalidation story, and nothing re-derives a row behind the reader's back.
+
+What keeps it honest is `repairProjectIndex`, which costs one names-only `readDirectory` of the projects root: a folder with no row is described once (through `summarize`, below) and added; a row with no folder is dropped; a row whose folder exists is believed. Re-reading every project to check would be the rescan the index exists to avoid, and the cost of being wrong is a stale name until the next rename. A missing, unparsable or unknown-version index means the same thing to a reader — nothing is known — so the repair rebuilds it rather than the screen refusing to draw.
+
+The seeded fixture is prepended to the list and written to no index: it lives in memory, per page, and a row for it would outlive the thing it describes. `.sefer/` under the projects root is the index's own home and is never listed as a project.
+
+### Describing a project
+
+`summaries.ts` answers what a row needs WITHOUT opening the project: opening one parses every book, seats it and attaches an analysis, and a list must not do that once per row. So it reads the two cheap things — the Burrito metadata (a name, a language) and a recursive directory listing (a `.usfm` count) — and degrades honestly: a folder with no `metadata.json` is still a project, and its name is its folder. `lastOpened` is the one field the filesystem cannot answer; it lives in the index, written BEFORE `open()` navigates — because a project you tried to open is one you were working on whether or not it opened — and falls back to the `shell.recentProjects` preference, which is still written for the sidebar and for rows an older build wrote.
 
 A project whose metadata declares no language shows its folder id, muted, rather than a dash — the seeded fixture has no metadata at all, and a dash tells nobody anything.
+
+### The kebab: rename, export, delete
+
+Every row carries a kebab, and the three items are the `ProjectAdmin` calls that had no caller. The fixture has none: there is nothing on disk to act on, and a menu of things that would fail is worse than no menu.
+
+- **Rename…** is `ProjectAdmin.rename`, which rewrites the burrito's `identification.name` in place (or `.sefer/project.json` when there is no burrito). It does NOT move the folder — that is a separate job with different consequences for open books and git remotes — so the root does not change, `shell.recentProjects` is keyed by root and has nothing to correct, and the dialog says as much. The index is re-read rather than patched, because a burrito rename may land in a different locale than the one the table displayed.
+- **Export as zip** is `ProjectAdmin.archive`, handed to a download. Every entry sits under the project's own folder name, so the archive unzips to a folder and imports straight back through the zip card. Sefer's private files (`.sefer/`, a `.sefer-tmp` sibling, `.git`) are left out. The download itself is `src/app/ui/landing/download.ts`: one anchor with `download`, over an object URL. It is a download and not a save dialog because OPFS is Sefer's own storage that nothing outside the page can see, and the `Dialogs` port has no save picker to name a real path with — the day it grows one, `ProjectAdmin.export(root, "usfm-zip", picked)` is already the other half.
+- **Delete…** asks with our own Dialog and passes the answer as the `Confirm` the port requires — the dialog IS the confirmation — then drops the index row and the preference entry.
+
+`src/app/projectCommands.ts` registers `project.export` and `project.rename` against the same registry, and exports the plain functions the kebab calls, so a button does not have to go through the palette to do the same thing.
 
 ## Adding a project: what each source needs, per host
 
