@@ -18,6 +18,7 @@ import { createSignal } from "solid-js";
 
 import { t } from "../../i18n";
 import { PanelHeader } from "../primitives";
+import { RecoveryBanner } from "../recovery/RecoveryBanner";
 import { ImportHub } from "./ImportHub";
 import { LandingHeader } from "./LandingHeader";
 import { YourProjects } from "./YourProjects";
@@ -34,6 +35,11 @@ export function ProjectsLanding() {
           { label: t("Projects"), to: "/projects" },
         ]}
       />
+
+      {/* Above everything, and only when there is something to answer: work
+          that exists nowhere but the journal is the first thing someone who
+          crashed needs to see, before the list of what to open next. */}
+      <RecoveryBanner />
 
       <section class="space-y-3">
         <PanelHeader
