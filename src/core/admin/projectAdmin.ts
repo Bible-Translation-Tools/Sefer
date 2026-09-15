@@ -360,20 +360,19 @@ const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminServic
 
     export: (root, format, to) =>
       format === "usfm-zip"
-        ? Effect.flatMap(archive(root), (bytes) =>
-            Effect.as(
-              Effect.mapError(
-                Effect.flatMap(
-                  fileSystem.makeDirectory(to.slice(0, Math.max(to.lastIndexOf("/"), 0)) || "/", {
-                    recursive: true,
-                  }),
-                  () => writeFileAtomic(fileSystem, to, bytes),
-                ),
+        ? Effect.gen(function* () {
+            const bytes = yield* archive(root);
+            // The folder someone picked may not exist yet — a copy is usually
+            // saved beside things, into a folder named for the occasion.
+            const parent = parentPath(to);
+            if (parent !== "")
+              yield* Effect.mapError(
+                fileSystem.makeDirectory(parent, { recursive: true }),
                 ioFailure,
-              ),
-              to,
-            ),
-          )
+              );
+            yield* Effect.mapError(writeFileAtomic(fileSystem, to, bytes), ioFailure);
+            return to;
+          })
         : Effect.as(Effect.mapError(fileSystem.copy(root, to), ioFailure), to),
   };
 };
