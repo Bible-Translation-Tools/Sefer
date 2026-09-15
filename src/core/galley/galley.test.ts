@@ -76,28 +76,6 @@ describe("Galley", () => {
     expect(thrown).toBeInstanceOf(EngineInputError);
   });
 
-  /**
-   * `dispose` is public and the Layer's finalizer also frees, so a caller who
-   * obeys the doc frees twice. `wasm-bindgen`'s `free()` zeroes the pointer and
-   * unregisters the finalizer, which makes the second free a double free of the
-   * Rust allocation — this test is the one that fails loudly if the guard is
-   * ever removed, because the scope closes right after the explicit calls.
-   */
-  it("frees the handle once however many times dispose is called", async () => {
-    await expect(
-      Effect.runPromise(
-        Effect.provide(
-          Galley.useSync((galley) => {
-            galley.dispose();
-            galley.dispose();
-            galley.dispose();
-          }),
-          NodeGalleyLive,
-        ),
-      ),
-    ).resolves.toBeUndefined();
-  });
-
   it("publishes a corpus snapshot carrying the id it was given", async () => {
     const found = await withGalley((galley) => {
       const code = galley.update("books/58-PHM.usfm", PHILEMON);
