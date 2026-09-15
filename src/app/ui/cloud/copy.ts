@@ -21,7 +21,13 @@
  *    moves and what does not.
  */
 
-import type { IncomingPlan, SyncActionId, SyncState } from "../../../core/sync";
+import type {
+  CombineRefusal,
+  CombineState,
+  IncomingPlan,
+  SyncActionId,
+  SyncState,
+} from "../../../core/sync";
 import { FRONT_MATTER } from "../../../core/sync";
 import { t, type Params } from "../../i18n";
 import type { BadgeTone } from "../primitives";
@@ -186,10 +192,15 @@ export const narrate = (
         "Sends your {count} versions to the shared project. Nothing on this device changes.",
       );
     case "combine":
+      // Both counts, because the whole question a person is weighing here is
+      // "what happens to my N versions, and to their M". The last clause is
+      // the promise the transaction actually keeps: everything up to the send
+      // is local, and a failure anywhere puts this device back as it was.
       return plural(
-        counts.behind,
-        "Puts the shared project's {count} version underneath, then keeps your work as one version on top. No scripture text is merged.",
-        "Puts the shared project's {count} versions underneath, then keeps your work as one version on top. No scripture text is merged.",
+        counts.ahead,
+        "Your {count} version becomes one version on top of the shared project's {behind}. Nothing in the shared project changes until it is sent.",
+        "Your {count} versions become one version on top of the shared project's {behind}. Nothing in the shared project changes until it is sent.",
+        { behind: counts.behind },
       );
     case "compare":
       return plural(
@@ -248,4 +259,80 @@ export const planSummary = (plan: IncomingPlan): string => {
     "{changed}; {count} of them also changed here.",
     { changed },
   );
+};
+
+/**
+ * A book's name from the file that holds it — "41-MRK.usfm" → "Mark".
+ *
+ * Combine names the books it is about to replay before it reads a byte of
+ * them, so there is no `\id` marker to go on yet; the file name is what a
+ * project has. An unrecognised stem falls through `bookName` unchanged, which
+ * shows the file rather than inventing a book.
+ */
+export const bookFromPath = (path: string): string => {
+  const file = path.slice(path.lastIndexOf("/") + 1);
+  const stem = file.replace(/\.[^.]*$/u, "");
+  return bookName(stem.replace(/^\d+[-_]?/u, "").toUpperCase());
+};
+
+/**
+ * Why a combine did not run, in the words of the surface.
+ *
+ * Core's refusals are spelled in git — "refs/remotes/origin/main does not
+ * exist" — because that is the accurate way to say them there. This is the one
+ * place they cross into the vocabulary a translator reads, and every sentence
+ * ends by saying where the work is, because a refused transfer is exactly when
+ * somebody wonders.
+ */
+export const combineRefusal = (refusal: CombineRefusal): string => {
+  switch (refusal) {
+    case "contested":
+      return t(
+        "You and the shared project both changed the same book, so nothing was combined. Compare the two versions and decide what to keep. Your work is untouched.",
+      );
+    case "unrecorded-work":
+      return t(
+        "There is work here that has not been recorded as a version yet. Record it first — combining would discard it. Nothing has changed.",
+      );
+    case "no-cloud-copy":
+      return t("The shared project has no copy of this work yet. Publish it first.");
+    case "no-shared-version":
+      return t(
+        "This project and the shared project have no version in common, so there is nothing to build on. Nothing has changed.",
+      );
+    case "not-diverged":
+      return t(
+        "Only one side has moved, so there is nothing to combine — send or receive instead. Nothing has changed.",
+      );
+    case "deletion":
+      return t(
+        "A book was deleted here, and a combine cannot carry a deletion. Send your changes instead. Nothing has changed.",
+      );
+    case "no-branch":
+    case "no-work-here":
+    case "nothing-to-replay":
+      return t("There is nothing here to combine. Your work is exactly as you left it.");
+  }
+};
+
+/**
+ * Where the work is after a combine failed on the way through.
+ *
+ * `restored` is the ordinary answer and it is good news; `stranded` is the one
+ * that needs a person, and it says so plainly rather than hiding behind "an
+ * error occurred".
+ */
+export const combineTrouble = (state: CombineState): string => {
+  switch (state) {
+    case "untouched":
+      return t("Nothing was changed on this device or in the shared project.");
+    case "restored":
+      return t(
+        "This device was put back exactly as it was, and nothing reached the shared project. You can try again.",
+      );
+    case "stranded":
+      return t(
+        "This device is part-way through a combine and could not be put back. Your versions are all still recorded — do not edit until someone has looked at it.",
+      );
+  }
 };

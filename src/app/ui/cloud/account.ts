@@ -40,12 +40,26 @@ export interface Account {
 /**
  * Every failure this surface shows, as one line.
  *
- * `services.run` rejects with the fiber's failure, whose own string already
- * carries a tagged error's `reason` and `description`. Reading those fields
- * would mean asserting a shape the promise's type does not carry, and the
- * string is what we would print anyway.
+ * `services.run` rejects with the fiber's failure ITSELF — the tagged error
+ * object, not a rendering of it — and `Data.TaggedError`'s own `toString` is
+ * just the tag. So `String(cause)` alone says "RemoteError" and nothing else,
+ * which is neither a sentence nor enough to tell a network failure from a
+ * refusal. The two fields every error on this surface carries are read
+ * structurally, and anything else still falls back to the string.
  */
-export const describe = (cause: unknown): string => String(cause);
+export const describe = (cause: unknown): string => {
+  if (typeof cause === "object" && cause !== null) {
+    // SAFETY: the guard above proves this is an object; both fields are read
+    // as `unknown` and each is narrowed to a string before it is used, so the
+    // assertion claims nothing about what the object actually is.
+    const held = cause as { readonly reason?: unknown; readonly description?: unknown };
+    const parts = [held.reason, held.description].filter(
+      (part): part is string => typeof part === "string" && part !== "",
+    );
+    if (parts.length > 0) return parts.join(": ");
+  }
+  return String(cause);
+};
 
 export const createAccount = (shell: Shell): Account => {
   const { services } = shell;

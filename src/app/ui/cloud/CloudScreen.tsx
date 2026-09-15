@@ -12,32 +12,38 @@
  * show the same truth rather than a copy of it.
  *
  * Nothing transfers on its own. Every state on this page is reached by
- * looking, and every transfer is a button someone pressed. A pull is the one
- * that takes two presses: the plan card says what would arrive, and the
- * confirmation is the second press.
+ * looking, and every transfer is a button someone pressed. Two of them take
+ * two presses: a pull, where the plan card says what would arrive and the
+ * confirmation is the second, and a combine, where the first press works out
+ * which books keep this device's version and a dialog names them.
  */
 
-import { Effect, Fiber, Stream } from "effect";
+import { Effect, Fiber, type FileSystem, Stream } from "effect";
 import CloudIcon from "lucide-solid/icons/cloud";
-import { Show, createEffect, createSignal, onCleanup } from "solid-js";
+import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 
 import { Git } from "../../../core/git/git";
 import { Remote, type RemoteFailureReason } from "../../../core/remote/remote";
 import {
+  combine,
+  CombineError,
   emptyPlan,
+  previewCombine,
   sync,
   wantsPlan,
+  type CombineReplay,
   type IncomingPlan,
   type SyncActionId,
 } from "../../../core/sync";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { Button, Card, EmptyState, PanelHeader } from "../primitives";
+import { Button, Card, Dialog, EmptyState, PanelHeader } from "../primitives";
 import { createAccount, describe } from "./account";
 import { AccountCard } from "./AccountCard";
 import { ActionCard } from "./ActionCard";
+import { bookFromPath, combineRefusal, combineTrouble, narrate } from "./copy";
 import { DevStateSwitcher } from "./DevStateSwitcher";
-import { fixtureFacts, fixtureStateRequested } from "./fixture";
+import { fixtureFacts, fixtureReplay, fixtureStateRequested } from "./fixture";
 import { IncomingPlanCard } from "./IncomingPlanCard";
 import { createNetworkStatus } from "./network";
 import { ProjectCard } from "./ProjectCard";
@@ -47,10 +53,30 @@ import { readSync, type ReadSyncOptions, type SyncFacts } from "./reading";
 const projectName = (root: string): string => root.slice(root.lastIndexOf("/") + 1);
 
 /**
- * A `RemoteError`'s reason, recovered from the string `services.run` rejects
- * with. The promise's type does not carry the tagged error's shape, and the
- * reason is spelled in its message — which is enough to tell "the network did
- * not answer" from "the far side said no", and that distinction is the whole
+ * Who the combined version is by.
+ *
+ * Sefer, not the translator: the one version a combine records is bookkeeping
+ * over versions they already authored, the same identity `src/app/commands.ts`
+ * commits a save under and the Web host writes a merge under.
+ */
+const COMBINE_AUTHOR = { name: "Sefer", email: "sefer@localhost" } as const;
+
+/**
+ * A combine's failure, as the sentence a translator reads.
+ *
+ * A refusal names the rule; anything else names where the work is now, which
+ * is the only question worth answering when a transfer stopped part-way.
+ */
+const explainCombine = (cause: unknown): string | undefined => {
+  if (!(cause instanceof CombineError)) return undefined;
+  return cause.refusal === undefined ? combineTrouble(cause.state) : combineRefusal(cause.refusal);
+};
+
+/**
+ * A `RemoteError`'s reason, read out of the line `describe` makes of it. The
+ * promise's type does not carry the tagged error's shape, and the reason is
+ * the first word of that line — which is enough to tell "the network did not
+ * answer" from "the far side said no", and that distinction is the whole
  * difference between `offline` and a refusal worth reading.
  */
 const reasonOf = (cause: unknown): RemoteFailureReason | undefined => {
@@ -77,6 +103,16 @@ export function CloudScreen() {
   const [problem, setProblem] = createSignal("", { name: "syncProblem" });
   /** A pull is confirmed against the plan the person actually read. */
   const [confirming, setConfirming] = createSignal(false, { name: "syncConfirming" });
+  /**
+   * The combine a person is being asked about, or `undefined` when none is.
+   *
+   * It holds the REPLAY rather than a boolean because the question is "these
+   * books keep your version — go ahead?", and a dialog that could not name
+   * them would be asking somebody to agree to something unstated.
+   */
+  const [combining, setCombining] = createSignal<CombineReplay | undefined>(undefined, {
+    name: "syncCombining",
+  });
 
   /**
    * DEV only: `?syncState=diverged` renders the fixture's facts instead of the
@@ -195,9 +231,14 @@ export function CloudScreen() {
   /**
    * Every transfer, through one place: report the failure by reason (so the
    * network status learns about it), clear the phase line, and re-read.
+   *
+   * `explain` is how a press with its own vocabulary — Combine — turns its
+   * typed failure into the sentence a translator reads. Returning `undefined`
+   * falls back to the ordinary description.
    */
   const transfer = (
-    work: (root: string) => Effect.Effect<unknown, unknown, Git | Remote>,
+    work: (root: string) => Effect.Effect<unknown, unknown, Git | Remote | FileSystem.FileSystem>,
+    explain?: (cause: unknown) => string | undefined,
   ): void => {
     const project = shell.project();
     if (project === undefined) return;
@@ -212,7 +253,7 @@ export function CloudScreen() {
       .catch((cause: unknown) => {
         const reason = reasonOf(cause);
         if (reason !== undefined) network.noteFailure(reason);
-        setProblem(describe(cause));
+        setProblem(explain?.(cause) ?? describe(cause));
       })
       // A press's continuation, not a tracked scope: `refresh` reads signals
       // deliberately, once, when the transfer has finished. The reactivity
@@ -264,6 +305,37 @@ export function CloudScreen() {
     });
 
   /**
+   * The first of Combine's two presses: work out what WOULD be replayed, and
+   * put that to the person.
+   *
+   * The preview is local and asks the shared project nothing — it reads the
+   * object database the last check left behind. `combine` fetches and decides
+   * again for real, so a shared project that moved between this dialog opening
+   * and the second press is caught there rather than trusted from here.
+   */
+  const askToCombine = (): void => {
+    // DEV: a fixture has no repository to preview, and the dialog has to be
+    // reachable without one, like every other card on this screen.
+    const asked = fixtureState();
+    if (import.meta.env.DEV && asked !== undefined) {
+      setCombining(fixtureReplay(asked));
+      return;
+    }
+    const project = shell.project();
+    if (project === undefined) return;
+    setProblem("");
+    setBusy(true);
+    void services
+      .run(previewCombine(project.root))
+      .then((decision) => {
+        if (decision.ok) setCombining(decision.replay);
+        else setProblem(combineRefusal(decision.refusal));
+      })
+      .catch((cause: unknown) => setProblem(explainCombine(cause) ?? describe(cause)))
+      .finally(() => setBusy(false));
+  };
+
+  /**
    * The primary button, dispatched by the action the state machine chose.
    *
    * `attach` and `publish` are not run from here: choosing a repository needs
@@ -290,17 +362,16 @@ export function CloudScreen() {
         transfer(pull);
         return;
       case "combine":
-        // Both hosts now expose the branch move Combine needs
-        // (`Remote.moveBranch`), but the move is only half of it: the squash
-        // has to read this device's books out of HEAD, move onto the cloud's
-        // head, write them back and record ONE version. That replay is policy
-        // and belongs beside `combinePlan` in `src/core/sync`, not in a button
-        // handler — see documentation/architecture/sync.md, "Combine".
-        setProblem(
-          t(
-            "Combine is not wired to a transfer yet. Until it is, receive the updates into a fresh copy or compare the books by hand.",
-          ),
-        );
+        // Two presses, like a pull, and for a stronger reason: this one
+        // rewrites the work tree. The first press names the books that keep
+        // this device's version; the second runs the replay in `src/core/sync`
+        // — see documentation/architecture/sync.md, "Combine".
+        if (combining() === undefined) {
+          askToCombine();
+          return;
+        }
+        setCombining(undefined);
+        transfer((root) => combine({ root, author: COMBINE_AUTHOR }), explainCombine);
         return;
       case "resolve":
         transfer(abortMerge);
@@ -359,6 +430,53 @@ export function CloudScreen() {
                   problem={problem()}
                   onRun={() => run(held().primary)}
                 />
+
+                <Show when={combining()}>
+                  {(replay) => (
+                    <Dialog
+                      open
+                      onOpenChange={(open) => {
+                        if (!open) setCombining(undefined);
+                      }}
+                      title={t("Combine your work?")}
+                      description={narrate(
+                        "combine",
+                        {
+                          ahead: held().clocks.local.unshared,
+                          behind: held().clocks.shared.unshared,
+                          contested: plan().contested.length,
+                        },
+                        account.host ?? t("the cloud"),
+                      )}
+                      footer={
+                        <>
+                          <Button onClick={() => setCombining(undefined)}>{t("Not now")}</Button>
+                          <Button
+                            variant="primary"
+                            onClick={() => run("combine")}
+                            data-cloud-confirm="combine"
+                          >
+                            {t("Yes, combine them")}
+                          </Button>
+                        </>
+                      }
+                    >
+                      <div class="space-y-3" data-cloud-dialog="combine">
+                        <p>{t("These books keep the version on this device:")}</p>
+                        <ul class="list-disc space-y-1 pl-5" data-cloud="combine-books">
+                          <For each={replay().paths}>
+                            {(path) => <li data-cloud-book={path}>{bookFromPath(path)}</li>}
+                          </For>
+                        </ul>
+                        <p class="text-on-surface-secondary">
+                          {t(
+                            "Everything else becomes the shared project's. No scripture text is merged line by line, and if anything goes wrong on the way this device is put back exactly as it is now.",
+                          )}
+                        </p>
+                      </div>
+                    </Dialog>
+                  )}
+                </Show>
 
                 <Show when={confirming()}>
                   <Card class="space-y-3" data-cloud-card="confirm">

@@ -16,17 +16,16 @@
 
 import { Effect, FileSystem, Option, Result } from "effect";
 
-import { identifyBook } from "../../../core/book/book";
-import { Git, type Commit, type Repo } from "../../../core/git/git";
+import { Git, type Commit } from "../../../core/git/git";
 import { Gitea } from "../../../core/remote/gitea";
 import { Remote } from "../../../core/remote/remote";
 import {
   emptyPlan,
   emptyReading,
-  incomingPlan,
+  mergeBase,
   notIn,
+  surveyIncoming,
   trackingRef,
-  type IncomingFile,
   type IncomingPlan,
   type SyncReading,
 } from "../../../core/sync";
@@ -39,9 +38,6 @@ export interface SyncFacts {
 
 /** The branch to assume when HEAD is unborn — the one `git.init` creates. */
 const DEFAULT_BRANCH = "main";
-
-/** Only scripture files get a plan; a manifest change is not a chapter. */
-const USFM = /\.usfm$/iu;
 
 export interface ReadSyncOptions {
   /** The project's work tree. */
@@ -80,45 +76,6 @@ const mergeInProgress = (fileSystem: FileSystem.FileSystem, root: string): Effec
 /** An effect whose failure is an answer rather than a fault. */
 const orEmpty = <A, E>(effect: Effect.Effect<A, E>, fallback: A): Effect.Effect<A> =>
   Effect.orElseSucceed(effect, () => fallback);
-
-/**
- * The newest commit both sides hold — the merge base, near enough.
- *
- * "Near enough" is honest: this walks the two first-parent logs rather than
- * asking libgit2 for a true merge base, so a repository with criss-cross
- * merges could answer with an ancestor of the real base. The cost of that is
- * a plan that lists MORE changed chapters than strictly necessary, which is
- * the safe direction to be wrong in. `undefined` means no shared history at
- * all, and everything reads as changed on both sides.
- */
-const mergeBase = (local: readonly Commit[], remote: readonly Commit[]): Commit | undefined => {
-  const theirs = new Set(remote.map((commit) => commit.id));
-  return local.find((commit) => theirs.has(commit.id));
-};
-
-/**
- * A blob as text, or `""` when the path did not exist at that revision.
- *
- * `TextDecoder` rather than `core/source`'s `decode`: this text is never
- * edited, saved or stamped — it is one side of a comparison, and running a
- * historical blob through the canonical-UTF-8 gate would turn "this old
- * version had a bad byte" into a failure to describe the plan at all.
- */
-const textAt = (repo: Repo, rev: string, path: string): Effect.Effect<string, never, Git> =>
-  Effect.orElseSucceed(
-    Effect.map(
-      Effect.flatMap(Git, (git) => git.show(repo, rev, path)),
-      (bytes) => new TextDecoder().decode(bytes),
-    ),
-    () => "",
-  );
-
-/** The work tree's own copy, which may hold edits no version has recorded. */
-const textHere = (
-  fileSystem: FileSystem.FileSystem,
-  root: string,
-  path: string,
-): Effect.Effect<string> => orEmpty(fileSystem.readFileString(`${root}/${path}`), "");
 
 /**
  * One pass over the repository, the account and the device.
@@ -183,31 +140,13 @@ export const readSync = (
 
     if (behind.length === 0) return { reading, plan: emptyPlan };
 
-    // The plan. Everything below reads blobs that a fetch already brought
-    // down, so it costs no network and can run before the question is asked.
-    const from = mergeBase(localLog, remoteLog);
-    const changed = yield* orEmpty(
-      git.changedPathsBetween(repo, from?.id ?? tracking, tracking),
-      [],
-    );
-    const files: IncomingFile[] = [];
-    for (const entry of changed) {
-      if (!USFM.test(entry.path)) continue;
-      const cloud = yield* textAt(repo, tracking, entry.path);
-      const here = yield* textHere(fileSystem, options.root, entry.path);
-      // With no shared history there is no base to measure from, and `""`
-      // is the safe reading: every chapter counts as changed on both sides,
-      // so nothing is offered as an automatic fast-forward.
-      const baseText = from === undefined ? "" : yield* textAt(repo, from.id, entry.path);
-      files.push({
-        path: entry.path,
-        bookId: identifyBook(cloud === "" ? here : cloud, entry.path),
-        kind: entry.kind,
-        base: baseText,
-        cloud,
-        here,
-      });
-    }
-
-    return { reading, plan: incomingPlan(behind, files) };
+    // The plan. `surveyIncoming` is core's, and it is core's for a reason:
+    // Combine asks the same question before it runs, and the screen must not
+    // be able to offer a move the program then refuses.
+    const survey = yield* surveyIncoming(repo, {
+      tracking,
+      base: mergeBase(localLog, remoteLog),
+      behind,
+    });
+    return { reading, plan: survey.plan };
   });
