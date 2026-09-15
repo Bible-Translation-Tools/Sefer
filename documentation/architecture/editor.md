@@ -54,6 +54,54 @@ Each chord is bound **twice**: in `usfmKeys()` (so a press with the editor focus
 
 The footnote chord is `Mod-Shift-n`, for **n**ote. It used to be `Mod-Shift-f`, which is `search.open` — "find in project" — so one press meant two different things depending on where the focus was, and the editor silently won. Two commands that a reader thinks of separately do not share a chord.
 
+### Footnotes: two halves of one note
+
+In regular mode a note is drawn twice — as a superscript CALLER where it is
+anchored, and as a ROW in the apparatus block at the foot of its chapter.
+`src/editor/recipes/noteEditor.ts` is what makes both live; before it,
+`toggleNote` was a stub nothing installed, so a caller was a letter you could
+not follow and the rows were a picture of the notes rather than the notes.
+
+Three gestures, and `NoteGesture` names them:
+
+| Click | What happens |
+| --- | --- |
+| a caller | the page goes to that note's row and tints it for a moment |
+| a row's mark or reference | the page goes back to the caller |
+| a row's body | the body becomes editable in place |
+
+The editable body is a **satellite** (`recipes/satellite.ts`) mounted into the
+row's own `.usfm-note-edit` slot. It holds no copy of the text: every keystroke
+becomes changes, goes through the `Funnel` to `book.apply`, and comes back from
+the canonical Book. The row's static text hides while it is open
+(`usfm-note-editing`) so the note is never on screen twice, and the row is
+written back from the document when it closes — the widget refuses to patch a
+row whose slot is occupied, and closing is not a decoration change, so nothing
+else would.
+
+Two rulings worth knowing:
+
+- **Its range is the note's CONTENT, not the whole note.** The `\f +` opener,
+  the caller sigil and the `\f*` closer are markup, and renaming `\ft` to
+  `\fq` is a USFM-mode edit — the same ruling the front matter card makes about
+  marker names. A note the engine could not close has no body part at all and
+  gets the whole note, which is the honest thing to show.
+- **The write is `trusted`.** In regular mode the entire note is hidden markup,
+  so `refuseKeystrokesInsideHiddenMarkup` guards every offset in it; an
+  untrusted satellite there is a text box that silently refuses every key. The
+  surface is narrow and its targets are hard-edged, which is the trade that
+  argument rests on.
+
+The satellite installs `structureField` and NOT the whole `readingLayer`:
+`readingLayer` brings `decoField`, whose regular-mode projection is the one that
+collapses a note to its caller, and inside this view that would hide the very
+text the reader clicked to write in. `buildNoteApparatus` is the projection it
+wears instead — markup elided, the origin as `usfm-fr`, the body as `usfm-ft`.
+
+A clipped chapter still shows its own apparatus: the block is planned per
+chapter and sits at the end of the chapter's last line, so it is inside the
+clip's own window rather than outside it.
+
 ### The front matter card
 
 `core/frontmatter.ts` replaces the header lines — `\id \ide \usfm \h \toc1-3 \toca1-3 \mt*`, stopping at the first line that is neither blank nor one of those — with **one block widget** of labelled fields, in regular mode only. It is the aligned-word popover's idea at book scale, and it keeps that popover's discipline: the marker name is a locked label, because a marker is spec vocabulary and turning `\h` into `\toc2` is a USFM-mode edit.

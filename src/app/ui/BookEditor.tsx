@@ -56,6 +56,7 @@ import {
   dumpTrace,
   traces as editorTraces,
   type Measured,
+  noteBookIs,
   watchLocation,
 } from "../../editor";
 import { installEditorDevSurface } from "../../platform/observability";
@@ -130,6 +131,10 @@ export function BookEditor(props: BookEditorProps) {
       });
       const created = view;
       const unbind = book.bindView(created);
+      // The note editor mounts a satellite over this book, and a satellite is
+      // built from a `Funnel` — which comes from the Book, not from the view.
+      // This is the one place that knows both.
+      const unname = noteBookIs(created, book);
       installEditorDevSurface({
         keystrokes: () => keystrokes,
         spans: editorSpans,
@@ -236,6 +241,7 @@ export function BookEditor(props: BookEditorProps) {
 
       onCleanup(() => {
         unwatch();
+        unname();
         Effect.runFork(Fiber.interrupt(watching));
         unsubscribe();
         unbind();

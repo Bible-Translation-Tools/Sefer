@@ -577,6 +577,32 @@
   font-style: normal;
 }
 
+/* The row a followed caller landed on. A brief tint, not a permanent mark:
+   it answers "which one" and then gets out of the way. */
+.cm-mode-regular .usfm-note-found {
+  background: var(--surface-highlight);
+  border-radius: 4px;
+  transition: background 220ms ease-out;
+}
+
+/* The note being edited in place: a satellite over the note's own span, in the
+   row's slot. It has no card of its own — the row IS the card — so the view
+   inside it drops the page's chrome the way an excerpt does. */
+.cm-mode-regular .cm-note .cm-content {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  caret-color: var(--editor-accent);
+}
+.cm-mode-regular .cm-note .cm-line {
+  padding: 0;
+}
+.cm-mode-regular .cm-note .cm-scroller {
+  overflow: visible;
+}
+
 .cm-mode-regular .usfm-note-edit {
   display: none;
 }

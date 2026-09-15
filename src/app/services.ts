@@ -67,6 +67,7 @@ import {
   commandsLayer,
   editorBook,
   lintHoverGrace,
+  noteEditing,
   usfmLinter,
   viewLayer,
   type EditorBook,
@@ -454,7 +455,16 @@ export const composeServices = async (
    */
   // The inline linter needs one @codemirror/state instance shared with
   // @codemirror/lint; vite.config.ts dedupes the package for that reason.
-  const mountable = [commandsLayer, viewLayer(), usfmLinter(), lintHoverGrace(), lintGutter()];
+  const mountable = [
+    commandsLayer,
+    viewLayer(),
+    usfmLinter(),
+    lintHoverGrace(),
+    lintGutter(),
+    // Footnote callers that follow and note bodies that can be typed in. A DOM
+    // surface, so it belongs with the mountable half and not in the seat.
+    noteEditing(),
+  ];
 
   const seats = new Map<BookId, EditorBook>();
   const seat: Seat = (plain) => {
