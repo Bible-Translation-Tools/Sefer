@@ -39,6 +39,7 @@ import { env, giteaHostFor } from "../../env";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { Button, Card, Dialog, Input, cx, toasts } from "../primitives";
+import { rememberProject } from "./summaries";
 
 /** Each step the pipeline runs, in order. The dialog draws all four. */
 const STEPS = ["pick", "stage", "classify", "commit"] as const;
@@ -185,6 +186,10 @@ export function ImportHub(props: { readonly onImported: () => void }) {
         message: t("{count} books", { count: books.length }),
         tone: "success",
       });
+      // The projects index learns about the project HERE, at the one moment
+      // this device knows a new one exists — before the list is told to
+      // re-read, so the row it draws is the one just written.
+      await services.run(rememberProject(services.projectsRoot, into, undefined));
       props.onImported();
     })().catch((cause: unknown) => {
       const message = describe(cause);
@@ -252,6 +257,10 @@ export function ImportHub(props: { readonly onImported: () => void }) {
         message: t("{count} books", { count: books.length }),
         tone: "success",
       });
+      // The projects index learns about the project HERE, at the one moment
+      // this device knows a new one exists — before the list is told to
+      // re-read, so the row it draws is the one just written.
+      await services.run(rememberProject(services.projectsRoot, into, undefined));
       props.onImported();
     })().catch((cause: unknown) => {
       const message = describe(cause);
@@ -295,7 +304,9 @@ export function ImportHub(props: { readonly onImported: () => void }) {
       .then(() => {
         finished(t("Ready"), t("Cloned into {root}.", { root: into }), false);
         toasts.update(toast, { title: t("Cloned {name}", { name }), tone: "success" });
-        props.onImported();
+        void services
+          .run(rememberProject(services.projectsRoot, into, undefined))
+          .then(() => props.onImported());
       })
       .catch((cause: unknown) => {
         const message = describe(cause);
