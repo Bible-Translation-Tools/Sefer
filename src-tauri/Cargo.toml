@@ -54,6 +54,11 @@ usfm_galley = { path = "../../usfm_onion_2/galley", features = ["parallel"] }
 # lives in sous-core and galley does not re-export it, so it is named directly.
 sous-core = { path = "../../usfm_onion_2/sous-chef/core" }
 
+[dev-dependencies]
+# Temp work trees for `src/git.rs`'s unit tests. Already in the lock file as a
+# transitive dependency, so naming it here costs the build nothing new.
+tempfile = "3"
+
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
