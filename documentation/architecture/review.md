@@ -16,7 +16,7 @@ to.
 - `src/app/ui/review/` — the screen, the source table, the unit card.
 - `src/core/compare/` — the port, the comparison, the plan, the one write.
 - `src/core/galley/diff.ts` — the decision-unit types and the engine door.
-- `src/core/diff/skeleton.ts` — the interim diff behind that door.
+- `src/core/diff/skeleton.ts` — the cache in front of that door.
 - `src/core/save/`, `src/core/recovery/` — the two modules that write bytes.
 
 ---
@@ -123,42 +123,48 @@ renumbered one reads as a delete plus an add), and reports coalesced bridges,
 duplicate contexts, pure relabels and markup-only changes.
 
 `src/core/galley/diff.ts` mirrors that wire in TypeScript — `DiffSkeleton`,
-`DecisionUnit`, `Slot`, `Addr`, `CoveredBy`, `UnitTextDiff` — and holds the
-door. See [galley.md](galley.md) for `DIFF_DOOR`, what is missing and where it
-will land.
+`DecisionUnit`, `Slot`, `Addr`, `CoveredBy`, `UnitTextDiff` — and binds the
+door off the wasm module. See [galley.md](galley.md).
 
 `diffSkeleton(galley, book, baselineText, currentText)`
-(`src/core/diff/skeleton.ts`) is the **one function the screen calls**. It
-prefers `Galley.diff` and falls back to the interim; `DiffSkeleton.engine` says
-which produced the value in hand, and the screen shows that as a badge, because
-a reviewer deciding what to keep is entitled to know whether a USFM parser or a
-verse-key walk produced the alignment.
+(`src/core/diff/skeleton.ts`) is the **one function the screen calls**, and
+since scripture-kitchen v0.1.0 it is a cache in front of `Galley.diff` and
+nothing else. The review re-derives its units on every shell tick, and an
+engine diff of two whole books per tick is exactly the cold path this screen
+must not be; the key is the pair of texts, so there is nothing to invalidate.
 
-### What the interim covers, and what waits for the engine
+### There is no second diff
 
-The interim asks the engine where the verses are (`spans.ts` → `analyze`),
-aligns the two sides by verse reference (`verses.ts`), and turns the rows into
-units of exactly the same shape. What it carries: the addresses, the spans into
-each side's own text, whitespace-only changes, and `isUsfmStructureChange` —
-read from `core/excerpts`' projection rather than from a second opinion about
-what USFM means.
+Until v0.1.0 the galley artifact carried no diff door, so this module built the
+same `DiffSkeleton` out of Sefer's own verse alignment and the screen wore an
+"interim diff" badge to say so. The door landed and the stand-in is **deleted**
+— Will, 2026-09-15: "the engine is the only diff". `src/core/diff/verses.ts`
+and `spans.ts` are gone. A second implementation that nothing runs is a second
+implementation that rots and is then switched on by accident.
 
-What it cannot say, stated plainly so nobody builds on an absence:
+The badge still says **engine diff**, because a reviewer deciding what to keep
+is entitled to know what aligned it. What it no longer does is choose between
+two answers.
 
-- `kind` is never `coalesced`. A bridge against its members is one decision to
-  the engine and two unmatched rows here, because the alignment key includes
-  the range end.
-- `status` is never `moved`. A moved verse reads as a removal plus an addition
-  — true, and coarser.
-- `displaced`, `relabeled`, `isDup` and `coveredBy` are always their empty
-  value. They are narration about pairings this aligner does not make.
-- `slots` is empty. The interleave is the engine's merge machinery; the interim
-  merge walks the units instead.
-- `DecisionUnit.text` — the engine's own word runs over the reader-visible
-  bytes (`onion::diff::unit_text_diff`) — is absent, so the card computes its
-  marks with `core/diff/inline.ts` instead.
+`Galley.diff` is still a `Result`, and that is not hedging. The doors are free
+functions probed by name off the wasm module, so an artifact that is not the
+vendored build is a real failure mode: the screen says "this build's engine has
+no diff door" and offers no plan for that book. One refused book withdraws the
+whole plan, because a partial plan is a write nobody asked for.
 
-### Word marks, not character marks
+### Word marks
+
+`diff` takes a TEXT MODE as its third argument (`"none" | "words" | "chars"`)
+and Sefer asks for `"words"` — UAX-29 runs over the engine's own reader-text
+mask. `DecisionUnit.text` is therefore populated, and in the reading the card
+uses those runs verbatim: they are over the same string the columns show.
+
+The **markup view** is the one place the engine has no answer, because its runs
+never mention a marker — there is no engine opinion about which characters of a
+`\q1 …` line changed. Those columns keep the word LCS in
+`core/diff/inline.ts`. It decides nothing: the alignment, the units and the
+decisions are all the engine's, and this only tints characters inside a unit
+the engine already paired.
 
 `inline.ts` was a character LCS and is now a word one. Characters were visibly
 the wrong unit: changing "multitude" to "crowd" marked `m`, `ulti`, `ude`
@@ -169,9 +175,7 @@ base), a run of whitespace, or one other character. Whitespace is its own token
 rather than attached to a word, which is what keeps the concatenation of every
 segment exactly the input — the renderer splits the segments back onto lines,
 and a tokenizer that swallowed a newline would silently join two lines of
-scripture. Onion's own intra-unit diff is word-grained
-(`TextDiffMode::Words`, UAX-29), so the interim marks and the engine's marks
-will say the same kind of thing when the door lands.
+scripture.
 
 ### Two readings, and the "markup only" badge
 

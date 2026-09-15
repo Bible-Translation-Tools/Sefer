@@ -175,7 +175,7 @@ An Effect-returning command is run on the app runtime by the runner `registerShe
 
 **The editor's chords are bound twice.** `editor.insert.verse` / `.paragraph` / `.poetry` / `.footnote` are registered here with `Mod-Shift-v/p/l/n` *and* inside CodeMirror's own keymap (`usfmKeys`), because an insertion needs the caret. The document listener skips an event the editor already consumed (`event.defaultPrevented`), so a chord fires once. The footnote is `Mod-Shift-n` — for **n**ote — and not `Mod-Shift-f`, which is `search.open`: one chord meaning "footnote" inside the editor and "find in project" outside it is two commands wearing one press. `editor.frontmatter.edit` has no chord and focuses the front matter card's first field. See [the editor](editor.md), "Structured entry".
 
-`format.book` and `format.project` are registered and **refusing**, with the engine door named in the message — see [findings](findings.md), "Format needs one door". `format.project` is the shell's only `MultiBook`: one instance over a thunk of the project's books, so the cross-book Undo offer has somewhere to live when the door lands.
+`format.book` and `format.project` apply Onion's own whole-book transaction through `Fixes.formatBook`/`applyFormat` — see [findings](findings.md), "Format". `format.project` is the shell's only `MultiBook`: one instance over a thunk of the project's books, so the cross-book Undo offer has somewhere to live.
 
 ## Routes and tokens
 

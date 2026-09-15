@@ -112,42 +112,48 @@ Sefer writes no USFM transformations. Onion attaches the edits to the diagnostic
 - `preview` refuses `Stale` unless the analysis `describesExactly` the Book's current text **and** matches the finding's engine stamp **and** the diagnostic at that index still carries the same code. Three checks because they catch different mistakes; a same-length edit passes a length check alone.
 - `apply` refuses `Stale` if the Book's revision moved since the preview. `applyAll(previews, book)` puts one book's set through a single `apply` — one Undo step, one receipt — and one stale or foreign member refuses the whole set rather than applying it partially.
 - Whether the edit is admissible at all is the Book's business: an editor-backed Book runs its phases, and a fix that would break structure is refused by the rules, not by a check here.
-- `formatBook` **fails** with `Unsupported`, and the message is the ask — see [Format needs one door](#format-needs-one-door) below.
+- `formatBook`/`applyFormat` are the same machinery over the engine's whole-book transaction — see [Format](#format) below.
 - Sous findings never carry edits — they measure. `preview` refuses them `NotEngineFix`, and sink 1 offers them no button for the same reason.
 - Inside the editor the door is the bound view, not `fixes.apply`: `applyFix` dispatches the engine's edits with `trusted.of('lint-fix')`, and because the view was bound with `dispatchTransactions: (trs) => book.fromView(view, trs)` that IS `book.apply` — the same phases, the same receipt. The freshness check is the engine stamp rather than the revision: the editor re-analyzes the live document and compares hashes, so a same-length edit made while the tooltip was open is caught. `fixes.preview`/`apply` remain the door for a surface with no view, which is the panel.
 
-## Format needs one door
+## Format
 
-`format.book` and `format.project` are **registered and refusing**. The refusal says exactly what is missing, in the engine's own vocabulary, because "Format book" greyed out with no reason is indistinguishable from "this book is already formatted".
+`format.book` and `format.project` apply **the engine's** whole-book transaction, and Sefer writes no part of it. Engine-asks item 1 landed in scripture-kitchen v0.1.0; `Fixes.FORMAT_DOOR` and its refusal are gone.
 
-> Format needs an engine door: `formatEdits(text, opts)` on the Galley handle — `onion::format::format_edits` exists and `onion-wasm` binds it, but `galley/src/wasm.rs` does not re-export it, so the pinned artifact has no format.
+`Fixes.formatBook(galley, book)` calls the module's `formatEdits(text, opts)` and hands back a `FormatPreview { bookId, changes, stamp, empty }`. `Fixes.applyFormat(preview, book)` puts the changes through one `book.apply(changes, 'format', trustedBy('format'))` after checking the Book has not moved since the preview — the same staleness rule a fix preview obeys, for the same reason: the offsets would otherwise land in text nobody looked at.
 
-That sentence is one constant, `Fixes.FORMAT_DOOR`, so the command, the status line and this page cannot drift apart.
+It is a `FormatPreview` and not a `FixPreview`. Format is not a repair offered at a site and there is no finding behind it; giving it a fabricated `Finding` so it could share a type would be a lie in the shape of a convenience. What the two do share is the vocabulary a caller needs — the changes, and the stamp that says which text they are offsets into.
 
-### What the engine actually has
+**"Already formatted" is now a sentence Sefer can say honestly.** `FormatPreview.empty` is what the formatter had nothing to do; the command reports it rather than applying an empty transaction, which would spend a revision and an Undo step on nothing.
 
-The formatter is written and tested upstream. `onion/src/format.rs` is "the OPT-IN prettifier — one transaction of byte edits, no rewriter", and it exports three functions:
+### Why edits, and not the formatted document
 
-| upstream | what it gives |
-|---|---|
-| `onion::format::format_edits(source, opts) -> Vec<Edit>` | the whole-book transaction as byte edits — **this is the one Sefer wants** |
-| `onion::format::format_edits_in(source, from, to, opts)` | the same, clipped to a byte range: the "format this chapter" button of slice 15 increment 3 |
-| `onion::format::format(source, opts) -> Vec<u8>` | the applied result, which Sefer would have to diff back into edits |
+The module also exports `format(text, opts)`, which answers the whole rewritten string. Sefer deliberately uses `formatEdits`:
 
-`onion-wasm/src/lib.rs` already binds all three (`format_edits`, `format_edits_in`, `format`). What Sefer is pinned to is a *different* wasm crate: `galley`, whose `wasm.rs` re-exports `parse`/`parseText`, `lint`, `update`/`updateReference`/`remove`, `publish`, `find`/`findAll`, `verseText`, `structureText`, `fingerprint` and the cache counters — and no format. `vendor/galley/pkg-web/usfm_galley.d.ts` is the proof: the whole handle surface is in that file.
+- **One Undo step that a reviewer can read.** The edits go through the Book as ONE transaction — one revision, one receipt for Save, Recovery, ProjectAnalysis and the panel. A replaced document would undo correctly too, and would appear in a diff as a single change covering every character in the book.
+- **The Book still judges it.** An editor-backed Book runs its phases over the changes like any other write. The origin is trusted, so the keyboard guards stand aside the way they do for a fix-it, but nothing skips the one write path.
 
-So the ask upstream is a re-export on one file, not a feature: put `format_edits` (and `format_edits_in`) on the `Galley` handle with `FormatOptions` as a plain settings object, the way `Knobs` already crosses.
+`format.project` runs the same call across books through `MultiBook.runAcrossBooks('format', …)`: one `apply` per book with origin `project.format`, which the editor-backed Book isolates in its history — so Undo takes back that book's share of the operation and nothing the reader typed around it.
 
-### Why Sefer does not write it instead
+### Why there is still no formatter in Sefer
 
-Two routes were considered and both were refused.
+Unchanged, and worth keeping written down. `onion::format` merges **two** edit sets — the lint rows flagged `formatter` in the catalogue, and the FORM channel (`Severity::Form`) that `lint` never reaches — colliding them by row order, first writer wins. Sefer can see the first half and cannot see the second at all, so a TypeScript pass would reproduce half of format and silently diverge on the rest. Two formatters that disagree about scripture is the worst bug available here.
 
-- **A second formatter in TypeScript.** Slice 15 rules it out by name ("avoid implementing a second JS formatter"), and the reason is structural: `onion::format` merges **two** edit sets — the lint rows flagged `formatter` in the catalogue, and the FORM channel (`Severity::Form`) that `lint` never reaches — colliding them by row order, first writer wins. Sefer can see the first half (a diagnostic's own `fix()` edits, and the catalogue's `formatter` flag is in `vendor/galley/diagnostics.json`) and cannot see the second at all. A TypeScript pass would reproduce half of format and silently diverge on the rest, and two formatters that disagree about scripture is worse than no format button.
-- **Whitespace-only normalisation, proven lossless by re-parsing.** The proof is not available. The handle hands back a token stream whose every offset moves when whitespace moves, so "same tokens, only whitespace differs" would need the alignment the engine already owns. And the interesting half of format is not whitespace-only anyway: `VerseBreaks`, `collapse_blank_lines`, `block_marker_own_line` and `remove_markers` all change what is on which line, and `repairs` inserts closers.
+The options are not offered either. `FormatOpts` has a dozen switches (`verse_breaks`, `collapse_blank_lines`, `block_marker_own_line`, `remove_markers`, `repairs`…) and Sefer passes none of them: the engine's own defaults are what "Format" means, and choosing among them is a settings surface nobody has designed. `src/core/galley/format.ts` types all of them, so the day someone designs it the plumbing is one object.
 
-### The shape that is already wired
+## Sous's new lanes
 
-Only `Fixes.formatBook` has to change when the door lands. Everything around it is built and exercised:
+v0.1.0 gave Sous two more rule codes and two more channels, and `corpusCode`/`corpusSeverity` in `src/core/findings/finding.ts` name all of them:
 
-- `format.book` → `Fixes.formatBook(book)` → one `book.apply(changes, 'format', trustedBy('format'))`. One `apply`, therefore one transaction, therefore **one Undo step**, and one receipt for Save, Recovery, ProjectAnalysis and the panel.
-- `format.project` → `MultiBook.runAcrossBooks('format', book => …)` (`src/core/multibook/multibook.ts`). One `apply` per book with origin `project.format`, which the editor-backed Book isolates in its history — so Undo takes back that book's share of the operation and nothing the reader typed around it — one receipt each, and one summary on the status line.
+| wire | code | severity | on by default |
+|---|---|---|---|
+| `Presence` | `sous.presence.Missing` / `.Extra` / `.Empty` | `warning` | yes |
+| `SourceCopy` | `sous.source-copy` | `info` | **no** |
+| channel `LetterRun` | `sous.convention.LetterRun` | `info` | yes |
+| channel `SentenceStart` | `sous.convention.SentenceStart` | `info` | yes |
+
+Presence is a `warning` because a verse coverage gap is usually real and occasionally deliberate; everything statistical stays `info`. Source-copy is off in the engine's defaults because a borrowed proper name would otherwise be a finding in every verse that carries one, and turning it on needs references registered with their text — `Galley.wordlessReferences()` counts the ones that were not.
+
+The two new channels are convictions like any other and reach `/inventory` through the same pattern table; see [Character inventory](inventory.md).
+
+The header's snapshot id now changes when the settings change, not only when the text does. That costs `ProjectAnalysis` nothing today: its finding, cross-book and inventory caches are keyed on nothing at all and are dropped wholesale whenever a publication lands or a book changes. A settings surface that flipped a lane WITHOUT touching any text would have to invalidate them by hand; nothing calls `setSettings` yet, and this is the note for whoever writes the first caller.
