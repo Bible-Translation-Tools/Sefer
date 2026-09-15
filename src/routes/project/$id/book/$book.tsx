@@ -5,6 +5,7 @@ import { t } from "../../../../app/i18n";
 import { useShell } from "../../../../app/ProjectContext";
 import { BookEditor } from "../../../../app/ui/BookEditor";
 import { Resizable } from "../../../../app/ui/primitives";
+import { RecoveryBanner } from "../../../../app/ui/recovery/RecoveryBanner";
 import { ShellGate } from "../../../../app/ui/ShellGate";
 import { bookName } from "../../../../app/ui/workspace/books";
 import { metadataOf } from "../../../../app/ui/workspace/project";
@@ -84,6 +85,11 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
 
   return (
     <main class="flex h-full min-h-0 min-w-0 flex-col gap-3 p-4">
+      {/* Above everything, and on THIS route as well as the project page:
+          unsaved work found on open is the first thing to answer, and opening
+          a project now lands on the book rather than on the census, so a
+          banner mounted only there is a banner nobody sees. */}
+      <RecoveryBanner />
       <Show
         when={shell.focused()}
         fallback={

@@ -56,9 +56,43 @@ What each state means:
   un-clipped and the offset is scrolled to.
 - **On.** `focus` opens clipped — to the chapter the navigation asked for, or the first one.
 
+**Going to a chapter is one call, and the preference decides what it means.** `shell.showChapter(ordinal)`
+is what the sidebar's chapter grid, the location bar's outline and its two arrows all call. With the
+preference ON it clips; with it OFF it drops any clip and scrolls that chapter's `\c` anchor to the
+TOP of the page. That is what `reveal.at` distinguishes: a finding or a search hit is a point in the
+middle of a page and is centred, and a chapter is the first line you read. Before this the grid always
+clipped, so a reader who had never asked for chapter view lost the rest of the book by clicking a
+number.
+
+The front matter is row 0 of the engine's chapter table and has no `\c` number. It is a real place —
+the identification, the table of contents, the main title — so the grid and the outline both offer it
+as **Intro**, and only when the book actually has any.
+
 Findings and search navigate by URL, and the route that lands calls `focus(bookId)` with no offset. So
 the offset is left on the shell first: `shell.aim(bookId, from)` records it, `focus` reads it to
 choose the opening chapter, and `shell.reveal()` keeps it for the editor surface to scroll to.
+
+## Where you were: `workspace.lastLocation`
+
+Opening a project lands on the WORK, not on a census. `workspace.lastLocation` is a preference keyed by
+project root holding `{ bookId, chapter }`; `focus` and every chapter change write it (debounced, like
+the sidebar width — a record rewrite per click is a file write per click), and two places read it:
+
+- **`/project/$id`** forwards to `shell.landingPath(root)` as soon as the project is open, unless the
+  URL carries `?books=1`. The book is checked against the project first, so a book that has since been
+  removed falls back to the census rather than to a not-found.
+- **The rail's panel tile** uses it as the way back. On a project route the tile is the panel toggle it
+  always was; on a full-page screen (settings, findings, history, compare) there is no panel to toggle,
+  so it opens the panel and returns to the remembered book. Pressing it on `/settings` used to appear
+  to do nothing.
+
+The census is reachable from the location bar's book crumb, which navigates with `?books=1` — a door
+that bounced you straight back out would not be one.
+
+The recovery banner is mounted on the book route as well as the project route, for the same reason:
+unsaved work found on open is the first thing to answer, and after this change the project page is not
+where an open lands.
+
 
 ## The workspace chrome
 
@@ -119,7 +153,8 @@ fraction of the row, written once the drag settles); `shell.theme`,
 `src/app/ui/theme.ts`; `editor.fontSize`, the scripture column's own size,
 applied by the same module as `--editor-font-size` and kept live by a fiber
 over `settings.changes` in `ProjectContext`; and `shell.recentProjects`, the
-root → ISO-8601 record the sidebar and the landing screen share.
+root → ISO-8601 record the sidebar and the landing screen share; and
+`workspace.lastLocation`, above.
 
 `shell.updateAvailable()` is one `Updater.check()` per session, on the desktop
 host only, five seconds after the shell is built. The sidebar footer reads an

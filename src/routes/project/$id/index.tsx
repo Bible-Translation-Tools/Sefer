@@ -1,4 +1,4 @@
-import { Link, createFileRoute } from "@tanstack/solid-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/solid-router";
 import { For, Show, createEffect, createSignal } from "solid-js";
 
 import { runCommand } from "../../../app/commands";
@@ -19,9 +19,37 @@ import { ShellGate } from "../../../app/ui/ShellGate";
  * is the whole of the shell's reactivity contract for derived products.
  */
 
-function ProjectPage(props: { readonly root: string }) {
+function ProjectPage(props: { readonly root: string; readonly census: boolean }) {
   const shell = useShell();
+  const navigate = useNavigate();
   const [opening, setOpening] = createSignal(false);
+
+  /**
+   * Opening a project lands on the WORK, not on a census.
+   *
+   * A translator who opens a project every morning was being shown a list of
+   * books and asked to find their own place in it. `shell.lastLocation` is
+   * where they were; this route forwards to it, and the census is one click
+   * away on the location bar's book crumb, which arrives with `?books=1` and
+   * therefore does not bounce.
+   *
+   * The remembered book is checked against the project HERE, because this is
+   * the first moment it is open: a book that has since been removed falls back
+   * to the census rather than to a not-found.
+   */
+  createEffect(
+    () => ({ root: props.root, census: props.census, held: shell.project() }),
+    ({ root, census, held }) => {
+      if (census || held === undefined || held.root !== root) return;
+      const where = shell.lastLocation(root);
+      if (where === undefined || !held.books.some((book) => book.id === where.bookId)) return;
+      void navigate({
+        to: "/project/$id/book/$book",
+        params: { id: encodeURIComponent(root), book: encodeURIComponent(where.bookId) },
+        replace: true,
+      });
+    },
+  );
 
   // Deep-linking is honest here: the route names a root, so a project that is
   // not the open one is opened rather than reported as missing. An effect on
@@ -126,10 +154,28 @@ function ProjectPage(props: { readonly root: string }) {
   );
 }
 
+interface ProjectSearch {
+  readonly books?: boolean;
+}
+
 export const Route = createFileRoute("/project/$id/")({
+  /**
+   * `?books=1` asks for the census itself and suppresses the forward to the
+   * last location. Every other arrival is an Open, and an Open means "take me
+   * back to my work".
+   */
+  validateSearch: (search: Record<string, unknown>): ProjectSearch =>
+    search.books === true || search.books === "1" || search.books === 1 ? { books: true } : {},
   head: () => ({ meta: [{ title: "Sefer — project" }] }),
   component: () => {
     const params = Route.useParams();
-    return <ShellGate>{() => <ProjectPage root={decodeURIComponent(params().id)} />}</ShellGate>;
+    const search = Route.useSearch();
+    return (
+      <ShellGate>
+        {() => (
+          <ProjectPage root={decodeURIComponent(params().id)} census={search().books === true} />
+        )}
+      </ShellGate>
+    );
   },
 });

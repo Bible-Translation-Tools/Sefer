@@ -121,6 +121,29 @@ const RecentProjects = Schema.Record(Schema.String, Schema.String);
 
 export type RecentProjects = typeof RecentProjects.Type;
 
+/**
+ * Where the reader was in each project: the book they had open and the chapter
+ * they were clipped to, by project root.
+ *
+ * A preference and not a cache, for the same reason `recentProjects` is one: a
+ * translator works in one book for weeks, and an editor that lands them on a
+ * census every morning has made them navigate back to their own work. `chapter`
+ * is the CLIP — `null` for the whole book, which is the ordinary case — and it
+ * is only obeyed when the book it names is still in the project.
+ *
+ * Left out of `shellSettings` like `recentProjects`: there is no `kind` for a
+ * record, and a settings form is not where you edit a history.
+ */
+const LastLocations = Schema.Record(
+  Schema.String,
+  Schema.Struct({ bookId: Schema.String, chapter: Schema.NullOr(Schema.Number) }),
+);
+
+export type LastLocations = typeof LastLocations.Type;
+
+/** One project's remembered place. */
+export type LastLocation = LastLocations[string];
+
 /** The tokens the shell keeps after registering, by the name the code uses. */
 export interface ShellKeys {
   readonly theme: SettingKey<string>;
@@ -174,6 +197,8 @@ export interface ShellKeys {
   readonly editorFontSize: SettingKey<number>;
   /** Project root → ISO-8601 of the last open. See `RecentProjects`. */
   readonly recentProjects: SettingKey<RecentProjects>;
+  /** Project root → the book and clip the reader last had open there. */
+  readonly lastLocation: SettingKey<LastLocations>;
 }
 
 /** The sidebar's share of the workspace row, and the range a drag may reach. */
@@ -213,6 +238,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     zoom: settings.register("shell.zoom", Schema.Number, 100),
     editorFontSize: settings.register("editor.fontSize", Schema.Number, DEFAULT_EDITOR_FONT_SIZE),
     recentProjects: settings.register("shell.recentProjects", RecentProjects, {}),
+    lastLocation: settings.register("workspace.lastLocation", LastLocations, {}),
   };
   registered.set(settings, keys);
   return keys;

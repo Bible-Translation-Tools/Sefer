@@ -162,6 +162,7 @@ export function ProjectSidebar() {
       <li>
         <button
           type="button"
+          data-testid={`sidebar-book-${rowProps.row.id}`}
           data-book={rowProps.row.id}
           data-focused={focused() ? "" : undefined}
           class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start text-small transition-colors data-focused:bg-sidebar-surface-active data-focused:font-medium data-focused:text-brand not-data-focused:text-sidebar-on-surface not-data-focused:hover:bg-sidebar-surface-hover"
@@ -277,10 +278,14 @@ export function ProjectSidebar() {
   const choosing = (): boolean => path().startsWith("/projects") || path().startsWith("/start");
 
   return (
-    <div class="flex h-full flex-col border-e border-sidebar-border bg-sidebar-surface">
+    <div
+      class="flex h-full flex-col border-e border-sidebar-border bg-sidebar-surface"
+      data-testid="sidebar"
+    >
       <div class="p-3 pb-2">
         <button
           type="button"
+          data-testid="sidebar-project"
           data-current={choosing() ? "" : undefined}
           class="flex w-full cursor-pointer items-center gap-2 rounded-lg border bg-surface-primary px-3 py-2 text-start transition-colors hover:bg-sidebar-surface-hover data-current:border-brand data-current:bg-brand-light not-data-current:border-surface-border"
           onClick={() => go("/projects")}
@@ -306,6 +311,7 @@ export function ProjectSidebar() {
           <Input
             size="sm"
             type="search"
+            data-testid="sidebar-goto"
             icon={<SearchIcon size={14} />}
             aria-label={t("Go to")}
             placeholder={t("Go to 'Luke 1'…")}
@@ -339,6 +345,7 @@ export function ProjectSidebar() {
       <footer class="border-t border-sidebar-border p-3">
         <button
           type="button"
+          data-testid="sidebar-settings"
           class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-small text-sidebar-on-surface-muted transition-colors hover:bg-sidebar-surface-hover hover:text-sidebar-on-surface"
           onClick={() => go("/settings")}
         >

@@ -69,8 +69,37 @@ export function IconRail() {
   const choosing = (): "true" | "false" =>
     path().startsWith("/projects") || path().startsWith("/start") ? "true" : "false";
 
+  /** Is the reader looking at a project, or at one of the full-page screens? */
+  const inProject = (): boolean => path().startsWith("/project/");
+
+  /**
+   * The top tile does two jobs, and which one depends on where you are.
+   *
+   * On a project route it is the panel toggle it has always been. On a
+   * full-page screen -- settings, findings, history, compare -- there is no
+   * panel to toggle, and what a reader wants from the one tile at the top of
+   * the rail is the way BACK: it opens the panel and returns to the book they
+   * were in (the remembered location). Left as a plain toggle, pressing it on
+   * `/settings` appeared to do nothing at all.
+   */
+  const togglePanel = (): void => {
+    const project = shell.project();
+    if (project !== undefined && !inProject()) {
+      shell.setSidebarOpen(true);
+      go(shell.landingPath(project.root));
+      return;
+    }
+    shell.setSidebarOpen(!shell.sidebarOpen());
+  };
+
+  const panelLabel = (): string => {
+    if (shell.project() !== undefined && !inProject()) return t("Back to the book");
+    return shell.sidebarShowing() ? t("Hide the project panel") : t("Show the project panel");
+  };
+
   return (
     <nav
+      data-testid="rail"
       aria-label={t("Sefer")}
       class="flex w-13 shrink-0 flex-col items-center gap-1 border-e border-sidebar-border bg-surface-primary py-3"
     >
@@ -80,11 +109,12 @@ export function IconRail() {
           collapsed panel would be the rail claiming otherwise. The click still
           writes the reader's own answer, which is waiting when a project opens. */}
       <IconButton
-        label={shell.sidebarShowing() ? t("Hide the project panel") : t("Show the project panel")}
+        data-testid="rail-panel"
+        label={panelLabel()}
         tooltipSide="right"
         icon={<PanelLeft size={18} />}
         aria-pressed={shell.sidebarShowing() ? "true" : "false"}
-        onClick={() => shell.setSidebarOpen(!shell.sidebarOpen())}
+        onClick={togglePanel}
       />
 
       <Show when={shell.project() !== undefined}>
@@ -92,6 +122,7 @@ export function IconRail() {
 
         <IconButton
           label={t("Refine")}
+          data-testid="rail-refine"
           tooltipSide="right"
           icon={<BookOpen size={18} />}
           aria-pressed={shell.mode() === "usfm" ? "false" : "true"}
@@ -99,6 +130,7 @@ export function IconRail() {
         />
         <IconButton
           label={t("Key terms")}
+          data-testid="rail-terms"
           tooltipSide="right"
           icon={<ListChecks size={18} />}
           aria-pressed={at("/terms")}
@@ -106,6 +138,7 @@ export function IconRail() {
         />
         <IconButton
           label={t("USFM")}
+          data-testid="rail-usfm"
           tooltipSide="right"
           icon={<Code size={18} />}
           aria-pressed={shell.mode() === "usfm" ? "true" : "false"}
@@ -121,6 +154,7 @@ export function IconRail() {
             screen (`ProjectSidebar` reads the same two prefixes). */}
         <IconButton
           label={t("Projects")}
+          data-testid="rail-projects"
           tooltipSide="right"
           aria-pressed={choosing()}
           icon={<FolderOpen size={18} />}
@@ -133,6 +167,7 @@ export function IconRail() {
         <Show when={shell.project() !== undefined}>
           <IconButton
             label={t("Character inventory")}
+            data-testid="rail-inventory"
             tooltipSide="right"
             aria-pressed={at("/inventory")}
             icon={<TypeIcon size={18} />}
@@ -140,6 +175,7 @@ export function IconRail() {
           />
           <IconButton
             label={t("Compare")}
+            data-testid="rail-compare"
             tooltipSide="right"
             aria-pressed={at("/compare")}
             icon={<GitCompare size={18} />}
@@ -147,6 +183,7 @@ export function IconRail() {
           />
           <IconButton
             label={t("Cloud")}
+            data-testid="rail-cloud"
             tooltipSide="right"
             aria-pressed={at("/cloud")}
             icon={<CloudIcon size={18} />}
@@ -160,6 +197,7 @@ export function IconRail() {
         <span class="relative inline-flex">
           <IconButton
             label={t("Findings")}
+            data-testid="rail-findings"
             tooltipSide="right"
             aria-pressed={at("/findings")}
             icon={<Bell size={18} />}
@@ -178,6 +216,7 @@ export function IconRail() {
 
         <IconButton
           label={t("History")}
+          data-testid="rail-history"
           tooltipSide="right"
           aria-pressed={at("/history")}
           icon={<HistoryIcon size={18} />}
@@ -185,6 +224,7 @@ export function IconRail() {
         />
         <IconButton
           label={t("Settings")}
+          data-testid="rail-settings"
           tooltipSide="right"
           aria-pressed={at("/settings")}
           icon={<SettingsIcon size={18} />}

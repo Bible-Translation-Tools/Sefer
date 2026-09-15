@@ -46,7 +46,13 @@ import { useComposition } from "./CompositionContext";
 import { t } from "./i18n";
 import { registerProjectCommands } from "./projectCommands";
 import { composeServices, fixtureRequested, type Services } from "./services";
-import { shellKeys, SIDEBAR_WIDTH, type RecentProjects } from "./settings";
+import {
+  shellKeys,
+  SIDEBAR_WIDTH,
+  type LastLocation,
+  type LastLocations,
+  type RecentProjects,
+} from "./settings";
 import { applyEditorFontSize } from "./ui/theme";
 
 /**
@@ -154,6 +160,19 @@ export interface Shell {
    * one place that decides.
    */
   readonly showChapter: (ordinal: number) => void;
+
+  /**
+   * Where the reader last was in `root` — the book and the clip — or undefined
+   * if this device has never had one open there.
+   *
+   * Written by `focus` and by every chapter change, read by the project route
+   * (which sends an Open straight back to the work rather than to a census)
+   * and by the rail's panel toggle (which is the way back into a project from
+   * a full-page screen). Held as a preference, so it survives a restart.
+   */
+  readonly lastLocation: (root: string) => LastLocation | undefined;
+  /** The path an Open of `root` should land on: the remembered book, or the census. */
+  readonly landingPath: (root: string) => string;
 
   /** The finding the "next/previous finding" commands point at. */
   readonly finding: Accessor<Finding | undefined>;
@@ -369,6 +388,15 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     name: "sidebarWidth",
   });
 
+  // Where the reader was in each project. Same discipline as the two above —
+  // this shell is the only writer, so a signal seeded once cannot fall behind
+  // the file — and the same `equals: false` as `recentProjects`, because the
+  // value is a record replaced wholesale.
+  const [locations, setLocations] = createSignal<LastLocations>(
+    services.settings.get(keys.lastLocation),
+    { name: "lastLocations", equals: false },
+  );
+
   const persist = <S,>(key: SettingKey<S>, value: S): void => {
     // `Effect.result` because a rejected preference is a note, not a crash:
     // the value is already on screen, and the shell's status line is where a
@@ -549,7 +577,49 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     const aimed = reveal();
     const at = aimed?.bookId === bookId ? aimed.from : undefined;
     if (aimed !== undefined && aimed.bookId !== bookId) setReveal(undefined);
-    setChapter(openingChapter(editing, at));
+    const opening = openingChapter(editing, at);
+    setChapter(opening);
+    remember(bookId, opening);
+  };
+
+  /**
+   * Remembers where the reader is, so an Open lands back on it.
+   *
+   * Called on every focus and every chapter change, which is often — so the
+   * write goes through the same debounce the sidebar width uses rather than
+   * rewriting the whole preferences file per click.
+   */
+  let locationWrite: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => {
+    if (locationWrite !== undefined) clearTimeout(locationWrite);
+  });
+
+  const remember = (bookId: BookId | undefined, ordinal: number | null): void => {
+    const root = project()?.root;
+    if (root === undefined || bookId === undefined) return;
+    const next: LastLocations = { ...locations(), [root]: { bookId, chapter: ordinal } };
+    setLocations(next);
+    if (locationWrite !== undefined) clearTimeout(locationWrite);
+    locationWrite = setTimeout(() => {
+      locationWrite = undefined;
+      persist(keys.lastLocation, next);
+    }, 400);
+  };
+
+  const lastLocation = (root: string): LastLocation | undefined => locations()[root];
+
+  /**
+   * Where an Open of `root` should land.
+   *
+   * The remembered book when there is one, and the project's census otherwise.
+   * The book is NOT checked against the project here — the project may not be
+   * open yet when this is asked — so the route that lands falls back to the
+   * census when the book turns out to be gone.
+   */
+  const landingPath = (root: string): string => {
+    const held = lastLocation(root);
+    if (held === undefined) return `/project/${encodeURIComponent(root)}`;
+    return `/project/${encodeURIComponent(root)}/book/${encodeURIComponent(held.bookId)}`;
   };
 
   const aim = (bookId: BookId, from: number, to?: number, at?: RevealAt): void => {
@@ -559,6 +629,7 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
   const showChapter = (ordinal: number): void => {
     const book = focused();
     if (book === undefined) return;
+    remember(book.id, preferChapterView() ? ordinal : null);
     if (preferChapterView()) {
       setChapter(ordinal);
       return;
@@ -639,11 +710,14 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     chapter,
     setChapter: (ordinal) => {
       setChapter(ordinal);
+      remember(focused()?.id, ordinal);
     },
     preferChapterView,
     aim,
     reveal,
     showChapter,
+    lastLocation,
+    landingPath,
     finding,
     tick,
     bump,

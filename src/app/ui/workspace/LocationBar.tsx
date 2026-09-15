@@ -95,9 +95,12 @@ export function LocationBar(props: LocationBarProps) {
   const first = (): boolean => rows()[0]?.ordinal === at();
   const last = (): boolean => rows()[rows().length - 1]?.ordinal === at();
 
+  // `?books=1` because the project route forwards a plain arrival back to the
+  // last location (item 15) — this crumb is the one door to the census, and a
+  // door that bounced you back would not be one.
   const toBooks = (): void => {
     const project = shell.project();
-    if (project !== undefined) props.go(projectPath(project.root));
+    if (project !== undefined) props.go(`${projectPath(project.root)}?books=1`);
   };
 
   return (

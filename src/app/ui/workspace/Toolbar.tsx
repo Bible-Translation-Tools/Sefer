@@ -114,7 +114,7 @@ export function Toolbar() {
     "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start text-small text-on-surface-primary transition-colors hover:bg-surface-secondary disabled:cursor-not-allowed disabled:text-on-surface-tertiary disabled:hover:bg-transparent";
 
   return (
-    <div class="flex flex-wrap items-center gap-3">
+    <div class="flex flex-wrap items-center gap-3" data-testid="toolbar">
       <strong
         class="min-w-0 shrink truncate text-h4 font-semibold text-on-surface-primary"
         data-workspace-title
@@ -139,6 +139,7 @@ export function Toolbar() {
         <Input
           size="sm"
           type="search"
+          data-testid="toolbar-search"
           wrapperClass="w-44"
           icon={<SearchIcon size={14} />}
           aria-label={t("Find in project")}
@@ -154,6 +155,7 @@ export function Toolbar() {
 
         <IconButton
           size="sm"
+          data-testid="toolbar-undo"
           label={t("Undo")}
           icon={<Undo2 size={16} />}
           disabled={!can("book.undo")}
@@ -161,6 +163,7 @@ export function Toolbar() {
         />
         <IconButton
           size="sm"
+          data-testid="toolbar-redo"
           label={t("Redo")}
           icon={<Redo2 size={16} />}
           disabled={!can("book.redo")}
@@ -170,6 +173,7 @@ export function Toolbar() {
         <span class="relative inline-flex">
           <IconButton
             size="sm"
+            data-testid="toolbar-findings"
             label={t("Findings")}
             icon={<Bell size={16} />}
             onClick={() => go("/findings")}
@@ -192,9 +196,17 @@ export function Toolbar() {
           class="w-56 p-1"
           open={menuOpen()}
           onOpenChange={setMenuOpen}
-          trigger={<IconButton size="sm" label={t("More")} icon={<MoreVertical size={16} />} />}
+          trigger={
+            <IconButton
+              size="sm"
+              data-testid="toolbar-kebab"
+              label={t("More")}
+              icon={<MoreVertical size={16} />}
+            />
+          }
         >
           <button
+            data-testid="kebab-save"
             type="button"
             class={item}
             disabled={!can("book.save")}
@@ -206,6 +218,7 @@ export function Toolbar() {
             {t("Save")}
           </button>
           <button
+            data-testid="kebab-save-review"
             type="button"
             class={item}
             disabled={!can("book.save")}
@@ -218,6 +231,7 @@ export function Toolbar() {
             {t("Save & Review")}
           </button>
           <button
+            data-testid="kebab-inventory"
             type="button"
             class={item}
             onClick={() => {
@@ -234,6 +248,7 @@ export function Toolbar() {
               design-direction.md, gap list 4). Not match-formatting, which
               needs an Onion overlay of two texts first. */}
           <button
+            data-testid="kebab-format-book"
             type="button"
             class={item}
             onClick={() => {
@@ -244,6 +259,7 @@ export function Toolbar() {
             {t("Format book")}
           </button>
           <button
+            data-testid="kebab-format-project"
             type="button"
             class={item}
             onClick={() => {
@@ -260,6 +276,7 @@ export function Toolbar() {
               editor is where someone is when they decide to hand the work on
               or rename it (gap list 7: "Export as zip … and rename: yes"). */}
           <button
+            data-testid="kebab-export-zip"
             type="button"
             class={item}
             onClick={() => {
@@ -270,6 +287,7 @@ export function Toolbar() {
             {t("Export as zip")}
           </button>
           <button
+            data-testid="kebab-rename-project"
             type="button"
             class={item}
             onClick={() => {
