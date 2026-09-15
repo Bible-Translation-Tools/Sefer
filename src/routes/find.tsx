@@ -219,6 +219,16 @@ function Find() {
     { name: "cursorSid" },
   );
 
+  /**
+   * The shell's mode, as the card's two-way choice.
+   *
+   * Every projection but `usfm` is a variation on the reading, so anything
+   * that is not `usfm` is `regular` here — the same reduction `BookEditor`
+   * makes for CodeMirror's mode facet, and for the same reason: the card has
+   * two surfaces, not one per named projection.
+   */
+  const mode = (): "regular" | "usfm" => (shell.mode() === "usfm" ? "usfm" : "regular");
+
   /** The match the cursor is on, as its source offset — the card's `active`. */
   const cursorAt = (): number | undefined => hits()[cursor()]?.from;
 
@@ -331,6 +341,7 @@ function Find() {
           onExpand={feed.expand}
           focus={cursorSid()}
           activeHit={cursorAt()}
+          mode={mode()}
           empty={
             <EmptyState
               icon={<SearchIcon size={22} />}

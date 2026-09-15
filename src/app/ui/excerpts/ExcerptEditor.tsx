@@ -22,7 +22,7 @@
  *    opening a card costs no second analysis of the book.
  */
 
-import { Prec } from "@codemirror/state";
+import { Compartment, Prec } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { createEffect, createSignal, onCleanup, untrack } from "solid-js";
 
@@ -30,9 +30,12 @@ import type { Excerpt } from "../../../core/excerpts/excerpts";
 import type { Analysis } from "../../../core/galley";
 import {
   analyzer,
+  assignment,
   clippedToScope,
   markedRanges,
+  modeFacet,
   mountSatellite,
+  projectionFor,
   readingLayer,
   reclip,
   type EditorBook,
@@ -44,11 +47,28 @@ import "../../../editor/editor.css";
 export interface ExcerptEditorProps {
   readonly book: EditorBook;
   readonly excerpt: Excerpt;
+  /**
+   * The shell's mode. It rides a compartment rather than the mount, so
+   * switching mode with a card open re-paints the same view instead of
+   * destroying it — the caret, the selection and the scroll survive, exactly
+   * as they do in the main editor.
+   */
+  readonly mode: "regular" | "usfm";
   /** The book's own memo, so the satellite never parses a second time. */
   readonly analyze: (text: string) => Analysis;
   /** Escape, or the Done button. */
   readonly onDone: () => void;
 }
+
+/** The projection, the facet and the class for one mode, as one extension. */
+const viewFor = (mode: "regular" | "usfm") => [
+  assignment.of(projectionFor(mode === "usfm" ? "usfm" : "default")),
+  modeFacet.of(mode),
+  // Through the facet, not `dom.classList`: CodeMirror rewrites the editor's
+  // class on every update from `editorAttributes`, so a class added by hand
+  // survives exactly until the first keystroke.
+  EditorView.editorAttributes.of({ class: `cm-mode-${mode} cm-excerpt` }),
+];
 
 /**
  * The excerpt's span, snapped to whole lines and clamped to the document.
@@ -74,6 +94,9 @@ export function ExcerptEditor(props: ExcerptEditorProps) {
   const [live, setLive] = createSignal<Satellite | undefined>(undefined, {
     name: "excerptSatellite",
   });
+  const [mode, setMode] = createSignal<Compartment | undefined>(undefined, {
+    name: "excerptMode",
+  });
 
   // An effect rather than a render effect: the view measures itself, so it is
   // constructed after its parent is in the document.
@@ -87,6 +110,8 @@ export function ExcerptEditor(props: ExcerptEditorProps) {
       const excerpt = untrack(() => props.excerpt);
       const analyze = untrack(() => props.analyze);
       const range = lineRange(book.state.doc, excerpt.span);
+      const view = new Compartment();
+      setMode(view);
 
       const release = book.hold();
       const satellite = mountSatellite({
@@ -96,10 +121,7 @@ export function ExcerptEditor(props: ExcerptEditorProps) {
         editable: true,
         label: `excerpt:${excerpt.sid}`,
         extensions: [
-          // Through the facet, not `dom.classList`: CodeMirror rewrites the
-          // editor's class on every update from `editorAttributes`, so a class
-          // added by hand survives exactly until the first keystroke.
-          EditorView.editorAttributes.of({ class: "cm-mode-regular cm-excerpt" }),
+          view.of(viewFor(untrack(() => props.mode))),
           analyzer.of(analyze),
           readingLayer,
           clippedToScope(),
@@ -128,9 +150,20 @@ export function ExcerptEditor(props: ExcerptEditorProps) {
 
       onCleanup(() => {
         setLive(undefined);
+        setMode(undefined);
         satellite.destroy();
         release();
       });
+    },
+  );
+
+  // The mode, dispatched into the live view. Not a document change, so the
+  // Book's funnel ignores it — a projection is presentation, not an edit.
+  createEffect(
+    () => ({ satellite: live(), view: mode(), name: props.mode }),
+    ({ satellite, view, name }) => {
+      if (satellite === undefined || view === undefined) return;
+      satellite.view.dispatch({ effects: view.reconfigure(viewFor(name)) });
     },
   );
 

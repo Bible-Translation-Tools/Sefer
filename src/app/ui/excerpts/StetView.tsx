@@ -56,6 +56,8 @@ export interface StetViewProps {
   readonly analyze: (text: string) => Analysis;
   readonly onEdited?: () => void;
   readonly onExpand?: (sid: string, direction: -1 | 1) => void;
+  /** The shell's mode, handed to the excerpt cards. */
+  readonly mode?: "regular" | "usfm";
 
   /** The source reading for one excerpt, or nothing when none is bound. */
   readonly sourceOf?: (excerpt: Excerpt) => SourceReading | undefined;
@@ -278,6 +280,7 @@ export function StetView(props: StetViewProps) {
         seat={props.seat}
         analyze={props.analyze}
         onEdited={props.onEdited}
+        mode={props.mode ?? "regular"}
         renderPair={pair}
         empty={
           <p class="text-small text-on-surface-tertiary">

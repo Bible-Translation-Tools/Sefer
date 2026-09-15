@@ -8,10 +8,19 @@
  * canonical Book.
  *
  * The body is `Excerpt.text` — the projection, with the match highlighted
- * through `Excerpt.marks` and the verses either side dimmed through
- * `Excerpt.focus`. Both are computed in `src/core/excerpts`, so this component
- * does no offset arithmetic of its own; it slices a string at the boundaries
- * it was given.
+ * through `Excerpt.marks`, the verse numbers painted from `Excerpt.verses` and
+ * the verses either side dimmed through `Excerpt.focus`. All three are
+ * computed in `src/core/excerpts`, so this component does no offset arithmetic
+ * of its own; it slices a string at the boundaries it was given.
+ *
+ * ## The two modes
+ *
+ * The shell's mode is a choice about what USFM IS on screen, and a results
+ * list is no exception: in USFM mode the card shows `Excerpt.source` — the raw
+ * slice, markers and all, mono on the editor's terminal ground — and the
+ * satellite behind Edit opens in the same mode. That path needs no projection
+ * and no coordinate mapping: a hit's offsets are source offsets, and the body
+ * is the source, so the highlight is `hit.from - span.from` and nothing else.
  */
 
 import type { JSX } from "@solidjs/web";
@@ -55,6 +64,8 @@ export interface ExcerptCardProps {
    * matches keep the soft highlight they have when nothing is current.
    */
   readonly active?: number;
+  /** The shell's mode. `usfm` shows the markup; anything else, the reading. */
+  readonly mode?: "regular" | "usfm";
 }
 
 interface Segment {
@@ -65,6 +76,8 @@ interface Segment {
   readonly dim: boolean;
   /** A verse number to paint before this segment — `Excerpt.verses`. */
   readonly verse?: string;
+  /** USFM mode only: is this segment a marker rather than text? */
+  readonly marker?: boolean;
 }
 
 /**
@@ -107,6 +120,56 @@ const segmentsOf = (excerpt: Excerpt, active: number | undefined): readonly Segm
   return out;
 };
 
+/** A USFM marker: what the editor paints as `.cm-usfm-marker`. */
+const MARKER = /\\\+?[a-zA-Z][a-zA-Z0-9-]*\*?/g;
+
+/**
+ * The raw slice, cut at every marker and every hit.
+ *
+ * The arithmetic here is a subtraction, not a mapping: `Excerpt.source` is the
+ * text of `Excerpt.span`, and a hit is already in source coordinates, so a
+ * highlight is `hit.from - span.from`. The projection is not involved at all,
+ * which is the point of showing the source.
+ */
+const usfmSegmentsOf = (excerpt: Excerpt, active: number | undefined): readonly Segment[] => {
+  const base = excerpt.span.from;
+  const length = excerpt.source.length;
+  const ranges = excerpt.hits.flatMap((hit) =>
+    (hit.pieces !== undefined && hit.pieces.length > 1 ? hit.pieces : [hit]).map((piece) => ({
+      from: Math.max(0, Math.min(length, piece.from - base)),
+      to: Math.max(0, Math.min(length, piece.to - base)),
+      source: hit.from,
+    })),
+  );
+  const markers: { from: number; to: number }[] = [];
+  MARKER.lastIndex = 0;
+  for (let found = MARKER.exec(excerpt.source); found !== null; found = MARKER.exec(excerpt.source))
+    markers.push({ from: found.index, to: found.index + found[0].length });
+
+  const cuts = new Set<number>([0, length]);
+  for (const range of [...ranges, ...markers]) {
+    cuts.add(range.from);
+    cuts.add(range.to);
+  }
+  const bounds = [...cuts].sort((a, b) => a - b);
+  const out: Segment[] = [];
+  for (let index = 0; index + 1 < bounds.length; index += 1) {
+    // SAFETY: `index` and `index + 1` are both inside a list of this length.
+    const from = bounds[index]!;
+    const to = bounds[index + 1]!;
+    if (to <= from) continue;
+    const covering = ranges.filter((range) => range.from <= from && range.to >= to);
+    out.push({
+      text: excerpt.source.slice(from, to),
+      hit: covering.length > 0,
+      current: active !== undefined && covering.some((range) => range.source === active),
+      dim: false,
+      marker: markers.some((range) => range.from <= from && range.to >= to),
+    });
+  }
+  return out;
+};
+
 /** The editor's `.usfm-verse`, in the card's vocabulary. */
 const VERSE = "align-super font-sans text-[0.66em] font-bold text-brand select-none";
 
@@ -127,9 +190,14 @@ export function ExcerptCard(props: ExcerptCardProps) {
   // is the only thing on screen that can say otherwise.
   const [opening, setOpening] = createSignal(false, { name: "excerptOpening" });
   const [refused, setRefused] = createSignal(false, { name: "excerptRefused" });
-  const segments = createMemo(() => segmentsOf(props.excerpt, props.active), {
-    name: "excerptSegments",
-  });
+  const usfm = (): boolean => props.mode === "usfm";
+  const segments = createMemo(
+    () =>
+      usfm()
+        ? usfmSegmentsOf(props.excerpt, props.active)
+        : segmentsOf(props.excerpt, props.active),
+    { name: "excerptSegments" },
+  );
   /** Does the current match live here? Drives the card's ring. */
   const current = (): boolean =>
     props.active !== undefined && props.excerpt.hits.some((hit) => hit.from === props.active);
@@ -152,6 +220,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
       padded={false}
       data-sid={props.excerpt.sid}
       data-current={current() ? "true" : undefined}
+      data-mode={usfm() ? "usfm" : "regular"}
       class={cx("overflow-hidden", current() && "ring-1 ring-brand")}
     >
       <header class="flex items-center gap-2 border-b border-surface-border px-3 py-1.5">
@@ -213,7 +282,17 @@ export function ExcerptCard(props: ExcerptCardProps) {
       <Show
         when={props.editing}
         fallback={
-          <p class="px-3 py-2 font-scripture text-body leading-relaxed text-on-surface-primary">
+          <p
+            class={cx(
+              "px-3 py-2",
+              usfm()
+                ? // The editor's USFM surface, in a card: the same terminal
+                  // ground and the same mono, so switching mode changes what
+                  // the text IS rather than only where it is shown.
+                  "whitespace-pre-wrap bg-[#0c0a09] font-mono text-small leading-relaxed text-[#d6d3d1]"
+                : "font-scripture text-body leading-relaxed text-on-surface-primary",
+            )}
+          >
             <For each={segments()}>
               {(segment) => (
                 <>
@@ -231,12 +310,15 @@ export function ExcerptCard(props: ExcerptCardProps) {
                         ? "rounded-xs bg-brand-light font-medium text-on-surface-primary ring-1 ring-brand"
                         : segment.hit
                           ? "rounded-xs bg-surface-highlight text-on-surface-highlight"
-                          : segment.dim
-                            ? "text-on-surface-tertiary"
-                            : undefined
+                          : segment.marker
+                            ? "font-semibold text-[#38bdf8]"
+                            : segment.dim
+                              ? "text-on-surface-tertiary"
+                              : undefined
                     }
                     data-hit={segment.hit ? "true" : undefined}
                     data-current={segment.current ? "true" : undefined}
+                    data-marker={segment.marker ? "true" : undefined}
                   >
                     {segment.text}
                   </span>
@@ -258,6 +340,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
             <ExcerptEditor
               book={seated()}
               excerpt={props.excerpt}
+              mode={props.mode ?? "regular"}
               analyze={props.analyze}
               onDone={done}
             />

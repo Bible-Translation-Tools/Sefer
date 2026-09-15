@@ -217,6 +217,7 @@ function Terms() {
           analyze={feed.analyze}
           onEdited={feed.edited}
           onExpand={feed.expand}
+          mode={shell.mode() === "usfm" ? "usfm" : "regular"}
           sourceOf={(excerpt) => readings().get(excerpt.sid)}
         />
       </Show>

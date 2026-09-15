@@ -91,4 +91,20 @@ describe("the excerpt projection", () => {
     const mark = excerpt!.marks[0]!;
     expect(excerpt!.text.slice(mark.from, mark.to)).toBe("May grace");
   });
+
+  it("carries the raw slice of its own span, indexable by source offset", async () => {
+    const analysis = await analyzed();
+    const at = PHILEMON.indexOf("May grace be to you");
+    const [excerpt] = excerptsOf(book(analysis), [
+      { bookId: "PHM", from: at, to: at + "May grace".length },
+    ]);
+    expect(excerpt).toBeDefined();
+    // The markup the reading drops is all still here, which is the point.
+    expect(excerpt!.source).toBe(PHILEMON.slice(excerpt!.span.from, excerpt!.span.to));
+    expect(excerpt!.source).toContain("\\v 3 ");
+    // A USFM-mode card highlights by subtraction and nothing else.
+    const hit = excerpt!.hits[0]!;
+    const from = hit.from - excerpt!.span.from;
+    expect(excerpt!.source.slice(from, from + "May grace".length)).toBe("May grace");
+  });
 });

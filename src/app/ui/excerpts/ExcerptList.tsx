@@ -64,6 +64,11 @@ export interface ExcerptListProps {
    * without the list moving.
    */
   readonly activeHit?: number;
+  /**
+   * The shell's mode, passed to every card. A results list is a view of the
+   * same text the editor shows, so USFM mode means markers here too.
+   */
+  readonly mode?: "regular" | "usfm";
   /** STET's source verse for one excerpt. */
   readonly renderPair?: (excerpt: Excerpt) => JSX.Element;
   /**
@@ -383,6 +388,7 @@ export function ExcerptList(props: ExcerptListProps) {
                                     : (direction) => props.onExpand?.(sid, direction)
                                 }
                                 active={props.focus === sid ? props.activeHit : undefined}
+                                mode={props.mode ?? "regular"}
                               />
                             </div>
                           )}

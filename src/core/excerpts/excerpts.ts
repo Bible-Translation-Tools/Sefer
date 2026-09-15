@@ -87,6 +87,17 @@ export interface Excerpt {
   readonly span: { readonly from: number; readonly to: number };
   readonly hits: readonly Occurrence[];
   readonly text: string;
+  /**
+   * The raw USFM of exactly `span` — markers and all.
+   *
+   * The projection is what a card shows in regular mode; this is what it shows
+   * in USFM mode, where the reader has asked to see the markup. It is a slice,
+   * so a hit's source offsets index into it directly once `span.from` is
+   * subtracted, and no coordinate mapping is needed at all. Held rather than
+   * re-sliced by the card because the card has no book: the feed hands it a
+   * value, and the value must be complete.
+   */
+  readonly source: string;
   readonly marks: readonly Mark[];
   /**
    * The verse numbers to paint over `text`, in order — `Projection.verses` for
@@ -476,6 +487,7 @@ const buildExcerpt = (
     span: { from, to },
     hits: held,
     text: projection.text,
+    source: book.analysis.text.slice(from, to),
     marks: marksFor(projection, held.flatMap(rangesOf)),
     verses: projection.verses,
     focus:
