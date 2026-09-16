@@ -125,7 +125,7 @@ import from the directory, never from a file inside it.
 | `Resizable` | `.Root` (`orientation`, `onSizesChange`), `.Panel` (`initialSize`, `minSize`, `maxSize`), `.Handle` (`label`). |
 | `Kbd` | A keycap. Show the chord exactly as `src/app/commands.ts` spells it. |
 | `EmptyState` | `icon`, `title`, `description`, one `action`. |
-| `VirtualList` | `sections` (each a key plus keyed rows with a height estimate), `header(section, ref)`, `row(item, key)`, `pinned`, `focus`, `onActive`, `empty`, `ref(goTo)`. Sticky section headers over a windowed list. |
+| `VirtualList` | `sections` (each a key plus keyed rows with a height estimate), `header(section, ref)`, `row(item, key)` — `section` and `item` are ACCESSORS, because a row outlives the model it was built from — `pinned`, `focus`, `onActive`, `empty`, `ref(goTo)`. Sticky section headers over a windowed list. |
 | `toasts` + `Toaster` | `show`/`info`/`success`/`error`/`progress`/`update`/`dismiss`/`dismissAll` over a module-level list; `<Toaster />` is the viewport, mounted once in `src/routes/__root.tsx`. |
 
 Icons are `lucide-solid`, imported one at a time
@@ -187,13 +187,46 @@ the diagnostics caught:
   registered there never runs (`NO_OWNER_CLEANUP`), so the library's
   `_didMount()` disposer is held at component scope and released by one
   `onCleanup` in the body.
-- **A `ref` callback is not a tracking scope.** Reading a virtual item's index
-  inside one is `STRICT_READ_UNTRACKED`; the index at mount is the right one,
-  and the library re-measures on its own afterwards.
+- **A `ref` callback is not a tracking scope, and its element is not in the
+  document yet.** Both matter here, and the second one is the more expensive:
+  an element that is not in the document measures 0 × 0, and a 0 handed to the
+  library as a row's first measurement is what opened `/findings` 8,154px down
+  a list nobody had touched (see below). The element goes into a signal and is
+  measured from an effect, which runs once it is on the page.
 
 `@tanstack/virtual-core` is in `optimizeDeps.include`. Discovering it when the
 first multibuffer route loads triggers a mid-session re-optimization, and a
 re-optimization reloads the page — which drops the open project.
+
+**The `<For>` walks KEYS, not virtual items.** `getVirtualItems()` hands back
+fresh objects for every index at or below the lowest one whose size moved,
+because that is where the library rebuilds its measurements from. Solid
+reconciles by reference, so a `<For>` over those items re-created rows on every
+measurement — and a row is not a cheap thing here: an open excerpt editor is a
+CodeMirror satellite mounted inside one. Edit opened a satellite, the card
+grew, the growth re-created the card, and the card sat on "Opening…" for ever
+(fixed 2026-09-16). The `<For>` walks the window's keys instead — the caller's
+own verse sid or finding id — which reconcile by value, so a measurement moves
+a row rather than replacing it. That is also why `row` and `header` take
+accessors: a row outlives the model it was built from, and has to read the
+current one.
+
+**A first measurement never moves the viewport.**
+`shouldAdjustScrollPositionOnItemSizeChange` is an instance property, not an
+option (`setOptions` does not touch it), and it is narrowed to one case: a
+RE-measurement of a row this list has measured before, lying entirely above the
+fold. That is what compensation is for — a card that grew because it was opened
+for editing must not push the row under the reader's eyes down the screen.
+Answering FIRST measurements, which the library's default does, moves the
+viewport by the sum of every estimate's error: it walked both multibuffers a
+third of the way down their lists on arrival, and dragged a fresh query's
+results back to the offset the previous query had been left at.
+
+**A rebuild that replaces every row on screen goes back to the top.** The
+reader's place in a list is a row, not a number of pixels. An accepted edit
+keeps the reader where they were, because the rows they were looking at are
+still there under the same keys; a fresh query, or a regrouping of `/findings`,
+replaces all of them, and then there is no place left to hold.
 
 ### Two Solid 2 facts these wrappers had to learn
 

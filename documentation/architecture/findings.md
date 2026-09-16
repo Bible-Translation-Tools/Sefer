@@ -113,7 +113,7 @@ Core cannot navigate. `navigateTarget` returns a value; the shell calls `project
 
 **Two helpers are waiting for core.** `markupSlice` (the raw slice around a span, cut from `Excerpt.source`) and `foldRuns` (the identical-run fold) are pure functions over values core already owns and belong beside `quote` and `groupBy`; they live in `findingsFeed.ts` until a pass is allowed to edit `src/core`.
 
-**A known quirk, shared with Find.** Both lists open scrolled into the middle rather than at the top, because TanStack Virtual compensates the scroll offset for every first measurement above the fold and the card estimates are well under the measured heights. It is `primitives/VirtualList`'s to fix — `shouldAdjustScrollPositionOnItemSizeChange`, or a closer estimate — and it behaves identically on `/find`, measured 2026-09-15.
+**The list opens at the top, and Edit opens a card.** Both were broken here and on `/find` in exactly the same way until 2026-09-16, because both are one component: the list arrived scrolled 8,154px down, and a card asked to edit sat on "Opening…" for ever. Neither was about findings — the two causes are the measurement and the reconciliation of `primitives/VirtualList`, written up in [the UI layer](ui.md#the-multibuffer-virtual-core-and-why-not-solid-virtual).
 
 ## What fixes can and cannot do
 
