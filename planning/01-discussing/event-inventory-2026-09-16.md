@@ -1,126 +1,98 @@
 # Every event, and which are operations
 
-2026-09-16. Discussing. The companion to
-[ui-state-stores](ui-state-stores-2026-09-16.md): that one audits what the UI
-recomputes, this one audits what the application *says* it did.
+2026-09-16. Discussing. Vocabulary settled in `documentation/glossary.md`; the
+argument for it is in [observability-glossary](observability-glossary-2026-09-16.md).
+Companion to [ui-state-stores](ui-state-stores-2026-09-16.md), which audits
+what the UI recomputes where this audits what the application says it did.
 
 ## The rule this applies
 
-An **operation** is one end-to-end piece of work — in practice, one thing a
-person did, or one piece of background work no gesture caused. It is a wide
-event: written once, when the work finishes, carrying everything known by then.
+An **operation** is one end-to-end piece of work — one thing a person did, or
+one piece of background work no Gesture caused. It is a wide event: written
+once, when the work finishes, carrying everything known by then.
 
 Inside it:
 
 - a **span** is a hop that crosses a boundary and can vary or fail on its own —
-  a filesystem write, an engine parse, an `invoke` into Rust
-- an **event** (`note`) is a point in time inside the work — a decision, a
-  refusal, a derivation
-- **fields** are everything else: ids, counts, sizes, durations too small for a
-  clock to resolve
+  a file write, a Galley parse, an `invoke` into the desktop host
+- an **event** is a point in time inside the work — a decision, a refusal, a
+  derivation
+- **fields** are everything else: ids, counts, sizes, and durations too small
+  for a browser's clock to resolve
 
-Work that merely *followed* from a gesture — anything debounced or coalesced —
-is its own operation with `op.link` back, never a child. One analysis pass
-serves several keystrokes; a parent would have to name one of them and lie.
+Work that merely *followed* — anything debounced or coalesced — is its own
+operation carrying `op.cause`, never a child. One analysis pass serves several
+keystrokes; a parent would have to name one of them and lie.
 
-## Today
+## Shipped
 
-The editor is the only door that opens an operation. Everything else is a bare
-span or note with no `trace`, so `traces.recent()` shows typing and nothing
-else, and `logs.recent()` holds the rest.
-
-| Emitted today | Kind | Should be |
+| Operation | Opened by | Carries |
 |---|---|---|
-| `boot` | span + note | **operation** — the application starting is the first end-to-end work there is |
-| `shell.services` | note | field on `boot` |
-| `fixture` | note | field on `boot` (dev only) |
-| `project.open` | span + 4 notes | **operation**, with `project.metadata`, per-book opens and refusals as events inside |
-| `project.instantiate` | note | event inside `project.open`, or its own operation when a seat is taken later |
-| `project.release` | note ×2 | event inside whatever gesture released it |
-| `project.close` | note | **operation** |
-| `project.watch` | note | **operation**, uncaused — a watcher declining is not part of any gesture |
-| `project.metadata` | note | event inside `project.open` |
-| `save` / `save.write` | span + 4 notes | **operation** per book saved, `save.write` the filesystem span inside it |
-| `save.adopt` | note ×2 | event inside `project.open` (it adopts on open) |
-| `save.external` | note | **operation**, uncaused — the watcher saw disk change |
-| `save.resolve` | note ×2 | event inside the gesture that resolved it |
-| `analyze` | span + note | span inside `analyze.project`, never on its own |
-| `analyze.project` | span + note | **operation**, linked to the transactions that armed it |
-| `analyze.publish` | span + note | span inside `analyze.project` |
-| `analyze.corpus` | note | event inside `analyze.project` |
-| `analyze.reference` | note | event inside `analyze.project` |
-| `galley.analyze` | span + note | span, wherever it is called from — already carries `galley.why` |
-| `recovery.journal` | note ×2 | **operation**, linked — the journal write is debounced |
-| `recovery.compact` | note | event inside `save` (it follows a write) |
-| `recovery.pending` | note ×2 | **operation** — the scan at startup |
-| `recovery.restore` | note ×2 | **operation** — a gesture |
-| `recovery.reopen` | note | **operation** — a gesture |
-| `recovery.discard` | note | event inside the gesture that discarded |
-| `library.load` / `library.add` | note | events inside an import **operation** that does not exist yet |
-| `book.apply` | note ×4 | fields on `editor.mutation` — **done** |
-| `editor.transaction` | operation | renamed `editor.mutation` / `editor.selection` — **done** |
-| `editor.render` | operation | repaints nobody typed for — **done** |
-| `editor.sous` | note | event inside the gesture that republished |
-| `editor.close` | note | event inside the gesture that closed it |
-| `keystroke` | note | fields on `editor.mutation` — **done** |
+| `boot` | the application starting | `session.id`, `build.id`, `app.host`, `boot.phase` |
+| `project.open` | opening a Project | `project.root`, `project.books`; metadata, Seats and Baselines inside it |
+| `save` | Record a version | `book.id`, `fs.path`, `fs.bytes`, `book.revision`; `file.write` inside it |
+| `analysis.pass` | **caused by** the Gestures that armed it | `analysis.books`, `analysis.refreshed`; `galley.parse` and `corpus.publish` inside it |
+| `editor.mutation` | a Gesture that changed Source | book, revisions, phase timings, derive totals, broadcast, meter |
+| `editor.selection` | a Gesture that moved the caret | the same, minus the mutation |
+| `editor.render` | a repaint nobody typed for | derive totals, `findings.shown` |
 
-## Operations, once this lands
+Inside those, as spans: `galley.parse` (with `galley.why` naming its caller),
+`file.write`, `corpus.publish`.
 
-Named, with what each carries. This is the list `traces.recent()` should be
-able to show, and the argument for the list is that each is something a person
-either did or waited for.
+As events: `book.analyze`, `corpus.update`, `corpus.reference`,
+`baseline.adopt`, `seat.open`, `seat.close`, `project.metadata`, `book.apply`
+(only when no Gesture is open), `journal.*`, `conflict.resolve`, `library.*`.
 
-| Operation | Caused by | Carries |
+## Not yet operations
+
+| Should open | Caused by | Why it is not yet |
 |---|---|---|
-| `boot` | the app starting | `app.host`, `build.id`, `session.id`, phase timings, fixture |
-| `project.open` | opening a project | `project.root`, `project.books`, per-book events, `analyze.project` |
-| `project.close` | closing one | book count, unsaved count |
-| `editor.mutation` | a keystroke that changed text | done — book, revisions, phases, derives, broadcast, meter |
-| `editor.selection` | a keystroke that moved the caret | done |
-| `editor.render` | a repaint nobody typed for | done — derive totals, coalesced count |
-| `save` | Record a version | book, bytes, revision, `save.write` span, `recovery.compact` |
-| `analyze.project` | **linked** to the transactions that armed it | books refreshed, `galley.analyze` spans, `analyze.publish` |
-| `recovery.journal` | **linked** to the transaction that dirtied the book | journal id, entries |
-| `recovery.pending` | startup | journals found |
-| `recovery.restore` / `recovery.reopen` / `recovery.discard` | a gesture | journal id, book, entries |
-| `project.watch` | uncaused | why the watch stopped |
-| `save.external` | uncaused | book, what changed on disk |
-| `import.resource` | a gesture | **does not exist yet** — url, bytes, entries, files written; `library.add` inside |
-| `compare` / `review.apply` | a gesture | **not inventoried** — `src/core/compare`, `src/core/save` |
-| `sync.*` | a gesture or a poll | **not inventoried** — `src/core/sync` |
-| `terms.*`, `find`, `inventory` | a gesture | **not inventoried** |
+| `project.close` | a Gesture | Mechanical; `project.open`'s shape applies directly. |
+| `journal.write` | **cause** — the Gesture that dirtied the Book | Debounced, so it needs the same `supply`-style hand-off the analysis pass uses. |
+| `journal.pending` | startup | Runs before a Project exists; belongs inside `boot` or beside it, undecided. |
+| `journal.restore` / `journal.offer` / `journal.discard` | a Gesture | Mechanical. |
+| `project.watch` | uncaused | A watcher declining is nobody's Gesture. Root of its own. |
+| `file.changed` | uncaused | The watcher saw disk change. Root of its own. |
+| `import.resource` | a Gesture | **Does not exist at all.** See below. |
 
-## Gaps this survey found
+## Still silent
 
-- **Three screens emit nothing at all.** Review/compare, cloud sync, and terms
-  have no observability call sites. They are also the three with the most
-  network and filesystem work, which is exactly where a trace earns its keep.
-- **Import has no events**, only `library.load` / `library.add` at the end of
-  it. The download → unzip → write cascade is the worked example everyone
-  reaches for when explaining why spans exist, and it is uninstrumented.
-- **`work`, `silent`, `probe`, `outer`, `inner`, `kept`, `ignored`, `r`,
-  `recorded`** are test fixtures, not application events. Listed only so the
-  count reconciles.
+The survey's real finding, unchanged by the work so far:
 
-## Order
+- **Import emits nothing** but `library.load` / `library.add` at the very end.
+  The download → unzip → write cascade is the example everyone reaches for when
+  explaining why spans exist, and it is uninstrumented. It is also the one
+  place a user waits on a network.
+- **Review and compare** (`src/core/compare`, `src/core/save`) emit nothing.
+- **Cloud sync** (`src/core/sync`) emits nothing. Nine states, two clocks, a
+  remote — and no trace of any of it.
+- **Terms**, **Find**, **Inventory** emit nothing.
 
-1. `boot` — smallest, and it makes `traces.recent()` non-empty on every load,
-   which is how anyone will first check this works.
-2. `project.open` — biggest single cost measured so far (~66 parses), and the
-   one whose repeated firing is still unexplained.
-3. `save`, then `recovery.*` — a gesture each, mechanical once the pattern is set.
-4. `analyze.project` — first use of `op.link`, so it settles the linking shape.
-5. `import.resource` — needs the operation to exist before the cascade can hang
-   off it.
-6. Review, sync, terms — currently silent, and the largest new surface.
+Those four are the largest remaining surface, and three of them are where the
+network and the filesystem are.
 
-## Open
+## Open, and worth deciding before the silent screens
 
-- Does every gesture get an operation, or only those that do work? A palette
-  command that toggles a boolean is a gesture and is not interesting. Proposal:
-  the command registry opens one for every command and the level decides
-  whether it is recorded, so the answer is a policy rather than a judgement made
-  once per command.
-- `project.instantiate` and `project.release` happen both inside `project.open`
-  and later on their own. Nested when inside, their own operation when not —
-  which the DI model gives for free, since whatever service they receive decides.
+- **Does every Gesture get an operation?** A palette command toggling a boolean
+  is a Gesture and is not interesting. Agreed proposal: the command registry
+  opens one for every command and the level decides whether it is recorded — a
+  policy rather than a judgement made once per command.
+- **`seat.open` / `seat.close` happen both inside `project.open` and later on
+  their own.** Nested when inside, their own operation when not, which the DI
+  model gives for free: whichever service they receive decides.
+- **`journal.pending` runs before there is a Project.** Inside `boot`, or its
+  own operation beside it?
+
+## What the instrument has already found
+
+Kept here because the argument for doing any of this is that it pays.
+
+- **`dirty()` parsed the whole Book to compute a hash**, on every reactive read,
+  per badged Book per keystroke — about 4.5 full engine parses per key pressed.
+  The comment above it read "a per-save parse, never a per-keystroke one".
+- **`project.open` fires repeatedly** — 8 times in one session, each re-parsing
+  every Book in the Project. Still unexplained, and now countable.
+- **Passes that do nothing**: `analysis.pass` with `analysis.books: 0`.
+- **A keystroke costs 33–45ms to paint with 3–8ms of JS**, where a caret move
+  costs ~16ms. The gap is inside the browser, so it wants a DevTools profile
+  rather than more spans.

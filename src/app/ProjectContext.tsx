@@ -457,7 +457,7 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
 
   const report = (message: string): void => {
     setStatus(message);
-    services.composition.observability.note("shell", "consumed", message);
+    services.composition.observability.note("shell.report", "consumed", message);
   };
 
   const bump = (): void => {

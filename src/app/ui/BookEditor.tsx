@@ -187,7 +187,13 @@ export function BookEditor(props: BookEditorProps) {
             ...(measured.render === null ? {} : { "editor.to_paint_ms": measured.render }),
           });
           if (!onGesture)
-            observability.note("keystroke", "ready", measured.note, { "book.id": book.id });
+            // No gesture was open — the meter measured a repaint nobody
+            // typed for, and it belongs to that rather than to a keystroke.
+            annotateRepaint({
+              "editor.js_ms": measured.gesture,
+              "book.id": book.id,
+              ...(measured.render === null ? {} : { "editor.to_paint_ms": measured.render }),
+            });
         });
         created.dispatch({
           effects: StateEffect.appendConfig.of([
