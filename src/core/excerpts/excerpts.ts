@@ -77,6 +77,29 @@ export interface Mark {
  * projection of exactly that span and `marks` index into it. `hits` stays in
  * source coordinates because that is what Replace and "open in editor" need.
  */
+/**
+ * One card's worth of text, and what to paint on it.
+ *
+ * FIVE of these fields are LAZY — `text`, `source`, `marks`, `verses` and
+ * `focus`, everything that needs the projection. They are getters over a
+ * memoised `project()` call, and reading any of them is what pays for it.
+ *
+ * Why: a feed builds one excerpt per hit, and `/findings` on a 66-book project
+ * has twenty thousand of them — but the list is virtualised and shows about
+ * twenty. Projecting every excerpt to render twenty cost ~1.15s of walking the
+ * Onion reader on every arrival (measured; see the plan). Everything a feed
+ * needs in order to GROUP, COUNT, ORDER and ESTIMATE is arithmetic over the
+ * verse table, so all of that stays eager and the reader's twenty cards pay
+ * for themselves.
+ *
+ * The laziness is invisible and must stay so: every field reads like a value,
+ * an excerpt is still a plain immutable object, and the memo is a closure with
+ * no signal in it — `src/core` owns no reactivity (`pnpm boundaries`).
+ *
+ * One rule for callers: do NOT object-spread an excerpt. `{ ...excerpt }`
+ * evaluates every getter and projects the document, which is exactly the cost
+ * this shape exists to avoid. Spreading the ARRAY is fine.
+ */
 export interface Excerpt {
   readonly bookId: BookId;
   /** `PHM 1:4` — the verse anchor this excerpt is grouped under. */
@@ -540,6 +563,25 @@ const walk = (spans: readonly VerseSpan[], index: number, steps: number, by: -1 
  * expanded is built by exactly the same arithmetic as the card they started
  * with — only the extent differs.
  */
+/**
+ * A thunk that runs once and remembers, including when it answers `undefined`.
+ *
+ * Deliberately not a `Map` cache or a class: an excerpt is a value, and this is
+ * the smallest thing that makes one of its fields cost nothing until it is
+ * looked at.
+ */
+const once = <T>(make: () => T): (() => T) => {
+  let held: T;
+  let made = false;
+  return () => {
+    if (!made) {
+      held = make();
+      made = true;
+    }
+    return held;
+  };
+};
+
 const buildExcerpt = (
   book: BookText,
   spans: readonly VerseSpan[],
@@ -565,7 +607,15 @@ const buildExcerpt = (
   const to =
     verse === undefined ? (spans[0]?.from ?? book.analysis.docLen) : (spans[high]?.to ?? verse.to);
 
-  const projection = project(book.analysis, from, to);
+  // The one expensive call, made at most once per excerpt and only if a field
+  // that needs it is read.
+  const projection = once(() => project(book.analysis, from, to));
+  const marks = once(() => marksFor(projection(), held.flatMap(rangesOf)));
+  const focus = once(() =>
+    verse === undefined
+      ? null
+      : (marksFor(projection(), [{ from: verse.from, to: verse.to }])[0] ?? null),
+  );
   const ref: Ref =
     verse === undefined
       ? { book: book.bookId, chapter }
@@ -581,14 +631,21 @@ const buildExcerpt = (
     label: refLabel(name, ref),
     span: { from, to },
     hits: held,
-    text: projection.text,
-    source: book.analysis.text.slice(from, to),
-    marks: marksFor(projection, held.flatMap(rangesOf)),
-    verses: projection.verses,
-    focus:
-      verse === undefined
-        ? null
-        : (marksFor(projection, [{ from: verse.from, to: verse.to }])[0] ?? null),
+    get text() {
+      return projection().text;
+    },
+    get source() {
+      return book.analysis.text.slice(from, to);
+    },
+    get marks() {
+      return marks();
+    },
+    get verses() {
+      return projection().verses;
+    },
+    get focus() {
+      return focus();
+    },
     more:
       verse === undefined
         ? { up: false, down: false }

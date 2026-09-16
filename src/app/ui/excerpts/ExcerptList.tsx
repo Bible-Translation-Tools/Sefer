@@ -109,8 +109,26 @@ const LINE = 26;
 const CHARS_PER_LINE = 92;
 const CARD_CHROME = 42;
 
-const estimate = (excerpt: Excerpt): number =>
-  CARD_CHROME + Math.max(1, Math.ceil(excerpt.text.length / CHARS_PER_LINE)) * LINE + 16;
+/**
+ * Markup, as a fraction of the source it is cut from.
+ *
+ * The estimate is made from `span`, the excerpt's SOURCE length, and not from
+ * its projected text — reading `excerpt.text` projects the document, and this
+ * runs for every row in the feed rather than for the twenty on screen (see
+ * `Excerpt`'s note). Source is longer than what a card shows, by whatever the
+ * markers take up, so it is discounted.
+ *
+ * A rough number on purpose: this is the height used until the row is measured,
+ * and `VirtualList` refuses to compensate a FIRST measurement precisely so an
+ * imperfect estimate cannot move the viewport under the reader.
+ */
+const PROJECTED = 0.82;
+
+const estimate = (excerpt: Excerpt): number => {
+  const source = excerpt.span.to - excerpt.span.from;
+  const lines = Math.max(1, Math.ceil((source * PROJECTED) / CHARS_PER_LINE));
+  return CARD_CHROME + lines * LINE + 16;
+};
 
 export function ExcerptList(props: ExcerptListProps) {
   const [editing, setEditing] = createSignal<string | undefined>(undefined, {
