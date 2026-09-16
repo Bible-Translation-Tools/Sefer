@@ -364,11 +364,18 @@ export const openProject = (
 ): Effect.Effect<Project, ProjectError, FileSystem.FileSystem | Scope.Scope> =>
   Effect.flatMap(Effect.serviceOption(Observability), (found) => {
     const observability = Option.getOrUndefined(found);
-    const endSpan = observability?.span("project.open", root);
-    return Effect.ensuring(
-      openIn(root, options, observability),
+    if (observability === undefined) return openIn(root, options, undefined);
+    // Opening a project is one end-to-end piece of work, and everything it
+    // does — reading metadata, opening each book, adopting baselines, the
+    // first analysis pass — belongs inside it rather than beside it. The
+    // operation IS an ObservabilityService, so `openIn` narrates into it
+    // without knowing it is doing so.
+    const opening = observability.operation("project.open", { "project.root": root });
+    return Effect.onExit(openIn(root, options, opening), (exit) =>
       Effect.sync(() => {
-        endSpan?.();
+        if (exit._tag === "Success")
+          opening.end("ready", { "project.books": exit.value.books.length });
+        else opening.end("failed");
       }),
     );
   });
@@ -438,6 +445,5 @@ const openIn = (
     });
 
     yield* Effect.addFinalizer(() => project.close());
-    observability?.note("project.open", "ready", `${order.length} books`);
     return project;
   });

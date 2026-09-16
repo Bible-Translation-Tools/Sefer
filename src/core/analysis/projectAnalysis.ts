@@ -123,7 +123,12 @@ export interface ProjectAnalysisService {
    * opens a latch. The book's corpus registration is refreshed on the next
    * scheduler pass, so a keystroke costs no wasm call beyond the editor's own.
    */
-  readonly supply: (bookId: BookId, analysis: Analysis) => void;
+  /**
+   * `cause` is the trace of the gesture that produced this Analysis. The pass
+   * it arms is debounced and serves several gestures, so it cannot be a child
+   * of one — it carries `op.cause` instead, and one query returns the cascade.
+   */
+  readonly supply: (bookId: BookId, analysis: Analysis, cause?: string) => void;
 
   /**
    * Register the project's bound source and reference books WITH THEIR TEXT,
@@ -279,6 +284,8 @@ const make = (
     let lastArmed = 0;
     let burstStarted = 0;
     let armed = false;
+    /** The gesture that most recently armed the scheduler. See `supply`. */
+    let causedBy: string | undefined;
 
     const invalidateCaches = (): void => {
       findingsCache = undefined;
@@ -313,6 +320,9 @@ const make = (
       bookId: BookId,
       book: Book,
       entry: Entry,
+      // Whoever is narrating: the pass that is running, or the root when a
+      // project is opening. `refresh` cannot tell, which is the point.
+      into: ObservabilityService | undefined = observability,
     ): Effect.Effect<SourceStamp | undefined> =>
       Effect.gen(function* () {
         const source = book.source();
@@ -329,7 +339,7 @@ const make = (
           } catch {
             // Retain, do not clear: an engine refusal is an integration
             // problem, not evidence that the book became clean.
-            observability?.note("book.analyze", "failed", "engine refused", { "book.id": bookId });
+            into?.note("book.analyze", "failed", "engine refused", { "book.id": bookId });
             return undefined;
           }
         }
@@ -341,11 +351,11 @@ const make = (
         // registers it again. Reported, never swallowed.
         yield* Effect.catch(corpus.update(bookId, source.text), (error) =>
           Effect.sync(() =>
-            observability?.note("corpus.update", "failed", error.reason, { "book.id": bookId }),
+            into?.note("corpus.update", "failed", error.reason, { "book.id": bookId }),
           ),
         );
         const { errors } = countsOf(bookId, analysis, source.stamp);
-        observability?.note("book.analyze", "ready", undefined, {
+        into?.note("book.analyze", "ready", undefined, {
           "book.id": bookId,
           "analysis.diagnostics": analysis.dish.diagnostics.length,
           "analysis.errors": errors,
@@ -386,18 +396,27 @@ const make = (
       }
       const todo = [...pending];
       pending.clear();
+      // One pass is one piece of work, and it FOLLOWED the gestures that armed
+      // it rather than happening inside any of them.
+      const running = observability?.operation(
+        "analysis.pass",
+        { "analysis.books": todo.length },
+        causedBy === undefined ? undefined : { cause: causedBy },
+      );
+      causedBy = undefined;
       const refreshed: { bookId: BookId; stamp: SourceStamp }[] = [];
       for (const bookId of todo) {
         const entry = entries.get(bookId);
         const book = project.book(bookId);
         if (entry === undefined || book === undefined) continue;
-        const stamp = yield* refresh(bookId, book, entry);
+        const stamp = yield* refresh(bookId, book, entry, running ?? observability);
         if (stamp !== undefined) refreshed.push({ bookId, stamp });
       }
       if (refreshed.length > 0) {
         yield* publishCorpus;
         invalidateCaches();
       }
+      running?.end("ready", { "analysis.refreshed": refreshed.length });
       return refreshed;
     });
 
@@ -576,8 +595,11 @@ const make = (
       attach,
       attachReferences,
       references: () => referenceIds,
-      supply: (bookId, analysis) => {
+      supply: (bookId, analysis, cause) => {
         supplied.set(bookId, analysis);
+        // The most recent gesture wins: a pass serving three keystrokes names
+        // the last one, which is the one whose text it is about to read.
+        if (cause !== undefined) causedBy = cause;
         arm(bookId);
       },
       census: (project) =>

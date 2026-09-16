@@ -90,6 +90,18 @@ const BURST_MS = 120;
  * it. So the burst names no book: a repaint is not necessarily about one.
  */
 let repaintInto: ObservabilityService | null = null;
+/**
+ * The trace of the gesture in flight, for work that will FOLLOW it.
+ *
+ * Read synchronously, inside the gesture — the analysis scheduler is armed
+ * from `book.changes`, which runs inside `accept()` — so this is accurate at
+ * the only moment it is asked. It is not a propagation mechanism: nothing
+ * async may read it, and nothing does.
+ */
+let openGesture: string | null = null;
+
+/** The gesture in flight, for whatever the gesture is about to cause. */
+export const gestureTrace = (): string | undefined => openGesture ?? undefined;
 let burst: { op: Operation; derived: Map<string, { ms: number; n: number }> } | null = null;
 let closing: ReturnType<typeof setTimeout> | undefined;
 
@@ -177,6 +189,7 @@ export const observabilityTracer = (
       "editor.doc_length": trace.docLength,
       "editor.head": trace.head,
     });
+    openGesture = operation.trace;
     const opened = performance.now();
     // The instrument closes a trace when the NEXT transaction opens, so wall
     // time from here to `end` is mostly the reader sitting still. The last
@@ -256,6 +269,7 @@ export const observabilityTracer = (
     };
 
     function close(): void {
+      openGesture = null;
       // A gesture that only moved the caret is not a mutation, and at
       // `verdicts` it is not worth a record at all: arrow keys, clicks and
       // drags are the bulk of the volume and almost never the question.

@@ -51,7 +51,7 @@ import {
 
 import { trustedBy, type Book, type BookId } from "../book/book";
 import { writeFileAtomic } from "../fileSystem/atomic";
-import { Observability } from "../observability";
+import { Observability, type ObservabilityService } from "../observability";
 import { Recovery } from "../recovery/recovery";
 import { decode, encode, type SourceStamp } from "../source/source";
 import type { Baseline } from "./baseline";
@@ -288,7 +288,30 @@ const make = (
         });
       });
 
-    const save = (book: Book): Effect.Effect<SaveReceipt, SaveError> =>
+    // One Save is one end-to-end piece of work: the person chose to record a
+    // version, and the bytes reaching disk is one hop inside that, not the
+    // same fact — they can fail separately.
+    const save = (book: Book): Effect.Effect<SaveReceipt, SaveError> => {
+      const saving = observability?.operation("save", {
+        "book.id": book.id,
+        "fs.path": book.path,
+      });
+      return Effect.onExit(saveIn(book, saving ?? observability), (exit) =>
+        Effect.sync(() => {
+          if (exit._tag === "Success")
+            saving?.end("ready", {
+              "fs.bytes": exit.value.bytes,
+              "book.revision": exit.value.stamp.revision,
+            });
+          else saving?.end("failed");
+        }),
+      );
+    };
+
+    const saveIn = (
+      book: Book,
+      observability: ObservabilityService | undefined,
+    ): Effect.Effect<SaveReceipt, SaveError> =>
       Effect.gen(function* () {
         remember(book);
         const conflict = conflicts.get(book.id);

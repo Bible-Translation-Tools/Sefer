@@ -41,6 +41,7 @@ import type { SourceStamp } from "../../core/source/source";
 import {
   annotateOpen,
   annotateRepaint,
+  gestureTrace,
   assignment,
   flash,
   flashing,
@@ -200,7 +201,12 @@ export function BookEditor(props: BookEditorProps) {
 
       const supply = (): void => {
         const analysis = structureAt(book.state).analysis;
-        if (analysis !== null) shell.services.projectAnalysis.supply(book.id, analysis);
+        // The gesture's trace goes with it: the pass this arms is debounced,
+        // so it will carry `op.cause` rather than being a child of any one
+        // keystroke. Called inside `book.changes`, which runs inside the
+        // gesture, so the trace is the right one.
+        if (analysis !== null)
+          shell.services.projectAnalysis.supply(book.id, analysis, gestureTrace());
       };
       supply();
 
