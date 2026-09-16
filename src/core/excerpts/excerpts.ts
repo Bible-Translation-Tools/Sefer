@@ -563,24 +563,117 @@ const walk = (spans: readonly VerseSpan[], index: number, steps: number, by: -1 
  * expanded is built by exactly the same arithmetic as the card they started
  * with — only the extent differs.
  */
+
 /**
- * A thunk that runs once and remembers, including when it answers `undefined`.
+ * An excerpt whose lazy fields live on a PROTOTYPE, not on the object.
  *
- * Deliberately not a `Map` cache or a class: an excerpt is a value, and this is
- * the smallest thing that makes one of its fields cost nothing until it is
- * looked at.
+ * A class and not an object literal, for one measured reason: six accessors in
+ * a literal are six accessors on every instance, and a feed builds one
+ * instance per hit. On a 66-book project that is twenty thousand objects, each
+ * forced into a slower shape than plain data, to render twenty cards —
+ * `buildExcerpt` was 32ms of a 198ms arrival in the production build. Declared
+ * once on a prototype, the getters cost nothing per instance and construction
+ * is a plain field assignment.
+ *
+ * `Excerpt`'s contract is unchanged and so is every call site: the fields
+ * still read like values, and the ones that need the projection still cost
+ * nothing until something reads them.
  */
-const once = <T>(make: () => T): (() => T) => {
-  let held: T;
-  let made = false;
-  return () => {
-    if (!made) {
-      held = make();
-      made = true;
-    }
-    return held;
-  };
-};
+class LazyExcerpt implements Excerpt {
+  readonly bookId: BookId;
+  readonly sid: string;
+  readonly ref: Ref;
+  readonly span: { readonly from: number; readonly to: number };
+  readonly hits: readonly Occurrence[];
+
+  /** Set on first read of any projected field; see `body`. */
+  private held:
+    | {
+        readonly projection: Projection;
+        readonly marks: readonly Mark[];
+        readonly focus: Mark | null;
+      }
+    | undefined;
+
+  constructor(
+    private readonly book: BookText,
+    private readonly spans: readonly VerseSpan[],
+    private readonly name: string,
+    private readonly verse: VerseSpan | undefined,
+    private readonly low: number,
+    private readonly high: number,
+    from: number,
+    to: number,
+    hits: readonly Occurrence[],
+    sid: string,
+    ref: Ref,
+  ) {
+    this.bookId = book.bookId;
+    this.sid = sid;
+    this.ref = ref;
+    this.span = { from, to };
+    this.hits = hits;
+  }
+
+  /**
+   * Everything the projection pays for, computed once.
+   *
+   * One bundle rather than three memos: a card that reads any of these reads
+   * all of them, so splitting them would buy nothing and cost per instance.
+   */
+  private body(): {
+    readonly projection: Projection;
+    readonly marks: readonly Mark[];
+    readonly focus: Mark | null;
+  } {
+    if (this.held !== undefined) return this.held;
+    const projection = project(this.book.analysis, this.span.from, this.span.to);
+    const verse = this.verse;
+    this.held = {
+      projection,
+      marks: marksFor(projection, this.hits.flatMap(rangesOf)),
+      focus:
+        verse === undefined
+          ? null
+          : (marksFor(projection, [{ from: verse.from, to: verse.to }])[0] ?? null),
+    };
+    return this.held;
+  }
+
+  /** Built on read rather than stored: a card asks once, and a string is cheaper than a field. */
+  get label(): string {
+    return refLabel(this.name, this.ref);
+  }
+
+  get text(): string {
+    return this.body().projection.text;
+  }
+
+  get source(): string {
+    return this.book.analysis.text.slice(this.span.from, this.span.to);
+  }
+
+  get marks(): readonly Mark[] {
+    return this.body().marks;
+  }
+
+  get verses(): readonly VerseMark[] {
+    return this.body().projection.verses;
+  }
+
+  get focus(): Mark | null {
+    return this.body().focus;
+  }
+
+  /** Two walks of the verse table — only a rendered card draws expand chevrons. */
+  get more(): { readonly up: boolean; readonly down: boolean } {
+    if (this.verse === undefined) return { up: false, down: false };
+    return {
+      up: walk(this.spans, this.low, 1, -1) !== this.low,
+      down: walk(this.spans, this.high, 1, 1) !== this.high,
+    };
+  }
+}
 
 const buildExcerpt = (
   book: BookText,
@@ -607,70 +700,17 @@ const buildExcerpt = (
   const to =
     verse === undefined ? (spans[0]?.from ?? book.analysis.docLen) : (spans[high]?.to ?? verse.to);
 
-  /**
-   * Everything the projection pays for, in ONE thunk and one closure.
-   *
-   * Three separate memos would be three closures per excerpt, and a feed makes
-   * one excerpt per hit — sixty thousand allocations to render twenty cards.
-   * A card that reads any of these reads all of them, so there is nothing to
-   * gain by splitting them and a per-excerpt cost to pay.
-   */
-  const body = once(() => {
-    const projection = project(book.analysis, from, to);
-    return {
-      projection,
-      marks: marksFor(projection, held.flatMap(rangesOf)),
-      focus:
-        verse === undefined
-          ? null
-          : (marksFor(projection, [{ from: verse.from, to: verse.to }])[0] ?? null),
-    };
-  });
   const ref: Ref =
     verse === undefined
       ? { book: book.bookId, chapter }
       : { book: book.bookId, chapter: verse.chapter, verse: verse.first };
 
-  return {
-    bookId: book.bookId,
-    sid:
-      verse === undefined
-        ? `${book.bookId} ${chapter}`
-        : sidOf(book.bookId, verse.chapter, verse.first, verse.last),
-    ref,
-    // A plain getter and not a memo: building the string is cheaper than the
-    // closure that would remember it, and a card asks once.
-    get label() {
-      return refLabel(name, ref);
-    },
-    span: { from, to },
-    hits: held,
-    get text() {
-      return body().projection.text;
-    },
-    get source() {
-      return book.analysis.text.slice(from, to);
-    },
-    get marks() {
-      return body().marks;
-    },
-    get verses() {
-      return body().projection.verses;
-    },
-    get focus() {
-      return body().focus;
-    },
-    // Two walks of the verse table, deferred for the same reason as `label`:
-    // only a rendered card draws expand chevrons.
-    get more() {
-      return verse === undefined
-        ? { up: false, down: false }
-        : {
-            up: walk(spans, low, 1, -1) !== low,
-            down: walk(spans, high, 1, 1) !== high,
-          };
-    },
-  };
+  const sid =
+    verse === undefined
+      ? `${book.bookId} ${chapter}`
+      : sidOf(book.bookId, verse.chapter, verse.first, verse.last);
+
+  return new LazyExcerpt(book, spans, name, verse, low, high, from, to, held, sid, ref);
 };
 
 /**
