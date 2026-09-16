@@ -67,11 +67,11 @@ function ProjectPage(props: { readonly root: string; readonly census: boolean })
     },
   );
 
-  const census = () => {
-    shell.tick();
-    const project = shell.project();
-    return project === undefined ? [] : shell.services.projectAnalysis.census(project);
-  };
+  // The shell's census, not `ProjectAnalysis`'s: the same rows, held from the
+  // last Publication instead of rebuilt on every read. Rebuilding it meant
+  // materialising every finding in every book to count two of them, and behind
+  // `tick` this page did that on every keystroke typed in another route.
+  const census = () => shell.census();
 
   const dirty = (bookId: string): boolean => {
     const book = shell.project()?.book(bookId);

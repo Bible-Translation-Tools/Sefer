@@ -97,17 +97,11 @@ export function InventoryPanel() {
   });
 
   /**
-   * One read of the memoised value per render pass. `tick()` is the shell's
-   * one reactivity source over the Books, exactly as the findings panel uses
-   * it; `inventory()` itself recomputes only when a publication lands.
+   * The inventory of the last Publication, which is the only time it can
+   * differ — it is measured FROM a Publication, so a keystroke cannot change
+   * it and `tick` was waking this screen for every one of them.
    */
-  const held = createMemo(
-    () => {
-      shell.tick();
-      return shell.services.projectAnalysis.inventory();
-    },
-    { name: "inventory" },
-  );
+  const held = createMemo(() => shell.inventory(), { name: "inventory" });
 
   const shown = createMemo(
     () =>

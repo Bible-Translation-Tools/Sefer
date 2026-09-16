@@ -123,12 +123,13 @@ export function GlyphDetail(props: GlyphDetailProps) {
    * character to mark, and `quote` says so: that row falls back to the raw
    * slice and is labelled. One site's answer, not the page's.
    *
-   * Nothing here subscribes: `tick()` is the shell's one signal over the Books
-   * and the excerpt re-reads with it, exactly as every other derived screen
-   * does.
+   * Nothing here subscribes. The book's stamp is read so the quotation is
+   * re-taken when THAT book's text moves — the fallback slices the Book's own
+   * text, so it goes stale with it — and reading it per book is what stops an
+   * edit in one book re-quoting sites in the other sixty-five.
    */
   const excerpt = (site: FlaggedSite): Quotation => {
-    shell.tick();
+    shell.stampOf(site.bookId);
     const analysis = analysisOf(site.bookId)?.analysis;
     if (analysis !== undefined) return quote(analysis, site.from, site.to);
     const text = shell.project()?.book(site.bookId)?.source().text;
@@ -150,9 +151,8 @@ export function GlyphDetail(props: GlyphDetailProps) {
 
   /** Has the book moved on since the publication measured this site? */
   const stale = (site: FlaggedSite): boolean => {
-    shell.tick();
-    const book = shell.project()?.book(site.bookId);
-    return book === undefined || book.source().stamp.revision !== site.stamp.revision;
+    const stamp = shell.stampOf(site.bookId);
+    return stamp === undefined || stamp.revision !== site.stamp.revision;
   };
 
   /**

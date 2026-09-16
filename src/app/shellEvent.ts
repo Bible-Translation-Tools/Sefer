@@ -48,7 +48,20 @@ export type ShellEvent =
    */
   | { readonly kind: "remote.transfer" }
   /** A Publication landed: new cross-book findings and a new census. */
-  | { readonly kind: "corpus.publish" };
+  | { readonly kind: "corpus.publish" }
+  /**
+   * A Book was seated, or released back to a plain Book.
+   *
+   * Both matter because `instantiate` and `release` REPLACE the object that
+   * holds the canonical text (`core/project/project.ts`: "holding a reference
+   * across an instantiate or release is therefore a bug in the holder"). A
+   * store row derived from a Book goes stale at exactly that moment and
+   * nothing else announces it — an edit would, eventually, which is precisely
+   * the kind of "correct once you touch it" behaviour this union exists to
+   * stop.
+   */
+  | { readonly kind: "seat.open"; readonly books: readonly BookId[] }
+  | { readonly kind: "seat.close"; readonly books: readonly BookId[] };
 
 /**
  * The Books an event moved, or `"all"` when it moved the project as a whole.
@@ -62,6 +75,8 @@ export const booksOf = (event: ShellEvent): readonly BookId[] | "all" => {
     case "book.apply":
     case "book.write":
     case "journal.restore":
+    case "seat.open":
+    case "seat.close":
       return event.books;
     case "project.open":
     case "remote.transfer":

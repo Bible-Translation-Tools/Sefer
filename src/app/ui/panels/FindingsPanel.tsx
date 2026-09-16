@@ -154,9 +154,12 @@ export function FindingsPanel() {
   );
 
   const all = (): readonly Finding[] => {
-    shell.tick();
     if (shell.project() === undefined) return [];
-    const listed = Findings.list(shell.services.projectAnalysis);
+    // `list` is a pure sort over whatever supplies the findings, so it takes
+    // the shell's published list instead of asking ProjectAnalysis to rebuild
+    // one. Behind `tick` that rebuild ran on every keystroke, and it
+    // materialises every finding in every book.
+    const listed = Findings.list({ findings: shell.findings });
     const only = pattern();
     // A pattern is not one of `FindingsFilter`'s fields and should not become
     // one: it is an address another screen hands over for one visit, not a
@@ -167,9 +170,11 @@ export function FindingsPanel() {
   };
 
   const isStale = (finding: Finding): boolean => {
-    shell.tick();
-    const book = shell.project()?.book(finding.bookId);
-    return book === undefined || Findings.stale(finding, book);
+    // The book's stamp from the shell's store, wrapped back into the shape the
+    // core rule takes: the rule stays in one place, and only the book this
+    // finding is about wakes the answer.
+    const stamp = shell.stampOf(finding.bookId);
+    return stamp === undefined || Findings.stale(finding, { source: () => ({ stamp }) });
   };
 
   /** Counts over the unfiltered list: a chip's own count must not move as you click it. */
