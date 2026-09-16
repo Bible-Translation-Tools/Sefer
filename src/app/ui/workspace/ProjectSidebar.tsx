@@ -73,30 +73,25 @@ export function ProjectSidebar() {
   };
 
   // A MEMO, not a plain function: `section()` below asks for it once per
-  // testament, so every keystroke walked the census twice and rebuilt one row
-  // per book each time. The tick is still the trigger — the answer genuinely
-  // changes when an edit moves a diagnostic count — but it is computed once
-  // per tick instead of once per reader.
+  // testament, so without one every pass would build sixty-six rows twice.
+  //
+  // It tracks the findings store and NOT `tick`. The census it used to call
+  // rebuilds every finding in every book to count two of them, and `tick`
+  // fired on every keystroke — so typing one letter in one book rebuilt the
+  // whole project's findings to redraw badges that had not moved. The store
+  // is written when a Publication lands, which is the only time an answer
+  // here can actually differ.
   const rows = createMemo(
     (): readonly Row[] => {
-      shell.tick();
       const project = shell.project();
       if (project === undefined) return [];
       const metadata = metadataOf(project);
-      const counted = new Map(
-        shell.services.projectAnalysis
-          .census(project)
-          .map((book) => [book.bookId, book.diagnostics] as const),
-      );
-      return project.books.map((book) => {
-        const diagnostics = counted.get(book.id);
-        return {
-          id: book.id,
-          name: bookName(book.id, metadata),
-          testament: testamentOf(book.id),
-          attention: (diagnostics?.errors ?? 0) + (diagnostics?.warnings ?? 0),
-        };
-      });
+      return project.books.map((book) => ({
+        id: book.id,
+        name: bookName(book.id, metadata),
+        testament: testamentOf(book.id),
+        attention: shell.attentionOf(book.id),
+      }));
     },
     { name: "sidebarBooks" },
   );

@@ -243,6 +243,15 @@ export interface Shell {
   readonly findingCounts: Accessor<{ readonly errors: number; readonly warnings: number }>;
 
   /**
+   * How many findings one book is being asked about — the sidebar's badge.
+   *
+   * A read of the findings store, written when a Publication lands. It
+   * replaces `census()` per keystroke per reader: the census rebuilds every
+   * finding in every book, and the sidebar was calling it on every tick.
+   */
+  readonly attentionOf: (bookId: BookId) => number;
+
+  /**
    * The workspace chrome: is the project sidebar showing, and how wide is it.
    *
    * Both are `workspace.*` preferences (src/app/settings.ts) and both live
@@ -493,21 +502,75 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     setTick((held) => held + 1);
   };
 
-  const findings = (): readonly Finding[] => {
-    // `tick` is read so the cursor and every panel derived from it recompute
-    // after an edit; ProjectAnalysis memoises the list itself.
-    tick();
-    return project() === undefined ? [] : services.projectAnalysis.findings();
-  };
+  /**
+   * What the project's analyses currently say, and who it is about.
+   *
+   * Written when a Publication lands — NOT when a keystroke happens — which is
+   * the honest cue for two reasons. The held analyses do not move between
+   * scheduler passes, so recomputing sooner produces the same findings from
+   * the same inputs; and the corpus half is genuinely a pass behind, so counts
+   * published sooner would be counts for text nobody judged.
+   *
+   * It retains rather than clears, which is `ProjectAnalysis`'s own rule
+   * (§"Failure retains, never clears") carried up to the UI: an edit does not
+   * blank the bell and the badges while the next pass runs, it leaves the last
+   * published answer standing. Known-stale beats an apparently clean project.
+   *
+   * This is the replacement for the loudest `tick` reader of all. Both
+   * `ProjectAnalysis.findings()` and `census()` rebuild every finding in every
+   * book, and `attach` invalidates their caches on every accepted edit — so
+   * behind `tick` the bell, the rail and the sixty-six sidebar rows each paid
+   * a whole-project rebuild per keystroke.
+   */
+  const [findingsHeld, setFindingsHeld] = createStore<{
+    list: readonly Finding[];
+    counts: Record<BookId, { errors: number; warnings: number }>;
+    totals: { errors: number; warnings: number };
+  }>({ list: [], counts: {}, totals: { errors: 0, warnings: 0 } }, { name: "findings" });
 
-  const findingCounts = (): { readonly errors: number; readonly warnings: number } => {
+  const publishFindings = (): void => {
+    const staticOpen = project();
+    if (staticOpen === undefined) {
+      setFindingsHeld((draft) => {
+        draft.list = [];
+        draft.counts = {};
+        draft.totals = { errors: 0, warnings: 0 };
+      });
+      return;
+    }
+    // One rebuild, here, for every reader — the cost `tick` made each of them
+    // pay separately.
+    const list = services.projectAnalysis.findings();
     let errors = 0;
     let warnings = 0;
-    for (const held of findings()) {
+    for (const held of list) {
       if (held.severity === "error") errors += 1;
       else if (held.severity === "warning") warnings += 1;
     }
-    return { errors, warnings };
+    const counts: Record<BookId, { errors: number; warnings: number }> = {};
+    for (const summary of services.projectAnalysis.census(staticOpen))
+      counts[summary.bookId] = { ...summary.diagnostics };
+    setFindingsHeld((draft) => {
+      draft.list = list;
+      draft.counts = counts;
+      draft.totals = { errors, warnings };
+    });
+  };
+
+  const findings = (): readonly Finding[] => findingsHeld.list;
+
+  const findingCounts = (): { readonly errors: number; readonly warnings: number } =>
+    findingsHeld.totals;
+
+  /**
+   * How many things one book is being asked about — the sidebar's badge.
+   *
+   * A read of one row of the store, so a publication that changed RUT's count
+   * does not wake the sixty-five rows it did not change.
+   */
+  const attentionOf = (bookId: BookId): number => {
+    const held = findingsHeld.counts[bookId];
+    return held === undefined ? 0 : held.errors + held.warnings;
   };
 
   const finding = (): Finding | undefined => {
@@ -654,8 +717,38 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
         else onDisk.add(bookId);
       }
     refreshBooks(booksOf(event));
+    // The two events that move findings. An edit is NOT one of them: it arms
+    // the scheduler, and the Publication that follows is what has something
+    // new to say.
+    if (event.kind === "project.open" || event.kind === "corpus.publish") publishFindings();
     bump();
   };
+
+  /**
+   * A Publication landed, so the findings store is rewritten.
+   *
+   * Coalesced, because `watch()` republishes once per book a pass refreshed
+   * and a pass over forty books is still ONE publication: without this, a
+   * bulk format would rebuild the whole project's findings forty times to
+   * answer one question. A timeout rather than a microtask because the
+   * republishes arrive from a forked fiber and need not share a tick.
+   */
+  let publishPending: ReturnType<typeof setTimeout> | undefined;
+  const watchingAnalysis = services.runtime.runFork(
+    Stream.runForEach(services.projectAnalysis.watch(), () =>
+      Effect.sync(() => {
+        if (publishPending !== undefined) return;
+        publishPending = setTimeout(() => {
+          publishPending = undefined;
+          changed({ kind: "corpus.publish" });
+        }, 0);
+      }),
+    ),
+  );
+  onCleanup(() => {
+    if (publishPending !== undefined) clearTimeout(publishPending);
+    Effect.runFork(Fiber.interrupt(watchingAnalysis));
+  });
 
   const noteWritten = (bookIds: readonly BookId[], recorded: boolean): void => {
     changed({ kind: "book.write", books: bookIds, recorded });
@@ -947,6 +1040,7 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
       setPaletteOpen(open);
     },
     findingCounts,
+    attentionOf,
     sidebarOpen,
     setSidebarOpen: (open) => {
       setSidebarOpen(open);
