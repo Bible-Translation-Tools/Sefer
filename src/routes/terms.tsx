@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/solid-router";
 import { Effect, Option, Result } from "effect";
-import { createEffect, createMemo, createSignal, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, Show, untrack } from "solid-js";
 
 import { t } from "../app/i18n";
 import { useShell } from "../app/ProjectContext";
@@ -188,8 +188,11 @@ function Terms() {
   createEffect(
     () => selected()?.id,
     () => {
-      const term = selected();
-      const project = shell.project();
+      // Snapshots, not dependencies: the compute above names the one thing
+      // that should re-run this, and the readings are fetched for the term
+      // selected at that moment.
+      const term = untrack(selected);
+      const project = untrack(shell.project);
       if (term === undefined || project === undefined) {
         setReadings(new Map());
         return;

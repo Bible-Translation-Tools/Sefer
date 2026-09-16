@@ -29,7 +29,7 @@ import GitCommitVertical from "lucide-solid/icons/git-commit-vertical";
 import PencilLine from "lucide-solid/icons/pencil-line";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Undo2 from "lucide-solid/icons/undo-2";
-import { For, Show, createEffect, createSignal } from "solid-js";
+import { For, Show, createEffect, createSignal, untrack } from "solid-js";
 
 import type { BookId } from "../../../core/book/book";
 import * as Diff from "../../../core/diff/diff";
@@ -127,7 +127,8 @@ export function HistoryPanel() {
         version.refresh();
       });
   };
-  load();
+  // One read of the open project, at setup. `load` is not a derivation.
+  untrack(load);
 
   /** Which books a commit touched, from the per-book version lists. */
   const booksIn = (id: string): readonly BookId[] => {
@@ -185,7 +186,14 @@ export function HistoryPanel() {
   createEffect(
     () => `${selected()}:${shell.tick()}:${versions().size}:${version.recorded().head ?? ""}`,
     () => {
-      void recompute();
+      // The compute above IS the dependency list. Everything this reads is a
+      // one-time snapshot of the state that key already describes, so
+      // `untrack` says so — a read in an effect's effect-phase that is not a
+      // dependency is what STRICT_READ_UNTRACKED exists to catch, and it
+      // cannot tell a deliberate snapshot from a mistake without being told.
+      untrack(() => {
+        void recompute();
+      });
     },
   );
 

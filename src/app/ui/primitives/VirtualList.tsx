@@ -234,7 +234,11 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
    */
   const optionsOf = (): VirtualizerOptions<HTMLDivElement, HTMLElement> => ({
     count: untrack(flat).entries.length,
-    getScrollElement: () => scroller() ?? null,
+    // `untrack`, like every read in this bag: these callbacks are invoked by
+    // `virtual-core` from its own observers, and a read there is a question
+    // asked at call time, not a dependency. The effect below is what re-hands
+    // the options when `scroller` moves, and it tracks it in its compute.
+    getScrollElement: () => untrack(scroller) ?? null,
     estimateSize: (index: number) => {
       const entry = untrack(flat).entries[index];
       return entry === undefined ? HEADER : entry.kind === "header" ? HEADER : entry.row.estimate;
@@ -251,8 +255,10 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     rangeExtractor: (range: Range) => {
       const keep = new Set(defaultRangeExtractor(range));
       keep.add(headerAbove(range.startIndex));
-      const pinnedAt =
-        props.pinned === undefined ? undefined : untrack(flat).indexOfKey.get(props.pinned);
+      // Read at range time, untracked for the same reason: the library asks
+      // what is pinned NOW, and a stale answer would unmount an open editor.
+      const pinned = untrack(() => props.pinned);
+      const pinnedAt = pinned === undefined ? undefined : untrack(flat).indexOfKey.get(pinned);
       if (pinnedAt !== undefined) keep.add(pinnedAt);
       return [...keep].sort((a, b) => a - b);
     },

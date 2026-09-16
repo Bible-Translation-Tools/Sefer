@@ -50,7 +50,7 @@ import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import CircleCheck from "lucide-solid/icons/circle-check";
 import Wrench from "lucide-solid/icons/wrench";
-import { For, Show, createEffect, createSignal, onCleanup, untrack } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
 import type { BookId } from "../../../core/book/book";
 import type { Excerpt } from "../../../core/excerpts/excerpts";
@@ -153,35 +153,66 @@ export function FindingsPanel() {
     },
   );
 
-  const all = (): readonly Finding[] => {
-    if (shell.project() === undefined) return [];
-    // `list` is a pure sort over whatever supplies the findings, so it takes
-    // the shell's published list instead of asking ProjectAnalysis to rebuild
-    // one. Behind `tick` that rebuild ran on every keystroke, and it
-    // materialises every finding in every book.
-    const listed = Findings.list({ findings: shell.findings });
-    const only = pattern();
-    // A pattern is not one of `FindingsFilter`'s fields and should not become
-    // one: it is an address another screen hands over for one visit, not a
-    // preference anybody sets. So it narrows the list this panel calls "all",
-    // which keeps the header's "N of TOTAL shown" honest about the question
-    // that was actually asked.
-    return only === undefined ? listed : listed.filter((finding) => finding.pattern === only);
-  };
+  // MEMOS, all three, and on a screen with twenty thousand findings that is
+  // not an optimisation but the difference between usable and not. `all` sorts
+  // the whole list; `shown` filters it; both were plain functions called once
+  // per reader and then once per rendered card, so opening this panel sorted
+  // and filtered twenty thousand findings several times over.
+  const all = createMemo(
+    (): readonly Finding[] => {
+      if (shell.project() === undefined) return [];
+      // `list` is a pure sort over whatever supplies the findings, so it takes
+      // the shell's published list instead of asking ProjectAnalysis to rebuild
+      // one. Behind `tick` that rebuild ran on every keystroke, and it
+      // materialises every finding in every book.
+      const listed = Findings.list({ findings: shell.findings });
+      const only = pattern();
+      // A pattern is not one of `FindingsFilter`'s fields and should not become
+      // one: it is an address another screen hands over for one visit, not a
+      // preference anybody sets. So it narrows the list this panel calls "all",
+      // which keeps the header's "N of TOTAL shown" honest about the question
+      // that was actually asked.
+      return only === undefined ? listed : listed.filter((finding) => finding.pattern === only);
+    },
+    { name: "findingsAll" },
+  );
 
+  /**
+   * Every book's current revision, as ONE plain object.
+   *
+   * Staleness is a revision comparison, and the revisions live in the shell's
+   * `books` store — so asking per finding meant twenty thousand store-proxy
+   * reads per pass, from inside a `<For>` where Solid cannot track them
+   * (STRICT_READ_UNTRACKED, and it was right to complain). Read once here, in
+   * a tracking scope, keyed by book: sixty-six reads when a book's text moves,
+   * and a plain lookup per finding.
+   */
+  const revisions = createMemo(
+    (): Readonly<Record<BookId, number>> => {
+      const out: Record<BookId, number> = {};
+      for (const book of shell.project()?.books ?? []) {
+        const stamp = shell.stampOf(book.id);
+        if (stamp !== undefined) out[book.id] = stamp.revision;
+      }
+      return out;
+    },
+    { name: "bookRevisions" },
+  );
+
+  /** Has the book moved on since the publication that measured this finding? */
   const isStale = (finding: Finding): boolean => {
-    // The book's stamp from the shell's store, wrapped back into the shape the
-    // core rule takes: the rule stays in one place, and only the book this
-    // finding is about wakes the answer.
-    const stamp = shell.stampOf(finding.bookId);
-    return stamp === undefined || Findings.stale(finding, { source: () => ({ stamp }) });
+    const revision = revisions()[finding.bookId];
+    return revision === undefined || revision !== finding.stamp.revision;
   };
 
   /** Counts over the unfiltered list: a chip's own count must not move as you click it. */
-  const facets = () => Filter.facets(all());
+  const facets = createMemo(() => Filter.facets(all()), { name: "findingsFacets" });
 
-  const shown = (): readonly Finding[] =>
-    Filter.applyFilter(all(), filters.filter(), (finding) => isStale(finding));
+  const shown = createMemo(
+    (): readonly Finding[] =>
+      Filter.applyFilter(all(), filters.filter(), (finding) => isStale(finding)),
+    { name: "findingsShown" },
+  );
 
   /** Every book in the project, so a clean book still offers its chip. */
   const books = (): readonly BookId[] => shell.project()?.books.map((book) => book.id) ?? [];
@@ -318,7 +349,6 @@ export function FindingsPanel() {
     const id = `${row.key}|${finding.id}`;
     const folded = (run?.members.length ?? 1) > 1;
     const markup = inMarkup(row.excerpt, finding);
-    const stale = isStale(finding);
     return (
       <li
         class="group/finding flex flex-col gap-0.5"
@@ -346,7 +376,7 @@ export function FindingsPanel() {
               <Badge tone="muted">{t("in markup")}</Badge>
             </button>
           </Show>
-          <Show when={stale}>
+          <Show when={isStale(finding)}>
             <Badge tone="muted">{t("stale")}</Badge>
           </Show>
           <Show when={folded}>
