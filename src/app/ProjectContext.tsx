@@ -36,6 +36,7 @@ import type { Finding } from "../core/findings/finding";
 import { navigateTarget } from "../core/findings/findings";
 import * as Fixes from "../core/fixes/fixes";
 import type { SettingKey } from "../core/host/settings";
+import { Observability } from "../core/observability";
 import { openProject as openProjectEffect, type Project } from "../core/project/project";
 import { DEFAULT_JOURNAL_POLICY, Recovery } from "../core/recovery/recovery";
 import { SaveCoordinator } from "../core/save/saveCoordinator";
@@ -497,10 +498,24 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
 
   const openProject = async (root: string): Promise<void> => {
     await closeProject();
+    // ONE record for one thing the person did. Opening the files and analysing
+    // what was opened are two calls and one gesture: separately they were two
+    // unrelated traces whose durations had to be added up by hand, and the
+    // analysis — the expensive half — looked like background work nobody asked
+    // for. Provided to both, so everything either reaches narrates inside it.
+    const gesture = services.composition.observability.operation("project.open", {
+      "project.root": root,
+      "op.trigger": "shell",
+    });
     const opened = await services.run(
-      Effect.result(openProjectEffect(root, { seat: services.seat })),
+      Effect.provideService(
+        Effect.result(openProjectEffect(root, { seat: services.seat })),
+        Observability,
+        gesture,
+      ),
     );
     if (Result.isFailure(opened)) {
+      gesture.end("failed", { "project.error": opened.failure.reason });
       report(t("could not open {root}: {reason}", { root, reason: opened.failure.reason }));
       return;
     }
@@ -508,11 +523,16 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     // The census, the corpus and every finding come from here; `attach` is what
     // analyses the project once at open (vision §11.1) and keeps it in step.
     await services.run(
-      Effect.gen(function* () {
-        const analysis = yield* ProjectAnalysis;
-        yield* analysis.attach(ready);
-      }),
+      Effect.provideService(
+        Effect.gen(function* () {
+          const analysis = yield* ProjectAnalysis;
+          yield* analysis.attach(ready);
+        }),
+        Observability,
+        gesture,
+      ),
     );
+    gesture.end("ready", { "project.books": ready.books.length });
     setProject(ready);
     setCursor(0);
     bump();

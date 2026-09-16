@@ -65,7 +65,13 @@ export type OperationName =
   | "journal.pending"
   | "journal.restore"
   | "journal.offer"
-  | "import.resource";
+  | "import.resource"
+  /**
+   * One command run from the palette, a keybinding or a click. The id is in
+   * the name so a trace list reads as what the person did, and `command.` is a
+   * prefix a filter can take whole.
+   */
+  | `command.${string}`;
 
 /**
  * One record in the ring.

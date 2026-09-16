@@ -24,6 +24,7 @@ import type { Book } from "../core/book/book";
 import { applyFormat, formatBook } from "../core/fixes/fixes";
 import { Git } from "../core/git/git";
 import { makeMultiBook } from "../core/multibook/multibook";
+import { Observability, type ObservabilityService } from "../core/observability";
 import type { Project } from "../core/project/project";
 import { Remote } from "../core/remote/remote";
 import type { EditorAction, EditorBook, ProjectionName } from "../editor";
@@ -113,6 +114,17 @@ export const availableCommands = (): readonly Command[] =>
 
 let runner: ((effect: Effect.Effect<unknown, unknown, Domain | Scope.Scope>) => void) | undefined;
 
+let narrator: ObservabilityService | undefined;
+
+/**
+ * Where a command's own record goes. Set beside the runner, for the same
+ * reason: a command registered before there is a composition has nowhere to
+ * narrate to, and silently dropping it would be worse than not trying.
+ */
+export const setCommandObservability = (observability: ObservabilityService): void => {
+  narrator = observability;
+};
+
 /**
  * How an Effect-returning command reaches a runtime. Set once by
  * `registerShellCommands`; a command registered before there is a runtime and
@@ -143,14 +155,37 @@ export const findCommand = (id: string): Command | undefined =>
 export const runCommand = (id: string, argument?: unknown): void => {
   const command = findCommand(id);
   if (command === undefined || !command.available()) return;
+  // EVERY command opens one, and the level decides whether it is recorded.
+  // The alternative is judging once per command whether it is interesting,
+  // which is a judgement made at the wrong time by the wrong person: a command
+  // that toggles a boolean is dull until the day it is the one that is slow.
+  const gesture = narrator?.operation(`command.${id}`);
   const outcome = command.run(argument);
-  if (outcome === undefined) return;
-  if (Effect.isEffect(outcome)) {
-    if (runner === undefined)
-      throw new Error(`command ${id} returned an Effect before a command runner was installed`);
-    runner(outcome);
+  if (outcome === undefined) {
+    gesture?.end("ready");
     return;
   }
+  if (Effect.isEffect(outcome)) {
+    if (runner === undefined) {
+      gesture?.end("failed");
+      throw new Error(`command ${id} returned an Effect before a command runner was installed`);
+    }
+    // The gesture is PROVIDED to the work, so everything the command reaches —
+    // core services asking the context for Observability — lands inside it.
+    // And it ends when the Effect does, not when this function returns: a
+    // command that opens a project is not over because it was dispatched.
+    runner(
+      Effect.onExit(
+        gesture === undefined ? outcome : Effect.provideService(outcome, Observability, gesture),
+        (exit) =>
+          Effect.sync(() => {
+            gesture?.end(exit._tag === "Success" ? "ready" : "failed");
+          }),
+      ),
+    );
+    return;
+  }
+  gesture?.end("ready");
   void outcome;
 };
 
@@ -235,6 +270,7 @@ export const installCommandKeys = (target: Document): (() => void) => {
  */
 export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
   const { services } = bridge;
+  setCommandObservability(services.composition.observability);
   setCommandRunner((effect) => {
     void services.run(effect).catch((cause: unknown) => {
       bridge.report(t("failed: {cause}", { cause: String(cause) }));
