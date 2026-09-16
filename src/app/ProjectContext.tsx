@@ -27,7 +27,6 @@ import { Effect, Fiber, Option, Result, Stream } from "effect";
 import {
   createContext,
   createSignal,
-  createStore,
   getOwner,
   onCleanup,
   runWithOwner,
@@ -41,7 +40,7 @@ import { ProjectAnalysis, type BookSummary } from "../core/analysis/projectAnaly
 import type { Book, BookId } from "../core/book/book";
 import type { Finding } from "../core/findings/finding";
 import { navigateTarget } from "../core/findings/findings";
-import { EMPTY as EMPTY_INVENTORY, type Inventory } from "../core/findings/inventory";
+import type { Inventory } from "../core/findings/inventory";
 import * as Fixes from "../core/fixes/fixes";
 import type { SettingKey } from "../core/host/settings";
 import { Observability } from "../core/observability";
@@ -64,8 +63,11 @@ import {
   type LastLocations,
   type RecentProjects,
 } from "./settings";
-import { booksOf, type ShellEvent } from "./shellEvent";
+import type { ShellEvent } from "./shellEvent";
+import { makeShellStores, type SaveState } from "./shellStores";
 import { applyEditorFontSize } from "./ui/theme";
+
+export type { SaveState } from "./shellStores";
 
 /**
  * Where the editor should put the aimed-at offset.
@@ -76,21 +78,6 @@ import { applyEditorFontSize } from "./ui/theme";
  * book below it.
  */
 export type RevealAt = "top" | "centre";
-
-/**
- * Where a book's text stands against the file and the last version.
- *
- *   * `unsaved` — the text on screen is not the text in the file.
- *   * `recorded` — the file holds this text and a version holds the file.
- *   * `onDisk` — the file holds this text and NO version does.
- */
-export type SaveState = "unsaved" | "onDisk" | "recorded";
-
-/** What the shell holds about one book: where it stands, and which text that is about. */
-interface BookRow {
-  readonly saveState: SaveState;
-  readonly stamp: SourceStamp;
-}
 
 /** What the next open of `bookId` should scroll to, and how. */
 export interface Reveal {
@@ -559,119 +546,24 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     setTick((held) => held + 1);
   };
 
-  /**
-   * What the project's analyses currently say, and who it is about.
-   *
-   * Written when a Publication lands — NOT when a keystroke happens — which is
-   * the honest cue for two reasons. The held analyses do not move between
-   * scheduler passes, so recomputing sooner produces the same findings from
-   * the same inputs; and the corpus half is genuinely a pass behind, so counts
-   * published sooner would be counts for text nobody judged.
-   *
-   * It retains rather than clears, which is `ProjectAnalysis`'s own rule
-   * (§"Failure retains, never clears") carried up to the UI: an edit does not
-   * blank the bell and the badges while the next pass runs, it leaves the last
-   * published answer standing. Known-stale beats an apparently clean project.
-   *
-   * This is the replacement for the loudest `tick` reader of all. Both
-   * `ProjectAnalysis.findings()` and `census()` rebuild every finding in every
-   * book, and `attach` invalidates their caches on every accepted edit — so
-   * behind `tick` the bell, the rail and the sixty-six sidebar rows each paid
-   * a whole-project rebuild per keystroke.
-   */
-  // Signals for the three WHOLESALE products and a store for the one PARTIAL
-  // one, which is the plan's own rule and not a stylistic choice. A
-  // Publication replaces the findings list, the totals and the inventory
-  // entirely — there is no such thing as half a snapshot — and putting a
-  // thousand-element frozen array behind a store proxy would charge every
-  // reader that iterates it for granularity it cannot use. The census is the
-  // opposite: sixty-six rows that move independently, where a reader of RUT's
-  // row must not wake for PSA's.
-  const [findingsList, setFindingsList] = createSignal<readonly Finding[]>([], {
-    name: "findings",
-  });
-  const [findingTotals, setFindingTotals] = createSignal(
-    { errors: 0, warnings: 0 },
-    { name: "findingTotals" },
-  );
-  const [inventoryHeld, setInventoryHeld] = createSignal<Inventory>(EMPTY_INVENTORY, {
-    name: "inventory",
-  });
-  const [censusHeld, setCensusHeld] = createStore<Record<BookId, BookSummary>>(
-    {},
-    { name: "census" },
-  );
-
-  const publishFindings = (): void => {
-    const staticOpen = live;
-    if (staticOpen === undefined) {
-      setFindingsList([]);
-      setFindingTotals({ errors: 0, warnings: 0 });
-      setInventoryHeld(EMPTY_INVENTORY);
-      setCensusHeld((draft) => {
-        for (const bookId of Object.keys(draft)) delete draft[bookId];
-      });
-      return;
-    }
-    // One rebuild, here, for every reader — the cost `tick` made each of them
-    // pay separately. All three doors are memoised behind the same
-    // publication, so asking for all of them costs what asking for one did.
-    const list = services.projectAnalysis.findings();
-    let errors = 0;
-    let warnings = 0;
-    for (const held of list) {
-      if (held.severity === "error") errors += 1;
-      else if (held.severity === "warning") warnings += 1;
-    }
-    const rows = services.projectAnalysis.census(staticOpen);
-    setFindingsList(list);
-    setFindingTotals({ errors, warnings });
-    setInventoryHeld(services.projectAnalysis.inventory());
-    setCensusHeld((draft) => {
-      const present = new Set<BookId>();
-      for (const row of rows) {
-        draft[row.bookId] = row;
-        present.add(row.bookId);
-      }
-      // A project can lose a book. Rows for books that are gone would keep
-      // badging a sidebar that no longer lists them.
-      for (const bookId of Object.keys(draft)) if (!present.has(bookId)) delete draft[bookId];
-    });
-  };
-
-  const findings = (): readonly Finding[] => findingsList();
-
-  const findingCounts = (): { readonly errors: number; readonly warnings: number } =>
-    findingTotals();
-
-  /**
-   * One book's row of the last Publication — its counts, its chapter and verse
-   * totals, and the stamp they were measured against.
-   *
-   * A read of one row of the store, so a publication that changed RUT's row
-   * does not wake the sixty-five it did not.
-   */
-  const summaryOf = (bookId: BookId): BookSummary | undefined => censusHeld[bookId];
-
-  const attentionOf = (bookId: BookId): number => {
-    const held = censusHeld[bookId];
-    return held === undefined ? 0 : held.diagnostics.errors + held.diagnostics.warnings;
-  };
-
-  /** The whole census, in the project's own book order. */
-  const census = (): readonly BookSummary[] => {
-    // `project()` here and not `live`: this one IS a reactive read, so a route
-    // that renders the census re-renders when a project opens or closes.
-    const staticOpen = project();
-    if (staticOpen === undefined) return [];
-    return staticOpen.books.flatMap((book) => {
-      const row = censusHeld[book.id];
-      return row === undefined ? [] : [row];
-    });
-  };
-
-  /** The character inventory of the last Publication. */
-  const inventory = (): Inventory => inventoryHeld();
+  // The coordinator: every store, and the one door they are written through.
+  // `open` is the plain handle and not the signal, for the reason its own note
+  // gives; `bump` goes in because the readers that have not moved to a store
+  // yet still need the counter.
+  const stores = makeShellStores({ services, open: () => live, bump });
+  const {
+    changed,
+    noteWritten,
+    unsaved,
+    saveState,
+    stampOf,
+    findings,
+    findingCounts,
+    summaryOf,
+    attentionOf,
+    census,
+    inventory,
+  } = stores;
 
   const finding = (): Finding | undefined => {
     const list = findings();
@@ -688,10 +580,7 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     setFocused(undefined);
     setProject(undefined);
     // The stores describe a project. With none open they describe nothing.
-    setBooks((draft) => {
-      for (const bookId of Object.keys(draft)) delete draft[bookId];
-    });
-    publishFindings();
+    stores.clear();
     if (staticOpen !== undefined) await services.run(staticOpen.close());
   };
 
@@ -747,146 +636,6 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     changed({ kind: "project.open" });
     report(t("opened {name} ({count} books)", { name: ready.root, count: ready.books.length }));
   };
-
-  /**
-   * Books whose bytes are on disk with no version behind them: a `saveAll`
-   * that succeeded under a `git.commit` that did not. A plain Set because
-   * `saveStateOf` is now its only reader, and that runs on an event rather
-   * than on a render.
-   */
-  const onDisk = new Set<BookId>();
-
-  /**
-   * One book's save state, asked of the modules that own it.
-   *
-   * A book with no adopted baseline was never opened this session: nothing on
-   * screen can differ from disk, so it is not "unsaved" — `dirty` alone would
-   * badge every untouched book on the project page.
-   *
-   * NOT reactive, and that is the whole point of the rewrite. This is the
-   * computation a `ShellEvent` provokes: it runs once per event, for the books
-   * that event named, and its answer is written into `books`. `dirty` can cost
-   * an engine hash, so no render may reach it — behind `tick()` it cost ~4.5
-   * whole parses per keystroke, per badged book, because every reader of the
-   * counter re-asked it for every book
-   * (planning/01-discussing/ui-state-stores-2026-09-16.md).
-   */
-  const saveStateOf = (book: Book): SaveState => {
-    if (Option.isSome(services.save.baseline(book)) && services.save.dirty(book)) return "unsaved";
-    return onDisk.has(book.id) ? "onDisk" : "recorded";
-  };
-
-  /**
-   * Every open book's save state, pushed rather than polled.
-   *
-   * A store and not a signal because the state is per book and moves per book:
-   * a store write that does not change a row wakes nobody, so an event naming
-   * RUT costs one comparison and leaves PSA's row — and PSA's reader —
-   * untouched. That is the granularity `tick` could not express.
-   *
-   * Every book of the open project has a row, written at `project.open`. A
-   * missing row therefore means the book is not in the open project, and
-   * `recorded` is the honest answer for it: nothing here has anything to say.
-   */
-  const [books, setBooks] = createStore<Record<BookId, BookRow>>({}, { name: "books" });
-
-  const refreshBooks = (which: readonly BookId[] | "all"): void => {
-    const staticOpen = live;
-    if (staticOpen === undefined) return;
-    const moved =
-      which === "all"
-        ? staticOpen.books
-        : which.flatMap((bookId) => {
-            // Through the project, not a held reference: `project.book` is
-            // what knows whether a book is seated, and a seated book is the
-            // one holding the text that was just edited.
-            const book = staticOpen.book(bookId);
-            return book === undefined ? [] : [book];
-          });
-    if (moved.length === 0) return;
-    setBooks((draft) => {
-      for (const book of moved) {
-        // The stamp as well as the state, because the stamp is what every
-        // "has this moved since?" question compares against — a finding's
-        // staleness, a flagged site's, the editor's status line — and those
-        // are the questions that DO change on a keystroke. Held per book, so
-        // typing in RUT leaves PSA's row alone.
-        draft[book.id] = { saveState: saveStateOf(book), stamp: book.source().stamp };
-      }
-    });
-  };
-
-  /**
-   * Something moved, and this is what it was.
-   *
-   * The one door the stores are written through, replacing `bump()` as the
-   * thing every call site calls. What a caller gains by naming its event is
-   * that only the books it names are re-examined; what the application gains
-   * is that `shellEvent.ts` is now a readable list of everything that can
-   * change the UI.
-   *
-   * It still bumps `tick` at the end, and will until the last reader leaves
-   * it. The migration is incremental on purpose (the plan's step 6 deletes
-   * both): `books` has taken the dirty markers off the counter, and the
-   * seventeen readers that have not moved yet stay correct meanwhile.
-   */
-  const changed = (event: ShellEvent): void => {
-    if (event.kind === "book.write")
-      for (const bookId of event.books) {
-        if (event.recorded) onDisk.delete(bookId);
-        else onDisk.add(bookId);
-      }
-    refreshBooks(booksOf(event));
-    // The two events that move findings. An edit is NOT one of them: it arms
-    // the scheduler, and the Publication that follows is what has something
-    // new to say.
-    if (event.kind === "project.open" || event.kind === "corpus.publish") publishFindings();
-    bump();
-  };
-
-  /**
-   * A Publication landed, so the findings store is rewritten.
-   *
-   * Coalesced, because `watch()` republishes once per book a pass refreshed
-   * and a pass over forty books is still ONE publication: without this, a
-   * bulk format would rebuild the whole project's findings forty times to
-   * answer one question. A timeout rather than a microtask because the
-   * republishes arrive from a forked fiber and need not share a tick.
-   */
-  let publishPending: ReturnType<typeof setTimeout> | undefined;
-  const watchingAnalysis = services.runtime.runFork(
-    Stream.runForEach(services.projectAnalysis.watch(), () =>
-      Effect.sync(() => {
-        if (publishPending !== undefined) return;
-        publishPending = setTimeout(() => {
-          publishPending = undefined;
-          changed({ kind: "corpus.publish" });
-        }, 0);
-      }),
-    ),
-  );
-  onCleanup(() => {
-    if (publishPending !== undefined) clearTimeout(publishPending);
-    Effect.runFork(Fiber.interrupt(watchingAnalysis));
-  });
-
-  const noteWritten = (bookIds: readonly BookId[], recorded: boolean): void => {
-    changed({ kind: "book.write", books: bookIds, recorded });
-  };
-
-  const unsaved = (book: Book): boolean => books[book.id]?.saveState === "unsaved";
-
-  const saveState = (book: Book): SaveState => books[book.id]?.saveState ?? "recorded";
-
-  /**
-   * The stamp of the text this book currently holds, as the last event
-   * reported it.
-   *
-   * The one per-book fact that genuinely moves on every keystroke, which is
-   * why it is a store row and not a counter: the book being typed in wakes its
-   * own readers and nobody else's.
-   */
-  const stampOf = (bookId: BookId): SourceStamp | undefined => books[bookId]?.stamp;
 
   /**
    * The chapter a book opens on.
