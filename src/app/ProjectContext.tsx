@@ -275,6 +275,17 @@ export interface Shell {
   readonly stampOf: (bookId: BookId) => SourceStamp | undefined;
 
   /**
+   * The focused book's undo and redo depth, and its chapter count.
+   *
+   * Reactive, which is the whole point: they are the last inputs to a
+   * command's `when()` that CodeMirror owns and never publishes, so behind
+   * `tick` the toolbar's buttons only re-evaluated when something else on it
+   * happened to re-render. Written from the `books` row on every accepted edit.
+   */
+  readonly historyDepth: Accessor<{ readonly undo: number; readonly redo: number }>;
+  readonly chapterCount: Accessor<number>;
+
+  /**
    * The workspace chrome: is the project sidebar showing, and how wide is it.
    *
    * Both are `workspace.*` preferences (src/app/settings.ts) and both live
@@ -939,6 +950,14 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     census,
     inventory,
     stampOf,
+    historyDepth: () => {
+      const book = focused();
+      return book === undefined ? { undo: 0, redo: 0 } : stores.historyDepth(book.id);
+    },
+    chapterCount: () => {
+      const book = focused();
+      return book === undefined ? 0 : stores.chapterCount(book.id);
+    },
     sidebarOpen,
     setSidebarOpen: (open) => {
       setSidebarOpen(open);
@@ -977,7 +996,8 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     setMode: shell.setMode,
     chapter,
     setChapter: shell.setChapter,
-    chapterCount: () => focused()?.structure().chapters.length ?? 0,
+    chapterCount: shell.chapterCount,
+    historyDepth: shell.historyDepth,
     stepFinding,
     applyFix,
     go,

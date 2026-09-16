@@ -56,6 +56,19 @@ export type SaveState = "unsaved" | "onDisk" | "recorded";
 interface BookRow {
   readonly saveState: SaveState;
   readonly stamp: SourceStamp;
+  /**
+   * The editor's undo and redo depth, and how many chapters the text has.
+   *
+   * Here because they are the last inputs to a command's `when()` that are not
+   * signals — CodeMirror's history and its structure field — and a predicate
+   * cannot declare a dependency on something that never publishes. Both are
+   * O(1) reads of a `StateField` the editor already maintains, so the event
+   * path pays nothing to carry them, and putting them here is what lets the
+   * toolbar stop reading `tick`.
+   */
+  readonly undo: number;
+  readonly redo: number;
+  readonly chapters: number;
 }
 
 /** What the coordinator hands the shell. Every member is cheap to call. */
@@ -74,6 +87,10 @@ export interface ShellStores {
   readonly unsaved: (book: Book) => boolean;
   readonly saveState: (book: Book) => SaveState;
   readonly stampOf: (bookId: BookId) => SourceStamp | undefined;
+  /** How deep this book's undo and redo stacks are. Zeroes for an unseated book. */
+  readonly historyDepth: (bookId: BookId) => { readonly undo: number; readonly redo: number };
+  /** How many chapters this book's text has. Zero for an unseated book. */
+  readonly chapterCount: (bookId: BookId) => number;
 
   readonly findings: Accessor<readonly Finding[]>;
   readonly findingCounts: Accessor<{ readonly errors: number; readonly warnings: number }>;
@@ -278,7 +295,17 @@ export const makeShellStores = (options: {
         // staleness, a flagged site's, the editor's status line — and those
         // are the questions that DO change on a keystroke. Held per book, so
         // typing in RUT leaves PSA's row alone.
-        draft[book.id] = { saveState: saveStateOf(book), stamp: book.source().stamp };
+        // `seated` for the structure: `structure()` belongs to the editor-backed
+        // Book, and an unseated book has no chapters to count for a command
+        // that only acts on the focused one.
+        const depth = book.history()?.depth();
+        draft[book.id] = {
+          saveState: saveStateOf(book),
+          stamp: book.source().stamp,
+          undo: depth?.undo ?? 0,
+          redo: depth?.redo ?? 0,
+          chapters: services.seated(book.id)?.structure().chapters.length ?? 0,
+        };
       }
     });
   };
@@ -355,6 +382,15 @@ export const makeShellStores = (options: {
    */
   const stampOf = (bookId: BookId): SourceStamp | undefined => books[bookId]?.stamp;
 
+  const NO_HISTORY = { undo: 0, redo: 0 } as const;
+
+  const historyDepth = (bookId: BookId): { readonly undo: number; readonly redo: number } => {
+    const row = books[bookId];
+    return row === undefined ? NO_HISTORY : { undo: row.undo, redo: row.redo };
+  };
+
+  const chapterCount = (bookId: BookId): number => books[bookId]?.chapters ?? 0;
+
   const clear = (): void => {
     setBooks((draft) => {
       for (const bookId of Object.keys(draft)) delete draft[bookId];
@@ -369,6 +405,8 @@ export const makeShellStores = (options: {
     unsaved,
     saveState,
     stampOf,
+    historyDepth,
+    chapterCount,
     findings,
     findingCounts,
     summaryOf,

@@ -95,20 +95,18 @@ export function Toolbar() {
   /**
    * Is this command possible right now?
    *
-   * `shell.tick()` is read FIRST and that is the whole point. A command's
-   * `when()` asks a module — Undo asks the book's history for its depth, Save
-   * asks the coordinator whether the text moved — and none of those is a
-   * signal. Without the tick these buttons only re-evaluated when something
-   * else on the toolbar happened to re-render, which in practice was the hover
-   * that restyled them: Undo stayed greyed out after a keystroke until the
-   * pointer touched it. The tick is the shell's one contract for a derived
-   * product (documentation/architecture/shell.md), and the editor bumps it on
-   * every receipt.
+   * No `tick`, and no store either: the predicate IS the dependency
+   * declaration. Every `when()` these buttons ask now reads signals — the
+   * focused book, the open project, and the undo/redo depth the `books` store
+   * carries — so calling `available()` inside JSX subscribes to exactly what
+   * that command depends on and nothing else.
+   *
+   * It needed the counter only because its inputs were not reactive: Undo asks
+   * CodeMirror's history for its depth, and CodeMirror publishes to nobody. So
+   * the depth moved onto the book's row, written on the same receipt that
+   * already fans out, and the predicate became honest.
    */
-  const can = (id: string): boolean => {
-    shell.tick();
-    return findCommand(id)?.available() === true;
-  };
+  const can = (id: string): boolean => findCommand(id)?.available() === true;
 
   const item =
     "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start text-small text-on-surface-primary transition-colors hover:bg-surface-secondary disabled:cursor-not-allowed disabled:text-on-surface-tertiary disabled:hover:bg-transparent";

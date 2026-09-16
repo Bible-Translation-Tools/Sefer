@@ -74,6 +74,8 @@ export interface ShellBridge {
   readonly chapter: () => number | null;
   readonly setChapter: (ordinal: number | null) => void;
   readonly chapterCount: () => number;
+  /** The focused book's undo and redo depth, from the shell's `books` store. */
+  readonly historyDepth: () => { readonly undo: number; readonly redo: number };
   /** Moves the findings cursor and navigates to what it points at. */
   readonly stepFinding: (delta: 1 | -1) => void;
   /** Applies the fix offered by the finding under the cursor, if any. */
@@ -417,7 +419,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
     registerCommand({
       id: "book.undo",
       title: t("Undo"),
-      when: () => (bridge.focused()?.history()?.depth().undo ?? 0) > 0,
+      when: () => bridge.historyDepth().undo > 0,
       run: () => {
         bridge.focused()?.history()?.undo();
       },
@@ -426,7 +428,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
     registerCommand({
       id: "book.redo",
       title: t("Redo"),
-      when: () => (bridge.focused()?.history()?.depth().redo ?? 0) > 0,
+      when: () => bridge.historyDepth().redo > 0,
       run: () => {
         bridge.focused()?.history()?.redo();
       },
