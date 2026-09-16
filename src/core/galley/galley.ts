@@ -368,7 +368,7 @@ export interface GalleyService {
    *
    * Throws `EngineInputError` when `text` contains `\r`.
    */
-  readonly analyze: (text: string, why?: string) => Analysis;
+  readonly analyze: (text: string, why?: string, id?: string) => Analysis;
 
   /**
    * A memo for one Book: the same text returns the same `Analysis` instance.
@@ -377,7 +377,7 @@ export interface GalleyService {
    * that reads the analysis three times costs one parse, and a keystroke that
    * lands the same text (an undo back to where we were) costs none.
    */
-  readonly memoize: () => (text: string) => Analysis;
+  readonly memoize: (id?: string) => (text: string) => Analysis;
 
   /**
    * Register or replace one whole book as a proofreading target, by the
@@ -709,7 +709,7 @@ const makeService = (
     held?.free();
   };
 
-  const analyze = (text: string, why = "unnamed"): Analysis => {
+  const analyze = (text: string, why = "unnamed", id?: string): Analysis => {
     if (text.includes("\r")) {
       throw new EngineInputError({
         reason: "canonical text is LF; the engine refuses a carriage return",
@@ -717,9 +717,13 @@ const makeService = (
     }
     // `why` is the door: there are several into this parse and the timing of
     // one says nothing without knowing which fired. See `memoize`.
+    // `id` is a label the caller already has, not the engine learning about
+    // Books: the parse is over text and stays that way. Without it "which of
+    // these 66 parses was slow" has no answer.
     const done = observe?.span("galley.parse", undefined, {
       "galley.why": why,
       "galley.text_length": text.length,
+      ...(id === undefined ? {} : { "book.id": id }),
     });
     const started = performance.now();
     // `parseText`, not `parse`: since v0.1.0 the plain name takes a registered
@@ -730,13 +734,10 @@ const makeService = (
     // path pays because the editor's text is the authority, not the corpus's.
     const dish = deserialize(handle.parseText(text, true, true, true));
     const engineMs = Math.round((performance.now() - started) * 1000) / 1000;
-    done?.();
-    // Counts and codes only — a diagnostic's message quotes the document.
-    observe?.note("galley.parse", "ready", undefined, {
-      "galley.why": why,
-      "galley.diagnostics": dish.diagnostics.length,
-      "galley.engine_ms": engineMs,
-    });
+    // Counts and codes only — a diagnostic's message quotes the document. On
+    // the span that measured the parse, not a note beside it saying the same
+    // thing under the same name.
+    done?.({ "galley.diagnostics": dish.diagnostics.length, "galley.engine_ms": engineMs });
     revision += 1;
     return {
       dish,
@@ -749,11 +750,11 @@ const makeService = (
     };
   };
 
-  const memoize = (): ((text: string) => Analysis) => {
+  const memoize = (id?: string): ((text: string) => Analysis) => {
     let last: Analysis | undefined;
     return (text: string): Analysis => {
       if (last !== undefined && last.text === text) return last;
-      last = analyze(text, "editor");
+      last = analyze(text, "editor", id);
       return last;
     };
   };

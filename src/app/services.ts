@@ -491,7 +491,7 @@ export const composeServices = async (
   const seats = new Map<BookId, EditorBook>();
   const seat: Seat = (plain) => {
     const seated = editorBook(plain, {
-      analyze: galley.memoize(),
+      analyze: galley.memoize(plain.id),
       observability: composition.observability,
       extensions: mountable,
     });
