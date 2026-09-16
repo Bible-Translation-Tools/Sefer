@@ -47,12 +47,34 @@
  * Solid 2 allows them. Nothing is reimplemented: measurement, the range, the
  * scroll observers and `scrollToIndex` are all the library's.
  *
- * ## Keys
+ * ## The list is rendered over KEYS, not over virtual items
  *
- * Rows are keyed by the caller's own stable string (a verse sid, a finding id),
- * through `getItemKey`. That is what lets a height correction RE-POSITION a row
- * instead of re-creating it, so an open satellite or an open editor survives the
- * correction it caused.
+ * `getVirtualItems()` hands back fresh objects for every index at or below the
+ * lowest one whose size moved — the library rebuilds its measurements from
+ * there — so a `<For>` over those items, which reconciles by REFERENCE,
+ * re-created rows on every measurement. That is not a performance note: an
+ * open excerpt editor is a CodeMirror view mounted inside a row, and
+ * re-creating the row destroyed it. Edit opened a satellite, the card grew,
+ * the growth re-created the card, and the card sat on "Opening…" for ever.
+ *
+ * So the `<For>` walks the WINDOW'S KEYS — the caller's own stable strings, a
+ * verse sid or a finding id — and each row reads its own geometry back out of
+ * the item list by key. Strings reconcile by value, so a measurement MOVES a
+ * row rather than replacing it, and an open editor survives the correction it
+ * caused. It is also why `row` and `header` are handed ACCESSORS: a row now
+ * outlives the model it was built from and has to read the current one.
+ *
+ * ## Measure in the effect phase, never in the `ref`
+ *
+ * A `ref` callback runs while the element is still detached, and an element
+ * that is not in the document measures 0 × 0. Handing that 0 to the library as
+ * a first measurement was the whole of the "the list opens half way down" bug:
+ * the real height then arrived as a RE-measurement of a 0-high row sitting
+ * exactly at the fold, which is the one case TanStack compensates the scroll
+ * position for — so each row in turn pushed the viewport down by its own
+ * height, 8,154px of accumulated correction on `/findings` before the list had
+ * been touched. The element goes into a signal instead and is measured from an
+ * effect, which runs once it is in the document.
  */
 
 import type { JSX } from "@solidjs/web";
@@ -66,7 +88,16 @@ import {
   type VirtualItem,
   type VirtualizerOptions,
 } from "@tanstack/virtual-core";
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
+import {
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  untrack,
+  type Accessor,
+} from "solid-js";
 
 /** One row: a stable key, and the height to assume until it has been measured. */
 export interface VirtualRow<T> {
@@ -100,9 +131,18 @@ export interface VirtualListProps<T> {
    * what the virtualizer measures, and a wrapper of its own would report the
    * wrong number.
    */
-  readonly header: (section: VirtualSection<T>, ref: (element: HTMLElement) => void) => JSX.Element;
-  /** One row. Kept simple on purpose: the row owns its own chrome. */
-  readonly row: (item: T, key: string) => JSX.Element;
+  readonly header: (
+    section: Accessor<VirtualSection<T>>,
+    ref: (element: HTMLElement) => void,
+  ) => JSX.Element;
+  /**
+   * One row. Kept simple on purpose: the row owns its own chrome.
+   *
+   * An ACCESSOR, because a row outlives the model it was built from: it is
+   * made once, when its key enters the window, and stays through every rebuild
+   * of the list that still holds that key.
+   */
+  readonly row: (item: Accessor<T>, key: string) => JSX.Element;
   /**
    * A row that must stay mounted even when it scrolls out — an open editor, an
    * expanded satellite. Windowing that unmounted it would take the reader's
@@ -166,6 +206,26 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   const [total, setTotal] = createSignal(0, { name: "virtualTotal" });
 
   /**
+   * The ROWS that were on screen when the list was last drawn.
+   *
+   * The reader's place in a list is a row, not a number of pixels — see the
+   * rebuild rule in the effect further down, which is the only thing this is
+   * for. Headers are left out on purpose: a section that survives a rebuild
+   * says the books still have results, not that the reader's place is still
+   * there.
+   */
+  let onScreen: readonly string[] = [];
+
+  /** Publish one window, and remember the rows it held. */
+  const remember = (window: readonly VirtualItem[]): void => {
+    const entries = untrack(flat).entries;
+    onScreen = window
+      .filter((item) => entries[item.index]?.kind === "row")
+      .map((item) => String(item.key));
+    setItems(window);
+  };
+
+  /**
    * Every option, rebuilt on demand.
    *
    * `virtual-core`'s `setOptions` REPLACES the option bag rather than merging
@@ -179,8 +239,9 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
       const entry = untrack(flat).entries[index];
       return entry === undefined ? HEADER : entry.kind === "header" ? HEADER : entry.row.estimate;
     },
-    // The caller's own stable string. A height correction then re-positions a
-    // row instead of re-creating it.
+    // The caller's own stable string. It keys the library's measurement cache,
+    // so a row that leaves the window and comes back is the height it was, and
+    // it is what the `<For>` below reconciles on.
     getItemKey: (index: number) => untrack(flat).entries[index]?.key ?? index,
     overscan: OVERSCAN,
     // Two indices are kept in the window whatever the scroll says: the header
@@ -202,17 +263,46 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     // outside any owner — so these writes are ordinary event-handler writes.
     onChange: (instance) => {
       instance._willUpdate();
-      setItems(instance.getVirtualItems());
+      remember(instance.getVirtualItems());
       setTotal(instance.getTotalSize());
     },
   });
 
   const virtualizer = new Virtualizer(optionsOf());
 
+  /**
+   * When a height correction may move the viewport under the reader.
+   *
+   * An INSTANCE property and not an option — `setOptions` never touches it,
+   * which is why it is set once, here.
+   *
+   * Compensating a correction is a way of holding still what the reader has
+   * already scrolled PAST: a row above the fold that turns out to be taller
+   * than its estimate would otherwise push the row they are reading down the
+   * screen. It is worth doing for exactly one kind of correction, a
+   * RE-measurement of a row this list has measured before — a card that grew
+   * because it was opened for editing, a verse that grew because it was
+   * expanded.
+   *
+   * A FIRST measurement is refused, and that is the narrowing the library's
+   * own default does not make. Every row is measured for the first time at
+   * least once, and answering those moves the viewport by the sum of every
+   * estimate's error: on arrival that walked `/findings` 8,154px down a list
+   * the reader had not touched, and on a fresh query — where every key is new
+   * — it dragged the list straight back to the offset the PREVIOUS results
+   * had been left at.
+   */
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => {
+    if (!instance.itemSizeCache.has(item.key)) return false;
+    const fold = (instance.scrollOffset ?? 0) + instance.scrollAdjustments;
+    if (fold <= 0) return false;
+    return item.start + item.size <= fold;
+  };
+
   /** Pull what the library computed into the two signals above. */
   const publish = (): void => {
     virtualizer._willUpdate();
-    setItems(virtualizer.getVirtualItems());
+    remember(virtualizer.getVirtualItems());
     setTotal(virtualizer.getTotalSize());
   };
 
@@ -235,27 +325,30 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   });
 
   createEffect(
-    () => [scroller(), flat().entries.length] as const,
-    ([element]) => {
+    () => [scroller(), flat()] as const,
+    ([element, list]) => {
       if (element === undefined) return;
+      /**
+       * Is this still the list the reader was holding their place in?
+       *
+       * A place is a ROW. An accepted edit rebuilds the model and the reader
+       * stays where they were, because the rows they were looking at are
+       * still there under the same keys. A fresh query — or a regrouping of
+       * /findings — replaces every key on screen, and then there is nothing
+       * left to hold a place WITH: a scroll position measured in pixels of
+       * somebody else's results is not a place, so the list goes back to its
+       * top, which is where a new list starts.
+       */
+      const lost = onScreen.length > 0 && !onScreen.some((key) => list.indexOfKey.has(key));
       virtualizer.setOptions(optionsOf());
       unmount ??= virtualizer._didMount();
+      if (lost && untrack(offset) > 0) {
+        virtualizer.scrollToOffset(0);
+        setOffset(0);
+      }
       publish();
     },
   );
-
-  /**
-   * Measure one element, telling the virtualizer which index it is.
-   *
-   * `untrack`: a `ref` callback is not a tracking scope, and reading the store
-   * item's index inside one is exactly what Solid 2's STRICT_READ_UNTRACKED
-   * warns about. The index at MOUNT is the right one — the element is measured
-   * again by the virtualizer's own observer whenever its height moves.
-   */
-  const measure = (item: { readonly index: number }) => (element: HTMLElement) => {
-    element.dataset.index = String(untrack(() => item.index));
-    virtualizer.measureElement(element);
-  };
 
   /** The first item the reader can actually see, as an index. */
   const firstVisible = createMemo(
@@ -301,6 +394,21 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     },
   );
 
+  /** The window, as the caller's keys: what the `<For>` reconciles on. */
+  const windowed = createMemo(() => items().map((item) => String(item.key)), {
+    name: "virtualWindow",
+  });
+
+  /** Where each key currently sits, for the row that reads its own place back. */
+  const geometry = createMemo(
+    () => {
+      const at = new Map<string, number>();
+      for (const item of items()) at.set(String(item.key), item.start);
+      return at;
+    },
+    { name: "virtualGeometry" },
+  );
+
   return (
     <div
       ref={setScroller}
@@ -310,9 +418,16 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     >
       <Show when={props.sections.length > 0} fallback={props.empty}>
         <div style={{ height: `${total()}px` }} class="relative">
-          <For each={items()}>
-            {(virtual) => {
-              const entry = () => flat().entries[virtual.index];
+          <For each={windowed()}>
+            {(key) => {
+              // Read back by KEY and not by the index the row was built at:
+              // rows outlive the list they were built from, and an edit that
+              // adds a section moves every index below it.
+              const at = () => flat().indexOfKey.get(key);
+              const entry = () => {
+                const index = at();
+                return index === undefined ? undefined : flat().entries[index];
+              };
               const asHeader = () => {
                 const held = entry();
                 return held?.kind === "header" ? held : undefined;
@@ -321,7 +436,27 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
                 const held = entry();
                 return held?.kind === "row" ? held : undefined;
               };
-              const isStuck = () => virtual.index === stuck();
+              const isStuck = () => at() === stuck();
+              const start = () => geometry().get(key) ?? 0;
+
+              /**
+               * The element the virtualizer measures, measured from the EFFECT
+               * phase — see the header. `data-index` is re-stamped whenever
+               * the row moves, because that attribute is how the library's
+               * resize observer works out which item it is looking at.
+               */
+              const [measured, setMeasured] = createSignal<HTMLElement | undefined>(undefined, {
+                name: "virtualMeasured",
+              });
+              createEffect(
+                () => [measured(), at()] as const,
+                ([element, index]) => {
+                  if (element === undefined || index === undefined) return;
+                  element.dataset.index = String(index);
+                  virtualizer.measureElement(element);
+                },
+              );
+
               return (
                 <>
                   <Show when={asHeader()}>
@@ -331,22 +466,20 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
                       // the transform the virtualizer computed.
                       <div
                         class={isStuck() ? "sticky top-0 z-20" : "absolute inset-x-0 top-0 z-10"}
-                        style={
-                          isStuck() ? undefined : { transform: `translateY(${virtual.start}px)` }
-                        }
+                        style={isStuck() ? undefined : { transform: `translateY(${start()}px)` }}
                       >
-                        {props.header(header().section, measure(virtual))}
+                        {props.header(() => header().section, setMeasured)}
                       </div>
                     )}
                   </Show>
                   <Show when={asRow()}>
                     {(row) => (
                       <div
-                        ref={measure(virtual)}
+                        ref={setMeasured}
                         class="absolute inset-x-0 top-0"
-                        style={{ transform: `translateY(${virtual.start}px)` }}
+                        style={{ transform: `translateY(${start()}px)` }}
                       >
-                        {props.row(row().row.item, row().key)}
+                        {props.row(() => row().row.item, key)}
                       </div>
                     )}
                   </Show>

@@ -200,19 +200,19 @@ export function ExcerptList(props: ExcerptListProps) {
         header={(section, ref) => (
           <header
             ref={ref}
-            data-book={section.key}
+            data-book={section().key}
             class="sticky top-0 z-10 flex items-baseline gap-2 border-b border-surface-border bg-surface-secondary/95 px-1 py-1.5 backdrop-blur-xs"
           >
-            {decorated(section.key) ?? (
+            {decorated(section().key) ?? (
               <>
                 <strong class="text-small font-semibold text-on-surface-primary">
-                  {section.key}
+                  {section().key}
                 </strong>
                 <span class="text-small text-on-surface-secondary">
-                  {nameOf(section.key)?.name}
+                  {nameOf(section().key)?.name}
                 </span>
                 <span class="ms-auto text-smallest text-on-surface-tertiary">
-                  {t("{count} hits", { count: nameOf(section.key)?.count ?? 0 })}
+                  {t("{count} hits", { count: nameOf(section().key)?.count ?? 0 })}
                 </span>
               </>
             )}
@@ -220,32 +220,32 @@ export function ExcerptList(props: ExcerptListProps) {
         )}
         row={(excerpt, key) => (
           <ExcerptCard
-            excerpt={excerpt}
+            excerpt={excerpt()}
             editing={editing() === key}
             onEdit={() => setEditing(key)}
             onDone={done}
             onOpen={() =>
               props.onOpen(
-                excerpt.bookId,
-                excerpt.hits[0]?.from ?? excerpt.span.from,
-                excerpt.hits[0]?.to,
+                excerpt().bookId,
+                excerpt().hits[0]?.from ?? excerpt().span.from,
+                excerpt().hits[0]?.to,
               )
             }
-            seat={() => props.seat(excerpt.bookId)}
+            seat={() => props.seat(excerpt().bookId)}
             analyze={props.analyze}
-            pair={props.renderPair?.(excerpt)}
+            pair={props.renderPair?.(excerpt())}
             onExpand={
               props.onExpand === undefined
                 ? undefined
                 : // The EXTENT is keyed by sid, which is the verse — a section
                   // key in front of it is about where the card is on screen,
                   // and an expansion is about the verse wherever it is shown.
-                  (direction) => props.onExpand?.(excerpt.sid, direction)
+                  (direction) => props.onExpand?.(excerpt().sid, direction)
             }
             active={props.focus === key ? props.activeHit : undefined}
             mode={props.mode ?? "regular"}
-            label={props.decor?.label?.(excerpt, key)}
-            notes={props.decor?.notes?.(excerpt, key)}
+            label={props.decor?.label?.(excerpt(), key)}
+            notes={props.decor?.notes?.(excerpt(), key)}
             markTone={props.decor?.markTone}
           />
         )}
