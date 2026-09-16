@@ -264,17 +264,45 @@ Loose ends found while doing this, none of them blocking:
   as literal control characters. Deliberate, but `file` calls the source "data"
   and plain `grep` silently finds nothing in it. Escaping them as `\0` would
   cost nothing.
-- **No production measurement is possible on a filesystem project.** `vite
-  preview` uses the OPFS host adapter, so it cannot open `/sefer/projects/…` at
-  all. Every number in this document is from a dev build, where Solid's dev
-  bundle and Vite's unbundled modules both inflate the result — `/findings`
-  opens in 401ms cold but 223ms with its modules already loaded, and the
-  difference is thirty dev-server requests that production does not make.
-- **Excerpt SHELLS are still eager.** The bodies are lazy now, but a feed still
-  materialises one shell per hit — ~46ms and most of the GC for twenty thousand
-  findings. Going further means `group()` returning a lazy per-book structure,
-  which touches Find and Key terms too. Not worth it without a production
-  number to aim at.
+- **Production CAN be measured, and the answer changed the plan.** The earlier
+  claim here — that `vite preview` uses a different host adapter and cannot open
+  a project — was wrong. The web host always uses OPFS; `/sefer` IS the OPFS
+  root. What broke was the ORIGIN: preview on another port gets its own empty
+  OPFS. Serve the production build on the dev server's own port and the project
+  is simply there:
+
+      kill the dev server; pnpm serve --port 3000 --strictPort
+
+  Measured that way, on en_ulb, click to result count:
+
+      dev   cold 401ms (30 requests)   warm 204ms
+      prod  cold 292ms ( 6 requests)   warm 210ms
+
+  So the module waterfall is real but only affects the cold path, and the warm
+  path is the SAME in both. Solid's dev bundle was not the cost — roughly 200ms
+  of real work is, and this document's earlier "half of it is dev overhead" was
+  a guess that the measurement disproves.
+- **~80ms of O(all findings) work is left, and it IS worth removing.** Profiled
+  on the production build, warm:
+
+      49ms  the findings feed's model memo   (builds a row per finding)
+      32ms  buildExcerpt                     (builds a shell per finding)
+
+  of ~198ms total. Both walk every finding to render twenty cards, and both
+  want the same treatment: `group()` returning a lazy per-book structure
+  (`count`, `keyAt(i)`, `estimateAt(i)`, `excerptAt(i)`) so the eager pass
+  collapses to the one grouping pass that genuinely cannot be skipped — you
+  cannot size a scrollbar without knowing how many rows there are.
+
+  `VirtualList` already supports this: a row is `{ key, item, estimate }` and
+  `item` is only touched when the row renders. The estimate does not need the
+  real span either; a per-book average would do, and the virtualizer refuses to
+  compensate a first measurement precisely so an imperfect estimate cannot move
+  the viewport.
+
+  Find and Key terms sit on the same feed, so all three screens get it. This is
+  the next piece of work, and unlike the note it replaces, there is now a
+  production number to aim at.
 
 ## Measurement
 
