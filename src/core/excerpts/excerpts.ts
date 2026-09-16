@@ -607,15 +607,25 @@ const buildExcerpt = (
   const to =
     verse === undefined ? (spans[0]?.from ?? book.analysis.docLen) : (spans[high]?.to ?? verse.to);
 
-  // The one expensive call, made at most once per excerpt and only if a field
-  // that needs it is read.
-  const projection = once(() => project(book.analysis, from, to));
-  const marks = once(() => marksFor(projection(), held.flatMap(rangesOf)));
-  const focus = once(() =>
-    verse === undefined
-      ? null
-      : (marksFor(projection(), [{ from: verse.from, to: verse.to }])[0] ?? null),
-  );
+  /**
+   * Everything the projection pays for, in ONE thunk and one closure.
+   *
+   * Three separate memos would be three closures per excerpt, and a feed makes
+   * one excerpt per hit — sixty thousand allocations to render twenty cards.
+   * A card that reads any of these reads all of them, so there is nothing to
+   * gain by splitting them and a per-excerpt cost to pay.
+   */
+  const body = once(() => {
+    const projection = project(book.analysis, from, to);
+    return {
+      projection,
+      marks: marksFor(projection, held.flatMap(rangesOf)),
+      focus:
+        verse === undefined
+          ? null
+          : (marksFor(projection, [{ from: verse.from, to: verse.to }])[0] ?? null),
+    };
+  });
   const ref: Ref =
     verse === undefined
       ? { book: book.bookId, chapter }
@@ -628,31 +638,38 @@ const buildExcerpt = (
         ? `${book.bookId} ${chapter}`
         : sidOf(book.bookId, verse.chapter, verse.first, verse.last),
     ref,
-    label: refLabel(name, ref),
+    // A plain getter and not a memo: building the string is cheaper than the
+    // closure that would remember it, and a card asks once.
+    get label() {
+      return refLabel(name, ref);
+    },
     span: { from, to },
     hits: held,
     get text() {
-      return projection().text;
+      return body().projection.text;
     },
     get source() {
       return book.analysis.text.slice(from, to);
     },
     get marks() {
-      return marks();
+      return body().marks;
     },
     get verses() {
-      return projection().verses;
+      return body().projection.verses;
     },
     get focus() {
-      return focus();
+      return body().focus;
     },
-    more:
-      verse === undefined
+    // Two walks of the verse table, deferred for the same reason as `label`:
+    // only a rendered card draws expand chevrons.
+    get more() {
+      return verse === undefined
         ? { up: false, down: false }
         : {
             up: walk(spans, low, 1, -1) !== low,
             down: walk(spans, high, 1, 1) !== high,
-          },
+          };
+    },
   };
 };
 
