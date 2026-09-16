@@ -148,6 +148,16 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
     { name: "excerptModel" },
   );
 
+  /**
+   * The book the open excerpt editor is editing.
+   *
+   * `seat` is the feed's only door to an editable excerpt, and an excerpt
+   * editor is a satellite on that one seat — so the book seated last is the
+   * book `edited()` is about. Remembered here rather than threaded back
+   * through `ExcerptList.onEdited`, which carries a card key and not a book.
+   */
+  let seated: BookId | undefined;
+
   const seat = async (bookId: BookId): Promise<EditorBook | undefined> => {
     const project = shell.project();
     if (project === undefined) return undefined;
@@ -156,6 +166,7 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
       shell.report(t("could not open book {book}", { book: bookId }));
       return undefined;
     }
+    seated = bookId;
     return shell.services.seated(bookId);
   };
 
@@ -194,7 +205,8 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
    * an edit that was REFUSED republishes nothing at all.
    */
   const edited = (): void => {
-    shell.bump();
+    // Nothing seated means no excerpt was editable, so no edit was accepted.
+    shell.changed({ kind: "book.apply", books: seated === undefined ? [] : [seated] });
     const after = options.onEdited;
     if (after === undefined) return;
     void shell.services

@@ -283,7 +283,7 @@ function Terms() {
         ? t("match formatting refused: {reason}", { reason: applied.failure.description })
         : t("matched {book} to the source's formatting", { book: book.id }),
     );
-    shell.bump();
+    shell.changed({ kind: "book.apply", books: [book.id] });
   };
 
   const note = (): string =>

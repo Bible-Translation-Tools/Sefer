@@ -31,6 +31,7 @@ import type { EditorAction, EditorBook, ProjectionName } from "../editor";
 import { giteaHostFor } from "./env";
 import { t } from "./i18n";
 import type { Domain, Services } from "./services";
+import type { ShellEvent } from "./shellEvent";
 
 /** What a command's `run` may return; an Effect is run on the app runtime. */
 export type CommandResult =
@@ -86,8 +87,15 @@ export interface ShellBridge {
    * Tells the shell that a module's derived state moved for a reason the
    * editor did not publish — a save that reset a baseline, a commit. Every
    * dirty marker is derived, so without this one call they stay stale.
+   *
+   * BEING RETIRED in favour of `changed`; do not add a caller.
    */
   readonly bump: () => void;
+  /**
+   * The same news, but saying which books it is about, so that a command
+   * touching one book does not wake every book's readers.
+   */
+  readonly changed: (event: ShellEvent) => void;
 }
 
 // A signal rather than a plain array so the palette re-renders when the set
@@ -334,7 +342,9 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
           loaded: progress.loaded,
         }),
       );
-      bridge.bump();
+      // No book list: a transfer moves the repository under the whole
+      // project, and which books it touched is git's answer, not one we ask.
+      bridge.changed({ kind: "remote.transfer" });
     });
   };
 
@@ -627,7 +637,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
             ? t("format refused: {reason}", { reason: applied.failure.description })
             : t("formatted {book}", { book: book.id }),
         );
-        bridge.bump();
+        bridge.changed({ kind: "book.apply", books: [book.id] });
       },
     }),
 
@@ -650,7 +660,8 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
           return;
         }
         bridge.report(t("formatted {count} book(s)", { count: operation.books.length }));
-        bridge.bump();
+        // `operation.books` lists only the books that actually changed.
+        bridge.changed({ kind: "book.apply", books: operation.books });
       },
     }),
   ];

@@ -219,7 +219,10 @@ export function BookEditor(props: BookEditorProps) {
       const unsubscribe = book.changes((receipt) => {
         setStamp(receipt.after);
         supply();
-        shell.bump();
+        // The receipt names ONE book, so this says so. It is the difference
+        // between a keystroke re-examining this book's save state and a
+        // keystroke re-examining every book in the project.
+        shell.changed({ kind: "book.apply", books: [book.id] });
       });
 
       // The corpus half of sink 1. `crossBook()` is the whole project's Sous

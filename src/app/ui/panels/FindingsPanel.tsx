@@ -256,7 +256,7 @@ export function FindingsPanel() {
         : t("refused by {rule}", { rule: applied.failure.rule }),
     );
     setPreview(undefined);
-    shell.bump();
+    shell.changed({ kind: "book.apply", books: [fix.finding.bookId] });
   };
 
   /**

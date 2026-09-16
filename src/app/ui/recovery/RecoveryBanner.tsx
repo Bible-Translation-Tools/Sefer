@@ -153,6 +153,14 @@ export function RecoveryBanner() {
         setOffered([]);
         const refused = results.filter(Result.isFailure);
         const restored = results.length - refused.length;
+        // Only the journals that actually replayed. `results` is parallel to
+        // `journals`, and a refused journal moved no text, so naming it here
+        // would wake its row to tell it nothing.
+        const books = results.flatMap((result, index) => {
+          const journal = journals[index];
+          return Result.isSuccess(result) && journal !== undefined ? [journal.bookId] : [];
+        });
+        shell.changed({ kind: "journal.restore", books });
         if (refused.length > 0) {
           toasts.update(notice, {
             tone: "error",
@@ -163,7 +171,6 @@ export function RecoveryBanner() {
             }),
             message: describe(refused[0]?.failure),
           });
-          shell.bump();
           return;
         }
         toasts.update(notice, {
@@ -173,7 +180,6 @@ export function RecoveryBanner() {
             "The work is in the editor, unsaved. Save & Review shows every changed book against the file on disk.",
           ),
         });
-        shell.bump();
       });
   };
 

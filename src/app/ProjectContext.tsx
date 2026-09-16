@@ -12,15 +12,22 @@
  *
  * The Solid/Book boundary rule (editor-and-save §1.5) applies to this file
  * too: NOTHING here subscribes to `book.changes`. Only the editor surface
- * does, and when it accepts a receipt it calls `bump()` — one signal the
- * census, the dirty markers and the status bar derive from. That keeps exactly
- * one subscription per book, at the one place that already has to have one.
+ * does. That keeps exactly one subscription per book, at the one place that
+ * already has to have one, and it is unchanged.
+ *
+ * What the subscriber DOES with the receipt is what changed. It used to call
+ * `bump()` — one counter meaning "something, somewhere", which every derived
+ * read in nine screens re-ran on. It now calls `changed()` with a `ShellEvent`
+ * naming the books that moved (`shellEvent.ts`), and the stores below update
+ * only the rows that event touched. `tick` survives alongside them until its
+ * last reader leaves; see planning/01-discussing/ui-state-stores-2026-09-16.md.
  */
 
 import { Effect, Fiber, Option, Result, Stream } from "effect";
 import {
   createContext,
   createSignal,
+  createStore,
   getOwner,
   onCleanup,
   runWithOwner,
@@ -55,6 +62,7 @@ import {
   type LastLocations,
   type RecentProjects,
 } from "./settings";
+import { booksOf, type ShellEvent } from "./shellEvent";
 import { applyEditorFontSize } from "./ui/theme";
 
 /**
@@ -66,6 +74,15 @@ import { applyEditorFontSize } from "./ui/theme";
  * book below it.
  */
 export type RevealAt = "top" | "centre";
+
+/**
+ * Where a book's text stands against the file and the last version.
+ *
+ *   * `unsaved` — the text on screen is not the text in the file.
+ *   * `recorded` — the file holds this text and a version holds the file.
+ *   * `onDisk` — the file holds this text and NO version does.
+ */
+export type SaveState = "unsaved" | "onDisk" | "recorded";
 
 /** What the next open of `bookId` should scroll to, and how. */
 export interface Reveal {
@@ -91,27 +108,26 @@ export interface Shell {
    *
    * Exactly `SaveCoordinator.dirty` — the coordinator adopts a baseline when
    * the shell opens a book, so "no baseline" no longer means "just opened".
-   * Reading `tick()` is what makes the answer reactive.
+   *
+   * A read of the `books` store, so it is reactive AND free: the coordinator
+   * is asked when a `ShellEvent` says this book moved, never on a render.
    */
   readonly unsaved: (book: Book) => boolean;
 
   /**
    * The three states a book can be in, now that the file is written only when
-   * a version is recorded.
-   *
-   *   * `unsaved` — the text on screen is not the text in the file.
-   *   * `recorded` — the file holds this text and a version holds the file.
-   *   * `onDisk` — the file holds this text and NO version does. Reachable
-   *     only when a write succeeded and the commit after it did not, which is
-   *     the one case a reader has to be told about by name.
+   * a version is recorded. See `SaveState`.
    *
    * `recorded` is inferred rather than read from git, and that is the point of
    * the save model: writing the file and recording the version are one action,
    * so a book that matches the file matches the last version too. The one
    * exception is the failed commit, and `noteWritten` is how Save & Review
    * reports it.
+   *
+   * NOTE: nothing calls `noteWritten` today, so `onDisk` is currently
+   * unreachable. Pre-existing; see the note in the plan.
    */
-  readonly saveState: (book: Book) => "unsaved" | "onDisk" | "recorded";
+  readonly saveState: (book: Book) => SaveState;
   /**
    * Save & Review's report after it wrote files: which books reached the disk,
    * and whether a version was recorded for them. Nothing else may call it —
@@ -192,9 +208,21 @@ export interface Shell {
   readonly finding: Accessor<Finding | undefined>;
 
   /**
+   * Something moved, and this says what — the one door the shell's stores are
+   * written through. Call it instead of `bump()`: naming the event is what
+   * lets a keystroke in one book leave every other book's readers asleep.
+   */
+  readonly changed: (event: ShellEvent) => void;
+
+  /**
    * Bumped whenever the project's text or save state moved. Read it in a route
    * that renders a census, a dirty marker or a diff to make that render
    * reactive without a second subscription to any Book.
+   *
+   * BEING RETIRED. `changed()` bumps it so the readers that have not moved to
+   * a store yet stay correct; both go when the last one leaves
+   * (planning/01-discussing/ui-state-stores-2026-09-16.md, step 6). Do not
+   * add a reader.
    */
   readonly tick: Accessor<number>;
   readonly bump: () => void;
@@ -535,39 +563,107 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     gesture.end("ready", { "project.books": ready.books.length });
     setProject(ready);
     setCursor(0);
-    bump();
+    // After `setProject`: the books store is populated from the project that
+    // is now open, and `changed` reads it through `project()`.
+    changed({ kind: "project.open" });
     report(t("opened {name} ({count} books)", { name: ready.root, count: ready.books.length }));
-  };
-
-  // A book with no adopted baseline was never opened this session: nothing on
-  // screen can differ from disk, so it is not "unsaved" — `dirty` alone would
-  // badge every untouched book on the project page.
-  const unsaved = (book: Book): boolean => {
-    tick();
-    return Option.isSome(services.save.baseline(book)) && services.save.dirty(book);
   };
 
   /**
    * Books whose bytes are on disk with no version behind them: a `saveAll`
-   * that succeeded under a `git.commit` that did not. A plain Set rather than
-   * a signal because every reader of it already reads `tick()`, and Save &
-   * Review bumps after both halves of a record.
+   * that succeeded under a `git.commit` that did not. A plain Set because
+   * `saveStateOf` is now its only reader, and that runs on an event rather
+   * than on a render.
    */
   const onDisk = new Set<BookId>();
 
-  const noteWritten = (bookIds: readonly BookId[], recorded: boolean): void => {
-    for (const bookId of bookIds) {
-      if (recorded) onDisk.delete(bookId);
-      else onDisk.add(bookId);
-    }
+  /**
+   * One book's save state, asked of the modules that own it.
+   *
+   * A book with no adopted baseline was never opened this session: nothing on
+   * screen can differ from disk, so it is not "unsaved" — `dirty` alone would
+   * badge every untouched book on the project page.
+   *
+   * NOT reactive, and that is the whole point of the rewrite. This is the
+   * computation a `ShellEvent` provokes: it runs once per event, for the books
+   * that event named, and its answer is written into `books`. `dirty` can cost
+   * an engine hash, so no render may reach it — behind `tick()` it cost ~4.5
+   * whole parses per keystroke, per badged book, because every reader of the
+   * counter re-asked it for every book
+   * (planning/01-discussing/ui-state-stores-2026-09-16.md).
+   */
+  const saveStateOf = (book: Book): SaveState => {
+    if (Option.isSome(services.save.baseline(book)) && services.save.dirty(book)) return "unsaved";
+    return onDisk.has(book.id) ? "onDisk" : "recorded";
+  };
+
+  /**
+   * Every open book's save state, pushed rather than polled.
+   *
+   * A store and not a signal because the state is per book and moves per book:
+   * a store write that does not change a row wakes nobody, so an event naming
+   * RUT costs one comparison and leaves PSA's row — and PSA's reader —
+   * untouched. That is the granularity `tick` could not express.
+   *
+   * Every book of the open project has a row, written at `project.open`. A
+   * missing row therefore means the book is not in the open project, and
+   * `recorded` is the honest answer for it: nothing here has anything to say.
+   */
+  const [books, setBooks] = createStore<Record<BookId, SaveState>>({}, { name: "books" });
+
+  const refreshBooks = (which: readonly BookId[] | "all"): void => {
+    // `static` because this runs on an event, not in a tracking scope: the
+    // books that moved are the books of the project open at the moment the
+    // event happened, and re-reading later would be answering a later question.
+    const staticOpen = project();
+    if (staticOpen === undefined) return;
+    const moved =
+      which === "all"
+        ? staticOpen.books
+        : which.flatMap((bookId) => {
+            // Through the project, not a held reference: `project.book` is
+            // what knows whether a book is seated, and a seated book is the
+            // one holding the text that was just edited.
+            const book = staticOpen.book(bookId);
+            return book === undefined ? [] : [book];
+          });
+    if (moved.length === 0) return;
+    setBooks((draft) => {
+      for (const book of moved) draft[book.id] = saveStateOf(book);
+    });
+  };
+
+  /**
+   * Something moved, and this is what it was.
+   *
+   * The one door the stores are written through, replacing `bump()` as the
+   * thing every call site calls. What a caller gains by naming its event is
+   * that only the books it names are re-examined; what the application gains
+   * is that `shellEvent.ts` is now a readable list of everything that can
+   * change the UI.
+   *
+   * It still bumps `tick` at the end, and will until the last reader leaves
+   * it. The migration is incremental on purpose (the plan's step 6 deletes
+   * both): `books` has taken the dirty markers off the counter, and the
+   * seventeen readers that have not moved yet stay correct meanwhile.
+   */
+  const changed = (event: ShellEvent): void => {
+    if (event.kind === "book.write")
+      for (const bookId of event.books) {
+        if (event.recorded) onDisk.delete(bookId);
+        else onDisk.add(bookId);
+      }
+    refreshBooks(booksOf(event));
     bump();
   };
 
-  const saveState = (book: Book): "unsaved" | "onDisk" | "recorded" => {
-    tick();
-    if (unsaved(book)) return "unsaved";
-    return onDisk.has(book.id) ? "onDisk" : "recorded";
+  const noteWritten = (bookIds: readonly BookId[], recorded: boolean): void => {
+    changed({ kind: "book.write", books: bookIds, recorded });
   };
+
+  const unsaved = (book: Book): boolean => books[book.id] === "unsaved";
+
+  const saveState = (book: Book): SaveState => books[book.id] ?? "recorded";
 
   /**
    * The chapter a book opens on.
@@ -811,7 +907,7 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
         ? t("applied {label}", { label: previewed.success.label })
         : t("refused by {rule}", { rule: applied.failure.rule }),
     );
-    bump();
+    changed({ kind: "book.apply", books: [held.bookId] });
   };
 
   const shell: Shell = {
@@ -823,6 +919,7 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     focus,
     unsaved,
     saveState,
+    changed,
     noteWritten,
     mode,
     setMode: (next) => {
@@ -896,6 +993,7 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     setPaletteOpen: shell.setPaletteOpen,
     report,
     bump,
+    changed,
   };
 
   onCleanup(registerShellCommands(bridge));

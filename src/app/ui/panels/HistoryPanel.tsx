@@ -189,13 +189,17 @@ export function HistoryPanel() {
     },
   );
 
-  const announce = (done: Result.Result<unknown, { readonly reason: string }>): void => {
+  /** `bookId` because a revert is an edit to ONE book, and says so. */
+  const announce = (
+    bookId: BookId,
+    done: Result.Result<unknown, { readonly reason: string }>,
+  ): void => {
     if (Result.isFailure(done)) {
       toasts.error({ title: t("Revert refused"), message: t(done.failure.reason) });
       return;
     }
     toasts.success({ title: t("Reverted") });
-    shell.bump();
+    shell.changed({ kind: "book.apply", books: [bookId] });
   };
 
   const revertHunk = (changes: BookChanges, hunk: Diff.Hunk): void => {
@@ -206,7 +210,7 @@ export function HistoryPanel() {
         "{book} goes back to the selected version for this one hunk. Undo takes it back.",
         { book: nameOf(changes.bookId) },
       ),
-      run: () => announce(Diff.revert(hunk, changes.book)),
+      run: () => announce(changes.bookId, Diff.revert(hunk, changes.book)),
     });
   };
 
@@ -215,7 +219,7 @@ export function HistoryPanel() {
       title: t("Revert every change in {book}?", { book: nameOf(changes.bookId) }),
       label: t("Revert {count} change(s)", { count: changes.hunks.length }),
       description: t("One edit, so one Undo takes the whole thing back."),
-      run: () => announce(Diff.revertAll(changes.hunks, changes.book)),
+      run: () => announce(changes.bookId, Diff.revertAll(changes.hunks, changes.book)),
     });
   };
 
