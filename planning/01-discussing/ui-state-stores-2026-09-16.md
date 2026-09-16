@@ -130,10 +130,13 @@ scroll offsets, draft text in an input. Those stay in the component.
 Incremental — `tick` can survive alongside the stores until the last reader
 leaves, so nothing has to land in one commit.
 
-1. `books` store, and move `unsaved`/`saveState` onto it. Kills the
-   per-keystroke fan-out for the dirty markers, the loudest case.
-2. `findings`, written on publication rather than on every edit. Second loudest:
-   the findings panel, the sidebar counts and the inventory all hang off it.
+1. ~~`books` store, and move `unsaved`/`saveState` onto it.~~ DONE (61ca050),
+   with the `ShellEvent` union. Not the loudest case — see above.
+2. ~~`findings`, written on publication rather than on every edit.~~ DONE
+   (d246dfb). This was the loudest case: 174.8ms -> 19.1ms of reactive work per
+   ten keystrokes. `shell.findings`, `findingCounts`, the new `attentionOf` and
+   `ProjectSidebar.rows` are off `tick`; `FindingsPanel`, `InventoryPanel` and
+   `GlyphDetail` still read it and should follow.
 3. `structure`, from the editor receipt.
 4. `versions`, `conflicts`, `recovery` — lower traffic, mechanical.
 5. `Toolbar.can` — needs its own think: command availability is a predicate over
@@ -141,16 +144,79 @@ leaves, so nothing has to land in one commit.
    declaration rather than a store.
 6. Delete `tick` and `bump`.
 
-## Open questions
+## Open questions — settled 2026-09-16
 
-- Does command availability (`Toolbar.can`) become a store, or do commands
-  declare what they depend on? It is the one reader whose input is not a
-  fixed set.
-- `excerpts` and `inventory` are expensive and screen-local. Do they belong in
-  a shared store at all, or should they be route-scoped resources that
-  recompute on entry and subscribe to `findings` only while mounted?
-- Does the push model want the `Receipt` as-is, or a shell-level event type
-  that a save receipt and an editor receipt both widen into?
+**Command availability declares itself; it does not become a store.** Wrap
+`available()` in a `createMemo` per command. Eighteen of the twenty-three
+`when:` predicates already read only signals (`focused`, `project`, `seated`,
+`mode`, `chapter`) and are free. The residue is two named inputs, both owned by
+a store already planned: undo/redo depth (`commands.ts:410,419`) is CodeMirror
+history, so it becomes a field on the `books` row written from the receipt —
+the editor surface is the subscriber and already holds it; and `chapterCount`
+(`:448,460`) lands with `structure` in step 3. No sixth store.
+
+**`excerpts` and `inventory` are route-scoped, and `excerpts` is not state at
+all.** `ui/excerpts/feed.ts` is shared machinery behind two routes — Find and
+Key terms — that takes `hits` as an input and groups them into cards and an
+outline. The hits are a search result or the STET guide's references mapped
+onto the project. So "excerpts" is a shape, derived twice over, and there is no
+single state to share: at most one of the two feeds is mounted, and they do not
+agree on their source. `inventory` is one screen's census and its future is
+undecided. Both stay route-scoped, subscribing to `findings` while mounted.
+
+**A shell event union, and it landed with step 1.** Not the `Receipt` as-is:
+several sources (editor receipt, `SaveReceipt`, recovery restore, external
+change, seat swap) do not share a shape. The union is `src/app/shellEvent.ts`,
+named by the glossary's `<thing>.<what happened to it>` rule, and narrow — a
+variant carries what a store reads today and nothing more. It was worth landing
+immediately rather than at step 4 because the variety was already present at
+the twelve `bump()` call sites: each one already knew its books, and `bump()`
+was the only thing throwing that away.
+
+## What the measurement said — and what it corrected
+
+Measured on `en_ulb` (66 books, sidebar open, editing 1KI), 10 keystrokes, over
+CDP against the running app. The derived-recompute counter this document said
+was missing already exists: the dev server exposes Solid's attribution bridge at
+`/__solid/diagnostics` (`POST {"method":"begin"|"costs"|"end"}`), which reports
+per-scope `runs`, `selfMs` and `wastedMs` by name. No instrumentation needed.
+
+|                     | e5d77b9 | + `books` | + `findings` |
+| ------------------- | ------- | --------- | ------------ |
+| reactive self time  | 174.8ms | 162.7ms   | **19.1ms**   |
+| wasted recomputes   | 78.3ms  | 68.4ms    | **0.8ms**    |
+| `sidebarBooks` runs | 10      | 10        | **3**        |
+| `sidebarBooks` self | 62.1ms  | 63.1ms    | **1.0ms**    |
+
+**The migration order in this document was wrong.** Step 1 was called "the
+loudest case" and it moved nothing: on the editor route nothing reads per-book
+save state. The three `unsaved`/`saveState` callers are the project census page
+and the book route, and the census page is not mounted while you type. The
+per-keystroke fan-out `unsaved` causes is real, but it is a cost of the screen
+that shows it, not of typing. Step 1 is still right — it removes the shape that
+let a getter cost four parses, and it is what the rest hangs off — but it is not
+where the time was.
+
+The time was in step 2, and for a reason this document did not name:
+`ProjectAnalysis.attach` invalidates the findings caches inside `book.changes`,
+so they are dropped on **every accepted edit**, not once per scheduler pass.
+`findings()` and `census()` each rebuild every finding in every book, and behind
+`tick` the toolbar bell, the rail bell and the sixty-six sidebar rows each paid
+that rebuild per keystroke — to redraw badges that could not have moved, because
+the held analyses do not change between passes.
+
+`galley.why=save.hash` per `editor.mutation` is already 0: no `galley.*` records
+appear in the ring during typing at all. The revision-first check and the
+memoised hasher fixed that before this plan started, which is why step 1 had no
+number to move. `editor.js_ms` is unchanged at ~5.3ms throughout — it measures
+CodeMirror's own gesture, which was never the problem.
+
+## Migration
+
+Twenty-two `tick()` reads remain, across `Toolbar`, `LocationBar`, `changes`,
+`HistoryPanel`, `ProjectSidebar` (the chapter grid), `feed`, `FindingsPanel`,
+`InventoryPanel`, `GlyphDetail`, `settings`, `terms`, and the two project
+routes.
 
 ## Measurement
 
