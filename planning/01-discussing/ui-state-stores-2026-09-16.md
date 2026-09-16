@@ -137,11 +137,17 @@ leaves, so nothing has to land in one commit.
    ten keystrokes. `shell.findings`, `findingCounts`, the new `attentionOf` and
    `ProjectSidebar.rows` are off `tick`; `FindingsPanel`, `InventoryPanel` and
    `GlyphDetail` still read it and should follow.
-3. `structure`, from the editor receipt.
-4. `versions`, `conflicts`, `recovery` — lower traffic, mechanical.
-5. `Toolbar.can` — needs its own think: command availability is a predicate over
-   whatever a command happens to read, so it may want an explicit dependency
-   declaration rather than a store.
+3. `structure`, from the editor receipt. NEXT. Frees `LocationBar` (the
+   chapter table), `ProjectSidebar` (the chapter grid) and `terms`.
+4. `versions`, `conflicts`, `recovery` — lower traffic, mechanical. Frees
+   `HistoryPanel` and `changes.ts`.
+5. ~~`Toolbar.can`.~~ DONE (0e5ae41), and it needed no store. The predicate IS
+   the dependency declaration; `can()` is now `findCommand(id)?.available()`
+   called inside JSX. Eighteen of the twenty-three `when()` predicates already
+   read only signals — the holdouts asked CodeMirror for undo/redo depth and
+   the chapter count, which publish to nobody, so those two rode onto the
+   `books` row. Verified in the app: Undo and Redo flip correctly with no
+   counter.
 6. Delete `tick` and `bump`.
 
 ## Open questions — settled 2026-09-16
@@ -213,10 +219,62 @@ CodeMirror's own gesture, which was never the problem.
 
 ## Migration
 
-Twenty-two `tick()` reads remain, across `Toolbar`, `LocationBar`, `changes`,
-`HistoryPanel`, `ProjectSidebar` (the chapter grid), `feed`, `FindingsPanel`,
-`InventoryPanel`, `GlyphDetail`, `settings`, `terms`, and the two project
-routes.
+**Eight** `shell.tick()` reads remain, from twenty-two. Every one is blocked on
+a store that does not exist yet:
+
+| Reader | Wants |
+| --- | --- |
+| `LocationBar.tsx:58` | `structure` (step 3) |
+| `ProjectSidebar.tsx:125` (chapter grid) | `structure` |
+| `terms.tsx:162`, `:249` | `structure`, plus book text |
+| `HistoryPanel.tsx:187` | `versions` (step 4) |
+| `changes.ts:88`, `:128` | `versions` |
+| `feed.ts:111` | book TEXT — see below |
+
+(`settings.tsx:55` reads a LOCAL `settingsTick`, not the shell's. The audit
+table above miscounted it; it is not part of this migration.)
+
+### The one question step 3 will force
+
+`feed.ts` and `terms` do not read a derived product — they read book **text**.
+No store holds text, and putting it in one would mean holding the project's
+whole corpus in a Solid store, which is the opposite of what the `books` row
+does (it holds a STAMP so a reader can ask "has this moved?" and go read the
+Book itself). The likely answer is that these readers take the stamp and
+re-read the Book, exactly as `FindingsPanel.isStale` now does — but it is a
+decision, not a mechanical port, and `structure` is what will force it.
+
+## Still outstanding
+
+Loose ends found while doing this, none of them blocking:
+
+- **`noteWritten` has no callers anywhere.** So `onDisk` is always empty and
+  `saveState` can never return `"onDisk"` — the failed-commit state the save
+  model documents by name is unreachable. Pre-existing; behaviour preserved.
+- **Bulk paths are unverified.** A forty-book format and a save/record should
+  coalesce to one publication through `changed()`, and the reasoning is in the
+  code, but neither was exercised.
+- **The card height estimate is now a proxy.** It measures from `span` (source
+  length, discounted for markup) because reading `excerpt.text` would project
+  every excerpt and undo the laziness. Wants a human eye on real scrolling.
+- **`{ ...excerpt }` is a footgun.** Object-spreading an excerpt evaluates every
+  lazy getter and projects the document. Nothing does it today and the type says
+  so, but the old shape could not be misused this way.
+- **`ReviewPanel.tsx` contains raw NUL bytes** — `${bookId}\0${unitId}` written
+  as literal control characters. Deliberate, but `file` calls the source "data"
+  and plain `grep` silently finds nothing in it. Escaping them as `\0` would
+  cost nothing.
+- **No production measurement is possible on a filesystem project.** `vite
+  preview` uses the OPFS host adapter, so it cannot open `/sefer/projects/…` at
+  all. Every number in this document is from a dev build, where Solid's dev
+  bundle and Vite's unbundled modules both inflate the result — `/findings`
+  opens in 401ms cold but 223ms with its modules already loaded, and the
+  difference is thirty dev-server requests that production does not make.
+- **Excerpt SHELLS are still eager.** The bodies are lazy now, but a feed still
+  materialises one shell per hit — ~46ms and most of the GC for twenty thousand
+  findings. Going further means `group()` returning a lazy per-book structure,
+  which touches Find and Key terms too. Not worth it without a production
+  number to aim at.
 
 ## Measurement
 
