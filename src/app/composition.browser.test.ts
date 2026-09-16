@@ -9,10 +9,10 @@ test("exposes a read-only observability dev surface showing the boot note", asyn
 
     expect(surface).toBeDefined();
     expect(surface?.level()).toBe("all");
-    expect(surface?.recent()).toEqual(composition.observability.recent());
-
-    const note = surface?.recent().find((event) => event.kind === "note" && event.name === "boot");
+    // `boot` belongs to no gesture, so it is a log rather than a trace.
+    const note = surface?.logs.recent().find((event) => event.name === "boot");
     expect(note?.verdict).toBe("ready");
+    expect(surface?.export()).toContain('"name":"boot"');
   } finally {
     await composition.dispose();
   }

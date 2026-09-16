@@ -96,15 +96,14 @@ export const pendingOnOpen = (
       observability?.note(
         "recovery.reopen",
         Result.isFailure(cleared) ? "declined" : "consumed",
-        `${journal.id} matched disk`,
-        journal.bookId,
+        "matched disk",
+        { "recovery.journal": journal.id, "book.id": journal.bookId },
       );
     }
-    observability?.note(
-      "recovery.reopen",
-      "ready",
-      `n=${offered.length} of ${mine.length}`,
-      projectId,
-    );
+    observability?.note("recovery.reopen", "ready", undefined, {
+      "project.id": projectId,
+      "recovery.offered": offered.length,
+      "recovery.candidates": mine.length,
+    });
     return offered;
   });

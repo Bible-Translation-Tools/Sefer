@@ -110,7 +110,7 @@ describe("observability ring", () => {
 describe("observability export", () => {
   test("emits one JSON object per line in the documented field order", () => {
     const { text, events } = withRing({ capacity: 16 }, (observability) => {
-      observability.note("boot", "ready", "web dev+test", "op-1");
+      observability.note("boot", "ready", "web dev+test", { "build.id": "dev+test" });
       observability.span("work", "note")();
       return Effect.succeed({ text: observability.export(), events: observability.recent() });
     });
@@ -129,7 +129,7 @@ describe("observability export", () => {
       "name",
       "verdict",
       "detail",
-      "correlation",
+      "attrs",
     ]);
     expect(Object.keys(parsed[1] ?? {})).toEqual([
       "seq",
@@ -139,17 +139,26 @@ describe("observability export", () => {
       "detail",
       "ms",
       "self",
+      "id",
     ]);
   });
 
-  test("round-trips a correlation id", () => {
+  test("carries the operation and the fields of the work it describes", () => {
     const events = withRing({}, (observability) => {
-      observability.note("save", "passed", "revision 7", "operation-42");
+      const op = observability.operation("save", { "book.id": "PHM" });
+      op.note("save.write", "passed", "revision 7", { "book.revision": 7 });
+      op.end("ready");
       return Effect.succeed(observability.recent());
     });
 
-    expect(named(events, "save").correlation).toBe("operation-42");
-    expect(named(events, "save").detail).toBe("revision 7");
+    const note = named(events, "save.write");
+    const operation = named(events, "save");
+    expect(note.detail).toBe("revision 7");
+    expect(note.attrs?.["book.revision"]).toBe(7);
+    // The note happened inside the operation, and says so.
+    expect(note.trace).toBe(operation.trace);
+    expect(note.parent).toBe(operation.id);
+    expect(operation.attrs?.["book.id"]).toBe("PHM");
   });
 });
 
@@ -185,7 +194,7 @@ describe("effect integration", () => {
     const span = named(events, "engine.load");
     expect(span.kind).toBe("span");
     expect(span.ms).toBeGreaterThanOrEqual(0);
-    expect(typeof span.correlation).toBe("string");
+    expect(typeof span.trace).toBe("string");
   });
 });
 
@@ -199,7 +208,7 @@ describe("sink isolation", () => {
         },
       },
       (observability) => {
-        expect(() => observability.note("boot", "ready", long, "op-1")).not.toThrow();
+        expect(() => observability.note("boot", "ready", long, { "build.id": "x" })).not.toThrow();
         return Effect.succeed({ events: observability.recent(), dropped: observability.dropped() });
       },
     );

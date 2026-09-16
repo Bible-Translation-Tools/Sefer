@@ -279,17 +279,17 @@ const make = (
           journal.entries.length === 0 ? remove(id) : write(id, journal),
         );
         if (Result.isFailure(written)) {
-          observability?.note("recovery.journal", "failed", `${id} ${written.failure.reason}`, id);
+          observability?.note("recovery.journal", "failed", written.failure.reason, {
+            "recovery.journal": id,
+          });
           // Keep it dirty so the next burst tries again; a lost journal is
           // worse than a repeated write.
           unwritten.add(id);
         } else
-          observability?.note(
-            "recovery.journal",
-            "rewrote",
-            `${id} n=${journal.entries.length}`,
-            id,
-          );
+          observability?.note("recovery.journal", "rewrote", undefined, {
+            "recovery.journal": id,
+            "recovery.entries": journal.entries.length,
+          });
       }
     });
 
@@ -372,7 +372,10 @@ const make = (
       const compacted: Journal = { header: journal.header, entries: kept };
       journals.set(id, compacted);
       unwritten.delete(id);
-      observability?.note("recovery.compact", "rewrote", `${id} n=${kept.length}`, id);
+      observability?.note("recovery.compact", "rewrote", undefined, {
+        "recovery.journal": id,
+        "recovery.entries": kept.length,
+      });
       return kept.length === 0 ? remove(id) : write(id, compacted);
     };
 
@@ -411,12 +414,9 @@ const make = (
           for (const id of yield* listIds) {
             const journal = yield* Effect.result(read(id));
             if (Result.isFailure(journal)) {
-              observability?.note(
-                "recovery.pending",
-                "declined",
-                `${id} ${journal.failure.reason}`,
-                id,
-              );
+              observability?.note("recovery.pending", "declined", journal.failure.reason, {
+                "recovery.journal": id,
+              });
               continue;
             }
             const entries = journal.success.entries;
@@ -435,7 +435,9 @@ const make = (
               entries,
             });
           }
-          observability?.note("recovery.pending", "ready", `n=${found.length}`);
+          observability?.note("recovery.pending", "ready", undefined, {
+            "recovery.pending": found.length,
+          });
           return found;
         }),
 
@@ -455,12 +457,11 @@ const make = (
           for (const [index, entry] of journal.entries.entries()) {
             const applied = book.apply(entry.changes, "recovery", trust);
             if (Result.isFailure(applied)) {
-              observability?.note(
-                "recovery.restore",
-                "refused",
-                `${id} entry=${index} ${applied.failure.reason}`,
-                book.id,
-              );
+              observability?.note("recovery.restore", "refused", applied.failure.reason, {
+                "recovery.journal": id,
+                "recovery.entry": index,
+                "book.id": book.id,
+              });
               return yield* Effect.fail(
                 new RecoveryError({
                   reason: "Refused",
@@ -471,12 +472,11 @@ const make = (
             }
           }
           journals.set(id, journal);
-          observability?.note(
-            "recovery.restore",
-            "rewrote",
-            `${id} n=${journal.entries.length}`,
-            book.id,
-          );
+          observability?.note("recovery.restore", "rewrote", undefined, {
+            "recovery.journal": id,
+            "recovery.entries": journal.entries.length,
+            "book.id": book.id,
+          });
           return book;
         }),
 
@@ -485,7 +485,9 @@ const make = (
           journals.delete(id);
           unwritten.delete(id);
           yield* remove(id);
-          observability?.note("recovery.discard", "consumed", id, id);
+          observability?.note("recovery.discard", "consumed", undefined, {
+            "recovery.journal": id,
+          });
         }),
 
       setPolicy: (next) =>

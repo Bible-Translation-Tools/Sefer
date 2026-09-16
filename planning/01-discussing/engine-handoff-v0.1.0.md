@@ -13,7 +13,7 @@ conformance scripts OK, committed `pkg-*` byte-identical to a fresh build.
 | repo | `git@github.com:WycliffeAssociates/scripture-kitchen.git` (was `usfm_onion_2`; local checkout `../scripture-kitchen`) |
 | tag | `v0.1.0` — every Cargo.toml and package.json says `0.1.0`; CI's release job refuses a tag that disagrees |
 | npm | `npm i github:WycliffeAssociates/scripture-kitchen#v0.1.0` → `@wycliffeassociates/scripture-kitchen` |
-| build (vendoring) | `cd galley && wasm-pack build --target web --release -- --features wasm` — or take the COMMITTED `galley/pkg-web/` as is: it is built by `galley/build.sh` with path remapping and CI gates it byte for byte |
+| build (vendoring) | take the COMMITTED `galley/pkg-web/` as is. It is an x86_64-Linux build (`galley/build.sh` containers itself on any other host via `wasm-build.sh`; LLVM's layout of tied items depends on the build host's architecture) and CI gates it byte for byte. A native `wasm-pack build` on an arm64 Mac produces a functionally identical file that differs by a few hundred bytes — do not vendor that one |
 
 `vendor/galley/manifest.json`: set `engine.spec` to `../scripture-kitchen`,
 `engine.revision` to the tag's commit, and re-hash the artifacts. The build

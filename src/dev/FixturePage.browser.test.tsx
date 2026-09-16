@@ -29,7 +29,7 @@ test("the fixture route renders every seeded file and publishes dev state", asyn
 
   // One composition, one ring: the boot note and the fixture note sit side by
   // side in the same dev surface, and neither is duplicated.
-  const notes = (globalThis.__sefer?.observability?.recent() ?? []).filter(
+  const notes = (globalThis.__sefer?.observability?.logs.recent() ?? []).filter(
     (event) => event.kind === "note",
   );
   expect(notes.filter((event) => event.name === "boot").length).toBe(1);

@@ -17,6 +17,8 @@ collide with the v1 app's variables on one machine.
 | `VITE_SEFER_LANGUAGE_API_URL` | shell | language names and directions |
 | `VITE_SEFER_OTLP_URL` | dev only | OTLP endpoint merged beside the observability ring; traces and logs only |
 | `VITE_SEFER_OTLP_METRICS` | dev only | `1` to send OTLP metrics as well. Off by default — see below |
+| `VITE_SEFER_LOG` / `SEFER_LOG` | dev only | the RAW sink: one JSONL line per event to stderr, under a Node-shaped host |
+| `VITE_SEFER_STREAM` | dev only | console stream: `1` for every operation, or comma-separated name prefixes. A `!` prefix excludes: `!editor.selection` is everything except caret moves |
 
 ## Telemetry sends traces and logs, and metrics only when asked
 

@@ -68,6 +68,7 @@ test("apply emits one book.apply note when Observability is in context", async (
 
   expect(applied).toHaveLength(1);
   expect(applied[0]?.verdict).toBe("rewrote");
-  expect(applied[0]?.correlation).toBe("PHM");
-  expect(applied[0]?.detail).toBe("PHM r0 -> r1 (test)");
+  expect(applied[0]?.attrs?.["book.id"]).toBe("PHM");
+  expect(applied[0]?.attrs?.["book.revision"]).toBe(1);
+  expect(applied[0]?.attrs?.["book.origin"]).toBe("test");
 });

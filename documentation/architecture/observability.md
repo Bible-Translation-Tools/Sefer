@@ -6,10 +6,12 @@ Status: working guidance for experiments. The design remains provisional in [`pl
 
 Status: this section describes code that exists. Everything below it is the agreed direction, not a claim about the tree.
 
-`src/core/observability.ts` defines the `Observability` service (an Effect 4 `Context.Service`) with four operations plus volume:
+`src/core/observability.ts` defines the `Observability` service (an Effect 4 `Context.Service`):
 
-- `span(name, note?) => () => number` — synchronous and nestable. The returned closer records inclusive `ms` and exclusive `self` (inclusive minus the time billed to spans opened and closed inside it) and returns the inclusive milliseconds. Below level `spans` it is two `performance.now()` reads and records nothing.
-- `note(rule, verdict, detail?, correlation?)` — synchronous. `verdict` is the closed union `ready | passed | refused | rewrote | consumed | declined | failed`.
+- `operation(name, attrs?, options?) => Operation` — opens ONE end-to-end piece of work, which in practice is one thing the user did. The returned `Operation` IS an `ObservabilityService`, plus `attr(attrs)`, `end(verdict?, attrs?)`, and its own `trace` and `id`.
+- `span(name, note?, attrs?) => (attrs?) => number` — synchronous and nestable. The returned closer records inclusive `ms` and exclusive `self` (inclusive minus the time billed to spans opened and closed inside it) and returns the inclusive milliseconds. Below level `spans` it is two `performance.now()` reads and records nothing.
+- `note(rule, verdict, detail?, attrs?)` — synchronous. `verdict` is the closed union `ready | passed | refused | rewrote | consumed | declined | failed`.
+- `session()` — the id, build and host every event of this run has in common.
 - `recent(limit?)` — the newest events, oldest first.
 - `export()` — JSONL, one event per line, each line terminated by a newline.
 - `level()` / `setLevel(level)`.
@@ -23,39 +25,41 @@ A sink is host code and may do anything, including throw. `push` calls it inside
 
 `name` and `detail` are truncated to `MAX_TEXT` (512) characters before the event is recorded, so one runaway string cannot bloat the ring or a sink line. The cap is applied on the way in, so `recent()` and `export()` agree.
 
-Recorded event fields, in the order `export()` writes them: `seq`, `t` (epoch milliseconds), `kind` (`span | note | log`), `name` (the span name or the note's rule), `verdict`, `detail`, `ms`, `self`, `correlation`. Absent fields are omitted from the line.
+Recorded event fields, in the order `export()` writes them: `seq`, `t` (epoch milliseconds), `kind` (`operation | span | note | log`), `name`, `verdict`, `detail`, `ms`, `self`, `trace`, `id`, `parent`, `attrs`. Absent fields are omitted from the line.
 
-`ObservabilityLive(options)` in core builds the ring and merges three layers: the service itself, `Logger.layer` with a logger that writes every `Effect.log*` into the ring as a `log` event (`name` is the message, `detail` is the Effect log level, `verdict` is `failed` for `Error` and `Fatal`), and `Tracer.Tracer` replaced by a tracer that wraps `Tracer.NativeSpan` and records each span as it ends, correlated by its `traceId`. Because the logger layer replaces the default, `Effect.log*` no longer writes to the console on its own.
+`attrs` is the wide half: `Record<string, string | number | boolean>`, capped at `MAX_ATTRS` (32) keys with string values through `MAX_TEXT`. Primitives only, and the type is the enforcement — an attribute holding a reference would be pinned alive by the ring for the next `capacity` events, which is how a bounded buffer becomes a leak. Prefer fields over sentences: `{ "book.id": id, "book.revision": 41 }` is queryable where `` `${id} r41` `` is not.
 
-Sinks are the host's job, in `src/platform/observability.ts`. `hostSink()` returns a stderr writer that emits each JSONL line under a Node-shaped host, and in a browser or webview a sink that mirrors `note` events to `console.debug`. **Both are opt-in, behind the same `SEFER_LOG` / `VITE_SEFER_LOG`.** The console sink used to be on for every dev build and was the single most expensive thing on the keystroke path — a `console.debug` per note, and the ring builds a JSONL line with `JSON.stringify` whenever any sink exists at all, so about a third of a keystroke's JS work was spent reporting the keystroke. Nothing is lost by the default silence: the ring holds every event either way, and `__sefer.observability.recent()` is how it is read. `pnpm verify:launch` sets the variable itself, so `.verify/<runId>/observability.jsonl` is unchanged.
+## How an operation propagates
 
-`installObservabilityDevSurface(service)` publishes `globalThis.__sefer.observability = { recent, export, level, setLevel }` when `import.meta.env.DEV`, and nothing in production. Core references neither `console` nor `globalThis`.
+`trace` is the OPERATION — one gesture — not a book and not a file; those are attributes OF the work. Every event carries the `trace` it belongs to and the `parent` span it happened inside, so a gesture reassembles into a tree.
+
+Propagation is dependency injection, not ambient state and not a parameter threaded through core. An `Operation` is an `ObservabilityService`, so the gesture's door provides it — `Effect.provideService(Observability, operation)` — and core's existing `Effect.serviceOption(Observability)` receives it without knowing whether it is the root or a gesture's own. Correct across every await, because Effect's context lives on the fiber. **Core narrates; it does not know anyone is tracing.** No core module imports a span, a trace, or an exporter.
+
+The editor is the exception, and deliberately so: its rules run inside `changeFilter` and `transactionFilter` on the keystroke path, where there is no fiber to carry a context. `src/editor/observability.ts` opens one `editor.transaction` operation per transaction and passes it down its own instrument.
+
+Work that no gesture caused — a filesystem watcher, `boot` — carries no `trace` and exports as a root of its own. That is the honest shape, and it makes "which traces had no gesture behind them" a query.
+
+`ObservabilityLive(options)` in core builds the ring and merges three layers: the service itself, `Logger.layer` with a logger that writes every `Effect.log*` into the ring as a `log` event (`name` is the message, `detail` is the Effect log level, `verdict` is `failed` for `Error` and `Fatal`), and `Tracer.Tracer` replaced by a tracer that wraps `Tracer.NativeSpan` and records each span as it ends, under its own `traceId` and `spanId`. Because the logger layer replaces the default, `Effect.log*` no longer writes to the console on its own.
+
+Sinks are the host's job, in `src/platform/observability.ts`. `hostSink()` returns a stderr writer that emits each JSONL line when `SEFER_LOG` or `VITE_SEFER_LOG` is set under a Node-shaped host and is silent otherwise; in a browser or webview it returns a sink that mirrors `note` events to `console.debug` in dev builds only. `installObservabilityDevSurface(service)` publishes `globalThis.__sefer.observability = { recent, export, level, setLevel }` when `import.meta.env.DEV`, and nothing in production. Core references neither `console` nor `globalThis`.
 
 `src/app/composition.ts` builds the Layer at the root, runs `boot` inside it, and emits one `boot` span and one `boot` note (`ready` with `<host> <build>` and the build identity as correlation, or `failed` with the error tag).
 
 `composeApplication(options)` is the one composition entry: it builds the Layer into a `ManagedRuntime`, runs `boot` on it, and returns `{ boot, observability, fileSystem, layer, runtime, dispose }` — see [composition](composition.md) for why the runtime, not the program, owns the Layer's scope. `src/App.tsx` awaits it once with no options — the production root provides no `FileSystem` — and hands the result to every consumer through `useComposition()`. There is one ring per running application: the dev fixture route merges its seeded FileSystem over `composition.layer` instead of composing again, so its `fixture` note lands in the same ring beside the `boot` note.
 
-## OTLP: exporting the ring
+OTLP is a dev-only toggle in `composeApplication`, and it is a SINK ON THE RING rather than a second Layer. The exporters only ever see Effect-native spans and logs, and `Effect.log`/`Effect.withSpan` appear nowhere in `src/` — the ring's `note()` and `span()` are plain function calls — so merging `Otlp.layerJson` beside `ObservabilityLive` exported nothing at all, and the two layers fought over the same `Tracer` and `CurrentLoggers`. Instead, when `import.meta.env.DEV` and `VITE_SEFER_OTLP_URL` is set, `telemetryBridge()` dynamically imports `OtlpTracer`, `OtlpLogger`, `OtlpMetrics`, `OtlpSerialization` and `FetchHttpClient`, builds a `ManagedRuntime` of its OWN from them, and returns a sink: every ring event is forwarded, a `note` or `log` as an OTLP log record and a `span` as a real span carrying the duration the ring measured. The ring keeps its own tracer and logger untouched, and there is no loop, because that runtime's logger set is the OTLP one alone.
 
-OTLP is a dev-only toggle in `composeApplication`, and it is a **sink on the ring**, not a second observability system. That is the shape it has to have, because Sefer's own instrument is the ring: `note()` and `span()` are plain function calls that push a record into a buffer, and `Effect.log` and `Effect.withSpan` appear nowhere in `src/`. An OTLP tracer and logger see only Effect-native spans and logs, so the exporters had nothing whatever to export and a configured run posted no request at all.
-
-So `telemetryBridge()` builds the exporters into a `ManagedRuntime` **of their own** — separate from the application's, because `ObservabilityLive` installs its own `Tracer.Tracer` and replaces `CurrentLoggers`, and merging the two layers meant one silently discarded the other's — and returns an `ObservabilitySink`. Every ring event is forwarded through it: a `note` and a `log` become an OTLP log record annotated with `sefer.verdict`, `sefer.detail` and `sefer.correlation`; a `span` becomes a real span ended the `ms` the ring measured after it began. There is no loop, because that runtime's logger set is the OTLP one alone (`mergeWithExisting: false`) and never reaches the ring.
-
-Run it with — and this exact command is verified against motel:
+The browser posts to the SAME-ORIGIN path `/__otlp`, which the dev server proxies to the collector. A collector is a different origin and an OTLP body is `application/json`, so a direct post is preflighted — and motel answers `OPTIONS /v1/logs` with a bare 404, so the preflight fails and the POST is never made, silently. `OTLP_PROXY_PATH` is declared in both `vite.config.ts` and `src/app/composition.ts`, beside the same explanation. Metrics stay opt-in behind `VITE_SEFER_OTLP_METRICS=1`, because motel serves `/v1/traces` and `/v1/logs` and answers `/v1/metrics` with nothing; each signal gets its own `guardedFetch`, which warns once and then refuses locally rather than filling the console with `net::ERR_FAILED` on every interval. Run it with
 
 ```sh
-export VITE_SEFER_OTLP_URL=http://127.0.0.1:27686
-pnpm dev
+VITE_SEFER_OTLP_URL=http://127.0.0.1:27686 pnpm dev
 ```
 
-Two details that are easy to get wrong and were both wrong:
+and read it in motel on that same port — `motel tui`, or `http://127.0.0.1:27686/api/traces`. In the TUI, `[` and `]` cycle the service: it remembers the last one in `~/.local/state/motel/last-service.txt` and otherwise defaults to its own `motel-otel-tui`, which shows an empty trace list while Sefer is exporting perfectly well under `sefer`. The imports are dynamic and inside the `import.meta.env.DEV` branch, so a production build contains no OTLP code: `grep -r Otlp dist/` comes back empty. Note that the OTLP Layer builds asynchronously, which is why the composition is a `Promise` and `src/App.tsx` uses top-level `await`.
 
-- **The browser never posts to the collector directly.** A collector is a different origin and an OTLP body is `application/json`, so the browser sends a CORS preflight — and motel answers `OPTIONS /v1/logs` with a bare 404 and no `Access-Control-Allow-Origin`. The preflight fails, the POST is never made, and nothing appears anywhere: no request on the wire, no error the collector can report. `vite.config.ts` therefore proxies `/__otlp` to `VITE_SEFER_OTLP_URL` whenever it is set, and the exporters post to `"/__otlp/v1/traces"` and `"/__otlp/v1/logs"` — same-origin, so there is no preflight and no collector configuration to get right. The variable is read with `loadEnv`, so `export`ing it in the shell that runs `pnpm dev` is enough.
-- **Each signal has its own guarded fetch.** `guardedFetch` warns once and then refuses locally, so a collector that is not there cannot fill the console with `net::ERR_FAILED`; one shared instance meant a single endpoint the collector does not serve stopped every other signal too. Metrics stay opt-in (`VITE_SEFER_OTLP_METRICS=1`) for the same reason: motel takes `/v1/traces` and `/v1/logs` and answers `/v1/metrics` with nothing at all.
+The bridge holds a gesture's events until its operation record arrives, because the ring writes the wide record LAST — everything known by the time the work finished — and an exporter needs the parent first. The hold is bounded (64 traces, 256 events each, oldest dropped): an operation that never ends must not grow it. Children are emitted inside the parent span's context, so the OTLP logger stamps each note with the trace and span it belongs to.
 
-Confirmed working: with the variable exported, motel answers `{"insertedLogs": 171}` and `{"insertedSpans": 155}` for one page load plus five keystrokes; with it unset, the page makes no telemetry request at all. The imports are dynamic and inside the `import.meta.env.DEV` branch, so a production build contains no OTLP code: `grep -r Otlp dist/` comes back empty. The bridge builds asynchronously, which is why the composition is a `Promise` and `src/App.tsx` uses top-level `await`; `dispose()` closes the application runtime first and the exporters last, so the final batch is flushed.
-
-Not present yet: JSONL files on disk, rotation, retention, batching, run IDs, and any editor instrumentation.
+Not present yet: JSONL files on disk, rotation, retention, batching, and cross-process correlation with the Tauri host — a Rust `invoke` is one opaque child span, timed from the web side, which is the same shape Effect gives an async filesystem call.
 
 ## Boundary
 
@@ -126,8 +130,6 @@ Read it left to right:
 
 - **`gesture`** — the JS work: the DOM event to the LAST state update of the gesture. This is the part Sefer's own code owns.
 - **`render`** — the same event to after the browser painted, measured by waiting a frame and then a macrotask inside it (a `requestAnimationFrame` callback runs *before* the paint). Omitted entirely when no frame was observed — a headless state, a background tab — rather than printed as a guess. It is always larger than `gesture` and it is not a sum: between the last update and the paint sit CodeMirror's measure pass, style and layout.
-
-  **Read it with its floor in mind.** Because the measurement waits for the next frame, `render` can never be less than the gap to the next vsync plus the macrotask after the paint — about 17 ms on a 60Hz display, however fast the gesture was. A measured `gesture=1.8ms render=17.0ms` is a keystroke with nothing wrong with it. What is worth chasing is `render` that is several frames: `gesture=8.7ms render=78.1ms` is four or five frames of waiting, and by construction none of that time is inside the gesture — it is a main thread or a compositor that is behind. The usual causes are work scheduled off the gesture (a `requestAnimationFrame` chain, an observer), and compositing the editor is expensive for reasons no JS profile shows — which is why the sticky location bar carries no `backdrop-filter` any more.
 - **`analyzes`** — parses the gesture actually caused, counted by `Analysis.revision` moving, so a memo hit is not counted.
 - **the per-span totals** — exclusive milliseconds per span inside the gesture, biggest first: `analyze` (the engine parse, timed in `core/analyzer.ts`), the derivation spans `scan`, `index`, `decorate`, `paint`, and one `phase:<name>` per editing phase that cost anything. Buckets under 0.05 ms are dropped from the line.
 - **`other`** — gesture milliseconds no span accounted for.

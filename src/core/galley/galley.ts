@@ -368,7 +368,7 @@ export interface GalleyService {
    *
    * Throws `EngineInputError` when `text` contains `\r`.
    */
-  readonly analyze: (text: string) => Analysis;
+  readonly analyze: (text: string, why?: string) => Analysis;
 
   /**
    * A memo for one Book: the same text returns the same `Analysis` instance.
@@ -709,13 +709,18 @@ const makeService = (
     held?.free();
   };
 
-  const analyze = (text: string): Analysis => {
+  const analyze = (text: string, why = "unnamed"): Analysis => {
     if (text.includes("\r")) {
       throw new EngineInputError({
         reason: "canonical text is LF; the engine refuses a carriage return",
       });
     }
-    const done = observe?.span("analyze");
+    // `why` is the door: there are several into this parse and the timing of
+    // one says nothing without knowing which fired. See `memoize`.
+    const done = observe?.span("galley.analyze", undefined, {
+      "galley.why": why,
+      "galley.text_length": text.length,
+    });
     const started = performance.now();
     // `parseText`, not `parse`: since v0.1.0 the plain name takes a registered
     // book's ID and answers off its retained text, and the loose-text door is
@@ -727,7 +732,11 @@ const makeService = (
     const engineMs = Math.round((performance.now() - started) * 1000) / 1000;
     done?.();
     // Counts and codes only — a diagnostic's message quotes the document.
-    observe?.note("analyze", "ready", `diag=${dish.diagnostics.length}`);
+    observe?.note("galley.analyze", "ready", undefined, {
+      "galley.why": why,
+      "galley.diagnostics": dish.diagnostics.length,
+      "galley.engine_ms": engineMs,
+    });
     revision += 1;
     return {
       dish,
@@ -744,7 +753,7 @@ const makeService = (
     let last: Analysis | undefined;
     return (text: string): Analysis => {
       if (last !== undefined && last.text === text) return last;
-      last = analyze(text);
+      last = analyze(text, "editor");
       return last;
     };
   };

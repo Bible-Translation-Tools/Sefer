@@ -50,6 +50,7 @@ import { actionCommand, type EditorAction } from "./core/actions";
 import type { Analyze } from "./core/analyzer";
 import { historyLayer, usfmEditorHeadless } from "./core/compose";
 import { docText, structureAt, type DocStructure } from "./core/docStructure";
+import { traceOf } from "./core/instrument";
 import { clearRefusal, lastRefusal, localTracer, tracer } from "./core/instrument";
 import { trusted } from "./core/kernel";
 import { withoutScrolling } from "./core/scroll";
@@ -165,6 +166,8 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
 
   const stamp = (): SourceStamp => ({ revision, length: state().doc.length });
 
+  const round = (ms: number): number => Math.round(ms * 1000) / 1000;
+
   /**
    * One accepted edit: bump the revision, then publish — borrowing surfaces
    * first (they must map their caret through this exact `ChangeSet` before
@@ -173,15 +176,30 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
   const accept = (tr: Transaction, before: SourceStamp, origin: Origin): Receipt => {
     revision += 1;
     const receipt: Receipt = { before, after: stamp(), origin };
-    observability?.note(
-      "book.apply",
-      "rewrote",
-      `${id} r${before.revision} -> r${receipt.after.revision} (${origin})`,
-      id,
-    );
     const now = state();
+    // The satellites first — they must map their caret through this exact
+    // `ChangeSet` before anyone reads them — then the Book port's listeners.
+    // Both run INSIDE the gesture, so their cost is the gesture's cost.
+    const broadcast = performance.now();
     for (const receive of Array.from(receivers)) receive(tr.changes, now);
+    const satellites = performance.now();
     listeners.publish(receipt, changesOf(tr.changes));
+    const published = performance.now();
+    // On the gesture's own record when there is one. `book.apply` as a
+    // separate note was a root of its own: a fact about a keystroke, filed
+    // where nothing could see which keystroke.
+    const fields = {
+      "book.id": id,
+      "book.origin": origin,
+      "book.revision": receipt.after.revision,
+      "book.revision_before": before.revision,
+      "book.receivers": receivers.size,
+      "book.broadcast_ms": round(satellites - broadcast),
+      "book.publish_ms": round(published - satellites),
+    };
+    const trace = traceOf(tr.startState);
+    if (trace === null) observability?.note("book.apply", "rewrote", undefined, fields);
+    else trace.annotate(fields);
     return receipt;
   };
 
@@ -196,7 +214,15 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
   const refuse = (origin: Origin, count: number): Refusal => {
     const first = lastRefusal();
     const rule = first?.rule ?? "editor.phases";
-    observability?.note("book.apply", "refused", `${id} ${rule} (${origin})`, id);
+    const fields = {
+      "book.id": id,
+      "book.origin": origin,
+      "book.rule": rule,
+      "book.changes": count,
+    };
+    const trace = traceOf(state());
+    if (trace === null) observability?.note("book.apply", "refused", first?.detail, fields);
+    else trace.annotate(fields);
     return new Refusal({
       rule,
       reason: first?.detail ?? "Refused",
@@ -350,7 +376,7 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
       closed = true;
       view = null;
       receivers.clear();
-      observability?.note("editor.close", "consumed", id, id);
+      observability?.note("editor.close", "consumed", undefined, { "book.id": id });
     },
   };
 

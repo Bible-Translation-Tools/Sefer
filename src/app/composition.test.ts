@@ -26,7 +26,7 @@ describe("application composition", () => {
 
     const note = events.find((event) => event.kind === "note" && event.name === "boot");
     expect(note?.verdict).toBe("ready");
-    expect(note?.detail).toMatch(/^web /u);
+    expect(note?.attrs?.["app.host"]).toBe("web");
 
     expect(composition.boot._tag).toBe("Success");
   });

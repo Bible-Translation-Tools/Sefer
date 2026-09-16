@@ -45,7 +45,7 @@ export const analysisOf = (galley: GalleyService, text: string): Analysis | unde
   if (cache.has(text)) return cache.get(text);
   let held: Analysis | undefined;
   try {
-    held = galley.analyze(text);
+    held = galley.analyze(text, "review.reading");
   } catch {
     held = undefined;
   }

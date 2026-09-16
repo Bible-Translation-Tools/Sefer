@@ -159,7 +159,11 @@ export function install(
     const fn = r.rule(parser);
     const isChange = HOOK[r.phase] === "change";
     const entered = (tr: Transaction) => {
-      const trace = traceFor(tr.startState, tr.annotation(Transaction.userEvent) ?? "transaction");
+      const trace = traceFor(
+        tr.startState,
+        tr.annotation(Transaction.userEvent) ?? "transaction",
+        tr.docChanged,
+      );
       const close = trace === null ? null : trace.stage(r.phase, r.name);
       const done = span(`phase:${r.phase}`, r.name);
       try {

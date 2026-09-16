@@ -242,9 +242,17 @@ const make = (
       const baseline = baselines.get(book.id);
       if (baseline === undefined) return true;
       const source = book.source();
+      // The revision FIRST, because it is a number and the hash is a parse.
+      // Revision only moves when an edit was accepted, so an unmoved one means
+      // the text is the baseline's text and nothing needs hashing to say so.
+      // This is read reactively, once per badged book per keystroke: hashing
+      // first cost a full engine parse of every untouched book on screen.
+      if (source.stamp.revision === baseline.stamp.revision) return false;
+      // Moved, so the text MAY differ — or may have been edited and undone
+      // back to what was written, which only the hash can tell.
       if (baseline.hash !== undefined && hasher !== undefined)
         return hasher(source.text) !== baseline.hash;
-      return source.stamp.revision !== baseline.stamp.revision;
+      return true;
     };
 
     /**
@@ -258,12 +266,10 @@ const make = (
         if (baselines.has(book.id)) return;
         const source = book.source();
         if (source.stamp.revision !== 0) {
-          observability?.note(
-            "save.adopt",
-            "declined",
-            `${book.id} r${source.stamp.revision}`,
-            book.id,
-          );
+          observability?.note("save.adopt", "declined", "not a baseline revision", {
+            "book.id": book.id,
+            "book.revision": source.stamp.revision,
+          });
           return;
         }
         baselines.set(book.id, {
@@ -276,7 +282,10 @@ const make = (
           // the file's mtime and the port's stat is optional on some hosts.
           savedAt: Date.now(),
         });
-        observability?.note("save.adopt", "consumed", `${book.id} r0`, book.id);
+        observability?.note("save.adopt", "consumed", undefined, {
+          "book.id": book.id,
+          "book.revision": 0,
+        });
       });
 
     const save = (book: Book): Effect.Effect<SaveReceipt, SaveError> =>
@@ -302,14 +311,21 @@ const make = (
         const hash = hasher?.(text);
 
         // 3 one queue per path, atomic on every host.
-        const stop = observability?.span("save", book.id);
+        const stop = observability?.span("save.write", undefined, {
+          "book.id": book.id,
+          "fs.path": book.path,
+          "fs.bytes": bytes.length,
+        });
         const written = yield* Effect.result(
           serialize(book.path)(writeFileAtomic(fileSystem, book.path, bytes)),
         );
         stop?.();
         if (Result.isFailure(written)) {
           const reason = failureFor(written.failure);
-          observability?.note("save", "failed", `${book.id} ${reason}`, book.id);
+          observability?.note("save", "failed", reason, {
+            "book.id": book.id,
+            "fs.path": book.path,
+          });
           return yield* Effect.fail(refuse(book, reason, written.failure.message));
         }
 
@@ -333,23 +349,20 @@ const make = (
           savedAt: at,
         });
         // 6 counts and codes only
-        observability?.note(
-          "save",
-          "rewrote",
-          `${book.id} r${stamp.revision} ${bytes.length}B`,
-          book.id,
-        );
+        observability?.note("save", "rewrote", undefined, {
+          "book.id": book.id,
+          "book.revision": stamp.revision,
+          "fs.bytes": bytes.length,
+        });
         // 7 the journal up to this stamp is obsolete. A Recovery that cannot
         // compact is noted, never fatal: the bytes are already on disk.
         if (recovery !== undefined) {
           const compacted = yield* Effect.result(recovery.compact(book.id, stamp));
           if (Result.isFailure(compacted))
-            observability?.note(
-              "save",
-              "declined",
-              `${book.id} compact ${compacted.failure.reason}`,
-              book.id,
-            );
+            observability?.note("save", "declined", compacted.failure.reason, {
+              "book.id": book.id,
+              "save.stage": "compact",
+            });
         }
         // 8 what composition hangs off a completed write (see `onSaved`).
         if (options.onSaved !== undefined) yield* Effect.ignore(options.onSaved(receipt));
@@ -429,12 +442,10 @@ const make = (
           (change) =>
             Effect.sync(() => {
               conflicts.set(change.bookId, change);
-              observability?.note(
-                "save.external",
-                "declined",
-                `${change.bookId} ${change.kind}`,
-                change.bookId,
-              );
+              observability?.note("save.external", "declined", undefined, {
+                "book.id": change.bookId,
+                "save.change": change.kind,
+              });
             }),
         ),
 
@@ -443,12 +454,10 @@ const make = (
           if (choice === "compare") return Option.some(yield* readDisk(change));
           if (choice === "keepMine") {
             conflicts.delete(change.bookId);
-            observability?.note(
-              "save.resolve",
-              "consumed",
-              `${change.bookId} keepMine`,
-              change.bookId,
-            );
+            observability?.note("save.resolve", "consumed", undefined, {
+              "book.id": change.bookId,
+              "save.choice": "keepMine",
+            });
             return Option.none();
           }
           const book = seen.get(change.bookId);
@@ -478,7 +487,10 @@ const make = (
           // The disk text is now what both sides hold, so it is the baseline;
           // its stamp is the book's post-revert stamp, not the decoded 0.
           baselines.set(book.id, { ...disk, stamp: book.source().stamp, savedAt: Date.now() });
-          observability?.note("save.resolve", "rewrote", `${book.id} takeDisk`, book.id);
+          observability?.note("save.resolve", "rewrote", undefined, {
+            "book.id": book.id,
+            "save.choice": "takeDisk",
+          });
           return Option.none();
         }),
 

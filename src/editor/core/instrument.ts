@@ -82,6 +82,13 @@ export interface TraceSummary {
   readonly seq: number;
   /** CodeMirror's `userEvent`, or how the trace was opened. */
   readonly origin: string;
+  /**
+   * Whether this gesture changed the DOCUMENT, as opposed to only the
+   * selection. Set as soon as a transaction that changes text joins the trace,
+   * which may be after it opened: a command opens the trace on a keypress and
+   * dispatches its transaction into the same one.
+   */
+  readonly changed: boolean;
   readonly docLength: number;
   readonly head: number;
   readonly entries: readonly TraceEntry[];
@@ -103,6 +110,13 @@ export interface Trace {
   step(step: TraceStep): void;
   /** A closed local span from `core/timing.ts`: the derivation pipeline. */
   derived(name: string, detail: string, ms: number): void;
+  /** This gesture changed the document after all. Idempotent. */
+  mutated(): void;
+  /**
+   * Fields for the gesture's own record — what the transaction turned out to
+   * be, measured by code that runs after the phases have had their say.
+   */
+  annotate(fields: Readonly<Record<string, string | number | boolean>>): void;
   /**
    * Closes the trace. Called for you when the next transaction begins, so no
    * rule has to remember to. The outcome is not an argument because it is
@@ -116,7 +130,7 @@ export interface Tracer {
    * One trace per transaction. `state` is the transaction's START state (the
    * one a command read), which is also the trace's key.
    */
-  begin(state: EditorState, origin: string): Trace;
+  begin(state: EditorState, origin: string, changed?: boolean): Trace;
 }
 
 /**
@@ -134,6 +148,8 @@ export interface TraceEmit {
   readonly frame: (kind: FrameKind, phase: string, name: string) => (entry: TraceEntry) => void;
   /** An entry with no frame of its own: a bare `note`, or a derived span. */
   readonly step: (entry: TraceEntry) => void;
+  /** Fields for the gesture's own record. See `Trace.annotate`. */
+  readonly annotate: (fields: Readonly<Record<string, string | number | boolean>>) => void;
   readonly end: () => void;
 }
 
@@ -166,6 +182,7 @@ export const lastRefusal = (): { rule: string; detail?: string } | null => refus
 interface Live {
   seq: number;
   origin: string;
+  changed: boolean;
   docLength: number;
   head: number;
   entries: TraceEntry[];
@@ -187,6 +204,7 @@ interface Frame {
 const NO_EMIT: TraceEmit = {
   frame: () => () => {},
   step: () => {},
+  annotate: () => {},
   end: () => {},
 };
 
@@ -195,10 +213,11 @@ const NO_EMIT: TraceEmit = {
  * ring and the refusal slot is here exactly once; `emit` is the only variable.
  */
 export const makeTracer = (emit: Emitter | null): Tracer => ({
-  begin: (state, origin) => {
+  begin: (state, origin, changed = false) => {
     const live: Live = {
       seq: ++seq,
       origin,
+      changed,
       docLength: state.doc.length,
       head: state.selection.main.head,
       entries: [],
@@ -262,6 +281,12 @@ export const makeTracer = (emit: Emitter | null): Tracer => ({
       seq: live.seq,
       stage: (phase, name) => frame("stage", phase, name),
       command: (name) => frame("command", "", name),
+      mutated: () => {
+        live.changed = true;
+      },
+      annotate: (fields) => {
+        out.annotate(fields);
+      },
       step: (s) => {
         const held = open;
         if (held !== null) {
@@ -314,18 +339,31 @@ export const flushTrace = (): void => {
  *
  * Returns null when the facet is null, and allocates nothing in that case.
  */
-export const traceFor = (state: EditorState, origin: string): Trace | null => {
+export const traceFor = (state: EditorState, origin: string, changed = false): Trace | null => {
   const held = state.facet(tracer);
   if (held === null) {
     if (current !== null) flushTrace();
     return null;
   }
-  if (key === state && current !== null) return current;
+  if (key === state && current !== null) {
+    if (changed) current.mutated();
+    return current;
+  }
   flushTrace();
   key = state;
-  current = held.begin(state, origin);
+  current = held.begin(state, origin, changed);
   return current;
 };
+
+/**
+ * The trace this state's gesture is already inside, or null.
+ *
+ * Unlike `traceFor` this NEVER opens or flushes one: it is for code that runs
+ * after the phases — `book.apply` and the satellite broadcast — and wants to
+ * put its fields on the gesture's record without becoming a gesture itself.
+ */
+export const traceOf = (state: EditorState): Trace | null =>
+  key === state && current !== null ? current : null;
 
 /** The last traces, newest last. Flushes the open one so the view is current. */
 export const traces = (limit = RING): readonly TraceSummary[] => {
@@ -372,7 +410,31 @@ export function noteTr(tr: Transaction, s: TraceStep): void {
  * belongs to the meter that owns the gesture, and `phase:<phase>` measures
  * exactly what the stage frame around that rule already measured.
  */
+let orphan: ((name: string, detail: string, ms: number) => void) | null = null;
+
+/**
+ * Where a derivation goes when NO gesture is open: a repaint from a scroll, a
+ * resize, a viewport change. It is still work and still worth seeing, but it
+ * belongs to nobody's keystroke — attaching it to whichever trace was left
+ * open would date it to a gesture from a minute ago.
+ */
+export const onOrphanDerived = (
+  handle: (name: string, detail: string, ms: number) => void,
+): void => {
+  orphan = handle;
+};
+
+/** Fields onto the gesture that is open right now, if one is. */
+export const annotateOpen = (
+  fields: Readonly<Record<string, string | number | boolean>>,
+): boolean => {
+  if (current === null) return false;
+  current.annotate(fields);
+  return true;
+};
+
 onDerived((name, detail, ms) => {
   if (name === "keystroke" || name.startsWith("phase:")) return;
-  current?.derived(name, detail, ms);
+  if (current === null) orphan?.(name, detail, ms);
+  else current.derived(name, detail, ms);
 });

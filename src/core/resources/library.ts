@@ -376,7 +376,10 @@ const makeLibrary = (
             ...held,
             resources: [...held.resources.filter((held) => held.id !== resource.id), resource],
           });
-          observability?.note("library.add", "ready", `${classification} (1)`, resource.id);
+          observability?.note("library.add", "ready", undefined, {
+            "resource.id": resource.id,
+            "resource.classification": classification,
+          });
           return resource;
         }),
 

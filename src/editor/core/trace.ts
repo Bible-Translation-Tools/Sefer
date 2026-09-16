@@ -56,7 +56,8 @@ export const sinkTracer = (sink: TraceSink): Tracer => {
         head: trace.head,
       });
     };
-    return { frame: () => one, step: one, end: () => {} };
+    // A flat sink has no gesture record to put fields on.
+    return { frame: () => one, step: one, annotate: () => {}, end: () => {} };
   };
   return makeTracer(emit);
 };

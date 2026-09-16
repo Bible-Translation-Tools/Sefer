@@ -325,11 +325,11 @@ const make = (
         if (handed !== undefined && describesExactly(handed, source.text)) analysis = handed;
         else {
           try {
-            analysis = galley.analyze(source.text);
+            analysis = galley.analyze(source.text, "scheduler");
           } catch {
             // Retain, do not clear: an engine refusal is an integration
             // problem, not evidence that the book became clean.
-            observability?.note("analyze", "failed", bookId, bookId);
+            observability?.note("analyze", "failed", "engine refused", { "book.id": bookId });
             return undefined;
           }
         }
@@ -341,16 +341,15 @@ const make = (
         // registers it again. Reported, never swallowed.
         yield* Effect.catch(corpus.update(bookId, source.text), (error) =>
           Effect.sync(() =>
-            observability?.note("analyze.corpus", "failed", `${bookId} ${error.reason}`, bookId),
+            observability?.note("analyze.corpus", "failed", error.reason, { "book.id": bookId }),
           ),
         );
         const { errors } = countsOf(bookId, analysis, source.stamp);
-        observability?.note(
-          "analyze",
-          "ready",
-          `${bookId} diag=${analysis.dish.diagnostics.length} err=${errors}`,
-          bookId,
-        );
+        observability?.note("analyze", "ready", undefined, {
+          "book.id": bookId,
+          "analyze.diagnostics": analysis.dish.diagnostics.length,
+          "analyze.errors": errors,
+        });
         return source.stamp;
       });
 

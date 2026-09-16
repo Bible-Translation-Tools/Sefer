@@ -204,22 +204,22 @@ export const makeBook = (
       const before = current.stamp;
       const next = applyAll(current, list);
       if (Result.isFailure(next)) {
-        observability?.note(
-          "book.apply",
-          "refused",
-          `${id} ${next.failure.reason} (${origin})`,
-          id,
-        );
+        observability?.note("book.apply", "refused", next.failure.reason, {
+          "book.id": id,
+          "book.origin": origin,
+          "book.revision": before.revision,
+        });
         return Result.fail(next.failure);
       }
       current = next.success;
       const receipt: Receipt = { before, after: current.stamp, origin };
-      observability?.note(
-        "book.apply",
-        "rewrote",
-        `${id} r${before.revision} -> r${receipt.after.revision} (${origin})`,
-        id,
-      );
+      observability?.note("book.apply", "rewrote", undefined, {
+        "book.id": id,
+        "book.origin": origin,
+        "book.revision": receipt.after.revision,
+        "book.revision_before": before.revision,
+        "book.changes": list.length,
+      });
       listeners.publish(receipt, list);
       return Result.succeed(receipt);
     },

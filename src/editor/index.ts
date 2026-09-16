@@ -219,4 +219,5 @@ export {
   type Verdict,
 } from "./core/trace";
 export { observabilityTracer } from "./observability";
+export { annotateOpen } from "./core/instrument";
 export { inspect } from "./core/inspect";

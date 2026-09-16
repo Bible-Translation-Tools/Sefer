@@ -19,9 +19,41 @@ This is the shared vocabulary for planning and implementation. Terms marked **ag
 | Host | agreed | The environment providing platform capabilities: Web or Tauri desktop. Host composition supplies capabilities; core policy does not import either host. |
 | Composition root | agreed | The small host/application boundary where concrete capabilities are assembled. The router chooses screens; it is not automatically the service container. |
 | Effect program | provisional | A typed, scoped description of asynchronous or resource-owning work. Effect is a runtime tool, not a reason to create a service for every noun. |
+| Galley | agreed | The engine that reads Source. ONE call returns both the structure and every problem it can see; parsing and proofreading are one pass, not two steps. |
+| Analysis | agreed | What Galley returns for one Book, from that Book's Source alone: the reading AND its diagnostics. Not a list of errors, and not cross-book. |
+| Corpus | agreed | Galley's registry of many Books' Source at once, so it can answer questions only true across Books. Reached through a port (`CorpusEngineService`) whose kind is `wasm` or `native` — both are Galley: `native` is the same engine over IPC, taken for whole-project work that parallelises, while the hot path stays on wasm in-process. Not the Project, which is files on disk. |
+| Publication | agreed | The Corpus packed into a buffer JS can decode — the engine's internal cross-book state, made readable, whole. Cross-book truth only holds all at once, so a Publication replaces the previous one entirely rather than updating it. |
+| Finding | agreed | One thing worth telling the reader about one place in the Source. It comes from an Analysis or from a Publication. It is not necessarily an error, and it may be wrong. |
+| Seat | agreed | A Book with an editor attached, so it can be typed in. Not a window: two windows over one Book share one Seat. |
+| Satellite | agreed | A second view onto the same Seat, such as a note editor. Not a copy; it maps its own caret through the same edits. |
+| Baseline | agreed | The Source as last written to disk, which is what "unsaved" is measured against. Not a Checkpoint: bytes can be on disk with no Checkpoint behind them. |
+| Journal | agreed | The Recovery log of accepted edits not yet written to the file. Not a Save. |
+| Gesture | agreed | One thing the person did: a keystroke, a click, a command. Not a transaction — one Gesture can produce several — and it is the unit an Operation covers. |
+| Source stamp | agreed | A Source's freshness pair: its Revision and its length. Equal stamps mean equal text. Not a content hash and not a Checkpoint. |
 
 ## Naming rules
 
-Use `Source` for canonical editable text, `Disk bytes` for persisted representation, `Revision` for a session identity, and `Snapshot` for a captured input. Say `Save`, `Recovery`, or `Checkpoint` explicitly when describing persistence. Avoid calling all three a “version.”
+Use `Source` for canonical editable text, `Disk bytes` for persisted representation, `Revision` for a session identity, and `Snapshot` for a captured input. Say `Save`, `Recovery`, or `Checkpoint` explicitly when describing persistence. Avoid calling all three a “version.” The Record a version… command is product copy for one Save; it does not make “version” a term.
+
+## Observability names
+
+Every event the application records is named **`<thing>.<what happened to it>`**, where the thing is a term from the table above.
+
+Not `<subsystem>.<function>`: `analyze.publish` named the module that happened to hold the code, where `corpus.publish` names what exists afterwards. When the code moves, the second name is still true. This matters most where the implementation can change underneath — the Corpus is reached over wasm in-process or over IPC depending on the host and the work, and `corpus.publish` is true of both where a name for either door would not be.
+
+| Verb | Means |
+| --- | --- |
+| `open` / `close` | a lifetime began or ended |
+| `read` / `write` | Disk bytes moved |
+| `parse` | Source went into Galley, an Analysis came out |
+| `analyze` | a Book's Analysis was replaced — whether Galley ran or the editor supplied one |
+| `update` | a registry now holds this |
+| `publish` | a whole snapshot was produced |
+| `apply` | an edit was accepted into a Book |
+| `restore` / `discard` | Recovery state was used or dropped |
+
+A refusal is a **verdict** on an event, never a name: one thing happened and a rule said no to it.
+
+One word, one meaning, in events and in conversation. `analyze` previously meant four different things — a Book finished, a Publication produced, one Book registered, and Galley reading text — which is the confusion these rules exist to prevent.
 
 When a boundary is still under review, keep the word provisional in the document rather than encoding it as a public class hierarchy. The parser, proofreader, and Git lifecycles may refine these terms without changing the core source authority.

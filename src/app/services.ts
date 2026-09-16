@@ -195,12 +195,32 @@ export const fixtureRequested = (): boolean => {
 };
 
 /**
+ * The engine hash of a text, parsed at most once per distinct text.
+ *
+ * `sourceHash` is a byproduct of `parse` — the engine exposes no hash door —
+ * so asking for it costs a whole analysis. This was documented as "a per-save
+ * parse, never a per-keystroke one" and the trace said otherwise: `dirty` is
+ * read reactively through `tick`, so it ran per badged book per keystroke,
+ * around four full parses for every key pressed. One entry is enough here:
+ * the dirty book is the book being typed in, and `dirty` now settles the
+ * clean ones on the revision alone without asking.
+ */
+const hashOf = (galley: GalleyService): ((text: string) => bigint) => {
+  let last: { text: string; hash: bigint } | undefined;
+  return (text) => {
+    if (last !== undefined && last.text === text) return last.hash;
+    const hash = galley.analyze(text, "save.hash").sourceHash;
+    last = { text, hash };
+    return hash;
+  };
+};
+
+/**
  * The Save coordinator, holding the engine's content hash.
  *
  * `Layer.unwrap` rather than a plain merge because `SaveCoordinatorOptions`
  * takes the hasher as a FUNCTION, and the function needs the built Galley —
  * core computes no hash of its own (see documentation/architecture/review.md).
- * The parse this costs is a per-save parse, never a per-keystroke one.
  */
 const saveLayer: Layer.Layer<
   SaveCoordinator,
@@ -212,7 +232,7 @@ const saveLayer: Layer.Layer<
     const admin = yield* ProjectAdmin;
     const fileSystem = yield* FileSystem.FileSystem;
     return SaveCoordinatorLive({
-      hasher: (text) => galley.analyze(text).sourceHash,
+      hasher: hashOf(galley),
       // The one thing that is wrong the moment a book is written: a Scripture
       // Burrito's ingredient carries the md5 and the size of the file it
       // names. Save must not know what a burrito is, and ProjectAdmin must not

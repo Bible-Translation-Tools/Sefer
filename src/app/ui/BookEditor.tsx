@@ -39,6 +39,7 @@ import { createEffect, createRenderEffect, createSignal, untrack } from "solid-j
 import { stale } from "../../core/findings/finding";
 import type { SourceStamp } from "../../core/source/source";
 import {
+  annotateOpen,
   assignment,
   flash,
   flashing,
@@ -52,21 +53,15 @@ import {
   type EditorBook,
   type ProjectionName,
   keystrokeMeter,
-  recent as editorSpans,
-  summary as editorSummary,
-  dumpTrace,
-  traces as editorTraces,
   type Measured,
   noteBookIs,
   watchLocation,
 } from "../../editor";
-import { installEditorDevSurface } from "../../platform/observability";
 import { useComposition } from "../CompositionContext";
 import { useShell } from "../ProjectContext";
 import { LocationBar } from "./workspace/LocationBar";
 
 // Last measurements for the dev surface; one module-level ring is enough.
-const keystrokes: Measured[] = [];
 
 /**
  * Which books have already had the mountable half of the editor appended to
@@ -143,19 +138,6 @@ export function BookEditor(props: BookEditorProps) {
       // built from a `Funnel` — which comes from the Book, not from the view.
       // This is the one place that knows both.
       const unname = noteBookIs(created, book);
-      installEditorDevSurface({
-        keystrokes: () => keystrokes,
-        spans: editorSpans,
-        summary: editorSummary,
-        // The pipeline instrument: which stages each recent transaction flowed
-        // through and what each decided. `trace()` prints one of them.
-        traces: editorTraces,
-        trace: (at) => {
-          const held = editorTraces();
-          const one = held[at === undefined ? held.length - 1 : at];
-          return one === undefined ? "no trace recorded" : dumpTrace(one);
-        },
-      });
       // The mountable half of the editor, appended ONCE PER BOOK.
       //
       // Once, because `appendConfig` goes through the view and the view is
@@ -181,9 +163,30 @@ export function BookEditor(props: BookEditorProps) {
         // makes it add up. The ring gets one bounded note per gesture; the dev
         // surface keeps the last fifty measurements whole.
         const meter = keystrokeMeter((measured) => {
-          observability.note("keystroke", "ready", measured.note, book.id);
-          keystrokes.push(measured);
-          if (keystrokes.length > 50) keystrokes.shift();
+          // Onto the gesture's own record. The meter measures THROUGH the
+          // paint, which lands after the transaction's rules are done but
+          // before the next transaction opens, so the gesture is still the one
+          // that is open — and `annotateOpen` says so rather than assuming it.
+          // A `keystroke` note of its own was a root beside the mutation it
+          // described, which is the shape this whole pass is removing.
+          //
+          // Both are measured from the DOM EVENT, where the gesture's own span
+          // starts at the first phase rule a fraction of a millisecond later —
+          // so `to_paint_ms` can read slightly longer than the span that
+          // carries it. Named for their windows rather than left to look like
+          // a contradiction.
+          //
+          // `to_paint_ms` is also mostly not work: a keystroke that lands
+          // mid-frame waits for the next vsync, so ~16ms at 60Hz is the floor,
+          // not a cost. `js_ms` is the half we can do anything about.
+          const onGesture = annotateOpen({
+            "editor.js_ms": measured.gesture,
+            "editor.analyzes": measured.analyzes,
+            "editor.unaccounted_ms": measured.other,
+            ...(measured.render === null ? {} : { "editor.to_paint_ms": measured.render }),
+          });
+          if (!onGesture)
+            observability.note("keystroke", "ready", measured.note, { "book.id": book.id });
         });
         created.dispatch({
           effects: StateEffect.appendConfig.of([
@@ -219,12 +222,11 @@ export function BookEditor(props: BookEditorProps) {
         showCorpusFindings(created, list);
         // Counts and ids only — a finding's message quotes the document and
         // never reaches the ring (editor-and-save §2, sink 4).
-        observability.note(
-          "editor.sous",
-          "ready",
-          `${book.id} n=${list.length} r${book.source().stamp.revision}`,
-          book.id,
-        );
+        observability.note("editor.sous", "ready", undefined, {
+          "book.id": book.id,
+          "sous.findings": list.length,
+          "book.revision": book.source().stamp.revision,
+        });
       };
       corpus();
       // One pass of the analysis scheduler publishes the corpus once and then

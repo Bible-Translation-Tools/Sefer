@@ -1,15 +1,23 @@
-import { Effect, Exit, FileSystem, Layer, ManagedRuntime, Option, Result } from "effect";
+import { Effect, Exit, FileSystem, Layer, ManagedRuntime, Option, Result, Tracer } from "effect";
 
 import { boot, type BootError, type BootInfo } from "../core/boot";
 import {
+  makeAssembler,
   Observability,
   ObservabilityLive,
+  type AssembledSpan,
+  type AssemblerSinks,
   type ObservabilityEvent,
   type ObservabilityService,
   type ObservabilitySink,
 } from "../core/observability";
 import { detectHost } from "../platform/host";
-import { hostSink, installObservabilityDevSurface } from "../platform/observability";
+import {
+  consoleStream,
+  devRings,
+  hostSink,
+  installObservabilityDevSurface,
+} from "../platform/observability";
 
 const buildIdentity = (): string | undefined =>
   typeof __SEFER_BUILD__ === "string" ? __SEFER_BUILD__ : undefined;
@@ -92,8 +100,7 @@ const guardedFetch = (): typeof globalThis.fetch => {
  * signal also gets its OWN `guardedFetch`, so one endpoint the collector does
  * not serve can no longer stop the two it does.
  */
-interface Telemetry {
-  readonly sink: ObservabilitySink;
+interface Telemetry extends AssemblerSinks {
   readonly dispose: () => Promise<void>;
 }
 
@@ -154,36 +161,81 @@ const telemetryBridge = async (): Promise<Telemetry | undefined> => {
 
   const runtime = ManagedRuntime.make(exporters);
 
-  const record = (event: ObservabilityEvent): Effect.Effect<void> => {
-    if (event.kind === "span") {
-      return Effect.gen(function* () {
-        const span = yield* Effect.makeSpan(event.name, {
-          root: true,
-          attributes: {
-            ...(event.detail === undefined ? {} : { detail: event.detail }),
-            ...(event.self === undefined ? {} : { "sefer.self_ms": event.self }),
-            ...(event.correlation === undefined ? {} : { "sefer.correlation": event.correlation }),
-          },
-        });
-        // The ring measured the duration; the span is ended that far after it
-        // began, so the trace shows the number the note shows.
-        const started = span.status.startTime;
-        span.end(started + nanos(event.ms ?? 0), Exit.succeed(undefined));
+  const attributesOf = (
+    of: {
+      readonly attrs?: Record<string, unknown>;
+      readonly verdict?: string;
+      readonly detail?: string;
+    },
+    kind: string,
+  ): Record<string, unknown> => ({
+    "sefer.kind": kind,
+    ...(of.attrs ?? {}),
+    ...(of.detail === undefined ? {} : { "sefer.detail": of.detail }),
+    ...(of.verdict === undefined ? {} : { "sefer.verdict": of.verdict }),
+  });
+
+  /**
+   * One assembled operation as one OTLP span.
+   *
+   * Its notes go on as span EVENTS rather than as separate log records: they
+   * are points inside the work, they carry its trace and span by construction,
+   * and a collector renders them in the span rather than beside it.
+   */
+  const exportSpan = (assembled: AssembledSpan, root: boolean): Effect.Effect<Tracer.Span> =>
+    Effect.gen(function* () {
+      const span = yield* Effect.makeSpan(assembled.name, {
+        ...(root ? { root: true } : {}),
+        attributes: {
+          ...attributesOf(assembled, root ? "operation" : "span"),
+          ...(assembled.self === undefined ? {} : { "sefer.self_ms": assembled.self }),
+        },
       });
-    }
+      for (const one of assembled.events)
+        span.event(one.name, nanos(one.t), attributesOf(one, "note"));
+      span.end(span.status.startTime + nanos(assembled.ms ?? 0), Exit.succeed(undefined));
+      return span;
+    });
+
+  const exportOperation = (assembled: AssembledSpan): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      const parent = yield* exportSpan(assembled, true);
+      yield* Effect.withParentSpan(
+        Effect.forEach(assembled.children, (child) => exportSpan(child, false), { discard: true }),
+        parent,
+      );
+    });
+
+  /** Work no gesture caused: its own root, or a log with nothing to nest in. */
+  const exportLoose = (event: ObservabilityEvent): Effect.Effect<void> => {
+    if (event.kind === "span" || event.kind === "operation")
+      return Effect.asVoid(
+        exportSpan(
+          {
+            name: event.name,
+            trace: "",
+            id: "",
+            t: event.t,
+            ...(event.ms === undefined ? {} : { ms: event.ms }),
+            ...(event.verdict === undefined ? {} : { verdict: event.verdict }),
+            ...(event.attrs === undefined ? {} : { attrs: event.attrs }),
+            events: [],
+            children: [],
+          },
+          true,
+        ),
+      );
     const line = `${event.name}${event.verdict === undefined ? "" : ` ${event.verdict}`}`;
     const said = event.verdict === "failed" ? Effect.logError(line) : Effect.log(line);
-    return Effect.annotateLogs(said, {
-      "sefer.kind": event.kind,
-      ...(event.verdict === undefined ? {} : { "sefer.verdict": event.verdict }),
-      ...(event.detail === undefined ? {} : { "sefer.detail": event.detail }),
-      ...(event.correlation === undefined ? {} : { "sefer.correlation": event.correlation }),
-    });
+    return Effect.annotateLogs(said, attributesOf(event, event.kind));
   };
 
   return {
-    sink: (event) => {
-      runtime.runFork(record(event));
+    operation: (assembled) => {
+      runtime.runFork(exportOperation(assembled));
+    },
+    loose: (event) => {
+      runtime.runFork(exportLoose(event));
     },
     dispose: () => runtime.dispose(),
   };
@@ -218,19 +270,16 @@ interface Composed {
 
 const program: Effect.Effect<Composed, never, Observability> = Effect.gen(function* () {
   const observability = yield* Observability;
-  installObservabilityDevSurface(observability);
 
   const end = observability.span("boot");
   const result = yield* Effect.result(boot(detectHost(), buildIdentity()));
   end();
 
   if (Result.isSuccess(result))
-    observability.note(
-      "boot",
-      "ready",
-      `${result.success.host} ${result.success.build}`,
-      result.success.build,
-    );
+    observability.note("boot", "ready", undefined, {
+      "app.host": result.success.host,
+      "build.id": result.success.build,
+    });
   else observability.note("boot", "failed", result.failure._tag);
 
   const fileSystem = yield* Effect.serviceOption(FileSystem.FileSystem);
@@ -242,7 +291,28 @@ export const composeApplication = async (
   options: CompositionOptions = {},
 ): Promise<Composition> => {
   const telemetry = await telemetryBridge();
-  const sinks = [hostSink(), telemetry?.sink].filter(
+  // ONE assembly of the ring's flat stream into operations, fanned out to
+  // everything that renders them: the collector, the console, and the dev
+  // surface `traces.recent()` reads. They cannot drift, because there is one
+  // tree and three renderers rather than three reconstructions.
+  const rings = devRings();
+  const stream = consoleStream();
+  const assembled = [rings.sinks, stream, telemetry].filter(
+    (one): one is AssemblerSinks => one !== undefined,
+  );
+  const assemble = makeAssembler({
+    operation: (span) => {
+      for (const one of assembled) one.operation(span);
+    },
+    loose: (event) => {
+      for (const one of assembled) one.loose(event);
+    },
+  });
+  // The raw JSONL sink stays on the events themselves: a line per event is the
+  // evidence format, and it must not wait for an operation to finish.
+  // SAFETY: an assembler takes one `ObservabilityEvent` and returns nothing,
+  // which is a sink's shape minus the JSONL line it does not read.
+  const sinks = [hostSink(), assemble as ObservabilitySink].filter(
     (sink): sink is ObservabilitySink => sink !== undefined,
   );
   const recorded = ObservabilityLive({ sink: fanOut(sinks) });
@@ -251,7 +321,16 @@ export const composeApplication = async (
     options.fileSystem === undefined ? withExtra : Layer.merge(withExtra, options.fileSystem);
 
   const runtime: ManagedRuntime.ManagedRuntime<Observability, never> = ManagedRuntime.make(layer);
-  const composed = await runtime.runPromise(program);
+  // Installed HERE rather than inside the program, because the dev surface
+  // publishes the assembled trees as well as the ring, and the assembly is
+  // composition's, not the boot program's.
+  const composed = await runtime.runPromise(
+    Effect.tap(program, (made) =>
+      Effect.sync(() => {
+        installObservabilityDevSurface(made.observability, rings, stream.set);
+      }),
+    ),
+  );
   const context = await runtime.context();
 
   return {
