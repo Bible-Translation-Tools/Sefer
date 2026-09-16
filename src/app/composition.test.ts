@@ -21,12 +21,14 @@ describe("application composition", () => {
     const composition = await compose();
     const events = composition.observability.recent();
 
-    const span = events.find((event) => event.kind === "span" && event.name === "boot");
-    expect(span?.ms).toBeGreaterThanOrEqual(0);
-
-    const note = events.find((event) => event.kind === "note" && event.name === "boot");
-    expect(note?.verdict).toBe("ready");
-    expect(note?.attrs?.["app.host"]).toBe("web");
+    // Booting is one end-to-end piece of work, so it is ONE wide record and
+    // not a span beside a note.
+    const booted = events.find((event) => event.kind === "operation" && event.name === "boot");
+    expect(booted?.ms).toBeGreaterThanOrEqual(0);
+    expect(booted?.verdict).toBe("ready");
+    expect(booted?.attrs?.["app.host"]).toBe("web");
+    expect(booted?.trace).toBeDefined();
+    expect(booted?.attrs?.["session.id"]).toBeDefined();
 
     expect(composition.boot._tag).toBe("Success");
   });
@@ -38,7 +40,7 @@ describe("application composition", () => {
       .split("\n")
       .filter((line) => line !== "");
 
-    expect(lines.length).toBeGreaterThanOrEqual(2);
+    expect(lines.length).toBeGreaterThanOrEqual(1);
     for (const line of lines) expect(() => JSON.parse(line)).not.toThrow();
   });
 

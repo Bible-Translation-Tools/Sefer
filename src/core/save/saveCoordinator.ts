@@ -266,7 +266,7 @@ const make = (
         if (baselines.has(book.id)) return;
         const source = book.source();
         if (source.stamp.revision !== 0) {
-          observability?.note("save.adopt", "declined", "not a baseline revision", {
+          observability?.note("baseline.adopt", "declined", "not a baseline revision", {
             "book.id": book.id,
             "book.revision": source.stamp.revision,
           });
@@ -282,7 +282,7 @@ const make = (
           // the file's mtime and the port's stat is optional on some hosts.
           savedAt: Date.now(),
         });
-        observability?.note("save.adopt", "consumed", undefined, {
+        observability?.note("baseline.adopt", "consumed", undefined, {
           "book.id": book.id,
           "book.revision": 0,
         });
@@ -311,7 +311,7 @@ const make = (
         const hash = hasher?.(text);
 
         // 3 one queue per path, atomic on every host.
-        const stop = observability?.span("save.write", undefined, {
+        const stop = observability?.span("file.write", undefined, {
           "book.id": book.id,
           "fs.path": book.path,
           "fs.bytes": bytes.length,
@@ -442,7 +442,7 @@ const make = (
           (change) =>
             Effect.sync(() => {
               conflicts.set(change.bookId, change);
-              observability?.note("save.external", "declined", undefined, {
+              observability?.note("file.changed", "declined", undefined, {
                 "book.id": change.bookId,
                 "save.change": change.kind,
               });
@@ -454,7 +454,7 @@ const make = (
           if (choice === "compare") return Option.some(yield* readDisk(change));
           if (choice === "keepMine") {
             conflicts.delete(change.bookId);
-            observability?.note("save.resolve", "consumed", undefined, {
+            observability?.note("conflict.resolve", "consumed", undefined, {
               "book.id": change.bookId,
               "save.choice": "keepMine",
             });
@@ -487,7 +487,7 @@ const make = (
           // The disk text is now what both sides hold, so it is the baseline;
           // its stamp is the book's post-revert stamp, not the decoded 0.
           baselines.set(book.id, { ...disk, stamp: book.source().stamp, savedAt: Date.now() });
-          observability?.note("save.resolve", "rewrote", undefined, {
+          observability?.note("conflict.resolve", "rewrote", undefined, {
             "book.id": book.id,
             "save.choice": "takeDisk",
           });

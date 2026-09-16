@@ -170,7 +170,7 @@ const telemetryBridge = async (): Promise<Telemetry | undefined> => {
     kind: string,
   ): Record<string, unknown> => ({
     "sefer.kind": kind,
-    ...(of.attrs ?? {}),
+    ...of.attrs,
     ...(of.detail === undefined ? {} : { "sefer.detail": of.detail }),
     ...(of.verdict === undefined ? {} : { "sefer.verdict": of.verdict }),
   });
@@ -269,22 +269,36 @@ interface Composed {
 }
 
 const program: Effect.Effect<Composed, never, Observability> = Effect.gen(function* () {
-  const observability = yield* Observability;
+  const root = yield* Observability;
+  // The first end-to-end piece of work there is, and the one that makes
+  // `traces.recent()` answer on a page that has done nothing else yet.
+  const session = root.session();
+  const boots = root.operation("boot", {
+    "session.id": session.id,
+    ...(session.build === undefined ? {} : { "build.id": session.build }),
+    ...(session.host === undefined ? {} : { "app.host": session.host }),
+  });
 
-  const end = observability.span("boot");
-  const result = yield* Effect.result(boot(detectHost(), buildIdentity()));
-  end();
+  // Provided to `boot` itself, so anything it narrates lands inside this
+  // operation rather than beside it — core asks the context for Observability
+  // and cannot tell which one it received.
+  const result = yield* Effect.provideService(
+    Effect.result(boot(detectHost(), buildIdentity())),
+    Observability,
+    boots,
+  );
 
   if (Result.isSuccess(result))
-    observability.note("boot", "ready", undefined, {
+    boots.end("ready", {
       "app.host": result.success.host,
       "build.id": result.success.build,
+      "boot.phase": result.success.phase,
     });
-  else observability.note("boot", "failed", result.failure._tag);
+  else boots.end("failed", { "boot.error": result.failure._tag });
 
   const fileSystem = yield* Effect.serviceOption(FileSystem.FileSystem);
 
-  return { boot: result, observability, fileSystem: Option.getOrUndefined(fileSystem) };
+  return { boot: result, observability: root, fileSystem: Option.getOrUndefined(fileSystem) };
 });
 
 export const composeApplication = async (
@@ -315,7 +329,14 @@ export const composeApplication = async (
   const sinks = [hostSink(), assemble as ObservabilitySink].filter(
     (sink): sink is ObservabilitySink => sink !== undefined,
   );
-  const recorded = ObservabilityLive({ sink: fanOut(sinks) });
+  // The session stamp: what every event of this run has in common, which
+  // belongs once on the OTLP Resource and once on a JSONL header rather than
+  // repeated on every line.
+  const recorded = ObservabilityLive({
+    sink: fanOut(sinks),
+    host: detectHost(),
+    ...(buildIdentity() === undefined ? {} : { build: buildIdentity() }),
+  });
   const withExtra = options.layers === undefined ? recorded : Layer.merge(recorded, options.layers);
   const layer =
     options.fileSystem === undefined ? withExtra : Layer.merge(withExtra, options.fileSystem);

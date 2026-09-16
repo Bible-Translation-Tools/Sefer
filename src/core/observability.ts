@@ -59,12 +59,12 @@ export type OperationName =
   | "editor.selection"
   | "editor.render"
   | "save"
-  | "save.external"
-  | "analyze.project"
-  | "recovery.journal"
-  | "recovery.pending"
-  | "recovery.restore"
-  | "recovery.reopen"
+  | "file.changed"
+  | "analysis.pass"
+  | "journal.write"
+  | "journal.pending"
+  | "journal.restore"
+  | "journal.offer"
   | "import.resource";
 
 /**
@@ -144,14 +144,19 @@ export interface Operation extends ObservabilityService {
 export interface ObservabilityService {
   /**
    * Open an operation: one user-initiated piece of work, or one piece of
-   * background work that no gesture caused. `link` is the operation this one
-   * continues — a debounced autosave is caused by a keystroke whose span has
-   * already ended, which is a link, not a parent.
+   * background work that no gesture caused.
+   *
+   * `cause` is the trace of the work this one FOLLOWED FROM, when that work has
+   * already finished — a debounced journal write, an analysis pass serving
+   * several keystrokes. It is not a parent: a parent would have to pick one of
+   * those keystrokes and be wrong about the rest, and the gesture's own record
+   * could never be written while it waited. `op.cause` carries it as a field,
+   * so one query returns the whole cascade.
    */
   readonly operation: (
     name: OperationName,
     attrs?: Attrs,
-    options?: { readonly link?: string | undefined },
+    options?: { readonly cause?: string | undefined },
   ) => Operation;
   readonly span: (name: string, note?: string, attrs?: Attrs) => (attrs?: Attrs) => number;
   readonly note: (rule: string, verdict: Verdict, detail?: string, attrs?: Attrs) => void;
@@ -389,16 +394,16 @@ const makeRing = (options: ObservabilityOptions): Ring => {
     (
       name: OperationName,
       attrs?: Attrs,
-      options?: { readonly link?: string | undefined },
+      options?: { readonly cause?: string | undefined },
     ): Operation => {
       const trace = frame?.trace ?? traceId();
       const own = spanId();
       const started = performance.now();
-      // A link is a field like any other: the operation this one continues,
-      // rather than the one it runs inside.
+      // The cause is a field like any other: the work this one followed from,
+      // rather than the work it runs inside.
       let fields = merge(
         narrow(attrs),
-        options?.link === undefined ? undefined : { "op.link": options.link },
+        options?.cause === undefined ? undefined : { "op.cause": options.cause },
       );
       let ended = false;
       let title = name;

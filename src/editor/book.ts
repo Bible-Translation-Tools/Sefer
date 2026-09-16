@@ -376,7 +376,7 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
       closed = true;
       view = null;
       receivers.clear();
-      observability?.note("editor.close", "consumed", undefined, { "book.id": id });
+      observability?.note("seat.close", "consumed", undefined, { "book.id": id });
     },
   };
 

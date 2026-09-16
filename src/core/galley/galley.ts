@@ -717,7 +717,7 @@ const makeService = (
     }
     // `why` is the door: there are several into this parse and the timing of
     // one says nothing without knowing which fired. See `memoize`.
-    const done = observe?.span("galley.analyze", undefined, {
+    const done = observe?.span("galley.parse", undefined, {
       "galley.why": why,
       "galley.text_length": text.length,
     });
@@ -732,7 +732,7 @@ const makeService = (
     const engineMs = Math.round((performance.now() - started) * 1000) / 1000;
     done?.();
     // Counts and codes only — a diagnostic's message quotes the document.
-    observe?.note("galley.analyze", "ready", undefined, {
+    observe?.note("galley.parse", "ready", undefined, {
       "galley.why": why,
       "galley.diagnostics": dish.diagnostics.length,
       "galley.engine_ms": engineMs,

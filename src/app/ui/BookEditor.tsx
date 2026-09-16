@@ -40,6 +40,7 @@ import { stale } from "../../core/findings/finding";
 import type { SourceStamp } from "../../core/source/source";
 import {
   annotateOpen,
+  annotateRepaint,
   assignment,
   flash,
   flashing,
@@ -53,7 +54,6 @@ import {
   type EditorBook,
   type ProjectionName,
   keystrokeMeter,
-  type Measured,
   noteBookIs,
   watchLocation,
 } from "../../editor";
@@ -222,9 +222,14 @@ export function BookEditor(props: BookEditorProps) {
         showCorpusFindings(created, list);
         // Counts and ids only — a finding's message quotes the document and
         // never reaches the ring (editor-and-save §2, sink 4).
-        observability.note("editor.sous", "ready", undefined, {
+        //
+        // On the REPAINT this provokes, not a record of its own. A Publication
+        // fans out to every open book, and what showing findings costs is the
+        // repaint — one record per book per publication would be noise about
+        // one fact.
+        annotateRepaint({
+          "findings.shown": list.length,
           "book.id": book.id,
-          "sous.findings": list.length,
           "book.revision": book.source().stamp.revision,
         });
       };

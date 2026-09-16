@@ -273,7 +273,7 @@ const makeProject = (parts: ProjectParts): Project => {
         // and from here the seat holds it.
         const seated = seat(entry.plain);
         entry.seated = seated;
-        observability?.note("project.instantiate", "ready", undefined, { "book.id": bookId });
+        observability?.note("seat.open", "ready", undefined, { "book.id": bookId });
         publish(bookId);
         return Effect.succeed<Book>(seated);
       }),
@@ -286,7 +286,7 @@ const makeProject = (parts: ProjectParts): Project => {
         if (seated === undefined) return Effect.void;
         const attached = seated.attached?.() ?? 0;
         if (attached > 0) {
-          observability?.note("project.release", "refused", "still attached", {
+          observability?.note("seat.close", "refused", "still attached", {
             "book.id": bookId,
             "book.attached": attached,
           });
@@ -297,7 +297,7 @@ const makeProject = (parts: ProjectParts): Project => {
         entry.plain = makeBook(seated.path, seated.source(), observability);
         entry.seated = undefined;
         seated.close?.();
-        observability?.note("project.release", "ready", undefined, { "book.id": bookId });
+        observability?.note("seat.close", "ready", undefined, { "book.id": bookId });
         publish(bookId);
         return Effect.void;
       }),

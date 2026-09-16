@@ -329,7 +329,7 @@ const make = (
           } catch {
             // Retain, do not clear: an engine refusal is an integration
             // problem, not evidence that the book became clean.
-            observability?.note("analyze", "failed", "engine refused", { "book.id": bookId });
+            observability?.note("book.analyze", "failed", "engine refused", { "book.id": bookId });
             return undefined;
           }
         }
@@ -341,14 +341,14 @@ const make = (
         // registers it again. Reported, never swallowed.
         yield* Effect.catch(corpus.update(bookId, source.text), (error) =>
           Effect.sync(() =>
-            observability?.note("analyze.corpus", "failed", error.reason, { "book.id": bookId }),
+            observability?.note("corpus.update", "failed", error.reason, { "book.id": bookId }),
           ),
         );
         const { errors } = countsOf(bookId, analysis, source.stamp);
-        observability?.note("analyze", "ready", undefined, {
+        observability?.note("book.analyze", "ready", undefined, {
           "book.id": bookId,
-          "analyze.diagnostics": analysis.dish.diagnostics.length,
-          "analyze.errors": errors,
+          "analysis.diagnostics": analysis.dish.diagnostics.length,
+          "analysis.errors": errors,
         });
         return source.stamp;
       });
@@ -362,10 +362,10 @@ const make = (
      * cross-book findings beat an apparently clean project.
      */
     const publishCorpus = Effect.gen(function* () {
-      const done = observability?.span("analyze.publish", corpus.kind);
+      const done = observability?.span("corpus.publish", corpus.kind);
       const published = yield* Effect.catch(corpus.publish(), (error) =>
         Effect.sync(() => {
-          observability?.note("analyze.publish", "failed", `${corpus.kind} ${error.reason}`);
+          observability?.note("corpus.publish", "failed", `${corpus.kind} ${error.reason}`);
           return undefined;
         }),
       );
@@ -468,7 +468,7 @@ const make = (
           );
         };
 
-        const done = observability?.span("analyze.project", project.root);
+        const done = observability?.span("analysis.pass", project.root);
         for (const book of project.books) {
           const entry: Entry = {
             analysis: undefined,
@@ -487,7 +487,7 @@ const make = (
         yield* publishCorpus;
         invalidateCaches();
         done?.();
-        observability?.note("analyze.project", "ready", `${entries.size} books`);
+        observability?.note("analysis.pass", "ready", `${entries.size} books`);
 
         // A seat swap replaces the object that holds a book's canonical text,
         // so the old subscription is dead: re-resolve and re-subscribe, and
@@ -558,7 +558,7 @@ const make = (
             (error) =>
               Effect.sync(() => {
                 observability?.note(
-                  "analyze.reference",
+                  "corpus.reference",
                   "failed",
                   `${reference.id} ${error.reason}`,
                 );
@@ -568,7 +568,7 @@ const make = (
           if (done) registered.push(reference.id);
         }
         referenceIds = registered;
-        observability?.note("analyze.reference", "ready", `${registered.length} books`);
+        observability?.note("corpus.reference", "ready", `${registered.length} books`);
         return registered;
       });
 

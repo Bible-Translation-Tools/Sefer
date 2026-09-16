@@ -94,16 +94,16 @@ export const pendingOnOpen = (
       // restore what is already saved teaches people to ignore the banner.
       const cleared = yield* Effect.result(recovery.discard(journal.id));
       observability?.note(
-        "recovery.reopen",
+        "journal.offer",
         Result.isFailure(cleared) ? "declined" : "consumed",
         "matched disk",
-        { "recovery.journal": journal.id, "book.id": journal.bookId },
+        { "journal.write": journal.id, "book.id": journal.bookId },
       );
     }
-    observability?.note("recovery.reopen", "ready", undefined, {
+    observability?.note("journal.offer", "ready", undefined, {
       "project.id": projectId,
-      "recovery.offered": offered.length,
-      "recovery.candidates": mine.length,
+      "journal.offered": offered.length,
+      "journal.candidates": mine.length,
     });
     return offered;
   });

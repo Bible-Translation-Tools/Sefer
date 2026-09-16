@@ -78,6 +78,66 @@ const round = (ms: number): number => Math.round(ms * 1000) / 1000;
 /** How long a repaint burst must be quiet before it counts as finished. */
 const BURST_MS = 120;
 
+/**
+ * Repaints nobody typed for — a scroll, a resize, a viewport change, or a
+ * decoration pass following a gesture that has already painted — coalesced on
+ * the TRAILING edge into one `editor.render`.
+ *
+ * ONE of these for the application, not one per book. A continuous scroll is
+ * thousands of view updates and one piece of work, and `onOrphanDerived` holds
+ * a single handler anyway — registering per book meant the last book opened
+ * won, and every repaint after that was labelled with its id whoever caused
+ * it. So the burst names no book: a repaint is not necessarily about one.
+ */
+let repaintInto: ObservabilityService | null = null;
+let burst: { op: Operation; derived: Map<string, { ms: number; n: number }> } | null = null;
+let closing: ReturnType<typeof setTimeout> | undefined;
+
+const openBurst = (): Operation | null => {
+  const into = repaintInto;
+  if (into === null || VOLUME[into.level()] < 2) return null;
+  burst ??= { op: into.operation("editor.render"), derived: new Map() };
+  clearTimeout(closing);
+  closing = setTimeout(() => {
+    const ending = burst;
+    burst = null;
+    if (ending === null) return;
+    const totals: Record<string, string | number | boolean> = {};
+    let whole = 0;
+    for (const [name, count] of ending.derived) {
+      totals[`editor.derive.${name}.ms`] = count.ms;
+      totals[`editor.derive.${name}.n`] = count.n;
+      whole = round(whole + count.ms);
+    }
+    ending.op.end("ready", totals, whole);
+  }, BURST_MS);
+  return burst.op;
+};
+
+const repaint = (name: string, detail: string, ms: number): void => {
+  if (openBurst() === null || burst === null) return;
+  const held = burst.derived.get(name) ?? { ms: 0, n: 0 };
+  held.ms = round(held.ms + ms);
+  held.n += 1;
+  burst.derived.set(name, held);
+  if (detail !== "" && held.n === 1) burst.op.attr({ [`editor.derive.${name}.detail`]: detail });
+};
+
+/**
+ * Fields onto the repaint now in flight, opening one if none is.
+ *
+ * What republished findings costs IS the repaint it provokes, so the count
+ * belongs on that record rather than on one of its own — a publication fans
+ * out to every open book, and an event each would be noise about one fact.
+ */
+export const annotateRepaint = (
+  fields: Readonly<Record<string, string | number | boolean>>,
+): void => {
+  openBurst()?.attr(fields);
+};
+
+onOrphanDerived(repaint);
+
 /** Level `off`: the trace still runs for `__sefer.editor.traces()`, silently. */
 const SILENT: TraceEmit = {
   frame: () => () => {},
@@ -97,6 +157,7 @@ export const observabilityTracer = (
   observability: ObservabilityService,
   bookId: string,
 ): Tracer => {
+  repaintInto ??= observability;
   const emit: Emitter = (trace) => {
     const volume = VOLUME[observability.level()];
     if (volume === 0) return SILENT;
@@ -218,42 +279,6 @@ export const observabilityTracer = (
       );
     }
   };
-
-  // Repaints nobody typed for — a scroll, a resize, a viewport change, or a
-  // decoration pass that followed a gesture that has already painted —
-  // coalesced on the TRAILING edge into one `editor.render` operation. A
-  // continuous scroll is thousands of view updates and one piece of work; an
-  // operation per update would say nothing an operation per burst does not.
-  let burst: { op: Operation; derived: Map<string, { ms: number; n: number }> } | null = null;
-  let closing: ReturnType<typeof setTimeout> | undefined;
-  const repaint = (name: string, detail: string, ms: number): void => {
-    if (VOLUME[observability.level()] < 2) return;
-    if (burst === null)
-      burst = {
-        op: observability.operation("editor.render", { "book.id": bookId }),
-        derived: new Map(),
-      };
-    const held = burst.derived.get(name) ?? { ms: 0, n: 0 };
-    held.ms = round(held.ms + ms);
-    held.n += 1;
-    burst.derived.set(name, held);
-    if (detail !== "" && held.n === 1) burst.op.attr({ [`editor.derive.${name}.detail`]: detail });
-    clearTimeout(closing);
-    closing = setTimeout(() => {
-      const ending = burst;
-      burst = null;
-      if (ending === null) return;
-      const totals: Record<string, string | number | boolean> = {};
-      let whole = 0;
-      for (const [of, count] of ending.derived) {
-        totals[`editor.derive.${of}.ms`] = count.ms;
-        totals[`editor.derive.${of}.n`] = count.n;
-        whole = round(whole + count.ms);
-      }
-      ending.op.end("ready", totals, whole);
-    }, BURST_MS);
-  };
-  onOrphanDerived(repaint);
 
   return makeTracer(emit);
 };

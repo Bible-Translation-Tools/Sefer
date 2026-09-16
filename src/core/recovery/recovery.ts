@@ -279,16 +279,16 @@ const make = (
           journal.entries.length === 0 ? remove(id) : write(id, journal),
         );
         if (Result.isFailure(written)) {
-          observability?.note("recovery.journal", "failed", written.failure.reason, {
-            "recovery.journal": id,
+          observability?.note("journal.write", "failed", written.failure.reason, {
+            "journal.write": id,
           });
           // Keep it dirty so the next burst tries again; a lost journal is
           // worse than a repeated write.
           unwritten.add(id);
         } else
-          observability?.note("recovery.journal", "rewrote", undefined, {
-            "recovery.journal": id,
-            "recovery.entries": journal.entries.length,
+          observability?.note("journal.write", "rewrote", undefined, {
+            "journal.write": id,
+            "journal.entries": journal.entries.length,
           });
       }
     });
@@ -372,9 +372,9 @@ const make = (
       const compacted: Journal = { header: journal.header, entries: kept };
       journals.set(id, compacted);
       unwritten.delete(id);
-      observability?.note("recovery.compact", "rewrote", undefined, {
-        "recovery.journal": id,
-        "recovery.entries": kept.length,
+      observability?.note("journal.compact", "rewrote", undefined, {
+        "journal.write": id,
+        "journal.entries": kept.length,
       });
       return kept.length === 0 ? remove(id) : write(id, compacted);
     };
@@ -414,8 +414,8 @@ const make = (
           for (const id of yield* listIds) {
             const journal = yield* Effect.result(read(id));
             if (Result.isFailure(journal)) {
-              observability?.note("recovery.pending", "declined", journal.failure.reason, {
-                "recovery.journal": id,
+              observability?.note("journal.pending", "declined", journal.failure.reason, {
+                "journal.write": id,
               });
               continue;
             }
@@ -435,8 +435,8 @@ const make = (
               entries,
             });
           }
-          observability?.note("recovery.pending", "ready", undefined, {
-            "recovery.pending": found.length,
+          observability?.note("journal.pending", "ready", undefined, {
+            "journal.pending": found.length,
           });
           return found;
         }),
@@ -457,9 +457,9 @@ const make = (
           for (const [index, entry] of journal.entries.entries()) {
             const applied = book.apply(entry.changes, "recovery", trust);
             if (Result.isFailure(applied)) {
-              observability?.note("recovery.restore", "refused", applied.failure.reason, {
-                "recovery.journal": id,
-                "recovery.entry": index,
+              observability?.note("journal.restore", "refused", applied.failure.reason, {
+                "journal.write": id,
+                "journal.entry": index,
                 "book.id": book.id,
               });
               return yield* Effect.fail(
@@ -472,9 +472,9 @@ const make = (
             }
           }
           journals.set(id, journal);
-          observability?.note("recovery.restore", "rewrote", undefined, {
-            "recovery.journal": id,
-            "recovery.entries": journal.entries.length,
+          observability?.note("journal.restore", "rewrote", undefined, {
+            "journal.write": id,
+            "journal.entries": journal.entries.length,
             "book.id": book.id,
           });
           return book;
@@ -485,8 +485,8 @@ const make = (
           journals.delete(id);
           unwritten.delete(id);
           yield* remove(id);
-          observability?.note("recovery.discard", "consumed", undefined, {
-            "recovery.journal": id,
+          observability?.note("journal.discard", "consumed", undefined, {
+            "journal.write": id,
           });
         }),
 
