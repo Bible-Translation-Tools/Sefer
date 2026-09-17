@@ -18,6 +18,7 @@
     "tauri:config": "node tools/tauri/updaterConfig.ts",
     "boundaries": "node tools/boundaries/check.ts",
     "verify:launch": "node tools/verify/launch.ts",
+    "verify:chrome": "node tools/verify/chrome.ts",
     "test": "vitest",
     "test:unit": "vitest run --project core",
     "test:browser": "vitest run --project browser",

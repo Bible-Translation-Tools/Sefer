@@ -46,13 +46,24 @@ Defer Lightpanda for editor verification. Its lack of real rendering makes it un
 
 A dedicated browser profile, so a person's own project is never scratch state. These commands were run, in this order, and work.
 
-**1. A profile of our own, with the debugger on.** Chrome 136+ refuses remote debugging on the default data directory, which is also where a person's real OPFS lives — so a dedicated `--user-data-dir` is not a nicety, it is the only way in.
+**1. Start the rig. `pnpm verify:chrome`, and never launch Chrome by hand.**
 
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-      --user-data-dir="$HOME/.sefer-cdp-profile" \
-      --remote-debugging-port=9222 --no-first-run --no-default-browser-check
+    pnpm verify:chrome            # headless, the default — start here
+    pnpm verify:chrome --headed   # a window, to watch or to drive it yourself
+    pnpm verify:chrome --status   # up? which mode? how many tabs?
+    pnpm verify:chrome --stop     # quit it and give the port back
 
-Connect with `chromium.connectOverCDP(...)`. **Check both `http://127.0.0.1:9222` and `http://[::1]:9222`** — which one answers has changed between launches, and the other refuses the connection outright.
+It prints one JSON line; `cdp` is the endpoint for `chromium.connectOverCDP(...)`. It tries both `127.0.0.1:9222` and `[::1]:9222`, because which one answers has changed between launches and the other refuses outright.
+
+Chrome 136+ refuses remote debugging on the default data directory, which is also where a person's real browsing lives, so the rig has its own long-lived `--user-data-dir` at `~/.sefer-cdp-profile`. That directory is also where its OPFS lives — which is why the profile is named and kept: a corpus imported once is still there next week.
+
+**Headless is the default because a visible rig steals the machine.** macOS activates an *application*, not a window: a headed Chrome driven by an agent raises `Google Chrome.app` and takes the keyboard away from whatever the person was doing in their own Chrome — a different profile, the same dock icon. Headless draws nothing, takes no focus, and OPFS, screenshots and tracing all work in it (verified: the imported `en_ulb` opens through Revelation headless).
+
+Worse, launching Chrome while an instance with a *different* `--user-data-dir` is already running does not start a second one — macOS activates the running process, so the person clicks Chrome and gets the rig's empty profile instead of their own, with no explanation. If someone says their profile has vanished, that is what happened: `pnpm verify:chrome --stop`, then reopen Chrome normally.
+
+**Leave the desktop as you found it: `--stop` when the run is done, and close the tabs you opened.** `--status` lists them.
+
+Use `--headed` when a person asks to watch, or wants to drive the app themselves and then have an agent read the traces. It is the exception, not the default.
 
 **2. Import a corpus through the product's own door.** The profile starts with an empty OPFS. Do not hand-write storage; use the importer, so what is measured is what a person would have:
 
