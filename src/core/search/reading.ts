@@ -40,7 +40,7 @@
 // the markup, and that a literal search can deliberately run over the markup
 // instead. Those two are unreachable through `findAll` at any price.
 
-import type { Book, BookId } from "../book/book";
+import type { BookId } from "../book/book";
 import type { GalleyService } from "../galley/galley";
 import type { SourceStamp } from "../source/source";
 
@@ -51,6 +51,22 @@ export interface SourceRange {
 }
 
 /**
+ * What a reading is cut from: a registered id and the text Sefer holds for it.
+ *
+ * A project's Book and a bound REFERENCE are both this. That is the point —
+ * the reference scope searches somebody else's book, and there is no reason it
+ * should search it differently. What a reference lacks is a `stamp`: it is
+ * bound once and does not move while a project is open, so there is no
+ * revision to key a cache on and nothing to go stale against.
+ */
+export interface Subject {
+  readonly id: BookId;
+  readonly text: string;
+  /** The revision `text` belongs to. Absent for a reference. */
+  readonly stamp?: SourceStamp;
+}
+
+/**
  * One book's reading, and the two questions a hit in it needs answered.
  *
  * Built per call and thrown away with the call. Nothing here outlives the
@@ -58,8 +74,11 @@ export interface SourceRange {
  */
 export interface Reading {
   readonly bookId: BookId;
-  /** The canonical text's stamp when this was cut. A hit's freshness key. */
-  readonly stamp: SourceStamp;
+  /**
+   * The text's stamp when this was cut — a hit's freshness key. Absent for a
+   * reference, which has none and needs none: nothing edits one.
+   */
+  readonly stamp: SourceStamp | undefined;
   /** What a reader sees: the source spans, concatenated, nothing between. */
   readonly text: string;
   /** Where an offset in the reading sits in the canonical text. */
@@ -85,16 +104,16 @@ export interface Reading {
  */
 export interface Readings {
   /**
-   * `book`'s reading as its text stands NOW, or `undefined` when the engine
-   * has no mask for it (a book it was never told about, or a reference bound
-   * without its text).
+   * `subject`'s reading as its text stands NOW, or `undefined` when the engine
+   * has no mask for it — a book it was never told about, a reference bound
+   * WITHOUT its text (a lengths-only registration retains no projection to
+   * cut), or a registration that is a scheduler pass behind this text.
    *
-   * Re-masks when the book's stamp has moved and reuses the held map when it
-   * has not, so typing in the editor costs nothing here until something
-   * searches — the work happens on the gesture that needs it, not on the
-   * keystroke.
+   * Re-masks when the stamp has moved and reuses the held map when it has not,
+   * so typing in the editor costs nothing here until something searches — the
+   * work happens on the gesture that needs it, not on the keystroke.
    */
-  readonly of: (book: Book) => Reading | undefined;
+  readonly of: (subject: Subject) => Reading | undefined;
   /** Drop one book's map, or all of them. */
   readonly forget: (id?: BookId) => void;
   /** How many maps are held. For evidence, not for logic. */
@@ -103,7 +122,7 @@ export interface Readings {
 
 /** A map plus the prefix sums that make `toSource` a binary search. */
 interface Held {
-  readonly stamp: SourceStamp;
+  readonly stamp: SourceStamp | undefined;
   readonly rangeCount: number;
   /** `from[n]`, `to[n]` — the source span of range `n`. */
   readonly from: Uint32Array;
@@ -170,33 +189,39 @@ const readingOf = (held: Held, text: string): string => {
 export const createReadings = (galley: GalleyService): Readings => {
   const held = new Map<BookId, Held>();
 
-  const mapFor = (book: Book, stamp: SourceStamp): Held | undefined => {
-    const standing = held.get(book.id);
-    if (standing !== undefined && standing.stamp === stamp) return standing;
-    const map = galley.mask(book.id);
+  const mapFor = (subject: Subject): Held | undefined => {
+    const standing = held.get(subject.id);
+    // A stampless subject — a reference — is cached on its id alone; the
+    // `sourceLen` guard below is what catches a text that moved anyway.
+    if (
+      standing !== undefined &&
+      (subject.stamp === undefined ? true : standing.stamp === subject.stamp)
+    ) {
+      return standing;
+    }
+    const map = galley.mask(subject.id);
     if (map === undefined) {
-      held.delete(book.id);
+      held.delete(subject.id);
       return undefined;
     }
-    const built: Held = { stamp, ...hold(map) };
-    held.set(book.id, built);
+    const built: Held = { stamp: subject.stamp, ...hold(map) };
+    held.set(subject.id, built);
     return built;
   };
 
   return {
-    of: (book) => {
-      const source = book.source();
-      const map = mapFor(book, source.stamp);
+    of: (subject) => {
+      const map = mapFor(subject);
       if (map === undefined) return undefined;
       // The engine is a scheduler pass behind this text. Answering nothing for
       // this book is right: the next pass republishes, and the Find screen
       // re-runs on that (`createExcerptFeed`'s `edited`). Answering with the
       // stale map would put hits at offsets that are simply wrong.
-      if (map.sourceLen !== source.text.length) return undefined;
+      if (map.sourceLen !== subject.text.length) return undefined;
       return {
-        bookId: book.id,
-        stamp: source.stamp,
-        text: readingOf(map, source.text),
+        bookId: subject.id,
+        stamp: subject.stamp,
+        text: readingOf(map, subject.text),
         toSource: (at) => {
           const n = rangeAt(map, at);
           // SAFETY: `rangeAt` returns an index into the arrays.

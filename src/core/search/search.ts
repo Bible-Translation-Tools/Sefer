@@ -30,15 +30,18 @@
 // — what am I matching with, what am I matching against — are two switches
 // rather than one.
 //
-// `findProjected` is the engine's own literal find over the same reading. It
-// predates the mask map, and `findInReading` has replaced it on the Find
-// screen: the engine rebuilds and re-folds every projection on every call,
-// which is most of what a search cost.
+// The engine's own `find`/`findAll` are no longer used from here. They were the
+// only way to search the reading until the mask map arrived, and they cost
+// what they cost because the engine rebuilds and re-folds every projection on
+// every call. What replaced them supports strictly more: the same
+// `caseSensitive`, `wholeWord`, `limit` and book filter, plus a regex, plus the
+// markup as a haystack. `GalleyService.find`/`findAll` stay on the seam — the
+// door is fine, Sefer just has a better way to ask.
 //
-// All of them produce the same `Hit`, so `resolveHit`, `replace` and
-// `planReplace` are written once.
+// Both produce the same `Hit`, so `resolveHit`, `replace` and `planReplace`
+// are written once.
 
-import { Data, Effect, Result } from "effect";
+import { Data, Result } from "effect";
 
 import {
   identifyBook,
@@ -49,8 +52,6 @@ import {
   type Receipt,
   type Ref,
 } from "../book/book";
-import type { GalleyService } from "../galley/galley";
-import type { EngineHit } from "../galley/galley";
 import type { Change, SourceStamp } from "../source/source";
 import type { Readings } from "./reading";
 
@@ -88,9 +89,12 @@ export interface Hit {
   readonly ref: Ref;
   readonly preview: string;
   /**
-   * Where the hit sits in the engine's verse-text projection — what the reader
-   * sees in visual mode. Present only on hits from `findProjected`; neither the
-   * raw scan nor `findInReading` reports one, and nothing reads it today.
+   * Where the hit sits in the reading — what a reader sees in visual mode.
+   *
+   * Nothing sets this today. It went away with the engine's own find, and the
+   * field is kept because a card that wanted to highlight in the READING
+   * rather than in the source would need exactly it, and `findInReading` has
+   * the number in hand.
    */
   readonly projected?: { readonly from: number; readonly to: number };
   /**
@@ -116,12 +120,14 @@ export const spansMarkup = (hit: Hit): boolean => (hit.pieces?.length ?? 1) > 1;
 
 export class SearchError extends Data.TaggedError("SearchError")<{
   /**
-   * `InvalidRegex` — the raw scan's pattern is not one. `Engine` — the corpus
-   * did not answer the projected search (it is a different host on desktop),
-   * carrying that failure's description rather than a second error type for a
-   * caller that would treat both the same way.
+   * The pattern is not a regular expression. The ONLY way a search fails now:
+   * every scan here runs in this process over strings this module was handed,
+   * so there is no call that can be refused and no host that can be absent.
+   *
+   * There was an `Engine` reason for as long as a search went through the
+   * corpus. It went when the engine's find did.
    */
-  readonly reason: "InvalidRegex" | "Engine";
+  readonly reason: "InvalidRegex";
   readonly description: string;
 }> {}
 
@@ -410,7 +416,8 @@ export const findInReading = (
   const hits: Hit[] = [];
   for (const book of books) {
     if (wanted !== null && !wanted.has(book.id)) continue;
-    const reading = readings.of(book);
+    const source = book.source();
+    const reading = readings.of({ id: book.id, text: source.text, stamp: source.stamp });
     // A book the engine holds no mask for contributes nothing. It is not an
     // error: a project opening has books registered one at a time, and a
     // search that arrives mid-way should report what is ready rather than
@@ -421,7 +428,7 @@ export const findInReading = (
     // The ref table is built over the SOURCE, because a ref is a fact about
     // the document and the reading has no `\c`/`\v` markers left in it — they
     // are exactly what the mask cut out.
-    const table = buildRefTable(book.source().text);
+    const table = buildRefTable(source.text);
 
     pattern.lastIndex = 0;
     for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) {
@@ -438,7 +445,7 @@ export const findInReading = (
       if (first === undefined) continue;
       hits.push({
         bookId: book.id,
-        stamp: reading.stamp,
+        stamp: source.stamp,
         from: first.from,
         to: first.to,
         ref: refFrom(table, book.id, first.from),
@@ -452,125 +459,6 @@ export const findInReading = (
     }
   }
   return Result.succeed(hits);
-};
-
-// ---------------------------------------------------------------------------
-// Find, through the engine
-// ---------------------------------------------------------------------------
-
-/**
- * The `Hit` an engine hit becomes, or `undefined` when it names a book this
- * call was not asked about.
- *
- * `from`/`to` are the FIRST source piece rather than the hit's bounds: the
- * bounds of a split hit would swallow the markup between the pieces, and
- * handing that to `book.apply` is precisely the edit nobody asked for.
- */
-const projectedHit = (
-  hit: EngineHit,
-  book: Book,
-  table: RefTable,
-  stamp: SourceStamp,
-): Hit | undefined => {
-  const first = hit.source[0];
-  if (first === undefined) return undefined;
-  return {
-    bookId: book.id,
-    stamp,
-    from: first.from,
-    to: first.to,
-    ref: refFrom(table, book.id, first.from),
-    preview: hit.preview,
-    projected: hit.projected,
-    ...(hit.source.length > 1 ? { pieces: hit.source } : {}),
-  };
-};
-
-/**
- * Searches the ENGINE's verse-text projection — the reading, not the markup —
- * and places every hit back in the source.
- *
- * This is the find a translator means. The needle is matched against what the
- * page shows, so markup can neither hide a match nor manufacture one, and each
- * hit comes back in both coordinate spaces: `projected` for the reading and
- * `from`/`to` (plus `pieces`) for the text. A hit that crosses markup the
- * projection dropped carries one piece per contiguous run and is not
- * replaceable — `replace` refuses it as `SpansMarkup`.
- *
- * Literal only, and never a pattern: a `regex` query belongs to `find`.
- *
- * The books are the caller's, as everywhere in this module, and they are what
- * binds the result: a hit for a book not in `books` is dropped, and each hit
- * carries the stamp its book holds NOW, so an edit between the search and the
- * click is detectable exactly as it is for a raw hit. Books the corpus was
- * never told about simply have no hits — registration belongs to
- * `ProjectAnalysis.attach`, which registers every book of a project as it
- * opens.
- */
-export const findProjected = (
-  galley: GalleyService,
-  books: readonly Book[],
-  query: Query,
-  options?: Options,
-): Effect.Effect<readonly Hit[], SearchError> => {
-  if (query.text === "") return Effect.succeed([]);
-  if (query.regex === true)
-    return Effect.fail(
-      new SearchError({
-        reason: "InvalidRegex",
-        description: "the engine's find is literal; a regex query must use the raw scan",
-      }),
-    );
-  const limit = options?.limit;
-  if (limit !== undefined && limit <= 0) return Effect.succeed([]);
-  const wanted = options?.books === undefined ? null : new Set(options.books);
-
-  return Effect.try({
-    try: () =>
-      // `limit` omitted rather than passed as 0: the engine reads a missing
-      // key as no bound, and spelling that as a number would rely on the two
-      // sides agreeing on what 0 means.
-      galley.findAll({
-        text: query.text,
-        caseSensitive: query.caseSensitive,
-        wholeWord: query.wholeWord,
-        ...(limit === undefined ? {} : { limit }),
-      }),
-    catch: (cause) => ({ reason: "Engine" as const, description: String(cause) }),
-  }).pipe(
-    Effect.mapError(
-      (error) =>
-        new SearchError({
-          reason: "Engine",
-          description: `${error.reason}: ${error.description}`,
-        }),
-    ),
-    Effect.map((found): readonly Hit[] => {
-      // One ref table per book that actually matched, shared by its hits —
-      // the same trade `find` makes, and the reason a book the search did
-      // not touch costs nothing here.
-      const seats = new Map(books.map((book) => [book.id, book] as const));
-      const tables = new Map<BookId, { table: RefTable; stamp: SourceStamp }>();
-      const hits: Hit[] = [];
-      for (const engineHit of found) {
-        const bookId = engineHit.bookId;
-        if (bookId === undefined) continue;
-        const book = seats.get(bookId);
-        if (book === undefined) continue;
-        if (wanted !== null && !wanted.has(bookId)) continue;
-        let held = tables.get(bookId);
-        if (held === undefined) {
-          const source = book.source();
-          held = { table: buildRefTable(source.text), stamp: source.stamp };
-          tables.set(bookId, held);
-        }
-        const hit = projectedHit(engineHit, book, held.table, held.stamp);
-        if (hit !== undefined) hits.push(hit);
-        if (limit !== undefined && hits.length >= limit) break;
-      }
-      return hits;
-    }),
-  );
 };
 
 // ---------------------------------------------------------------------------
@@ -588,10 +476,9 @@ export const findProjected = (
  * something to read.
  *
  * So this carries what a reader can use — which resource file it came from,
- * where in the reading the match sits, and the projected text around it — and
- * deliberately no offset into any text Sefer could write to. A reference hit
- * that could be confused for an editable one is the bug this separation exists
- * to prevent.
+ * which verse it landed in, where in that file's text it sits, and the reading
+ * around it — and deliberately no stamp. A reference hit that could be confused
+ * for an editable one is the bug this separation exists to prevent.
  */
 export interface ReferenceHit {
   /** The registered id, which is the resource's own file path. */
@@ -601,117 +488,103 @@ export interface ReferenceHit {
   /** Display text around the match. Ellipsed; never parsed back to offsets. */
   readonly preview: string;
   /**
-   * Which verse the hit landed in, when the reference's own text was available
-   * to say so — `findInReferences` takes a `textOf` for exactly this.
+   * Which verse the hit landed in.
    *
-   * It is what lets Find show reference results as the same excerpt cards every
-   * other screen uses: the verse is the join, so the project's own verse can be
-   * put beside the reference's. Absent when nothing retained the text, and a
-   * caller must then fall back to the preview.
+   * The join that lets Find show reference results as the same excerpt cards
+   * every other screen uses: the project's own verse is the card, and the
+   * reference's reading sits beside it.
    */
-  readonly ref?: Ref;
+  readonly ref: Ref;
   /**
-   * The match in the REFERENCE's canonical text, present with `ref`.
+   * The match in the REFERENCE's canonical text.
    *
    * The FIRST source piece, like `Hit.from`/`to` and for the same reason: a hit
    * that crossed markup has pieces, and their bounds would swallow the markup
    * between them. Read-only on this side, so it is somewhere to highlight and
    * never somewhere to write.
    */
-  readonly from?: number;
-  readonly to?: number;
+  readonly from: number;
+  readonly to: number;
 }
 
 /**
- * Literal find over the project's BOUND REFERENCES — the `source` and
- * `reference` resources registered with their text.
+ * One bound reference: the id it was registered under, and the text Sefer
+ * holds for it.
+ *
+ * `ProjectAnalysis.references()` names them and `referenceText(id)` answers the
+ * text, which it keeps for exactly this. A reference registered WITHOUT its
+ * text has no reading to cut and is simply absent from the list.
+ */
+export interface BoundReference {
+  readonly id: string;
+  readonly text: string;
+}
+
+/**
+ * Find over the project's BOUND REFERENCES — the `source` and `reference`
+ * resources registered with their text.
+ *
+ * The SAME scan as `findInReading`, over the same kind of reading, with the
+ * same matcher. That is the point: a reference is somebody else's book, not a
+ * different kind of thing, and a reader searching one should not silently get
+ * literal-only matching and a different set of rules. It went through the
+ * engine's `findAll(scope: "references")` until the mask map made the reading
+ * available on this side — which is also why the regex toggle had to be refused
+ * on this scope, and is not any more.
  *
  * `src/app/workflows/references.ts` is what registers them, through
- * `ProjectAnalysis.attachReferences`. A project with no binding, or one whose
- * references were registered without their text, simply has no hits: the
- * engine's `references` scope enumerates only books that retain a projection.
- *
- * Literal only, like `findProjected` and for the same reason — the engine's
- * find is `memmem` over the projection and there is no regex on that side.
+ * `ProjectAnalysis.attachReferences`.
  */
 export const findInReferences = (
-  galley: GalleyService,
+  readings: Readings,
+  references: readonly BoundReference[],
   query: Query,
   options?: Options,
-  /**
-   * One registered reference's canonical text — `ProjectAnalysis.referenceText`
-   * in the application, absent in a caller that has none.
-   *
-   * Given it, every hit comes back with the verse it landed in and a range in
-   * that text, which is what lets a screen show reference results as ordinary
-   * excerpt cards paired with the project's own verse. Without it the hits are
-   * previews and nothing more, which is what this returned before.
-   */
-  textOf?: (id: string) => string | undefined,
-): Effect.Effect<readonly ReferenceHit[], SearchError> => {
-  if (query.text === "") return Effect.succeed([]);
-  if (query.regex === true)
-    return Effect.fail(
-      new SearchError({
-        reason: "InvalidRegex",
-        description: "the engine's find is literal; a regex query must use the raw scan",
-      }),
-    );
-  const limit = options?.limit;
-  if (limit !== undefined && limit <= 0) return Effect.succeed([]);
-  return Effect.try({
-    try: () =>
-      galley.findAll(
-        {
-          text: query.text,
-          caseSensitive: query.caseSensitive,
-          wholeWord: query.wholeWord,
-          ...(limit === undefined ? {} : { limit }),
-        },
-        "references",
-      ),
-    catch: (cause) => ({ reason: "Engine" as const, description: String(cause) }),
-  }).pipe(
-    Effect.mapError(
-      (error) =>
-        new SearchError({
-          reason: "Engine",
-          description: `${error.reason}: ${error.description}`,
-        }),
-    ),
-    Effect.map((found): readonly ReferenceHit[] => {
-      // One ref table per reference book that matched, built at most once and
-      // shared by its hits — the same trade `find` and `findProjected` make.
-      const tables = new Map<string, { table: RefTable; bookId: BookId } | undefined>();
-      const tableFor = (id: string): { table: RefTable; bookId: BookId } | undefined => {
-        if (tables.has(id)) return tables.get(id);
-        const text = textOf?.(id);
-        const built =
-          text === undefined
-            ? undefined
-            : { table: buildRefTable(text), bookId: identifyBook(text, id) };
-        tables.set(id, built);
-        return built;
-      };
+): Result.Result<readonly ReferenceHit[], SearchError> => {
+  if (query.text === "") return Result.succeed([]);
 
-      return found.map((hit): ReferenceHit => {
-        const id = hit.bookId ?? "";
-        const held = tableFor(id);
-        const first = hit.source[0];
-        if (held === undefined || first === undefined) {
-          return { source: id, projected: hit.projected, preview: hit.preview };
-        }
-        return {
-          source: id,
-          projected: hit.projected,
-          preview: hit.preview,
-          ref: refFrom(held.table, held.bookId, first.from),
-          from: first.from,
-          to: first.to,
-        };
+  const matcher = matcherFor(query);
+  if (Result.isFailure(matcher)) return Result.fail(matcher.failure);
+  const pattern = matcher.success;
+
+  const limit = options?.limit;
+  if (limit !== undefined && limit <= 0) return Result.succeed([]);
+
+  const hits: ReferenceHit[] = [];
+  for (const reference of references) {
+    const reading = readings.of({ id: reference.id, text: reference.text });
+    // No mask means no retained projection — a reference bound lengths-only.
+    // It contributes nothing rather than failing the others' search.
+    if (reading === undefined) continue;
+
+    const text = reading.text;
+    const table = buildRefTable(reference.text);
+    // The reference's OWN book code, off its `\id`, so the ref this produces
+    // can be matched against a project book of the same code.
+    const bookId = identifyBook(reference.text, reference.id);
+
+    pattern.lastIndex = 0;
+    for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) {
+      const from = match.index;
+      const to = from + match[0].length;
+      if (to === from) pattern.lastIndex = from + 1;
+      if (query.wholeWord === true && (isWordChar(text, from - 1) || isWordChar(text, to)))
+        continue;
+
+      const first = reading.pieces(from, to)[0];
+      if (first === undefined) continue;
+      hits.push({
+        source: reference.id,
+        projected: { from, to },
+        preview: previewAt(text, from, to),
+        ref: refFrom(table, bookId, first.from),
+        from: first.from,
+        to: first.to,
       });
-    }),
-  );
+      if (limit !== undefined && hits.length >= limit) return Result.succeed(hits);
+    }
+  }
+  return Result.succeed(hits);
 };
 
 // ---------------------------------------------------------------------------

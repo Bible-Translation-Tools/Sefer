@@ -1,6 +1,6 @@
 import type { JSX } from "@solidjs/web";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/solid-router";
-import { Effect, Option, Result } from "effect";
+import { Option, Result } from "effect";
 import CaseSensitiveIcon from "lucide-solid/icons/case-sensitive";
 import ChevronDownIcon from "lucide-solid/icons/chevron-down";
 import ChevronUpIcon from "lucide-solid/icons/chevron-up";
@@ -26,7 +26,7 @@ import { ShellGate } from "../../../app/ui/ShellGate";
 import * as Workflows from "../../../app/workflows/references";
 import type { BookId } from "../../../core/book/book";
 import { refOccurrences, type Excerpt, type Occurrence } from "../../../core/excerpts/excerpts";
-import { describesExactly, Galley } from "../../../core/galley";
+import { describesExactly } from "../../../core/galley";
 import { createReadings } from "../../../core/search/reading";
 import * as Search from "../../../core/search/search";
 
@@ -320,19 +320,18 @@ function Find() {
       return;
     }
 
-    // The reference scope is a different door and a different result shape —
-    // read-only hits in books this project does not own — so it is answered
-    // here rather than folded into the excerpt path below.
+    // The reference scope is the same scan over somebody else's book, and a
+    // different result shape — read-only hits, no stamp, nothing to edit — so
+    // it is answered here rather than folded into the path below. Synchronous
+    // like the rest since it stopped going through the engine.
     if (want === "reference") {
-      const found = await shell.services.run(
-        Effect.flatMap(Galley, (galley) =>
-          Effect.result(
-            Search.findInReferences(galley, staticQuery, options, (id) =>
-              shell.services.projectAnalysis.referenceText(id),
-            ),
-          ),
-        ),
-      );
+      const analysis = shell.services.projectAnalysis;
+      const references = analysis.references().flatMap((id) => {
+        const text = analysis.referenceText(id);
+        // A reference registered without its text retains no reading to cut.
+        return text === undefined ? [] : [{ id, text }];
+      });
+      const found = Search.findInReferences(readings, references, staticQuery, options);
       setHits([]);
       if (Result.isFailure(found)) {
         setProblem(found.failure.description);
