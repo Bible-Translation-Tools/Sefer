@@ -17,6 +17,7 @@
  * its port; a command that navigates calls `bridge.go`.
  */
 
+import type { UseNavigateResult } from "@tanstack/solid-router";
 import { Effect, Option, Result, type Scope } from "effect";
 import { createSignal } from "solid-js";
 
@@ -80,9 +81,14 @@ export interface ShellBridge {
   readonly stepFinding: (delta: 1 | -1) => void;
   /** Applies the fix offered by the finding under the cursor, if any. */
   readonly applyFix: () => void;
-  readonly go: (path: string) => void;
-  /** `/project/<slug>/<screen>` — see `Shell.projectPath`. */
-  readonly projectPath: (screen?: string) => string;
+  /**
+   * The router's typed navigate. NOT a `go(path: string)`: a built path has to
+   * be cast past the route union, and that cast is what let nine screens move
+   * under `/project/$slug` without a single compile error.
+   */
+  readonly navigate: UseNavigateResult<string>;
+  /** The open project's slug, for the `params` of an in-project route. */
+  readonly slug: () => string;
   readonly openProject: (root: string) => Promise<void>;
   readonly setPaletteOpen: (open: boolean) => void;
   /** Shown in the status bar; the shell's one place for a transient message. */
@@ -370,7 +376,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
             // services.ts), so there is nothing honest to open from it yet;
             // the projects list is the working route.
             bridge.report(t("no folder chosen"));
-            bridge.go("/");
+            void bridge.navigate({ to: "/" });
             return;
           }
           yield* Effect.promise(() => bridge.openProject(picked.value));
@@ -382,7 +388,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       title: t("Settings"),
       keys: "Mod-,",
       run: () => {
-        bridge.go("/settings");
+        void bridge.navigate({ to: "/settings" });
       },
     }),
 
@@ -398,7 +404,11 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
        * keystrokes the old shortcut cost, with a diff in between.
        */
       run: () => {
-        bridge.go(`${bridge.projectPath("history")}?review=1`);
+        void bridge.navigate({
+          to: "/project/$slug/history",
+          params: { slug: bridge.slug() },
+          search: { review: true },
+        });
       },
     }),
 
@@ -410,7 +420,11 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       // One door to disk: the file is written when a version is recorded, so
       // this opens Save & Review like Mod-S rather than writing on its own.
       run: () => {
-        bridge.go(`${bridge.projectPath("history")}?review=1`);
+        void bridge.navigate({
+          to: "/project/$slug/history",
+          params: { slug: bridge.slug() },
+          search: { review: true },
+        });
       },
     }),
 
@@ -438,7 +452,11 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       keys: "Mod-Shift-f",
       when: hasProject,
       run: () => {
-        bridge.go(bridge.projectPath("find"));
+        void bridge.navigate({
+          to: "/project/$slug/find",
+          params: { slug: bridge.slug() },
+          search: {},
+        });
       },
     }),
 
@@ -521,7 +539,11 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       // Same door as Mod-S: writing and recording are one action on the
       // review screen, never a palette side-effect.
       run: () => {
-        bridge.go(`${bridge.projectPath("history")}?review=1`);
+        void bridge.navigate({
+          to: "/project/$slug/history",
+          params: { slug: bridge.slug() },
+          search: { review: true },
+        });
       },
     }),
 
@@ -545,10 +567,10 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
         }
         const project = bridge.project();
         if (project === undefined) {
-          bridge.go("/");
+          void bridge.navigate({ to: "/" });
           return;
         }
-        bridge.go(`/project/${encodeURIComponent(project.root)}`);
+        void bridge.navigate({ to: "/project/$slug", params: { slug: bridge.slug() } });
         bridge.report(t("sign in to {host} in the Cloud panel", { host }));
       },
     }),
@@ -572,7 +594,11 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       title: t("Findings"),
       when: hasProject,
       run: () => {
-        bridge.go(bridge.projectPath("findings"));
+        void bridge.navigate({
+          to: "/project/$slug/findings",
+          params: { slug: bridge.slug() },
+          search: {},
+        });
       },
     }),
 
@@ -581,7 +607,11 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       title: t("History"),
       when: hasProject,
       run: () => {
-        bridge.go(bridge.projectPath("history"));
+        void bridge.navigate({
+          to: "/project/$slug/history",
+          params: { slug: bridge.slug() },
+          search: {},
+        });
       },
     }),
 

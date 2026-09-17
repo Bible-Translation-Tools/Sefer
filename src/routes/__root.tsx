@@ -165,15 +165,10 @@ function Root() {
   return (
     <>
       <HeadContent />
-      <ProjectProvider
-        go={(path) => {
-          // SAFETY: `to` is a typed route literal union, and these paths are
-          // built at runtime from a project root and a book id. The router
-          // resolves an unknown path through its own not-found boundary, so a
-          // wrong string is a 404, never a crash.
-          void navigate({ to: path as never });
-        }}
-      >
+      {/* The router's own navigate, handed down as-is. Not wrapped in a
+          `go(path: string)`: that shape forced every caller to cast past the
+          typed route union, which is the one thing this router is for. */}
+      <ProjectProvider navigate={navigate}>
         <Chrome />
       </ProjectProvider>
     </>

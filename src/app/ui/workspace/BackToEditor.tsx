@@ -61,7 +61,7 @@ export function BackToEditor() {
     // SAFETY: the path is built at runtime from a project root and a book id,
     // which no route literal union can spell; an unresolvable one goes through
     // the router's own not-found boundary.
-    void navigate({ to: shell.landingPath(project.root) as never });
+    void navigate(shell.landingTarget(project.root));
   };
 
   onCleanup(

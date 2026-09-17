@@ -23,6 +23,7 @@
  * (planning/01-discussing/ui-state-stores-2026-09-16.md).
  */
 
+import type { UseNavigateResult } from "@tanstack/solid-router";
 import { Effect, Fiber, Option, Result, Stream } from "effect";
 import {
   createContext,
@@ -199,7 +200,7 @@ export interface Shell {
    */
   readonly lastLocation: (root: string) => LastLocation | undefined;
   /** The path an Open of `root` should land on: the remembered book, or the census. */
-  readonly landingPath: (root: string) => string;
+  readonly landingTarget: (root: string) => LandingTarget;
 
   /** The finding the "next/previous finding" commands point at. */
   readonly finding: Accessor<Finding | undefined>;
@@ -335,18 +336,6 @@ export interface Shell {
    * resolves to the "no project here" state rather than a crash.
    */
   readonly slug: Accessor<string>;
-  /**
-   * The URL of a screen inside the open project — `projectPath("findings")` is
-   * `/project/en-ulb/findings`.
-   *
-   * Exists because the imperative navigations (the icon rail, the toolbar, the
-   * command palette) go through a `go(path)` that takes a raw string and casts
-   * it past the router's typed route union. That cast is what let seven screens
-   * move under `/project/$slug` with the typechecker reporting nothing, so the
-   * prefix is built in ONE place that the compiler does check.
-   */
-  readonly projectPath: (screen?: string) => string;
-  /** The project a slug names, or `undefined` if nothing here answers to it. */
   readonly rootForSlug: (slug: string) => string | undefined;
   /**
    * Is there a newer Sefer? Checked ONCE per session, on the desktop host
@@ -355,6 +344,29 @@ export interface Shell {
    */
   readonly updateAvailable: Accessor<boolean>;
 }
+
+/**
+ * The router's navigate, as the shell passes it around.
+ *
+ * Named here so that `ShellBridge` and the provider agree with the router
+ * without either of them importing route ids.
+ */
+export type Navigate = UseNavigateResult<string>;
+
+/**
+ * Where an Open of a project should land, as the ROUTER's own shape rather
+ * than a path string.
+ *
+ * It used to be a string, and both callers cast it past the typed route union
+ * to use it. A discriminated pair of typed targets cannot be wrong about a
+ * route that moved, which a string silently can.
+ */
+export type LandingTarget =
+  | { readonly to: "/project/$slug"; readonly params: { readonly slug: string } }
+  | {
+      readonly to: "/project/$slug/book/$book";
+      readonly params: { readonly slug: string; readonly book: string };
+    };
 
 /** One row of `shell.recentProjects`: a root, its folder name, and when. */
 export interface RecentProject {
@@ -414,7 +426,7 @@ export const readyShell = (state: ShellState): Shell | undefined =>
 /** One frozen empty table: "no focused book" must be the SAME value every time. */
 const NO_CHAPTERS: readonly ChapterRow[] = Object.freeze([]);
 
-const makeShell = (services: Services, go: (path: string) => void): Shell => {
+const makeShell = (services: Services, navigate: Navigate): Shell => {
   const [project, setProject] = createSignal<Project | undefined>(undefined, { name: "project" });
   const [focused, setFocused] = createSignal<EditorBook | undefined>(undefined, {
     name: "focusedBook",
@@ -525,12 +537,6 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
   const slug = (): string => {
     const root = project()?.root;
     return root === undefined ? "" : slugFor(root);
-  };
-
-  const projectPath = (screen?: string): string => {
-    const held = slug();
-    const base = `/project/${held}`;
-    return screen === undefined ? base : `${base}/${screen}`;
   };
 
   const rootForSlug = (slug: string): string | undefined =>
@@ -943,10 +949,15 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
    * open yet when this is asked — so the route that lands falls back to the
    * census when the book turns out to be gone.
    */
-  const landingPath = (root: string): string => {
+  const landingTarget = (root: string): LandingTarget => {
+    const slug = slugFor(root);
     const held = lastLocation(root);
-    if (held === undefined) return `/project/${encodeURIComponent(root)}`;
-    return `/project/${encodeURIComponent(root)}/book/${encodeURIComponent(held.bookId)}`;
+    return held === undefined
+      ? { to: "/project/$slug", params: { slug } }
+      : {
+          to: "/project/$slug/book/$book",
+          params: { slug, book: encodeURIComponent(held.bookId) },
+        };
   };
 
   const aim = (bookId: BookId, from: number, to?: number, at?: RevealAt): void => {
@@ -989,9 +1000,10 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     const held_project = project();
     if (held_project === undefined) return;
     aim(target.bookId, target.from);
-    go(
-      `/project/${encodeURIComponent(held_project.root)}/book/${encodeURIComponent(target.bookId)}`,
-    );
+    void navigate({
+      to: "/project/$slug/book/$book",
+      params: { slug: slugFor(held_project.root), book: encodeURIComponent(target.bookId) },
+    });
     report(t("{code} at {from}", { code: held.code, from: target.from }));
   };
 
@@ -1049,7 +1061,7 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     showChapter,
     noteChapterAtTop,
     lastLocation,
-    landingPath,
+    landingTarget,
     finding,
     findings,
     status,
@@ -1079,7 +1091,6 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     recentProjects,
     slugFor,
     slug,
-    projectPath,
     rootForSlug,
     updateAvailable,
     sidebarWidth,
@@ -1106,7 +1117,7 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
 
   const bridge: ShellBridge = {
     services,
-    projectPath: shell.projectPath,
+    slug: shell.slug,
     project: () => project(),
     focused: () => focused(),
     mode,
@@ -1117,7 +1128,7 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     historyDepth: shell.historyDepth,
     stepFinding,
     applyFix,
-    go,
+    navigate,
     openProject,
     setPaletteOpen: shell.setPaletteOpen,
     report,
@@ -1132,7 +1143,7 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     registerProjectCommands({
       services,
       root: () => project()?.root,
-      ask: (root) => go(`/projects?rename=${encodeURIComponent(root)}`),
+      ask: (root) => void navigate({ to: "/", search: { rename: root } }),
     }),
   );
   return shell;
@@ -1146,7 +1157,7 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
  * that will not load renders as a failure rather than as an editor that
  * refuses every parse.
  */
-export function ProjectProvider(props: ParentProps<{ readonly go: (path: string) => void }>) {
+export function ProjectProvider(props: ParentProps<{ readonly navigate: Navigate }>) {
   const composition = useComposition();
   const [state, setState] = createSignal<ShellState>({ kind: "building" }, { name: "shellState" });
   // The shell registers commands with `onCleanup`, and it is built inside a
@@ -1173,7 +1184,7 @@ export function ProjectProvider(props: ParentProps<{ readonly go: (path: string)
         onCleanup(() => {
           void services.dispose();
         });
-        return makeShell(services, props.go);
+        return makeShell(services, props.navigate);
       });
       if (shell === undefined) return;
       setState({ kind: "ready", shell });

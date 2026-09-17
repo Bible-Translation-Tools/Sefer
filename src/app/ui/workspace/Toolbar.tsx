@@ -48,14 +48,6 @@ export function Toolbar() {
   const [menuOpen, setMenuOpen] = createSignal(false, { name: "toolbarMenu" });
   const shell = useShell();
 
-  const go = (to: string, search?: Readonly<Record<string, string>>): void => {
-    // SAFETY: `/find` and `/history` are route literals, but their search
-    // schemas belong to routes still being built, so the shapes are cast
-    // rather than declared here. An unknown search key is dropped, never a
-    // crash.
-    void navigate({ to: to as never, search: search as never });
-  };
-
   /**
    * "Mark 5 (Shila)" — book, where in it, project.
    *
@@ -83,7 +75,7 @@ export function Toolbar() {
 
   const pick = (value: Segment): void => {
     if (value === "stet") {
-      go(shell.projectPath("terms"));
+      void navigate({ to: "/project/$slug/terms", params: { slug: shell.slug() }, search: {} });
       return;
     }
     shell.setMode(value === "usfm" ? "usfm" : "default");
@@ -147,7 +139,11 @@ export function Toolbar() {
           onKeyDown={(event) => {
             if (event.key !== "Enter") return;
             event.preventDefault();
-            go(shell.projectPath("find"), { q: query() });
+            void navigate({
+              to: "/project/$slug/find",
+              params: { slug: shell.slug() },
+              search: { q: query() },
+            });
           }}
         />
 
@@ -174,7 +170,13 @@ export function Toolbar() {
             data-testid="toolbar-findings"
             label={t("Findings")}
             icon={<Bell size={16} />}
-            onClick={() => go(shell.projectPath("findings"))}
+            onClick={() =>
+              void navigate({
+                to: "/project/$slug/findings",
+                params: { slug: shell.slug() },
+                search: {},
+              })
+            }
           />
           <Show when={attention() > 0}>
             <span
@@ -223,7 +225,11 @@ export function Toolbar() {
             onClick={() => {
               setMenuOpen(false);
               runCommand("book.save");
-              go(shell.projectPath("history"), { review: "1" });
+              void navigate({
+                to: "/project/$slug/history",
+                params: { slug: shell.slug() },
+                search: { review: true },
+              });
             }}
           >
             {t("Save & Review")}
@@ -234,7 +240,11 @@ export function Toolbar() {
             class={item}
             onClick={() => {
               setMenuOpen(false);
-              go(shell.projectPath("inventory"));
+              void navigate({
+                to: "/project/$slug/inventory",
+                params: { slug: shell.slug() },
+                search: {},
+              });
             }}
           >
             {t("Character inventory")}

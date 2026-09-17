@@ -48,15 +48,6 @@ export function IconRail() {
   const navigate = useNavigate();
   const shell = useShell();
 
-  const go = (to: string, search?: Readonly<Record<string, string>>): void => {
-    // SAFETY: the cast is the usual typed-route one. Some of these paths
-    // (`/terms`, `/compare`) belong to routes being built alongside this one,
-    // so the generated tree does not know them yet and the literal union
-    // refuses them. A path the router cannot resolve goes through its own
-    // not-found boundary, so an unmerged tile is a 404 page, never a crash.
-    void navigate({ to: to as never, search: search as never });
-  };
-
   const findings = () => shell.findingCounts();
   const attention = () => findings().errors + findings().warnings;
 
@@ -86,7 +77,7 @@ export function IconRail() {
     const project = shell.project();
     if (project !== undefined && !inProject()) {
       shell.setSidebarOpen(true);
-      go(shell.landingPath(project.root));
+      void navigate(shell.landingTarget(project.root));
       return;
     }
     shell.setSidebarOpen(!shell.sidebarOpen());
@@ -134,7 +125,13 @@ export function IconRail() {
           tooltipSide="right"
           icon={<ListChecks size={18} />}
           aria-pressed={at("/terms")}
-          onClick={() => go(shell.projectPath("terms"))}
+          onClick={() =>
+            void navigate({
+              to: "/project/$slug/terms",
+              params: { slug: shell.slug() },
+              search: {},
+            })
+          }
         />
         <IconButton
           label={t("USFM")}
@@ -158,7 +155,7 @@ export function IconRail() {
           tooltipSide="right"
           aria-pressed={choosing()}
           icon={<FolderOpen size={18} />}
-          onClick={() => go("/")}
+          onClick={() => void navigate({ to: "/" })}
         />
 
         {/* Which characters this project actually uses, and this project
@@ -171,7 +168,13 @@ export function IconRail() {
             tooltipSide="right"
             aria-pressed={at("/inventory")}
             icon={<TypeIcon size={18} />}
-            onClick={() => go(shell.projectPath("inventory"))}
+            onClick={() =>
+              void navigate({
+                to: "/project/$slug/inventory",
+                params: { slug: shell.slug() },
+                search: {},
+              })
+            }
           />
           <IconButton
             label={t("Compare")}
@@ -179,7 +182,13 @@ export function IconRail() {
             tooltipSide="right"
             aria-pressed={at("/compare")}
             icon={<GitCompare size={18} />}
-            onClick={() => go(shell.projectPath("compare"))}
+            onClick={() =>
+              void navigate({
+                to: "/project/$slug/compare",
+                params: { slug: shell.slug() },
+                search: {},
+              })
+            }
           />
           <IconButton
             label={t("Cloud")}
@@ -187,7 +196,13 @@ export function IconRail() {
             tooltipSide="right"
             aria-pressed={at("/cloud")}
             icon={<CloudIcon size={18} />}
-            onClick={() => go(shell.projectPath("cloud"))}
+            onClick={() =>
+              void navigate({
+                to: "/project/$slug/cloud",
+                params: { slug: shell.slug() },
+                search: {},
+              })
+            }
           />
         </Show>
 
@@ -201,7 +216,13 @@ export function IconRail() {
             tooltipSide="right"
             aria-pressed={at("/findings")}
             icon={<Bell size={18} />}
-            onClick={() => go(shell.projectPath("findings"))}
+            onClick={() =>
+              void navigate({
+                to: "/project/$slug/findings",
+                params: { slug: shell.slug() },
+                search: {},
+              })
+            }
           />
           <Show when={attention() > 0}>
             <span
@@ -220,7 +241,13 @@ export function IconRail() {
           tooltipSide="right"
           aria-pressed={at("/history")}
           icon={<HistoryIcon size={18} />}
-          onClick={() => go(shell.projectPath("history"))}
+          onClick={() =>
+            void navigate({
+              to: "/project/$slug/history",
+              params: { slug: shell.slug() },
+              search: {},
+            })
+          }
         />
         <IconButton
           label={t("Settings")}
@@ -228,7 +255,7 @@ export function IconRail() {
           tooltipSide="right"
           aria-pressed={at("/settings")}
           icon={<SettingsIcon size={18} />}
-          onClick={() => go("/settings")}
+          onClick={() => void navigate({ to: "/settings" })}
         />
 
         {/* A placeholder until there is an account to read a name from: the

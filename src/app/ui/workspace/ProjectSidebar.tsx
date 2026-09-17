@@ -27,7 +27,7 @@ import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { Badge, Input } from "../primitives";
 import { bookName, parseReference, testamentOf, type Testament } from "./books";
-import { bookPath, metadataOf, projectLanguage, projectName, projectPath } from "./project";
+import { metadataOf, projectLanguage, projectName } from "./project";
 
 interface Row {
   readonly id: string;
@@ -63,14 +63,6 @@ export function ProjectSidebar() {
       if (at !== undefined && at >= 0) shell.showChapter(at);
     },
   );
-
-  const go = (to: string): void => {
-    // SAFETY: the book path is built at runtime from a project root and a book
-    // id, which no route literal union can spell. An unresolvable path is the
-    // router's own not-found, never a crash — the same trade
-    // `ProjectContext.go` makes for every navigation a command performs.
-    void navigate({ to: to as never });
-  };
 
   // A MEMO, not a plain function: `section()` below asks for it once per
   // testament, so without one every pass would build sixty-six rows twice.
@@ -143,7 +135,10 @@ export function ProjectSidebar() {
   const openBook = (bookId: string): void => {
     const project = shell.project();
     if (project === undefined) return;
-    go(bookPath(project.root, bookId));
+    void navigate({
+      to: "/project/$slug/book/$book",
+      params: { slug: shell.slug(), book: encodeURIComponent(bookId) },
+    });
   };
 
   const jump = (): void => {
@@ -257,7 +252,13 @@ export function ProjectSidebar() {
                 type="button"
                 data-recent={recent.root}
                 class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start text-small text-sidebar-on-surface transition-colors hover:bg-sidebar-surface-hover"
-                onClick={() => go(projectPath(recent.root))}
+                onClick={() =>
+                  void navigate({
+                    to: "/project/$slug",
+                    params: { slug: shell.slugFor(recent.root) },
+                    search: {},
+                  })
+                }
               >
                 <FolderClock size={15} aria-hidden="true" class="shrink-0" />
                 <span class="min-w-0 flex-1 truncate">{recent.name}</span>
@@ -269,7 +270,7 @@ export function ProjectSidebar() {
       <button
         type="button"
         class="mt-2 w-full cursor-pointer rounded-md px-2 py-1.5 text-start text-small text-brand transition-colors hover:bg-sidebar-surface-hover"
-        onClick={() => go("/")}
+        onClick={() => void navigate({ to: "/" })}
       >
         {t("All projects")}
       </button>
@@ -296,7 +297,7 @@ export function ProjectSidebar() {
           data-testid="sidebar-project"
           data-current={choosing() ? "" : undefined}
           class="flex w-full cursor-pointer items-center gap-2 rounded-lg border bg-surface-primary px-3 py-2 text-start transition-colors hover:bg-sidebar-surface-hover data-current:border-brand data-current:bg-brand-light not-data-current:border-surface-border"
-          onClick={() => go("/")}
+          onClick={() => void navigate({ to: "/" })}
         >
           <span class="min-w-0 flex-1">
             <span class="block truncate text-small font-bold text-on-surface-primary">
@@ -355,7 +356,7 @@ export function ProjectSidebar() {
           type="button"
           data-testid="sidebar-settings"
           class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-small text-sidebar-on-surface-muted transition-colors hover:bg-sidebar-surface-hover hover:text-sidebar-on-surface"
-          onClick={() => go("/settings")}
+          onClick={() => void navigate({ to: "/settings" })}
         >
           <SettingsIcon size={15} aria-hidden="true" />
           {t("Settings")}

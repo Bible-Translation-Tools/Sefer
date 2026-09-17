@@ -18,6 +18,7 @@
  * and does not care which happened.
  */
 
+import { useNavigate } from "@tanstack/solid-router";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronUp from "lucide-solid/icons/chevron-up";
 import ListTree from "lucide-solid/icons/list-tree";
@@ -27,12 +28,11 @@ import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { IconButton, Popover } from "../primitives";
 import { bookName } from "./books";
-import { metadataOf, projectPath } from "./project";
+import { metadataOf } from "./project";
 
 export interface LocationBarProps {
   /** The chapter row at the top of the viewport, as the editor measured it. */
   readonly ordinal: number | undefined;
-  readonly go: (path: string) => void;
 }
 
 /** What a chapter row is called when it has no `\c` number: the front matter. */
@@ -40,6 +40,7 @@ export const INTRO_LABEL = "Intro";
 
 export function LocationBar(props: LocationBarProps) {
   const shell = useShell();
+  const navigate = useNavigate();
   const [outline, setOutline] = createSignal(false, { name: "outlineOpen" });
 
   /**
@@ -120,8 +121,12 @@ export function LocationBar(props: LocationBarProps) {
   // last location (item 15) — this crumb is the one door to the census, and a
   // door that bounced you back would not be one.
   const toBooks = (): void => {
-    const project = shell.project();
-    if (project !== undefined) props.go(`${projectPath(project.root)}?books=1`);
+    if (shell.project() === undefined) return;
+    void navigate({
+      to: "/project/$slug",
+      params: { slug: shell.slug() },
+      search: { books: true },
+    });
   };
 
   return (

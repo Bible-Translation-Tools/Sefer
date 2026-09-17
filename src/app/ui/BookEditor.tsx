@@ -93,14 +93,6 @@ export function BookEditor(props: BookEditorProps) {
   const shell = useShell();
   // The book this instance is for, read once — see the mount effect below.
   const bookId = untrack(() => props.book.id);
-  const navigate = useNavigate();
-  const go = (to: string): void => {
-    // SAFETY: the project path is built at runtime from a root, which no route
-    // literal union can spell. An unresolvable path goes through the router's
-    // own not-found boundary, never a crash — the same trade every other
-    // navigation in the shell makes.
-    void navigate({ to: to as never });
-  };
   const observability = useComposition().observability;
   const [stamp, setStamp] = createSignal<SourceStamp | undefined>(undefined, { name: "stamp" });
   const [bound, setBound] = createSignal<Bound | undefined>(undefined, { name: "boundView" });
@@ -344,7 +336,7 @@ export function BookEditor(props: BookEditorProps) {
       data-mode={shell.mode()}
       data-revision={(stamp() ?? props.book.source().stamp).revision}
     >
-      <LocationBar ordinal={atTop()} go={go} />
+      <LocationBar ordinal={atTop()} />
       <div class="cm-host" data-testid="editor-host" ref={setHost} />
     </div>
   );
