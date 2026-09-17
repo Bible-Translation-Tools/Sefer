@@ -40,8 +40,11 @@ import {
   FindingsSnapshot,
   FORMAT_VERSION as SOUS_FORMAT_VERSION,
 } from "../../../vendor/galley/sous-reader";
-import { Census, FORMAT_VERSION as TOC_FORMAT_VERSION } from "../../../vendor/galley/toc-reader";
-import type { BookCensus } from "../../../vendor/galley/toc-reader";
+import {
+  Census as ProjectToc,
+  FORMAT_VERSION as TOC_FORMAT_VERSION,
+} from "../../../vendor/galley/toc-reader";
+import type { BookCensus as BookToc } from "../../../vendor/galley/toc-reader";
 import { Observability, type ObservabilityService } from "../observability";
 import type { Analysis, DiagnosticView } from "./analysis";
 import {
@@ -90,10 +93,21 @@ export type {
   PatternKey,
   Pool,
 } from "../../../vendor/galley/sous-reader";
-// The census reader, same rule: `toc`/`census` answer these classes, and the
+// The TOC reader, same rule: `toc`/`tocAll` answer these classes, and the
 // sidebar reads chapter counts off them without learning a layout.
-export { Census };
-export type { BookCensus, ChapterRow, VerseRow } from "../../../vendor/galley/toc-reader";
+//
+// RENAMED at the seam, deliberately. Upstream calls this buffer a "census" and
+// its rows `ChapterRow`/`VerseRow`; all three names are already spent in Sefer.
+// "Census" is the glyph inventory (`/inventory`) and the book-list page, and
+// `ChapterRow` is the editor's own row in `src/editor/core/docStructure.ts`.
+// TOC is what `search.md` and `resources.md` have called this thing since
+// before the door existed, so that is what it is called here.
+export { ProjectToc };
+export type { BookCensus as BookToc } from "../../../vendor/galley/toc-reader";
+export type {
+  ChapterRow as TocChapter,
+  VerseRow as TocVerse,
+} from "../../../vendor/galley/toc-reader";
 
 /** The wasm module could not be instantiated at all. */
 export class EngineLoadError extends Data.TaggedError("EngineLoadError")<{
@@ -418,24 +432,24 @@ export interface GalleyService {
   readonly lint: (id: string, why?: string) => readonly DiagnosticView[];
 
   /**
-   * One registered book's census — chapter count, verse count, chapter rows —
+   * One registered book's TOC — chapter count, verse count, chapter rows —
    * off the `Toc` that `update` already built.
    *
    * Nothing is derived: no chunk is resolved, no text is read, no wire is
    * plated. This is what a sidebar and a chapter picker want, and asking for
    * it is what takes one parse per book off a project's open.
    */
-  readonly toc: (id: string) => BookCensus | undefined;
+  readonly toc: (id: string) => BookToc | undefined;
 
   /**
-   * The same over every registered book, in canonical book order — the
-   * project-wide census in one call.
+   * The same over every registered book, in canonical book order — every
+   * book's TOC in one call.
    *
    * Offsets are bytes, not UTF-16: the table that rebases them travels with a
-   * book's text, and a census spans books. Counts are unit-free, so a sidebar
+   * book's text, and this spans books. Counts are unit-free, so a sidebar
    * never notices.
    */
-  readonly census: () => Census;
+  readonly tocAll: () => ProjectToc;
 
   /**
    * A memo for one Book: the same text returns the same `Analysis` instance.
@@ -861,12 +875,12 @@ const makeService = (
     return found;
   };
 
-  const toc = (id: string): BookCensus | undefined => {
+  const toc = (id: string): BookToc | undefined => {
     // UTF-16, because a chapter row's offsets are handed to CodeMirror. The
-    // project-wide `census` cannot do this — the table that rebases offsets
+    // project-wide `tocAll` cannot do this — the table that rebases offsets
     // travels with one book's text — which is why it answers counts only.
-    const census = Census.open(handle.toc(id, true));
-    return census.bookCount === 0 ? undefined : census.book(0);
+    const one = ProjectToc.open(handle.toc(id, true));
+    return one.bookCount === 0 ? undefined : one.book(0);
   };
 
   const memoize = (id?: string): ((text: string) => Analysis) => {
@@ -924,7 +938,7 @@ const makeService = (
     memoize,
     lint,
     toc,
-    census: () => Census.open(handle.tocAll(undefined, undefined)),
+    tocAll: () => ProjectToc.open(handle.tocAll(undefined, undefined)),
     find: (id, query) => decodeHits(handle.find(id, query.text, findOptions(query))),
     findAll: (query, scope) =>
       decodeHits(handle.findAll(query.text, findOptions(query, scope ?? "targets"))),
