@@ -11,11 +11,23 @@
  * does not want, and would put its open state in two places.
  */
 
-import { For, Show, createEffect, createSignal } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
+import type { Reference } from "../../core/reference/reference";
+import { parseReference } from "../../core/reference/reference";
 import { availableCommands, runCommand } from "../commands";
 import { t } from "../i18n";
+import { useShell } from "../ProjectContext";
 import { Kbd } from "./primitives";
+import { bookName, lookupFor } from "./workspace/books";
+import { metadataOf } from "./workspace/project";
+
+/** "Luke", "Luke 3", "Luke 3:1" — only as much as was actually named. */
+const referenceLabel = (found: Reference & { readonly label: string }): string => {
+  if (found.chapter === undefined) return found.label;
+  if (found.verse === undefined) return `${found.label} ${found.chapter}`;
+  return `${found.label} ${found.chapter}:${found.verse}`;
+};
 
 export interface PaletteProps {
   readonly open: boolean;
@@ -23,6 +35,7 @@ export interface PaletteProps {
 }
 
 export function CommandPalette(props: PaletteProps) {
+  const shell = useShell();
   const [query, setQuery] = createSignal("");
   const [box, setBox] = createSignal<HTMLInputElement | undefined>(undefined, {
     name: "paletteInput",
@@ -54,10 +67,41 @@ export function CommandPalette(props: PaletteProps) {
       command.title.toLowerCase().includes(query().trim().toLowerCase()),
     );
 
+  /**
+   * A place, when what was typed is one and no command answers to it.
+   *
+   * ONLY when no command matches, and that order is the whole design. "find"
+   * is a command and also the start of no book; "job" is a book and could
+   * easily become a word in some command's title. A reader who typed the name
+   * of a command they can see in the list means the command, always — so the
+   * reference is what the palette falls back to, never what it prefers.
+   *
+   * The parser is the same one the sidebar and the book picker use
+   * (`core/reference`), so "luk 3", "Lucas 3:1" and "1 john 2" mean the same
+   * thing everywhere in the application.
+   */
+  const place = createMemo(() => {
+    if (shown().length > 0) return undefined;
+    const project = shell.project();
+    if (project === undefined) return undefined;
+    const found = parseReference(query(), lookupFor(project, metadataOf(project)));
+    if (found === undefined) return undefined;
+    return { ...found, label: bookName(found.bookId, metadataOf(project)) };
+  });
+
   const choose = (id: string): void => {
     props.onClose();
     setQuery("");
     runCommand(id);
+  };
+
+  /** Go where the text pointed, and say so the way the reader wrote it. */
+  const go = (): void => {
+    const found = place();
+    if (found === undefined) return;
+    props.onClose();
+    setQuery("");
+    shell.showReference(found);
   };
 
   return (
@@ -95,6 +139,7 @@ export function CommandPalette(props: PaletteProps) {
               if (event.key !== "Enter") return;
               const first = shown()[0];
               if (first !== undefined) choose(first.id);
+              else go();
             }}
           />
           <ul class="overflow-auto py-1">
@@ -112,7 +157,22 @@ export function CommandPalette(props: PaletteProps) {
                 </li>
               )}
             </For>
-            <Show when={shown().length === 0}>
+            <Show when={place()}>
+              {(found) => (
+                <li>
+                  <button
+                    type="button"
+                    data-testid="palette-reference"
+                    class="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-start text-small text-on-surface-primary hover:bg-surface-secondary"
+                    onClick={go}
+                  >
+                    <span>{t("Go to {place}", { place: referenceLabel(found()) })}</span>
+                    <Kbd class="ms-auto">{t("Enter")}</Kbd>
+                  </button>
+                </li>
+              )}
+            </Show>
+            <Show when={shown().length === 0 && place() === undefined}>
               <li class="px-4 py-2 text-small text-on-surface-tertiary">
                 {t("No command matches.")}
               </li>

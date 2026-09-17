@@ -19,6 +19,7 @@ export {
   type IconButtonSize,
   type IconButtonVariant,
 } from "./IconButton";
+export { FilterList, type FilterListProps } from "./FilterList";
 export { Input, type InputProps, type InputSize } from "./Input";
 export { Kbd, type KbdProps } from "./Kbd";
 export { Popover, type PopoverAlign, type PopoverProps, type PopoverSide } from "./Popover";

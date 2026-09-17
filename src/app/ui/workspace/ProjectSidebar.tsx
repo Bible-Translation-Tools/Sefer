@@ -21,12 +21,12 @@ import FolderClock from "lucide-solid/icons/folder-clock";
 import SearchIcon from "lucide-solid/icons/search";
 import SettingsIcon from "lucide-solid/icons/settings";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
-import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
+import { For, Show, createMemo, createSignal } from "solid-js";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { Badge, Input } from "../primitives";
-import { bookName, parseReference, testamentOf, type Testament } from "./books";
+import { bookName, lookupFor, parseReference, testamentOf, type Testament } from "./books";
 import { metadataOf, projectLanguage, projectName } from "./project";
 
 interface Row {
@@ -40,30 +40,6 @@ export function ProjectSidebar() {
   const navigate = useNavigate();
   const shell = useShell();
   const [query, setQuery] = createSignal("", { name: "sidebarQuery" });
-  // A reference typed with a chapter ("Luke 1") names a place in a book that is
-  // not open yet. Setting the clip before navigating does not survive: the
-  // route's effect calls `focus`, and `focus` decides the opening chapter
-  // itself (`editor.preferChapterView`). So the chapter is REMEMBERED and
-  // applied once the book it names is the focused one.
-  const [pending, setPending] = createSignal<
-    { readonly bookId: string; readonly chapter: number } | undefined
-  >(undefined, { name: "pendingChapter" });
-
-  createEffect(
-    () => ({ focused: shell.focused()?.id, want: pending() }),
-    ({ focused, want }) => {
-      if (want === undefined || focused === undefined || focused !== want.bookId) return;
-      setPending(undefined);
-      // By LABEL, not by index: the engine's first chapter row is the front
-      // matter, so "3" is not necessarily the third row.
-      const at = shell
-        .focused()
-        ?.structure()
-        .chapters.findIndex((chapter) => chapter.label === String(want.chapter));
-      if (at !== undefined && at >= 0) shell.showChapter(at);
-    },
-  );
-
   // A MEMO, not a plain function: `section()` below asks for it once per
   // testament, so without one every pass would build sixty-six rows twice.
   //
@@ -144,18 +120,16 @@ export function ProjectSidebar() {
   const jump = (): void => {
     const project = shell.project();
     if (project === undefined) return;
-    const found = parseReference(
-      query(),
-      project.books.map((book) => book.id),
-    );
+    const found = parseReference(query(), lookupFor(project, metadataOf(project)));
     if (found === undefined) {
       shell.report(t("no book matches {query}", { query: query() }));
       return;
     }
-    setPending(
-      found.chapter === undefined ? undefined : { bookId: found.bookId, chapter: found.chapter },
-    );
-    openBook(found.bookId);
+    // One door for every "take me to Luke 3:1" in the application: the shell
+    // navigates and remembers the chapter until the book it names is focused
+    // (`Shell.showReference`). This screen kept its own copy of that, and the
+    // palette wanting the same thing is what moved it.
+    shell.showReference(found);
     setQuery("");
   };
 

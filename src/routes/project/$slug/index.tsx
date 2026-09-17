@@ -18,7 +18,7 @@ import { RecoveryBanner } from "../../../app/ui/recovery/RecoveryBanner";
  * page reads.
  */
 
-function ProjectPage(props: { readonly root: string; readonly census: boolean }) {
+function ProjectPage(props: { readonly root: string }) {
   const shell = useShell();
   const navigate = useNavigate();
   const [opening, setOpening] = createSignal(false);
@@ -28,18 +28,22 @@ function ProjectPage(props: { readonly root: string; readonly census: boolean })
    *
    * A translator who opens a project every morning was being shown a list of
    * books and asked to find their own place in it. `shell.lastLocation` is
-   * where they were; this route forwards to it, and the census is one click
-   * away on the location bar's book crumb, which arrives with `?books=1` and
-   * therefore does not bounce.
+   * where they were, and this route forwards to it.
+   *
+   * It forwards UNCONDITIONALLY now. There used to be a `?books=1` escape so
+   * the location bar's book crumb had somewhere to land that would not bounce
+   * it straight back out — a whole screen, and a search param to protect it,
+   * because a crumb had nowhere to go. The crumb is a picker now, so the only
+   * arrivals left here are the ones that mean "take me to my work".
    *
    * The remembered book is checked against the project HERE, because this is
    * the first moment it is open: a book that has since been removed falls back
    * to the census rather than to a not-found.
    */
   createEffect(
-    () => ({ root: props.root, census: props.census, held: shell.project() }),
-    ({ root, census, held }) => {
-      if (census || held === undefined || held.root !== root) return;
+    () => ({ root: props.root, held: shell.project() }),
+    ({ root, held }) => {
+      if (held === undefined || held.root !== root) return;
       // Untracked: an effect's callback does not track in Solid 2, and asking
       // it to would be wrong anyway — this reads where the reader WAS at the
       // moment the project opened, not a place that then follows them around.
@@ -156,26 +160,14 @@ function ProjectPage(props: { readonly root: string; readonly census: boolean })
   );
 }
 
-interface ProjectSearch {
-  readonly books?: boolean;
-}
-
 export const Route = createFileRoute("/project/$slug/")({
-  /**
-   * `?books=1` asks for the census itself and suppresses the forward to the
-   * last location. Every other arrival is an Open, and an Open means "take me
-   * back to my work".
-   */
-  validateSearch: (search: Record<string, unknown>): ProjectSearch =>
-    search.books === true || search.books === "1" || search.books === 1 ? { books: true } : {},
   head: () => ({ meta: [{ title: "Sefer — project" }] }),
   // No `ShellGate` and no root param: the parent route (`project/$slug`)
   // gated on the shell AND opened the project, so by the time this renders
   // `shell.project()` IS the project this URL names. Reading the root off the
   // shell rather than off the URL is the point of the parent existing.
   component: () => {
-    const search = Route.useSearch();
     const shell = useShell();
-    return <ProjectPage root={shell.project()?.root ?? ""} census={search().books === true} />;
+    return <ProjectPage root={shell.project()?.root ?? ""} />;
   },
 });

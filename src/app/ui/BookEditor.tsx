@@ -283,21 +283,61 @@ export function BookEditor(props: BookEditorProps) {
     },
   );
 
+  /**
+   * The mode the view is currently configured for, so a flip can be told from
+   * a first bind or a clip. Not a signal: nothing renders from it.
+   */
+  let showing: ProjectionName | undefined;
+
+  /** The document position sitting at the top of the viewport, right now. */
+  const topOfViewport = (view: EditorView): number | undefined => {
+    const box = view.scrollDOM.getBoundingClientRect();
+    // A few pixels in, so the probe lands inside the first visible line rather
+    // than on the boundary above it.
+    return view.posAtCoords({ x: box.left + 4, y: box.top + 4 }) ?? undefined;
+  };
+
   // The view choices: which classes paint how, and which chapter is editable.
   createRenderEffect(
     () => ({ held: bound(), mode: shell.mode(), chapter: shell.chapter() }),
     ({ held, mode, chapter }) => {
       if (held === undefined) return;
+      /**
+       * Flipping Regular/USFM must not move the reader.
+       *
+       * Both modes are the SAME DOCUMENT — Regular paints over markup rather
+       * than removing it — so an offset means the same verse in both, and the
+       * selection survives the reconfigure for free. What does not survive is
+       * the SCROLL: hidden markup collapses lines, so the same offset sits at
+       * a different height and the page appears to jump somewhere else in the
+       * book. Checking your work in the other mode is the whole reason to
+       * flip, and landing three chapters away defeats it.
+       *
+       * Only on a flip. This effect also runs on a CLIP, where re-anchoring
+       * would fight the deliberate jump the reader just asked for.
+       */
+      const flipped = showing !== undefined && showing !== mode;
+      showing = mode;
+      const anchor = flipped ? topOfViewport(held.view) : undefined;
       // The mode class rides the compartment as an editor attribute, not a
       // hand-added class: CodeMirror rewrites `view.dom`'s class attribute from
       // its facets whenever focus changes, and a class it did not put there is
       // wiped on the first click into the text.
       held.view.dispatch({
-        effects: held.projection.reconfigure([
-          assignment.of(projectionFor(mode)),
-          modeFacet.of(cmMode(mode)),
-          EditorView.editorAttributes.of({ class: `cm-mode-${cmMode(mode)}` }),
-        ]),
+        effects: [
+          held.projection.reconfigure([
+            assignment.of(projectionFor(mode)),
+            modeFacet.of(cmMode(mode)),
+            EditorView.editorAttributes.of({ class: `cm-mode-${cmMode(mode)}` }),
+          ]),
+          // In the SAME transaction as the reconfigure, not a second one after
+          // it. A separate dispatch measures the old layout — the decorations
+          // have changed but the heights have not been recomputed — so the
+          // scroll lands where the anchor used to be and the reader is thrown
+          // to the top of the book. One transaction lets CodeMirror apply the
+          // configuration and honour the scroll request in a single measure.
+          ...(anchor === undefined ? [] : [EditorView.scrollIntoView(anchor, { y: "start" })]),
+        ],
       });
       held.view.dispatch(pickChapter(held.view.state, chapter));
     },

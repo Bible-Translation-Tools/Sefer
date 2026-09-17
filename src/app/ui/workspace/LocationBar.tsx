@@ -22,12 +22,13 @@ import { useNavigate } from "@tanstack/solid-router";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronUp from "lucide-solid/icons/chevron-up";
 import ListTree from "lucide-solid/icons/list-tree";
-import { For, Show, createMemo, createSignal } from "solid-js";
+import { Show, createMemo, createSignal } from "solid-js";
 
+import { fold } from "../../../core/reference/reference";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { IconButton, Popover } from "../primitives";
-import { bookName } from "./books";
+import { FilterList, IconButton, Popover } from "../primitives";
+import { bookName, CANON } from "./books";
 import { metadataOf } from "./project";
 
 export interface LocationBarProps {
@@ -42,6 +43,7 @@ export function LocationBar(props: LocationBarProps) {
   const shell = useShell();
   const navigate = useNavigate();
   const [outline, setOutline] = createSignal(false, { name: "outlineOpen" });
+  const [picking, setPicking] = createSignal(false, { name: "bookPickerOpen" });
 
   /**
    * The focused book's chapter table.
@@ -53,7 +55,26 @@ export function LocationBar(props: LocationBarProps) {
    */
   const table = () => shell.outline();
 
-  const at = (): number => props.ordinal ?? shell.chapter() ?? 0;
+  /**
+   * Which chapter the reader is in.
+   *
+   * THE CLIP WINS. When the book is clipped to one chapter, that chapter IS
+   * where you are, whatever the scroll says — and what the scroll says is
+   * wrong: the hidden chapters are still in the document, occupying their
+   * offsets with zero height, so `chapterAtTop` probes the top edge, lands in
+   * the hidden front matter at position 0 and answers "Intro" for every
+   * chapter of the book.
+   *
+   * Which made Next and Previous useless with "Open books one chapter at a
+   * time" turned on. `step` looks the current row up by this number, so it
+   * always found row 0 and always moved to row 1: the first press went to
+   * chapter 1 and every press after it went to chapter 1 again, while the
+   * crumb read "Intro" throughout.
+   *
+   * The scroll reading is the answer only when the whole book is on screen,
+   * which is exactly when there is no clip.
+   */
+  const at = (): number => shell.chapter() ?? props.ordinal ?? 0;
 
   /**
    * The crumb's own row, by index. A chapter's ordinal IS its index in the
@@ -117,15 +138,35 @@ export function LocationBar(props: LocationBarProps) {
 
   const last = (): boolean => at() === lastOrdinal();
 
-  // `?books=1` because the project route forwards a plain arrival back to the
-  // last location (item 15) — this crumb is the one door to the census, and a
-  // door that bounced you back would not be one.
-  const toBooks = (): void => {
-    if (shell.project() === undefined) return;
+  /**
+   * The books this project holds, in canonical order, named as the project
+   * names them.
+   *
+   * This crumb used to navigate to a whole SCREEN — `/project/$slug?books=1`,
+   * a page that existed only because the crumb had nowhere else to go, and
+   * which needed a search param to stop the project route forwarding it
+   * straight back out again. A picker is what the crumb always meant, and the
+   * page and the param are gone with it.
+   */
+  const books = createMemo(() => {
+    const project = shell.project();
+    if (project === undefined) return [];
+    const metadata = metadataOf(project);
+    const order = new Map(CANON.map((book, index) => [book.id, index]));
+    return [...project.books]
+      .map((book) => ({ id: book.id, name: bookName(book.id, metadata) }))
+      .sort(
+        (a, b) =>
+          (order.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+          (order.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+      );
+  });
+
+  const goToBook = (id: string): void => {
+    setPicking(false);
     void navigate({
-      to: "/project/$slug",
-      params: { slug: shell.slug() },
-      search: { books: true },
+      to: "/project/$slug/book/$book",
+      params: { slug: shell.slug(), book: encodeURIComponent(id) },
     });
   };
 
@@ -141,14 +182,47 @@ export function LocationBar(props: LocationBarProps) {
          text underneath no worse: it covers it. The token carries dark. */
       class="sticky top-0 z-20 flex items-center gap-1 border-b border-surface-border bg-surface-primary px-3 py-1"
     >
-      <button
-        type="button"
-        data-testid="location-book"
-        class="cursor-pointer truncate rounded px-1 py-0.5 text-smallest font-medium text-on-surface-secondary transition-colors hover:bg-surface-secondary hover:text-on-surface-primary"
-        onClick={toBooks}
+      <Popover
+        label={t("Books")}
+        side="bottom"
+        align="start"
+        class="flex max-h-[60vh] w-64 flex-col p-2"
+        open={picking()}
+        onOpenChange={setPicking}
+        trigger={
+          <button
+            type="button"
+            data-testid="location-book"
+            class="cursor-pointer truncate rounded px-1 py-0.5 text-smallest font-medium text-on-surface-secondary transition-colors hover:bg-surface-secondary hover:text-on-surface-primary"
+          >
+            {name()}
+          </button>
+        }
       >
-        {name()}
-      </button>
+        <FilterList
+          label={t("Filter books")}
+          placeholder={t("Book or code…")}
+          items={books()}
+          current={shell.focused()?.id}
+          key={(book) => book.id}
+          // The CODE as well as the name: a translator types "mrk" as readily
+          // as "Mark", and a project may hold a book the canon does not name.
+          match={(book, query) => {
+            const needle = fold(query);
+            return fold(book.name).includes(needle) || book.id.toLowerCase().includes(needle);
+          }}
+          onPick={(book) => goToBook(book.id)}
+        >
+          {(book) => (
+            <>
+              <span class="w-9 shrink-0 font-mono text-smallest text-on-surface-tertiary">
+                {book.id}
+              </span>
+              <span class="truncate">{book.name}</span>
+            </>
+          )}
+        </FilterList>
+      </Popover>
 
       <Show when={where() !== ""}>
         <span aria-hidden="true" class="text-smallest text-on-surface-tertiary">
@@ -159,7 +233,7 @@ export function LocationBar(props: LocationBarProps) {
           label={t("Outline")}
           side="bottom"
           align="start"
-          class="max-h-[60vh] w-56 overflow-y-auto p-1"
+          class="flex max-h-[60vh] w-56 flex-col p-2"
           open={outline()}
           onOpenChange={setOutline}
           trigger={
@@ -173,22 +247,24 @@ export function LocationBar(props: LocationBarProps) {
             </button>
           }
         >
-          <For each={rows()}>
+          <FilterList
+            label={t("Filter chapters")}
+            placeholder={t("Chapter…")}
+            items={rows()}
+            current={String(at())}
+            key={(row) => String(row.ordinal)}
+            match={(row, query) => fold(row.label).startsWith(fold(query))}
+            onPick={(row) => {
+              setOutline(false);
+              shell.showChapter(row.ordinal);
+            }}
+          >
             {(row) => (
-              <button
-                type="button"
-                data-testid={`outline-${row.intro ? "intro" : row.label}`}
-                data-current={row.ordinal === at() ? "" : undefined}
-                class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-start text-small text-on-surface-primary transition-colors hover:bg-surface-secondary data-current:bg-brand-light data-current:font-semibold data-current:text-brand"
-                onClick={() => {
-                  setOutline(false);
-                  shell.showChapter(row.ordinal);
-                }}
-              >
+              <span data-testid={`outline-${row.intro ? "intro" : row.label}`}>
                 {row.intro ? row.label : t("Chapter {label}", { label: row.label })}
-              </button>
+              </span>
             )}
-          </For>
+          </FilterList>
         </Popover>
       </Show>
 

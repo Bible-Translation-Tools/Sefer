@@ -27,6 +27,7 @@ import type { UseNavigateResult } from "@tanstack/solid-router";
 import { Effect, Fiber, Option, Result, Stream } from "effect";
 import {
   createContext,
+  createEffect,
   createMemo,
   createSignal,
   getOwner,
@@ -49,6 +50,7 @@ import { Observability } from "../core/observability";
 import { openProject as openProjectEffect, type Project } from "../core/project/project";
 import { mintSlug } from "../core/project/slug";
 import { DEFAULT_JOURNAL_POLICY, Recovery } from "../core/recovery/recovery";
+import type { Reference } from "../core/reference/reference";
 import { SaveCoordinator } from "../core/save/saveCoordinator";
 import type { SourceStamp } from "../core/source/source";
 import { anchorFrom, type ChapterRow, type EditorBook, type ProjectionName } from "../editor";
@@ -176,6 +178,12 @@ export interface Shell {
    * one place that decides.
    */
   readonly showChapter: (ordinal: number) => void;
+
+  /**
+   * Go to a book, and to a chapter and verse of it when the text named one.
+   * The one door for every "take me to Luke 3:1" in the application.
+   */
+  readonly showReference: (reference: Reference) => void;
 
   /**
    * The editor reporting which chapter is at the TOP of its viewport, so that
@@ -432,6 +440,10 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     name: "focusedBook",
   });
   const [mode, setMode] = createSignal<ProjectionName>("default", { name: "mode" });
+  /** A reference waiting for the book it names to become the focused one. */
+  const [pendingPlace, setPendingPlace] = createSignal<Reference | undefined>(undefined, {
+    name: "pendingPlace",
+  });
   const [chapter, setChapter] = createSignal<number | null>(null, { name: "chapter" });
 
   /**
@@ -983,6 +995,65 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     aim(book.id, anchorFrom(chapter), undefined, "top");
   };
 
+  /**
+   * A place somebody named, from anywhere: the sidebar's box, the location
+   * bar's book picker, the command palette.
+   *
+   * Navigating to a book and then asking for a chapter of it does not work as
+   * one step, and the reason is worth stating once here rather than being
+   * rediscovered per caller: the chapter table belongs to a book that is not
+   * open yet, and the route's own effect calls `focus`, which decides the
+   * opening chapter itself from `editor.preferChapterView`. So the chapter is
+   * REMEMBERED and applied when the book it names becomes the focused one.
+   *
+   * `ProjectSidebar` grew a local signal and an effect to do exactly this. It
+   * lives here now because the palette wanted the same thing, and two copies
+   * of "wait for the book, then scroll" would drift.
+   */
+  const showReference = (reference: Reference): void => {
+    if (project() === undefined) return;
+    if (reference.chapter !== undefined) setPendingPlace(reference);
+    void navigate({
+      to: "/project/$slug/book/$book",
+      params: { slug: slug(), book: encodeURIComponent(reference.bookId) },
+    });
+  };
+
+  createEffect(
+    () => ({ book: focused()?.id, want: pendingPlace() }),
+    ({ book, want }) => {
+      if (want === undefined || book === undefined || book !== want.bookId) return;
+      setPendingPlace(undefined);
+      const held = focused();
+      if (held === undefined || want.chapter === undefined) return;
+      // By LABEL, not by index: the engine's first chapter row is the front
+      // matter, so "3" is not necessarily the third row.
+      const at = held
+        .structure()
+        .chapters.findIndex((chapter) => chapter.label === String(want.chapter));
+      if (at >= 0) showChapter(at);
+      // The verse is a scroll WITHIN the chapter we just landed on, so it runs
+      // after: `showChapter` aims at the chapter's own anchor and this moves
+      // from there. A verse the book does not have leaves you at the chapter,
+      // which is the nearest true answer.
+      if (want.verse === undefined || at < 0) return;
+      const chapter = held.structure().chapters[at];
+      if (chapter === undefined) return;
+      // Verse rows are a flat list over the whole book and carry no chapter of
+      // their own, so the chapter's extent is what scopes the search — the
+      // same number appears once per chapter.
+      const verse = held
+        .structure()
+        .verses.find(
+          (row) =>
+            row.markerFrom >= chapter.from &&
+            row.markerFrom < chapter.to &&
+            row.num === String(want.verse),
+        );
+      if (verse !== undefined) aim(held.id, verse.markerFrom, undefined, "top");
+    },
+  );
+
   const stepFinding = (delta: 1 | -1): void => {
     const list = findings();
     if (list.length === 0) {
@@ -1059,6 +1130,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     aim,
     reveal,
     showChapter,
+    showReference,
     noteChapterAtTop,
     lastLocation,
     landingTarget,
