@@ -311,10 +311,13 @@ const make = (
      * engine refused the text (the previously held analysis is kept and the
      * entry stays stale).
      *
-     * ONE door, not two. `analyze(text, why, id)` registers the text and then
-     * parses off the retained copy; a separate `corpus.update` beside it would
-     * send the same string across the wall a second time, which is the habit
-     * the engine's maintainer measured as most of a project open's cost.
+     * ONE door, not two, and so PLAIN rather than an effect. `analyze(text,
+     * why, id)` registers the text and then parses off the retained copy; a
+     * separate `corpus.update` beside it would send the same string across the
+     * wall a second time, which is the habit the engine's maintainer measured
+     * as most of a project open's cost. With that gone there is nothing here
+     * that leaves this thread, and a generator that never yields was saying
+     * otherwise.
      *
      * That is also why `update` no longer goes through `CorpusEngine`: a
      * registration the parse path cannot see is not a registration the parse
@@ -328,40 +331,39 @@ const make = (
       // Whoever is narrating: the pass that is running, or the root when a
       // project is opening. `refresh` cannot tell, which is the point.
       into: ObservabilityService | undefined = observability,
-    ): Effect.Effect<SourceStamp | undefined> =>
-      Effect.gen(function* () {
-        const source = book.source();
-        const handed = supplied.get(bookId);
-        supplied.delete(bookId);
-        // The editor's analysis counts only if it describes the text the Book
-        // holds RIGHT NOW; a keystroke between the supply and this pass makes
-        // it a stale gift, not a shortcut.
-        let analysis: Analysis;
-        if (handed !== undefined && describesExactly(handed, source.text)) analysis = handed;
-        else {
-          try {
-            analysis = galley.analyze(source.text, "scheduler", bookId);
-          } catch {
-            // Retain, do not clear: an engine refusal is an integration
-            // problem, not evidence that the book became clean.
-            into?.note("book.analyze", "failed", "engine refused", { "book.id": bookId });
-            return undefined;
-          }
+    ): SourceStamp | undefined => {
+      const source = book.source();
+      const handed = supplied.get(bookId);
+      supplied.delete(bookId);
+      // The editor's analysis counts only if it describes the text the Book
+      // holds RIGHT NOW; a keystroke between the supply and this pass makes
+      // it a stale gift, not a shortcut.
+      let analysis: Analysis;
+      if (handed !== undefined && describesExactly(handed, source.text)) analysis = handed;
+      else {
+        try {
+          analysis = galley.analyze(source.text, "scheduler", bookId);
+        } catch {
+          // Retain, do not clear: an engine refusal is an integration
+          // problem, not evidence that the book became clean.
+          into?.note("book.analyze", "failed", "engine refused", { "book.id": bookId });
+          return undefined;
         }
-        entry.analysis = analysis;
-        entry.stamp = source.stamp;
-        entry.stale = false;
-        // A gift from the editor was parsed through the id door too, on the
-        // keystroke that produced it, so the corpus already holds this text
-        // either way and there is nothing to register here.
-        const { errors } = countsOf(bookId, analysis, source.stamp);
-        into?.note("book.analyze", "ready", undefined, {
-          "book.id": bookId,
-          "analysis.diagnostics": analysis.dish.diagnostics.length,
-          "analysis.errors": errors,
-        });
-        return source.stamp;
+      }
+      entry.analysis = analysis;
+      entry.stamp = source.stamp;
+      entry.stale = false;
+      // A gift from the editor was parsed through the id door too, on the
+      // keystroke that produced it, so the corpus already holds this text
+      // either way and there is nothing to register here.
+      const { errors } = countsOf(bookId, analysis, source.stamp);
+      into?.note("book.analyze", "ready", undefined, {
+        "book.id": bookId,
+        "analysis.diagnostics": analysis.dish.diagnostics.length,
+        "analysis.errors": errors,
       });
+      return source.stamp;
+    };
 
     /**
      * One whole-corpus publication, through whichever door this host got. The
@@ -409,7 +411,7 @@ const make = (
         const entry = entries.get(bookId);
         const book = project.book(bookId);
         if (entry === undefined || book === undefined) continue;
-        const stamp = yield* refresh(bookId, book, entry, running ?? observability);
+        const stamp = refresh(bookId, book, entry, running ?? observability);
         if (stamp !== undefined) refreshed.push({ bookId, stamp });
       }
       if (refreshed.length > 0) {
@@ -500,7 +502,7 @@ const make = (
           // not an interaction cost. It is also the remaining cold path on
           // BOTH hosts — the parse cannot move, so only the corpus half of
           // each lap crosses the seam.
-          yield* refresh(book.id, book, entry);
+          refresh(book.id, book, entry);
           subscribe(book);
         }
         yield* publishCorpus;
