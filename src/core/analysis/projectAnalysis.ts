@@ -166,7 +166,7 @@ export interface ProjectAnalysisService {
    * zero chapters, zero verses and zero counts — read `fresh` to tell that
    * apart from a clean book.
    */
-  readonly census: (project: Project) => readonly BookSummary[];
+  readonly bookCensus: (project: Project) => readonly BookSummary[];
 
   readonly analysis: (bookId: BookId) => Option.Option<HeldAnalysis>;
   /** Is the held analysis the one for this stamp? */
@@ -618,7 +618,7 @@ const make = (
         if (cause !== undefined) causedBy = cause;
         arm(bookId);
       },
-      census: (project) =>
+      bookCensus: (project) =>
         project.books.map((book) => {
           const entry = entries.get(book.id);
           return entry === undefined

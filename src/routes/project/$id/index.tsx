@@ -12,7 +12,7 @@ import { ShellGate } from "../../../app/ui/ShellGate";
 /**
  * One project: the book census, and which books have unsaved work.
  *
- * Both come straight from the modules — `ProjectAnalysis.census(project)` and
+ * Both come straight from the modules — `ProjectAnalysis.bookCensus(project)` and
  * `SaveCoordinator.dirty(book)` — and both are synchronous reads of things
  * already in memory. Neither is recomputed here; the page reads
  * `shell.tick()` so that an edit made in the editor route re-renders it, which
@@ -71,7 +71,7 @@ function ProjectPage(props: { readonly root: string; readonly census: boolean })
   // last Publication instead of rebuilt on every read. Rebuilding it meant
   // materialising every finding in every book to count two of them, and behind
   // `tick` this page did that on every keystroke typed in another route.
-  const census = () => shell.census();
+  const census = () => shell.bookCensus();
 
   const dirty = (bookId: string): boolean => {
     const book = shell.project()?.book(bookId);

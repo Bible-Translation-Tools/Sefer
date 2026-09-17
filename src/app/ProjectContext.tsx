@@ -250,7 +250,7 @@ export interface Shell {
    * How many findings one book is being asked about — the sidebar's badge.
    *
    * A read of the census store, written when a Publication lands. It replaces
-   * `ProjectAnalysis.census()` per keystroke per reader: the census rebuilds
+   * `ProjectAnalysis.bookCensus()` per keystroke per reader: it rebuilds
    * every finding in every book, and the sidebar was calling it on every tick.
    */
   readonly attentionOf: (bookId: BookId) => number;
@@ -259,7 +259,7 @@ export interface Shell {
   readonly summaryOf: (bookId: BookId) => BookSummary | undefined;
 
   /** The whole census, in the project's book order. Publication-scoped. */
-  readonly census: Accessor<readonly BookSummary[]>;
+  readonly bookCensus: Accessor<readonly BookSummary[]>;
 
   /** The character inventory of the last Publication. */
   readonly inventory: Accessor<Inventory>;
@@ -572,7 +572,7 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     findingCounts,
     summaryOf,
     attentionOf,
-    census,
+    bookCensus,
     inventory,
   } = stores;
 
@@ -947,7 +947,7 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     findingCounts,
     attentionOf,
     summaryOf,
-    census,
+    bookCensus,
     inventory,
     stampOf,
     historyDepth: () => {

@@ -96,7 +96,7 @@ export interface ShellStores {
   readonly findingCounts: Accessor<{ readonly errors: number; readonly warnings: number }>;
   readonly summaryOf: (bookId: BookId) => BookSummary | undefined;
   readonly attentionOf: (bookId: BookId) => number;
-  readonly census: Accessor<readonly BookSummary[]>;
+  readonly bookCensus: Accessor<readonly BookSummary[]>;
   readonly inventory: Accessor<Inventory>;
 }
 
@@ -181,7 +181,7 @@ export const makeShellStores = (options: {
       if (held.severity === "error") errors += 1;
       else if (held.severity === "warning") warnings += 1;
     }
-    const rows = services.projectAnalysis.census(staticOpen);
+    const rows = services.projectAnalysis.bookCensus(staticOpen);
     setFindingsList(list);
     setFindingTotals({ errors, warnings });
     setInventoryHeld(services.projectAnalysis.inventory());
@@ -217,7 +217,7 @@ export const makeShellStores = (options: {
   };
 
   /** The whole census, in the project's own book order. */
-  const census = (): readonly BookSummary[] => {
+  const bookCensus = (): readonly BookSummary[] => {
     // Untracked, and correct: every change to the census is a write to
     // `censusHeld` above, which is what wakes this. A project opening or
     // closing writes it too.
@@ -411,7 +411,7 @@ export const makeShellStores = (options: {
     findingCounts,
     summaryOf,
     attentionOf,
-    census,
+    bookCensus,
     inventory,
   };
 };
