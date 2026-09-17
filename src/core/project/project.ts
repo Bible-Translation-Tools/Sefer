@@ -406,6 +406,22 @@ export const openProject = (
     );
   });
 
+/**
+ * How many books are read at once when a project opens.
+ *
+ * Measured over en_ulb (66 books) in Chrome, five opens each, median of the
+ * time between `project.open` starting and the parse beginning:
+ *
+ *   1 (sequential)  161 ms      4  95 ms
+ *   12               75 ms     32  71 ms
+ *
+ * Most of the win is in by 12 and the curve is flat after it, so this is the
+ * knee rather than the floor. Bounded rather than unbounded because 32 buys
+ * 4ms over 12, and a whole-Bible project would hold every book's bytes in
+ * flight at once to get it.
+ */
+const OPEN_CONCURRENCY = 12;
+
 const openIn = (
   root: string,
   options: OpenProjectOptions,
@@ -435,8 +451,28 @@ const openIn = (
     const entries = new Map<BookId, Entry>();
     const failed: FailedBook[] = [];
 
-    for (const path of paths) {
-      const opened = yield* Effect.result(openBook(path));
+    // The reads go WIDE; the bookkeeping stays in order.
+    //
+    // Opening a project spent more time reading files than parsing them — 66
+    // sequential awaits on OPFS, each one a round trip to the storage thread
+    // that the main thread simply waits out. They do not depend on each other,
+    // so they do not need to be sequential.
+    //
+    // `Effect.forEach` with a concurrency answers IN INPUT ORDER however the
+    // reads interleave, which is what lets the fold below stay exactly as it
+    // was: canonical order still decides which of two files claiming one `\id`
+    // keeps it, and a slow read cannot promote a book past its neighbour.
+    //
+    // Bounded rather than unbounded: sixty-six simultaneous file handles is a
+    // burst the storage layer queues anyway, and an unbounded `forEach` over a
+    // whole-Bible project would also hold every book's bytes in memory at once.
+    const reads = yield* Effect.forEach(paths, (path) => Effect.result(openBook(path)), {
+      concurrency: OPEN_CONCURRENCY,
+    });
+
+    for (const [index, path] of paths.entries()) {
+      // SAFETY: `forEach` answers one result per input, in input order.
+      const opened = reads[index]!;
       if (Result.isFailure(opened)) {
         failed.push({ path, error: opened.failure });
         observability?.note("project.open", "declined", `${path} ${describe(opened.failure)}`);
