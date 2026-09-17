@@ -46,7 +46,7 @@ import {
 
 import { makeBook, openBook, type Book, type BookId } from "../book/book";
 import { normalisePath } from "../fileSystem/path";
-import { Observability, type ObservabilityService } from "../observability";
+import { Observability, type ObservabilityService, type Operation } from "../observability";
 import type { BurritoMetadata } from "../resources/burrito";
 import type { SourceDecodeError } from "../source/source";
 import { discoverBooks, readProjectMetadata } from "./discovery";
@@ -370,6 +370,32 @@ export const openProject = (
     // first analysis pass — belongs inside it rather than beside it. The
     // operation IS an ObservabilityService, so `openIn` narrates into it
     // without knowing it is doing so.
+    //
+    // Unless we are ALREADY inside one, which is the ordinary case: the shell
+    // opens `project.open` as the reader's gesture and provides it here, so
+    // that opening the files and analysing them are one record rather than two
+    // whose durations have to be added up by hand. Opening a second operation
+    // of the same name defeated exactly that, and the ring showed the damage —
+    // two overlapping `project.open` records per landing, both claiming 66
+    // books, which reads as the project having been opened twice. It was not;
+    // it was recorded twice.
+    //
+    // So: contribute to the one we were handed, and open our own only when
+    // nobody handed us anything. That is the rule the event inventory already
+    // states for `seat.open` — nested when inside, its own operation when not
+    // — and the DI model gives it for free, because whichever service arrives
+    // is the one that decides.
+    // SAFETY: an `Operation` is an `ObservabilityService` with these three
+    // extra members; `attr` is the one probed for and the one used.
+    const enclosing = observability as Partial<Operation>;
+    if (typeof enclosing.attr === "function") {
+      const attr = enclosing.attr.bind(enclosing);
+      return Effect.onExit(openIn(root, options, observability), (exit) =>
+        Effect.sync(() => {
+          if (exit._tag === "Success") attr({ "project.books": exit.value.books.length });
+        }),
+      );
+    }
     const opening = observability.operation("project.open", { "project.root": root });
     return Effect.onExit(openIn(root, options, opening), (exit) =>
       Effect.sync(() => {

@@ -620,7 +620,32 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     if (staticOpen !== undefined) await services.run(staticOpen.close());
   };
 
-  const openProject = async (root: string): Promise<void> => {
+  /**
+   * The open that is still running, and the root it is opening.
+   *
+   * Both routes that can land on a project guard with "is this one already
+   * open", and both read `project()`, which is not set until `attach` has
+   * finished. For the four hundred milliseconds in between, the answer is
+   * "no" — so landing on `/project/X` and forwarding to `/project/X/book/Y`
+   * opened en_ulb TWICE, parsing sixty-six books each time, and the ring said
+   * so: two `project.open` records per landing, back to back.
+   *
+   * Held here rather than fixed in the routes because a guard on a value that
+   * only exists afterwards cannot be made correct in the caller. This is the
+   * one place that knows an open is in flight.
+   */
+  let opening: { readonly root: string; readonly done: Promise<void> } | undefined;
+
+  const openProject = (root: string): Promise<void> => {
+    if (opening !== undefined && opening.root === root) return opening.done;
+    const done = openProjectOnce(root).finally(() => {
+      if (opening?.root === root) opening = undefined;
+    });
+    opening = { root, done };
+    return done;
+  };
+
+  const openProjectOnce = async (root: string): Promise<void> => {
     await closeProject();
     // ONE record for one thing the person did. Opening the files and analysing
     // what was opened are two calls and one gesture: separately they were two
