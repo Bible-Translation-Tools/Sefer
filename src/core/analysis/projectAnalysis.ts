@@ -306,15 +306,20 @@ const make = (
     };
 
     /**
-     * Analyze one book and register it with the corpus. Succeeds with the
-     * stamp the analysis describes, or `undefined` when the engine refused the
-     * text (the previously held analysis is kept and the entry stays stale).
+     * Analyze one book, registering it with the corpus in the same call.
+     * Succeeds with the stamp the analysis describes, or `undefined` when the
+     * engine refused the text (the previously held analysis is kept and the
+     * entry stays stale).
      *
-     * The parse is synchronous and in-process: it is the same `analyze` the
-     * editor runs, off the same warm chunk cache. The corpus registration is
-     * not — on desktop `corpus.update` crosses IPC into native Rust — so the
-     * `yield*` below is where this book's share of the work leaves the JS
-     * thread.
+     * ONE door, not two. `analyze(text, why, id)` registers the text and then
+     * parses off the retained copy; a separate `corpus.update` beside it would
+     * send the same string across the wall a second time, which is the habit
+     * the engine's maintainer measured as most of a project open's cost.
+     *
+     * That is also why `update` no longer goes through `CorpusEngine`: a
+     * registration the parse path cannot see is not a registration the parse
+     * path can name. The port still owns `publish`, `find`, `remove` and
+     * `updateReference` — the calls a Worker could genuinely take.
      */
     const refresh = (
       bookId: BookId,
@@ -335,7 +340,7 @@ const make = (
         if (handed !== undefined && describesExactly(handed, source.text)) analysis = handed;
         else {
           try {
-            analysis = galley.analyze(source.text, "scheduler");
+            analysis = galley.analyze(source.text, "scheduler", bookId);
           } catch {
             // Retain, do not clear: an engine refusal is an integration
             // problem, not evidence that the book became clean.
@@ -346,14 +351,9 @@ const make = (
         entry.analysis = analysis;
         entry.stamp = source.stamp;
         entry.stale = false;
-        // A corpus registration that did not land costs this book its share of
-        // the cross-book half only; its own analysis stands, and the next pass
-        // registers it again. Reported, never swallowed.
-        yield* Effect.catch(corpus.update(bookId, source.text), (error) =>
-          Effect.sync(() =>
-            into?.note("corpus.update", "failed", error.reason, { "book.id": bookId }),
-          ),
-        );
+        // A gift from the editor was parsed through the id door too, on the
+        // keystroke that produced it, so the corpus already holds this text
+        // either way and there is nothing to register here.
         const { errors } = countsOf(bookId, analysis, source.stamp);
         into?.note("book.analyze", "ready", undefined, {
           "book.id": bookId,
