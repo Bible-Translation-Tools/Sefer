@@ -421,7 +421,7 @@ const make = (
      * corpus ONCE. Publishing per book would throw away the previous snapshot
      * n times and judge the corpus n times for one user gesture.
      */
-    const pass = Effect.gen(function* () {
+    const pass = Effect.sync(() => {
       const project = attached;
       if (project === undefined) {
         pending.clear();
@@ -568,7 +568,7 @@ const make = (
         // Scoped to the attachment, so leaving the project cancels it rather
         // than publishing a corpus we have already begun to dismantle.
         yield* Effect.forkScoped(
-          Effect.gen(function* () {
+          Effect.sync(() => {
             publishCorpus();
             invalidateCaches();
           }),
@@ -633,7 +633,7 @@ const make = (
     const attachReferences = (
       references: readonly ReferenceText[],
     ): Effect.Effect<readonly string[]> =>
-      Effect.gen(function* () {
+      Effect.sync(() => {
         const wanted = new Set(references.map((reference) => reference.id));
         for (const id of referenceIds) if (!wanted.has(id)) forget(id);
         const registered: string[] = [];
