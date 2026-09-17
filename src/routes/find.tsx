@@ -23,7 +23,7 @@ import {
 import { ShellGate } from "../app/ui/ShellGate";
 import * as Workflows from "../app/workflows/references";
 import type { BookId } from "../core/book/book";
-import { CorpusEngine } from "../core/galley";
+import { Galley } from "../core/galley";
 import * as Search from "../core/search/search";
 
 /**
@@ -171,11 +171,11 @@ function Find() {
   /**
    * One search, through whichever door the toggles name.
    *
-   * The engine path is asynchronous because the corpus is: on desktop the
-   * projections live in the native process, which is exactly where the search
-   * has to run. The corpus already holds every book of the open project —
-   * `ProjectAnalysis.attach` registers them as it opens — so nothing here
-   * registers anything.
+   * The engine path stays an Effect because a search can fail and this screen
+   * reports why, not because it suspends — the engine is in this process and
+   * the call is synchronous. The corpus already holds every book of the open
+   * project (`ProjectAnalysis.attach` registers them as it opens), so nothing
+   * here registers anything.
    */
   const run = async (over?: Over): Promise<void> => {
     const project = shell.project();
@@ -197,8 +197,8 @@ function Find() {
     // here rather than folded into the excerpt path below.
     if (want === "reference") {
       const found = await shell.services.run(
-        Effect.flatMap(CorpusEngine, (corpus) =>
-          Effect.result(Search.findInReferences(corpus, staticQuery, options)),
+        Effect.flatMap(Galley, (galley) =>
+          Effect.result(Search.findInReferences(galley, staticQuery, options)),
         ),
       );
       setHits([]);
@@ -216,8 +216,8 @@ function Find() {
       staticQuery.regex === true
         ? Search.find(books, staticQuery, options)
         : await shell.services.run(
-            Effect.flatMap(CorpusEngine, (corpus) =>
-              Effect.result(Search.findProjected(corpus, books, staticQuery, options)),
+            Effect.flatMap(Galley, (galley) =>
+              Effect.result(Search.findProjected(galley, books, staticQuery, options)),
             ),
           );
     setReferenceHits([]);

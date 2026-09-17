@@ -4,7 +4,6 @@
  */
 
 export * from "./analysis";
-export * from "./corpus";
 export * from "./diff";
 export * from "./format";
 export * from "./overlay";

@@ -77,7 +77,8 @@ export interface MatchFormatting {
 /**
  * Register both sides with the wasm handle, so the overlay doors can read them.
  *
- * The handle, NOT the `CorpusEngine` port, and that is the one thing worth
+ * The handle directly — which, since the `CorpusEngine` port was deleted, is
+ * the only door. What is worth
  * reading twice here. The overlay doors are on the `Galley` handle in this
  * process; on Web the corpus IS that handle, so the target is already there and
  * this costs a checksum, but on desktop the corpus lives in the native process

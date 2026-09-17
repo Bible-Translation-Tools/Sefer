@@ -31,13 +31,14 @@
 //     shows known-stale findings rather than an apparently clean project
 //     (vision §11.4).
 //
-// Two engines, not one. The per-book `analyze` comes off the `Galley` handle in
-// this process — that is the editor's synchronous path and it never moves. The
-// whole-corpus half (`update`, `remove`, `publish`) goes through the
-// `CorpusEngine` port instead, which on desktop is native Rust with rayon
-// mapping chapters on Tauri's thread pool. Everything below that awaits a
-// corpus call is therefore the place where the work leaves the JS thread; see
-// documentation/architecture/galley.md, "Two doors, one publication".
+// ONE engine. The per-book `analyze` and the whole-corpus `update`/`remove`/
+// `publish` are two halves of the same `Galley` handle in this process, and
+// every call here is SYNCHRONOUS. That is load-bearing, not incidental:
+// JavaScript cannot run a keystroke handler in the middle of a wasm call, so a
+// debounced publication needs its revision checked once on entry and never
+// again — nothing can move underneath it. There was a `CorpusEngine` port with
+// a native implementation over IPC; both are deleted, and the reason is in
+// documentation/architecture/galley.md.
 //
 // Telemetry carries counts and codes only. A diagnostic's message quotes the
 // document and lives in Findings.
@@ -48,12 +49,10 @@ import type { Book, BookId } from "../book/book";
 import { fromAnalysis, fromSnapshot, type Finding } from "../findings/finding";
 import { EMPTY as EMPTY_INVENTORY, inventory, type Inventory } from "../findings/inventory";
 import {
-  CorpusEngine,
   describesExactly,
   Galley,
   stampOf,
   type Analysis,
-  type CorpusEngineService,
   type EngineStamp,
   type FindingsSnapshot,
   type GalleyService,
@@ -115,7 +114,10 @@ export interface ProjectAnalysisService {
    * Attaching a second Project replaces the first: the module holds one
    * project's worth of analyses, and the Galley corpus is one corpus.
    */
-  readonly attach: (project: Project) => Effect.Effect<void, never, Scope.Scope>;
+  readonly attach: (
+    project: Project,
+    options?: { readonly first?: BookId },
+  ) => Effect.Effect<void, never, Scope.Scope>;
 
   /**
    * The editor's own synchronous analysis, handed in instead of a second
@@ -275,7 +277,6 @@ const summaryOf = (bookId: BookId, entry: Entry): BookSummary => {
 
 const make = (
   galley: GalleyService,
-  corpus: CorpusEngineService,
   observability: ObservabilityService | undefined,
 ): Effect.Effect<ProjectAnalysisService> =>
   Effect.gen(function* () {
@@ -334,10 +335,9 @@ const make = (
      * that leaves this thread, and a generator that never yields was saying
      * otherwise.
      *
-     * That is also why `update` no longer goes through `CorpusEngine`: a
-     * registration the parse path cannot see is not a registration the parse
-     * path can name. The port still owns `publish`, `find`, `remove` and
-     * `updateReference` — the calls a Worker could genuinely take.
+     * That is also what killed the `CorpusEngine` port: a registration the
+     * parse path cannot SEE is not a registration the parse path can name, so
+     * an engine anywhere but here cannot answer `parse(id)` at all.
      */
     const refresh = (
       bookId: BookId,
@@ -388,17 +388,33 @@ const make = (
      * A refused publication RETAINS the previous snapshot: known-stale
      * cross-book findings beat an apparently clean project.
      */
-    const publishCorpus = Effect.gen(function* () {
-      const done = observability?.span("corpus.publish", corpus.kind);
-      const published = yield* Effect.catch(corpus.publish(), (error) =>
-        Effect.sync(() => {
-          observability?.note("corpus.publish", "failed", `${corpus.kind} ${error.reason}`);
-          return undefined;
-        }),
-      );
-      if (published !== undefined) snapshot = published;
+    /**
+     * Drop one id from the corpus, never mind whether it was there.
+     *
+     * `remove` answers `false` for an id it never knew, which is not a failure
+     * and is not interesting: every caller here is tidying up after a project
+     * it is leaving.
+     */
+    const forget = (id: string): void => {
+      try {
+        galley.remove(id);
+      } catch {
+        // An engine that will not forget an id is an engine we are about to
+        // replace the whole corpus of anyway.
+      }
+    };
+
+    const publishCorpus = (): void => {
+      const done = observability?.span("corpus.publish");
+      try {
+        snapshot = galley.publish();
+      } catch (cause) {
+        // A refused publication RETAINS the previous snapshot: known-stale
+        // cross-book findings beat an apparently clean project.
+        observability?.note("corpus.publish", "failed", String(cause));
+      }
       done?.();
-    });
+    };
 
     /**
      * One scheduler pass: re-analyze every pending book, then publish the
@@ -430,7 +446,7 @@ const make = (
         if (stamp !== undefined) refreshed.push({ bookId, stamp });
       }
       if (refreshed.length > 0) {
-        yield* publishCorpus;
+        publishCorpus();
         invalidateCaches();
       }
       running?.end("ready", { "analysis.refreshed": refreshed.length });
@@ -472,14 +488,17 @@ const make = (
       return out;
     };
 
-    const attach = (project: Project): Effect.Effect<void, never, Scope.Scope> =>
+    const attach = (
+      project: Project,
+      options?: { readonly first?: BookId },
+    ): Effect.Effect<void, never, Scope.Scope> =>
       Effect.gen(function* () {
         // One project at a time. Re-attaching drops the previous corpus rather
         // than judging two projects as one — the bound references included,
         // because a resource bound to the project we are leaving is not a
         // reference for the one we are opening.
-        for (const bookId of entries.keys()) yield* Effect.ignore(corpus.remove(bookId));
-        for (const id of referenceIds) yield* Effect.ignore(corpus.remove(id));
+        for (const bookId of entries.keys()) forget(bookId);
+        for (const id of referenceIds) forget(id);
         referenceIds = [];
         entries.clear();
         supplied.clear();
@@ -505,7 +524,20 @@ const make = (
         };
 
         const done = observability?.span("analysis.pass", project.root);
-        for (const book of project.books) {
+        // The book the reader is about to look at goes FIRST.
+        //
+        // The loop is serial and the whole project is parsed before the open
+        // finishes either way, so this costs nothing and changes nothing about
+        // the total. What it changes is which parse the reader is waiting on:
+        // in canonical order, opening JUD waits behind sixty-five books it is
+        // not going to show. The editor needs one analysis to draw, and this
+        // makes it the first one produced rather than the last.
+        const first = options?.first;
+        const ordered =
+          first === undefined
+            ? project.books
+            : [...project.books].sort((a, b) => Number(b.id === first) - Number(a.id === first));
+        for (const book of ordered) {
           const entry: Entry = {
             analysis: undefined,
             stamp: undefined,
@@ -537,7 +569,7 @@ const make = (
         // than publishing a corpus we have already begun to dismantle.
         yield* Effect.forkScoped(
           Effect.gen(function* () {
-            yield* publishCorpus;
+            publishCorpus();
             invalidateCaches();
           }),
         );
@@ -603,22 +635,16 @@ const make = (
     ): Effect.Effect<readonly string[]> =>
       Effect.gen(function* () {
         const wanted = new Set(references.map((reference) => reference.id));
-        for (const id of referenceIds) if (!wanted.has(id)) yield* Effect.ignore(corpus.remove(id));
+        for (const id of referenceIds) if (!wanted.has(id)) forget(id);
         const registered: string[] = [];
         for (const reference of references) {
-          const done = yield* Effect.catch(
-            Effect.as(corpus.updateReference(reference.id, reference.text, true), true),
-            (error) =>
-              Effect.sync(() => {
-                observability?.note(
-                  "corpus.reference",
-                  "failed",
-                  `${reference.id} ${error.reason}`,
-                );
-                return false;
-              }),
-          );
-          if (done) registered.push(reference.id);
+          try {
+            galley.updateReference(reference.id, reference.text, true);
+            registered.push(reference.id);
+          } catch (cause) {
+            // One unreadable reference must not cost the others their scope.
+            observability?.note("corpus.reference", "failed", `${reference.id} ${String(cause)}`);
+          }
         }
         referenceIds = registered;
         observability?.note("corpus.reference", "ready", `${registered.length} books`);
@@ -677,20 +703,18 @@ const make = (
   });
 
 /**
- * The Layer. Needs `Galley` for the synchronous per-book parse and
- * `CorpusEngine` for the whole-corpus half — two requirements because on
- * desktop they are two processes. Takes `Observability` optionally, so core
- * policy runs with or without the ring. It is NOT scoped: the module holds no
- * host resource of its own, and the fibers and subscriptions belong to the
- * scope that called `attach`.
+ * The Layer. Needs `Galley`, and only `Galley`: the per-book parse and the
+ * whole-corpus publication are two halves of ONE handle in this process, and
+ * they were only ever two requirements because they used to be two processes.
+ * Takes `Observability` optionally, so core policy runs with or without the
+ * ring. It is NOT scoped: the module holds no host resource of its own, and
+ * the fibers and subscriptions belong to the scope that called `attach`.
  */
-export const ProjectAnalysisLive: Layer.Layer<ProjectAnalysis, never, Galley | CorpusEngine> =
-  Layer.effect(
-    ProjectAnalysis,
-    Effect.gen(function* () {
-      const galley = yield* Galley;
-      const corpus = yield* CorpusEngine;
-      const observability = yield* Effect.serviceOption(Observability);
-      return yield* make(galley, corpus, Option.getOrUndefined(observability));
-    }),
-  );
+export const ProjectAnalysisLive: Layer.Layer<ProjectAnalysis, never, Galley> = Layer.effect(
+  ProjectAnalysis,
+  Effect.gen(function* () {
+    const galley = yield* Galley;
+    const observability = yield* Effect.serviceOption(Observability);
+    return yield* make(galley, Option.getOrUndefined(observability));
+  }),
+);

@@ -650,7 +650,10 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
       Effect.provideService(
         Effect.gen(function* () {
           const analysis = yield* ProjectAnalysis;
-          yield* analysis.attach(ready);
+          // The remembered book first. `attach` parses the whole project
+          // serially either way; naming the landing book decides which parse
+          // the reader is waiting on rather than how many there are.
+          yield* analysis.attach(ready, { first: lastLocation(root)?.bookId });
         }),
         Observability,
         gesture,

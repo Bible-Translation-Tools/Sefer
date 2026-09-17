@@ -35,9 +35,7 @@ import {
 import type { BookId } from "../core/book/book";
 import { FixtureFileSystemLive, SMALL_NT_ROOT } from "../core/fixture/smallNt";
 import {
-  CorpusEngine,
   Galley,
-  WasmCorpusLive,
   type EngineLoadError,
   type GalleyService,
   type VersionMismatch,
@@ -112,7 +110,6 @@ export type Domain =
   | Observability
   | FileSystem.FileSystem
   | Galley
-  | CorpusEngine
   | HostInfo
   | Settings
   | Credentials
@@ -296,27 +293,27 @@ const domainLayer = (
   );
 
   /**
-   * The engine. ONE handle, in the webview, on both hosts.
+   * The engine. ONE handle, ONE Layer, in the webview, on both hosts.
    *
    * Desktop used to run the whole-corpus half natively behind Tauri commands,
-   * to keep a publication off the thread that paints the editor. That is gone,
-   * and the reason is the id doors: `parse(id)` and `lint(id)` answer off the
-   * text a handle retains, so a corpus that lives in another process is a
-   * corpus the parse path cannot ask about. Keeping both meant every book's
-   * text crossing the wall twice — once to register natively, once to parse in
-   * wasm — which is most of what the engine's maintainer measured us wasting.
+   * so a publication did not run on the thread that paints the editor. That is
+   * gone, and so is the port that made room for it. The id doors are the
+   * reason: `parse(id)` and `lint(id)` answer off the text a handle RETAINS,
+   * so a corpus living in another process is a corpus the parse path cannot
+   * name, and keeping both meant every book's text crossing the wall twice.
    *
-   * What we gave up is real: rayon mapped a cold publication's chapters across
-   * ten threads, and wasm maps them on one. What we got is one resident copy
-   * of the project instead of two, and the parse path able to name a book
-   * rather than re-send it. A Worker is the way back to a publication off this
-   * thread, and the port's signature is still asynchronous so that stays a
-   * one-Layer change.
+   * What we gave up is real — rayon mapped a cold publication's chapters
+   * across ten threads and wasm maps them on one. What we got is one resident
+   * copy of the project, and a parse path that names a book rather than
+   * re-sending it.
    *
-   * `provideMerge` because `WasmCorpusLive` needs the handle `WebGalleyLive`
-   * builds, and both must come OUT of this layer.
+   * The way back to an off-thread publication is a Worker, and it is worth
+   * being honest that the deleted port would NOT have made that a one-Layer
+   * change: a Worker needs the whole corpus on the other side, which is the
+   * same thing that made the native door untenable. Whoever builds it is
+   * moving the engine, not swapping an implementation.
    */
-  const engine = Layer.provideMerge(WasmCorpusLive, WebGalleyLive);
+  const engine = WebGalleyLive;
 
   const host = Layer.mergeAll(
     engine,

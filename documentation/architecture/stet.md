@@ -166,7 +166,7 @@ The source is paired to the target **by book code in the file name**, the same
 loose rule `Library.lookup` uses. Resource layouts vary and the manifest that
 would answer authoritatively is YAML.
 
-Registration goes to the wasm **handle**, not through the `CorpusEngine` port.
+Registration goes to the wasm **handle**, which since the `CorpusEngine` port was deleted is the only door there is.
 On Web those are the same object; on desktop the corpus is a separate process
 and the handle has never been told about either book, so without this the view
 would work on Web and quietly not on desktop. It costs the source's text being

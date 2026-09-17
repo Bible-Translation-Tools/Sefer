@@ -34,7 +34,7 @@
 import { Data, Effect, Result } from "effect";
 
 import { Refusal, UNTRUSTED, type Book, type BookId, type Receipt, type Ref } from "../book/book";
-import type { CorpusEngineService } from "../galley/corpus";
+import type { GalleyService } from "../galley/galley";
 import type { EngineHit } from "../galley/galley";
 import type { Change, SourceStamp } from "../source/source";
 
@@ -367,7 +367,7 @@ const projectedHit = (
  * opens.
  */
 export const findProjected = (
-  corpus: CorpusEngineService,
+  galley: GalleyService,
   books: readonly Book[],
   query: Query,
   options?: Options,
@@ -384,47 +384,49 @@ export const findProjected = (
   if (limit <= 0) return Effect.succeed([]);
   const wanted = options?.books === undefined ? null : new Set(options.books);
 
-  return corpus
-    .find({
-      text: query.text,
-      caseSensitive: query.caseSensitive,
-      wholeWord: query.wholeWord,
-      limit,
-    })
-    .pipe(
-      Effect.mapError(
-        (error) =>
-          new SearchError({
-            reason: "Engine",
-            description: `${error.reason}: ${error.description}`,
-          }),
-      ),
-      Effect.map((found): readonly Hit[] => {
-        // One ref table per book that actually matched, shared by its hits —
-        // the same trade `find` makes, and the reason a book the search did
-        // not touch costs nothing here.
-        const seats = new Map(books.map((book) => [book.id, book] as const));
-        const tables = new Map<BookId, { table: RefTable; stamp: SourceStamp }>();
-        const hits: Hit[] = [];
-        for (const engineHit of found) {
-          const bookId = engineHit.bookId;
-          if (bookId === undefined) continue;
-          const book = seats.get(bookId);
-          if (book === undefined) continue;
-          if (wanted !== null && !wanted.has(bookId)) continue;
-          let held = tables.get(bookId);
-          if (held === undefined) {
-            const source = book.source();
-            held = { table: buildRefTable(source.text), stamp: source.stamp };
-            tables.set(bookId, held);
-          }
-          const hit = projectedHit(engineHit, book, held.table, held.stamp);
-          if (hit !== undefined) hits.push(hit);
-          if (hits.length >= limit) break;
-        }
-        return hits;
+  return Effect.try({
+    try: () =>
+      galley.findAll({
+        text: query.text,
+        caseSensitive: query.caseSensitive,
+        wholeWord: query.wholeWord,
+        limit,
       }),
-    );
+    catch: (cause) => ({ reason: "Engine" as const, description: String(cause) }),
+  }).pipe(
+    Effect.mapError(
+      (error) =>
+        new SearchError({
+          reason: "Engine",
+          description: `${error.reason}: ${error.description}`,
+        }),
+    ),
+    Effect.map((found): readonly Hit[] => {
+      // One ref table per book that actually matched, shared by its hits —
+      // the same trade `find` makes, and the reason a book the search did
+      // not touch costs nothing here.
+      const seats = new Map(books.map((book) => [book.id, book] as const));
+      const tables = new Map<BookId, { table: RefTable; stamp: SourceStamp }>();
+      const hits: Hit[] = [];
+      for (const engineHit of found) {
+        const bookId = engineHit.bookId;
+        if (bookId === undefined) continue;
+        const book = seats.get(bookId);
+        if (book === undefined) continue;
+        if (wanted !== null && !wanted.has(bookId)) continue;
+        let held = tables.get(bookId);
+        if (held === undefined) {
+          const source = book.source();
+          held = { table: buildRefTable(source.text), stamp: source.stamp };
+          tables.set(bookId, held);
+        }
+        const hit = projectedHit(engineHit, book, held.table, held.stamp);
+        if (hit !== undefined) hits.push(hit);
+        if (hits.length >= limit) break;
+      }
+      return hits;
+    }),
+  );
 };
 
 // ---------------------------------------------------------------------------
@@ -469,7 +471,7 @@ export interface ReferenceHit {
  * find is `memmem` over the projection and there is no regex on that side.
  */
 export const findInReferences = (
-  corpus: CorpusEngineService,
+  galley: GalleyService,
   query: Query,
   options?: Options,
 ): Effect.Effect<readonly ReferenceHit[], SearchError> => {
@@ -483,32 +485,34 @@ export const findInReferences = (
     );
   const limit = options?.limit ?? DEFAULT_LIMIT;
   if (limit <= 0) return Effect.succeed([]);
-  return corpus
-    .find(
-      {
-        text: query.text,
-        caseSensitive: query.caseSensitive,
-        wholeWord: query.wholeWord,
-        limit,
-      },
-      "references",
-    )
-    .pipe(
-      Effect.mapError(
-        (error) =>
-          new SearchError({
-            reason: "Engine",
-            description: `${error.reason}: ${error.description}`,
-          }),
+  return Effect.try({
+    try: () =>
+      galley.findAll(
+        {
+          text: query.text,
+          caseSensitive: query.caseSensitive,
+          wholeWord: query.wholeWord,
+          limit,
+        },
+        "references",
       ),
-      Effect.map((found): readonly ReferenceHit[] =>
-        found.map((hit) => ({
-          source: hit.bookId ?? "",
-          projected: hit.projected,
-          preview: hit.preview,
-        })),
-      ),
-    );
+    catch: (cause) => ({ reason: "Engine" as const, description: String(cause) }),
+  }).pipe(
+    Effect.mapError(
+      (error) =>
+        new SearchError({
+          reason: "Engine",
+          description: `${error.reason}: ${error.description}`,
+        }),
+    ),
+    Effect.map((found): readonly ReferenceHit[] =>
+      found.map((hit) => ({
+        source: hit.bookId ?? "",
+        projected: hit.projected,
+        preview: hit.preview,
+      })),
+    ),
+  );
 };
 
 // ---------------------------------------------------------------------------
