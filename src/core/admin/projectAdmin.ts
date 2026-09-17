@@ -23,8 +23,14 @@ import { zipSync } from "fflate";
 
 import { writeFileAtomic, writeFileStringAtomic } from "../fileSystem/atomic";
 import { joinPath, parentPath } from "../fileSystem/path";
+import { MANIFEST_FILE } from "../project/discovery";
 import { type BurritoMetadata, decodeBurritoMetadata } from "../resources/burrito";
 import { refreshIngredientChecksums } from "../resources/checksum";
+import {
+  fromBurrito,
+  readResourceContainer,
+  type ProjectMetadata,
+} from "../resources/projectMetadata";
 
 /** Scripture Burrito's own name for the file; not ours to choose. */
 export const METADATA_FILE = "metadata.json";
@@ -70,8 +76,11 @@ export interface ProjectAdminService {
   readonly rename: (root: string, name: string) => Effect.Effect<void, AdminError>;
   /** Removes the project folder, but only after `confirm` answers true. */
   readonly delete: (root: string, confirm: Confirm) => Effect.Effect<void, AdminError>;
-  /** `None` when the project carries no `metadata.json`; `Invalid` when it does but it is broken. */
-  readonly metadata: (root: string) => Effect.Effect<Option.Option<BurritoMetadata>, AdminError>;
+  /**
+   * What the project declares, from `metadata.json` or `manifest.yaml`.
+   * `None` when it carries neither; `Invalid` only when a BURRITO is broken.
+   */
+  readonly metadata: (root: string) => Effect.Effect<Option.Option<ProjectMetadata>, AdminError>;
   /**
    * The name a `rename` recorded for a project that has no burrito to carry
    * one — `.sefer/project.json`'s `name`, and `None` when there is no such
@@ -280,7 +289,14 @@ const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminServic
       });
     });
 
-  const metadata = (root: string): Effect.Effect<Option.Option<BurritoMetadata>, AdminError> =>
+  /**
+   * The BURRITO, decoded — the write paths' read.
+   *
+   * `rename` and `refreshChecksums` edit `metadata.json` through its schema,
+   * so they need the burrito itself and not the application's view of it. Kept
+   * private: nothing outside this file writes metadata.
+   */
+  const burrito = (root: string): Effect.Effect<Option.Option<BurritoMetadata>, AdminError> =>
     Effect.flatMap(rawMetadata(root), (raw) =>
       Option.match(raw, {
         onNone: () => Effect.succeed(Option.none<BurritoMetadata>()),
@@ -295,12 +311,45 @@ const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminServic
       }),
     );
 
+  /**
+   * What the project declares, from whichever container it uses.
+   *
+   * Reading is common to both formats and writing is not: `updateMetadata`
+   * below still goes through the Burrito schema, because Sefer authors
+   * burritos and has no business rewriting somebody's `manifest.yaml`. So this
+   * door answers `ProjectMetadata` and the write door keeps its own raw read.
+   *
+   * A `manifest.yaml` that does not decode is NOT an error here the way a
+   * broken `metadata.json` is. A burrito is Sefer's own file and a bad one is
+   * a defect worth reporting; a Resource Container came from somewhere else,
+   * and a project whose manifest we cannot read is still a perfectly good
+   * folder of USFM that should list and open.
+   */
+  const metadata = (root: string): Effect.Effect<Option.Option<ProjectMetadata>, AdminError> =>
+    Effect.gen(function* () {
+      const raw = yield* rawMetadata(root);
+      if (Option.isSome(raw)) {
+        const decoded = decodeBurritoMetadata(raw.value);
+        return Result.isFailure(decoded)
+          ? yield* Effect.fail(
+              new AdminError({ reason: "Invalid", description: decoded.failure.message }),
+            )
+          : Option.some(fromBurrito(decoded.success));
+      }
+      const path = `${root}/${MANIFEST_FILE}`;
+      const present = yield* Effect.mapError(fileSystem.exists(path), ioFailure);
+      if (!present) return Option.none();
+      const text = yield* Effect.mapError(fileSystem.readFileString(path), ioFailure);
+      const read = readResourceContainer(text);
+      return Result.isFailure(read) ? Option.none() : Option.some(read.success);
+    });
+
   return {
     rename: (root, name) =>
       Effect.gen(function* () {
         const raw = yield* rawMetadata(root);
         if (Option.isSome(raw)) {
-          const current = yield* metadata(root);
+          const current = yield* burrito(root);
           if (Option.isSome(current)) {
             const locale = nameLocale(current.value);
             const identification = {
@@ -377,7 +426,7 @@ const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminServic
       Effect.gen(function* () {
         const raw = yield* rawMetadata(root);
         if (Option.isNone(raw)) return [];
-        const current = yield* metadata(root);
+        const current = yield* burrito(root);
         if (Option.isNone(current)) return [];
         const refreshed = yield* refreshIngredientChecksums(
           current.value,

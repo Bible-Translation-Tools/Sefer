@@ -14,9 +14,17 @@ import { Effect, FileSystem, Option, PlatformError, Result } from "effect";
 
 import { joinPath, normalisePath } from "../fileSystem/path";
 import { decodeBurritoMetadata, type BurritoMetadata } from "../resources/burrito";
+import {
+  fromBurrito,
+  readResourceContainer,
+  type ProjectMetadata,
+} from "../resources/projectMetadata";
 
 /** The burrito metadata file, read from directly under the project root. */
 export const METADATA_FILE = "metadata.json";
+
+/** The Resource Container manifest, the other way a project declares itself. */
+export const MANIFEST_FILE = "manifest.yaml";
 
 /**
  * The extensions a bare file in the root must carry to be a book. Matched
@@ -69,21 +77,61 @@ export const canonicalOrder = (paths: readonly string[]): readonly string[] =>
     return left < right ? -1 : left > right ? 1 : 0;
   });
 
-/** Why a project has no burrito metadata, in vocabulary a note can carry. */
-export type MetadataRefusal = "absent" | "unreadable" | "unparsable" | "notABurrito";
+/** Why a project has no metadata Sefer could read, in a note's vocabulary. */
+export type MetadataRefusal = "absent" | "unreadable" | "unparsable" | "notAKnownFormat";
 
 export interface MetadataRead {
-  readonly metadata: Option.Option<BurritoMetadata>;
+  /** What the application reads, whichever container it came from. */
+  readonly metadata: Option.Option<ProjectMetadata>;
+  /**
+   * The BURRITO, when that is what this was.
+   *
+   * Narrower than `metadata` on purpose, and not a duplicate of it: the
+   * ingredients table is a Burrito concept that a Resource Container has no
+   * answer for, and it is what `discoverBooks` below reads to find a book that
+   * is not directly under the root. Everything that does not need ingredients
+   * should take `metadata` and stay indifferent to the format.
+   */
+  readonly burrito: Option.Option<BurritoMetadata>;
   /** Absent when the metadata decoded; otherwise why it did not. */
   readonly declined?: MetadataRefusal;
 }
 
+const NOTHING = { metadata: Option.none(), burrito: Option.none() } as const;
+
+const readTextIfPresent = (
+  fileSystem: FileSystem.FileSystem,
+  path: string,
+): Effect.Effect<Option.Option<string>, "unreadable"> =>
+  Effect.gen(function* () {
+    const present = yield* Effect.result(fileSystem.exists(path));
+    if (Result.isFailure(present) || !present.success) return Option.none();
+    const bytes = yield* Effect.result(fileSystem.readFile(path));
+    if (Result.isFailure(bytes)) return yield* Effect.fail("unreadable" as const);
+    return Option.some(new TextDecoder().decode(bytes.success));
+  });
+
 /**
- * Reads and decodes `<root>/metadata.json`. Never fails: a folder of loose
- * USFM files is a legitimate project, and metadata that does not decode as a
- * Scripture Burrito is treated exactly like metadata that is not there —
- * discovery falls back to the extension scan and `project.metadata()` is
- * `None`. The refusal is returned rather than logged here so the caller can
+ * A project's own declaration, from whichever of the two containers it uses.
+ *
+ *   metadata.json    Scripture Burrito
+ *   manifest.yaml    Resource Container
+ *
+ * Burrito FIRST, and the order is a rule rather than a preference: it is the
+ * format Sefer writes, so a project that carries both has been through Sefer
+ * and its burrito is the newer statement. A Resource Container is only
+ * consulted when there is no burrito to consult.
+ *
+ * Only the second half is new. Sefer read `metadata.json` and nothing else,
+ * which is why `en_ulb` — a Resource Container, like most of what comes out of
+ * the catalogue — showed a folder name for its title and an em dash for its
+ * language. Both formats were already Effect schemas; what was missing was a
+ * shape to decode them into (`resources/projectMetadata.ts`).
+ *
+ * Never fails: a folder of loose USFM files is a legitimate project, and
+ * metadata that does not decode is treated exactly like metadata that is not
+ * there — discovery falls back to the extension scan and `project.metadata()`
+ * is `None`. The refusal is returned rather than logged here so the caller can
  * note it once, at the `project.open` boundary.
  */
 export const readProjectMetadata = (
@@ -91,25 +139,43 @@ export const readProjectMetadata = (
   root: string,
 ): Effect.Effect<MetadataRead> =>
   Effect.gen(function* () {
-    const path = joinPath(root, METADATA_FILE);
-    const present = yield* Effect.result(fileSystem.exists(path));
-    if (Result.isFailure(present) || !present.success)
-      return { metadata: Option.none(), declined: "absent" };
-
-    const bytes = yield* Effect.result(fileSystem.readFile(path));
-    if (Result.isFailure(bytes)) return { metadata: Option.none(), declined: "unreadable" };
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(new TextDecoder().decode(bytes.success));
-    } catch {
-      return { metadata: Option.none(), declined: "unparsable" };
+    const burritoText = yield* Effect.orElseSucceed(
+      readTextIfPresent(fileSystem, joinPath(root, METADATA_FILE)),
+      () => Option.none<string>(),
+    );
+    if (Option.isSome(burritoText)) {
+      // Decoded ONCE, here, and narrowed after: this is the one caller that
+      // needs the burrito itself as well as the application's view of it, so
+      // it takes the raw decoder and applies the adapter rather than reading
+      // the file's shape twice.
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(burritoText.value);
+      } catch {
+        return { ...NOTHING, declined: "unparsable" };
+      }
+      const decoded = decodeBurritoMetadata(parsed);
+      return Result.isFailure(decoded)
+        ? { ...NOTHING, declined: "notAKnownFormat" }
+        : {
+            metadata: Option.some(fromBurrito(decoded.success)),
+            burrito: Option.some(decoded.success),
+          };
     }
 
-    const decoded = decodeBurritoMetadata(parsed);
-    return Result.isFailure(decoded)
-      ? { metadata: Option.none(), declined: "notABurrito" }
-      : { metadata: Option.some(decoded.success) };
+    const manifestText = yield* Effect.orElseSucceed(
+      readTextIfPresent(fileSystem, joinPath(root, MANIFEST_FILE)),
+      () => Option.none<string>(),
+    );
+    if (Option.isNone(manifestText)) return { ...NOTHING, declined: "absent" };
+
+    const read = readResourceContainer(manifestText.value);
+    return Result.isFailure(read)
+      ? {
+          ...NOTHING,
+          declined: read.failure.reason === "Syntax" ? "unparsable" : "notAKnownFormat",
+        }
+      : { metadata: Option.some(read.success), burrito: Option.none() };
   });
 
 /**
@@ -135,8 +201,8 @@ export const discoverBooks = (
     for (const name of names) if (isBookFileName(name)) paths.add(joinPath(root, name));
 
     const read = yield* readProjectMetadata(fileSystem, root);
-    if (Option.isSome(read.metadata)) {
-      for (const [name, ingredient] of Object.entries(read.metadata.value.ingredients))
+    if (Option.isSome(read.burrito)) {
+      for (const [name, ingredient] of Object.entries(read.burrito.value.ingredients))
         if (isUsfmIngredient(name, ingredient.mimeType)) paths.add(joinPath(root, name));
     }
 

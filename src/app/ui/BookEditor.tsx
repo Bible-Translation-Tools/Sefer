@@ -59,8 +59,10 @@ import {
   watchLocation,
 } from "../../editor";
 import { useComposition } from "../CompositionContext";
+import { textDirection } from "../language";
 import { useShell } from "../ProjectContext";
 import { LocationBar } from "./workspace/LocationBar";
+import { metadataOf } from "./workspace/project";
 
 // Last measurements for the dev surface; one module-level ring is enough.
 
@@ -91,6 +93,8 @@ interface Bound {
 
 export function BookEditor(props: BookEditorProps) {
   const shell = useShell();
+  /** Which way this project's scripture runs; see the host element below. */
+  const direction = (): "ltr" | "rtl" => textDirection(metadataOf(shell.project()));
   // The book this instance is for, read once — see the mount effect below.
   const bookId = untrack(() => props.book.id);
   const observability = useComposition().observability;
@@ -337,7 +341,13 @@ export function BookEditor(props: BookEditorProps) {
       data-revision={(stamp() ?? props.book.source().stamp).revision}
     >
       <LocationBar ordinal={atTop()} />
-      <div class="cm-host" data-testid="editor-host" ref={setHost} />
+      {/* The PROJECT's direction, not the application's. A translator working
+          in Arabic reads Sefer's own chrome in whatever interface language
+          they chose and their scripture right-to-left; the two are separate
+          settings and this is the text one. It rides the host element because
+          CodeMirror reads `direction` off its computed style rather than from
+          a facet, so the browser's own bidi handling does the work. */}
+      <div class="cm-host" dir={direction()} data-testid="editor-host" ref={setHost} />
     </div>
   );
 }

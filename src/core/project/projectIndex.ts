@@ -65,15 +65,23 @@ export type ProjectRow = typeof Row.Type;
  * it does not know treats the file as absent and repairs, which is exactly
  * what the unreadable case already does.
  *
- * `v: 2` is that day. Version 1 stored the language as the single string
+ * `v: 2` was that day. Version 1 stored the language as the single string
  * "English (en)" and let a project with no declared language fall back to its
  * FOLDER NAME, so the table's Language column could read `small-nt`. The name
  * and the tag are two fields now, and there is no folder fallback — so every
  * v1 row is a row whose language may be wrong. Refusing the old file is how a
  * wrong value is corrected without a migration nobody can test: the repair
  * below re-describes each project from disk exactly once.
+ *
+ * `v: 3` is the same move for the same reason. Until now a row was described
+ * by reading `metadata.json` alone, so every Resource Container — which is
+ * most of what the catalogue serves, `en_ulb` included — was written down with
+ * an empty name and an empty language and KEPT that way: `repairProjectIndex`
+ * only describes a root it has no row for, so a project already in the index
+ * would never be looked at again. Teaching the reader about `manifest.yaml`
+ * fixes new rows; bumping the version is what fixes the ones already written.
  */
-const INDEX_VERSION = 2;
+const INDEX_VERSION = 3;
 
 const Index = Schema.Struct({ v: Schema.Literal(INDEX_VERSION), rows: Schema.Array(Row) });
 

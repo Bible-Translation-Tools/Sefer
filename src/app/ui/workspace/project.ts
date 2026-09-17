@@ -12,11 +12,11 @@
 import { Option } from "effect";
 
 import type { Project } from "../../../core/project/project";
-import type { BurritoMetadata } from "../../../core/resources/burrito";
+import type { ProjectMetadata } from "../../../core/resources/projectMetadata";
 import { languageLabel, projectDisplayName } from "../../language";
 import { renamedName } from "../../projectNames";
 
-export const metadataOf = (project: Project | undefined): BurritoMetadata | undefined =>
+export const metadataOf = (project: Project | undefined): ProjectMetadata | undefined =>
   project === undefined ? undefined : Option.getOrUndefined(project.metadata());
 
 /**

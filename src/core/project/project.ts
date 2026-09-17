@@ -47,7 +47,7 @@ import {
 import { makeBook, openBook, type Book, type BookId } from "../book/book";
 import { normalisePath } from "../fileSystem/path";
 import { Observability, type ObservabilityService, type Operation } from "../observability";
-import type { BurritoMetadata } from "../resources/burrito";
+import type { ProjectMetadata } from "../resources/projectMetadata";
 import type { SourceDecodeError } from "../source/source";
 import { discoverBooks, readProjectMetadata } from "./discovery";
 
@@ -138,7 +138,7 @@ export interface Project {
   /** Discovered paths that did not become Books. */
   readonly failed: readonly FailedBook[];
   book(id: BookId): Book | undefined;
-  metadata(): Option.Option<BurritoMetadata>;
+  metadata(): Option.Option<ProjectMetadata>;
   /** Plain → Instantiated. Idempotent; `Refused` without a seat. */
   instantiate(id: BookId): Effect.Effect<Book, ProjectError>;
   /** Instantiated → Plain, carrying the seat's current text. */
@@ -173,18 +173,6 @@ const refuse = (
 const describe = (error: FailedBook["error"]): string =>
   error._tag === "PlatformError" ? error.message : error.reason;
 
-/**
- * The burrito's primary id, when it declares one: the first
- * `identification.primary[authority][id]` key. Burritos in practice carry one
- * authority and one id; taking the first is the simple reading, and the
- * fallback is the root path alone.
- */
-const primaryId = (metadata: BurritoMetadata): string | undefined => {
-  for (const ids of Object.values(metadata.identification.primary ?? {}))
-    for (const id of Object.keys(ids)) return id;
-  return undefined;
-};
-
 /** One book's seat: the plain Book, and the editor-backed one when seated. */
 interface Entry {
   plain: Book;
@@ -196,7 +184,7 @@ const current = (entry: Entry): Book => entry.seated ?? entry.plain;
 interface ProjectParts {
   readonly root: string;
   readonly fileSystem: FileSystem.FileSystem;
-  readonly metadata: Option.Option<BurritoMetadata>;
+  readonly metadata: Option.Option<ProjectMetadata>;
   readonly order: readonly BookId[];
   readonly entries: ReadonlyMap<BookId, Entry>;
   readonly failed: readonly FailedBook[];
@@ -210,8 +198,7 @@ const makeProject = (parts: ProjectParts): Project => {
   const id: ProjectId = Option.match(metadata, {
     onNone: () => root,
     onSome: (found) => {
-      const primary = primaryId(found);
-      return primary === undefined ? root : `${root}#${primary}`;
+      return found.id === undefined ? root : `${root}#${found.id}`;
     },
   });
 

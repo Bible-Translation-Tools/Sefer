@@ -10,14 +10,15 @@
  * `MRK`, what section heading does its row sit under and what word goes on it.
  *
  * The English names are NOT wrapped in `t()`, and that is deliberate. A book
- * name is not chrome: the right translation of it is the one the PROJECT uses,
- * which a Scripture Burrito publishes in `localizedNames` — so `bookName`
- * reads the metadata first and falls back to this table, and further to the
- * bare id. Putting sixty-six names in the UI catalogue would offer a
- * translator two places to disagree about what Mark is called.
+ * name is not chrome: the right translation of it is the one the PROJECT uses
+ * — a Scripture Burrito publishes it in `localizedNames`, a Resource Container
+ * in `projects[].title`, and `ProjectMetadata.bookNames` is where both land —
+ * so `bookName` reads the metadata first and falls back to this table, and
+ * further to the bare id. Putting sixty-six names in the UI catalogue would
+ * offer a translator two places to disagree about what Mark is called.
  */
 
-import type { BurritoMetadata } from "../../../core/resources/burrito";
+import { localized, type ProjectMetadata } from "../../../core/resources/projectMetadata";
 
 export type Testament = "ot" | "nt";
 
@@ -107,20 +108,13 @@ const BY_ID = new Map(CANON.map((book) => [book.id, book]));
 export const testamentOf = (id: string): Testament =>
   BY_ID.get(id.toUpperCase())?.testament ?? "nt";
 
-/** The first localized string in a burrito's `{ locale: text }` record. */
-const anyLocale = (text: Readonly<Record<string, string>> | undefined): string | undefined => {
-  if (text === undefined) return undefined;
-  for (const value of Object.values(text)) if (value !== "") return value;
-  return undefined;
-};
-
 /**
  * What to call a book: what the project calls it, else the English canon, else
  * the id itself. Never blank — the id is always something a reader can act on.
  */
-export const bookName = (id: string, metadata?: BurritoMetadata): string => {
-  const local = anyLocale(metadata?.localizedNames?.[id]?.short);
-  return local ?? BY_ID.get(id.toUpperCase())?.name ?? id;
+export const bookName = (id: string, metadata?: ProjectMetadata): string => {
+  const local = localized(metadata?.bookNames[id], [metadata?.defaultLocale]);
+  return local !== "" ? local : (BY_ID.get(id.toUpperCase())?.name ?? id);
 };
 
 export interface Reference {
