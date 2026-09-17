@@ -134,7 +134,7 @@ export function IconRail() {
           tooltipSide="right"
           icon={<ListChecks size={18} />}
           aria-pressed={at("/terms")}
-          onClick={() => go("/terms")}
+          onClick={() => go(shell.projectPath("terms"))}
         />
         <IconButton
           label={t("USFM")}
@@ -171,7 +171,7 @@ export function IconRail() {
             tooltipSide="right"
             aria-pressed={at("/inventory")}
             icon={<TypeIcon size={18} />}
-            onClick={() => go("/inventory")}
+            onClick={() => go(shell.projectPath("inventory"))}
           />
           <IconButton
             label={t("Compare")}
@@ -179,7 +179,7 @@ export function IconRail() {
             tooltipSide="right"
             aria-pressed={at("/compare")}
             icon={<GitCompare size={18} />}
-            onClick={() => go("/compare")}
+            onClick={() => go(shell.projectPath("compare"))}
           />
           <IconButton
             label={t("Cloud")}
@@ -187,7 +187,7 @@ export function IconRail() {
             tooltipSide="right"
             aria-pressed={at("/cloud")}
             icon={<CloudIcon size={18} />}
-            onClick={() => go("/cloud")}
+            onClick={() => go(shell.projectPath("cloud"))}
           />
         </Show>
 
@@ -201,7 +201,7 @@ export function IconRail() {
             tooltipSide="right"
             aria-pressed={at("/findings")}
             icon={<Bell size={18} />}
-            onClick={() => go("/findings")}
+            onClick={() => go(shell.projectPath("findings"))}
           />
           <Show when={attention() > 0}>
             <span
@@ -220,7 +220,7 @@ export function IconRail() {
           tooltipSide="right"
           aria-pressed={at("/history")}
           icon={<HistoryIcon size={18} />}
-          onClick={() => go("/history")}
+          onClick={() => go(shell.projectPath("history"))}
         />
         <IconButton
           label={t("Settings")}

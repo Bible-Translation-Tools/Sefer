@@ -329,6 +329,23 @@ export interface Shell {
    * into a project.
    */
   readonly slugFor: (root: string) => string;
+  /**
+   * The OPEN project's slug — what every in-project link needs for its
+   * `params`. Empty string when no project is open, which is a URL that
+   * resolves to the "no project here" state rather than a crash.
+   */
+  readonly slug: Accessor<string>;
+  /**
+   * The URL of a screen inside the open project — `projectPath("findings")` is
+   * `/project/en-ulb/findings`.
+   *
+   * Exists because the imperative navigations (the icon rail, the toolbar, the
+   * command palette) go through a `go(path)` that takes a raw string and casts
+   * it past the router's typed route union. That cast is what let seven screens
+   * move under `/project/$slug` with the typechecker reporting nothing, so the
+   * prefix is built in ONE place that the compiler does check.
+   */
+  readonly projectPath: (screen?: string) => string;
   /** The project a slug names, or `undefined` if nothing here answers to it. */
   readonly rootForSlug: (slug: string) => string | undefined;
   /**
@@ -503,6 +520,17 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
       );
     }
     return minted;
+  };
+
+  const slug = (): string => {
+    const root = project()?.root;
+    return root === undefined ? "" : slugFor(root);
+  };
+
+  const projectPath = (screen?: string): string => {
+    const held = slug();
+    const base = `/project/${held}`;
+    return screen === undefined ? base : `${base}/${screen}`;
   };
 
   const rootForSlug = (slug: string): string | undefined =>
@@ -1050,6 +1078,8 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     sidebarShowing: () => sidebarOpen() && (project() !== undefined || recentProjects().length > 0),
     recentProjects,
     slugFor,
+    slug,
+    projectPath,
     rootForSlug,
     updateAvailable,
     sidebarWidth,
@@ -1076,6 +1106,7 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
 
   const bridge: ShellBridge = {
     services,
+    projectPath: shell.projectPath,
     project: () => project(),
     focused: () => focused(),
     mode,

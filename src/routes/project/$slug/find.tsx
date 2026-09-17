@@ -8,9 +8,9 @@ import SearchIcon from "lucide-solid/icons/search";
 import WholeWordIcon from "lucide-solid/icons/whole-word";
 import { For, Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
-import { t } from "../app/i18n";
-import { useShell } from "../app/ProjectContext";
-import { createExcerptFeed, ExcerptList } from "../app/ui/excerpts";
+import { t } from "../../../app/i18n";
+import { useShell } from "../../../app/ProjectContext";
+import { createExcerptFeed, ExcerptList } from "../../../app/ui/excerpts";
 import {
   Button,
   Card,
@@ -19,12 +19,12 @@ import {
   Input,
   PanelHeader,
   SegmentedControl,
-} from "../app/ui/primitives";
-import { ShellGate } from "../app/ui/ShellGate";
-import * as Workflows from "../app/workflows/references";
-import type { BookId } from "../core/book/book";
-import { Galley } from "../core/galley";
-import * as Search from "../core/search/search";
+} from "../../../app/ui/primitives";
+import { ShellGate } from "../../../app/ui/ShellGate";
+import * as Workflows from "../../../app/workflows/references";
+import type { BookId } from "../../../core/book/book";
+import { Galley } from "../../../core/galley";
+import * as Search from "../../../core/search/search";
 
 /**
  * Find, as a multibuffer.
@@ -101,7 +101,12 @@ function Find() {
 
   /** One navigation, merged over what the URL already says. */
   const ask = (next: FindSearch): void => {
-    void navigate({ to: "/find", search: { ...params(), ...next }, replace: true });
+    void navigate({
+      to: "/project/$slug/find",
+      params: { slug: shell.slug() },
+      search: { ...params(), ...next },
+      replace: true,
+    });
   };
 
   // The box starts on whatever the URL asked for; the effect below keeps it
@@ -485,7 +490,7 @@ function Find() {
   );
 }
 
-export const Route = createFileRoute("/find")({
+export const Route = createFileRoute("/project/$slug/find")({
   validateSearch: (search: Record<string, unknown>): FindSearch => ({
     ...(typeof search["q"] === "string" && search["q"] !== "" ? { q: search["q"] } : {}),
     ...(search["scope"] === "book" || search["scope"] === "reference"
@@ -498,9 +503,9 @@ export const Route = createFileRoute("/find")({
    * `mode` key, so the raw search string is what says where the reader meant
    * to go.
    */
-  beforeLoad: ({ location }) => {
+  beforeLoad: ({ location, params }) => {
     if (new URLSearchParams(location.searchStr).get("mode") === "stet")
-      throw redirect({ to: "/terms", search: {} });
+      throw redirect({ to: "/project/$slug/terms", params: { slug: params.slug }, search: {} });
   },
   head: () => ({ meta: [{ title: "Sefer — find" }] }),
   component: () => <ShellGate>{() => <Find />}</ShellGate>,

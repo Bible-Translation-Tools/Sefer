@@ -2,12 +2,12 @@ import { createFileRoute, useNavigate } from "@tanstack/solid-router";
 import { Effect, Option, Result } from "effect";
 import { createEffect, createMemo, createSignal, Show, untrack } from "solid-js";
 
-import { t } from "../app/i18n";
-import { useShell } from "../app/ProjectContext";
-import { createExcerptFeed, MatchFormattingView, StetView } from "../app/ui/excerpts";
-import { PanelHeader, SegmentedControl } from "../app/ui/primitives";
-import { ShellGate } from "../app/ui/ShellGate";
-import * as References from "../app/workflows/references";
+import { t } from "../../../app/i18n";
+import { useShell } from "../../../app/ProjectContext";
+import { createExcerptFeed, MatchFormattingView, StetView } from "../../../app/ui/excerpts";
+import { PanelHeader, SegmentedControl } from "../../../app/ui/primitives";
+import { ShellGate } from "../../../app/ui/ShellGate";
+import * as References from "../../../app/workflows/references";
 import {
   keyTermGuides,
   keyTerms,
@@ -16,13 +16,13 @@ import {
   sourceReadings,
   type MatchFormatting,
   type SourceReading,
-} from "../app/workflows/stet";
-import { trustedBy, type Ref } from "../core/book/book";
-import { refOccurrences, type BookText, type Occurrence } from "../core/excerpts/excerpts";
-import { chaptersTouched } from "../core/galley";
-import { describesExactly } from "../core/galley";
-import { DEFAULT_LOCALE } from "../core/stet/fixture";
-import type { Guide, Term } from "../core/stet/stet";
+} from "../../../app/workflows/stet";
+import { trustedBy, type Ref } from "../../../core/book/book";
+import { refOccurrences, type BookText, type Occurrence } from "../../../core/excerpts/excerpts";
+import { chaptersTouched } from "../../../core/galley";
+import { describesExactly } from "../../../core/galley";
+import { DEFAULT_LOCALE } from "../../../core/stet/fixture";
+import type { Guide, Term } from "../../../core/stet/stet";
 
 /**
  * `/terms` — Key terms (STET), its own pane.
@@ -92,7 +92,12 @@ function Terms() {
 
   /** One navigation, merged over what the URL already says. */
   const ask = (next: TermsSearch): void => {
-    void navigate({ to: "/terms", search: { ...params(), ...next }, replace: true });
+    void navigate({
+      to: "/project/$slug/terms",
+      params: { slug: shell.slug() },
+      search: { ...params(), ...next },
+      replace: true,
+    });
   };
 
   const [terms, setTerms] = createSignal<readonly Term[]>([], { name: "terms" });
@@ -382,7 +387,7 @@ function Terms() {
   );
 }
 
-export const Route = createFileRoute("/terms")({
+export const Route = createFileRoute("/project/$slug/terms")({
   validateSearch: (search: Record<string, unknown>): TermsSearch => ({
     ...(typeof search["term"] === "string" && search["term"] !== ""
       ? { term: search["term"] }

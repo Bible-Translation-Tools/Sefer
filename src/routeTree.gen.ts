@@ -10,20 +10,20 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as CloudRouteImport } from './routes/cloud'
-import { Route as CompareRouteImport } from './routes/compare'
-import { Route as FindRouteImport } from './routes/find'
-import { Route as FindingsRouteImport } from './routes/findings'
-import { Route as HistoryRouteImport } from './routes/history'
-import { Route as InventoryRouteImport } from './routes/inventory'
-import { Route as ReviewRouteImport } from './routes/review'
 import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as TermsRouteImport } from './routes/terms'
 import { Route as DevFixtureRouteImport } from './routes/dev/fixture'
 import { Route as ProjectSlugRouteImport } from './routes/project/$slug'
 import { Route as StartCreateRouteImport } from './routes/start/create'
 import { Route as StartFindRouteImport } from './routes/start/find'
 import { Route as ProjectSlugIndexRouteImport } from './routes/project/$slug/index'
+import { Route as ProjectSlugCloudRouteImport } from './routes/project/$slug/cloud'
+import { Route as ProjectSlugCompareRouteImport } from './routes/project/$slug/compare'
+import { Route as ProjectSlugFindRouteImport } from './routes/project/$slug/find'
+import { Route as ProjectSlugFindingsRouteImport } from './routes/project/$slug/findings'
+import { Route as ProjectSlugHistoryRouteImport } from './routes/project/$slug/history'
+import { Route as ProjectSlugInventoryRouteImport } from './routes/project/$slug/inventory'
+import { Route as ProjectSlugReviewRouteImport } from './routes/project/$slug/review'
+import { Route as ProjectSlugTermsRouteImport } from './routes/project/$slug/terms'
 import { Route as ProjectSlugBookBookRouteImport } from './routes/project/$slug/book/$book'
 
 const IndexRoute = IndexRouteImport.update({
@@ -31,49 +31,9 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const CloudRoute = CloudRouteImport.update({
-  id: '/cloud',
-  path: '/cloud',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CompareRoute = CompareRouteImport.update({
-  id: '/compare',
-  path: '/compare',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const FindRoute = FindRouteImport.update({
-  id: '/find',
-  path: '/find',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const FindingsRoute = FindingsRouteImport.update({
-  id: '/findings',
-  path: '/findings',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const HistoryRoute = HistoryRouteImport.update({
-  id: '/history',
-  path: '/history',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const InventoryRoute = InventoryRouteImport.update({
-  id: '/inventory',
-  path: '/inventory',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ReviewRoute = ReviewRouteImport.update({
-  id: '/review',
-  path: '/review',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TermsRoute = TermsRouteImport.update({
-  id: '/terms',
-  path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DevFixtureRoute = DevFixtureRouteImport.update({
@@ -101,6 +61,46 @@ const ProjectSlugIndexRoute = ProjectSlugIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ProjectSlugRoute,
 } as any)
+const ProjectSlugCloudRoute = ProjectSlugCloudRouteImport.update({
+  id: '/cloud',
+  path: '/cloud',
+  getParentRoute: () => ProjectSlugRoute,
+} as any)
+const ProjectSlugCompareRoute = ProjectSlugCompareRouteImport.update({
+  id: '/compare',
+  path: '/compare',
+  getParentRoute: () => ProjectSlugRoute,
+} as any)
+const ProjectSlugFindRoute = ProjectSlugFindRouteImport.update({
+  id: '/find',
+  path: '/find',
+  getParentRoute: () => ProjectSlugRoute,
+} as any)
+const ProjectSlugFindingsRoute = ProjectSlugFindingsRouteImport.update({
+  id: '/findings',
+  path: '/findings',
+  getParentRoute: () => ProjectSlugRoute,
+} as any)
+const ProjectSlugHistoryRoute = ProjectSlugHistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
+  getParentRoute: () => ProjectSlugRoute,
+} as any)
+const ProjectSlugInventoryRoute = ProjectSlugInventoryRouteImport.update({
+  id: '/inventory',
+  path: '/inventory',
+  getParentRoute: () => ProjectSlugRoute,
+} as any)
+const ProjectSlugReviewRoute = ProjectSlugReviewRouteImport.update({
+  id: '/review',
+  path: '/review',
+  getParentRoute: () => ProjectSlugRoute,
+} as any)
+const ProjectSlugTermsRoute = ProjectSlugTermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => ProjectSlugRoute,
+} as any)
 const ProjectSlugBookBookRoute = ProjectSlugBookBookRouteImport.update({
   id: '/book/$book',
   path: '/book/$book',
@@ -109,55 +109,55 @@ const ProjectSlugBookBookRoute = ProjectSlugBookBookRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/cloud': typeof CloudRoute
-  '/compare': typeof CompareRoute
-  '/find': typeof FindRoute
-  '/findings': typeof FindingsRoute
-  '/history': typeof HistoryRoute
-  '/inventory': typeof InventoryRoute
-  '/review': typeof ReviewRoute
   '/settings': typeof SettingsRoute
-  '/terms': typeof TermsRoute
   '/dev/fixture': typeof DevFixtureRoute
   '/project/$slug': typeof ProjectSlugRouteWithChildren
   '/start/create': typeof StartCreateRoute
   '/start/find': typeof StartFindRoute
+  '/project/$slug/cloud': typeof ProjectSlugCloudRoute
+  '/project/$slug/compare': typeof ProjectSlugCompareRoute
+  '/project/$slug/find': typeof ProjectSlugFindRoute
+  '/project/$slug/findings': typeof ProjectSlugFindingsRoute
+  '/project/$slug/history': typeof ProjectSlugHistoryRoute
+  '/project/$slug/inventory': typeof ProjectSlugInventoryRoute
+  '/project/$slug/review': typeof ProjectSlugReviewRoute
+  '/project/$slug/terms': typeof ProjectSlugTermsRoute
   '/project/$slug/': typeof ProjectSlugIndexRoute
   '/project/$slug/book/$book': typeof ProjectSlugBookBookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/cloud': typeof CloudRoute
-  '/compare': typeof CompareRoute
-  '/find': typeof FindRoute
-  '/findings': typeof FindingsRoute
-  '/history': typeof HistoryRoute
-  '/inventory': typeof InventoryRoute
-  '/review': typeof ReviewRoute
   '/settings': typeof SettingsRoute
-  '/terms': typeof TermsRoute
   '/dev/fixture': typeof DevFixtureRoute
   '/start/create': typeof StartCreateRoute
   '/start/find': typeof StartFindRoute
+  '/project/$slug/cloud': typeof ProjectSlugCloudRoute
+  '/project/$slug/compare': typeof ProjectSlugCompareRoute
+  '/project/$slug/find': typeof ProjectSlugFindRoute
+  '/project/$slug/findings': typeof ProjectSlugFindingsRoute
+  '/project/$slug/history': typeof ProjectSlugHistoryRoute
+  '/project/$slug/inventory': typeof ProjectSlugInventoryRoute
+  '/project/$slug/review': typeof ProjectSlugReviewRoute
+  '/project/$slug/terms': typeof ProjectSlugTermsRoute
   '/project/$slug': typeof ProjectSlugIndexRoute
   '/project/$slug/book/$book': typeof ProjectSlugBookBookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/cloud': typeof CloudRoute
-  '/compare': typeof CompareRoute
-  '/find': typeof FindRoute
-  '/findings': typeof FindingsRoute
-  '/history': typeof HistoryRoute
-  '/inventory': typeof InventoryRoute
-  '/review': typeof ReviewRoute
   '/settings': typeof SettingsRoute
-  '/terms': typeof TermsRoute
   '/dev/fixture': typeof DevFixtureRoute
   '/project/$slug': typeof ProjectSlugRouteWithChildren
   '/start/create': typeof StartCreateRoute
   '/start/find': typeof StartFindRoute
+  '/project/$slug/cloud': typeof ProjectSlugCloudRoute
+  '/project/$slug/compare': typeof ProjectSlugCompareRoute
+  '/project/$slug/find': typeof ProjectSlugFindRoute
+  '/project/$slug/findings': typeof ProjectSlugFindingsRoute
+  '/project/$slug/history': typeof ProjectSlugHistoryRoute
+  '/project/$slug/inventory': typeof ProjectSlugInventoryRoute
+  '/project/$slug/review': typeof ProjectSlugReviewRoute
+  '/project/$slug/terms': typeof ProjectSlugTermsRoute
   '/project/$slug/': typeof ProjectSlugIndexRoute
   '/project/$slug/book/$book': typeof ProjectSlugBookBookRoute
 }
@@ -165,69 +165,61 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/cloud'
-    | '/compare'
-    | '/find'
-    | '/findings'
-    | '/history'
-    | '/inventory'
-    | '/review'
     | '/settings'
-    | '/terms'
     | '/dev/fixture'
     | '/project/$slug'
     | '/start/create'
     | '/start/find'
+    | '/project/$slug/cloud'
+    | '/project/$slug/compare'
+    | '/project/$slug/find'
+    | '/project/$slug/findings'
+    | '/project/$slug/history'
+    | '/project/$slug/inventory'
+    | '/project/$slug/review'
+    | '/project/$slug/terms'
     | '/project/$slug/'
     | '/project/$slug/book/$book'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/cloud'
-    | '/compare'
-    | '/find'
-    | '/findings'
-    | '/history'
-    | '/inventory'
-    | '/review'
     | '/settings'
-    | '/terms'
     | '/dev/fixture'
     | '/start/create'
     | '/start/find'
+    | '/project/$slug/cloud'
+    | '/project/$slug/compare'
+    | '/project/$slug/find'
+    | '/project/$slug/findings'
+    | '/project/$slug/history'
+    | '/project/$slug/inventory'
+    | '/project/$slug/review'
+    | '/project/$slug/terms'
     | '/project/$slug'
     | '/project/$slug/book/$book'
   id:
     | '__root__'
     | '/'
-    | '/cloud'
-    | '/compare'
-    | '/find'
-    | '/findings'
-    | '/history'
-    | '/inventory'
-    | '/review'
     | '/settings'
-    | '/terms'
     | '/dev/fixture'
     | '/project/$slug'
     | '/start/create'
     | '/start/find'
+    | '/project/$slug/cloud'
+    | '/project/$slug/compare'
+    | '/project/$slug/find'
+    | '/project/$slug/findings'
+    | '/project/$slug/history'
+    | '/project/$slug/inventory'
+    | '/project/$slug/review'
+    | '/project/$slug/terms'
     | '/project/$slug/'
     | '/project/$slug/book/$book'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  CloudRoute: typeof CloudRoute
-  CompareRoute: typeof CompareRoute
-  FindRoute: typeof FindRoute
-  FindingsRoute: typeof FindingsRoute
-  HistoryRoute: typeof HistoryRoute
-  InventoryRoute: typeof InventoryRoute
-  ReviewRoute: typeof ReviewRoute
   SettingsRoute: typeof SettingsRoute
-  TermsRoute: typeof TermsRoute
   DevFixtureRoute: typeof DevFixtureRoute
   ProjectSlugRoute: typeof ProjectSlugRouteWithChildren
   StartCreateRoute: typeof StartCreateRoute
@@ -243,67 +235,11 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/cloud': {
-      id: '/cloud'
-      path: '/cloud'
-      fullPath: '/cloud'
-      preLoaderRoute: typeof CloudRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/compare': {
-      id: '/compare'
-      path: '/compare'
-      fullPath: '/compare'
-      preLoaderRoute: typeof CompareRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/find': {
-      id: '/find'
-      path: '/find'
-      fullPath: '/find'
-      preLoaderRoute: typeof FindRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/findings': {
-      id: '/findings'
-      path: '/findings'
-      fullPath: '/findings'
-      preLoaderRoute: typeof FindingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/history': {
-      id: '/history'
-      path: '/history'
-      fullPath: '/history'
-      preLoaderRoute: typeof HistoryRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/inventory': {
-      id: '/inventory'
-      path: '/inventory'
-      fullPath: '/inventory'
-      preLoaderRoute: typeof InventoryRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/review': {
-      id: '/review'
-      path: '/review'
-      fullPath: '/review'
-      preLoaderRoute: typeof ReviewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/settings': {
       id: '/settings'
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/terms': {
-      id: '/terms'
-      path: '/terms'
-      fullPath: '/terms'
-      preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dev/fixture': {
@@ -341,6 +277,62 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof ProjectSlugIndexRouteImport
       parentRoute: typeof ProjectSlugRoute
     }
+    '/project/$slug/cloud': {
+      id: '/project/$slug/cloud'
+      path: '/cloud'
+      fullPath: '/project/$slug/cloud'
+      preLoaderRoute: typeof ProjectSlugCloudRouteImport
+      parentRoute: typeof ProjectSlugRoute
+    }
+    '/project/$slug/compare': {
+      id: '/project/$slug/compare'
+      path: '/compare'
+      fullPath: '/project/$slug/compare'
+      preLoaderRoute: typeof ProjectSlugCompareRouteImport
+      parentRoute: typeof ProjectSlugRoute
+    }
+    '/project/$slug/find': {
+      id: '/project/$slug/find'
+      path: '/find'
+      fullPath: '/project/$slug/find'
+      preLoaderRoute: typeof ProjectSlugFindRouteImport
+      parentRoute: typeof ProjectSlugRoute
+    }
+    '/project/$slug/findings': {
+      id: '/project/$slug/findings'
+      path: '/findings'
+      fullPath: '/project/$slug/findings'
+      preLoaderRoute: typeof ProjectSlugFindingsRouteImport
+      parentRoute: typeof ProjectSlugRoute
+    }
+    '/project/$slug/history': {
+      id: '/project/$slug/history'
+      path: '/history'
+      fullPath: '/project/$slug/history'
+      preLoaderRoute: typeof ProjectSlugHistoryRouteImport
+      parentRoute: typeof ProjectSlugRoute
+    }
+    '/project/$slug/inventory': {
+      id: '/project/$slug/inventory'
+      path: '/inventory'
+      fullPath: '/project/$slug/inventory'
+      preLoaderRoute: typeof ProjectSlugInventoryRouteImport
+      parentRoute: typeof ProjectSlugRoute
+    }
+    '/project/$slug/review': {
+      id: '/project/$slug/review'
+      path: '/review'
+      fullPath: '/project/$slug/review'
+      preLoaderRoute: typeof ProjectSlugReviewRouteImport
+      parentRoute: typeof ProjectSlugRoute
+    }
+    '/project/$slug/terms': {
+      id: '/project/$slug/terms'
+      path: '/terms'
+      fullPath: '/project/$slug/terms'
+      preLoaderRoute: typeof ProjectSlugTermsRouteImport
+      parentRoute: typeof ProjectSlugRoute
+    }
     '/project/$slug/book/$book': {
       id: '/project/$slug/book/$book'
       path: '/book/$book'
@@ -352,11 +344,27 @@ declare module '@tanstack/solid-router' {
 }
 
 interface ProjectSlugRouteChildren {
+  ProjectSlugCloudRoute: typeof ProjectSlugCloudRoute
+  ProjectSlugCompareRoute: typeof ProjectSlugCompareRoute
+  ProjectSlugFindRoute: typeof ProjectSlugFindRoute
+  ProjectSlugFindingsRoute: typeof ProjectSlugFindingsRoute
+  ProjectSlugHistoryRoute: typeof ProjectSlugHistoryRoute
+  ProjectSlugInventoryRoute: typeof ProjectSlugInventoryRoute
+  ProjectSlugReviewRoute: typeof ProjectSlugReviewRoute
+  ProjectSlugTermsRoute: typeof ProjectSlugTermsRoute
   ProjectSlugIndexRoute: typeof ProjectSlugIndexRoute
   ProjectSlugBookBookRoute: typeof ProjectSlugBookBookRoute
 }
 
 const ProjectSlugRouteChildren: ProjectSlugRouteChildren = {
+  ProjectSlugCloudRoute: ProjectSlugCloudRoute,
+  ProjectSlugCompareRoute: ProjectSlugCompareRoute,
+  ProjectSlugFindRoute: ProjectSlugFindRoute,
+  ProjectSlugFindingsRoute: ProjectSlugFindingsRoute,
+  ProjectSlugHistoryRoute: ProjectSlugHistoryRoute,
+  ProjectSlugInventoryRoute: ProjectSlugInventoryRoute,
+  ProjectSlugReviewRoute: ProjectSlugReviewRoute,
+  ProjectSlugTermsRoute: ProjectSlugTermsRoute,
   ProjectSlugIndexRoute: ProjectSlugIndexRoute,
   ProjectSlugBookBookRoute: ProjectSlugBookBookRoute,
 }
@@ -367,15 +375,7 @@ const ProjectSlugRouteWithChildren = ProjectSlugRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  CloudRoute: CloudRoute,
-  CompareRoute: CompareRoute,
-  FindRoute: FindRoute,
-  FindingsRoute: FindingsRoute,
-  HistoryRoute: HistoryRoute,
-  InventoryRoute: InventoryRoute,
-  ReviewRoute: ReviewRoute,
   SettingsRoute: SettingsRoute,
-  TermsRoute: TermsRoute,
   DevFixtureRoute: DevFixtureRoute,
   ProjectSlugRoute: ProjectSlugRouteWithChildren,
   StartCreateRoute: StartCreateRoute,

@@ -779,7 +779,13 @@ export function ReviewPanel() {
             />
             <Button
               icon={<History size={14} />}
-              onClick={() => void navigate({ to: "/history", search: {} })}
+              onClick={() =>
+                void navigate({
+                  to: "/project/$slug/history",
+                  params: { slug: shell.slug() },
+                  search: {},
+                })
+              }
             >
               {t("History")}
             </Button>

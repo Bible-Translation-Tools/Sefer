@@ -184,7 +184,11 @@ export function GlyphDetail(props: GlyphDetailProps) {
   const openInFindings = (): void => {
     const channel = props.glyph.rows.find((row) => row.pattern === props.pattern)?.channel;
     if (channel === undefined) return;
-    void navigate({ to: "/findings", search: { code: `sous.convention.${channel}` } });
+    void navigate({
+      to: "/project/$slug/findings",
+      params: { slug: shell.slug() },
+      search: { code: `sous.convention.${channel}` },
+    });
   };
 
   const sites = (): readonly FlaggedSite[] =>

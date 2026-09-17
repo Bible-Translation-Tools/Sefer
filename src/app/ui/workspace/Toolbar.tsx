@@ -83,7 +83,7 @@ export function Toolbar() {
 
   const pick = (value: Segment): void => {
     if (value === "stet") {
-      go("/terms");
+      go(shell.projectPath("terms"));
       return;
     }
     shell.setMode(value === "usfm" ? "usfm" : "default");
@@ -147,7 +147,7 @@ export function Toolbar() {
           onKeyDown={(event) => {
             if (event.key !== "Enter") return;
             event.preventDefault();
-            go("/find", { q: query() });
+            go(shell.projectPath("find"), { q: query() });
           }}
         />
 
@@ -174,7 +174,7 @@ export function Toolbar() {
             data-testid="toolbar-findings"
             label={t("Findings")}
             icon={<Bell size={16} />}
-            onClick={() => go("/findings")}
+            onClick={() => go(shell.projectPath("findings"))}
           />
           <Show when={attention() > 0}>
             <span
@@ -223,7 +223,7 @@ export function Toolbar() {
             onClick={() => {
               setMenuOpen(false);
               runCommand("book.save");
-              go("/history", { review: "1" });
+              go(shell.projectPath("history"), { review: "1" });
             }}
           >
             {t("Save & Review")}
@@ -234,7 +234,7 @@ export function Toolbar() {
             class={item}
             onClick={() => {
               setMenuOpen(false);
-              go("/inventory");
+              go(shell.projectPath("inventory"));
             }}
           >
             {t("Character inventory")}

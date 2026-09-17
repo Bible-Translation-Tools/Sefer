@@ -81,6 +81,8 @@ export interface ShellBridge {
   /** Applies the fix offered by the finding under the cursor, if any. */
   readonly applyFix: () => void;
   readonly go: (path: string) => void;
+  /** `/project/<slug>/<screen>` — see `Shell.projectPath`. */
+  readonly projectPath: (screen?: string) => string;
   readonly openProject: (root: string) => Promise<void>;
   readonly setPaletteOpen: (open: boolean) => void;
   /** Shown in the status bar; the shell's one place for a transient message. */
@@ -396,7 +398,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
        * keystrokes the old shortcut cost, with a diff in between.
        */
       run: () => {
-        bridge.go("/history?review=1");
+        bridge.go(`${bridge.projectPath("history")}?review=1`);
       },
     }),
 
@@ -408,7 +410,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       // One door to disk: the file is written when a version is recorded, so
       // this opens Save & Review like Mod-S rather than writing on its own.
       run: () => {
-        bridge.go("/history?review=1");
+        bridge.go(`${bridge.projectPath("history")}?review=1`);
       },
     }),
 
@@ -436,7 +438,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       keys: "Mod-Shift-f",
       when: hasProject,
       run: () => {
-        bridge.go("/find");
+        bridge.go(bridge.projectPath("find"));
       },
     }),
 
@@ -519,7 +521,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       // Same door as Mod-S: writing and recording are one action on the
       // review screen, never a palette side-effect.
       run: () => {
-        bridge.go("/history?review=1");
+        bridge.go(`${bridge.projectPath("history")}?review=1`);
       },
     }),
 
@@ -570,7 +572,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       title: t("Findings"),
       when: hasProject,
       run: () => {
-        bridge.go("/findings");
+        bridge.go(bridge.projectPath("findings"));
       },
     }),
 
@@ -579,7 +581,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       title: t("History"),
       when: hasProject,
       run: () => {
-        bridge.go("/history");
+        bridge.go(bridge.projectPath("history"));
       },
     }),
 

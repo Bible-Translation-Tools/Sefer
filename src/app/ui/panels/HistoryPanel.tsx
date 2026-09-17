@@ -259,7 +259,11 @@ export function HistoryPanel() {
 
   /** The one way to Save & Review from this screen, so both doors agree. */
   const review = (): void => {
-    void navigate({ to: "/history", search: { review: true } });
+    void navigate({
+      to: "/project/$slug/history",
+      params: { slug: shell.slug() },
+      search: { review: true },
+    });
   };
 
   /** What a person calls a book: the project's own name for it, else the canon's. */

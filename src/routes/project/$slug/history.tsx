@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/solid-router";
 
-import { HistoryPanel } from "../app/ui/panels";
-import { ShellGate } from "../app/ui/ShellGate";
+import { HistoryPanel } from "../../../app/ui/panels";
+import { ShellGate } from "../../../app/ui/ShellGate";
 
 /**
  * `/history` — the commit timeline.
@@ -19,11 +19,12 @@ interface HistorySearch {
   readonly review?: true;
 }
 
-export const Route = createFileRoute("/history")({
+export const Route = createFileRoute("/project/$slug/history")({
   validateSearch: (search: Record<string, unknown>): HistorySearch =>
     search.review === true || search.review === "1" || search.review === 1 ? { review: true } : {},
-  beforeLoad: ({ search }) => {
-    if (search.review === true) throw redirect({ to: "/review" });
+  beforeLoad: ({ search, params }) => {
+    if (search.review === true)
+      throw redirect({ to: "/project/$slug/review", params: { slug: params.slug } });
   },
   head: () => ({ meta: [{ title: "Sefer — history" }] }),
   component: () => <ShellGate>{() => <HistoryPanel />}</ShellGate>,

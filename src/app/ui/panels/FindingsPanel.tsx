@@ -588,7 +588,13 @@ export function FindingsPanel() {
             <Button
               size="sm"
               variant="tertiary"
-              onClick={() => void navigate({ to: "/findings", search: {} })}
+              onClick={() =>
+                void navigate({
+                  to: "/project/$slug/findings",
+                  params: { slug: shell.slug() },
+                  search: {},
+                })
+              }
             >
               {t("Show every finding")}
             </Button>
