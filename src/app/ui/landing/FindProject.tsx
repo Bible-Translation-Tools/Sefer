@@ -21,7 +21,10 @@
  */
 
 import { Link } from "@tanstack/solid-router";
+import ArrowDown from "lucide-solid/icons/arrow-down";
 import ArrowLeft from "lucide-solid/icons/arrow-left";
+import ArrowUp from "lucide-solid/icons/arrow-up";
+import ChevronsUpDown from "lucide-solid/icons/chevrons-up-down";
 import Download from "lucide-solid/icons/download";
 import Globe from "lucide-solid/icons/globe";
 import Plus from "lucide-solid/icons/plus";
@@ -41,17 +44,35 @@ import {
   Input,
   SegmentedControl,
   Select,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
   Tooltip,
+  VirtualList,
+  cx,
   toasts,
   type SortDirection,
 } from "../primitives";
 import { formatDate } from "./summaries";
+
+/** The four sortable columns, in the order they are drawn. */
+const SORTABLE: readonly (readonly [Column, () => string])[] = [
+  ["code", () => t("Code")],
+  ["language", () => t("Language")],
+  ["region", () => t("Region")],
+  ["date", () => t("Date")],
+];
+
+/**
+ * One grid template for the header row and every body row, so the two cannot
+ * drift apart the way a hand-aligned pair of widths does. `minmax(0, …)` on the
+ * name column is what lets a long repository path truncate instead of pushing
+ * the Download button off the end.
+ */
+const COLUMNS = "grid grid-cols-[5rem_minmax(0,1fr)_8rem_7rem_9rem] items-center";
+
+/** What one catalogue row is tall, before it has been measured. */
+const ROW_HEIGHT = 41;
+
+const ariaSort = (sort: SortDirection): "none" | "ascending" | "descending" =>
+  sort === "asc" ? "ascending" : sort === "desc" ? "descending" : "none";
 
 type NameStyle = "natural" | "anglicized";
 
@@ -210,6 +231,17 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
       }));
     },
     { name: "catalogueRows" },
+  );
+
+  /**
+   * The same rows, as the virtualizer takes them: a stable key and a height to
+   * assume until the row has been on screen. Every row here is one line of
+   * text and a button, so one estimate is right for all of them and the list
+   * never has to correct itself.
+   */
+  const virtualRows = createMemo(
+    () => rows().map((row) => ({ key: row.entry.id, item: row, estimate: ROW_HEIGHT })),
+    { name: "catalogueVirtualRows" },
   );
 
   const sortOf = (key: Column): SortDirection => (column() === key ? direction() : "none");
@@ -372,94 +404,119 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
         </Show>
 
         <Card padded={false} class="overflow-hidden">
-          <Table data-catalogue={rows().length}>
-            <TableHead>
-              <TableRow>
-                <TableHeader sort={sortOf("code")} onSort={() => toggleSort("code")}>
-                  {t("Code")}
-                </TableHeader>
-                <TableHeader sort={sortOf("language")} onSort={() => toggleSort("language")}>
-                  {t("Language")}
-                </TableHeader>
-                <TableHeader sort={sortOf("region")} onSort={() => toggleSort("region")}>
-                  {t("Region")}
-                </TableHeader>
-                <TableHeader sort={sortOf("date")} onSort={() => toggleSort("date")}>
-                  {t("Date")}
-                </TableHeader>
-                <TableHeader>
-                  <span class="sr-only">{t("Download")}</span>
-                </TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {/* Keyed by the row's own id, so a row is UPDATED rather than
-                  torn down and rebuilt when the memo produces a fresh object —
-                  which it does on every name-style flip. The callback takes an
-                  accessor, and `<For>` gives each row its own: that is the
-                  per-key projection the HUGE_FAN_OUT diagnostic asks for, done
-                  by the list itself rather than by a store beside it. */}
-              <For
-                each={rows()}
-                keyed={(row) => row.entry.id}
-                fallback={
-                  <TableRow>
-                    <TableCell colspan={5} class="py-8 text-center text-on-surface-tertiary">
-                      <Show when={entries()} fallback={t("Loading projects…")}>
-                        {t("No results. Try a different search or filter.")}
-                      </Show>
-                    </TableCell>
-                  </TableRow>
-                }
+          {/* WINDOWED, and the catalogue is why: it lists every repository the
+              Language API knows, which on this account is 521 rows — 2,605
+              cells and 6,941 DOM nodes, all built, all measured, for the dozen
+              a reader can see. The section header is the column row, so the
+              list gets a sticky heading for free and the two stay aligned by
+              sharing one grid template.
+
+              A grid and not a `<table>`: a virtual row is positioned by a
+              transform, and a transform on a `<tr>` is not something table
+              layout honours. The roles carry the semantics the elements no
+              longer do. */}
+          <VirtualList<CatalogueRow>
+            class="h-[60vh] min-h-0 overflow-y-auto"
+            sections={[{ key: "catalogue", rows: virtualRows() }]}
+            empty={
+              <p class="py-8 text-center text-small text-on-surface-tertiary">
+                <Show when={entries()} fallback={t("Loading projects…")}>
+                  {t("No results. Try a different search or filter.")}
+                </Show>
+              </p>
+            }
+            header={(_section, ref) => (
+              <div
+                ref={ref}
+                role="row"
+                data-catalogue={rows().length}
+                class={cx(
+                  COLUMNS,
+                  "border-b border-surface-border bg-surface-secondary text-smallest text-on-surface-secondary",
+                )}
               >
-                {(row) => {
-                  const entry = () => row().entry;
-                  return (
-                    <TableRow data-entry={entry().id}>
-                      <TableCell class="font-mono text-smallest text-on-surface-tertiary">
-                        {entry().code}
-                      </TableCell>
-                      <TableCell>
-                        <strong class="font-medium text-on-surface-primary">{row().name}</strong>
-                        <span class="ms-2 text-smallest text-on-surface-tertiary">
-                          {entry().owner}/{entry().repo}
-                        </span>
-                      </TableCell>
-                      <TableCell class="text-on-surface-secondary">
-                        {entry().region ?? "—"}
-                      </TableCell>
-                      <TableCell class="text-on-surface-secondary">
-                        {formatDate(entry().updated) || "—"}
-                      </TableCell>
-                      <TableCell class="text-end">
-                        <Show
-                          when={row().refusal === ""}
-                          fallback={
-                            <Tooltip label={row().refusal}>
-                              <span class="inline-flex cursor-not-allowed items-center gap-1 text-smallest text-on-surface-tertiary opacity-60">
-                                <Download size={13} aria-hidden="true" />
-                                {t("Download")}
-                              </span>
-                            </Tooltip>
-                          }
-                        >
-                          <Button
-                            size="sm"
-                            variant="tertiary"
-                            loading={row().downloading}
-                            icon={<Download size={13} aria-hidden="true" />}
-                            onClick={() => download(entry())}
-                          >
+                <For each={SORTABLE}>
+                  {([column, label]) => (
+                    <div role="columnheader" class="px-3 py-2 font-medium">
+                      <button
+                        type="button"
+                        aria-sort={ariaSort(sortOf(column))}
+                        class="inline-flex cursor-pointer items-center gap-1 text-inherit transition-colors hover:text-on-surface-primary"
+                        onClick={() => toggleSort(column)}
+                      >
+                        {label()}
+                        {sortOf(column) === "asc" ? (
+                          <ArrowUp size={12} aria-hidden="true" />
+                        ) : sortOf(column) === "desc" ? (
+                          <ArrowDown size={12} aria-hidden="true" />
+                        ) : (
+                          <ChevronsUpDown size={12} aria-hidden="true" class="opacity-50" />
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </For>
+                <div role="columnheader" class="px-3 py-2">
+                  <span class="sr-only">{t("Download")}</span>
+                </div>
+              </div>
+            )}
+            row={(item) => {
+              const entry = () => item().entry;
+              return (
+                <div
+                  role="row"
+                  data-entry={entry().id}
+                  class={cx(
+                    COLUMNS,
+                    "border-b border-surface-border text-small transition-colors hover:bg-surface-secondary",
+                  )}
+                >
+                  <div
+                    role="cell"
+                    class="px-3 py-2 font-mono text-smallest text-on-surface-tertiary"
+                  >
+                    {entry().code}
+                  </div>
+                  <div role="cell" class="min-w-0 px-3 py-2">
+                    <strong class="font-medium text-on-surface-primary">{item().name}</strong>
+                    <span class="ms-2 text-smallest text-on-surface-tertiary">
+                      {entry().owner}/{entry().repo}
+                    </span>
+                  </div>
+                  <div role="cell" class="px-3 py-2 text-on-surface-secondary">
+                    {entry().region ?? "—"}
+                  </div>
+                  <div role="cell" class="px-3 py-2 text-on-surface-secondary">
+                    {formatDate(entry().updated) || "—"}
+                  </div>
+                  <div role="cell" class="px-3 py-2 text-end">
+                    <Show
+                      when={item().refusal === ""}
+                      fallback={
+                        <Tooltip label={item().refusal}>
+                          <span class="inline-flex cursor-not-allowed items-center gap-1 text-smallest text-on-surface-tertiary opacity-60">
+                            <Download size={13} aria-hidden="true" />
                             {t("Download")}
-                          </Button>
-                        </Show>
-                      </TableCell>
-                    </TableRow>
-                  );
-                }}
-              </For>
-            </TableBody>
-          </Table>
+                          </span>
+                        </Tooltip>
+                      }
+                    >
+                      <Button
+                        size="sm"
+                        variant="tertiary"
+                        loading={item().downloading}
+                        icon={<Download size={13} aria-hidden="true" />}
+                        onClick={() => download(entry())}
+                      >
+                        {t("Download")}
+                      </Button>
+                    </Show>
+                  </div>
+                </div>
+              );
+            }}
+          />
         </Card>
       </div>
     </div>
