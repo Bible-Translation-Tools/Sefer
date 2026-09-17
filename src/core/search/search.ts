@@ -21,14 +21,21 @@
 // phases judge them exactly like a keystroke, so a replacement that would
 // break markup is refused by the rules rather than by a check here.
 //
-// TWO DOORS, ONE `Hit`. `findProjected` searches through the engine, over the
-// verse-text projection — what the reader sees — and is the default: a search
+// TWO HAYSTACKS, ONE `Hit`. `findInReading` scans what a READER sees — the
+// markup cut out, through the engine's mask map — and is the default: a search
 // for "God" should not match `\w God|G` inside a word-level attribute, and a
 // hit that spans a footnote should say so. `find` is the raw scan of canonical
-// text, kept for the two things the projection cannot answer: a REGEX query
-// (the engine's find is literal `memmem` and the `regex` crate is deliberately
-// not one of its dependencies), and a search that is meant to reach the markup
-// itself. Both produce the same `Hit`, so `resolveHit`, `replace` and
+// text, for a search deliberately aimed AT the markup. Either takes a literal
+// or a regex, so the four combinations are all reachable and the two questions
+// — what am I matching with, what am I matching against — are two switches
+// rather than one.
+//
+// `findProjected` is the engine's own literal find over the same reading. It
+// predates the mask map, and `findInReading` has replaced it on the Find
+// screen: the engine rebuilds and re-folds every projection on every call,
+// which is most of what a search cost.
+//
+// All of them produce the same `Hit`, so `resolveHit`, `replace` and
 // `planReplace` are written once.
 
 import { Data, Effect, Result } from "effect";
@@ -45,6 +52,7 @@ import {
 import type { GalleyService } from "../galley/galley";
 import type { EngineHit } from "../galley/galley";
 import type { Change, SourceStamp } from "../source/source";
+import type { Readings } from "./reading";
 
 export interface Query {
   /** Literal text, or a regular expression source when `regex` is set. */
@@ -81,8 +89,8 @@ export interface Hit {
   readonly preview: string;
   /**
    * Where the hit sits in the engine's verse-text projection — what the reader
-   * sees in visual mode. Present only on hits from `findProjected`; the raw
-   * scan has no projection to place them in.
+   * sees in visual mode. Present only on hits from `findProjected`; neither the
+   * raw scan nor `findInReading` reports one, and nothing reads it today.
    */
   readonly projected?: { readonly from: number; readonly to: number };
   /**
@@ -127,17 +135,20 @@ const PREVIEW_WIDTH = 90;
  * engine's own `findAll`, median of seven, plus the JS decode into `Hit`s:
  *
  *     needle              hits    engine    decode     total
- *     "Melchizedek"         11    14.5ms         —         —
- *     "Jesus"            1,276    15.9ms     0.5ms    16.4ms
- *     "God"              4,656    25.0ms     1.4ms    26.4ms
- *     "the"             86,555    54.7ms    38.7ms    93.4ms
- *     "a"              255,018    90.5ms   108.1ms   199.6ms
+ *     "Melchizedek"         11    14.2ms         —         —
+ *     "Jesus"            1,276    16.6ms     0.5ms    17.1ms
+ *     "God"              4,656    26.6ms     1.4ms    28.0ms
+ *     "the"             86,555    81.5ms    38.7ms   120.2ms
+ *     "a"              255,018     173ms   108.1ms    281ms
  *
- * Two things fall out of that table. Every search pays a ~14ms floor whatever
- * it finds — the engine materialises all 66 projections and drops them — so a
- * cap buys nothing on a query anybody actually types. And the only row that
- * hurts is the single character: 255,018 hits is a 27MB buffer and a quarter
- * of a million objects, for a result no one can read.
+ * Two things fall out. There is a FLOOR of about 14ms whatever the search
+ * finds — `Melchizedek` matches eleven times and still pays it — so a cap
+ * buys nothing on a query anybody actually types. (The floor is the engine
+ * rebuilding and case-folding every projection per call: ~3.7ms of cut and
+ * ~10ms of fold. An earlier version of this comment blamed the cut alone,
+ * which was wrong.) And the only row that hurts is the single character:
+ * 255,018 hits is a 27MB buffer and a quarter of a million objects, for a
+ * result no one can read.
  *
  * So the bound is on the QUESTION, not the answer. Two characters, and then
  * every hit, because "how many are there" is most of what a project-wide find
@@ -346,6 +357,98 @@ export const find = (
         });
         if (limit !== undefined && hits.length >= limit) return Result.succeed(hits);
       }
+    }
+  }
+  return Result.succeed(hits);
+};
+
+// ---------------------------------------------------------------------------
+// Find, over the reading
+// ---------------------------------------------------------------------------
+
+/**
+ * Scans each book's READING — what a reader sees, with the markup cut out —
+ * and reports the hits in the canonical text underneath.
+ *
+ * This is the door Find uses for everything a reader asks of their own text,
+ * and it is the one that makes all four combinations reachable:
+ *
+ *                     over the reading        over the raw USFM
+ *     literal         findInReading           find
+ *     regex           findInReading           find
+ *
+ * Before the mask map only the two diagonal cells existed — `findAll` was
+ * literal-over-the-reading and `find` was regex-over-the-markup — and one
+ * toggle chose between them, which is why the regex button's label had to
+ * admit it also changed what was being searched. They are two questions and
+ * they are now two switches.
+ *
+ * The reading is REBUILT per call and dropped with it; only the mask survives,
+ * in `readings`. `src/core/search/reading.ts` states that trade and its
+ * measurements.
+ *
+ * Offsets come back in the SOURCE, through the map: `from`/`to` are the first
+ * piece and `pieces` carries the rest, exactly as the engine's find buffer
+ * reports them, so `resolveHit`, `spansMarkup` and `replace` are unchanged.
+ */
+export const findInReading = (
+  readings: Readings,
+  books: readonly Book[],
+  query: Query,
+  options?: Options,
+): Result.Result<readonly Hit[], SearchError> => {
+  if (query.text === "") return Result.succeed([]);
+
+  const matcher = matcherFor(query);
+  if (Result.isFailure(matcher)) return Result.fail(matcher.failure);
+  const pattern = matcher.success;
+
+  const limit = options?.limit;
+  if (limit !== undefined && limit <= 0) return Result.succeed([]);
+  const wanted = options?.books === undefined ? null : new Set(options.books);
+
+  const hits: Hit[] = [];
+  for (const book of books) {
+    if (wanted !== null && !wanted.has(book.id)) continue;
+    const reading = readings.of(book);
+    // A book the engine holds no mask for contributes nothing. It is not an
+    // error: a project opening has books registered one at a time, and a
+    // search that arrives mid-way should report what is ready rather than
+    // fail.
+    if (reading === undefined) continue;
+
+    const text = reading.text;
+    // The ref table is built over the SOURCE, because a ref is a fact about
+    // the document and the reading has no `\c`/`\v` markers left in it — they
+    // are exactly what the mask cut out.
+    const table = buildRefTable(book.source().text);
+
+    pattern.lastIndex = 0;
+    for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) {
+      const from = match.index;
+      const to = from + match[0].length;
+      // A pattern like `\b` or `x*` can match nothing; advance by hand or the
+      // loop never moves.
+      if (to === from) pattern.lastIndex = from + 1;
+      if (query.wholeWord === true && (isWordChar(text, from - 1) || isWordChar(text, to)))
+        continue;
+
+      const pieces = reading.pieces(from, to);
+      const first = pieces[0];
+      if (first === undefined) continue;
+      hits.push({
+        bookId: book.id,
+        stamp: reading.stamp,
+        from: first.from,
+        to: first.to,
+        ref: refFrom(table, book.id, first.from),
+        // Cut from the READING, so the preview reads as the reader sees it —
+        // no markers, no footnote bodies — which is the whole point of
+        // searching this side.
+        preview: previewAt(text, from, to),
+        ...(pieces.length > 1 ? { pieces } : {}),
+      });
+      if (limit !== undefined && hits.length >= limit) return Result.succeed(hits);
     }
   }
   return Result.succeed(hits);

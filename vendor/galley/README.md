@@ -5,8 +5,8 @@ The pinned WASM artifact Sefer analyzes USFM with: Onion (parser) and Sous
 stateless doors as free functions on the same module. Nothing in Sefer parses
 USFM except through this artifact.
 
-Pinned at `scripture-kitchen` **v0.1.1** (`07278dc`). The repository was
-`usfm_onion_2` until that tag; the local checkout is `../scripture-kitchen`.
+Pinned at `scripture-kitchen` **v0.1.2** (`eca6635`). The repository was
+`usfm_onion_2` until v0.1.1; the local checkout is `../scripture-kitchen`.
 
 ## What is here, and where upstream it comes from
 
@@ -17,6 +17,7 @@ Pinned at `scripture-kitchen` **v0.1.1** (`07278dc`). The repository was
 | `sous-reader.ts` | `galley/sous-reader.ts` | `./sous-reader` |
 | `find-reader.ts` | `galley/find-reader.ts` | `./find-reader` |
 | `toc-reader.ts` | `galley/toc-reader.ts` | `./toc-reader` |
+| `mask-reader.ts` | `galley/mask-reader.ts` | `./mask-reader` |
 | `diagnostics.json` | `onion-wasm/diagnostics.json` | `./diagnostics.json` |
 
 `pkg-web/` is the **galley superset** build — every onion door plus the
@@ -39,12 +40,18 @@ Pinned at `scripture-kitchen` **v0.1.1** (`07278dc`). The repository was
   "census" and its classes `Census`/`BookCensus`/`ChapterRow`; `src/core/galley`
   re-exports them as `ProjectToc`/`BookToc`/`TocChapter`/`TocVerse`, because all
   three upstream names are already spent in Sefer — see the note there.
+- `mask-reader.ts` — generated reader for the mask map (`mask`, `maskOf`).
+  New at v0.1.2. The map is the source spans a book's READING is made of, in
+  order; the reading is a pure concatenation of them, so a host holding the
+  text rebuilds the reading and maps an offset in it back to an offset it can
+  edit. `src/core/search/reading.ts` is the only consumer, and states what it
+  keeps and what it rebuilds.
 - `diagnostics.json` — the Onion diagnostic catalogue.
-- `manifest.json` — engine revision, the three wire versions and sha256 of
+- `manifest.json` — engine revision, the five wire versions and sha256 of
   every file here. `src/core/galley` refuses an artifact whose wire versions it
   does not know.
 
-## The three wire buffers
+## The five wire buffers
 
 | buffer | magic | version |
 | --- | --- | --- |
@@ -52,6 +59,7 @@ Pinned at `scripture-kitchen` **v0.1.1** (`07278dc`). The repository was
 | sous findings | `0x53554F53` | 1 |
 | find | `0x444E4946` ("FIND") | 1 |
 | toc | `0x53434F54` ("TOCS") | 1 |
+| mask | `0x4B53414D` ("MASK") | 1 |
 
 The find buffer's magic and version word are new at v0.1.0 and are read by
 `decodeHits` in `src/core/galley/galley.ts`, which refuses a buffer whose
@@ -59,8 +67,10 @@ header it does not know rather than decoding plausible nonsense.
 
 ## Re-vendoring
 
-Check `../scripture-kitchen` out at the tag, copy the nine files named above,
-rewrite `manifest.json` (revision, date, subject, wire versions, sha256 of
-each artifact), and move `src-tauri/Cargo.toml`'s path pin in the SAME commit —
-the native corpus door and this artifact must be one engine. Do not edit these
-files by hand.
+Check `../scripture-kitchen` out at the tag, copy the ten files named above, and
+rewrite `manifest.json` (revision, date, subject, wire versions, sha256 of each
+artifact). Do not edit these files by hand.
+
+`src-tauri/Cargo.toml` no longer pins the crate: the native corpus door was
+deleted with `CorpusEngine`, so the wasm artifact is the only engine and there
+is no second one to keep in step.

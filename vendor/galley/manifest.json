@@ -7,10 +7,10 @@
       "wasm"
     ],
     "target": "web",
-    "tag": "v0.1.1",
-    "revision": "07278dcd2ed370fcda59c5901c2d86746fefdc47",
-    "revisionDate": "2026-09-17T07:30:55-05:00",
-    "subject": "0.1.1: one wire generator (ticket) for dish, census, and find; toc/tocAll census doors; find reads through a shipped reader.",
+    "tag": "v0.1.2",
+    "revision": "eca66354db69821bf4d9fb5c10560bc412605586",
+    "revisionDate": "2026-09-17T13:51:20-05:00",
+    "subject": "0.1.2: the mask map crosses the wall — mask(id) and maskOf(text), one MASK buffer, read through a shipped reader.",
     "build": "cd galley && wasm-pack build --target web --release -- --features wasm"
   },
   "wire": {
@@ -29,6 +29,10 @@
     "toc": {
       "magic": 1396920148,
       "formatVersion": 1
+    },
+    "mask": {
+      "magic": 1263747405,
+      "formatVersion": 1
     }
   },
   "artifacts": {
@@ -36,10 +40,11 @@
     "sous-reader.ts": "2b6548d90d4e9a93b7c490937f61f2359355ac50f651f3d58951e7cd535f2aa9",
     "find-reader.ts": "39a6bd8e06ec4075556051878e96a7f59268be7eb580380603861c3ae1c138a0",
     "toc-reader.ts": "4462567a442ad9d88e296c97087deb8f36d45748d3835d011150408b5e06859e",
+    "mask-reader.ts": "ecc399d6b95354457eb0d9c279bb72f64c9832f33ed00ceb1cc03622c825fa7a",
     "diagnostics.json": "d4b067e4b3fb1076bbd11bc62eb1dfe975bdd3e76c78b737c37297c22b968d00",
-    "pkg-web/usfm_galley.js": "deef03f4cfffdc8cb0114300c513efc3d58f02f58c1d624212bf68c2cbf90dab",
-    "pkg-web/usfm_galley.d.ts": "970db943906137cb3915fb37304cef09bcde8089e0aa849966a466dc3f4051d5",
-    "pkg-web/usfm_galley_bg.wasm": "253ed798abe642bd3af46af84b6e5477335b1ef41d790028f6d9226020d323c3",
-    "pkg-web/usfm_galley_bg.wasm.d.ts": "72b99f750ff2522534d34a0bf6d2eb78c070fdac9b252e3bccbd3e2b0241b0c6"
+    "pkg-web/usfm_galley.js": "5f3d0187aefcff9fe6ea5fdd59d8c1a8dbe34b3ef62111b7d19467db95a32554",
+    "pkg-web/usfm_galley.d.ts": "685e1dccd7b17d10e51be77f178ba54e5691ffbccf5c579a9e722ed6d58d7fda",
+    "pkg-web/usfm_galley_bg.wasm": "fc02598b005a0660342fafdc3f54dbaee38f5ec4e234e62ecc620720c2e6c82a",
+    "pkg-web/usfm_galley_bg.wasm.d.ts": "febed1100032044d6457a9bd3f34832a224c246a85b2f0cd2d9f6cabc68bb951"
   }
 }

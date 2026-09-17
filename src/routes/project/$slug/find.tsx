@@ -4,6 +4,7 @@ import { Effect, Option, Result } from "effect";
 import CaseSensitiveIcon from "lucide-solid/icons/case-sensitive";
 import ChevronDownIcon from "lucide-solid/icons/chevron-down";
 import ChevronUpIcon from "lucide-solid/icons/chevron-up";
+import CodeIcon from "lucide-solid/icons/code";
 import RegexIcon from "lucide-solid/icons/regex";
 import SearchIcon from "lucide-solid/icons/search";
 import WholeWordIcon from "lucide-solid/icons/whole-word";
@@ -26,6 +27,7 @@ import * as Workflows from "../../../app/workflows/references";
 import type { BookId } from "../../../core/book/book";
 import { refOccurrences, type Excerpt, type Occurrence } from "../../../core/excerpts/excerpts";
 import { describesExactly, Galley } from "../../../core/galley";
+import { createReadings } from "../../../core/search/reading";
 import * as Search from "../../../core/search/search";
 
 /**
@@ -45,11 +47,12 @@ import * as Search from "../../../core/search/search";
  *
  * What is still the core module's, unchanged:
  *
- *  - `findProjected` searches the ENGINE's verse-text projection — the
- *    reading, not the markup — and is the default, because a translator
+ *  - `findInReading` searches the READING — the markup cut out, rebuilt here
+ *    from the engine's mask map — and is the default, because a translator
  *    searching for a word does not mean the marker that happens to contain it.
- *    `find` is the raw scan, and the only door that takes a regex, so turning
- *    the regex toggle on switches doors.
+ *    `find` is the raw scan of the USFM, for a search aimed AT the markup.
+ *    Either takes a literal or a regex, so the matcher and the haystack are
+ *    two switches and all four combinations work.
  *  - `resolveHit` decides whether a hit can still be trusted, so a card that
  *    named a revision the book has moved past refuses instead of editing the
  *    wrong range.
@@ -117,6 +120,28 @@ function Find() {
   // derivation of the params — Solid 2 is right to ask which one it is.
   const [text, setText] = createSignal(untrack(asked), { name: "query" });
   const [regex, setRegex] = createSignal(false, { name: "regex" });
+  /**
+   * Search the markup itself, rather than the reading.
+   *
+   * Its own switch since the mask map landed. It used to be an undocumented
+   * side effect of the regex toggle — the raw scan was the only door that took
+   * a pattern, so turning regex on silently changed WHAT was being searched as
+   * well as how, and the button's label had to admit it. "Find every `\f`" and
+   * "find `Jesus (said|answered)` in the reading" are the two cells that were
+   * unreachable; both work now.
+   */
+  const [markup, setMarkup] = createSignal(false, { name: "markup" });
+
+  /**
+   * The mask maps, held for as long as this screen is.
+   *
+   * ~0.6MB for a whole Bible, keyed by each book's stamp, re-cut only when a
+   * book has actually changed. The READINGS are not kept — they are rebuilt per
+   * search (~9ms for a corpus) and dropped, which is the trade
+   * `src/core/search/reading.ts` sets out. Dying with the screen is the point:
+   * nothing holds a second copy of the project while you are editing.
+   */
+  const readings = createReadings(shell.services.galley);
   const [matchCase, setMatchCase] = createSignal(false, { name: "matchCase" });
   const [wholeWord, setWholeWord] = createSignal(false, { name: "wholeWord" });
 
@@ -319,14 +344,13 @@ function Find() {
       return;
     }
 
-    const found =
-      staticQuery.regex === true
-        ? Search.find(books, staticQuery, options)
-        : await shell.services.run(
-            Effect.flatMap(Galley, (galley) =>
-              Effect.result(Search.findProjected(galley, books, staticQuery, options)),
-            ),
-          );
+    // TWO switches, not one. `markup` picks the haystack — the canonical USFM
+    // or the reading with the markup cut out — and `regex` picks the matcher.
+    // They used to be the same button, because the only regex door was the raw
+    // scan; the mask map is what separated them.
+    const found = markup()
+      ? Search.find(books, staticQuery, options)
+      : Search.findInReading(readings, books, staticQuery, options);
     setReferenceHits([]);
     if (Result.isFailure(found)) {
       setProblem(found.failure.description);
@@ -532,10 +556,17 @@ function Find() {
               />
               <IconButton
                 size="sm"
-                label={t("Regular expression (searches the markup too)")}
+                label={t("Regular expression")}
                 icon={<RegexIcon size={15} />}
                 aria-pressed={regex() ? "true" : "false"}
                 onClick={() => setRegex((held) => !held)}
+              />
+              <IconButton
+                size="sm"
+                label={t("Search the markup, not the reading")}
+                icon={<CodeIcon size={15} />}
+                aria-pressed={markup() ? "true" : "false"}
+                onClick={() => setMarkup((held) => !held)}
               />
             </div>
 

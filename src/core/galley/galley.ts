@@ -21,6 +21,7 @@
 import { Context, Data, Effect, Layer, Option, Result } from "effect";
 
 import manifest from "../../../vendor/galley/manifest.json";
+import { MaskMap, FORMAT_VERSION as MASK_FORMAT_VERSION } from "../../../vendor/galley/mask-reader";
 import {
   deserialize,
   declaredVersion,
@@ -122,7 +123,7 @@ export class EngineLoadError extends Data.TaggedError("EngineLoadError")<{
  * boot failure.
  */
 export class VersionMismatch extends Data.TaggedError("VersionMismatch")<{
-  readonly wire: "onion" | "sous" | "find" | "toc";
+  readonly wire: "onion" | "sous" | "find" | "toc" | "mask";
   readonly found: number;
   readonly expected: number;
 }> {}
@@ -480,6 +481,24 @@ export interface GalleyService {
   readonly tocAll: () => ProjectToc;
 
   /**
+   * One registered book's MASK MAP: the source spans its reading is made of,
+   * in order, in UTF-16.
+   *
+   * The reading — what `verseText(id)` answers, and what a search should look
+   * at — is a pure CONCATENATION of those spans, so a caller holding the
+   * book's text rebuilds the reading from the map alone, and maps an offset in
+   * the reading back to an offset in the text it can edit.
+   *
+   * That is the whole reason this door exists rather than `verseText`: a
+   * reading with no way back is a reading nothing can act on. See
+   * `src/core/search/reading.ts`, which is the only caller.
+   *
+   * `undefined` for a book that retains no text — a reference registered
+   * without `keepText` — which the engine reports by throwing.
+   */
+  readonly mask: (id: string) => MaskMap | undefined;
+
+  /**
    * A memo for one Book: the same text returns the same `Analysis` instance.
    *
    * One per Book, held by whatever owns that Book's editor state. A gesture
@@ -680,6 +699,7 @@ export interface EngineManifest {
     readonly sous: { readonly formatVersion: number };
     readonly find: { readonly magic: number; readonly formatVersion: number };
     readonly toc: { readonly formatVersion: number };
+    readonly mask: { readonly formatVersion: number };
   };
 }
 
@@ -735,6 +755,15 @@ export const accepts = (artifact: EngineManifest): Result.Result<void, VersionMi
         wire: "toc",
         found: artifact.wire.toc.formatVersion,
         expected: TOC_FORMAT_VERSION,
+      }),
+    );
+  }
+  if (artifact.wire.mask.formatVersion !== MASK_FORMAT_VERSION) {
+    return Result.fail(
+      new VersionMismatch({
+        wire: "mask",
+        found: artifact.wire.mask.formatVersion,
+        expected: MASK_FORMAT_VERSION,
       }),
     );
   }
@@ -923,6 +952,21 @@ const makeService = (
     return one.bookCount === 0 ? undefined : one.book(0);
   };
 
+  const mask = (id: string): MaskMap | undefined => {
+    // UTF-16, like `toc`: the offsets are handed to CodeMirror and to
+    // `Book.apply` in the end, and both count the way JS strings do.
+    //
+    // Thrown rather than returned by the engine for a book that retains no
+    // text, which is a real state — a reference bound without `keepText` — and
+    // not a bug to propagate. The caller asks a book and gets an answer or
+    // nothing.
+    try {
+      return MaskMap.open(handle.mask(id, { recipe: "verseText", utf16: true }));
+    } catch {
+      return undefined;
+    }
+  };
+
   const memoize = (id?: string): ((text: string) => Analysis) => {
     let last: Analysis | undefined;
     return (text: string): Analysis => {
@@ -978,6 +1022,7 @@ const makeService = (
     memoize,
     lint,
     toc,
+    mask,
     tocAll: () => ProjectToc.open(handle.tocAll(undefined, undefined)),
     find: (id, query) => decodeHits(handle.find(id, query.text, findOptions(query))),
     findAll: (query, scope) =>
