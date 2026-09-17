@@ -392,6 +392,21 @@ const SETTING_KEYS: readonly SettingKey[] = [
   "z_short",
 ];
 
+/**
+ * One book's diagnostics without its syntax tree — what `lint(id)` answers.
+ *
+ * Everything a Finding needs from a parse except the text, which the caller
+ * holds because the caller holds the Book: the diagnostics, the declared
+ * `\usfm` version that gates their severity, and the hash and length that
+ * stamp them. No tree, no tokens, no TOC.
+ */
+export interface LintReport {
+  readonly diagnostics: readonly DiagnosticView[];
+  readonly usfmVersion: string | null;
+  readonly sourceHash: bigint;
+  readonly docLen: number;
+}
+
 export interface GalleyService {
   /** What artifact this is. Read from the manifest, not from the wasm. */
   readonly version: () => EngineVersion;
@@ -429,7 +444,7 @@ export interface GalleyService {
    *
    * The book must be registered; `update` it first.
    */
-  readonly lint: (id: string, why?: string) => readonly DiagnosticView[];
+  readonly lint: (id: string, why?: string) => LintReport;
 
   /**
    * One registered book's TOC — chapter count, verse count, chapter rows —
@@ -854,7 +869,7 @@ const makeService = (
     };
   };
 
-  const lint = (id: string, why = "unnamed"): readonly DiagnosticView[] => {
+  const lint = (id: string, why = "unnamed"): LintReport => {
     const done = observe?.span("galley.lint", undefined, {
       "galley.why": why,
       "book.id": id,
@@ -862,17 +877,24 @@ const makeService = (
     const started = performance.now();
     // The same reader the parse buffer uses: upstream plates a lint report as
     // a parse buffer with only the diagnostics section asked for, so there is
-    // no second layout to learn and no second decoder to keep true.
+    // no second layout to learn and no second decoder to keep true. The header
+    // facts cross either way — `usfmVersion` because it GATES severity, and
+    // the hash because it is what stamps a finding.
     const dish = deserialize(handle.lint(id));
     // Materialised, not handed back as a cursor. The cursor reads a buffer
     // this function owns and nothing else holds, and a caller that kept one
     // past the next call would be reading whatever the engine plated next.
-    const found = [...dish.diagnostics];
+    const diagnostics = [...dish.diagnostics];
     done?.({
-      "galley.diagnostics": found.length,
+      "galley.diagnostics": diagnostics.length,
       "galley.engine_ms": Math.round((performance.now() - started) * 1000) / 1000,
     });
-    return found;
+    return {
+      diagnostics,
+      usfmVersion: declaredVersion(dish),
+      sourceHash: dish.sourceHash,
+      docLen: dish.sourceLength,
+    };
   };
 
   const toc = (id: string): BookToc | undefined => {

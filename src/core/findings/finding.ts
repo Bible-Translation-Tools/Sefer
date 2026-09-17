@@ -32,6 +32,7 @@ import {
   diagnosticSeverity,
   stampOf,
   type Analysis,
+  type DiagnosticView,
   type EngineStamp,
   type Finding as CorpusFinding,
   type FindingsSnapshot,
@@ -127,14 +128,50 @@ export const fromAnalysis = (
   bookId: BookId,
   analysis: Analysis,
   stamp: SourceStamp,
-): readonly Finding[] => {
-  const engine = stampOf(analysis);
-  const slice = (from: number, to: number): string => analysis.text.slice(from, to);
+): readonly Finding[] =>
+  fromDiagnostics({
+    bookId,
+    stamp,
+    engine: stampOf(analysis),
+    diagnostics: analysis.dish.diagnostics,
+    text: analysis.text,
+    usfmVersion: analysis.usfmVersion,
+  });
+
+/**
+ * The same, over a LINT report rather than a whole parse.
+ *
+ * A lint buffer is a parse buffer with only the diagnostics section plated —
+ * no tree, no tokens, no TOC — and it costs about a tenth of a parse. The four
+ * things a finding needs from a parse are all still in it: the diagnostics
+ * themselves, the declared `\usfm` version that gates their severity, and the
+ * source hash and length that stamp them. The text is the caller's, because
+ * the caller is who holds the Book.
+ *
+ * This is what lets a project open with every badge already right, having
+ * parsed nothing.
+ */
+export const fromDiagnostics = (input: {
+  readonly bookId: BookId;
+  readonly stamp: SourceStamp;
+  readonly engine: EngineStamp;
+  /**
+   * Indexable rather than iterable, and tolerant of a hole, so that BOTH
+   * sources fit without either copying: the parse buffer's `Diagnostics` is a
+   * cursor whose `at` always answers, and a lint report's is a plain array
+   * whose `at` is `Array.prototype.at`.
+   */
+  readonly diagnostics: { readonly length: number; at(n: number): DiagnosticView | undefined };
+  readonly text: string;
+  readonly usfmVersion: string | null;
+}): readonly Finding[] => {
+  const { bookId, stamp, engine, diagnostics, text, usfmVersion } = input;
+  const slice = (from: number, to: number): string => text.slice(from, to);
   const out: Finding[] = [];
-  const { diagnostics } = analysis.dish;
   for (let index = 0; index < diagnostics.length; index += 1) {
     const view = diagnostics.at(index);
-    const severity = diagnosticSeverity(view, analysis.usfmVersion);
+    if (view === undefined) continue;
+    const severity = diagnosticSeverity(view, usfmVersion);
     if (severity === null) continue;
     const code = diagnosticName(view);
     const span = view.span();
