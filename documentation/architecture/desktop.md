@@ -16,7 +16,12 @@ dialogs, OS paths and locale, native git, an OS keychain, and self-update. Each 
 | `Git`                                  | `TauriGitLive`                      | `git_*` commands over `git2`                                                      |
 | `Remote`                               | `TauriRemoteLive({ giteaHost })`    | `git_ensure_remote/fetch/pull/push`; `publish` needs `Gitea` for repo creation    |
 | `Updater` (`src/core/host/updater.ts`) | `TauriUpdaterLive({ updaterHost })` | `plugin-updater` + `install_update_from_endpoint`                                 |
-| `CorpusEngine` (`src/core/galley/corpus.ts`) | `NativeCorpusLive`            | `corpus_*` commands over a native `usfm_galley` Expediter on one owner thread, rayon inside `publish`; see [Galley](galley.md) |
+
+`CorpusEngine` is **not** in that table any more. Desktop ran the whole-corpus half natively —
+`corpus_*` commands over a `usfm_galley` Expediter on one owner thread, rayon inside `publish` — and
+that door is deleted. The id doors answer off the text a handle retains, so one engine in the
+webview is the only shape in which the parse path can name a book instead of re-sending it; see
+[Galley](galley.md). Desktop and Web now analyze through the identical Layer.
 
 `src/app/services.ts` picks these by `detectHost()` and loads them through a dynamic
 `import("../platform/tauri/index")` inside the `tauri` branch only. That is load-bearing: every file

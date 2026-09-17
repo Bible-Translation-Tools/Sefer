@@ -296,28 +296,27 @@ const domainLayer = (
   );
 
   /**
-   * The engine, in its two halves.
+   * The engine. ONE handle, in the webview, on both hosts.
    *
-   * `Galley` — the per-book synchronous parse the editor lives on — is the same
-   * wasm build in the webview on BOTH hosts. There is nothing host-specific to
-   * swap there and there never will be: a fiber and an IPC hop per keystroke is
-   * a budget Sefer does not have.
+   * Desktop used to run the whole-corpus half natively behind Tauri commands,
+   * to keep a publication off the thread that paints the editor. That is gone,
+   * and the reason is the id doors: `parse(id)` and `lint(id)` answer off the
+   * text a handle retains, so a corpus that lives in another process is a
+   * corpus the parse path cannot ask about. Keeping both meant every book's
+   * text crossing the wall twice — once to register natively, once to parse in
+   * wasm — which is most of what the engine's maintainer measured us wasting.
    *
-   * `CorpusEngine` — the whole-corpus `update`/`publish` half — is where the
-   * hosts differ. On desktop it is the same engine built natively with rayon,
-   * behind Tauri commands, so a publication does not run on the thread that
-   * paints the editor. On Web it delegates to the wasm handle in this process,
-   * which is still main-thread work; a Worker is the next step, and the seam
-   * that makes it a one-Layer change is now in place. Identical published bytes
-   * either way — the engine's own conformance tests hold that.
+   * What we gave up is real: rayon mapped a cold publication's chapters across
+   * ten threads, and wasm maps them on one. What we got is one resident copy
+   * of the project instead of two, and the parse path able to name a book
+   * rather than re-send it. A Worker is the way back to a publication off this
+   * thread, and the port's signature is still asynchronous so that stays a
+   * one-Layer change.
    *
-   * `provideMerge` on the Web side because `WasmCorpusLive` needs the handle
-   * `WebGalleyLive` builds, and both must come OUT of this layer.
+   * `provideMerge` because `WasmCorpusLive` needs the handle `WebGalleyLive`
+   * builds, and both must come OUT of this layer.
    */
-  const engine =
-    tauri === undefined
-      ? Layer.provideMerge(WasmCorpusLive, WebGalleyLive)
-      : Layer.merge(WebGalleyLive, tauri.NativeCorpusLive);
+  const engine = Layer.provideMerge(WasmCorpusLive, WebGalleyLive);
 
   const host = Layer.mergeAll(
     engine,

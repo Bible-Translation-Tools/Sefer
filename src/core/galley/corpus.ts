@@ -11,19 +11,17 @@
  * can feel.
  *
  * So the corpus half gets its own port, and it is ASYNCHRONOUS on purpose even
- * though today's Web implementation is a synchronous call away:
+ * though the one implementation is a synchronous call away: `WasmCorpusLive`
+ * delegates to the wasm handle in this process, on both hosts. A Worker is the
+ * next step, and it needs exactly this signature.
  *
- *   - on desktop, `NativeCorpusLive` (`src/platform/tauri/corpus.ts`) crosses
- *     IPC into `src-tauri/src/corpus.rs`, where the same engine runs natively
- *     with rayon mapping chapters on Tauri's thread pool;
- *   - on Web, `WasmCorpusLive` delegates to the wasm handle in this process.
- *     A Worker is the next step there, and it needs exactly this signature.
- *
- * The two doors publish the SAME BYTES. That is not an aspiration: the engine's
- * own conformance tests hold the native `Expediter` and the wasm `Galley` handle
- * against one set of golden buffers (`galley/src/wasm.md`, "The claim"), and
- * `galley/tests/equivalence.rs` holds the parallel chapter map against the
- * serial one. `FindingsSnapshot.open` reads either.
+ * There was a second implementation — `NativeCorpusLive`, crossing IPC into a
+ * natively-linked engine with rayon mapping chapters — and it is gone. The id
+ * doors are why: `parse(id)` and `lint(id)` answer off the text a handle
+ * retains, so a corpus in another process is a corpus the parse path cannot
+ * name, and keeping both meant sending every book's text across the wall
+ * twice. One resident copy of the project beats a parallel map we paid for in
+ * marshalling.
  *
  * `Galley` still owns the settings and `analyze`. This port is deliberately narrow:
  * the five calls ProjectAnalysis makes off the keystroke path, and nothing else.

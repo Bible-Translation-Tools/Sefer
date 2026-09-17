@@ -9,7 +9,6 @@
 //! `main.rs` is a two-line shim over `run()` so the same entry point serves
 //! the desktop binary and a mobile entry point.
 
-mod corpus;
 mod credentials;
 mod errors;
 mod git;
@@ -61,21 +60,7 @@ pub fn run() {
             credentials::credentials_set,
             credentials::credentials_clear,
             updater::install_update_from_endpoint,
-            // The whole-corpus half of the analysis engine, natively. The
-            // per-book parse stays in the webview's wasm handle; this is the
-            // publication, mapped on rayon off the main thread.
-            corpus::corpus_update,
-            corpus::corpus_update_reference,
-            corpus::corpus_remove,
-            corpus::corpus_publish,
-            corpus::corpus_find,
-            corpus::corpus_resident_bytes,
         ])
-        // One Expediter for the life of the process, as `CorpusState`. It is
-        // the corpus, resident: registering it here rather than per-window is
-        // deliberate — Sefer holds one project at a time and one corpus is
-        // what `publish()` means.
-        .manage(corpus::CorpusState::new())
         .setup(move |#[allow(unused_variables)] app| {
             // Devtools open in a debug build only. An agent verifying a change
             // on the desktop host reads the console the same way it reads the

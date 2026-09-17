@@ -12,7 +12,6 @@
  * `documentation/architecture/desktop.md` is the map of what these Layers
  * provide and which Rust commands they sit on.
  */
-export { NativeCorpusLive } from "./corpus";
 export { TauriCredentialsLive, KEYCHAIN_SERVICE } from "./credentials";
 export { TauriDialogsLive } from "./dialogs";
 export { TauriFileSystemLive, makeTauriFileSystem } from "./fileSystem";
