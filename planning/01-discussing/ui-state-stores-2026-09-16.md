@@ -267,6 +267,51 @@ excerpt instead of three — cut real CPU and moved the wall clock by nothing.
 That is the lesson worth keeping: on this screen the question was never how
 much work there is, it was how much of it happens before the browser paints.
 
+## The profile of the ~100ms, for whoever picks this up
+
+Production build, real `en_ulb` (20,352 findings, 66 books), warm route, click
+on the findings rail to the first card. Timings from the production build;
+FUNCTION NAMES from a dev build of the same interaction, because production is
+minified and the two agree on shape.
+
+    +0ms    click
+    +17ms   (gap — the router's async transition)
+    +17ms   TASK 1, 40ms
+    +59ms   TASK 2, 57ms
+    ~100ms  first card on screen
+
+    TASK 1                              TASK 2
+      14.1ms  35%  findingsFeed memo      13.6ms  24%  solid untrack
+       3.9ms  10%  excerptsOf              7.8ms  14%  solid read
+       3.8ms   9%  garbage collector       5.9ms  10%  virtual getMeasurements
+       2.3ms   6%  (program)               3.7ms   6%  findingsFeed row
+       1.5ms   4%  verseAt                 2.4ms   4%  virtual memoizedFunction
+
+Task 2 is the virtual list: Solid creating the nodes for the cards on screen,
+and `virtual-core` measuring. That one is roughly the product.
+
+**Task 1 is the open question.** It is the feed's model — and the model is
+supposed to be behind the `body()` gate, which is why the gate was built. It
+should be running in task 2, with the list that reads it. Nothing in
+`FindingsPanel` obviously reads `feed.*` during the shell render: the only
+`createEffect` reads `search().code`, `at()`/`step()` are keyboard handlers,
+and `focused()`/`focusedAt()` are props of `<ExcerptList>`, which is inside the
+gate. So something reads the model earlier than it looks, and finding it is
+worth more than any further trimming.
+
+Two candidates to check first:
+
+  * `createFindingsFeed`'s own `hits` memo maps every finding to an
+    `Occurrence` — twenty thousand objects, and 14ms is about right for it. If
+    something reads `hits` (not `model`), the gate would never have covered it.
+  * The rAF/timeout may fire during the router's async transition, before the
+    panel has painted at all — in which case `body()` is already true when the
+    panel mounts and the gate does nothing. The ~17ms gap before task 1 is the
+    transition, and it is long enough for that to happen.
+
+If the second is true the fix is to flip the gate on a paint that has actually
+happened, not on a frame that may already have passed.
+
 ## Still outstanding
 
 Loose ends found while doing this, none of them blocking:
