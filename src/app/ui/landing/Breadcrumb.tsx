@@ -8,13 +8,20 @@
  * trail, and only a crumb given a `to` is a link.
  */
 
-import { Link } from "@tanstack/solid-router";
+import { Link, type LinkProps } from "@tanstack/solid-router";
 import { For, Show } from "solid-js";
 
 export interface Crumb {
   readonly label: string;
-  /** A typed route path; a crumb without one is plain text. */
-  readonly to?: "/" | "/settings" | "/start/find" | "/start/create";
+  /**
+   * A typed route path; a crumb without one is plain text.
+   *
+   * Taken from `Link`'s own prop rather than spelled out here. A hand-written
+   * union of the four landing routes was a second copy of the route tree, and
+   * it went stale the moment a route was added: `/projects` was a type error
+   * in three files that had nothing wrong with them.
+   */
+  readonly to?: LinkProps["to"];
 }
 
 export function Breadcrumb(props: { readonly crumbs: readonly Crumb[] }) {

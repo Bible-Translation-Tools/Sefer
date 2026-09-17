@@ -155,7 +155,7 @@ export function IconRail() {
           tooltipSide="right"
           aria-pressed={choosing()}
           icon={<FolderOpen size={18} />}
-          onClick={() => void navigate({ to: "/" })}
+          onClick={() => void navigate({ to: "/projects" })}
         />
 
         {/* Which characters this project actually uses, and this project

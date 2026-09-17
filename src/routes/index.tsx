@@ -7,43 +7,35 @@ import { ShellGate } from "../app/ui/ShellGate";
 import "../app/ui/theme";
 
 /**
- * `/` IS the projects screen, and on a cold start it is also the door to the
- * last project.
+ * `/` is THE WORK: the project you were last in, or the projects list when
+ * this device has none.
  *
- * A redirect from `/` to a landing route would be tidier in the route tree and
- * worse in practice: the composition reads `?fixture=1` off `location` before
- * the router exists, and a redirect that dropped the search would silently
- * compose over OPFS instead of the seeded fixture.
+ * The list itself is `/projects`, which is always the list — see the note
+ * there for why the two are separate routes rather than one URL that tries to
+ * be both.
+ *
+ * Not a `beforeLoad` redirect, which is where a router would normally put
+ * this. Two reasons, and the second is the binding one:
+ *
+ *  - the composition reads `?fixture=1` off `location` before the router
+ *    exists, and a redirect that dropped the search would silently compose
+ *    over OPFS instead of the seeded fixture;
+ *  - the answer lives in `shell.recentProjects()`, and the shell is a Solid
+ *    context created by the root route's COMPONENT. A loader runs outside the
+ *    component tree and cannot reach it without hoisting the provider out —
+ *    the same trade `/project/$slug` makes, and the same note applies: this is
+ *    the version to revisit if loaders ever need to do more than choose.
  */
 
-/**
- * Whether this page load has already made its one automatic jump.
- *
- * MODULE level, not component state, and that is the whole mechanism. Sefer
- * opens into the project you were last in — an editor that lands you on a list
- * every morning has made you navigate back to your own work — but "go to my
- * projects" has to mean it. Both are the same URL, so the two are told apart
- * by WHEN: the first arrival at `/` in a page load is a cold start and
- * forwards; every arrival after it is a person asking for the list, and stays.
- *
- * Component state would reset on every mount and forward again, which is the
- * redirect loop. A flag that lives as long as the page load cannot.
- */
-let jumped = false;
-
-function ProjectsHome() {
+function Landing() {
   const shell = useShell();
   const navigate = useNavigate();
 
   // Called straight through rather than wrapped in an effect: it is a one-shot
   // decision made at mount, with no reactive input to re-run on. `ShellGate`
   // above guarantees the shell exists by the time this body runs.
-  const jumpOnce = (): void => {
-    if (jumped) return;
-    jumped = true;
-    // Newest first, so row zero is where they were. A device with no history
-    // has nothing to jump to and shows the list, which is also what a first
-    // run should do.
+  const enter = (): void => {
+    // Newest first, so row zero is where they were.
     const last = untrack(() => shell.recentProjects())[0];
     if (last === undefined) return;
     void navigate({
@@ -52,15 +44,16 @@ function ProjectsHome() {
       replace: true,
     });
   };
-  jumpOnce();
+  enter();
 
-  // Rendered while the jump is being decided as well as after it is declined:
-  // the list is the honest thing to show for the one frame it takes, and a
-  // spinner that flashes is worse than a list that is already right.
+  // A first run, or a device whose projects have all been removed: there is no
+  // work to go to, so the list IS the answer. Rendered rather than redirected,
+  // because a redirect to `/projects` would put a screen in the back stack
+  // that pressing Back could only bounce off.
   return <ProjectsLanding />;
 }
 
 export const Route = createFileRoute("/")({
   head: () => ({ meta: [{ title: "Sefer" }] }),
-  component: () => <ShellGate>{() => <ProjectsHome />}</ShellGate>,
+  component: () => <ShellGate>{() => <Landing />}</ShellGate>,
 });

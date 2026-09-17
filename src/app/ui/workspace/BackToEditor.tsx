@@ -33,16 +33,30 @@ import { metadataOf } from "./project";
 export function BackToEditor() {
   const shell = useShell();
   const navigate = useNavigate();
-  const path = useRouterState({ select: (state) => state.location.pathname });
+  /**
+   * The route that actually matched — an ID from the generated tree, not a
+   * string we parse.
+   *
+   * This used to ask `location.pathname.startsWith("/project/")`, which was
+   * true of exactly two screens when it was written and is now true of ALL of
+   * them: every project screen moved under `/project/$slug/`. So the predicate
+   * silently became "never", the door disappeared, and Escape stopped working
+   * with it. A route id cannot rot that way — move a screen and this is a
+   * compile error.
+   */
+  const routeId = useRouterState({ select: (state) => state.matches.at(-1)?.routeId });
 
   /**
-   * Is there a book behind this screen to go back TO?
+   * Is there work behind this screen to go back TO?
    *
-   * A project route already IS the work, so it needs no door; every other
-   * route has one as soon as a project is open. `/project/` as a prefix and
-   * not an equality, because the census and the editor are both the work.
+   * The work is the book, and the project route itself — which forwards to the
+   * book. Every other screen is a panel over the top of it and needs a door
+   * out, as soon as a project is open.
    */
-  const away = (): boolean => shell.project() !== undefined && !path().startsWith("/project/");
+  const away = (): boolean =>
+    shell.project() !== undefined &&
+    routeId() !== "/project/$slug/book/$book" &&
+    routeId() !== "/project/$slug/";
 
   const label = (): string => {
     const project = shell.project();
@@ -53,15 +67,14 @@ export function BackToEditor() {
   };
 
   const back = (): void => {
-    const project = shell.project();
-    if (project === undefined) return;
-    // The remembered location, which is where the reader was before the panel
-    // took the screen — the same answer the rail's tile gives, so the two
-    // doors cannot disagree.
-    // SAFETY: the path is built at runtime from a project root and a book id,
-    // which no route literal union can spell; an unresolvable one goes through
-    // the router's own not-found boundary.
-    void navigate(shell.landingTarget(project.root));
+    if (shell.project() === undefined) return;
+    // The PARENT route, and nothing cleverer. `/project/$slug` already knows
+    // where the work is — it forwards to the remembered book, and falls back
+    // to the book list when that book is gone — so asking it is one door
+    // instead of two answers that can disagree. This used to resolve
+    // `shell.landingTarget(root)` here, which was the same decision made a
+    // second time from the same inputs.
+    void navigate({ to: "/project/$slug", params: { slug: shell.slug() } });
   };
 
   onCleanup(

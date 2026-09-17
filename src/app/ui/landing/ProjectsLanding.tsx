@@ -32,7 +32,7 @@ export function ProjectsLanding() {
         tab="yours"
         crumbs={[
           { label: t("Sefer"), to: "/" },
-          { label: t("Projects"), to: "/" },
+          { label: t("Projects"), to: "/projects" },
         ]}
       />
 

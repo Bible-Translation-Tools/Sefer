@@ -1143,7 +1143,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     registerProjectCommands({
       services,
       root: () => project()?.root,
-      ask: (root) => void navigate({ to: "/", search: { rename: root } }),
+      ask: (root) => void navigate({ to: "/projects", search: { rename: root } }),
     }),
   );
   return shell;

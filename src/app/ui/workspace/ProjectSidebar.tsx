@@ -270,7 +270,7 @@ export function ProjectSidebar() {
       <button
         type="button"
         class="mt-2 w-full cursor-pointer rounded-md px-2 py-1.5 text-start text-small text-brand transition-colors hover:bg-sidebar-surface-hover"
-        onClick={() => void navigate({ to: "/" })}
+        onClick={() => void navigate({ to: "/projects" })}
       >
         {t("All projects")}
       </button>
@@ -297,7 +297,7 @@ export function ProjectSidebar() {
           data-testid="sidebar-project"
           data-current={choosing() ? "" : undefined}
           class="flex w-full cursor-pointer items-center gap-2 rounded-lg border bg-surface-primary px-3 py-2 text-start transition-colors hover:bg-sidebar-surface-hover data-current:border-brand data-current:bg-brand-light not-data-current:border-surface-border"
-          onClick={() => void navigate({ to: "/" })}
+          onClick={() => void navigate({ to: "/projects" })}
         >
           <span class="min-w-0 flex-1">
             <span class="block truncate text-small font-bold text-on-surface-primary">
