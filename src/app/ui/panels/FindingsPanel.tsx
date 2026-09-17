@@ -219,6 +219,37 @@ export function FindingsPanel() {
 
   const feed = createFindingsFeed({ findings: shown, view: filters.view });
 
+  /**
+   * The list waits for the shell to be on screen.
+   *
+   * Opening this panel was ONE synchronous task of ~114ms — the route
+   * transition, the feed's model over twenty thousand findings, the virtual
+   * list and its first layout, all before the browser painted anything. The
+   * click read as a freeze. Traced and profiled, that task had no hot spot to
+   * remove: the top sixteen costs were a long tail, none above 14%, so making
+   * any of it faster was never going to reach a hundred milliseconds.
+   *
+   * What reaches it is doing less BEFORE the paint. The header, the counts and
+   * the filters are cheap and they are what says the click landed; the list is
+   * the expensive half and nobody can read it in the first frame anyway. Solid
+   * makes the split almost free: memos are pull-based, so while this is false
+   * `feed`'s model is never read and therefore never computed.
+   *
+   * `requestAnimationFrame` runs BEFORE the paint, so the timeout it schedules
+   * is what runs after the frame is committed. That ordering is the whole
+   * mechanism — a bare rAF would build the list in the very frame it is meant
+   * to come after.
+   */
+  const [body, setBody] = createSignal(false, { name: "findingsBody" });
+  let after: ReturnType<typeof setTimeout> | undefined;
+  const frame = requestAnimationFrame(() => {
+    after = setTimeout(() => setBody(true), 0);
+  });
+  onCleanup(() => {
+    cancelAnimationFrame(frame);
+    if (after !== undefined) clearTimeout(after);
+  });
+
   const at = (index: number): FindingsRow | undefined => feed.rows()[index];
 
   /** Wraps, like the palette's own finding commands, over the cards on screen. */
@@ -604,25 +635,27 @@ export function FindingsPanel() {
             </Show>
           }
         >
-          <ExcerptList
-            groups={feed.groups()}
-            outline={feed.outline()}
-            onOpen={feed.excerpts.openInEditor}
-            seat={feed.excerpts.seat}
-            analyze={feed.excerpts.analyze}
-            onEdited={feed.excerpts.edited}
-            onExpand={feed.excerpts.expand}
-            focus={focused()}
-            activeHit={focusedAt()}
-            mode={mode()}
-            decor={decor}
-            empty={
-              <EmptyState
-                icon={<CircleCheck size={22} />}
-                title={t("Nothing to report in the books that are open.")}
-              />
-            }
-          />
+          <Show when={body()} fallback={<div class="min-h-0 flex-1" aria-busy="true" />}>
+            <ExcerptList
+              groups={feed.groups()}
+              outline={feed.outline()}
+              onOpen={feed.excerpts.openInEditor}
+              seat={feed.excerpts.seat}
+              analyze={feed.excerpts.analyze}
+              onEdited={feed.excerpts.edited}
+              onExpand={feed.excerpts.expand}
+              focus={focused()}
+              activeHit={focusedAt()}
+              mode={mode()}
+              decor={decor}
+              empty={
+                <EmptyState
+                  icon={<CircleCheck size={22} />}
+                  title={t("Nothing to report in the books that are open.")}
+                />
+              }
+            />
+          </Show>
         </Show>
       </div>
     </main>
