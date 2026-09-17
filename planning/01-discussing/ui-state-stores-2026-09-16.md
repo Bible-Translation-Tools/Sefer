@@ -226,23 +226,38 @@ a store that does not exist yet:
 | --- | --- |
 | `LocationBar.tsx:58` | `structure` (step 3) |
 | `ProjectSidebar.tsx:125` (chapter grid) | `structure` |
-| `terms.tsx:162`, `:249` | `structure`, plus book text |
 | `HistoryPanel.tsx:187` | `versions` (step 4) |
 | `changes.ts:88`, `:128` | `versions` |
-| `feed.ts:111` | book TEXT — see below |
+
+~~`feed.ts:111`~~ and ~~`terms.tsx:162`, `:249`~~ are DONE. They wanted book
+text, and the table was wrong to file `terms` under `structure` — both of its
+readers read text, not chapters.
 
 (`settings.tsx:55` reads a LOCAL `settingsTick`, not the shell's. The audit
 table above miscounted it; it is not part of this migration.)
 
-### The one question step 3 will force
+### Book text needs no store — the stamp is the signal
 
-`feed.ts` and `terms` do not read a derived product — they read book **text**.
-No store holds text, and putting it in one would mean holding the project's
-whole corpus in a Solid store, which is the opposite of what the `books` row
-does (it holds a STAMP so a reader can ask "has this moved?" and go read the
-Book itself). The likely answer is that these readers take the stamp and
-re-read the Book, exactly as `FindingsPanel.isStale` now does — but it is a
-decision, not a mechanical port, and `structure` is what will force it.
+`feed.ts` and `terms` read book **text**, and nothing holds text; putting the
+corpus in a Solid store would be the opposite of what the `books` row does. The
+answer is the row itself: it carries a STAMP, so a reader depends on
+`shell.stampOf(bookId)` for the books it actually uses and then reads the Book.
+
+That is strictly better than `tick`, because the dependency is per book: a
+keystroke in a book the screen is not showing no longer wakes it.
+
+A stamp and NOT a checksum, deliberately. A Revision moves on every accepted
+edit, so it can over-fire — an undo back to byte-identical text is a new
+revision — and can never under-fire. For a freshness signal that is the
+asymmetry you want. A content hash is exact and costs a whole engine parse,
+which is the `save.hash` bug this plan opened with. (An Analysis does carry
+one, so where a fresh analysis is already in hand the hash is free — worth
+revisiting, not needed here.)
+
+Proved in the running app rather than argued: with Find open on "Yahweh",
+editing a card inline took Genesis from 167 hits to 166 and moved the first
+card from 2:4 to 2:5 — the search re-ran over the new text, through the stamp,
+with no counter anywhere.
 
 ## What opening /findings actually cost
 

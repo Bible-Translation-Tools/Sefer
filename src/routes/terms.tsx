@@ -159,7 +159,6 @@ function Terms() {
 
   const hits = createMemo(
     (): readonly Occurrence[] => {
-      shell.tick();
       const project = shell.project();
       const wanted = refs();
       if (project === undefined || wanted.length === 0) return [];
@@ -167,6 +166,13 @@ function Terms() {
       const out: Occurrence[] = [];
       for (const book of project.books) {
         if (!books.has(book.id)) continue;
+        // The stamp of the book whose text is about to be read, so this depends
+        // on the books it USES and not on every edit anywhere. The stamp is the
+        // signal and the Book is still the source: a revision moves on every
+        // accepted edit, which can only over-fire (an undo back to identical
+        // text is a new revision) and never under-fire. A content hash would be
+        // the other trade — exact, and a whole engine parse to compute.
+        shell.stampOf(book.id);
         const source = book.source();
         const held = Option.getOrUndefined(shell.services.projectAnalysis.analysis(book.id));
         const analysis =
@@ -246,9 +252,12 @@ function Terms() {
   );
 
   const target = (): { readonly id: string; readonly text: string } | undefined => {
-    shell.tick();
     const book = shell.focused();
-    return book === undefined ? undefined : { id: book.id, text: book.source().text };
+    if (book === undefined) return undefined;
+    // One book, one dependency: this follows the focused book's text and
+    // nothing else's.
+    shell.stampOf(book.id);
+    return { id: book.id, text: book.source().text };
   };
 
   /**
