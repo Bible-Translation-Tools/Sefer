@@ -5,8 +5,8 @@
  * already hold — the project's own book order, `ProjectAnalysis.census` for
  * the review pills, and the FOCUSED book's `structure().chapters` for the
  * grid. Nothing here reads text, and nothing here subscribes to a Book: every
- * derived number is re-read behind `shell.tick()`, which is the shell's whole
- * reactivity contract for derived products (documentation/architecture/shell.md).
+ * derived number comes off a shell store, written when an event said that
+ * book moved (documentation/architecture/shell.md).
  *
  * Only the focused book expands. That is not a collapse animation waiting to
  * be written: the chapter grid is about the book you are editing, and two
@@ -113,8 +113,10 @@ export function ProjectSidebar() {
    * book that starts at `\c 1` still shows a grid of chapters and nothing else.
    *
    * A memo for the same reason `rows` is one: the grid is asked for twice per
-   * render and the shell ticks on every keystroke, so a 150-chapter book was
-   * rebuilding 300 tiles per keypress.
+   * render, so a 150-chapter book was rebuilding 300 tiles per ask. It now
+   * rebuilds when the focused book's chapter table does and not when anything
+   * else in the application happens, which behind `shell.tick()` was every
+   * keystroke in every book, every save, and every publication.
    */
   const chapters = createMemo(
     (): readonly {
@@ -122,12 +124,8 @@ export function ProjectSidebar() {
       readonly label: string;
       readonly intro: boolean;
     }[] => {
-      shell.tick();
-      const book = shell.focused();
-      if (book === undefined) return [];
       const rows: { index: number; label: string; intro: boolean }[] = [];
-      const table = book.structure().chapters;
-      table.forEach((chapter, index) => {
+      shell.outline().forEach((chapter, index) => {
         if (chapter.label !== "") {
           rows.push({ index, label: chapter.label, intro: false });
           return;

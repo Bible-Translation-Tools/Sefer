@@ -183,8 +183,25 @@ export function HistoryPanel() {
     setShown(out);
   };
 
+  /**
+   * The books this side is a diff OF, which is what decides when it restales.
+   *
+   * The working row diffs every book against the recorded baseline; a commit
+   * diffs only the books it touched. Naming them is what lets a keystroke in
+   * Genesis leave a selected Ruth commit alone — behind `shell.tick()` every
+   * edit anywhere re-ran this panel, blob fetch and decode included.
+   */
+  const diffed = (): readonly BookId[] => {
+    const id = selected();
+    if (id !== WORKING) return booksIn(id);
+    return shell.project()?.books.map((book) => book.id) ?? [];
+  };
+
   createEffect(
-    () => `${selected()}:${shell.tick()}:${versions().size}:${version.recorded().head ?? ""}`,
+    () =>
+      `${selected()}:${versions().size}:${version.recorded().head ?? ""}:${diffed()
+        .map((bookId) => shell.stampOf(bookId)?.revision ?? -1)
+        .join(",")}`,
     () => {
       // The compute above IS the dependency list. Everything this reads is a
       // one-time snapshot of the state that key already describes, so

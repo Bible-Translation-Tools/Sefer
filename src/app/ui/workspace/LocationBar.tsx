@@ -43,23 +43,14 @@ export function LocationBar(props: LocationBarProps) {
   const [outline, setOutline] = createSignal(false, { name: "outlineOpen" });
 
   /**
-   * The engine's chapter table for the focused book.
+   * The focused book's chapter table.
    *
-   * Read behind `shell.tick()` like every other derived product — the table
-   * changes when the reader adds a `\c`, and nothing here subscribes to a Book
-   * — but the memo hands back the ARRAY and builds nothing. That matters: the
-   * shell ticks on every keystroke, and this bar used to rebuild one labelled,
-   * translated row per chapter each time, behind a popover nobody had opened.
-   * On a book of 150 chapters that was 150 objects per keypress, on the
-   * gesture's critical path.
+   * The shell derives it once, from that book's stamp, and hands back the
+   * ARRAY the editor already holds (`ProjectContext.outline`). This bar used
+   * to rebuild it behind `shell.tick()` — on every event in the application,
+   * for a popover nobody had opened.
    */
-  const table = createMemo(
-    () => {
-      shell.tick();
-      return shell.focused()?.structure().chapters ?? [];
-    },
-    { name: "chapterTable" },
-  );
+  const table = () => shell.outline();
 
   const at = (): number => props.ordinal ?? shell.chapter() ?? 0;
 

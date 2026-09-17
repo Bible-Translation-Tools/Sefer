@@ -90,12 +90,8 @@ export interface ShellBridge {
    * editor did not publish — a save that reset a baseline, a commit. Every
    * dirty marker is derived, so without this one call they stay stale.
    *
-   * BEING RETIRED in favour of `changed`; do not add a caller.
-   */
-  readonly bump: () => void;
-  /**
-   * The same news, but saying which books it is about, so that a command
-   * touching one book does not wake every book's readers.
+   * It names the books it is about, so a command touching one book does not
+   * wake every book's readers.
    */
   readonly changed: (event: ShellEvent) => void;
 }

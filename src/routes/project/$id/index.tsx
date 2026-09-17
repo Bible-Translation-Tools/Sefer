@@ -12,11 +12,11 @@ import { ShellGate } from "../../../app/ui/ShellGate";
 /**
  * One project: the book census, and which books have unsaved work.
  *
- * Both come straight from the modules — `ProjectAnalysis.bookCensus(project)` and
- * `SaveCoordinator.dirty(book)` — and both are synchronous reads of things
- * already in memory. Neither is recomputed here; the page reads
- * `shell.tick()` so that an edit made in the editor route re-renders it, which
- * is the whole of the shell's reactivity contract for derived products.
+ * Both come straight from the shell's stores — `shell.bookCensus()` and
+ * `shell.saveState(book)` — which the coordinator wrote when an event said
+ * those books moved. Neither is recomputed here, and an edit made in the
+ * editor route reaches this page because the row it changed is the row this
+ * page reads.
  */
 
 function ProjectPage(props: { readonly root: string; readonly census: boolean }) {

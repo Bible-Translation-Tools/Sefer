@@ -4,8 +4,8 @@
  *
  * Sefer's core is pure and holds no signals (`pnpm boundaries`), and Solid
  * needs signals to know what to redraw. Something has to sit between them, and
- * for a long time that something was one counter: `bump()` said "something
- * changed somewhere" and every derived read in nine screens recomputed.
+ * for a long time that something was one counter: it said "something changed
+ * somewhere" and every derived read in nine screens recomputed.
  *
  * This is the replacement, and the model is one line:
  *
@@ -25,10 +25,10 @@
  * different one: this decides WHAT the UI knows, and ProjectContext decides
  * what a route can reach and what happens when the reader opens a book.
  *
- * `bump` is passed in and still called on every event. It is the old counter,
- * kept alive only for the readers that have not moved to a store yet; it and
- * `tick` go together when the last one leaves
- * (planning/01-discussing/ui-state-stores-2026-09-16.md, step 6).
+ * The counter is gone. There is no longer any way for one part of the
+ * application to tell another that something, somewhere, happened — every
+ * write goes through `changed()` and names its books, and every read is of a
+ * row those books own.
  */
 
 import { Effect, Fiber, Option, Stream } from "effect";
@@ -57,18 +57,22 @@ interface BookRow {
   readonly saveState: SaveState;
   readonly stamp: SourceStamp;
   /**
-   * The editor's undo and redo depth, and how many chapters the text has.
+   * The editor's undo and redo depth.
    *
-   * Here because they are the last inputs to a command's `when()` that are not
-   * signals — CodeMirror's history and its structure field — and a predicate
-   * cannot declare a dependency on something that never publishes. Both are
-   * O(1) reads of a `StateField` the editor already maintains, so the event
-   * path pays nothing to carry them, and putting them here is what lets the
-   * toolbar stop reading `tick`.
+   * Here because it is the last input to a command's `when()` that is not a
+   * signal — CodeMirror's history — and a predicate cannot declare a
+   * dependency on something that never publishes. It is an O(1) read of a
+   * field the editor already maintains, so the event path pays nothing to
+   * carry it, and carrying it is what let the toolbar stop reading the
+   * counter.
+   *
+   * The chapter table is NOT here. It belongs to the focused book alone and
+   * it is an array, so holding it in a store would proxy every row for every
+   * reader that walks it; `ProjectContext.outline` derives it from this row's
+   * stamp instead, which is the same dependency at none of the cost.
    */
   readonly undo: number;
   readonly redo: number;
-  readonly chapters: number;
 }
 
 /** What the coordinator hands the shell. Every member is cheap to call. */
@@ -89,8 +93,6 @@ export interface ShellStores {
   readonly stampOf: (bookId: BookId) => SourceStamp | undefined;
   /** How deep this book's undo and redo stacks are. Zeroes for an unseated book. */
   readonly historyDepth: (bookId: BookId) => { readonly undo: number; readonly redo: number };
-  /** How many chapters this book's text has. Zero for an unseated book. */
-  readonly chapterCount: (bookId: BookId) => number;
 
   readonly findings: Accessor<readonly Finding[]>;
   readonly findingCounts: Accessor<{ readonly errors: number; readonly warnings: number }>;
@@ -112,10 +114,8 @@ export const makeShellStores = (options: {
    * when it did, `project.open` wrote no book rows at all.
    */
   readonly open: () => Project | undefined;
-  /** The old counter, bumped on every event until its last reader leaves. */
-  readonly bump: () => void;
 }): ShellStores => {
-  const { services, open, bump } = options;
+  const { services, open } = options;
 
   /**
    * What the project's analyses currently say, and who it is about.
@@ -181,7 +181,7 @@ export const makeShellStores = (options: {
       if (held.severity === "error") errors += 1;
       else if (held.severity === "warning") warnings += 1;
     }
-    const rows = services.projectAnalysis.bookCensus(staticOpen);
+    const rows = services.projectAnalysis.census(staticOpen);
     setFindingsList(list);
     setFindingTotals({ errors, warnings });
     setInventoryHeld(services.projectAnalysis.inventory());
@@ -295,16 +295,12 @@ export const makeShellStores = (options: {
         // staleness, a flagged site's, the editor's status line — and those
         // are the questions that DO change on a keystroke. Held per book, so
         // typing in RUT leaves PSA's row alone.
-        // `seated` for the structure: `structure()` belongs to the editor-backed
-        // Book, and an unseated book has no chapters to count for a command
-        // that only acts on the focused one.
         const depth = book.history()?.depth();
         draft[book.id] = {
           saveState: saveStateOf(book),
           stamp: book.source().stamp,
           undo: depth?.undo ?? 0,
           redo: depth?.redo ?? 0,
-          chapters: services.seated(book.id)?.structure().chapters.length ?? 0,
         };
       }
     });
@@ -313,16 +309,10 @@ export const makeShellStores = (options: {
   /**
    * Something moved, and this is what it was.
    *
-   * The one door the stores are written through, replacing `bump()` as the
-   * thing every call site calls. What a caller gains by naming its event is
-   * that only the books it names are re-examined; what the application gains
-   * is that `shellEvent.ts` is now a readable list of everything that can
-   * change the UI.
-   *
-   * It still bumps `tick` at the end, and will until the last reader leaves
-   * it. The migration is incremental on purpose (the plan's step 6 deletes
-   * both): `books` has taken the dirty markers off the counter, and the
-   * seventeen readers that have not moved yet stay correct meanwhile.
+   * The one door the stores are written through, and now the only one. What
+   * a caller gains by naming its event is that only the books it names are
+   * re-examined; what the application gains is that `shellEvent.ts` is a
+   * readable list of everything that can change the UI.
    */
   const changed = (event: ShellEvent): void => {
     if (event.kind === "book.write")
@@ -335,7 +325,6 @@ export const makeShellStores = (options: {
     // the scheduler, and the Publication that follows is what has something
     // new to say.
     if (event.kind === "project.open" || event.kind === "corpus.publish") publishFindings();
-    bump();
   };
 
   /**
@@ -389,8 +378,6 @@ export const makeShellStores = (options: {
     return row === undefined ? NO_HISTORY : { undo: row.undo, redo: row.redo };
   };
 
-  const chapterCount = (bookId: BookId): number => books[bookId]?.chapters ?? 0;
-
   const clear = (): void => {
     setBooks((draft) => {
       for (const bookId of Object.keys(draft)) delete draft[bookId];
@@ -406,7 +393,6 @@ export const makeShellStores = (options: {
     saveState,
     stampOf,
     historyDepth,
-    chapterCount,
     findings,
     findingCounts,
     summaryOf,

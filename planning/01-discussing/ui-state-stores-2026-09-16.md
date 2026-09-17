@@ -148,7 +148,9 @@ leaves, so nothing has to land in one commit.
    the chapter count, which publish to nobody, so those two rode onto the
    `books` row. Verified in the app: Undo and Redo flip correctly with no
    counter.
-6. Delete `tick` and `bump`.
+6. Delete `tick` and `bump`. **DONE 2026-09-17.** Steps 3 and 4 were not
+   needed as written; see Migration below for what the readers actually
+   wanted.
 
 ## Open questions — settled 2026-09-16
 
@@ -219,22 +221,44 @@ CodeMirror's own gesture, which was never the problem.
 
 ## Migration
 
-**Eight** `shell.tick()` reads remain, from twenty-two. Every one is blocked on
-a store that does not exist yet:
+**DONE 2026-09-17: `tick` and `bump` are deleted.** There is no longer any way
+for one part of the application to say "something, somewhere, changed".
 
-| Reader | Wants |
-| --- | --- |
-| `LocationBar.tsx:58` | `structure` (step 3) |
-| `ProjectSidebar.tsx:125` (chapter grid) | `structure` |
-| `HistoryPanel.tsx:187` | `versions` (step 4) |
-| `changes.ts:88`, `:128` | `versions` |
+Neither `structure` nor `versions` was ever built, because neither needed to
+exist. Both were labels I put on the table before reading the readers:
 
-~~`feed.ts:111`~~ and ~~`terms.tsx:162`, `:249`~~ are DONE. They wanted book
-text, and the table was wrong to file `terms` under `structure` — both of its
-readers read text, not chapters.
+* **`versions` was not a thing.** All three of its supposed readers diff
+  WORKING TEXT against a baseline. The version side was already reactive —
+  `HistoryPanel`'s key carried `versions()` and `recorded().head` all along,
+  and `recordedChanges` takes the recorded state as an argument. `tick` stood
+  for "some book's text moved", so they take per-book stamps like the rest.
+* **`structure` collapsed to one memo.** Both readers want the FOCUSED book's
+  chapter table, and that table is CodeMirror's `structure()`, not the engine's
+  TOC — the editor's is right about a chapter typed a second ago. One memo
+  (`ProjectContext.outline`) keyed on that book's stamp serves both, and the
+  chapter COUNT came off the `books` row with it. A store would have been
+  worse: the rows are an array, so every reader that walked it would walk a
+  proxy.
+
+The audit also undercounted. `ReviewPanel.tsx` holds **six** more call sites
+(two readers, four writers) that `grep` never showed, because that file
+contains raw NUL bytes (`${bookId}\0${unitId}`) and so counts as binary — `grep
+-a` is required. Its four `bump()` writers now name their events, which is how
+`noteWritten` acquired its first real caller and `onDisk` became reachable:
+Save & Review's `saveAll` lands the files before the commit is attempted, and
+that IS `onDisk`.
 
 (`settings.tsx:55` reads a LOCAL `settingsTick`, not the shell's. The audit
-table above miscounted it; it is not part of this migration.)
+table above miscounted it; it was never part of this migration.)
+
+### One thing this did NOT fix, and it is pre-existing
+
+Typing a NEW `\c 51` at the end of Genesis does not grow the chapter grid or
+the location crumb — 51 tiles and "Chapter 50" before and after. Verified
+identical against `eeefe08` with `tick` fully in place, in a worktree built and
+served on the same origin, so it is not a regression from this work. The
+editor's structure field is not picking up a chapter marker typed at the end of
+the document. Worth its own look.
 
 ### Book text needs no store — the stamp is the signal
 
@@ -371,9 +395,10 @@ the second is ~57ms of Solid and the virtualizer, and the gate separates them.
 
 Loose ends found while doing this, none of them blocking:
 
-- **`noteWritten` has no callers anywhere.** So `onDisk` is always empty and
-  `saveState` can never return `"onDisk"` — the failed-commit state the save
-  model documents by name is unreachable. Pre-existing; behaviour preserved.
+- ~~**`noteWritten` has no callers anywhere.**~~ RESOLVED, and the claim was
+  wrong: `ReviewPanel` calls it twice, and `grep` hid them behind that file's
+  NUL bytes. `onDisk` is reachable, and now also on the path this work added —
+  `saveAll` landing before the commit is attempted.
 - **Bulk paths are unverified.** A forty-book format and a save/record should
   coalesce to one publication through `changed()`, and the reasoning is in the
   code, but neither was exercised.

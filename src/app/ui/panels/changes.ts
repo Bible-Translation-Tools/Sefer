@@ -18,7 +18,7 @@
  *     record, diff of 92208" the first time it was opened without a
  *     repository.
  *
- * Nothing here subscribes to anything — the caller reads `shell.tick()` to
+ * Nothing here subscribes to a Book — each walk reads `shell.stampOf` to
  * make the answer reactive, which is the single-subscription rule the shell
  * documents.
  *
@@ -85,11 +85,14 @@ export const changesOf = (
  * to be recorded rather than as a clean project.
  */
 export const recordedChanges = (shell: Shell, recorded: Recorded): readonly BookChanges[] => {
-  shell.tick();
   const project = shell.project();
   if (project === undefined || !recorded.read) return [];
   const out: BookChanges[] = [];
   for (const book of project.books) {
+    // The dependency, per book: this diff is against the book's WORKING text,
+    // so it moves when that text moves and when nothing else does. `recorded`
+    // is the caller's own signal and is already tracked where it is read.
+    shell.stampOf(book.id);
     const at = recorded.texts.get(book.id);
     if (at === undefined) {
       out.push({
@@ -125,11 +128,14 @@ export const recordedChanges = (shell: Shell, recorded: Recorded): readonly Book
  * prevent.
  */
 export const unsavedChanges = (shell: Shell): readonly BookChanges[] => {
-  shell.tick();
   const project = shell.project();
   if (project === undefined) return [];
   const out: BookChanges[] = [];
   for (const book of project.books) {
+    // Per book, for the same reason as above. A baseline is adopted where a
+    // seat opens, which is an event, so the row is written before anything
+    // asks — and a book with no baseline is skipped either way.
+    shell.stampOf(book.id);
     const baseline = shell.services.save.baseline(book);
     if (Option.isNone(baseline)) continue;
     const changed = changesOf(book, baseline.value);

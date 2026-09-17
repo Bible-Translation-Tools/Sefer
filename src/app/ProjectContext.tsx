@@ -15,17 +15,18 @@
  * does. That keeps exactly one subscription per book, at the one place that
  * already has to have one, and it is unchanged.
  *
- * What the subscriber DOES with the receipt is what changed. It used to call
- * `bump()` — one counter meaning "something, somewhere", which every derived
- * read in nine screens re-ran on. It now calls `changed()` with a `ShellEvent`
- * naming the books that moved (`shellEvent.ts`), and the stores below update
- * only the rows that event touched. `tick` survives alongside them until its
- * last reader leaves; see planning/01-discussing/ui-state-stores-2026-09-16.md.
+ * What the subscriber DOES with the receipt is what changed. It used to bump
+ * one counter meaning "something, somewhere", which every derived read in
+ * nine screens re-ran on. It now calls `changed()` with a `ShellEvent` naming
+ * the books that moved (`shellEvent.ts`), and the stores below update only
+ * the rows that event touched. The counter is gone
+ * (planning/01-discussing/ui-state-stores-2026-09-16.md).
  */
 
 import { Effect, Fiber, Option, Result, Stream } from "effect";
 import {
   createContext,
+  createMemo,
   createSignal,
   getOwner,
   onCleanup,
@@ -48,7 +49,7 @@ import { openProject as openProjectEffect, type Project } from "../core/project/
 import { DEFAULT_JOURNAL_POLICY, Recovery } from "../core/recovery/recovery";
 import { SaveCoordinator } from "../core/save/saveCoordinator";
 import type { SourceStamp } from "../core/source/source";
-import { anchorFrom, type EditorBook, type ProjectionName } from "../editor";
+import { anchorFrom, type ChapterRow, type EditorBook, type ProjectionName } from "../editor";
 import { detectHost } from "../platform/host";
 import { registerShellCommands, type ShellBridge } from "./commands";
 import { useComposition } from "./CompositionContext";
@@ -213,23 +214,10 @@ export interface Shell {
 
   /**
    * Something moved, and this says what — the one door the shell's stores are
-   * written through. Call it instead of `bump()`: naming the event is what
-   * lets a keystroke in one book leave every other book's readers asleep.
+   * written through. Naming the event is what lets a keystroke in one book
+   * leave every other book's readers asleep.
    */
   readonly changed: (event: ShellEvent) => void;
-
-  /**
-   * Bumped whenever the project's text or save state moved. Read it in a route
-   * that renders a census, a dirty marker or a diff to make that render
-   * reactive without a second subscription to any Book.
-   *
-   * BEING RETIRED. `changed()` bumps it so the readers that have not moved to
-   * a store yet stay correct; both go when the last one leaves
-   * (planning/01-discussing/ui-state-stores-2026-09-16.md, step 6). Do not
-   * add a reader.
-   */
-  readonly tick: Accessor<number>;
-  readonly bump: () => void;
 
   readonly status: Accessor<string>;
   readonly report: (message: string) => void;
@@ -241,8 +229,8 @@ export interface Shell {
    *
    * The rail's bell and the toolbar's bell both want one number and neither
    * wants to learn the findings module's vocabulary to get it, so the count is
-   * derived once here. `tick()` is read for the same reason everything derived
-   * here reads it: an edit changes the answer and nothing subscribes to a Book.
+   * derived once here, off the findings store, so both bells read one number
+   * that one publication wrote.
    */
   readonly findingCounts: Accessor<{ readonly errors: number; readonly warnings: number }>;
 
@@ -284,6 +272,15 @@ export interface Shell {
    */
   readonly historyDepth: Accessor<{ readonly undo: number; readonly redo: number }>;
   readonly chapterCount: Accessor<number>;
+
+  /**
+   * The focused book's chapter table — the location bar's crumb, its outline
+   * popover, and the sidebar's chapter grid, off one array.
+   *
+   * Empty when no book is focused. The rows are the editor's own and are not
+   * copied: read them, do not keep them past the render that asked.
+   */
+  readonly outline: Accessor<readonly ChapterRow[]>;
 
   /**
    * The workspace chrome: is the project sidebar showing, and how wide is it.
@@ -384,6 +381,9 @@ export const useServices = (): Services => useShell().services;
 export const readyShell = (state: ShellState): Shell | undefined =>
   state.kind === "ready" ? state.shell : undefined;
 
+/** One frozen empty table: "no focused book" must be the SAME value every time. */
+const NO_CHAPTERS: readonly ChapterRow[] = Object.freeze([]);
+
 const makeShell = (services: Services, go: (path: string) => void): Shell => {
   const [project, setProject] = createSignal<Project | undefined>(undefined, { name: "project" });
   const [focused, setFocused] = createSignal<EditorBook | undefined>(undefined, {
@@ -391,7 +391,6 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
   });
   const [mode, setMode] = createSignal<ProjectionName>("default", { name: "mode" });
   const [chapter, setChapter] = createSignal<number | null>(null, { name: "chapter" });
-  const [tick, setTick] = createSignal(0, { name: "tick" });
 
   /**
    * The open project, as a plain value.
@@ -553,15 +552,10 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     services.composition.observability.note("shell.report", "consumed", message);
   };
 
-  const bump = (): void => {
-    setTick((held) => held + 1);
-  };
-
   // The coordinator: every store, and the one door they are written through.
   // `open` is the plain handle and not the signal, for the reason its own note
-  // gives; `bump` goes in because the readers that have not moved to a store
-  // yet still need the counter.
-  const stores = makeShellStores({ services, open: () => live, bump });
+  // gives.
+  const stores = makeShellStores({ services, open: () => live });
   const {
     changed,
     noteWritten,
@@ -575,6 +569,37 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     bookCensus,
     inventory,
   } = stores;
+
+  /**
+   * The focused book's chapter table, and the last thing `tick` was for.
+   *
+   * The engine has a TOC per book, but this is not it: `structure()` is
+   * CodeMirror's own table over the text in the editor, so it is right about
+   * a chapter the reader added a second ago and the TOC is right about the
+   * last text the engine was given. A location bar that lags a keystroke is
+   * the bug, so the editor's table is the one on screen.
+   *
+   * The stamp is the dependency. Nothing subscribes to a Book, and a Book
+   * publishes no structure — so behind `tick` this rebuilt on every event in
+   * the application, including a save in another book, and each of the two
+   * readers built its own rows: 150 chapters meant 300 objects per keystroke
+   * on the gesture's critical path. Read this way it wakes when the focused
+   * book's text moves and at no other time, and hands back the ARRAY the
+   * editor already holds rather than building anything.
+   *
+   * Frozen empty rather than a fresh `[]` so that "no book" is one value: a
+   * new array each call would wake every reader on every unrelated event,
+   * which is the habit this whole migration exists to break.
+   */
+  const outline = createMemo<readonly ChapterRow[]>(
+    () => {
+      const book = focused();
+      if (book === undefined) return NO_CHAPTERS;
+      stampOf(book.id);
+      return book.structure().chapters;
+    },
+    { name: "outline" },
+  );
 
   const finding = (): Finding | undefined => {
     const list = findings();
@@ -936,8 +961,6 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     landingPath,
     finding,
     findings,
-    tick,
-    bump,
     status,
     report,
     paletteOpen,
@@ -954,10 +977,8 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
       const book = focused();
       return book === undefined ? { undo: 0, redo: 0 } : stores.historyDepth(book.id);
     },
-    chapterCount: () => {
-      const book = focused();
-      return book === undefined ? 0 : stores.chapterCount(book.id);
-    },
+    chapterCount: () => outline().length,
+    outline,
     sidebarOpen,
     setSidebarOpen: (open) => {
       setSidebarOpen(open);
@@ -1004,7 +1025,6 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     openProject,
     setPaletteOpen: shell.setPaletteOpen,
     report,
-    bump,
     changed,
   };
 
