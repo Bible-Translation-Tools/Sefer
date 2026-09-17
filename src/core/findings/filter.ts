@@ -86,17 +86,7 @@ export const applyFilter = (
   isStale?: (finding: Finding) => boolean,
 ): readonly Finding[] => {
   const needle = filter.text.trim().toLowerCase();
-  const books = filter.books;
-  const codes = filter.codes;
-  return findings.filter((finding) => {
-    if (!filter.severities.includes(finding.severity)) return false;
-    if (!filter.producers.includes(finding.producer)) return false;
-    if (books !== null && !books.includes(finding.bookId)) return false;
-    if (codes !== null && !codes.includes(finding.code)) return false;
-    if (needle !== "" && !matchesText(finding, needle)) return false;
-    if (filter.hideStale && isStale !== undefined && isStale(finding)) return false;
-    return true;
-  });
+  return findings.filter((finding) => passes(finding, filter, needle, isStale));
 };
 
 /** One row of a facet list: the value, and how many findings carry it. */
@@ -128,29 +118,97 @@ export interface Facets {
   readonly codes: readonly Facet<string>[];
 }
 
-const tally = <T>(values: Iterable<T>): Map<T, number> => {
-  const counts = new Map<T, number>();
-  for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
-  return counts;
-};
-
 const fixed = <T>(order: readonly T[], counts: Map<T, number>): readonly Facet<T>[] =>
   order.map((value) => ({ value, count: counts.get(value) ?? 0 }));
 
-export const facets = (findings: readonly Finding[]): Facets => {
-  const severities = tally(findings.map((finding) => finding.severity));
-  const producers = tally(findings.map((finding) => finding.producer));
-  const books = tally(findings.map((finding) => finding.bookId));
-  const codes = tally(findings.map((finding) => finding.code));
-  return {
-    total: findings.length,
-    severities: fixed(SEVERITIES, severities),
-    producers: fixed(PRODUCERS, producers),
-    books: [...books].map(([value, count]) => ({ value, count })),
-    codes: [...codes]
-      .map(([value, count]) => ({ value, count }))
-      .sort((a, b) => b.count - a.count || (a.value < b.value ? -1 : 1)),
-  };
+/** Whether one finding passes a filter. `applyFilter` and `summarise` share it. */
+const passes = (
+  finding: Finding,
+  filter: FindingsFilter,
+  needle: string,
+  isStale?: (finding: Finding) => boolean,
+): boolean => {
+  if (!filter.severities.includes(finding.severity)) return false;
+  if (!filter.producers.includes(finding.producer)) return false;
+  if (filter.books !== null && !filter.books.includes(finding.bookId)) return false;
+  if (filter.codes !== null && !filter.codes.includes(finding.code)) return false;
+  if (needle !== "" && !matchesText(finding, needle)) return false;
+  if (filter.hideStale && isStale !== undefined && isStale(finding)) return false;
+  return true;
+};
+
+const facetsOf = (
+  total: number,
+  severities: Map<Severity, number>,
+  producers: Map<Producer, number>,
+  books: Map<BookId, number>,
+  codes: Map<string, number>,
+): Facets => ({
+  total,
+  severities: fixed(SEVERITIES, severities),
+  producers: fixed(PRODUCERS, producers),
+  books: [...books].map(([value, count]) => ({ value, count })),
+  codes: [...codes]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => b.count - a.count || (a.value < b.value ? -1 : 1)),
+});
+
+/**
+ * ONE loop, four tallies.
+ *
+ * It used to be four `map`s into four `tally`s, which on a project with twenty
+ * thousand findings is four throwaway arrays of twenty thousand strings before
+ * any counting starts.
+ */
+export const facets = (findings: Iterable<Finding>): Facets => {
+  const severities = new Map<Severity, number>();
+  const producers = new Map<Producer, number>();
+  const books = new Map<BookId, number>();
+  const codes = new Map<string, number>();
+  let total = 0;
+  for (const finding of findings) {
+    total += 1;
+    severities.set(finding.severity, (severities.get(finding.severity) ?? 0) + 1);
+    producers.set(finding.producer, (producers.get(finding.producer) ?? 0) + 1);
+    books.set(finding.bookId, (books.get(finding.bookId) ?? 0) + 1);
+    codes.set(finding.code, (codes.get(finding.code) ?? 0) + 1);
+  }
+  return facetsOf(total, severities, producers, books, codes);
+};
+
+/**
+ * What a HEADER needs, in one pass and without a list.
+ *
+ * "20,352 of 20,352 shown" and a row of filter chips are counts, and counts do
+ * not need the findings sorted, grouped or even collected — but asking for them
+ * through `list` + `facets` + `applyFilter` meant three walks of every finding
+ * plus a sort, all of it before the panel could paint. This is the same answers
+ * in one walk and no intermediate array.
+ *
+ * `shown` applies the filter; the facets deliberately do NOT, because a chip's
+ * own count must not move as you click it.
+ */
+export const summarise = (
+  findings: Iterable<Finding>,
+  filter: FindingsFilter,
+  isStale?: (finding: Finding) => boolean,
+): { readonly total: number; readonly shown: number; readonly facets: Facets } => {
+  const needle = filter.text.trim().toLowerCase();
+  const severities = new Map<Severity, number>();
+  const producers = new Map<Producer, number>();
+  const books = new Map<BookId, number>();
+  const codes = new Map<string, number>();
+  let total = 0;
+  let shown = 0;
+  for (const finding of findings) {
+    total += 1;
+    severities.set(finding.severity, (severities.get(finding.severity) ?? 0) + 1);
+    producers.set(finding.producer, (producers.get(finding.producer) ?? 0) + 1);
+    books.set(finding.bookId, (books.get(finding.bookId) ?? 0) + 1);
+    codes.set(finding.code, (codes.get(finding.code) ?? 0) + 1);
+    if (passes(finding, filter, needle, isStale)) shown += 1;
+  }
+  return { total, shown, facets: facetsOf(total, severities, producers, books, codes) };
 };
 
 /** The three axes a reader can group by. `flat` is the absence of grouping. */

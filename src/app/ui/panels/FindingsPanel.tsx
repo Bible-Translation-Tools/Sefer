@@ -153,19 +153,19 @@ export function FindingsPanel() {
     },
   );
 
-  // MEMOS, all three, and on a screen with twenty thousand findings that is
-  // not an optimisation but the difference between usable and not. `all` sorts
-  // the whole list; `shown` filters it; both were plain functions called once
-  // per reader and then once per rendered card, so opening this panel sorted
-  // and filtered twenty thousand findings several times over.
-  const all = createMemo(
+  /**
+   * The findings this panel is about, in whatever order the shell published
+   * them.
+   *
+   * UNSORTED on purpose. Sorting is for the list, and the list is the half
+   * that waits a frame; the header needs counts, and counts do not care about
+   * order. When no pattern narrows it this is the store's own array, so the
+   * ordinary case allocates nothing at all.
+   */
+  const pool = createMemo(
     (): readonly Finding[] => {
       if (shell.project() === undefined) return [];
-      // `list` is a pure sort over whatever supplies the findings, so it takes
-      // the shell's published list instead of asking ProjectAnalysis to rebuild
-      // one. Behind `tick` that rebuild ran on every keystroke, and it
-      // materialises every finding in every book.
-      const listed = Findings.list({ findings: shell.findings });
+      const listed = shell.findings();
       const only = pattern();
       // A pattern is not one of `FindingsFilter`'s fields and should not become
       // one: it is an address another screen hands over for one visit, not a
@@ -174,7 +174,7 @@ export function FindingsPanel() {
       // that was actually asked.
       return only === undefined ? listed : listed.filter((finding) => finding.pattern === only);
     },
-    { name: "findingsAll" },
+    { name: "findingsPool" },
   );
 
   /**
@@ -205,12 +205,31 @@ export function FindingsPanel() {
     return revision === undefined || revision !== finding.stamp.revision;
   };
 
-  /** Counts over the unfiltered list: a chip's own count must not move as you click it. */
-  const facets = createMemo(() => Filter.facets(all()), { name: "findingsFacets" });
+  /**
+   * Everything the HEADER needs, in one walk and no sort.
+   *
+   * The counts and the filter chips used to cost `list` (a sort), then
+   * `facets`, then `applyFilter` — three more walks of twenty thousand
+   * findings, all of it before the panel could paint, because the header says
+   * "N of TOTAL shown". Measured on a 66-book project that was about a third
+   * of the first task, and none of it needs the findings in order.
+   *
+   * Facets are counted over the UNFILTERED pool: a chip's own count must not
+   * move as you click it.
+   */
+  const summary = createMemo(() => Filter.summarise(pool(), filters.filter(), isStale), {
+    name: "findingsSummary",
+  });
 
+  /**
+   * The body's list: sorted, then filtered.
+   *
+   * Read by the feed and by nothing the header draws, so the sort happens in
+   * the task that builds the list rather than the one that paints the panel.
+   */
   const shown = createMemo(
     (): readonly Finding[] =>
-      Filter.applyFilter(all(), filters.filter(), (finding) => isStale(finding)),
+      Filter.applyFilter(Findings.list({ findings: pool }), filters.filter(), isStale),
     { name: "findingsShown" },
   );
 
@@ -543,8 +562,8 @@ export function FindingsPanel() {
         )}
         actions={
           <>
-            <span class="text-small text-on-surface-tertiary" data-findings-count={shown().length}>
-              {t("{shown} of {total} shown", { shown: shown().length, total: all().length })}
+            <span class="text-small text-on-surface-tertiary" data-findings-count={summary().shown}>
+              {t("{shown} of {total} shown", { shown: summary().shown, total: summary().total })}
             </span>
             <SegmentedControl<FindingsView>
               label={t("Group findings by")}
@@ -561,7 +580,7 @@ export function FindingsPanel() {
           rarely, and on a project of sixty-six books the book chips alone used
           to push the findings below the fold. */}
       <Card class="space-y-2">
-        <FindingsFilters state={filters} facets={facets()} books={books()} />
+        <FindingsFilters state={filters} facets={summary().facets} books={books()} />
         <Show when={pattern() !== undefined}>
           <p class="flex flex-wrap items-center gap-2 text-smallest text-on-surface-tertiary">
             <Badge tone="brand">{t("one pattern")}</Badge>
@@ -614,14 +633,14 @@ export function FindingsPanel() {
 
       <div
         class="flex min-h-0 min-w-0 flex-1 flex-col"
-        data-findings={shown().length}
+        data-findings={summary().shown}
         data-view={filters.view()}
       >
         <Show
-          when={shown().length > 0}
+          when={summary().shown > 0}
           fallback={
             <Show
-              when={all().length > 0}
+              when={summary().total > 0}
               fallback={
                 <EmptyState
                   icon={<CircleCheck size={22} />}
@@ -630,7 +649,9 @@ export function FindingsPanel() {
               }
             >
               <EmptyState
-                title={t("{total} findings, all hidden by the filter.", { total: all().length })}
+                title={t("{total} findings, all hidden by the filter.", {
+                  total: summary().total,
+                })}
               />
             </Show>
           }
