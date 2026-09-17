@@ -14,7 +14,7 @@ import { For, Show } from "solid-js";
 export interface Crumb {
   readonly label: string;
   /** A typed route path; a crumb without one is plain text. */
-  readonly to?: "/" | "/projects" | "/settings" | "/start/find" | "/start/create";
+  readonly to?: "/" | "/settings" | "/start/find" | "/start/create";
 }
 
 export function Breadcrumb(props: { readonly crumbs: readonly Crumb[] }) {

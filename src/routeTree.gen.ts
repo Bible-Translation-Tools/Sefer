@@ -16,15 +16,15 @@ import { Route as FindRouteImport } from './routes/find'
 import { Route as FindingsRouteImport } from './routes/findings'
 import { Route as HistoryRouteImport } from './routes/history'
 import { Route as InventoryRouteImport } from './routes/inventory'
-import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as ReviewRouteImport } from './routes/review'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as DevFixtureRouteImport } from './routes/dev/fixture'
+import { Route as ProjectSlugRouteImport } from './routes/project/$slug'
 import { Route as StartCreateRouteImport } from './routes/start/create'
 import { Route as StartFindRouteImport } from './routes/start/find'
-import { Route as ProjectIdIndexRouteImport } from './routes/project/$id/index'
-import { Route as ProjectIdBookBookRouteImport } from './routes/project/$id/book/$book'
+import { Route as ProjectSlugIndexRouteImport } from './routes/project/$slug/index'
+import { Route as ProjectSlugBookBookRouteImport } from './routes/project/$slug/book/$book'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -61,11 +61,6 @@ const InventoryRoute = InventoryRouteImport.update({
   path: '/inventory',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProjectsRoute = ProjectsRouteImport.update({
-  id: '/projects',
-  path: '/projects',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ReviewRoute = ReviewRouteImport.update({
   id: '/review',
   path: '/review',
@@ -86,6 +81,11 @@ const DevFixtureRoute = DevFixtureRouteImport.update({
   path: '/dev/fixture',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProjectSlugRoute = ProjectSlugRouteImport.update({
+  id: '/project/$slug',
+  path: '/project/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StartCreateRoute = StartCreateRouteImport.update({
   id: '/start/create',
   path: '/start/create',
@@ -96,15 +96,15 @@ const StartFindRoute = StartFindRouteImport.update({
   path: '/start/find',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProjectIdIndexRoute = ProjectIdIndexRouteImport.update({
-  id: '/project/$id/',
-  path: '/project/$id/',
-  getParentRoute: () => rootRouteImport,
+const ProjectSlugIndexRoute = ProjectSlugIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ProjectSlugRoute,
 } as any)
-const ProjectIdBookBookRoute = ProjectIdBookBookRouteImport.update({
-  id: '/project/$id/book/$book',
-  path: '/project/$id/book/$book',
-  getParentRoute: () => rootRouteImport,
+const ProjectSlugBookBookRoute = ProjectSlugBookBookRouteImport.update({
+  id: '/book/$book',
+  path: '/book/$book',
+  getParentRoute: () => ProjectSlugRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -115,15 +115,15 @@ export interface FileRoutesByFullPath {
   '/findings': typeof FindingsRoute
   '/history': typeof HistoryRoute
   '/inventory': typeof InventoryRoute
-  '/projects': typeof ProjectsRoute
   '/review': typeof ReviewRoute
   '/settings': typeof SettingsRoute
   '/terms': typeof TermsRoute
   '/dev/fixture': typeof DevFixtureRoute
+  '/project/$slug': typeof ProjectSlugRouteWithChildren
   '/start/create': typeof StartCreateRoute
   '/start/find': typeof StartFindRoute
-  '/project/$id/': typeof ProjectIdIndexRoute
-  '/project/$id/book/$book': typeof ProjectIdBookBookRoute
+  '/project/$slug/': typeof ProjectSlugIndexRoute
+  '/project/$slug/book/$book': typeof ProjectSlugBookBookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -133,15 +133,14 @@ export interface FileRoutesByTo {
   '/findings': typeof FindingsRoute
   '/history': typeof HistoryRoute
   '/inventory': typeof InventoryRoute
-  '/projects': typeof ProjectsRoute
   '/review': typeof ReviewRoute
   '/settings': typeof SettingsRoute
   '/terms': typeof TermsRoute
   '/dev/fixture': typeof DevFixtureRoute
   '/start/create': typeof StartCreateRoute
   '/start/find': typeof StartFindRoute
-  '/project/$id': typeof ProjectIdIndexRoute
-  '/project/$id/book/$book': typeof ProjectIdBookBookRoute
+  '/project/$slug': typeof ProjectSlugIndexRoute
+  '/project/$slug/book/$book': typeof ProjectSlugBookBookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -152,15 +151,15 @@ export interface FileRoutesById {
   '/findings': typeof FindingsRoute
   '/history': typeof HistoryRoute
   '/inventory': typeof InventoryRoute
-  '/projects': typeof ProjectsRoute
   '/review': typeof ReviewRoute
   '/settings': typeof SettingsRoute
   '/terms': typeof TermsRoute
   '/dev/fixture': typeof DevFixtureRoute
+  '/project/$slug': typeof ProjectSlugRouteWithChildren
   '/start/create': typeof StartCreateRoute
   '/start/find': typeof StartFindRoute
-  '/project/$id/': typeof ProjectIdIndexRoute
-  '/project/$id/book/$book': typeof ProjectIdBookBookRoute
+  '/project/$slug/': typeof ProjectSlugIndexRoute
+  '/project/$slug/book/$book': typeof ProjectSlugBookBookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -172,15 +171,15 @@ export interface FileRouteTypes {
     | '/findings'
     | '/history'
     | '/inventory'
-    | '/projects'
     | '/review'
     | '/settings'
     | '/terms'
     | '/dev/fixture'
+    | '/project/$slug'
     | '/start/create'
     | '/start/find'
-    | '/project/$id/'
-    | '/project/$id/book/$book'
+    | '/project/$slug/'
+    | '/project/$slug/book/$book'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -190,15 +189,14 @@ export interface FileRouteTypes {
     | '/findings'
     | '/history'
     | '/inventory'
-    | '/projects'
     | '/review'
     | '/settings'
     | '/terms'
     | '/dev/fixture'
     | '/start/create'
     | '/start/find'
-    | '/project/$id'
-    | '/project/$id/book/$book'
+    | '/project/$slug'
+    | '/project/$slug/book/$book'
   id:
     | '__root__'
     | '/'
@@ -208,15 +206,15 @@ export interface FileRouteTypes {
     | '/findings'
     | '/history'
     | '/inventory'
-    | '/projects'
     | '/review'
     | '/settings'
     | '/terms'
     | '/dev/fixture'
+    | '/project/$slug'
     | '/start/create'
     | '/start/find'
-    | '/project/$id/'
-    | '/project/$id/book/$book'
+    | '/project/$slug/'
+    | '/project/$slug/book/$book'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -227,15 +225,13 @@ export interface RootRouteChildren {
   FindingsRoute: typeof FindingsRoute
   HistoryRoute: typeof HistoryRoute
   InventoryRoute: typeof InventoryRoute
-  ProjectsRoute: typeof ProjectsRoute
   ReviewRoute: typeof ReviewRoute
   SettingsRoute: typeof SettingsRoute
   TermsRoute: typeof TermsRoute
   DevFixtureRoute: typeof DevFixtureRoute
+  ProjectSlugRoute: typeof ProjectSlugRouteWithChildren
   StartCreateRoute: typeof StartCreateRoute
   StartFindRoute: typeof StartFindRoute
-  ProjectIdIndexRoute: typeof ProjectIdIndexRoute
-  ProjectIdBookBookRoute: typeof ProjectIdBookBookRoute
 }
 
 declare module '@tanstack/solid-router' {
@@ -289,13 +285,6 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof InventoryRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/projects': {
-      id: '/projects'
-      path: '/projects'
-      fullPath: '/projects'
-      preLoaderRoute: typeof ProjectsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/review': {
       id: '/review'
       path: '/review'
@@ -324,6 +313,13 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof DevFixtureRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/project/$slug': {
+      id: '/project/$slug'
+      path: '/project/$slug'
+      fullPath: '/project/$slug'
+      preLoaderRoute: typeof ProjectSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/start/create': {
       id: '/start/create'
       path: '/start/create'
@@ -338,22 +334,36 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof StartFindRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/project/$id/': {
-      id: '/project/$id/'
-      path: '/project/$id'
-      fullPath: '/project/$id/'
-      preLoaderRoute: typeof ProjectIdIndexRouteImport
-      parentRoute: typeof rootRouteImport
+    '/project/$slug/': {
+      id: '/project/$slug/'
+      path: '/'
+      fullPath: '/project/$slug/'
+      preLoaderRoute: typeof ProjectSlugIndexRouteImport
+      parentRoute: typeof ProjectSlugRoute
     }
-    '/project/$id/book/$book': {
-      id: '/project/$id/book/$book'
-      path: '/project/$id/book/$book'
-      fullPath: '/project/$id/book/$book'
-      preLoaderRoute: typeof ProjectIdBookBookRouteImport
-      parentRoute: typeof rootRouteImport
+    '/project/$slug/book/$book': {
+      id: '/project/$slug/book/$book'
+      path: '/book/$book'
+      fullPath: '/project/$slug/book/$book'
+      preLoaderRoute: typeof ProjectSlugBookBookRouteImport
+      parentRoute: typeof ProjectSlugRoute
     }
   }
 }
+
+interface ProjectSlugRouteChildren {
+  ProjectSlugIndexRoute: typeof ProjectSlugIndexRoute
+  ProjectSlugBookBookRoute: typeof ProjectSlugBookBookRoute
+}
+
+const ProjectSlugRouteChildren: ProjectSlugRouteChildren = {
+  ProjectSlugIndexRoute: ProjectSlugIndexRoute,
+  ProjectSlugBookBookRoute: ProjectSlugBookBookRoute,
+}
+
+const ProjectSlugRouteWithChildren = ProjectSlugRoute._addFileChildren(
+  ProjectSlugRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -363,15 +373,13 @@ const rootRouteChildren: RootRouteChildren = {
   FindingsRoute: FindingsRoute,
   HistoryRoute: HistoryRoute,
   InventoryRoute: InventoryRoute,
-  ProjectsRoute: ProjectsRoute,
   ReviewRoute: ReviewRoute,
   SettingsRoute: SettingsRoute,
   TermsRoute: TermsRoute,
   DevFixtureRoute: DevFixtureRoute,
+  ProjectSlugRoute: ProjectSlugRouteWithChildren,
   StartCreateRoute: StartCreateRoute,
   StartFindRoute: StartFindRoute,
-  ProjectIdIndexRoute: ProjectIdIndexRoute,
-  ProjectIdBookBookRoute: ProjectIdBookBookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

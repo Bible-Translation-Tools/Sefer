@@ -119,6 +119,23 @@ export type AnyDescriptor = BooleanSetting | StringSetting | NumberSetting | Cho
  */
 const RecentProjects = Schema.Record(Schema.String, Schema.String);
 
+/**
+ * Slug → project root: the readable name a project has in a URL.
+ *
+ * A separate key rather than a field on `recentProjects`, and additively so:
+ * the recents record is root → timestamp and has been written by older builds,
+ * so widening its value would mean a migration for a mapping that is derived
+ * anyway. This key can be absent, empty, or stale without costing anything —
+ * a slug with no root behind it is a 404, which is the honest answer for a
+ * bookmark to a project that has been removed.
+ *
+ * Keyed BY SLUG because that is the lookup the router makes on every
+ * navigation; root → slug is the rarer direction and a scan is fine for it.
+ */
+const ProjectSlugs = Schema.Record(Schema.String, Schema.String);
+
+export type ProjectSlugs = typeof ProjectSlugs.Type;
+
 export type RecentProjects = typeof RecentProjects.Type;
 
 /**
@@ -209,6 +226,8 @@ export interface ShellKeys {
   readonly editorFontSize: SettingKey<number>;
   /** Project root → ISO-8601 of the last open. See `RecentProjects`. */
   readonly recentProjects: SettingKey<RecentProjects>;
+  /** Slug → project root, for `/project/<slug>`. See `ProjectSlugs`. */
+  readonly projectSlugs: SettingKey<ProjectSlugs>;
   /** Project root → the book, the clip and the chapter the reader last had on screen. */
   readonly lastLocation: SettingKey<LastLocations>;
   /**
@@ -269,6 +288,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     zoom: settings.register("shell.zoom", Schema.Number, 100),
     editorFontSize: settings.register("editor.fontSize", Schema.Number, DEFAULT_EDITOR_FONT_SIZE),
     recentProjects: settings.register("shell.recentProjects", RecentProjects, {}),
+    projectSlugs: settings.register("shell.projectSlugs", ProjectSlugs, {}),
     lastLocation: settings.register("workspace.lastLocation", LastLocations, {}),
     referenceWidth: settings.register(
       "workspace.referenceWidth",

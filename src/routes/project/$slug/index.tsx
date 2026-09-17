@@ -7,7 +7,6 @@ import { useShell } from "../../../app/ProjectContext";
 import { CloudPanel } from "../../../app/ui/CloudPanel";
 import { Badge, Button, Card, PanelHeader } from "../../../app/ui/primitives";
 import { RecoveryBanner } from "../../../app/ui/recovery/RecoveryBanner";
-import { ShellGate } from "../../../app/ui/ShellGate";
 
 /**
  * One project: the book census, and which books have unsaved work.
@@ -47,8 +46,8 @@ function ProjectPage(props: { readonly root: string; readonly census: boolean })
       const where = untrack(() => shell.lastLocation(root));
       if (where === undefined || !held.books.some((book) => book.id === where.bookId)) return;
       void navigate({
-        to: "/project/$id/book/$book",
-        params: { id: encodeURIComponent(root), book: encodeURIComponent(where.bookId) },
+        to: "/project/$slug/book/$book",
+        params: { slug: shell.slugFor(root), book: encodeURIComponent(where.bookId) },
         replace: true,
       });
     },
@@ -109,9 +108,9 @@ function ProjectPage(props: { readonly root: string; readonly census: boolean })
                   <li data-book={book.bookId}>
                     <Card class="flex flex-wrap items-center gap-3">
                       <Link
-                        to="/project/$id/book/$book"
+                        to="/project/$slug/book/$book"
                         params={{
-                          id: encodeURIComponent(props.root),
+                          slug: shell.slugFor(props.root),
                           book: encodeURIComponent(book.bookId),
                         }}
                         class="font-semibold text-brand no-underline hover:underline"
@@ -161,7 +160,7 @@ interface ProjectSearch {
   readonly books?: boolean;
 }
 
-export const Route = createFileRoute("/project/$id/")({
+export const Route = createFileRoute("/project/$slug/")({
   /**
    * `?books=1` asks for the census itself and suppresses the forward to the
    * last location. Every other arrival is an Open, and an Open means "take me
@@ -170,15 +169,13 @@ export const Route = createFileRoute("/project/$id/")({
   validateSearch: (search: Record<string, unknown>): ProjectSearch =>
     search.books === true || search.books === "1" || search.books === 1 ? { books: true } : {},
   head: () => ({ meta: [{ title: "Sefer — project" }] }),
+  // No `ShellGate` and no root param: the parent route (`project/$slug`)
+  // gated on the shell AND opened the project, so by the time this renders
+  // `shell.project()` IS the project this URL names. Reading the root off the
+  // shell rather than off the URL is the point of the parent existing.
   component: () => {
-    const params = Route.useParams();
     const search = Route.useSearch();
-    return (
-      <ShellGate>
-        {() => (
-          <ProjectPage root={decodeURIComponent(params().id)} census={search().books === true} />
-        )}
-      </ShellGate>
-    );
+    const shell = useShell();
+    return <ProjectPage root={shell.project()?.root ?? ""} census={search().books === true} />;
   },
 });

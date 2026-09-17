@@ -7,7 +7,6 @@ import { REFERENCE_WIDTH } from "../../../../app/settings";
 import { BookEditor } from "../../../../app/ui/BookEditor";
 import { Resizable, cx } from "../../../../app/ui/primitives";
 import { RecoveryBanner } from "../../../../app/ui/recovery/RecoveryBanner";
-import { ShellGate } from "../../../../app/ui/ShellGate";
 import { bookName } from "../../../../app/ui/workspace/books";
 import { metadataOf } from "../../../../app/ui/workspace/project";
 import { ReferenceColumn } from "../../../../app/ui/workspace/ReferenceColumn";
@@ -199,19 +198,14 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
   );
 }
 
-export const Route = createFileRoute("/project/$id/book/$book")({
+export const Route = createFileRoute("/project/$slug/book/$book")({
   head: () => ({ meta: [{ title: "Sefer — book" }] }),
+  // The project is already open: `project/$slug` did it. See the note there.
   component: () => {
     const params = Route.useParams();
+    const shell = useShell();
     return (
-      <ShellGate>
-        {() => (
-          <BookPage
-            root={decodeURIComponent(params().id)}
-            bookId={decodeURIComponent(params().book)}
-          />
-        )}
-      </ShellGate>
+      <BookPage root={shell.project()?.root ?? ""} bookId={decodeURIComponent(params().book)} />
     );
   },
 });

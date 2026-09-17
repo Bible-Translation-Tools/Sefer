@@ -193,8 +193,8 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
     );
     shell.aim(bookId, from, to);
     void navigate({
-      to: "/project/$id/book/$book",
-      params: { id: encodeURIComponent(project.root), book: bookId },
+      to: "/project/$slug/book/$book",
+      params: { slug: shell.slugFor(project.root), book: bookId },
     });
     done();
   };

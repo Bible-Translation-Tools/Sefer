@@ -184,7 +184,7 @@ export function InventoryPanel() {
             title={t("No project is open.")}
             description={t("The inventory is a reading of one project's whole corpus.")}
             action={
-              <Link to="/projects" search={true} class="text-small text-brand hover:underline">
+              <Link to="/" class="text-small text-brand hover:underline">
                 {t("Open a project")}
               </Link>
             }

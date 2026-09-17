@@ -46,6 +46,7 @@ import * as Fixes from "../core/fixes/fixes";
 import type { SettingKey } from "../core/host/settings";
 import { Observability } from "../core/observability";
 import { openProject as openProjectEffect, type Project } from "../core/project/project";
+import { mintSlug } from "../core/project/slug";
 import { DEFAULT_JOURNAL_POLICY, Recovery } from "../core/recovery/recovery";
 import { SaveCoordinator } from "../core/save/saveCoordinator";
 import type { SourceStamp } from "../core/source/source";
@@ -318,6 +319,18 @@ export interface Shell {
    * back in.
    */
   readonly recentProjects: Accessor<readonly RecentProject[]>;
+
+  /**
+   * This project's readable URL segment, minted on first sight and kept.
+   *
+   * `/project/en-ulb`, not `/project/%2Fsefer%2Fprojects%2Fen_ulb`. A root is a
+   * filesystem path and paths make bad URL segments; the slug is what the
+   * address bar carries and `rootForSlug` is how a navigation turns it back
+   * into a project.
+   */
+  readonly slugFor: (root: string) => string;
+  /** The project a slug names, or `undefined` if nothing here answers to it. */
+  readonly rootForSlug: (slug: string) => string | undefined;
   /**
    * Is there a newer Sefer? Checked ONCE per session, on the desktop host
    * only, a few seconds after boot, and never awaited by anything: the answer
@@ -473,6 +486,28 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
   // for the same reason as above: the landing screen writes the key as it
   // opens a project, and the sidebar beside it must not still be showing the
   // list from before.
+  /**
+   * Mint-and-keep, because a URL someone bookmarked has to go on working.
+   *
+   * The index is keyed by slug, so resolving one is a read; minting scans it
+   * for the root, which is the rarer direction. Writing is fire-and-forget:
+   * a slug that failed to persist is re-minted identically next time, since
+   * `mintSlug` is deterministic given the same index.
+   */
+  const slugFor = (root: string): string => {
+    const held = services.settings.get(keys.projectSlugs);
+    const minted = mintSlug(root, held);
+    if (held[minted] !== root) {
+      void services.run(
+        Effect.ignore(services.settings.set(keys.projectSlugs, { ...held, [minted]: root })),
+      );
+    }
+    return minted;
+  };
+
+  const rootForSlug = (slug: string): string | undefined =>
+    services.settings.get(keys.projectSlugs)[slug];
+
   const asRows = (held: RecentProjects): readonly RecentProject[] =>
     Object.entries(held)
       .map(([root, at]) => ({ root, at, name: root.slice(root.lastIndexOf("/") + 1) || root }))
@@ -1014,6 +1049,8 @@ const makeShell = (services: Services, go: (path: string) => void): Shell => {
     },
     sidebarShowing: () => sidebarOpen() && (project() !== undefined || recentProjects().length > 0),
     recentProjects,
+    slugFor,
+    rootForSlug,
     updateAvailable,
     sidebarWidth,
     setSidebarWidth: (fraction) => {

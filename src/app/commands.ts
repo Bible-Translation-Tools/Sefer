@@ -368,7 +368,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
             // services.ts), so there is nothing honest to open from it yet;
             // the projects list is the working route.
             bridge.report(t("no folder chosen"));
-            bridge.go("/projects");
+            bridge.go("/");
             return;
           }
           yield* Effect.promise(() => bridge.openProject(picked.value));
@@ -543,7 +543,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
         }
         const project = bridge.project();
         if (project === undefined) {
-          bridge.go("/projects");
+          bridge.go("/");
           return;
         }
         bridge.go(`/project/${encodeURIComponent(project.root)}`);

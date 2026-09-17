@@ -136,10 +136,10 @@ export function YourProjects(props: { readonly reload: number }) {
         yield* Effect.ignore(touchProject(fileSystem, services.projectsRoot, row.root, stamp));
       }),
     );
-    void shell.openProject(row.root).then(() => {
-      if (shell.project() === undefined) return;
-      void navigate({ to: "/project/$id", params: { id: encodeURIComponent(row.root) } });
-    });
+    // Navigate and let the route open it. `project/$slug` is the one place a
+    // project is opened, and a landing row that opened it first was the third
+    // caller racing the other two.
+    void navigate({ to: "/project/$slug", params: { slug: shell.slugFor(row.root) } });
   };
 
   /** Saves a copy: the project as a zip, handed to the browser's downloads. */

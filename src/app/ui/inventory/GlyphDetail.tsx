@@ -165,9 +165,9 @@ export function GlyphDetail(props: GlyphDetailProps) {
     if (project === undefined) return;
     shell.aim(site.bookId, site.from);
     void navigate({
-      to: "/project/$id/book/$book",
+      to: "/project/$slug/book/$book",
       params: {
-        id: encodeURIComponent(project.root),
+        slug: shell.slugFor(project.root),
         book: encodeURIComponent(site.bookId),
       },
     });

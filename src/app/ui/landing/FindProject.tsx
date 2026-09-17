@@ -262,7 +262,7 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
         <div class="space-y-1">
           <h2 class="text-h4 font-bold text-on-surface-primary">{t("Find Project")}</h2>
           <Link
-            to="/projects"
+            to="/"
             search={true}
             class="inline-flex items-center gap-1 text-smallest text-on-surface-tertiary no-underline hover:text-on-surface-secondary"
           >

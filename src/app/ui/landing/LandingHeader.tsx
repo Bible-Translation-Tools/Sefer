@@ -45,7 +45,7 @@ export function LandingHeader(props: {
           // `?fixture=1`: the composition reads it off `location` at startup,
           // so a tab switch that dropped it would send the next RELOAD to OPFS
           // instead of the seeded fixture.
-          void navigate({ to: next === "yours" ? "/projects" : "/start/find", search: true });
+          void navigate({ to: next === "yours" ? "/" : "/start/find", search: true });
         }}
         items={[
           { value: "yours", label: t(TAB_LABEL.yours) },

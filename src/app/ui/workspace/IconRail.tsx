@@ -67,7 +67,7 @@ export function IconRail() {
   const at = (prefix: string): "true" | "false" => (path().startsWith(prefix) ? "true" : "false");
   /** Is the reader on the projects side — the list, or bringing one in? */
   const choosing = (): "true" | "false" =>
-    path().startsWith("/projects") || path().startsWith("/start") ? "true" : "false";
+    path() === "/" || path().startsWith("/start") ? "true" : "false";
 
   /** Is the reader looking at a project, or at one of the full-page screens? */
   const inProject = (): boolean => path().startsWith("/project/");
@@ -158,7 +158,7 @@ export function IconRail() {
           tooltipSide="right"
           aria-pressed={choosing()}
           icon={<FolderOpen size={18} />}
-          onClick={() => go("/projects")}
+          onClick={() => go("/")}
         />
 
         {/* Which characters this project actually uses, and this project
