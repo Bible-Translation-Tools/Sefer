@@ -40,8 +40,10 @@ import {
   FindingsSnapshot,
   FORMAT_VERSION as SOUS_FORMAT_VERSION,
 } from "../../../vendor/galley/sous-reader";
+import { Census, FORMAT_VERSION as TOC_FORMAT_VERSION } from "../../../vendor/galley/toc-reader";
+import type { BookCensus } from "../../../vendor/galley/toc-reader";
 import { Observability, type ObservabilityService } from "../observability";
-import type { Analysis } from "./analysis";
+import type { Analysis, DiagnosticView } from "./analysis";
 import {
   engineDiff,
   engineMerge,
@@ -88,6 +90,10 @@ export type {
   PatternKey,
   Pool,
 } from "../../../vendor/galley/sous-reader";
+// The census reader, same rule: `toc`/`census` answer these classes, and the
+// sidebar reads chapter counts off them without learning a layout.
+export { Census };
+export type { BookCensus, ChapterRow, VerseRow } from "../../../vendor/galley/toc-reader";
 
 /** The wasm module could not be instantiated at all. */
 export class EngineLoadError extends Data.TaggedError("EngineLoadError")<{
@@ -102,7 +108,7 @@ export class EngineLoadError extends Data.TaggedError("EngineLoadError")<{
  * boot failure.
  */
 export class VersionMismatch extends Data.TaggedError("VersionMismatch")<{
-  readonly wire: "onion" | "sous" | "find";
+  readonly wire: "onion" | "sous" | "find" | "toc";
   readonly found: number;
   readonly expected: number;
 }> {}
@@ -126,6 +132,7 @@ export interface EngineVersion {
   readonly onionFormat: number;
   readonly sousFormat: number;
   readonly findFormat: number;
+  readonly tocFormat: number;
 }
 
 /**
@@ -265,6 +272,23 @@ export const FIND_FORMAT_VERSION = 1;
  * Exported because the desktop door reads the same bytes off IPC; nothing
  * outside `src/core/galley` decodes an engine buffer.
  */
+/**
+ * `FindOptions` as the v0.1.1 doors take it: one object, every key optional,
+ * defaults applied on the Rust side.
+ *
+ * Built rather than passed through because the engine REFUSES a key it does
+ * not know and refuses `scope` on `find` by name — so the one place that knows
+ * which door is being opened is the one place that decides whether `scope`
+ * goes in the object. The generated `.d.ts` types the parameter `any`, which
+ * is why this returns a shape rather than relying on the call site.
+ */
+const findOptions = (query: FindQuery, scope?: FindScope): Record<string, unknown> => ({
+  ...(query.caseSensitive === undefined ? {} : { caseSensitive: query.caseSensitive }),
+  ...(query.wholeWord === undefined ? {} : { wholeWord: query.wholeWord }),
+  ...(query.limit === undefined ? {} : { limit: query.limit }),
+  ...(scope === undefined ? {} : { scope }),
+});
+
 export const decodeHits = (bytes: Uint8Array): readonly EngineHit[] => {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const word = (index: number): number => view.getUint32(index * 4, true);
@@ -367,8 +391,51 @@ export interface GalleyService {
    * code path.
    *
    * Throws `EngineInputError` when `text` contains `\r`.
+   *
+   * `id` chooses the DOOR, not just the label. Given one, this registers the
+   * text (`update`) and then parses off the retained copy (`parse(id)`);
+   * without one it goes through the loose-text door. The id door is the
+   * cheaper of the two for anything the corpus holds anyway — the engine's own
+   * numbers put ~85% of a warm parse in plating the wire buffer and marshalling
+   * the string back across the wall, and the id door marshals no string in.
+   *
+   * The ordering is the contract: `parse(id)` answers off what `update` last
+   * retained, so the two happen here, together, and a caller cannot get a
+   * parse of yesterday's text by holding the id.
    */
   readonly analyze: (text: string, why?: string, id?: string) => Analysis;
+
+  /**
+   * One registered book's diagnostics, without a parse buffer.
+   *
+   * About ten times cheaper than `analyze` on the same book, because it plates
+   * only the diagnostics section: no tree, no tokens, no UTF-16 table crossing
+   * the wall. This is the door for the sixty-five books nobody is looking at —
+   * their findings are wanted, their CodeMirror decorations are not.
+   *
+   * The book must be registered; `update` it first.
+   */
+  readonly lint: (id: string, why?: string) => readonly DiagnosticView[];
+
+  /**
+   * One registered book's census — chapter count, verse count, chapter rows —
+   * off the `Toc` that `update` already built.
+   *
+   * Nothing is derived: no chunk is resolved, no text is read, no wire is
+   * plated. This is what a sidebar and a chapter picker want, and asking for
+   * it is what takes one parse per book off a project's open.
+   */
+  readonly toc: (id: string) => BookCensus | undefined;
+
+  /**
+   * The same over every registered book, in canonical book order — the
+   * project-wide census in one call.
+   *
+   * Offsets are bytes, not UTF-16: the table that rebases them travels with a
+   * book's text, and a census spans books. Counts are unit-free, so a sidebar
+   * never notices.
+   */
+  readonly census: () => Census;
 
   /**
    * A memo for one Book: the same text returns the same `Analysis` instance.
@@ -570,6 +637,7 @@ export interface EngineManifest {
     readonly onion: { readonly formatVersion: number };
     readonly sous: { readonly formatVersion: number };
     readonly find: { readonly magic: number; readonly formatVersion: number };
+    readonly toc: { readonly formatVersion: number };
   };
 }
 
@@ -619,6 +687,15 @@ export const accepts = (artifact: EngineManifest): Result.Result<void, VersionMi
       }),
     );
   }
+  if (artifact.wire.toc.formatVersion !== TOC_FORMAT_VERSION) {
+    return Result.fail(
+      new VersionMismatch({
+        wire: "toc",
+        found: artifact.wire.toc.formatVersion,
+        expected: TOC_FORMAT_VERSION,
+      }),
+    );
+  }
   return Result.succeed(undefined);
 };
 
@@ -629,6 +706,7 @@ const engineVersion = (): EngineVersion => ({
   onionFormat: manifest.wire.onion.formatVersion,
   sousFormat: manifest.wire.sous.formatVersion,
   findFormat: manifest.wire.find.formatVersion,
+  tocFormat: manifest.wire.toc.formatVersion,
 });
 
 const readSettings = (held: SousSettingsHandle): SousSettings => ({
@@ -726,13 +804,25 @@ const makeService = (
       ...(id === undefined ? {} : { "book.id": id }),
     });
     const started = performance.now();
-    // `parseText`, not `parse`: since v0.1.0 the plain name takes a registered
-    // book's ID and answers off its retained text, and the loose-text door is
-    // the one with `Text` on the end. The chunk cache keys on content, so an
-    // unregistered copy of a registered book still hits it; what this costs
-    // over the id door is the string crossing the wall, which the keystroke
-    // path pays because the editor's text is the authority, not the corpus's.
-    const dish = deserialize(handle.parseText(text, true, true, true));
+    // Two doors, and `id` picks between them.
+    //
+    // With an id: register the text and parse off the retained copy. The
+    // corpus has to learn this text anyway — it is a proofreading target — so
+    // the register is not a cost this path added, and what it buys is a parse
+    // that marshals no string across the wall. The engine's own numbers put
+    // most of a warm parse in the marshal and the wire plate.
+    //
+    // Without one: the loose-text door, for text the corpus does not hold —
+    // a reference pane, a review reading, a STET excerpt.
+    //
+    // The order is the contract. `parse(id)` answers off whatever `update`
+    // last retained, so nothing may run between them, which is why both are
+    // here rather than at two call sites that merely intend to be adjacent.
+    const dish = deserialize(
+      id === undefined
+        ? handle.parseText(text, true, true, true)
+        : (handle.update(id, text), handle.parse(id, true, true, true)),
+    );
     const engineMs = Math.round((performance.now() - started) * 1000) / 1000;
     // Counts and codes only — a diagnostic's message quotes the document. On
     // the span that measured the parse, not a note beside it saying the same
@@ -748,6 +838,35 @@ const makeService = (
       engineMs,
       usfmVersion: declaredVersion(dish),
     };
+  };
+
+  const lint = (id: string, why = "unnamed"): readonly DiagnosticView[] => {
+    const done = observe?.span("galley.lint", undefined, {
+      "galley.why": why,
+      "book.id": id,
+    });
+    const started = performance.now();
+    // The same reader the parse buffer uses: upstream plates a lint report as
+    // a parse buffer with only the diagnostics section asked for, so there is
+    // no second layout to learn and no second decoder to keep true.
+    const dish = deserialize(handle.lint(id));
+    // Materialised, not handed back as a cursor. The cursor reads a buffer
+    // this function owns and nothing else holds, and a caller that kept one
+    // past the next call would be reading whatever the engine plated next.
+    const found = [...dish.diagnostics];
+    done?.({
+      "galley.diagnostics": found.length,
+      "galley.engine_ms": Math.round((performance.now() - started) * 1000) / 1000,
+    });
+    return found;
+  };
+
+  const toc = (id: string): BookCensus | undefined => {
+    // UTF-16, because a chapter row's offsets are handed to CodeMirror. The
+    // project-wide `census` cannot do this — the table that rebases offsets
+    // travels with one book's text — which is why it answers counts only.
+    const census = Census.open(handle.toc(id, true));
+    return census.bookCount === 0 ? undefined : census.book(0);
   };
 
   const memoize = (id?: string): ((text: string) => Analysis) => {
@@ -803,26 +922,12 @@ const makeService = (
     version: engineVersion,
     analyze,
     memoize,
-    find: (id, query) =>
-      decodeHits(
-        handle.find(
-          id,
-          query.text,
-          query.caseSensitive === true,
-          query.wholeWord === true,
-          query.limit ?? 0,
-        ),
-      ),
+    lint,
+    toc,
+    census: () => Census.open(handle.tocAll(undefined, undefined)),
+    find: (id, query) => decodeHits(handle.find(id, query.text, findOptions(query))),
     findAll: (query, scope) =>
-      decodeHits(
-        handle.findAll(
-          query.text,
-          query.caseSensitive === true,
-          query.wholeWord === true,
-          query.limit ?? 0,
-          scope ?? "targets",
-        ),
-      ),
+      decodeHits(handle.findAll(query.text, findOptions(query, scope ?? "targets"))),
     update: (id, text) => handle.update(id, text),
     updateReference: (id, text, keepText) => handle.updateReference(id, text, keepText === true),
     remove: (id) => handle.remove(id),

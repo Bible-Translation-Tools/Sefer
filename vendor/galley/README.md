@@ -5,7 +5,7 @@ The pinned WASM artifact Sefer analyzes USFM with: Onion (parser) and Sous
 stateless doors as free functions on the same module. Nothing in Sefer parses
 USFM except through this artifact.
 
-Pinned at `scripture-kitchen` **v0.1.0** (`4b99047`). The repository was
+Pinned at `scripture-kitchen` **v0.1.1** (`07278dc`). The repository was
 `usfm_onion_2` until that tag; the local checkout is `../scripture-kitchen`.
 
 ## What is here, and where upstream it comes from
@@ -15,6 +15,8 @@ Pinned at `scripture-kitchen` **v0.1.0** (`4b99047`). The repository was
 | `pkg-web/` | `galley/pkg-web/` | `.` / `./web` / `./web/wasm` |
 | `onion-reader.ts` | `onion-wasm/reader.ts` | `./reader`, `./schema` |
 | `sous-reader.ts` | `galley/sous-reader.ts` | `./sous-reader` |
+| `find-reader.ts` | `galley/find-reader.ts` | `./find-reader` |
+| `toc-reader.ts` | `galley/toc-reader.ts` | `./toc-reader` |
 | `diagnostics.json` | `onion-wasm/diagnostics.json` | `./diagnostics.json` |
 
 `pkg-web/` is the **galley superset** build — every onion door plus the
@@ -29,6 +31,11 @@ Pinned at `scripture-kitchen` **v0.1.0** (`4b99047`). The repository was
 - `onion-reader.ts` — generated reader for the parse buffer.
 - `sous-reader.ts` — generated reader for the corpus findings buffer
   (`Galley.publish`), codegen'd and identical to `sous-chef/reader.ts`.
+- `find-reader.ts` — generated reader for the find buffer (`find`, `findAll`).
+  New at v0.1.1; it replaces the hand-written decoder Sefer used to carry.
+- `toc-reader.ts` — generated reader for the census buffer (`toc`, `tocAll`).
+  New at v0.1.1. Lazy: opening validates the envelope, and a chapter row is
+  decoded only when something asks for it.
 - `diagnostics.json` — the Onion diagnostic catalogue.
 - `manifest.json` — engine revision, the three wire versions and sha256 of
   every file here. `src/core/galley` refuses an artifact whose wire versions it
@@ -41,6 +48,7 @@ Pinned at `scripture-kitchen` **v0.1.0** (`4b99047`). The repository was
 | onion parse | `0x534F4E4F` | 4 |
 | sous findings | `0x53554F53` | 1 |
 | find | `0x444E4946` ("FIND") | 1 |
+| toc census | `0x53434F54` ("TOCS") | 1 |
 
 The find buffer's magic and version word are new at v0.1.0 and are read by
 `decodeHits` in `src/core/galley/galley.ts`, which refuses a buffer whose
@@ -48,7 +56,7 @@ header it does not know rather than decoding plausible nonsense.
 
 ## Re-vendoring
 
-Check `../scripture-kitchen` out at the tag, copy the seven files named above,
+Check `../scripture-kitchen` out at the tag, copy the nine files named above,
 rewrite `manifest.json` (revision, date, subject, wire versions, sha256 of
 each artifact), and move `src-tauri/Cargo.toml`'s path pin in the SAME commit —
 the native corpus door and this artifact must be one engine. Do not edit these
