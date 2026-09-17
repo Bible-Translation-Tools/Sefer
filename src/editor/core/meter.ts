@@ -11,9 +11,11 @@
  *  - `gesture` — the JS work: the DOM event to the LAST state update of the
  *    gesture. This is the part Sefer's own code owns, and the part a slow
  *    phase, a re-parse or a decoration rebuild lands in.
- *  - `render` — the same event to after the browser PAINTED, measured by
- *    waiting a frame and then a macrotask. `null` when no frame was observed
- *    (a headless state, a background tab), never a guess.
+ *  - `render` — the same event to after the browser PAINTED. The Event Timing
+ *    API answers it where the browser offers one, and the frame trick answers
+ *    it otherwise; `renderSource` says which, because they are not the same
+ *    measurement and the frame one reads a frame high. `null` when neither
+ *    observed anything (a headless state, a background tab), never a guess.
  *
  * `render` is always the larger of the two and it is not a sum of anything:
  * between the last update and the paint sit CodeMirror's own measure pass,
@@ -44,8 +46,10 @@ import { closeGesture, openGesture, type Gesture } from "./timing";
 export interface Measured {
   /** DOM event to the last state update — the JS work, in milliseconds. */
   gesture: number;
-  /** DOM event to after the browser painted, or `null` when no frame ran. */
+  /** DOM event to after the browser painted, or `null` when nothing observed one. */
   render: number | null;
+  /** Which instrument answered `render` — see `afterPaint`. */
+  renderSource: "event" | "frame" | null;
   analyzes: number;
   /** Exclusive per-span totals inside the gesture. */
   totals: Gesture;
@@ -73,7 +77,11 @@ const FLOOR = 0.05;
  */
 const noteOf = (m: Omit<Measured, "note">): string => {
   const parts = [`gesture=${ms(m.gesture)}ms`];
-  if (m.render !== null) parts.push(`render=${ms(m.render)}ms`);
+  // Named for the instrument, because the two are not interchangeable: the
+  // browser's number is the input's real cost and the frame trick's reads a
+  // frame high. A line that called both `render=` would invite comparing them.
+  if (m.render !== null)
+    parts.push(`${m.renderSource === "event" ? "input" : "render"}=${ms(m.render)}ms`);
   parts.push(`analyzes=${m.analyzes}`);
   const spans = [...m.totals]
     .filter(([, total]) => total.ms >= FLOOR)
@@ -84,19 +92,120 @@ const noteOf = (m: Omit<Measured, "note">): string => {
 };
 
 /**
- * After the next paint: a frame, and then a macrotask inside it — a
- * `requestAnimationFrame` callback runs BEFORE the browser paints, so the
- * timeout scheduled from it is the first moment that can honestly say the
- * pixels are on screen. A host with no `requestAnimationFrame` answers `null`
- * rather than a number that means something else.
+ * Whether the browser will tell us what an input actually cost.
+ *
+ * The Event Timing API measures from the hardware timestamp of the input to
+ * the paint that followed processing it — the same window the frame trick
+ * below tries to approximate, except measured by the engine rather than
+ * inferred from task ordering. Feature-gated because it is the browser's to
+ * offer, and because the headless states this runs in may have neither.
  */
-const afterPaint = (then: (at: number | null) => void): void => {
+const EVENT_TIMING =
+  typeof PerformanceObserver === "function" &&
+  (PerformanceObserver.supportedEntryTypes ?? []).includes("event");
+
+/**
+ * The gestures waiting for the browser to report what they cost, by the
+ * `performance.now()` at which each opened.
+ *
+ * At most a handful, and each is resolved or dropped within
+ * `EVENT_TIMING_GRACE`. Entries arrive after the paint, so a gesture cannot be
+ * answered synchronously and cannot wait for ever either.
+ */
+const pending: { at: number; settle: (entry: PerformanceEntry) => void }[] = [];
+
+/** How long an Event Timing entry has to arrive before the frame trick wins. */
+const EVENT_TIMING_GRACE = 400;
+
+/**
+ * An entry belongs to a gesture when the input that produced it happened at
+ * about the moment the gesture opened. `startTime` is the hardware timestamp
+ * and the meter opens in the listener a fraction later, so the entry's start
+ * is at or slightly BEFORE the gesture's.
+ */
+const NEAR = 60;
+
+let observer: PerformanceObserver | undefined;
+
+const observeInputs = (): void => {
+  if (observer !== undefined || !EVENT_TIMING) return;
+  observer = new PerformanceObserver((list) => {
+    for (const entry of list.getEntries()) {
+      const index = pending.findIndex(
+        (want) => entry.startTime <= want.at + 8 && entry.startTime >= want.at - NEAR,
+      );
+      if (index < 0) continue;
+      const [want] = pending.splice(index, 1);
+      want?.settle(entry);
+    }
+  });
+  // 16ms is the smallest threshold the specification allows, so an input that
+  // was answered inside one frame is reported by NOBODY — which is the reason
+  // the frame trick below is kept rather than deleted. A keystroke fast enough
+  // not to be reported is also a keystroke nobody is asking about.
+  // SAFETY: `durationThreshold` IS Event Timing's own option on
+  // `PerformanceObserverInit` and is simply absent from the DOM lib's
+  // declaration of it. The type is widened, never narrowed, so nothing is
+  // claimed that the runtime will not accept; observing without it takes the
+  // default 104ms threshold, which reports nothing a keystroke ever does.
+  const options: PerformanceObserverInit & { durationThreshold: number } = {
+    type: "event",
+    buffered: false,
+    durationThreshold: 16,
+  };
+  observer.observe(options);
+};
+
+/**
+ * What one gesture cost, from the input to the pixels.
+ *
+ * TWO INSTRUMENTS, and the answer says which one spoke. The browser's is
+ * preferred because it measures what it is actually reporting; the frame trick
+ * is the fallback, and it was the only instrument here before.
+ *
+ *  - `"event"` — `PerformanceEventTiming.duration`: the hardware timestamp of
+ *    the input to the paint after it was processed. Rounded to 8ms by the
+ *    specification, so it is coarse, and it is the browser's own number.
+ *  - `"frame"` — a `requestAnimationFrame` callback runs BEFORE the paint, so
+ *    the timeout scheduled from it is the first task that can honestly say the
+ *    pixels are up. It is an INFERENCE from task ordering, and it reads high:
+ *    the timeout can land a frame later than the paint it is meant to witness,
+ *    which is why a keystroke whose JS cost 3ms could report 33ms — two frames
+ *    at 60Hz, most of it neither work nor latency.
+ *
+ * `null` for both when nothing observed a frame at all (a headless state, a
+ * background tab), never a guess.
+ */
+const afterPaint = (
+  began: number,
+  then: (cost: number | null, source: "event" | "frame" | null) => void,
+): void => {
+  let answered = false;
+  const answer = (cost: number | null, source: "event" | "frame" | null): void => {
+    if (answered) return;
+    answered = true;
+    then(cost, source);
+  };
+
+  if (EVENT_TIMING) {
+    observeInputs();
+    const want = {
+      at: began,
+      settle: (entry: PerformanceEntry) => answer(entry.duration, "event"),
+    };
+    pending.push(want);
+    setTimeout(() => {
+      const index = pending.indexOf(want);
+      if (index >= 0) pending.splice(index, 1);
+    }, EVENT_TIMING_GRACE);
+  }
+
   if (typeof requestAnimationFrame !== "function") {
-    then(null);
+    if (!EVENT_TIMING) answer(null, null);
     return;
   }
   requestAnimationFrame(() => {
-    setTimeout(() => then(performance.now()), 0);
+    setTimeout(() => answer(performance.now() - began, "frame"), 0);
   });
 };
 
@@ -128,9 +237,9 @@ export function keystrokeMeter(sink: (m: Measured) => void): Meter {
     let attributed = 0;
     for (const total of totals.values()) attributed += total.ms;
     const other = +Math.max(0, gesture - attributed).toFixed(3);
-    afterPaint((paintedAt) => {
-      const render = paintedAt === null ? null : +(paintedAt - startedAt).toFixed(3);
-      const measured = { gesture, render, analyzes, totals, other };
+    afterPaint(startedAt, (cost, source) => {
+      const render = cost === null ? null : +cost.toFixed(3);
+      const measured = { gesture, render, renderSource: source, analyzes, totals, other };
       sink({ ...measured, note: noteOf(measured) });
     });
   };

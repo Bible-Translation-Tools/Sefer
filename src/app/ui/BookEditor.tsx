@@ -176,11 +176,30 @@ export function BookEditor(props: BookEditorProps) {
           // `to_paint_ms` is also mostly not work: a keystroke that lands
           // mid-frame waits for the next vsync, so ~16ms at 60Hz is the floor,
           // not a cost. `js_ms` is the half we can do anything about.
+          //
+          // `to_paint_source` says which instrument answered. `event` is the
+          // browser's own Event Timing number and is what to trust; `frame` is
+          // the requestAnimationFrame inference, which reads up to a frame
+          // high because the timeout witnessing the paint can land after it.
+          // Comparing the two across records without reading this field is
+          // how "a 3ms keystroke took 33ms" gets believed. Measured on en_ulb,
+          // same typing, same machine: `event` says 16ms — one frame, the
+          // vsync floor — where `frame` says 29 to 33.
+          //
+          // The SPAN's own duration is not a third answer. The gesture closes
+          // when its measurement lands, so `editor.mutation`'s ms is "until we
+          // were told", which on the event path includes the observer's own
+          // latency. `editor.to_paint_ms` is the number to read.
           const onGesture = annotateOpen({
             "editor.js_ms": measured.gesture,
             "editor.analyzes": measured.analyzes,
             "editor.unaccounted_ms": measured.other,
-            ...(measured.render === null ? {} : { "editor.to_paint_ms": measured.render }),
+            ...(measured.render === null
+              ? {}
+              : {
+                  "editor.to_paint_ms": measured.render,
+                  "editor.to_paint_source": measured.renderSource ?? "frame",
+                }),
           });
           if (!onGesture)
             // No gesture was open — the meter measured a repaint nobody
@@ -188,7 +207,12 @@ export function BookEditor(props: BookEditorProps) {
             annotateRepaint({
               "editor.js_ms": measured.gesture,
               "book.id": book.id,
-              ...(measured.render === null ? {} : { "editor.to_paint_ms": measured.render }),
+              ...(measured.render === null
+                ? {}
+                : {
+                    "editor.to_paint_ms": measured.render,
+                    "editor.to_paint_source": measured.renderSource ?? "frame",
+                  }),
             });
         });
         created.dispatch({
