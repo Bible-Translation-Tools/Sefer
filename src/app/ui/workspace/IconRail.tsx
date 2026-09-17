@@ -21,13 +21,23 @@
  * pane now ("Find and Key terms are SEPARATE panes/routes with similar UI,
  * not a mode toggle on one page" — design-direction.md, gap list 5), so the
  * tile is a plain navigation and the URL is the whole of its state.
+ *
+ * EVERY TILE IS A PLACE. That is the rule this rail did not keep: `Refine` and
+ * `USFM` were `shell.setMode` calls sitting among navigations, so two of five
+ * tiles changed a setting and went nowhere, and `Refine` — the way back to the
+ * text — did not take you to the text. A projection is a preference about how
+ * the editor draws, not a screen; it belongs where preferences live, and for
+ * now that is the toolbar's own control and the `view.mode` commands in the
+ * palette.
+ *
+ * So `Refine` navigates to the book and `USFM` is gone from here.
  */
 
+import type { JSX } from "@solidjs/web";
 import { useNavigate, useRouterState } from "@tanstack/solid-router";
 import Bell from "lucide-solid/icons/bell";
 import BookOpen from "lucide-solid/icons/book-open";
 import CloudIcon from "lucide-solid/icons/cloud";
-import Code from "lucide-solid/icons/code";
 import FolderOpen from "lucide-solid/icons/folder-open";
 import GitCompare from "lucide-solid/icons/git-compare";
 import HistoryIcon from "lucide-solid/icons/history";
@@ -43,6 +53,54 @@ import { IconButton } from "../primitives";
 
 /** The reader's initials, on the tile the mockup puts at the foot of the rail. */
 const INITIALS = "GO";
+
+/**
+ * A rail tile: the icon, and the word under it.
+ *
+ * The words are the change. A column of unlabelled glyphs is a memory test —
+ * the tooltip only helps the reader who already suspected what the icon was —
+ * and there is room for them, so the rail says what it is offering.
+ *
+ * The tooltip stays anyway: it is what a screen reader gets, and the label is
+ * `aria-hidden` for exactly that reason. Announcing "Findings Findings" is
+ * worse than announcing it once.
+ */
+function Tile(props: {
+  readonly label: string;
+  /**
+   * The word under the icon, when the accessible label is a sentence.
+   *
+   * The panel toggle's label has to say what pressing it will DO, and it
+   * changes ("Show the project panel" / "Back to the book"); neither fits in
+   * sixteen pixels of rail. The caption names the thing instead.
+   */
+  readonly caption?: string;
+  readonly testId: string;
+  readonly icon: JSX.Element;
+  readonly pressed?: "true" | "false";
+  readonly onClick: () => void;
+  readonly children?: JSX.Element;
+}) {
+  return (
+    <span class="relative flex w-full flex-col items-center gap-0.5 py-1">
+      <IconButton
+        label={props.label}
+        data-testid={props.testId}
+        tooltipSide="right"
+        aria-pressed={props.pressed}
+        icon={props.icon}
+        onClick={props.onClick}
+      />
+      <span
+        aria-hidden="true"
+        class="max-w-full truncate px-0.5 text-center text-[10px] leading-3 text-on-surface-tertiary"
+      >
+        {props.caption ?? props.label}
+      </span>
+      {props.children}
+    </span>
+  );
+}
 
 export function IconRail() {
   const navigate = useNavigate();
@@ -92,39 +150,54 @@ export function IconRail() {
     <nav
       data-testid="rail"
       aria-label={t("Sefer")}
-      class="flex w-13 shrink-0 flex-col items-center gap-1 border-e border-sidebar-border bg-surface-primary py-3"
+      class="flex w-16 shrink-0 flex-col items-center gap-0.5 overflow-y-auto border-e border-sidebar-border bg-surface-primary py-3"
     >
+      {/* The mark, and the way home. It is the same `public/sefer.svg` the tab
+          shows, so the application is recognisable in a row of tabs and at the
+          top of its own window by one image rather than two that drift. */}
+      <button
+        type="button"
+        data-testid="rail-home"
+        aria-label={t("Sefer")}
+        class="mb-2 flex cursor-pointer items-center justify-center rounded-lg p-1 transition-colors hover:bg-surface-secondary"
+        onClick={() => void navigate({ to: "/" })}
+      >
+        <img src="/sefer.svg" alt="" width="24" height="24" class="size-6" />
+      </button>
+
       {/* Pressed reports what is ON SCREEN, not what the preference says: with
           no project and no history the panel has nothing to show and the shell
           collapses it (`shell.sidebarShowing`), and a toggle lit over a
           collapsed panel would be the rail claiming otherwise. The click still
           writes the reader's own answer, which is waiting when a project opens. */}
-      <IconButton
-        data-testid="rail-panel"
+      <Tile
+        testId="rail-panel"
         label={panelLabel()}
-        tooltipSide="right"
+        caption={t("Panel")}
         icon={<PanelLeft size={18} />}
-        aria-pressed={shell.sidebarShowing() ? "true" : "false"}
+        pressed={shell.sidebarShowing() ? "true" : "false"}
         onClick={togglePanel}
       />
 
       <Show when={shell.project() !== undefined}>
         <span aria-hidden="true" class="my-2 h-px w-6 bg-surface-border" />
 
-        <IconButton
+        {/* The text itself — the place every other tile is a detour from. It
+            used to call `setMode("default")` and go nowhere, so pressing the
+            one tile that means "back to my work" left you on whatever screen
+            you were already on. */}
+        <Tile
           label={t("Refine")}
-          data-testid="rail-refine"
-          tooltipSide="right"
+          testId="rail-refine"
           icon={<BookOpen size={18} />}
-          aria-pressed={shell.mode() === "usfm" ? "false" : "true"}
-          onClick={() => shell.setMode("default")}
+          pressed={inProject() ? "true" : "false"}
+          onClick={() => void navigate({ to: "/project/$slug", params: { slug: shell.slug() } })}
         />
-        <IconButton
+        <Tile
           label={t("Key terms")}
-          data-testid="rail-terms"
-          tooltipSide="right"
+          testId="rail-terms"
           icon={<ListChecks size={18} />}
-          aria-pressed={at("/terms")}
+          pressed={at("/terms")}
           onClick={() =>
             void navigate({
               to: "/project/$slug/terms",
@@ -132,14 +205,6 @@ export function IconRail() {
               search: {},
             })
           }
-        />
-        <IconButton
-          label={t("USFM")}
-          data-testid="rail-usfm"
-          tooltipSide="right"
-          icon={<Code size={18} />}
-          aria-pressed={shell.mode() === "usfm" ? "true" : "false"}
-          onClick={() => shell.setMode("usfm")}
         />
       </Show>
 
@@ -149,11 +214,10 @@ export function IconRail() {
             `/projects`: bringing a project in is the chooser's second half,
             and marking only the list would make the rail disagree with the
             screen (`ProjectSidebar` reads the same two prefixes). */}
-        <IconButton
+        <Tile
           label={t("Projects")}
-          data-testid="rail-projects"
-          tooltipSide="right"
-          aria-pressed={choosing()}
+          testId="rail-projects"
+          pressed={choosing()}
           icon={<FolderOpen size={18} />}
           onClick={() => void navigate({ to: "/projects" })}
         />
@@ -162,11 +226,11 @@ export function IconRail() {
             against another source. Both are project questions, so the tiles
             are only offered while one is open. */}
         <Show when={shell.project() !== undefined}>
-          <IconButton
+          <Tile
             label={t("Character inventory")}
-            data-testid="rail-inventory"
-            tooltipSide="right"
-            aria-pressed={at("/inventory")}
+            caption={t("Glyphs")}
+            testId="rail-inventory"
+            pressed={at("/inventory")}
             icon={<TypeIcon size={18} />}
             onClick={() =>
               void navigate({
@@ -176,11 +240,10 @@ export function IconRail() {
               })
             }
           />
-          <IconButton
+          <Tile
             label={t("Compare")}
-            data-testid="rail-compare"
-            tooltipSide="right"
-            aria-pressed={at("/compare")}
+            testId="rail-compare"
+            pressed={at("/compare")}
             icon={<GitCompare size={18} />}
             onClick={() =>
               void navigate({
@@ -190,11 +253,10 @@ export function IconRail() {
               })
             }
           />
-          <IconButton
+          <Tile
             label={t("Cloud")}
-            data-testid="rail-cloud"
-            tooltipSide="right"
-            aria-pressed={at("/cloud")}
+            testId="rail-cloud"
+            pressed={at("/cloud")}
             icon={<CloudIcon size={18} />}
             onClick={() =>
               void navigate({
@@ -206,40 +268,38 @@ export function IconRail() {
           />
         </Show>
 
-        {/* The count rides the button rather than sitting beside it: the rail
-            is one tile wide, and a badge in the flow would push the icon off
-            its own centre line. */}
-        <span class="relative inline-flex">
-          <IconButton
-            label={t("Findings")}
-            data-testid="rail-findings"
-            tooltipSide="right"
-            aria-pressed={at("/findings")}
-            icon={<Bell size={18} />}
-            onClick={() =>
-              void navigate({
-                to: "/project/$slug/findings",
-                params: { slug: shell.slug() },
-                search: {},
-              })
-            }
-          />
+        {/* The count rides the tile rather than sitting beside it: the rail is
+            one tile wide, and a badge in the flow would push the icon off its
+            own centre line. `Tile` is already the positioned box, so the badge
+            goes inside it. */}
+        <Tile
+          label={t("Findings")}
+          testId="rail-findings"
+          pressed={at("/findings")}
+          icon={<Bell size={18} />}
+          onClick={() =>
+            void navigate({
+              to: "/project/$slug/findings",
+              params: { slug: shell.slug() },
+              search: {},
+            })
+          }
+        >
           <Show when={attention() > 0}>
             <span
               aria-hidden="true"
               data-findings={attention()}
-              class="pointer-events-none absolute -end-1 -top-1 min-w-4 rounded-full bg-on-surface-error px-1 text-center text-smallest leading-4 font-semibold text-surface-error"
+              class="pointer-events-none absolute end-2 top-0 min-w-4 rounded-full bg-on-surface-error px-1 text-center text-smallest leading-4 font-semibold text-surface-error"
             >
               {attention() > 99 ? "99+" : attention()}
             </span>
           </Show>
-        </span>
+        </Tile>
 
-        <IconButton
+        <Tile
           label={t("History")}
-          data-testid="rail-history"
-          tooltipSide="right"
-          aria-pressed={at("/history")}
+          testId="rail-history"
+          pressed={at("/history")}
           icon={<HistoryIcon size={18} />}
           onClick={() =>
             void navigate({
@@ -249,11 +309,10 @@ export function IconRail() {
             })
           }
         />
-        <IconButton
+        <Tile
           label={t("Settings")}
-          data-testid="rail-settings"
-          tooltipSide="right"
-          aria-pressed={at("/settings")}
+          testId="rail-settings"
+          pressed={at("/settings")}
           icon={<SettingsIcon size={18} />}
           onClick={() => void navigate({ to: "/settings" })}
         />

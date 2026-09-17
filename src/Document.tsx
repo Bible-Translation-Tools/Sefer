@@ -14,7 +14,10 @@ export default function Document(props: ParentProps) {
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="icon" href="/favicon.ico" />
+        {/* The SVG first, and the .ico only for what cannot read one: the
+            rail shows the same file, so the tab and the application agree. */}
+        <link rel="icon" type="image/svg+xml" href="/sefer.svg" />
+        <link rel="alternate icon" href="/favicon.ico" />
         <title>Sefer</title>
         <HydrationScript />
       </head>

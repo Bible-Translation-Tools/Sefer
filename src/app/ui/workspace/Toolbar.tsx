@@ -25,7 +25,6 @@ import { useNavigate } from "@tanstack/solid-router";
 import Bell from "lucide-solid/icons/bell";
 import BookOpen from "lucide-solid/icons/book-open";
 import Code from "lucide-solid/icons/code";
-import ListChecks from "lucide-solid/icons/list-checks";
 import MoreVertical from "lucide-solid/icons/more-vertical";
 import Redo2 from "lucide-solid/icons/redo-2";
 import SearchIcon from "lucide-solid/icons/search";
@@ -40,7 +39,7 @@ import { bookName } from "./books";
 import { metadataOf, projectName } from "./project";
 
 /** The three segments, as literal strings so Tailwind and the reader agree. */
-type Segment = "regular" | "stet" | "usfm";
+type Segment = "regular" | "usfm";
 
 export function Toolbar() {
   const navigate = useNavigate();
@@ -74,10 +73,6 @@ export function Toolbar() {
   const segment = (): Segment => (shell.mode() === "usfm" ? "usfm" : "regular");
 
   const pick = (value: Segment): void => {
-    if (value === "stet") {
-      void navigate({ to: "/project/$slug/terms", params: { slug: shell.slug() }, search: {} });
-      return;
-    }
     shell.setMode(value === "usfm" ? "usfm" : "default");
   };
 
@@ -116,9 +111,13 @@ export function Toolbar() {
         class="mx-auto"
         label={t("Mode")}
         size="md"
+        /* Two modes, because that is what this control IS. Key terms was a
+           third segment here and it is not a mode — it is a screen, and
+           picking it navigated away, which made the other two look like
+           navigations too. It is a rail tile, where the other destinations
+           are. */
         items={[
           { value: "regular", label: t("Regular Mode"), icon: <BookOpen size={14} /> },
-          { value: "stet", label: t("Key terms"), icon: <ListChecks size={14} /> },
           { value: "usfm", label: t("USFM"), icon: <Code size={14} /> },
         ]}
         value={segment()}

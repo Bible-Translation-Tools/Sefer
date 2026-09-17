@@ -460,6 +460,37 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       },
     }),
 
+    /**
+     * The projection, by NAME rather than as a toggle.
+     *
+     * A palette is searched by typing what you want, and "Toggle USFM /
+     * visual" answers to neither word a reader would reach for: somebody who
+     * wants USFM types "usfm" and somebody who wants the reading types
+     * "revision". So each mode is its own command, titled as the mode, and
+     * offered only when the editor is not already in it — a command that would
+     * do nothing is one more line to read past.
+     *
+     * The chord stays on the toggle, because a keystroke is a flip and not a
+     * choice from a list.
+     */
+    registerCommand({
+      id: "view.mode.revision",
+      title: t("Revision mode"),
+      when: () => hasBook() && bridge.mode() === "usfm",
+      run: () => {
+        bridge.setMode("default");
+      },
+    }),
+
+    registerCommand({
+      id: "view.mode.usfm",
+      title: t("USFM mode"),
+      when: () => hasBook() && bridge.mode() !== "usfm",
+      run: () => {
+        bridge.setMode("usfm");
+      },
+    }),
+
     registerCommand({
       id: "editor.toggleMode",
       title: t("Toggle USFM / visual"),
