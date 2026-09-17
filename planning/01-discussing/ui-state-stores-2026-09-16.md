@@ -299,18 +299,37 @@ and `focused()`/`focusedAt()` are props of `<ExcerptList>`, which is inside the
 gate. So something reads the model earlier than it looks, and finding it is
 worth more than any further trimming.
 
-Two candidates to check first:
+Both candidates were checked, with `performance.mark` in the trace. Neither was
+right, and what the marks say is stranger and more useful:
 
-  * `createFindingsFeed`'s own `hits` memo maps every finding to an
-    `Occurrence` — twenty thousand objects, and 14ms is about right for it. If
-    something reads `hits` (not `model`), the gate would never have covered it.
-  * The rAF/timeout may fire during the router's async transition, before the
-    panel has painted at all — in which case `body()` is already true when the
-    panel mounts and the gate does nothing. The ~17ms gap before task 1 is the
-    transition, and it is long enough for that to happen.
+    +  0.0ms  click
+    + 39.7ms  the feed's `hits` memo runs
+    + 58.2ms  the feed's `model` memo runs
+    + 69.5ms  FindingsPanel is CONSTRUCTED
+    + 74.6ms  the body gate opens
+    + 73ms and +109ms  paints
+    +126.9ms  first card on screen
 
-If the second is true the fix is to flip the gate on a paint that has actually
-happened, not on a frame that may already have passed.
+**The gate works.** The shell paints at +73ms and the gate opens at +74.6ms,
+after it — which is exactly what the rAF-then-timeout ordering was for. The
+second candidate is dead.
+
+**And the model is not this panel's.** `hits` and `model` run at +39.7 and
++58.2ms, a full ten to thirty milliseconds BEFORE the component that owns them
+is constructed at +69.5ms. A memo cannot run before it exists, so the feed
+being computed in task 1 belongs to the PREVIOUS FindingsPanel instance —
+recomputed during the router's transition, on its way to being disposed. No
+gate inside the new panel can defer work that belongs to the old one.
+
+So the question is not "what reads the feed too early" but "why is a panel that
+is going away recomputing twenty thousand findings on its way out". Start at
+the router transition: whether the outgoing route is kept alive and
+re-evaluated while the incoming one loads, and what invalidates its memos at
+that moment.
+
+The reframe worth keeping: **~69ms of the ~127ms happens before the findings
+panel exists at all.** Every change made to that panel so far has been aimed at
+the smaller half.
 
 ## Still outstanding
 
