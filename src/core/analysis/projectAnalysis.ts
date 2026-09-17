@@ -357,7 +357,7 @@ const make = (
       if (handed !== undefined && describesExactly(handed, source.text)) analysis = handed;
       else {
         try {
-          analysis = galley.analyze(source.text, "scheduler", bookId);
+          analysis = galley.analyze(source.text, "scheduler", bookId, into);
         } catch {
           // Retain, do not clear: an engine refusal is an integration
           // problem, not evidence that the book became clean.
@@ -404,14 +404,14 @@ const make = (
       }
     };
 
-    const publishCorpus = (): void => {
-      const done = observability?.span("corpus.publish");
+    const publishCorpus = (into: ObservabilityService | undefined = observability): void => {
+      const done = into?.span("corpus.publish");
       try {
         snapshot = galley.publish();
       } catch (cause) {
         // A refused publication RETAINS the previous snapshot: known-stale
         // cross-book findings beat an apparently clean project.
-        observability?.note("corpus.publish", "failed", String(cause));
+        into?.note("corpus.publish", "failed", String(cause));
       }
       done?.();
     };
@@ -548,6 +548,8 @@ const make = (
         // in canonical order, opening JUD waits behind sixty-five books it is
         // not going to show. The editor needs one analysis to draw, and this
         // makes it the first one produced rather than the last.
+        let slowest: BookId | undefined;
+        let slowestMs = 0;
         const first = options?.first;
         const ordered =
           first === undefined
@@ -567,27 +569,42 @@ const make = (
           // syntax trees on idle afterwards. Twenty milliseconds is not worth
           // three mechanisms and a reader watching badges populate, so the
           // whole project is warm from the first frame.
+          // One book's own cost, kept as a number rather than a record. Sixty-
+          // six `galley.parse` spans answer "is ONE book pathological", which
+          // is worth asking and not worth 132 records in a bounded ring every
+          // time a project opens — so the spans are there at level `all` and
+          // the outlier is always on the span below.
+          const started = performance.now();
           refresh(book.id, book, entry, into);
+          const took = performance.now() - started;
+          if (took > slowestMs) {
+            slowestMs = took;
+            slowest = book.id;
+          }
           subscribe(book);
         }
-        done?.({ "analysis.books": entries.size });
+        done?.({
+          "analysis.books": entries.size,
+          ...(slowest === undefined
+            ? {}
+            : {
+                "analysis.slowest": slowest,
+                "analysis.slowest_ms": Math.round(slowestMs * 10) / 10,
+              }),
+        });
 
-        // The first publication is FORKED, not awaited. It is the expensive
-        // half of a cold open — it maps every chapter of every book and judges
-        // the corpus — and nothing the reader is waiting for depends on it.
-        // The sidebar draws from each book's own analysis; the editor opens on
-        // a book already registered and parsed. Cross-book findings arrive
-        // when they arrive, which is the same contract they have during
-        // typing.
+        // The first publication is AWAITED, not forked, and it is the expensive
+        // half of a cold open — every chapter of every book mapped, the corpus
+        // judged, ~410ms for a Bible.
         //
-        // Scoped to the attachment, so leaving the project cancels it rather
-        // than publishing a corpus we have already begun to dismantle.
-        yield* Effect.forkScoped(
-          Effect.sync(() => {
-            publishCorpus();
-            invalidateCaches();
-          }),
-        );
+        // Forking it never made it concurrent. It is a synchronous wasm call on
+        // the one thread, so a fork only moved the stall to AFTER first paint,
+        // where it landed on the reader's first scroll or click. Inline, it
+        // lands where a reader is already waiting, and "the project is open"
+        // means the project is parsed, registered AND proofread — no findings
+        // arriving late, nothing populating in.
+        publishCorpus(into);
+        invalidateCaches();
 
         // A seat swap replaces the object that holds a book's canonical text,
         // so the old subscription is dead: re-resolve and re-subscribe, and

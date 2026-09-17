@@ -466,9 +466,17 @@ const openIn = (
     // Bounded rather than unbounded: sixty-six simultaneous file handles is a
     // burst the storage layer queues anyway, and an unbounded `forEach` over a
     // whole-Bible project would also hold every book's bytes in memory at once.
+    // Spanned, because this is half the open and it used to be invisible: a
+    // `project.open` that said 190ms with a 115ms parse inside it and no
+    // account of the rest. Reading the files IS the rest.
+    const reading = observability?.span("file.read", undefined, {
+      "project.books": paths.length,
+      "file.concurrency": OPEN_CONCURRENCY,
+    });
     const reads = yield* Effect.forEach(paths, (path) => Effect.result(openBook(path)), {
       concurrency: OPEN_CONCURRENCY,
     });
+    reading?.();
 
     for (const [index, path] of paths.entries()) {
       // SAFETY: `forEach` answers one result per input, in input order.

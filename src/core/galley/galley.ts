@@ -431,8 +431,21 @@ export interface GalleyService {
    * The ordering is the contract: `parse(id)` answers off what `update` last
    * retained, so the two happen here, together, and a caller cannot get a
    * parse of yesterday's text by holding the id.
+   *
+   * `into` is WHO IS ASKING, and it is how the span finds its parent. The
+   * Layer captured an `Observability` when it was BUILT, which is the root
+   * service and will be for the life of the application — so a parse run
+   * inside somebody's gesture narrated beside that gesture rather than in it,
+   * and `galley.parse` never appeared in a `project.open` at all. A caller
+   * holding the operation passes it; a caller that is not inside one passes
+   * nothing and gets the old behaviour.
    */
-  readonly analyze: (text: string, why?: string, id?: string) => Analysis;
+  readonly analyze: (
+    text: string,
+    why?: string,
+    id?: string,
+    into?: ObservabilityService,
+  ) => Analysis;
 
   /**
    * One registered book's diagnostics, without a parse buffer.
@@ -816,7 +829,12 @@ const makeService = (
     held?.free();
   };
 
-  const analyze = (text: string, why = "unnamed", id?: string): Analysis => {
+  const analyze = (
+    text: string,
+    why = "unnamed",
+    id?: string,
+    into?: ObservabilityService,
+  ): Analysis => {
     if (text.includes("\r")) {
       throw new EngineInputError({
         reason: "canonical text is LF; the engine refuses a carriage return",
@@ -827,7 +845,7 @@ const makeService = (
     // `id` is a label the caller already has, not the engine learning about
     // Books: the parse is over text and stays that way. Without it "which of
     // these 66 parses was slow" has no answer.
-    const done = observe?.span("galley.parse", undefined, {
+    const done = (into ?? observe)?.span("galley.parse", undefined, {
       "galley.why": why,
       "galley.text_length": text.length,
       ...(id === undefined ? {} : { "book.id": id }),
