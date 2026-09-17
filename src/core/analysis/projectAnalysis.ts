@@ -499,16 +499,30 @@ const make = (
           };
           entries.set(book.id, entry);
           // Serial, on this thread, one book at a time: a project-open cost,
-          // not an interaction cost. It is also the remaining cold path on
-          // BOTH hosts — the parse cannot move, so only the corpus half of
-          // each lap crosses the seam.
+          // not an interaction cost. It is the remaining cold path, and with
+          // the id door each lap is one crossing rather than two.
           refresh(book.id, book, entry);
           subscribe(book);
         }
-        yield* publishCorpus;
-        invalidateCaches();
         done?.();
         observability?.note("analysis.pass", "ready", `${entries.size} books`);
+
+        // The first publication is FORKED, not awaited. It is the expensive
+        // half of a cold open — it maps every chapter of every book and judges
+        // the corpus — and nothing the reader is waiting for depends on it.
+        // The sidebar draws from each book's own analysis; the editor opens on
+        // a book already registered and parsed. Cross-book findings arrive
+        // when they arrive, which is the same contract they have during
+        // typing.
+        //
+        // Scoped to the attachment, so leaving the project cancels it rather
+        // than publishing a corpus we have already begun to dismantle.
+        yield* Effect.forkScoped(
+          Effect.gen(function* () {
+            yield* publishCorpus;
+            invalidateCaches();
+          }),
+        );
 
         // A seat swap replaces the object that holds a book's canonical text,
         // so the old subscription is dead: re-resolve and re-subscribe, and
