@@ -408,10 +408,13 @@ Loose ends found while doing this, none of them blocking:
 - **`{ ...excerpt }` is a footgun.** Object-spreading an excerpt evaluates every
   lazy getter and projects the document. Nothing does it today and the type says
   so, but the old shape could not be misused this way.
-- **`ReviewPanel.tsx` contains raw NUL bytes** — `${bookId}\0${unitId}` written
-  as literal control characters. Deliberate, but `file` calls the source "data"
-  and plain `grep` silently finds nothing in it. Escaping them as `\0` would
-  cost nothing.
+- ~~**`ReviewPanel.tsx` contains raw NUL bytes**~~ FIXED 2026-09-17, and it was
+  not free after all: it hid six `tick`/`bump` call sites from the audit above.
+  Both files that did this (`ReviewPanel.tsx`, `MatchFormattingView.tsx`) now
+  write the separator as the escape `\0`, which is the same string at runtime
+  and leaves the source as text. `file` calls both "UTF-8 text" again and plain
+  `grep` reads them. The separator itself was always the right choice — NUL is
+  the one character that cannot occur in a book code or a sid.
 - **Production CAN be measured, and the answer changed the plan.** The earlier
   claim here — that `vite preview` uses a different host adapter and cannot open
   a project — was wrong. The web host always uses OPFS; `/sefer` IS the OPFS
