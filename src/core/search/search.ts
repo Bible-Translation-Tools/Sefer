@@ -48,7 +48,12 @@ export interface Query {
 }
 
 export interface Options {
-  /** Total hits across all books, not per book. Defaults to 500. */
+  /**
+   * Total hits across all books, not per book. Omitted means NO BOUND, which
+   * is the default every caller should want: a truncated result whose count is
+   * displayed as the answer is a wrong answer, not a partial one. See
+   * [`MINIMUM_QUERY`] for what is bounded instead, and why.
+   */
   readonly limit?: number;
   /** When given, only these books are scanned, in the order the books arrive. */
   readonly books?: readonly BookId[];
@@ -107,7 +112,31 @@ export class SearchError extends Data.TaggedError("SearchError")<{
 /** Roughly how much of the containing line a result card shows. */
 const PREVIEW_WIDTH = 90;
 
-const DEFAULT_LIMIT = 500;
+/**
+ * The shortest query worth running across a whole project.
+ *
+ * NOT a guess. Measured against en_ulb (66 books, 4,503,659 chars) through the
+ * engine's own `findAll`, median of seven, plus the JS decode into `Hit`s:
+ *
+ *     needle              hits    engine    decode     total
+ *     "Melchizedek"         11    14.5ms         —         —
+ *     "Jesus"            1,276    15.9ms     0.5ms    16.4ms
+ *     "God"              4,656    25.0ms     1.4ms    26.4ms
+ *     "the"             86,555    54.7ms    38.7ms    93.4ms
+ *     "a"              255,018    90.5ms   108.1ms   199.6ms
+ *
+ * Two things fall out of that table. Every search pays a ~14ms floor whatever
+ * it finds — the engine materialises all 66 projections and drops them — so a
+ * cap buys nothing on a query anybody actually types. And the only row that
+ * hurts is the single character: 255,018 hits is a 27MB buffer and a quarter
+ * of a million objects, for a result no one can read.
+ *
+ * So the bound is on the QUESTION, not the answer. Two characters, and then
+ * every hit, because "how many are there" is most of what a project-wide find
+ * is for and a number that silently means "500, or possibly more" answers it
+ * wrongly.
+ */
+export const MINIMUM_QUERY = 2;
 
 const WORD = /[\p{L}\p{N}_]/u;
 
@@ -265,8 +294,9 @@ const matcherFor = (query: Query): Result.Result<RegExp, SearchError> => {
  * Returns `SearchError` only for a pattern `RegExp` will not accept. An empty
  * query, a book list that matches nothing, and a text with no match are all a
  * successful empty result. Hits arrive in book order then offset order, and
- * stop at `limit` in total; each carries the stamp its book held at scan time,
- * so a hit found before an edit is detectably stale afterwards.
+ * stop at `limit` in total only when one is given; each carries the stamp its
+ * book held at scan time, so a hit found before an edit is detectably stale
+ * afterwards.
  */
 export const find = (
   books: readonly Book[],
@@ -279,8 +309,8 @@ export const find = (
   if (Result.isFailure(matcher)) return Result.fail(matcher.failure);
   const pattern = matcher.success;
 
-  const limit = options?.limit ?? DEFAULT_LIMIT;
-  if (limit <= 0) return Result.succeed([]);
+  const limit = options?.limit;
+  if (limit !== undefined && limit <= 0) return Result.succeed([]);
   const wanted = options?.books === undefined ? null : new Set(options.books);
 
   const hits: Hit[] = [];
@@ -306,7 +336,7 @@ export const find = (
           ref: refFrom(table, book.id, from),
           preview: previewAt(text, from, to),
         });
-        if (hits.length >= limit) return Result.succeed(hits);
+        if (limit !== undefined && hits.length >= limit) return Result.succeed(hits);
       }
     }
   }
@@ -380,17 +410,20 @@ export const findProjected = (
         description: "the engine's find is literal; a regex query must use the raw scan",
       }),
     );
-  const limit = options?.limit ?? DEFAULT_LIMIT;
-  if (limit <= 0) return Effect.succeed([]);
+  const limit = options?.limit;
+  if (limit !== undefined && limit <= 0) return Effect.succeed([]);
   const wanted = options?.books === undefined ? null : new Set(options.books);
 
   return Effect.try({
     try: () =>
+      // `limit` omitted rather than passed as 0: the engine reads a missing
+      // key as no bound, and spelling that as a number would rely on the two
+      // sides agreeing on what 0 means.
       galley.findAll({
         text: query.text,
         caseSensitive: query.caseSensitive,
         wholeWord: query.wholeWord,
-        limit,
+        ...(limit === undefined ? {} : { limit }),
       }),
     catch: (cause) => ({ reason: "Engine" as const, description: String(cause) }),
   }).pipe(
@@ -422,7 +455,7 @@ export const findProjected = (
         }
         const hit = projectedHit(engineHit, book, held.table, held.stamp);
         if (hit !== undefined) hits.push(hit);
-        if (hits.length >= limit) break;
+        if (limit !== undefined && hits.length >= limit) break;
       }
       return hits;
     }),
@@ -483,8 +516,8 @@ export const findInReferences = (
         description: "the engine's find is literal; a regex query must use the raw scan",
       }),
     );
-  const limit = options?.limit ?? DEFAULT_LIMIT;
-  if (limit <= 0) return Effect.succeed([]);
+  const limit = options?.limit;
+  if (limit !== undefined && limit <= 0) return Effect.succeed([]);
   return Effect.try({
     try: () =>
       galley.findAll(
@@ -492,7 +525,7 @@ export const findInReferences = (
           text: query.text,
           caseSensitive: query.caseSensitive,
           wholeWord: query.wholeWord,
-          limit,
+          ...(limit === undefined ? {} : { limit }),
         },
         "references",
       ),

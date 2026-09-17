@@ -6,7 +6,7 @@ import ChevronUpIcon from "lucide-solid/icons/chevron-up";
 import RegexIcon from "lucide-solid/icons/regex";
 import SearchIcon from "lucide-solid/icons/search";
 import WholeWordIcon from "lucide-solid/icons/whole-word";
-import { For, Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
+import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
 import { t } from "../../../app/i18n";
 import { useShell } from "../../../app/ProjectContext";
@@ -19,6 +19,9 @@ import {
   Input,
   PanelHeader,
   SegmentedControl,
+  VirtualList,
+  type VirtualRow,
+  type VirtualSection,
 } from "../../../app/ui/primitives";
 import { ShellGate } from "../../../app/ui/ShellGate";
 import * as Workflows from "../../../app/workflows/references";
@@ -85,6 +88,15 @@ type Scope = "book" | "project" | "reference";
  */
 const fileName = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
 
+/**
+ * The height a reference row is assumed to have before it has been measured.
+ *
+ * A one-line path and a preview that usually wraps to two lines, plus the
+ * card's padding. Wrong is cheap — the virtualizer measures the row the moment
+ * it is on screen — but wrong by a lot makes the scrollbar jump as it corrects.
+ */
+const REFERENCE_ROW = 86;
+
 interface FindSearch {
   readonly q?: string;
   readonly scope?: Scope;
@@ -123,6 +135,63 @@ function Find() {
   });
   const [problem, setProblem] = createSignal("", { name: "problem" });
   const [cursor, setCursor] = createSignal(0, { name: "cursor" });
+
+  const [box, setBox] = createSignal<HTMLInputElement | undefined>(undefined, { name: "box" });
+
+  /**
+   * The search box takes the caret when Find opens.
+   *
+   * Arriving at Find is asking to search; a screen that makes you click its one
+   * input first has wasted the trip. The HTML `autofocus` attribute does not do
+   * this — it applies when the browser PARSES an element, and this one is
+   * created by Solid long after the page loaded — which is the same trap
+   * `CommandPalette` documents.
+   *
+   * Keyed on the ELEMENT, so it runs once when the field is mounted and not
+   * again on every later search. `select` as well as `focus` because arriving
+   * with a query already in the box (a link into `/find?q=…`, or coming back to
+   * the screen) usually means typing a different one, and a caret parked at the
+   * end would make that a backspace exercise.
+   */
+  createEffect(
+    () => box(),
+    (input) => {
+      if (input === undefined) return;
+      input.focus();
+      input.select();
+    },
+  );
+
+  /**
+   * The reference hits as one section per reference book, for the virtualizer.
+   *
+   * Grouped rather than one flat list because `VirtualList` is sectioned, and
+   * the grouping is the one a reader wants anyway: which book, then where in
+   * it. The hits arrive in book order already, so this is a single pass.
+   *
+   * The key is the source path and the hit's projected offset, which is unique
+   * within a book and stable across a re-search of the same text — a row that
+   * survives keeps its measured height instead of being re-measured.
+   */
+  const referenceSections = createMemo(
+    (): readonly VirtualSection<Search.ReferenceHit>[] => {
+      const sections: { key: string; rows: VirtualRow<Search.ReferenceHit>[] }[] = [];
+      let open: { key: string; rows: VirtualRow<Search.ReferenceHit>[] } | undefined;
+      for (const hit of referenceHits()) {
+        if (open === undefined || open.key !== hit.source) {
+          open = { key: hit.source, rows: [] };
+          sections.push(open);
+        }
+        open.rows.push({
+          key: `${hit.source}:${hit.projected.from}`,
+          item: hit,
+          estimate: REFERENCE_ROW,
+        });
+      }
+      return sections;
+    },
+    { name: "referenceSections" },
+  );
 
   /**
    * The project's bound references, registered with the corpus.
@@ -189,11 +258,27 @@ function Find() {
     const staticQuery = query(over);
     const want = over?.scope ?? scope();
     const only = want === "book" ? focusedBook() : undefined;
-    const options = { limit: 500, ...(only === undefined ? {} : { books: [only] }) };
+    // No limit. Every hit, and the count beside the box is therefore the
+    // answer rather than a ceiling — see `Search.MINIMUM_QUERY` for the
+    // measurements that say a project-wide find can afford it.
+    const options = only === undefined ? {} : { books: [only] };
     if (staticQuery.text === "") {
       setHits([]);
       setReferenceHits([]);
       setProblem("");
+      return;
+    }
+    // One character over 66 books is a quarter of a million hits and nothing a
+    // person can read. Said out loud rather than answered with "0 results",
+    // which would read as "this word is not in your project".
+    if (staticQuery.text.length < Search.MINIMUM_QUERY) {
+      setHits([]);
+      setReferenceHits([]);
+      setProblem(
+        t("Type at least {count} characters to search the whole project.", {
+          count: Search.MINIMUM_QUERY,
+        }),
+      );
       return;
     }
 
@@ -327,6 +412,7 @@ function Find() {
         <Card>
           <div class="flex flex-wrap items-center gap-2">
             <Input
+              ref={setBox}
               type="search"
               icon={<SearchIcon size={14} />}
               wrapperClass="w-72"
@@ -427,12 +513,19 @@ function Find() {
 
         {/* The reference scope's own results: a reading, not a multibuffer.
             No Edit, no Open in editor, no staleness badge — none of those mean
-            anything for a book this project does not own. */}
+            anything for a book this project does not own.
+
+            WINDOWED, like the multibuffer beside it. A search with no limit
+            can return tens of thousands of hits across a reference Bible, and
+            a `<For>` over that builds every card before the first one paints.
+            The path moved into a sticky section header on the way: it was on
+            every card when there were at most 500 of them, and repeating it
+            per row is noise once the rows are grouped by the book anyway. */}
         <Show when={scope() === "reference"}>
-          <div class="min-h-0 flex-1 overflow-auto" data-find-references>
-            <Show
-              when={referenceHits().length > 0}
-              fallback={
+          <Show
+            when={referenceHits().length > 0}
+            fallback={
+              <div class="min-h-0 flex-1 overflow-auto" data-find-references>
                 <EmptyState
                   icon={<SearchIcon size={22} />}
                   title={text() === "" ? t("Nothing searched yet") : t("No matches")}
@@ -440,24 +533,32 @@ function Find() {
                     count: bound().ids.length,
                   })}
                 />
-              }
-            >
-              <ul class="flex flex-col gap-2">
-                <For each={referenceHits()}>
-                  {(hit) => (
-                    <li>
-                      <Card class="flex flex-col gap-1" data-reference-hit={hit.source}>
-                        <p class="truncate text-smallest text-on-surface-tertiary">
-                          {fileName(hit.source)}
-                        </p>
-                        <p class="text-small break-words text-on-surface-primary">{hit.preview}</p>
-                      </Card>
-                    </li>
-                  )}
-                </For>
-              </ul>
-            </Show>
-          </div>
+              </div>
+            }
+          >
+            <VirtualList<Search.ReferenceHit>
+              class="min-h-0 flex-1"
+              sections={referenceSections()}
+              header={(section, ref) => (
+                <div
+                  ref={ref}
+                  class="bg-surface-primary py-1 text-smallest text-on-surface-tertiary"
+                >
+                  {fileName(section().key)}
+                  <span class="ms-2 tabular-nums">
+                    {t("{count} result(s)", { count: section().rows.length })}
+                  </span>
+                </div>
+              )}
+              row={(hit) => (
+                <div class="pb-2" data-reference-hit={hit().source}>
+                  <Card class="flex flex-col gap-1">
+                    <p class="text-small break-words text-on-surface-primary">{hit().preview}</p>
+                  </Card>
+                </div>
+              )}
+            />
+          </Show>
         </Show>
 
         <Show when={scope() !== "reference"}>
