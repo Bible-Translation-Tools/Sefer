@@ -52,6 +52,7 @@ Not `<subsystem>.<function>`: `analyze.publish` named the module that happened t
 | `analyze` | a Book's Analysis was replaced — whether Galley ran or the editor supplied one |
 | `update` | a registry now holds this |
 | `publish` | a whole snapshot was produced |
+| `warm` | a product was built before anyone asked for it, so the asking is cheap |
 | `apply` | an edit was accepted into a Book |
 | `restore` / `discard` | Recovery state was used or dropped |
 

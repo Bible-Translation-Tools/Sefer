@@ -39,6 +39,7 @@ Use these, and not synonyms of them.
 | `parse` | text went into the engine, a reading came out | `galley.parse` |
 | `update` | a registry now knows about this | `corpus.update` |
 | `publish` | a whole snapshot was produced | `corpus.publish` |
+| `warm` | a product was built before anyone asked for it | `analysis.warm` |
 | `apply` | an edit was accepted into a book | `book.apply` |
 | `refuse` | a rule said no, and nothing changed | verdict, not a name |
 | `restore` / `discard` | crash-safety state was used or dropped | `journal.restore` |

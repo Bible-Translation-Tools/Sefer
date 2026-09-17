@@ -61,6 +61,7 @@ export type OperationName =
   | "save"
   | "file.changed"
   | "analysis.pass"
+  | "analysis.warm"
   | "journal.write"
   | "journal.pending"
   | "journal.restore"

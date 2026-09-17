@@ -53,6 +53,7 @@ import {
   Galley,
   stampOf,
   type Analysis,
+  type BookToc,
   type CorpusEngineService,
   type EngineStamp,
   type FindingsSnapshot,
@@ -205,8 +206,23 @@ export class ProjectAnalysis extends Context.Service<ProjectAnalysis, ProjectAna
 ) {}
 
 interface Entry {
-  /** The last analysis we hold, fresh or not. Retained through failures. */
+  /**
+   * The last analysis we hold, fresh or not. Retained through failures.
+   *
+   * `undefined` means REGISTERED BUT NOT YET PARSED, which is now the normal
+   * state of a book for the first moments of a project: opening registers
+   * every book and parses none of them, and the warmer fills these in.
+   */
   analysis: Analysis | undefined;
+  /**
+   * This book's chapter and verse table, off the `Toc` that registration built.
+   *
+   * Held separately from `analysis` because it is available FIRST and costs
+   * nothing to ask for — no chunk is resolved, no text is read, no wire is
+   * plated. It is what lets the sidebar be right about a book's shape before
+   * anything has parsed it.
+   */
+  toc: BookToc | undefined;
   /** The Book stamp `analysis` describes. */
   stamp: SourceStamp | undefined;
   path: string;
@@ -229,9 +245,33 @@ const countsOf = (
   return { errors, warnings };
 };
 
+/**
+ * A bridged anchor (`\v 5-7`) names three verses from one row, so a verse
+ * count is over verse NUMBERS, not over rows. `first === 0` is the engine's
+ * mark for a missing or malformed designator; it still occupies one anchor.
+ *
+ * Stated once because it is now applied to two readers — the parse buffer's
+ * `Toc` and the registration's `BookToc`. They agree exactly when walked this
+ * way, and disagree if you reach for the TOC reader's `verseCount` (which
+ * counts `\v` MARKERS) or its `chapters` getter (which drops the synthetic
+ * front-matter row that `chapterRows.length` includes).
+ */
+const versesIn = (rows: {
+  length: number;
+  seek: (n: number) => { first: number; last: number };
+}): number => {
+  let verses = 0;
+  for (let n = 0; n < rows.length; n += 1) {
+    const { first, last } = rows.seek(n);
+    verses += last >= first && first > 0 ? last - first + 1 : 1;
+  }
+  return verses;
+};
+
 const summaryOf = (bookId: BookId, entry: Entry): BookSummary => {
   const analysis = entry.analysis;
-  if (analysis === undefined || entry.stamp === undefined)
+  const stamp = entry.stamp;
+  if (stamp === undefined)
     return {
       bookId,
       path: entry.path,
@@ -240,21 +280,30 @@ const summaryOf = (bookId: BookId, entry: Entry): BookSummary => {
       verses: 0,
       diagnostics: { errors: 0, warnings: 0 },
     };
+  // Registered but not parsed yet: the shape is already known and the counts
+  // are not. Reporting the shape beats reporting zero — a sidebar that says
+  // "Psalms, 0 chapters" for the first half-second is wrong in a way a reader
+  // notices, and a badge that arrives late is the contract findings already
+  // have.
+  if (analysis === undefined) {
+    const toc = entry.toc;
+    return {
+      bookId,
+      path: entry.path,
+      stamp,
+      chapters: toc?.chapterCount ?? 0,
+      verses: toc === undefined ? 0 : versesIn(toc.verseRows),
+      diagnostics: { errors: 0, warnings: 0 },
+    };
+  }
   const { toc } = analysis.dish;
-  // A bridged anchor (`\v 5-7`) names three verses from one row, so the count
-  // is over verse NUMBERS, not over rows. `first === 0` is the engine's mark
-  // for a missing or malformed designator; it still occupies one anchor.
-  let verses = 0;
-  toc.forEachVerse((_chapter, first, last) => {
-    verses += last >= first && first > 0 ? last - first + 1 : 1;
-  });
   return {
     bookId,
     path: entry.path,
-    stamp: entry.stamp,
+    stamp,
     chapters: toc.chapterRows.length,
-    verses,
-    diagnostics: countsOf(bookId, analysis, entry.stamp),
+    verses: versesIn(toc.verseRows),
+    diagnostics: countsOf(bookId, analysis, stamp),
   };
 };
 
@@ -324,6 +373,30 @@ const make = (
      * path can name. The port still owns `publish`, `find`, `remove` and
      * `updateReference` — the calls a Worker could genuinely take.
      */
+    /**
+     * Register one book and take its TOC. NO PARSE.
+     *
+     * This is what opening a project does now, per book, and it is the whole
+     * reason an open is fast: `update` lexes and builds the retained CST, the
+     * mask and the UTF-16 table inside the engine, and none of that crosses
+     * the wall. What crosses is the TOC — chapter and verse rows off the `Toc`
+     * the registration just built, nothing derived, no wire plated.
+     *
+     * The CST a reader eventually needs is plated later, by the warmer.
+     */
+    const register = (bookId: BookId, book: Book, entry: Entry): void => {
+      const source = book.source();
+      try {
+        galley.update(bookId, source.text);
+        entry.toc = galley.toc(bookId);
+        entry.stamp = source.stamp;
+      } catch {
+        // A book the engine will not register has no TOC and no analysis; it
+        // reports an empty shape and the warmer will try it again.
+        observability?.note("corpus.update", "failed", "engine refused", { "book.id": bookId });
+      }
+    };
+
     const refresh = (
       bookId: BookId,
       book: Book,
@@ -493,15 +566,16 @@ const make = (
         for (const book of project.books) {
           const entry: Entry = {
             analysis: undefined,
+            toc: undefined,
             stamp: undefined,
             path: book.path,
             stale: true,
           };
           entries.set(book.id, entry);
-          // Serial, on this thread, one book at a time: a project-open cost,
-          // not an interaction cost. It is the remaining cold path, and with
-          // the id door each lap is one crossing rather than two.
-          refresh(book.id, book, entry);
+          // Register only. Sixty-six laps of `update` + `toc`, and not one
+          // parse: the sidebar wants a book's SHAPE, and a wire buffer full of
+          // syntax tree is not that. The parses follow on idle.
+          register(book.id, book, entry);
           subscribe(book);
         }
         done?.();
@@ -521,6 +595,44 @@ const make = (
           Effect.gen(function* () {
             yield* publishCorpus;
             invalidateCaches();
+          }),
+        );
+
+        // Then warm the CSTs, one book per turn of the event loop.
+        //
+        // Opening a project no longer parses anything, which is right — but
+        // "only a seated book has a CST" is too strong a rule to live by. The
+        // moment a reader opens Findings or Find they are looking at TEXT:
+        // excerpt tiling reads `dish.toc` and `dish.tokens`, and a fix preview
+        // reads the tree. Making them wait per book, on the click, is the
+        // wrong place to spend it.
+        //
+        // So every book gets parsed, just not before the project is usable.
+        // Each lap is one warm `parse(id)` — the chunk cache is hot from the
+        // registration above — and `Effect.sleep(0)` between them hands the
+        // thread back, so a keystroke or a click always wins the race against
+        // the warmer.
+        //
+        // Scoped, like the publication: closing the project stops it mid-walk.
+        yield* Effect.forkScoped(
+          Effect.gen(function* () {
+            const warming = observability?.operation("analysis.warm", {
+              "analysis.books": entries.size,
+            });
+            let warmed = 0;
+            for (const book of project.books) {
+              yield* Effect.sleep(Duration.zero);
+              // The project may have gone, or a keystroke may have refreshed
+              // this book already while we waited our turn.
+              if (attached !== project) break;
+              const entry = entries.get(book.id);
+              if (entry === undefined || entry.analysis !== undefined) continue;
+              if (refresh(book.id, book, entry, warming ?? observability) !== undefined) {
+                warmed += 1;
+                invalidateCaches();
+              }
+            }
+            warming?.end("ready", { "analysis.warmed": warmed });
           }),
         );
 
@@ -624,6 +736,7 @@ const make = (
           return entry === undefined
             ? summaryOf(book.id, {
                 analysis: undefined,
+                toc: undefined,
                 stamp: undefined,
                 path: book.path,
                 stale: true,
