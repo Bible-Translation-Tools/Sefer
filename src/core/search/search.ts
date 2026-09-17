@@ -33,7 +33,15 @@
 
 import { Data, Effect, Result } from "effect";
 
-import { Refusal, UNTRUSTED, type Book, type BookId, type Receipt, type Ref } from "../book/book";
+import {
+  identifyBook,
+  Refusal,
+  UNTRUSTED,
+  type Book,
+  type BookId,
+  type Receipt,
+  type Ref,
+} from "../book/book";
 import type { GalleyService } from "../galley/galley";
 import type { EngineHit } from "../galley/galley";
 import type { Change, SourceStamp } from "../source/source";
@@ -489,6 +497,26 @@ export interface ReferenceHit {
   readonly projected: { readonly from: number; readonly to: number };
   /** Display text around the match. Ellipsed; never parsed back to offsets. */
   readonly preview: string;
+  /**
+   * Which verse the hit landed in, when the reference's own text was available
+   * to say so — `findInReferences` takes a `textOf` for exactly this.
+   *
+   * It is what lets Find show reference results as the same excerpt cards every
+   * other screen uses: the verse is the join, so the project's own verse can be
+   * put beside the reference's. Absent when nothing retained the text, and a
+   * caller must then fall back to the preview.
+   */
+  readonly ref?: Ref;
+  /**
+   * The match in the REFERENCE's canonical text, present with `ref`.
+   *
+   * The FIRST source piece, like `Hit.from`/`to` and for the same reason: a hit
+   * that crossed markup has pieces, and their bounds would swallow the markup
+   * between them. Read-only on this side, so it is somewhere to highlight and
+   * never somewhere to write.
+   */
+  readonly from?: number;
+  readonly to?: number;
 }
 
 /**
@@ -507,6 +535,16 @@ export const findInReferences = (
   galley: GalleyService,
   query: Query,
   options?: Options,
+  /**
+   * One registered reference's canonical text — `ProjectAnalysis.referenceText`
+   * in the application, absent in a caller that has none.
+   *
+   * Given it, every hit comes back with the verse it landed in and a range in
+   * that text, which is what lets a screen show reference results as ordinary
+   * excerpt cards paired with the project's own verse. Without it the hits are
+   * previews and nothing more, which is what this returned before.
+   */
+  textOf?: (id: string) => string | undefined,
 ): Effect.Effect<readonly ReferenceHit[], SearchError> => {
   if (query.text === "") return Effect.succeed([]);
   if (query.regex === true)
@@ -538,13 +576,38 @@ export const findInReferences = (
           description: `${error.reason}: ${error.description}`,
         }),
     ),
-    Effect.map((found): readonly ReferenceHit[] =>
-      found.map((hit) => ({
-        source: hit.bookId ?? "",
-        projected: hit.projected,
-        preview: hit.preview,
-      })),
-    ),
+    Effect.map((found): readonly ReferenceHit[] => {
+      // One ref table per reference book that matched, built at most once and
+      // shared by its hits — the same trade `find` and `findProjected` make.
+      const tables = new Map<string, { table: RefTable; bookId: BookId } | undefined>();
+      const tableFor = (id: string): { table: RefTable; bookId: BookId } | undefined => {
+        if (tables.has(id)) return tables.get(id);
+        const text = textOf?.(id);
+        const built =
+          text === undefined
+            ? undefined
+            : { table: buildRefTable(text), bookId: identifyBook(text, id) };
+        tables.set(id, built);
+        return built;
+      };
+
+      return found.map((hit): ReferenceHit => {
+        const id = hit.bookId ?? "";
+        const held = tableFor(id);
+        const first = hit.source[0];
+        if (held === undefined || first === undefined) {
+          return { source: id, projected: hit.projected, preview: hit.preview };
+        }
+        return {
+          source: id,
+          projected: hit.projected,
+          preview: hit.preview,
+          ref: refFrom(held.table, held.bookId, first.from),
+          from: first.from,
+          to: first.to,
+        };
+      });
+    }),
   );
 };
 

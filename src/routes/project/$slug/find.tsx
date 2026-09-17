@@ -1,5 +1,6 @@
+import type { JSX } from "@solidjs/web";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/solid-router";
-import { Effect, Result } from "effect";
+import { Effect, Option, Result } from "effect";
 import CaseSensitiveIcon from "lucide-solid/icons/case-sensitive";
 import ChevronDownIcon from "lucide-solid/icons/chevron-down";
 import ChevronUpIcon from "lucide-solid/icons/chevron-up";
@@ -19,14 +20,12 @@ import {
   Input,
   PanelHeader,
   SegmentedControl,
-  VirtualList,
-  type VirtualRow,
-  type VirtualSection,
 } from "../../../app/ui/primitives";
 import { ShellGate } from "../../../app/ui/ShellGate";
 import * as Workflows from "../../../app/workflows/references";
 import type { BookId } from "../../../core/book/book";
-import { Galley } from "../../../core/galley";
+import { refOccurrences, type Excerpt, type Occurrence } from "../../../core/excerpts/excerpts";
+import { describesExactly, Galley } from "../../../core/galley";
 import * as Search from "../../../core/search/search";
 
 /**
@@ -72,10 +71,11 @@ import * as Search from "../../../core/search/search";
  * the Library's `source` and `reference` bindings, registered with their text
  * so the engine can search them (`src/app/workflows/references.ts`).
  *
- * A reference hit is NOT an excerpt and is not offered as one: there is no
- * Book behind it, nothing to seat, and nothing to edit. It renders as a
- * reading — the resource it came from and the text around the match — because
- * that is honestly all it is.
+ * A reference search still shows YOUR text. The match is found in somebody
+ * else's book and the verse is the join: the card is this project's verse at
+ * that reference, editable as always, with the reference's own reading above it
+ * — the pair STET renders for a source verse. The reference side is never
+ * editable, because there is no Book behind it and nothing to write to.
  */
 type Scope = "book" | "project" | "reference";
 
@@ -87,15 +87,6 @@ type Scope = "book" | "project" | "reference";
  * `58-PHM.usfm` — and the full path is on the element for anyone debugging.
  */
 const fileName = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
-
-/**
- * The height a reference row is assumed to have before it has been measured.
- *
- * A one-line path and a preview that usually wraps to two lines, plus the
- * card's padding. Wrong is cheap — the virtualizer measures the row the moment
- * it is on screen — but wrong by a lot makes the scrollbar jump as it corrects.
- */
-const REFERENCE_ROW = 86;
 
 interface FindSearch {
   readonly q?: string;
@@ -139,6 +130,59 @@ function Find() {
   const [box, setBox] = createSignal<HTMLInputElement | undefined>(undefined, { name: "box" });
 
   /**
+   * A parse of one book's text, memoized — the same door `/terms` uses.
+   *
+   * `refOccurrences` needs the verse table, and the verse table comes from an
+   * analysis. The project's held analysis answers whenever it still describes
+   * the text; otherwise this parses, and the memo keeps a re-search over
+   * unchanged text from re-parsing the corpus.
+   */
+  const analyze = shell.services.galley.memoize();
+
+  /**
+   * The reference scope's hits, resolved against THIS project's books.
+   *
+   * A reference hit names a verse in somebody else's book. What the reader
+   * wants to see is their own verse — that is the whole point of searching a
+   * source — so the verse is the join: `refOccurrences` finds where each one
+   * sits in this project's text, and the result is an ordinary occurrence the
+   * multibuffer already knows how to render and edit.
+   *
+   * A reference verse this project does not have (a book it is not translating
+   * yet, a verse the versification puts elsewhere) simply yields nothing here.
+   * That is a real gap and the count above the list still reports the reference
+   * hits, so "412 results" over 200 cards is visible rather than silent.
+   */
+  const referenceMatches = createMemo(
+    (): readonly Occurrence[] => {
+      const project = shell.project();
+      const wanted = referenceHits();
+      if (project === undefined || wanted.length === 0) return [];
+      const refs = wanted.flatMap((hit) => (hit.ref === undefined ? [] : [hit.ref]));
+      if (refs.length === 0) return [];
+
+      const books = new Set(refs.map((ref) => ref.book));
+      const out: Occurrence[] = [];
+      for (const book of project.books) {
+        if (!books.has(book.id)) continue;
+        // Depend on the stamp of the book whose text is read, so this re-runs
+        // on an edit to a book it USES and not on every edit anywhere — the
+        // reasoning `/terms` spells out at the same call.
+        shell.stampOf(book.id);
+        const source = book.source();
+        const held = Option.getOrUndefined(shell.services.projectAnalysis.analysis(book.id));
+        const analysis =
+          held !== undefined && describesExactly(held.analysis, source.text)
+            ? held.analysis
+            : analyze(source.text);
+        out.push(...refOccurrences({ bookId: book.id, text: source.text, analysis }, refs));
+      }
+      return out;
+    },
+    { name: "referenceMatches" },
+  );
+
+  /**
    * The search box takes the caret when Find opens.
    *
    * Arriving at Find is asking to search; a screen that makes you click its one
@@ -160,37 +204,6 @@ function Find() {
       input.focus();
       input.select();
     },
-  );
-
-  /**
-   * The reference hits as one section per reference book, for the virtualizer.
-   *
-   * Grouped rather than one flat list because `VirtualList` is sectioned, and
-   * the grouping is the one a reader wants anyway: which book, then where in
-   * it. The hits arrive in book order already, so this is a single pass.
-   *
-   * The key is the source path and the hit's projected offset, which is unique
-   * within a book and stable across a re-search of the same text — a row that
-   * survives keeps its measured height instead of being re-measured.
-   */
-  const referenceSections = createMemo(
-    (): readonly VirtualSection<Search.ReferenceHit>[] => {
-      const sections: { key: string; rows: VirtualRow<Search.ReferenceHit>[] }[] = [];
-      let open: { key: string; rows: VirtualRow<Search.ReferenceHit>[] } | undefined;
-      for (const hit of referenceHits()) {
-        if (open === undefined || open.key !== hit.source) {
-          open = { key: hit.source, rows: [] };
-          sections.push(open);
-        }
-        open.rows.push({
-          key: `${hit.source}:${hit.projected.from}`,
-          item: hit,
-          estimate: REFERENCE_ROW,
-        });
-      }
-      return sections;
-    },
-    { name: "referenceSections" },
   );
 
   /**
@@ -288,7 +301,11 @@ function Find() {
     if (want === "reference") {
       const found = await shell.services.run(
         Effect.flatMap(Galley, (galley) =>
-          Effect.result(Search.findInReferences(galley, staticQuery, options)),
+          Effect.result(
+            Search.findInReferences(galley, staticQuery, options, (id) =>
+              shell.services.projectAnalysis.referenceText(id),
+            ),
+          ),
         ),
       );
       setHits([]);
@@ -360,18 +377,93 @@ function Find() {
    * feed does the waiting — a book's corpus registration is a scheduler pass
    * behind its text — and calls this when the project has republished.
    */
+  /**
+   * What the multibuffer is fed, whichever scope answered.
+   *
+   * The reference scope searches somebody else's book and shows YOURS: its
+   * matches arrive as verses, `referenceMatches` resolves those verses against
+   * this project's own text, and from there down the screen is the same one —
+   * same cards, same grouping, same editing. The reference's own reading rides
+   * along as the card's pair, which is what STET does with a source verse.
+   */
+  const feedHits = createMemo(
+    (): readonly Occurrence[] => (scope() === "reference" ? referenceMatches() : hits()),
+    { name: "feedHits" },
+  );
+
   const feed = createExcerptFeed({
-    hits,
+    hits: feedHits,
     name: "find",
     onEdited: () => {
       void run();
     },
   });
 
+  /**
+   * The reference's own reading for one excerpt, by verse.
+   *
+   * INTERIM, and the honest limit of this screen today: the pair shows the
+   * engine's preview — the projected text around the match, ellipsed — and not
+   * the reference's whole verse. The whole verse needs the reference's own
+   * excerpts built from its text, which is a second feed; the preview is what
+   * the search already returned and it reads as the verse it came from.
+   *
+   * Keyed by `BOOK chapter:verse` rather than by sid because the two sides need
+   * not agree on bridges: a reference may write `\v 4` where this project has
+   * `\v 4-5`, and the excerpt would then be `PHM 1:4-5` against a hit on
+   * `PHM 1:4`. `pairFor` walks the excerpt's own range instead of matching the
+   * string.
+   */
+  const referenceReadings = createMemo(
+    (): ReadonlyMap<string, Search.ReferenceHit> => {
+      const out = new Map<string, Search.ReferenceHit>();
+      for (const hit of referenceHits()) {
+        if (hit.ref?.verse === undefined) continue;
+        const key = `${hit.ref.book} ${hit.ref.chapter}:${hit.ref.verse}`;
+        // First hit in a verse wins: the card shows one reading, and a verse
+        // matched twice is still one verse.
+        if (!out.has(key)) out.set(key, hit);
+      }
+      return out;
+    },
+    { name: "referenceReadings" },
+  );
+
+  /**
+   * The reference's reading, above this project's verse.
+   *
+   * Read-only and visibly so: no Edit, no staleness badge, no open-in-editor.
+   * There is no Book behind it and nothing here could write to it.
+   */
+  const renderReference = (excerpt: Excerpt): JSX.Element => {
+    const held = pairFor(excerpt);
+    if (held === undefined) return null;
+    return (
+      <div class="mb-2 border-s-2 border-surface-border ps-3" data-reference-hit={held.source}>
+        <p class="truncate text-smallest text-on-surface-tertiary">{fileName(held.source)}</p>
+        <p class="text-small break-words text-on-surface-secondary">{held.preview}</p>
+      </div>
+    );
+  };
+
+  const pairFor = (excerpt: Excerpt): Search.ReferenceHit | undefined => {
+    const readings = referenceReadings();
+    const match = /^(\S+) (\d+):(\d+)(?:-(\d+))?$/.exec(excerpt.sid);
+    if (match === null) return undefined;
+    // SAFETY: groups 1..3 are required by the pattern that just matched.
+    const [book, chapter, first, last] = [match[1]!, match[2]!, Number(match[3]!), match[4]];
+    const end = last === undefined ? first : Number(last);
+    for (let verse = first; verse <= end; verse += 1) {
+      const held = readings.get(`${book} ${chapter}:${verse}`);
+      if (held !== undefined) return held;
+    }
+    return undefined;
+  };
+
   /** The excerpt the match cursor sits in, as a sid. */
   const cursorSid = createMemo(
     () => {
-      const hit = hits()[cursor()];
+      const hit = feedHits()[cursor()];
       if (hit === undefined) return undefined;
       for (const entry of feed.groups())
         for (const excerpt of entry.excerpts)
@@ -393,10 +485,10 @@ function Find() {
   const mode = (): "regular" | "usfm" => (shell.mode() === "usfm" ? "usfm" : "regular");
 
   /** The match the cursor is on, as its source offset — the card's `active`. */
-  const cursorAt = (): number | undefined => hits()[cursor()]?.from;
+  const cursorAt = (): number | undefined => feedHits()[cursor()]?.from;
 
   const step = (delta: 1 | -1): void => {
-    const total = hits().length;
+    const total = feedHits().length;
     if (total === 0) return;
     setCursor((held) => (held + delta + total) % total);
   };
@@ -477,28 +569,36 @@ function Find() {
             </Button>
 
             <div class="ms-auto flex items-center gap-1">
+              {/* The gap is stated, never swallowed. A reference search counts
+                  hits in SOMEBODY ELSE'S book; the cards count verses this
+                  project has. A reference book this project has not translated
+                  yet makes those two numbers differ, and saying only the second
+                  would quietly lose the difference. */}
+              <Show when={scope() === "reference" && referenceHits().length !== feedHits().length}>
+                <span class="text-smallest tabular-nums text-on-surface-tertiary">
+                  {t("{count} in the reference", { count: referenceHits().length })}
+                </span>
+              </Show>
               <span
                 class="text-small tabular-nums text-on-surface-tertiary"
-                data-count={scope() === "reference" ? referenceHits().length : hits().length}
+                data-count={feedHits().length}
               >
-                {scope() === "reference"
-                  ? t("{count} result(s)", { count: referenceHits().length })
-                  : hits().length === 0
-                    ? t("0 results")
-                    : t("{at}/{total}", { at: cursor() + 1, total: hits().length })}
+                {feedHits().length === 0
+                  ? t("0 results")
+                  : t("{at}/{total}", { at: cursor() + 1, total: feedHits().length })}
               </span>
               <IconButton
                 size="sm"
                 label={t("Previous match")}
                 icon={<ChevronUpIcon size={15} />}
-                disabled={hits().length === 0}
+                disabled={feedHits().length === 0}
                 onClick={() => step(-1)}
               />
               <IconButton
                 size="sm"
                 label={t("Next match")}
                 icon={<ChevronDownIcon size={15} />}
-                disabled={hits().length === 0}
+                disabled={feedHits().length === 0}
                 onClick={() => step(1)}
               />
             </div>
@@ -511,81 +611,42 @@ function Find() {
           </p>
         </Show>
 
-        {/* The reference scope's own results: a reading, not a multibuffer.
-            No Edit, no Open in editor, no staleness badge — none of those mean
-            anything for a book this project does not own.
-
-            WINDOWED, like the multibuffer beside it. A search with no limit
-            can return tens of thousands of hits across a reference Bible, and
-            a `<For>` over that builds every card before the first one paints.
-            The path moved into a sticky section header on the way: it was on
-            every card when there were at most 500 of them, and repeating it
-            per row is noise once the rows are grouped by the book anyway. */}
-        <Show when={scope() === "reference"}>
-          <Show
-            when={referenceHits().length > 0}
-            fallback={
-              <div class="min-h-0 flex-1 overflow-auto" data-find-references>
-                <EmptyState
-                  icon={<SearchIcon size={22} />}
-                  title={text() === "" ? t("Nothing searched yet") : t("No matches")}
-                  description={t("Searching {count} reference book(s), read-only.", {
-                    count: bound().ids.length,
-                  })}
-                />
-              </div>
-            }
-          >
-            <VirtualList<Search.ReferenceHit>
-              class="min-h-0 flex-1"
-              sections={referenceSections()}
-              header={(section, ref) => (
-                <div
-                  ref={ref}
-                  class="bg-surface-primary py-1 text-smallest text-on-surface-tertiary"
-                >
-                  {fileName(section().key)}
-                  <span class="ms-2 tabular-nums">
-                    {t("{count} result(s)", { count: section().rows.length })}
-                  </span>
-                </div>
-              )}
-              row={(hit) => (
-                <div class="pb-2" data-reference-hit={hit().source}>
-                  <Card class="flex flex-col gap-1">
-                    <p class="text-small break-words text-on-surface-primary">{hit().preview}</p>
-                  </Card>
-                </div>
-              )}
+        {/* ONE list, both scopes. The reference scope used to render a card
+            list of its own beside this one — a preview per hit, no verse, no
+            editing, nothing the rest of the app looks like. It now feeds the
+            same multibuffer, with the reference's reading as each card's pair,
+            which is the shape STET uses for a source verse. The editable side
+            is always this project's own text. */}
+        <ExcerptList
+          groups={feed.groups()}
+          outline={feed.outline()}
+          onOpen={feed.openInEditor}
+          seat={feed.seat}
+          analyze={feed.analyze}
+          onEdited={feed.edited}
+          onExpand={feed.expand}
+          focus={cursorSid()}
+          activeHit={cursorAt()}
+          mode={mode()}
+          renderPair={scope() === "reference" ? renderReference : undefined}
+          empty={
+            <EmptyState
+              icon={<SearchIcon size={22} />}
+              title={
+                feedHits().length === 0 && text() !== ""
+                  ? t("No matches")
+                  : t("Nothing searched yet")
+              }
+              description={
+                scope() === "reference"
+                  ? t("Searching {count} reference book(s); your own verse is the editable one.", {
+                      count: bound().ids.length,
+                    })
+                  : t("Results are grouped by verse, one card each, read-only until you edit.")
+              }
             />
-          </Show>
-        </Show>
-
-        <Show when={scope() !== "reference"}>
-          <ExcerptList
-            groups={feed.groups()}
-            outline={feed.outline()}
-            onOpen={feed.openInEditor}
-            seat={feed.seat}
-            analyze={feed.analyze}
-            onEdited={feed.edited}
-            onExpand={feed.expand}
-            focus={cursorSid()}
-            activeHit={cursorAt()}
-            mode={mode()}
-            empty={
-              <EmptyState
-                icon={<SearchIcon size={22} />}
-                title={
-                  hits().length === 0 && text() !== "" ? t("No matches") : t("Nothing searched yet")
-                }
-                description={t(
-                  "Results are grouped by verse, one card each, read-only until you edit.",
-                )}
-              />
-            }
-          />
-        </Show>
+          }
+        />
       </Show>
     </main>
   );

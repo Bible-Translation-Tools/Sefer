@@ -160,6 +160,16 @@ export interface ProjectAnalysisService {
   readonly references: () => readonly string[];
 
   /**
+   * One registered reference's canonical text, or `undefined` for an id this
+   * never registered.
+   *
+   * The engine holds its own copy and will not give it back as addressable
+   * source — `verseText(id)` answers the PROJECTION — so a caller that has to
+   * turn a reference hit into a chapter and verse reads it here.
+   */
+  readonly referenceText: (id: string) => string | undefined;
+
+  /**
    * The project census, from the analyses currently held. Synchronous: every
    * input is already in memory, and a census that could suspend would be a
    * census the shell has to await on every render.
@@ -286,6 +296,21 @@ const make = (
     const pending = new Set<BookId>();
     /** Bound source/reference books registered with their text, in order. */
     let referenceIds: readonly string[] = [];
+
+    /**
+     * The canonical text of every registered reference, by id.
+     *
+     * Held because the ENGINE's copy cannot be read back as text a consumer can
+     * address: `verseText(id)` answers the projection, and a projection offset
+     * is not a source offset until something carries the mask across (the open
+     * `maskOf` ask). Find's reference scope needs the source, to turn a hit
+     * into a chapter and verse and to show the verse it landed in.
+     *
+     * The cost is one more Bible in memory per bound reference, and the text
+     * was already read off disk to register it — this keeps the string rather
+     * than reading it twice.
+     */
+    const referenceTexts = new Map<string, string>();
     let attached: Project | undefined;
     let snapshot: FindingsSnapshot | undefined;
     let findingsCache: readonly Finding[] | undefined;
@@ -667,11 +692,16 @@ const make = (
     ): Effect.Effect<readonly string[]> =>
       Effect.sync(() => {
         const wanted = new Set(references.map((reference) => reference.id));
-        for (const id of referenceIds) if (!wanted.has(id)) forget(id);
+        for (const id of referenceIds)
+          if (!wanted.has(id)) {
+            forget(id);
+            referenceTexts.delete(id);
+          }
         const registered: string[] = [];
         for (const reference of references) {
           try {
             galley.updateReference(reference.id, reference.text, true);
+            referenceTexts.set(reference.id, reference.text);
             registered.push(reference.id);
           } catch (cause) {
             // One unreadable reference must not cost the others their scope.
@@ -687,6 +717,7 @@ const make = (
       attach,
       attachReferences,
       references: () => referenceIds,
+      referenceText: (id) => referenceTexts.get(id),
       supply: (bookId, analysis, cause) => {
         supplied.set(bookId, analysis);
         // The most recent gesture wins: a pass serving three keystrokes names
