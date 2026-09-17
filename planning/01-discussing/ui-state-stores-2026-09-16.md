@@ -244,6 +244,29 @@ Book itself). The likely answer is that these readers take the stamp and
 re-read the Book, exactly as `FindingsPanel.isStale` now does — but it is a
 decision, not a mechanical port, and `structure` is what will force it.
 
+## What opening /findings actually cost
+
+Traced on the production build, against the real `en_ulb` imported into a
+dedicated CDP profile (`documentation/agents/verification.md`):
+
+|                      | before | after |
+| -------------------- | ------ | ----- |
+| longest blocking task | 69ms   | 35ms  |
+| tasks over 50ms       | 1      | 0     |
+| total window          | 110ms  | 101ms |
+
+The total is the same work and was never going to move: the 69ms task had no
+hot spot, just a long tail — the feed model at 13.7%, then Solid, the
+virtualizer's first measure, `offsetWidth`, and a hundred smaller things. What
+moved is the shape. The panel's header, counts and filters paint in one task
+and the list follows in the next, so nothing crosses the 50ms line that makes
+a task "long".
+
+Two rounds of making the work CHEAPER — lazy projection, then one closure per
+excerpt instead of three — cut real CPU and moved the wall clock by nothing.
+That is the lesson worth keeping: on this screen the question was never how
+much work there is, it was how much of it happens before the browser paints.
+
 ## Still outstanding
 
 Loose ends found while doing this, none of them blocking:

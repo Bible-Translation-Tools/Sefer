@@ -40,7 +40,31 @@ Defer Lightpanda for editor verification. Its lack of real rendering makes it un
 4. Inspect the UI and relevant side effects. For save, compare actual persisted bytes and reopen behavior, not just the displayed success message.
 5. Preserve evidence in a per-run local artifact directory. Record the actual directory in the report. Clean up only processes and scratch resources owned by the run; retain the proof.
 
-The future launch helper should provide a unique profile/data directory, endpoint, readiness check, and run identity. Publish its exact commands here only after running them successfully. Until then, consult current scripts and report unavailable capabilities explicitly.
+`pnpm verify:launch` covers the fixture case: a dev server on a free port against `/dev/fixture`, artifacts in `.verify/<runId>/`. Any route also takes `?fixture=1`, which composes over the seeded in-memory `fixtures/small-nt` instead of OPFS — enough to prove a screen renders, not enough to measure one.
+
+## Driving a real project over CDP
+
+A dedicated browser profile, so a person's own project is never scratch state. These commands were run, in this order, and work.
+
+**1. A profile of our own, with the debugger on.** Chrome 136+ refuses remote debugging on the default data directory, which is also where a person's real OPFS lives — so a dedicated `--user-data-dir` is not a nicety, it is the only way in.
+
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+      --user-data-dir="$HOME/.sefer-cdp-profile" \
+      --remote-debugging-port=9222 --no-first-run --no-default-browser-check
+
+Connect with `chromium.connectOverCDP(...)`. **Check both `http://127.0.0.1:9222` and `http://[::1]:9222`** — which one answers has changed between launches, and the other refuses the connection outright.
+
+**2. Import a corpus through the product's own door.** The profile starts with an empty OPFS. Do not hand-write storage; use the importer, so what is measured is what a person would have:
+
+    delete globalThis.showDirectoryPicker   // in page.addInitScript
+
+The web host prefers the File System Access picker, which is a native dialog no automation can drive, and falls back to a `webkitdirectory` input when it is absent (`platform/web/intake.ts`). Removing the global takes the fallback, and Playwright's `filechooser` event then accepts a DIRECTORY path. `../scripture-kitchen/testData/exampleCorpora/en_ulb` imports as 66 books at `/sefer/projects/en_ulb`.
+
+**3. Measure the production build, not the dev server.** Vite dev serves every module as its own request — thirty of them for one route, in a four-level waterfall — which is real but is not what anyone ships. Serve the build on the SAME ORIGIN, or the profile's OPFS (and the project) will not be there:
+
+    pnpm build && pnpm serve --port 3000 --strictPort   # the dev server's own port
+
+**4. Prefer the longest task to the wall clock.** CDP `Tracing` with `devtools.timeline`, `performance.mark` either side of the interaction, then the top-level tasks in the window. A single 69ms task and two 34ms tasks take the same total time and do not feel the same; the second is the one that keeps typing responsive. A sampling profile (`Profiler.*`) correlated to a task's window by timestamp is what names the functions inside it — the timeline alone will only say `EventDispatch`.
 
 ## Evidence that humans and agents can inspect
 
