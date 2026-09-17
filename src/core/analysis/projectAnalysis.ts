@@ -493,6 +493,19 @@ const make = (
       options?: { readonly first?: BookId },
     ): Effect.Effect<void, never, Scope.Scope> =>
       Effect.gen(function* () {
+        // The observability IN CONTEXT NOW, not the one this module closed over
+        // when its Layer was built. They are different services, and the
+        // difference is the whole wide-event model: the shell opens
+        // `project.open` as the reader's gesture and provides it for this call,
+        // and a module that captured the root at construction narrates BESIDE
+        // that gesture instead of inside it. The ring showed exactly that — a
+        // 256ms `project.open` with no children, and `analysis.pass` sitting
+        // next to it as a root, as though nobody had asked for it.
+        //
+        // Only `attach` takes it this way. The scheduler's later passes happen
+        // long after any gesture has ended and correctly belong to the module's
+        // own service, which is what `observability` still is everywhere else.
+        const into = Option.getOrUndefined(yield* Effect.serviceOption(Observability));
         // One project at a time. Re-attaching drops the previous corpus rather
         // than judging two projects as one — the bound references included,
         // because a resource bound to the project we are leaving is not a
@@ -523,7 +536,10 @@ const make = (
           );
         };
 
-        const done = observability?.span("analysis.pass", project.root);
+        // One record, not two. A span and a note under the SAME name is the
+        // duplicate-emission shape `galley.parse` was already caught in: the
+        // count belongs on the span that measured the work.
+        const done = into?.span("analysis.pass", project.root);
         // The book the reader is about to look at goes FIRST.
         //
         // The loop is serial and the whole project is parsed before the open
@@ -551,11 +567,10 @@ const make = (
           // syntax trees on idle afterwards. Twenty milliseconds is not worth
           // three mechanisms and a reader watching badges populate, so the
           // whole project is warm from the first frame.
-          refresh(book.id, book, entry);
+          refresh(book.id, book, entry, into);
           subscribe(book);
         }
-        done?.();
-        observability?.note("analysis.pass", "ready", `${entries.size} books`);
+        done?.({ "analysis.books": entries.size });
 
         // The first publication is FORKED, not awaited. It is the expensive
         // half of a cold open — it maps every chapter of every book and judges
