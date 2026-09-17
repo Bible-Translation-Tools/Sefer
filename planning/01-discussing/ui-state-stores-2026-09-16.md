@@ -314,22 +314,43 @@ right, and what the marks say is stranger and more useful:
 after it — which is exactly what the rAF-then-timeout ordering was for. The
 second candidate is dead.
 
-**And the model is not this panel's.** `hits` and `model` run at +39.7 and
-+58.2ms, a full ten to thirty milliseconds BEFORE the component that owns them
-is constructed at +69.5ms. A memo cannot run before it exists, so the feed
-being computed in task 1 belongs to the PREVIOUS FindingsPanel instance —
-recomputed during the router's transition, on its way to being disposed. No
-gate inside the new panel can defer work that belongs to the old one.
+**The "previous instance" reading of that was WRONG, and checked.** Tagging each
+`FindingsPanel` with an instance number and marking setup, cleanup and its
+`shown` memo, across findings → inventory → findings:
 
-So the question is not "what reads the feed too early" but "why is a panel that
-is going away recomputing twenty thousand findings on its way out". Start at
-the router transition: whether the outgoing route is kept alive and
-re-evaluated while the incoming one loads, and what invalidates its memos at
-that moment.
+    +  191ms  setup:1
+    +  194ms  shown:1          (once, and only once)
+    + 3866ms  cleanup:1        (85ms after navigating away)
+    + 7342ms  setup:2
+    + 7345ms  shown:2          (once)
 
-The reframe worth keeping: **~69ms of the ~127ms happens before the findings
-panel exists at all.** Every change made to that panel so far has been aimed at
-the smaller half.
+Instances are created once, compute once, and are disposed when the route
+leaves. Nothing lingers and nothing recomputes on its way out, so route
+transitions are not leaking live components — which was the thing worth ruling
+out, because it would have applied to every screen.
+
+### What is left, and what has been eliminated
+
+The ordering that started this is still unexplained: in the first trace `hits`
+and `model` marked BEFORE a mark placed just after `createFindingsFeed(...)` in
+the same component body. Eliminated since:
+
+  * the body gate — it opens after a paint (+73ms paint, +74.6ms gate)
+  * an eager read in `FindingsPanel` — its only `createEffect` reads
+    `search().code`; `at`/`step` are keyboard handlers; `focused`/`focusedAt`
+    are props of `<ExcerptList>`, inside the gate
+  * an eager read in `createFindingsFeed` — every member of its return is a
+    lazy accessor over `model()`
+  * an eager read in `createExcerptFeed` — same, `groups`/`outline` only
+  * a lingering previous instance — the lifecycle above
+
+The likeliest remaining explanation is that the two marks belonged to the
+warm-up navigation's panel rather than the measured one, and that the first
+trace's window caught them. Worth re-running with instance ids on the feed's
+marks too before believing anything about it.
+
+What is NOT in doubt: the first task is ~40ms of feed model and `excerptsOf`,
+the second is ~57ms of Solid and the virtualizer, and the gate separates them.
 
 ## Still outstanding
 
