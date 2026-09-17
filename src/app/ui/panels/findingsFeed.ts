@@ -42,6 +42,7 @@
 
 import { createMemo, type Accessor } from "solid-js";
 
+import type { BookId } from "../../../core/book/book";
 import type {
   BookExcerpts,
   Excerpt,
@@ -53,10 +54,16 @@ import { t } from "../../i18n";
 import { createExcerptFeed, type ExcerptFeed, type MarkTone } from "../excerpts";
 import type { FindingsView } from "./findingsFilter";
 
-/** An occurrence that remembers which finding produced it. */
-interface FindingOccurrence extends Occurrence {
-  readonly finding: Finding;
-}
+/**
+ * A `Finding` IS an `Occurrence`.
+ *
+ * It already carries `bookId`, `from` and `to`, and `Occurrence`'s only other
+ * field is optional — so the feed can hand findings straight to the excerpts
+ * machinery and read them back off `Excerpt.hits`. There used to be a wrapper
+ * type and a `map` that built one object per finding to carry the finding it
+ * was built from, which on a 66-book project is twenty thousand objects to
+ * say something the finding already said.
+ */
 
 /** One card on the page: an excerpt, in a section, answering for findings. */
 export interface FindingsRow {
@@ -129,15 +136,30 @@ const rankOfKey = (key: string): number =>
 const isFront = (excerpt: Excerpt): boolean =>
   excerpt.ref.verse === undefined && excerpt.ref.chapter < 1;
 
-/** Which findings an excerpt was built from — the occurrences, read back. */
+/**
+ * One occurrence, if it is a finding.
+ *
+ * `severity` is on every `Finding` and on nothing else this application puts
+ * into an `Occurrence` — Find's hits carry `pieces`, never a severity — so the
+ * check is what makes the narrowing true rather than hoped for.
+ */
+const asFinding = (hit: Occurrence): Finding | undefined =>
+  // SAFETY: guarded by the `severity` check above, which no non-finding
+  // occurrence in this application satisfies. A hit from anywhere else is
+  // skipped rather than mistaken for a finding.
+  "severity" in hit ? (hit as unknown as Finding) : undefined;
+
+/**
+ * Which findings an excerpt was built from — the occurrences, read back.
+ *
+ * The occurrences ARE the findings, so this is a narrowing and not an unwrap.
+ * Checked rather than assumed, on a field only a `Finding` has: a hit from
+ * anywhere else is skipped rather than mistaken for one.
+ */
 export const findingsOf = (excerpt: Excerpt): readonly Finding[] => {
   const out: Finding[] = [];
   for (const hit of excerpt.hits) {
-    // SAFETY: every occurrence this page produces is a `FindingOccurrence`,
-    // and `core/excerpts` hands the very objects back on `Excerpt.hits`. The
-    // narrowing is checked rather than assumed — a hit from anywhere else
-    // simply has no `finding` and is skipped.
-    const held = "finding" in hit ? (hit as FindingOccurrence).finding : undefined;
+    const held = asFinding(hit);
     if (held !== undefined) out.push(held);
   }
   return out;
@@ -287,9 +309,14 @@ const bucketed = (
 const byBook = (groups: readonly BookExcerpts[], frontTitle: string): readonly Bucket[] => {
   const out: Bucket[] = [];
   for (const group of groups) {
+    // One pass, not two filters over the same array: the front matter and the
+    // rest are the two halves of a single partition.
+    const front: Excerpt[] = [];
+    const rest: Excerpt[] = [];
+    for (const excerpt of group.excerpts) (isFront(excerpt) ? front : rest).push(excerpt);
     const parts: readonly (readonly [boolean, readonly Excerpt[]])[] = [
-      [true, group.excerpts.filter((excerpt) => isFront(excerpt))],
-      [false, group.excerpts.filter((excerpt) => !isFront(excerpt))],
+      [true, front],
+      [false, rest],
     ];
     for (const [front, excerpts] of parts) {
       if (excerpts.length === 0) continue;
@@ -322,18 +349,9 @@ export const createFindingsFeed = (options: FindingsFeedOptions): FindingsFeed =
    * fall in, and a card that shows no highlight still shows the verse and says
    * why in its header.
    */
-  const hits = createMemo(
-    (): readonly Occurrence[] =>
-      options.findings().map(
-        (finding): FindingOccurrence => ({
-          bookId: finding.bookId,
-          from: finding.from,
-          to: finding.to,
-          finding,
-        }),
-      ),
-    { name: "findingOccurrences" },
-  );
+  const hits = createMemo((): readonly Occurrence[] => options.findings(), {
+    name: "findingOccurrences",
+  });
 
   const excerpts = createExcerptFeed({ hits, name: "findings" });
 
@@ -343,13 +361,20 @@ export const createFindingsFeed = (options: FindingsFeedOptions): FindingsFeed =
    * book is the only pair that identifies a finding's span across the project.
    */
   const tones = createMemo(
-    (): ReadonlyMap<string, Severity> => {
-      const out = new Map<string, Severity>();
+    (): ReadonlyMap<BookId, Map<number, Severity>> => {
+      // Keyed book-then-offset rather than by a joined string: the flat map
+      // built twenty thousand keys by concatenation to answer a question asked
+      // once per rendered mark.
+      const out = new Map<BookId, Map<number, Severity>>();
       for (const finding of options.findings()) {
-        const key = `${finding.bookId}${SEP}${finding.from}`;
-        const held = out.get(key);
+        let inBook = out.get(finding.bookId);
+        if (inBook === undefined) {
+          inBook = new Map<number, Severity>();
+          out.set(finding.bookId, inBook);
+        }
+        const held = inBook.get(finding.from);
         if (held === undefined || RANK[finding.severity] < RANK[held])
-          out.set(key, finding.severity);
+          inBook.set(finding.from, finding.severity);
       }
       return out;
     },
@@ -416,7 +441,7 @@ export const createFindingsFeed = (options: FindingsFeedOptions): FindingsFeed =
     row: (key) => model().byKey.get(key),
     head: (key) => model().heads.get(key),
     toneOf: (source, excerpt) =>
-      source === undefined ? undefined : tones().get(`${excerpt.bookId}${SEP}${source}`),
+      source === undefined ? undefined : tones().get(excerpt.bookId)?.get(source),
     excerpts,
   };
 };
