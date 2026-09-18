@@ -61,8 +61,10 @@ import {
 } from "@codemirror/state";
 import { Decoration, EditorView, type DecorationSet } from "@codemirror/view";
 
+import type { DocStructure } from "../core/docStructure";
 import { structureAt } from "../core/editorState";
 import { blockAt } from "../core/kernel";
+import { blockIsEmpty } from "./emptyBlocks";
 
 export interface PairedRange {
   readonly from: number;
@@ -124,9 +126,51 @@ const decorationsFor = (
 // Here: the block the caret is in, derived from this state alone.
 // ---------------------------------------------------------------------------
 
+/**
+ * The verse `pos` is in, as a range — the editor's own table, and it carries
+ * no end, so a verse reaches the next verse's marker.
+ *
+ * Coarser than the skeleton's `textFrom..textTo`, which stops before a heading
+ * that follows the verse. The difference does not show: what is drawn is a
+ * range on screen, and the reader is looking at where the words are, not at
+ * where a parser thinks they stop.
+ */
+const verseRange = (s: DocStructure, pos: number): PairedRange | undefined => {
+  const rows = s.verses;
+  let at = -1;
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (row === undefined || row.markerFrom > pos) break;
+    at = i;
+  }
+  const row = at < 0 ? undefined : rows[at];
+  if (row === undefined) return undefined;
+  const next = rows[at + 1];
+  return { from: row.contentFrom, to: next?.markerFrom ?? Number.MAX_SAFE_INTEGER };
+};
+
+/**
+ * What to mark, in order of what the reader is actually asking.
+ *
+ *  1. An EMPTY block, if that is where the caret is. This is the overlay case
+ *     and the reason the feature exists: the block has no words, so there is
+ *     no verse text to point at, and the empty block IS the answer.
+ *  2. The VERSE otherwise. A `\p` can run fifteen verses, and washing all of
+ *     them is a page of highlight for a question about one line (Will,
+ *     2026-09-18: "a full \p of like 15 verses is kinda a ton of busy
+ *     highlighting"). A verse is the unit two texts agree about.
+ *  3. The block, when there is no verse — front matter, a heading before
+ *     `\v 1`. Something true beats nothing.
+ */
 const hereIn = (state: EditorState): DecorationSet => {
   if (!pairingBlocks(state)) return Decoration.none;
-  const block = blockAt(structureAt(state), state.selection.main.head);
+  const head = state.selection.main.head;
+  const structure = structureAt(state);
+  const block = blockAt(structure, head);
+  if (block !== null && blockIsEmpty(state, block.contentFrom, block.to))
+    return decorationsFor(state.doc, { from: block.contentFrom, to: block.contentFrom });
+  const verse = verseRange(structure, head);
+  if (verse !== undefined) return decorationsFor(state.doc, verse);
   return block === null ? Decoration.none : decorationsFor(state.doc, block);
 };
 

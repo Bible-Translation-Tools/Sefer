@@ -65,10 +65,13 @@ import {
   blockAtOffset,
   blockExtents,
   equivalentExtent,
+  equivalentVerse,
+  verseAtOffset,
   type BlockExtent,
+  type Skeleton,
 } from "../../../core/galley";
 import type { Resource, Role } from "../../../core/resources/library";
-import { mountReference, type ReferenceMount } from "../../../editor";
+import { mountReference, type PairedRange, type ReferenceMount } from "../../../editor";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
@@ -211,18 +214,29 @@ export function ReferencePane(props: ReferencePaneProps) {
    */
   const paneId = `sefer.pane.${resourceId}\u0000${bookId}`;
 
-  const sourceBlocks = createMemo(
-    (): readonly BlockExtent[] | undefined => {
+  const sourceSkeleton = createMemo(
+    (): Skeleton | undefined => {
       const text = held();
       if (text.kind !== "text") return undefined;
       try {
         services.galley.updateReference(paneId, text.text, true);
-        return blockExtents(services.galley.skeleton(paneId), text.text.length);
+        return services.galley.skeleton(paneId);
       } catch {
         // A text the engine will not parse still renders — it is just a
         // reference with no pairing, which is a smaller loss than a blank pane.
         return undefined;
       }
+    },
+    { name: "referenceSkeleton" },
+  );
+
+  const sourceBlocks = createMemo(
+    (): readonly BlockExtent[] | undefined => {
+      const skeleton = sourceSkeleton();
+      const text = held();
+      return skeleton === undefined || text.kind !== "text"
+        ? undefined
+        : blockExtents(skeleton, text.text.length);
     },
     { name: "referenceBlocks" },
   );
@@ -239,18 +253,29 @@ export function ReferencePane(props: ReferencePaneProps) {
    * hold a second copy of it alive. ~0.4 ms per edit, which is the budget
    * `overlay.md` sets for exactly this.
    */
-  const targetBlocks = createMemo(
-    (): readonly BlockExtent[] | undefined => {
+  const targetSkeleton = createMemo(
+    (): { readonly skeleton: Skeleton; readonly length: number } | undefined => {
       const book = shell.focused();
       if (book === undefined || shell.stampOf(bookId) === undefined) return undefined;
       try {
         // The book's own text for the length, so the last block reaches the
-        // end of the document the caret is moving in rather than to a number
-        // read off something else.
-        return blockExtents(services.galley.skeleton(bookId), book.source().text.length);
+        // end of the document the caret is moving in rather than a number read
+        // off something else.
+        return {
+          skeleton: services.galley.skeleton(bookId),
+          length: book.source().text.length,
+        };
       } catch {
         return undefined;
       }
+    },
+    { name: "targetSkeleton" },
+  );
+
+  const targetBlocks = createMemo(
+    (): readonly BlockExtent[] | undefined => {
+      const held = targetSkeleton();
+      return held === undefined ? undefined : blockExtents(held.skeleton, held.length);
     },
     { name: "targetBlocks" },
   );
@@ -262,16 +287,46 @@ export function ReferencePane(props: ReferencePaneProps) {
    * the caret does — most keystrokes stay inside one block, and a dispatch per
    * arrow key would be a transaction per arrow key in every open pane.
    */
+  /**
+   * What to mark here, in the order the reader is asking.
+   *
+   *  1. The EMPTY BLOCK, when that is where the caret is. This is the overlay
+   *     case the feature was built for: the block holds no words, so there is
+   *     no verse text to point at, and the block IS the answer. Matched on
+   *     `(sid, where, ordinal)`, never on the marker — a `\q1` here against a
+   *     `\q2` there is the correspondence worth seeing.
+   *  2. The VERSE otherwise, matched on its sid alone. A `\p` can run fifteen
+   *     verses, and washing all of them is a page of highlight for a question
+   *     about one line.
+   *  3. The block, when the caret is in one but in no verse — a heading,
+   *     front matter.
+   */
   const paired = createMemo(
-    (): BlockExtent | undefined => {
+    (): PairedRange | undefined => {
       const at = shell.caret();
-      const target = targetBlocks();
-      const source = sourceBlocks();
+      const target = targetSkeleton();
+      const blocks = targetBlocks();
+      const source = sourceSkeleton();
+      const sourceRows = sourceBlocks();
       if (at === undefined || target === undefined || source === undefined) return undefined;
-      const here = blockAtOffset(target, at);
-      return here === undefined ? undefined : equivalentExtent(source, here);
+
+      const here = blocks === undefined ? undefined : blockAtOffset(blocks, at);
+      if (here?.empty === true && sourceRows !== undefined) {
+        const row = equivalentExtent(sourceRows, here);
+        return row === undefined ? undefined : { from: row.from, to: row.reaches };
+      }
+
+      const verse = verseAtOffset(target.skeleton, at);
+      if (verse !== undefined) {
+        const twin = equivalentVerse(source, verse.sid);
+        return twin === undefined ? undefined : { from: twin.textFrom, to: twin.textTo };
+      }
+
+      if (here === undefined || sourceRows === undefined) return undefined;
+      const row = equivalentExtent(sourceRows, here);
+      return row === undefined ? undefined : { from: row.from, to: row.reaches };
     },
-    { name: "pairedBlock" },
+    { name: "pairedRange" },
   );
 
   // `editor.pairBlocks`, live. Its own subscription rather than a prop from
@@ -298,27 +353,20 @@ export function ReferencePane(props: ReferencePaneProps) {
   /** Why there is or is not a mark — see the attribute on the root. */
   const pairState = (): string => {
     if (shell.caret() === undefined) return "no-caret";
-    const target = targetBlocks();
+    const target = targetSkeleton();
     if (target === undefined) return "no-target";
-    if (sourceBlocks() === undefined) return "no-source";
+    if (sourceSkeleton() === undefined) return "no-source";
     const at = shell.caret();
-    const here = at === undefined ? undefined : blockAtOffset(target, at);
-    if (here === undefined) return "no-block-here";
+    const verse = at === undefined ? undefined : verseAtOffset(target.skeleton, at);
     const row = paired();
-    return row === undefined
-      ? `unpaired:${here.sid}/${here.where}/${here.ordinal}/${here.marker}`
-      : `${row.sid}/${row.where}/${row.ordinal}`;
+    if (row === undefined) return verse === undefined ? "no-verse-here" : `unpaired:${verse.sid}`;
+    return verse === undefined ? "block" : verse.sid;
   };
 
   createEffect(
     () => ({ view: mounted(), row: paired() }),
     ({ view, row }) => {
-      // Reveal is off: this follows a caret, and a pane that scrolled on every
-      // block change would fight the chapter sync above it for the viewport.
-      // The chapter effect is what moves this pane; this only marks.
-      // The EXTENT, not the row: a row's own span is its marker, two
-      // characters the reading projection does not even draw.
-      view?.showPair(row === undefined ? null : { from: row.from, to: row.reaches });
+      view?.showPair(row ?? null);
     },
   );
 

@@ -406,6 +406,41 @@ export const equivalentExtent = (
       row.sid === address.sid && row.where === address.where && row.ordinal === address.ordinal,
   );
 
+/**
+ * The verse that holds `offset`, or `undefined`.
+ *
+ * A `SkeletonVerse` carries BOTH spans — `from..to` is its `\v` marker,
+ * `textFrom..textTo` its words — so unlike a block this needs no derivation.
+ * Measured on en_ulb Genesis: 1,533 verses, no two overlapping, and a verse's
+ * text runs THROUGH the block markers inside it (`GEN 49:1`'s text carries its
+ * own `\q1`), which is what makes the verse the right unit for a
+ * correspondence: it is the thing both texts agree exists.
+ *
+ * The match is on the marker and the text together — a caret on the `\v 3`
+ * itself is in verse 3 — and `undefined` for an offset in front matter, a
+ * heading, or a block between two verses.
+ */
+export const verseAtOffset = (skeleton: Skeleton, offset: number): SkeletonVerse | undefined => {
+  const rows = skeleton.verses;
+  let lo = 0;
+  let hi = rows.length - 1;
+  let found: SkeletonVerse | undefined;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const row = rows[mid];
+    if (row === undefined) break;
+    if (row.from <= offset) {
+      found = row;
+      lo = mid + 1;
+    } else hi = mid - 1;
+  }
+  return found !== undefined && offset < found.textTo ? found : undefined;
+};
+
+/** The verse of THIS skeleton with the same sid. The sid is the whole address. */
+export const equivalentVerse = (skeleton: Skeleton, sid: string): SkeletonVerse | undefined =>
+  skeleton.verses.find((row) => row.sid === sid);
+
 export const chaptersTouched = (report: OverlayReport): readonly number[] => {
   const seen = new Set<number>();
   const take = (sid: string): void => {

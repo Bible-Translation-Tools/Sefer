@@ -80,12 +80,16 @@ export interface ReferenceMount {
    */
   showChapter(chapter: number): boolean;
   /**
-   * Marks the block that answers the caret's block in the main editor, or
-   * clears the mark with `null`. `reveal` scrolls it into view — true when the
-   * reader moved deliberately, false while they are typing, because a pane
-   * that jumps on every keystroke is a pane nobody can read.
+   * Marks the range that answers where the caret is, or clears it with `null`,
+   * and brings it into view.
+   *
+   * `y: "nearest"` and not `"center"`, which is the whole difference between
+   * this being useful and being unusable: a pane that re-centres on every
+   * block change fights the reader for the viewport, and one that never
+   * scrolls marks a verse three screens away. Nearest moves only when the
+   * answer is off-screen, so reading down a chapter is still.
    */
-  showPair(range: PairedRange | null, reveal?: boolean): void;
+  showPair(range: PairedRange | null): void;
   /** Follows the reader's "show what the markup corresponds to" setting. */
   pairBlocks(on: boolean): void;
   destroy(): void;
@@ -165,15 +169,10 @@ export function mountReference(options: ReferenceOptions): ReferenceMount {
       return true;
     },
 
-    showPair: (range, reveal) => {
+    showPair: (range) => {
       showPaired(view, range);
-      if (range === null || reveal !== true) return;
-      // `y: "center"` and not `"start"`: the pair is being read IN ITS
-      // CONTEXT — the point is what sits around it — where a chapter jump is
-      // an arrival and wants the heading at the top.
-      view.dispatch({
-        effects: EditorView.scrollIntoView(range.from, { y: "center" }),
-      });
+      if (range === null) return;
+      view.dispatch({ effects: EditorView.scrollIntoView(range.from, { y: "nearest" }) });
     },
 
     pairBlocks: (on) => {

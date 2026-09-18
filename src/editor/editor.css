@@ -57,6 +57,13 @@
   --editor-note-hover: var(--surface-secondary);
   --editor-focus-bg: color-mix(in srgb, var(--brand-base) 10%, transparent);
   --editor-focus-bar: var(--brand-base);
+  /* The paired verse or block. Stronger than the arrival focus it started as,
+     and its own tokens rather than a reuse: this is read ACROSS two panes at
+     once, so it has to be findable at a glance in the one the reader is not
+     looking at. The rule carries it where a wash alone would not — a 16% tint
+     on paper is subtle by design, and the underline is what makes it certain. */
+  --editor-pair-bg: color-mix(in srgb, var(--brand-base) 15%, transparent);
+  --editor-pair-edge: color-mix(in srgb, var(--brand-base) 65%, transparent);
   --editor-error-bg: var(--surface-error);
   --editor-error-line: var(--on-surface-error);
   --editor-warn-bg: var(--surface-warning);
@@ -80,6 +87,10 @@
 }
 
 :root[data-theme="dark"] {
+  /* Dark needs MORE tint, not less: `--brand-base` is brand-70 here, so the
+     same percentage over a near-black ground reads as almost nothing. */
+  --editor-pair-bg: color-mix(in srgb, var(--brand-base) 30%, transparent);
+  --editor-pair-edge: var(--brand-base);
   --editor-link: #6cc0d6;
   --editor-link-x: #b393f5;
   --editor-nested-fg: #b393f5;
@@ -88,6 +99,8 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    --editor-pair-bg: color-mix(in srgb, var(--brand-base) 30%, transparent);
+    --editor-pair-edge: var(--brand-base);
     --editor-link: #6cc0d6;
     --editor-link-x: #b393f5;
     --editor-nested-fg: #b393f5;
@@ -448,12 +461,18 @@
    correspondence rather than a hit. The line form is for an EMPTY block, which
    is the ordinary case for a block an overlay inserted. */
 .usfm-paired {
-  background: var(--editor-focus-bg);
+  background: var(--editor-pair-bg);
+  /* `inset` and on the BOTTOM: an inline mark over three lines is three
+     fragments, and a ring around each of them reads as three boxes. An
+     underline per fragment reads as one continuous span. */
+  box-shadow: inset 0 -2px 0 var(--editor-pair-edge);
   border-radius: 2px;
 }
+/* The empty block an overlay inserted: nothing to underline, so the whole
+   line carries it and the start edge says where the words go. */
 .usfm-paired-line {
-  background: var(--editor-focus-bg);
-  box-shadow: inset 3px 0 0 var(--editor-focus-bar);
+  background: var(--editor-pair-bg);
+  box-shadow: inset 3px 0 0 var(--editor-pair-edge);
   border-radius: 3px;
 }
 
