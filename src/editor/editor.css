@@ -440,6 +440,23 @@
   transition: background 240ms ease-out;
 }
 
+/* The paired block: where the caret's block lives on the other side.
+   Unscoped by mode on purpose — "what is that \q2 in the source" is a question
+   a reader asks most often while looking AT the markup, so USFM mode is the
+   one place this must not disappear. A left rule plus a wash, not the
+   highlight token: the highlight means "a match is here", and a pair is a
+   correspondence rather than a hit. The line form is for an EMPTY block, which
+   is the ordinary case for a block an overlay inserted. */
+.usfm-paired {
+  background: var(--editor-focus-bg);
+  border-radius: 2px;
+}
+.usfm-paired-line {
+  background: var(--editor-focus-bg);
+  box-shadow: inset 3px 0 0 var(--editor-focus-bar);
+  border-radius: 3px;
+}
+
 .cm-mode-regular .usfm-word {
   border-bottom: 1px dotted var(--editor-word-line);
   cursor: help;

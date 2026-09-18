@@ -164,6 +164,41 @@ other => throw_str(…expected "verseText" or "structure")
 
 **Workaround check:** with item 8 landed, yes — intersecting two masks gets Sefer the same answer. This item is what makes a consumer able to ASK instead of compute, which is the rule's preference, but it is not a blocker.
 
+## 10b. A skeleton block's span is its marker, and nothing says so
+
+**Smallest item here, and a DOCUMENTATION ask by the rule above** — the
+workaround exists and is now verified, so this is not an API change.
+
+**The capability:** a value that carries a span says which span.
+
+**State.** `skeleton()` answers two row types with the same field names and
+different meanings. A VERSE carries `{from, to, textFrom, textTo}` — its `\v`
+marker, and its text. A BLOCK carries `{from, to}` and no second pair, and that
+span is the MARKER ONLY: `\p` is two characters. Nothing in `wasm.md` or
+`overlay.md` says which of the two a block's span is, and the field names are
+the ones that mean "the text" on the row above it.
+
+Sefer walked straight into it: `blockAtOffset` was written as a containment
+test against those spans, and on Genesis that is 491 two-character spans in a
+204,738-character document, so it answered "no block here" almost everywhere.
+Our own `SkeletonRow` doc said "an address, its span, and whether it holds
+words", which is the same ambiguity restated (fixed).
+
+**Measured before relying on the workaround**, because "the next block's marker"
+is only a safe extent if the rows behave: over `testData/exampleCorpora/en_ulb`,
+66 books, **31,720 block rows — every one 6 characters or fewer, none out of
+order, none overlapping**. So a block runs from its own marker to the next
+one's, and `core/galley/overlay.ts`'s `blockExtents` derives exactly that.
+
+**Change:** one sentence in `overlay.md` saying a block row's span is its
+marker. Optionally give blocks the `textFrom`/`textTo` verses already carry,
+which would make the two row types read the same way — but that is an API
+change for something a caller can compute, and by the rule above it does not
+qualify on its own.
+
+**Sefer side:** done. `blockExtents` / `blockAtOffset` / `equivalentExtent` in
+`core/galley/overlay.ts`, used by the block pairing in `ReferencePane`.
+
 ## 11. `classify` instead of `mask` — Will's counter-proposal, and what the corpus says
 
 Not an ask. Will, 2026-09-17: what if the primitive were `classify` rather than `mask` — every byte range carrying one or more TAGS (`[pad]`, `[markup, charMarker]`, …), one pass, and every view then a predicate over tags on the consumer's side, with the backwards map falling out for free? *"You diff the whole thing, and show/hide usfm for any u32..u32."*

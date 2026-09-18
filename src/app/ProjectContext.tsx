@@ -186,6 +186,33 @@ export interface Shell {
   readonly showReference: (reference: Reference) => void;
 
   /**
+   * Where the caret is in the open book, in document offsets — or `undefined`
+   * when no editor is mounted.
+   *
+   * The shell keeps this because the things that want it are not in the
+   * editor: the reference panes beside it, which highlight the block answering
+   * the caret's block, and the breadcrumb, which names the block the caret is
+   * in. `book.changes` could not serve them — it fires on DOCUMENT changes,
+   * and moving the caret changes no document.
+   *
+   * An offset and not a block: what a block IS depends on who is asking (the
+   * editor's `DocStructure`, the overlay's skeleton, Onion's CST all cut
+   * differently), and the shell should not pick one of those for everybody.
+   * The offset is the fact; the cut is the reader's.
+   */
+  readonly caret: Accessor<number | undefined>;
+
+  /**
+   * The editor reporting where the caret is. Only `BookEditor` calls it.
+   *
+   * Writes on every selection change, which is every arrow key — so consumers
+   * derive rather than react: a memo that maps the offset onto a block is
+   * recomputed per keypress, and the effects hanging off it fire only when the
+   * BLOCK changes, which is a good deal less often.
+   */
+  readonly noteCaret: (offset: number | undefined) => void;
+
+  /**
    * The editor reporting which chapter is at the TOP of its viewport, so that
    * the next open can land back on it.
    *
@@ -935,6 +962,18 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
    * other location change uses, and a scroll is already coalesced into one
    * animation frame before it gets here.
    */
+  const [caret, setCaret] = createSignal<number | undefined>(undefined, { name: "caret" });
+
+  /**
+   * Written by `BookEditor`'s selection listener, read by anything that wants
+   * to know where the reader is standing. A plain signal with no debounce:
+   * the write is one number on a gesture the reader made, and the consumers
+   * that would be expensive memoize themselves (see `caret`'s note).
+   */
+  const noteCaret = (offset: number | undefined): void => {
+    setCaret(offset);
+  };
+
   const noteChapterAtTop = (ordinal: number): void => {
     // Every read here is a one-time snapshot, for the same reason as in
     // `remember`: this is the editor REPORTING where the viewport got to, so
@@ -1131,6 +1170,8 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     reveal,
     showChapter,
     showReference,
+    caret,
+    noteCaret,
     noteChapterAtTop,
     lastLocation,
     landingTarget,

@@ -193,6 +193,13 @@ export interface ShellKeys {
   readonly preferChapterView: SettingKey<boolean>;
   readonly annotateEmptyParagraphs: SettingKey<boolean>;
   /**
+   * Mark the block the caret is in, and the block that answers it in every
+   * reference beside it. Off by default: it paints on every block change, and
+   * a reader who is drafting rather than matching shape does not want the page
+   * moving under them.
+   */
+  readonly pairBlocks: SettingKey<boolean>;
+  /**
    * The findings panel's persistent filter. Edited on `/findings`, not on
    * `/settings` — see `FindingsFilterPreference`.
    */
@@ -287,6 +294,9 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
       Schema.Boolean,
       true,
     ),
+    // Off by default, for the reason on the interface: it is a comparison
+    // tool, and the comparison is not what most sessions are doing.
+    pairBlocks: settings.register("editor.pairBlocks", Schema.Boolean, false),
     findingsFilter: settings.register(
       "findings.filter",
       FindingsFilterPreference,
@@ -378,6 +388,14 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
       label: "Name paragraphs that have no text",
       description:
         "A paragraph or poetry marker with nothing after it is invisible. Turn this on to show its name where the words would go — it is never written to the file.",
+      kind: "boolean",
+      group: "editor",
+    },
+    {
+      key: keys.pairBlocks,
+      label: "Show what a block corresponds to",
+      description:
+        "Marks the block you are in, and the block at the same place in every reference open beside it — so you can see which paragraph or poetry line answers which.",
       kind: "boolean",
       group: "editor",
     },

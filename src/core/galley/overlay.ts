@@ -63,7 +63,21 @@ export interface BlockAddress {
   readonly marker: string;
 }
 
-/** One row of a skeleton: an address, its span, and whether it holds words. */
+/**
+ * One row of a skeleton: an address, ITS MARKER'S SPAN, and whether the block
+ * holds words.
+ *
+ * `from..to` is the marker and nothing else — `\p` is two characters — which
+ * is the right shape for an overlay that inserts and removes markers and the
+ * wrong one for asking which block an offset is in. Verified over en_ulb:
+ * 31,720 rows across 66 books, every one 6 characters or fewer, none out of
+ * order, none overlapping.
+ *
+ * Note the asymmetry with `SkeletonVerse`, which carries `textFrom`/`textTo`
+ * beside its marker span. A block carries no such pair, so the extent is the
+ * caller's to derive — `blockExtents` below is that derivation, and the
+ * measurement above is what makes it safe.
+ */
 export interface SkeletonRow extends BlockAddress {
   readonly from: number;
   readonly to: number;
@@ -313,6 +327,85 @@ export const decodeOverlay = (edits: readonly FormatEdit[], reportJson: string):
  * off the report's addresses rather than the edits, since an address is the
  * only thing that names a place without a second parse.
  */
+/**
+ * One block, plus where it actually reaches.
+ *
+ * A `SkeletonRow`'s `from..to` is the MARKER'S OWN SPAN — `\p` is two
+ * characters — not the block it opens. That is the right shape for the
+ * overlay, which inserts and removes markers, and the wrong one for anything
+ * that asks "which block am I in": measured on en_ulb's Genesis, the rows are
+ * 491 two-character spans in a 204,738-character document, so a containment
+ * test against them answers "none" almost everywhere.
+ *
+ * A block therefore runs from its own marker to where the NEXT one begins,
+ * which is the only definition the skeleton supports and the one a reader
+ * means. The last block runs to the end of the document.
+ */
+export interface BlockExtent extends SkeletonRow {
+  /** Where this block's content ends — the next block's marker, or `docLength`. */
+  readonly reaches: number;
+}
+
+/**
+ * Every block with its extent, in document order.
+ *
+ * Computed once per skeleton and kept by the caller: it is a pass over an
+ * array that is already sorted, and doing it per caret move would be a pass
+ * per keystroke for an answer that only changes when the document does.
+ */
+export const blockExtents = (skeleton: Skeleton, docLength: number): readonly BlockExtent[] => {
+  const rows = skeleton.blocks;
+  return rows.map((row, at) => ({ ...row, reaches: rows[at + 1]?.from ?? docLength }));
+};
+
+/**
+ * The block that holds `offset`, or `undefined`.
+ *
+ * Binary search, because this runs on caret moves: the rows are in document
+ * order and their extents abut, so the last block beginning at or before the
+ * offset is the only candidate.
+ *
+ * `undefined` is an ordinary answer, not a failure — an offset before the
+ * first block marker is in the front matter, which belongs to no block. A
+ * caret there has no pair, which is different from having a pair that is
+ * missing.
+ */
+export const blockAtOffset = (
+  extents: readonly BlockExtent[],
+  offset: number,
+): BlockExtent | undefined => {
+  let lo = 0;
+  let hi = extents.length - 1;
+  let found: BlockExtent | undefined;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const row = extents[mid];
+    if (row === undefined) break;
+    if (row.from <= offset) {
+      found = row;
+      lo = mid + 1;
+    } else hi = mid - 1;
+  }
+  return found !== undefined && offset < found.reaches ? found : undefined;
+};
+
+/**
+ * The block of THESE extents at the same address, or `undefined`.
+ *
+ * `(sid, where, ordinal)` and NOT the marker: matching on the name too would
+ * mean a `\q1` here and a `\q2` there never pair, which is exactly the
+ * correspondence the reader opened this to see (`equivalentBlock` in
+ * `app/workflows/stet.ts` says the same thing for the two-column view).
+ */
+export const equivalentExtent = (
+  extents: readonly BlockExtent[],
+  address: { readonly sid: string; readonly where: BlockWhere; readonly ordinal: number },
+): BlockExtent | undefined =>
+  extents.find(
+    (row) =>
+      row.sid === address.sid && row.where === address.where && row.ordinal === address.ordinal,
+  );
+
 export const chaptersTouched = (report: OverlayReport): readonly number[] => {
   const seen = new Set<number>();
   const take = (sid: string): void => {

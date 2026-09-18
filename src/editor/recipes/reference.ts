@@ -49,6 +49,7 @@ import { type Mode, modeFacet } from "../core/kernel";
 import { assignment } from "../core/registry";
 import { span } from "../core/timing";
 import { pickChapter, projectionFor, type ProjectionName } from "../views";
+import { pairingThere, showBlockPairs, showPaired, type PairedRange } from "./pairing";
 
 export interface ReferenceOptions {
   /** Where the view mounts. */
@@ -59,6 +60,8 @@ export interface ReferenceOptions {
   readonly analyze: Analyze;
   /** The projection to open in; `setMode` moves it afterwards. */
   readonly mode: ProjectionName;
+  /** Draw the paired block? The reader's setting at mount; `pairBlocks` moves it. */
+  readonly pairBlocks?: boolean;
 }
 
 export interface ReferenceMount {
@@ -76,6 +79,15 @@ export interface ReferenceMount {
    * chapter click does in the editor. Answers whether it was found.
    */
   showChapter(chapter: number): boolean;
+  /**
+   * Marks the block that answers the caret's block in the main editor, or
+   * clears the mark with `null`. `reveal` scrolls it into view — true when the
+   * reader moved deliberately, false while they are typing, because a pane
+   * that jumps on every keystroke is a pane nobody can read.
+   */
+  showPair(range: PairedRange | null, reveal?: boolean): void;
+  /** Follows the reader's "show what the markup corresponds to" setting. */
+  pairBlocks(on: boolean): void;
   destroy(): void;
 }
 
@@ -117,6 +129,7 @@ export function mountReference(options: ReferenceOptions): ReferenceMount {
       readingLayer,
       viewLayer(),
       projection.of(modeExtensions(options.mode)),
+      pairingThere(options.pairBlocks === true),
       EditorState.readOnly.of(true),
       EditorView.editable.of(false),
     ],
@@ -150,6 +163,21 @@ export function mountReference(options: ReferenceOptions): ReferenceMount {
       if (row === undefined) return false;
       view.dispatch({ effects: EditorView.scrollIntoView(anchorFrom(row), { y: "start" }) });
       return true;
+    },
+
+    showPair: (range, reveal) => {
+      showPaired(view, range);
+      if (range === null || reveal !== true) return;
+      // `y: "center"` and not `"start"`: the pair is being read IN ITS
+      // CONTEXT — the point is what sits around it — where a chapter jump is
+      // an arrival and wants the heading at the top.
+      view.dispatch({
+        effects: EditorView.scrollIntoView(range.from, { y: "center" }),
+      });
+    },
+
+    pairBlocks: (on) => {
+      showBlockPairs(view, on);
     },
 
     destroy: () => {

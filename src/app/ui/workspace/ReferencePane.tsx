@@ -24,32 +24,54 @@
  * ordinal: the two texts are different files of the same book, so an ordinal
  * into one chapter table means nothing in the other, and the number a
  * translator reads is the only thing they are guaranteed to agree about.
- * Verse-level sync would need the main editor's CARET, and the shell has no
- * reactive signal for a selection — `book.changes` fires on document changes
- * only. Adding one means a selection listener in `BookEditor`; until that
- * exists this follows the reader's scroll and their clip.
+ *
+ * ## The paired block
+ *
+ * Below the chapter, the pane answers a finer question: **"what is that `\q2`
+ * in the source text"**. The caret is in a block of the reader's own book; the
+ * block at the same ADDRESS in this text is marked.
+ *
+ * The address is `(sid, where, ordinal)` — which verse, whether the block
+ * leads the verse or sits inside it, which one of those — and it is the only
+ * thing two texts of different lengths and different words can share. The
+ * MARKER is deliberately not part of it: a `\q1` here against a `\q2` there
+ * is precisely the correspondence worth seeing, and matching on the name would
+ * hide it by never pairing them (`core/galley/overlay.ts`).
+ *
+ * Both skeletons are fetched ONCE — the source's at mount, the target's per
+ * edit — and matched in TypeScript as the caret moves, which is the shape
+ * `overlay.md` asks for by name: `targetNodeFor`/`sourceNodeFor` are ~1.4 ms
+ * and are for one-off questions, not for a per-keystroke loop.
  *
  * A reference that simply has no file for this book is the ordinary case and
  * gets one line, not an empty editor.
  */
 
-import { Effect, Option, Result } from "effect";
+import { Effect, Fiber, Option, Result, Stream } from "effect";
 import X from "lucide-solid/icons/x";
 import {
   Match,
   Show,
   Switch,
   createEffect,
+  createMemo,
   createRenderEffect,
   createSignal,
   onCleanup,
   untrack,
 } from "solid-js";
 
+import {
+  blockAtOffset,
+  blockExtents,
+  equivalentExtent,
+  type BlockExtent,
+} from "../../../core/galley";
 import type { Resource, Role } from "../../../core/resources/library";
 import { mountReference, type ReferenceMount } from "../../../editor";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
+import { shellKeys } from "../../settings";
 import { IconButton } from "../primitives";
 import { bookName } from "./books";
 import { metadataOf } from "./project";
@@ -131,6 +153,7 @@ export function ReferencePane(props: ReferencePaneProps) {
         // never hits.
         analyze: services.galley.memoize(),
         mode: untrack(() => shell.mode()),
+        pairBlocks: untrack(() => services.settings.get(shellKeys(services.settings).pairBlocks)),
       });
       setMounted(view);
       // RETURNED, not `onCleanup`: a Solid 2 effect's cleanup is its return
@@ -164,6 +187,141 @@ export function ReferencePane(props: ReferencePaneProps) {
     },
   );
 
+  // --- the paired block ------------------------------------------------------
+
+  /**
+   * This text, registered with the engine so its skeleton can be asked for.
+   *
+   * Under a PANE-SCOPED id, and as a REFERENCE with `keepText`. Three reasons
+   * it is not the registration `bindReferences` already made:
+   *
+   *  - that one is keyed by FILE PATH, which this pane does not have — it
+   *    reads through `Library.readBook(resourceId, bookId)` and never learns
+   *    where the bytes came from;
+   *  - it may not exist. References are registered when a screen that needs
+   *    the corpus opens, and a pane must not silently stop pairing because
+   *    nobody happened to have done that yet;
+   *  - and it might describe different bytes. The skeleton has to be cut from
+   *    the exact text this view is showing, or the offsets it answers with
+   *    point into a document nobody is looking at.
+   *
+   * `updateReference` and not `update`: a reference publishes no findings, and
+   * registering another project's book as a proofreading TARGET would put its
+   * diagnostics in this project's list.
+   */
+  const paneId = `sefer.pane.${resourceId}\u0000${bookId}`;
+
+  const sourceBlocks = createMemo(
+    (): readonly BlockExtent[] | undefined => {
+      const text = held();
+      if (text.kind !== "text") return undefined;
+      try {
+        services.galley.updateReference(paneId, text.text, true);
+        return blockExtents(services.galley.skeleton(paneId), text.text.length);
+      } catch {
+        // A text the engine will not parse still renders — it is just a
+        // reference with no pairing, which is a smaller loss than a blank pane.
+        return undefined;
+      }
+    },
+    { name: "referenceBlocks" },
+  );
+
+  onCleanup(() => {
+    services.galley.remove(paneId);
+  });
+
+  /**
+   * The open book's skeleton, refreshed when the book moves.
+   *
+   * Keyed on the STAMP and not the text: the stamp is what changes per
+   * revision, reading it is free, and a memo over a whole book's text would
+   * hold a second copy of it alive. ~0.4 ms per edit, which is the budget
+   * `overlay.md` sets for exactly this.
+   */
+  const targetBlocks = createMemo(
+    (): readonly BlockExtent[] | undefined => {
+      const book = shell.focused();
+      if (book === undefined || shell.stampOf(bookId) === undefined) return undefined;
+      try {
+        // The book's own text for the length, so the last block reaches the
+        // end of the document the caret is moving in rather than to a number
+        // read off something else.
+        return blockExtents(services.galley.skeleton(bookId), book.source().text.length);
+      } catch {
+        return undefined;
+      }
+    },
+    { name: "targetBlocks" },
+  );
+
+  /**
+   * The row of THIS text that answers where the caret is standing.
+   *
+   * A memo, so the effect below fires when the BLOCK changes rather than when
+   * the caret does — most keystrokes stay inside one block, and a dispatch per
+   * arrow key would be a transaction per arrow key in every open pane.
+   */
+  const paired = createMemo(
+    (): BlockExtent | undefined => {
+      const at = shell.caret();
+      const target = targetBlocks();
+      const source = sourceBlocks();
+      if (at === undefined || target === undefined || source === undefined) return undefined;
+      const here = blockAtOffset(target, at);
+      return here === undefined ? undefined : equivalentExtent(source, here);
+    },
+    { name: "pairedBlock" },
+  );
+
+  // `editor.pairBlocks`, live. Its own subscription rather than a prop from
+  // the column: every surface that draws the pair follows the one setting
+  // directly, so none of them can be showing it while another is not.
+  createEffect(
+    () => mounted(),
+    (view) => {
+      if (view === undefined) return;
+      const key = shellKeys(services.settings).pairBlocks;
+      const fiber = services.runtime.runFork(
+        Stream.runForEach(services.settings.changes(key), (on: boolean) =>
+          Effect.sync(() => {
+            view.pairBlocks(on);
+          }),
+        ),
+      );
+      return () => {
+        Effect.runFork(Fiber.interrupt(fiber));
+      };
+    },
+  );
+
+  /** Why there is or is not a mark — see the attribute on the root. */
+  const pairState = (): string => {
+    if (shell.caret() === undefined) return "no-caret";
+    const target = targetBlocks();
+    if (target === undefined) return "no-target";
+    if (sourceBlocks() === undefined) return "no-source";
+    const at = shell.caret();
+    const here = at === undefined ? undefined : blockAtOffset(target, at);
+    if (here === undefined) return "no-block-here";
+    const row = paired();
+    return row === undefined
+      ? `unpaired:${here.sid}/${here.where}/${here.ordinal}/${here.marker}`
+      : `${row.sid}/${row.where}/${row.ordinal}`;
+  };
+
+  createEffect(
+    () => ({ view: mounted(), row: paired() }),
+    ({ view, row }) => {
+      // Reveal is off: this follows a caret, and a pane that scrolled on every
+      // block change would fight the chapter sync above it for the viewport.
+      // The chapter effect is what moves this pane; this only marks.
+      // The EXTENT, not the row: a row's own span is its marker, two
+      // characters the reading projection does not even draw.
+      view?.showPair(row === undefined ? null : { from: row.from, to: row.reaches });
+    },
+  );
+
   const missing = (): string =>
     t("{title} has no {book}", {
       title: props.resource.title,
@@ -177,6 +335,10 @@ export function ReferencePane(props: ReferencePaneProps) {
       data-role={props.role}
       data-mode={shell.mode()}
       data-state={held().kind}
+      // What this pane thinks the caret's block is here. A test hook, and the
+      // one thing that cannot be read off the DOM: a pane with no mark may
+      // have found no pair, or have had no skeleton to look in.
+      data-pair={pairState()}
     >
       {/* The header line: whose text this is, and the one way out of it. The
           × unbinds and does not delete — the resource stays registered, and

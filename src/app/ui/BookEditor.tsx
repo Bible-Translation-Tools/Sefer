@@ -58,6 +58,8 @@ import {
   type ProjectionName,
   keystrokeMeter,
   noteBookIs,
+  pairingHere,
+  showBlockPairs,
   showEmptyBlocks,
   watchLocation,
 } from "../../editor";
@@ -225,6 +227,21 @@ export function BookEditor(props: BookEditorProps) {
             projection.of([]),
             meter.extension,
             flashing(),
+            // Where the caret is, published to the shell.
+            //
+            // `selectionSet` and not every update: a document change that does
+            // not move the caret is not news to anybody reading this, and an
+            // update fires for scrolls, measurements and reconfigures too. The
+            // head rather than the anchor, because a reader dragging a
+            // selection is asking about the end they are dragging.
+            //
+            // The write is unconditional and the consumers derive — see
+            // `Shell.noteCaret`. Comparing here would mean this listener
+            // holding a copy of the last offset, which is a second record of
+            // the thing the signal already is.
+            EditorView.updateListener.of((update) => {
+              if (update.selectionSet) shell.noteCaret(update.state.selection.main.head);
+            }),
             frontMatterCard(),
             // Blocks with no words, named where the words go. The initial
             // value is the reader's setting; the fiber below follows it, so
@@ -235,6 +252,11 @@ export function BookEditor(props: BookEditorProps) {
                 shellKeys(shell.services.settings).annotateEmptyParagraphs,
               ),
             ),
+            // The editor's half of the block pairing. It marks the block the
+            // caret is in; the panes beside it mark the block at the same
+            // address, and the CORRESPONDENCE is the pair of marks. One
+            // without the other asserts something the reader cannot check.
+            pairingHere(shell.services.settings.get(shellKeys(shell.services.settings).pairBlocks)),
           ]),
         });
       }
@@ -303,6 +325,18 @@ export function BookEditor(props: BookEditorProps) {
         ),
       );
 
+      // `editor.pairBlocks`, live — the same shape the ghost's fiber has, and
+      // the panes run their own copy of it, so turning the setting off clears
+      // both sides without either knowing about the other.
+      const pairKey = shellKeys(shell.services.settings).pairBlocks;
+      const pairing = shell.services.runtime.runFork(
+        Stream.runForEach(shell.services.settings.changes(pairKey), (on) =>
+          Effect.sync(() => {
+            showBlockPairs(created, on);
+          }),
+        ),
+      );
+
       // The location bar's reading. One passive scroll listener, coalesced into
       // an animation frame by the recipe.
       const unwatch = watchLocation(created, (where) => {
@@ -323,7 +357,11 @@ export function BookEditor(props: BookEditorProps) {
       // the book stayed bound, and the analysis fiber outlived the screen.
       return () => {
         unwatch();
+        // No editor, no caret. Left set, it would point into a document that
+        // is gone and every pane beside it would keep a stale highlight.
+        shell.noteCaret(undefined);
         Effect.runFork(Fiber.interrupt(ghosting));
+        Effect.runFork(Fiber.interrupt(pairing));
         unname();
         Effect.runFork(Fiber.interrupt(watching));
         unsubscribe();
