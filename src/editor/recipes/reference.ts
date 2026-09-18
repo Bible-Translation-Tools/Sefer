@@ -83,13 +83,17 @@ export interface ReferenceMount {
    * Marks the range that answers where the caret is, or clears it with `null`,
    * and brings it into view.
    *
-   * `y: "nearest"` and not `"center"`, which is the whole difference between
-   * this being useful and being unusable: a pane that re-centres on every
-   * block change fights the reader for the viewport, and one that never
-   * scrolls marks a verse three screens away. Nearest moves only when the
-   * answer is off-screen, so reading down a chapter is still.
+   * `reveal` is the pane's own "follow the book" switch. A pinned pane still
+   * MARKS the pair — the answer is worth having even when you have asked the
+   * page to hold still — it just does not scroll to it.
+   *
+   * When it does scroll: `y: "nearest"` and not `"center"`, which is the whole
+   * difference between this being useful and being unusable. A pane that
+   * re-centres on every verse fights the reader for the viewport; one that
+   * never scrolls marks a verse three screens away. Nearest moves only when
+   * the answer is off screen, so reading down a chapter is still.
    */
-  showPair(range: PairedRange | null): void;
+  showPair(range: PairedRange | null, reveal?: boolean): void;
   /** Follows the reader's "show what the markup corresponds to" setting. */
   pairBlocks(on: boolean): void;
   destroy(): void;
@@ -169,9 +173,9 @@ export function mountReference(options: ReferenceOptions): ReferenceMount {
       return true;
     },
 
-    showPair: (range) => {
+    showPair: (range, reveal = true) => {
       showPaired(view, range);
-      if (range === null) return;
+      if (range === null || !reveal) return;
       view.dispatch({ effects: EditorView.scrollIntoView(range.from, { y: "nearest" }) });
     },
 

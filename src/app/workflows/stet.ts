@@ -29,13 +29,6 @@
 import { Effect, Option } from "effect";
 
 import type { Ref } from "../../core/book/book";
-import type {
-  GalleyService,
-  OverlayEdits,
-  OverlayOptions,
-  Skeleton,
-  SkeletonRow,
-} from "../../core/galley";
 import type { Project } from "../../core/project/project";
 import {
   ROLES,
@@ -61,89 +54,6 @@ export interface Comparison {
 }
 
 /** One side of a match-formatting view: a registered id and the text behind it. */
-export interface OverlaySide {
-  /** The id the engine knows it by — a `BookId` for the target, a path for a source. */
-  readonly id: string;
-  readonly text: string;
-}
-
-/** Both skeletons plus the transaction, which is everything the view draws. */
-export interface MatchFormatting {
-  readonly target: Skeleton;
-  readonly source: Skeleton;
-  readonly overlay: OverlayEdits;
-}
-
-/**
- * Register both sides with the wasm handle, so the overlay doors can read them.
- *
- * The handle directly — which, since the `CorpusEngine` port was deleted, is
- * the only door. What is worth
- * reading twice here. The overlay doors are on the `Galley` handle in this
- * process; on Web the corpus IS that handle, so the target is already there and
- * this costs a checksum, but on desktop the corpus lives in the native process
- * and the wasm handle has never been told about either book. Registering here
- * makes the view work identically on both hosts, at the price of the source's
- * text being resident twice on desktop. That is the right trade for a view a
- * translator opens deliberately and closes again.
- *
- * `keepText: true` on the source: an overlay reads its blocks, and a reference
- * registered without its text retains verse lengths and nothing else.
- */
-const register = (galley: GalleyService, target: OverlaySide, source: OverlaySide): void => {
-  galley.update(target.id, target.text);
-  galley.updateReference(source.id, source.text, true);
-};
-
-/**
- * Match formatting: the source's block structure, the target's, and the edits
- * that would make the second the first.
- *
- * Both skeletons come back because that is how the live highlight is drawn —
- * fetch them once per edit (~0.4 ms each) and match ADDRESSES in TypeScript as
- * the reader moves through the target. `targetNodeFor`/`sourceNodeFor` are for
- * one-off questions and are an order of magnitude dearer; a per-cursor-move
- * call into wasm is not what they are for.
- *
- * The overlay is a SUGGESTION. Nothing here writes: `overlay.edits` is a
- * transaction the caller applies through `book.apply` after showing
- * `overlay.report`, so the whole thing is one revision and one Undo step.
- *
- * Synchronous, like `analyze`: these are wasm calls on the handle Sefer already
- * holds, and an Effect per keystroke of a highlight is a budget this does not
- * have.
- */
-export const matchFormatting = (
-  galley: GalleyService,
-  target: OverlaySide,
-  source: OverlaySide,
-  opts?: OverlayOptions,
-): MatchFormatting => {
-  register(galley, target, source);
-  return {
-    target: galley.skeleton(target.id, opts),
-    source: galley.skeleton(source.id, opts),
-    overlay: galley.overlay(target.id, source.id, opts),
-  };
-};
-
-/**
- * The source block that answers a target block's address, or `undefined`.
- *
- * The address is `(sid, where, ordinal)` and the MARKER IS NOT PART OF IT —
- * matching on the marker too would mean a `\q1` in the source and a `\q2` in
- * the target never pair, which is exactly the difference a translator opened
- * this view to see.
- */
-export const equivalentBlock = (
-  skeleton: Skeleton,
-  address: { readonly sid: string; readonly where: string; readonly ordinal: number },
-): SkeletonRow | undefined =>
-  skeleton.blocks.find(
-    (row) =>
-      row.sid === address.sid && row.where === address.where && row.ordinal === address.ordinal,
-  );
-
 export const stetCompare = (_project: Project, _resource: Resource): Effect.Effect<Comparison> =>
   // TODO(seam): the read-only half of the same alignment.
   Effect.die(new Error("stetCompare: not implemented (seams §5.3, slice 27)"));

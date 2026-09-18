@@ -61,9 +61,9 @@ export function LocationBar(props: LocationBarProps) {
    * THE CLIP WINS. When the book is clipped to one chapter, that chapter IS
    * where you are, whatever the scroll says — and what the scroll says is
    * wrong: the hidden chapters are still in the document, occupying their
-   * offsets with zero height, so `chapterAtTop` probes the top edge, lands in
-   * the hidden front matter at position 0 and answers "Intro" for every
-   * chapter of the book.
+   * offsets with zero height, so `chapterInView` sees every chapter as the same
+   * nothing and answers with the first row — "Intro" for every chapter of the
+   * book.
    *
    * Which made Next and Previous useless with "Open books one chapter at a
    * time" turned on. `step` looks the current row up by this number, so it

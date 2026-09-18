@@ -200,6 +200,13 @@ export interface ShellKeys {
    */
   readonly pairBlocks: SettingKey<boolean>;
   /**
+   * Do reference panes follow the editor's place? On by default — a reference
+   * that does not move is a reference you scroll twice — but it is per-pane at
+   * the pane (`ReferencePane`'s header), and this is only the value a newly
+   * opened one starts from.
+   */
+  readonly syncReferences: SettingKey<boolean>;
+  /**
    * The findings panel's persistent filter. Edited on `/findings`, not on
    * `/settings` — see `FindingsFilterPreference`.
    */
@@ -297,6 +304,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     // Off by default, for the reason on the interface: it is a comparison
     // tool, and the comparison is not what most sessions are doing.
     pairBlocks: settings.register("editor.pairBlocks", Schema.Boolean, false),
+    syncReferences: settings.register("editor.syncReferences", Schema.Boolean, true),
     findingsFilter: settings.register(
       "findings.filter",
       FindingsFilterPreference,
@@ -396,6 +404,14 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
       label: "Show what a block corresponds to",
       description:
         "Marks the block you are in, and the block at the same place in every reference open beside it — so you can see which paragraph or poetry line answers which.",
+      kind: "boolean",
+      group: "editor",
+    },
+    {
+      key: keys.syncReferences,
+      label: "References follow the book you are reading",
+      description:
+        "Scrolling the book moves every reference beside it to the same place. Each pane can be unpinned on its own from its header; this is what a newly opened one starts as.",
       kind: "boolean",
       group: "editor",
     },

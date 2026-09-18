@@ -48,6 +48,8 @@
  */
 
 import { Effect, Fiber, Option, Result, Stream } from "effect";
+import Link from "lucide-solid/icons/link";
+import Unlink from "lucide-solid/icons/unlink";
 import X from "lucide-solid/icons/x";
 import {
   Match,
@@ -120,6 +122,23 @@ export function ReferencePane(props: ReferencePaneProps) {
     name: "referenceView",
   });
 
+  /**
+   * Does THIS pane follow the editor's place?
+   *
+   * Per pane, and local to it. The setting is only what a newly opened pane
+   * starts as — pinning one reference while another follows is the ordinary
+   * case (hold a verse in the Greek, read the English along), and a preference
+   * shared by every pane could not express it.
+   *
+   * Local state and not a setting per resource: a pane is remounted whenever
+   * the binding set or the open book changes, so "which pane was unpinned"
+   * has no life beyond the thing it is about.
+   */
+  const [following, setFollowing] = createSignal(
+    untrack(() => services.settings.get(shellKeys(services.settings).syncReferences)),
+    { name: "referenceFollows" },
+  );
+
   // The read. One per pane, started at setup rather than from an effect: its
   // two inputs are constants for this instance's whole life, so an effect
   // would be a dependency list with nothing in it. `onCleanup` here is at the
@@ -180,13 +199,15 @@ export function ReferencePane(props: ReferencePaneProps) {
   );
 
   // And the place follows the reader: the clip first (it decides what is on
-  // screen at all), then the scroll.
+  // screen at all), then the scroll. The CLIP is applied either way — it is
+  // what is in the document, not where the reader is in it, and a pinned pane
+  // showing a chapter the editor has hidden would be showing a different book.
   createEffect(
-    () => ({ view: mounted(), clip: props.clip(), at: props.at() }),
-    ({ view, clip, at }) => {
+    () => ({ view: mounted(), clip: props.clip(), at: props.at(), follow: following() }),
+    ({ view, clip, at, follow }) => {
       if (view === undefined) return;
       view.clipTo(clip);
-      if (at !== undefined) view.showChapter(at);
+      if (follow && at !== undefined) view.showChapter(at);
     },
   );
 
@@ -366,7 +387,10 @@ export function ReferencePane(props: ReferencePaneProps) {
   createEffect(
     () => ({ view: mounted(), row: paired() }),
     ({ view, row }) => {
-      view?.showPair(row ?? null);
+      // A pinned pane still MARKS the pair — the answer is worth having even
+      // when you have asked the page to hold still. It just does not scroll to
+      // it, which is what pinning means.
+      view?.showPair(row ?? null, following());
     },
   );
 
@@ -397,6 +421,22 @@ export function ReferencePane(props: ReferencePaneProps) {
           <Show when={props.resource.language}>{(language) => <span> · {language()}</span>}</Show>
           <span> · {props.role === "source" ? t("Source") : t("Reference")}</span>
         </p>
+        {/* Follow, or hold still. In the header rather than only in settings
+            because it is a per-pane decision made while reading — you pin the
+            one you are cross-checking and let the others follow. */}
+        <IconButton
+          size="sm"
+          data-testid={`follow-${props.resource.id}`}
+          data-following={following() ? "" : undefined}
+          label={
+            following()
+              ? t("Stop {title} following the book", { title: props.resource.title })
+              : t("Let {title} follow the book", { title: props.resource.title })
+          }
+          tooltipSide="left"
+          icon={following() ? <Link size={14} /> : <Unlink size={14} />}
+          onClick={() => setFollowing((on) => !on)}
+        />
         <IconButton
           size="sm"
           data-testid={`unbind-${props.resource.id}`}
