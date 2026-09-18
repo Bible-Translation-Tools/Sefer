@@ -30,7 +30,7 @@
  * choice, and neither is an edit.
  */
 
-import { Compartment, StateEffect } from "@codemirror/state";
+import { Compartment, StateEffect, type EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { useNavigate } from "@tanstack/solid-router";
 import { Effect, Fiber, Stream } from "effect";
@@ -90,6 +90,48 @@ import "../../editor/editor.css";
 export interface BookEditorProps {
   readonly book: EditorBook;
 }
+
+/**
+ * The offset a remembered place names now, or `undefined`.
+ *
+ * A LADDER, because the document may have moved while the reader was away —
+ * they may have been in Find for the express purpose of changing it:
+ *
+ *   1. the exact offset, when the document is the same length as when it was
+ *      taken (see `LastLocation.place` for why length and not a hash);
+ *   2. the VERSE, by its number, scoped to its chapter;
+ *   3. the CHAPTER, by `\c`'s own label;
+ *   4. nothing, and stay at the top.
+ *
+ * Every rung below the first is looked up by what the document SAYS rather
+ * than by an ordinal or an offset, so a book that gained a `\toc` line still
+ * resolves and a verse that was deleted falls to its chapter instead of
+ * landing in whatever now occupies its coordinates.
+ */
+const placeOf = (
+  state: EditorState,
+  place: {
+    readonly chapter: string;
+    readonly verse?: string;
+    readonly offset?: number;
+    readonly hash?: string;
+  },
+): number | undefined => {
+  const structureNow = structureAt(state);
+  const hash = structureNow.analysis?.sourceHash;
+  if (place.offset !== undefined && place.hash !== undefined && String(hash) === place.hash)
+    return Math.min(place.offset, state.doc.length);
+  const chapter = structureNow.chapters.find((row) => row.label === place.chapter);
+  if (chapter === undefined) return undefined;
+  if (place.verse === undefined) return chapter.from;
+  // Scoped to the chapter: verse numbers repeat, and `10` alone names sixty
+  // places in a book.
+  const verse = structureNow.verses.find(
+    (row) =>
+      row.markerFrom >= chapter.from && row.markerFrom < chapter.to && row.num === place.verse,
+  );
+  return verse?.markerFrom ?? chapter.from;
+};
 
 const cmMode = (mode: ProjectionName): "regular" | "usfm" => (mode === "usfm" ? "usfm" : "regular");
 
@@ -345,7 +387,13 @@ export function BookEditor(props: BookEditorProps) {
         // nothing about where in it the reader had got to, and reopening a
         // project landed on the top of the right book. This is the only place
         // that knows the answer.
-        if (where !== null) shell.noteChapterAtTop(where.ordinal, where.top);
+        if (where !== null)
+          shell.noteChapterAtTop(where.ordinal, {
+            chapter: where.label,
+            offset: where.top,
+            ...(where.hash === undefined ? {} : { hash: where.hash }),
+            ...(where.verse === undefined ? {} : { verse: where.verse }),
+          });
       });
 
       // Where the reader had got to, put back.
@@ -355,25 +403,35 @@ export function BookEditor(props: BookEditorProps) {
       // about the canonical state the view is over — so leaving for Find and
       // coming back landed at the top of the book with everything else intact.
       //
+      // Resolved as a REFERENCE, down a ladder, because the document may have
+      // moved while the reader was away — they may have been in Find for the
+      // express purpose of changing it:
+      //
+      //   the verse -> the chapter it was in -> nothing, and stay at the top.
+      //
+      // Each rung is looked up by what the document SAYS (`\c`'s label, the
+      // verse number), so a chapter that gained a line still resolves and a
+      // verse that was deleted falls to its chapter instead of landing in
+      // whatever now occupies its offsets.
+      //
       // It yields to `reveal`. A search hit or a finding is an explicit "take
-      // me here", and restoring a remembered scroll over the top of one would
+      // me here", and restoring a remembered place over the top of one would
       // be answering a question nobody asked. The reveal effect below does the
       // moving in that case.
       //
-      // Untracked, all of it: this is a one-time question asked at mount, not
-      // a subscription — the remembered location changes on every scroll, and
+      // Untracked, all of it: a one-time question asked at mount, not a
+      // subscription — the remembered location changes on every scroll, and
       // depending on it would make this effect re-run for its own writes.
       const resume = untrack(() => {
         if (shell.reveal()?.bookId === book.id) return undefined;
         const root = shell.project()?.root;
         const held = root === undefined ? undefined : shell.lastLocation(root);
-        return held?.bookId === book.id ? held.offset : undefined;
+        if (held?.bookId !== book.id || held.place === undefined) return undefined;
+        return placeOf(created.state, held.place);
       });
       if (resume !== undefined && resume > 0)
         created.dispatch({
-          effects: EditorView.scrollIntoView(Math.min(resume, created.state.doc.length), {
-            y: "start",
-          }),
+          effects: EditorView.scrollIntoView(resume, { y: "start" }),
         });
 
       setBound({ view: created, projection });

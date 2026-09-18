@@ -166,17 +166,43 @@ const LastLocations = Schema.Record(
     chapter: Schema.NullOr(Schema.Number),
     at: Schema.optionalKey(Schema.Number),
     /**
-     * The document offset at the TOP of the viewport — where the reader had
-     * scrolled to, not just which chapter they were in.
+     * The PLACE at the top of the viewport, as a reference: `\c`'s label and
+     * the verse number, both as written.
      *
-     * Chapter granularity was enough when the only consumer was "which book
-     * does an Open land on". It is not enough for coming BACK: leaving the
-     * editor for Find and returning put the reader at the top of chapter 1
-     * when they had been at 20:10, because a remount builds a fresh
-     * `EditorView` and scroll position is a fact about a view, not about the
-     * canonical state it is over.
+     * A reference and not an offset, which was the first attempt. An offset is
+     * a remembered range over a document that keeps changing — the stale-range
+     * bug this codebase is arranged to make impossible (`recipes/emptyBlocks.ts`
+     * argues the same thing about ghosts). Come back after an edit and it
+     * points at different words; come back after the verse was deleted and it
+     * points inside its neighbour. A reference either resolves or honestly
+     * does not.
+     *
+     * Both are strings because both are what the document SAYS. A chapter
+     * ordinal is positional and a book that gained a `\toc` line renumbers
+     * every one of them; "16" is still 16.
      */
-    offset: Schema.optionalKey(Schema.Number),
+    place: Schema.optionalKey(
+      Schema.Struct({
+        chapter: Schema.String,
+        verse: Schema.optionalKey(Schema.String),
+        /**
+         * The exact offset, and the CONTENT HASH of the document it was taken
+         * from — the engine's own `Analysis.sourceHash`, off the parse that
+         * had already happened, so nothing is hashed for this.
+         *
+         * The hash is what makes the exact offset safe to use: same hash, same
+         * document, so the offset means what it meant. A different hash means
+         * the text moved while the reader was away — they may have been in
+         * Find for exactly that purpose — and the offset is discarded in
+         * favour of the coarse-but-true rungs beside it.
+         *
+         * A string because `sourceHash` is a `bigint` and JSON has no such
+         * thing. It is compared, never arithmetic.
+         */
+        offset: Schema.optionalKey(Schema.Number),
+        hash: Schema.optionalKey(Schema.String),
+      }),
+    ),
   }),
 );
 

@@ -221,7 +221,7 @@ export interface Shell {
    * own — this is written straight into the remembered location and read
    * nowhere else.
    */
-  readonly noteChapterAtTop: (ordinal: number, offset?: number) => void;
+  readonly noteChapterAtTop: (ordinal: number, place?: LastLocation["place"]) => void;
 
   /**
    * Where the reader last was in `root` — the book, the clip and the chapter
@@ -935,7 +935,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     bookId: BookId | undefined,
     ordinal: number | null,
     at?: number,
-    offset?: number,
+    place?: LastLocation["place"],
   ): void => {
     // A writer, not a reader: this runs on a focus or a chapter change and
     // records what just happened. Both reads are therefore deliberately
@@ -954,14 +954,14 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     const same = previous?.bookId === bookId;
     const carried = same ? previous.at : undefined;
     const where = at ?? carried;
-    const scrolled = offset ?? (same ? previous.offset : undefined);
+    const where2 = place ?? (same ? previous.place : undefined);
     const next: LastLocations = {
       ...held,
       [root]: {
         bookId,
         chapter: ordinal,
         ...(where === undefined ? {} : { at: where }),
-        ...(scrolled === undefined ? {} : { offset: scrolled }),
+        ...(where2 === undefined ? {} : { place: where2 }),
       },
     };
     setLocations(next);
@@ -995,7 +995,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     setCaret(offset);
   };
 
-  const noteChapterAtTop = (ordinal: number, offset?: number): void => {
+  const noteChapterAtTop = (ordinal: number, place?: LastLocation["place"]): void => {
     // Every read here is a one-time snapshot, for the same reason as in
     // `remember`: this is the editor REPORTING where the viewport got to, so
     // it records the state at the moment of the scroll and subscribes to
@@ -1008,7 +1008,8 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     if (root === undefined) return;
     const held = untrack(locations)[root];
     const sameBook = held?.bookId === book.id;
-    if (sameBook && held.at === ordinal && held.offset === offset) return;
+    const settled = held?.place?.chapter === place?.chapter && held?.place?.verse === place?.verse;
+    if (sameBook && held.at === ordinal && settled) return;
 
     // A CHAPTER change is news — the crumb reads it, the reference panes
     // follow it — so it goes through at once.
@@ -1017,18 +1018,18 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
         clearTimeout(offsetWrite);
         offsetWrite = undefined;
       }
-      remember(book.id, untrack(chapter), ordinal, offset);
+      remember(book.id, untrack(chapter), ordinal, place);
       return;
     }
 
-    // An OFFSET change inside one chapter is not. It fires once per animation
+    // A VERSE change inside one chapter is not. It fires once per animation
     // frame for the length of a scroll, and it is only ever read again after a
     // remount — so it is throttled to the trailing edge rather than writing a
     // store (and waking every reader of it) sixty times a second.
     if (offsetWrite !== undefined) clearTimeout(offsetWrite);
     offsetWrite = setTimeout(() => {
       offsetWrite = undefined;
-      remember(book.id, untrack(chapter), ordinal, offset);
+      remember(book.id, untrack(chapter), ordinal, place);
     }, OFFSET_SETTLE);
   };
 

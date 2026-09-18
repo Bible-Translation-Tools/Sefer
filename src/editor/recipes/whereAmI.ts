@@ -23,14 +23,26 @@ export interface ChapterName {
 /** Where the reader is: a chapter, and how far into the document. */
 export interface Where extends ChapterName {
   /**
-   * The document offset at the very TOP of the viewport.
+   * The verse number at the very TOP of the viewport, as written — `"10"`,
+   * `"5-7"` for a bridge — or absent above the first verse of the chapter.
    *
-   * Finer than the chapter, and it is what restores a scroll position: a
-   * remount builds a new `EditorView`, and where the reader had got to is a
-   * fact about a view rather than about the state it is over. The chapter is
-   * still carried because that is what the crumb and the reference panes read.
+   * With `label` this is the place the reader had got to, and it is what puts
+   * them back: a remount builds a new `EditorView`, and where somebody had
+   * scrolled to is a fact about a view rather than about the state it is over.
+   * A reference rather than an offset, so an edit while they were away moves
+   * it with the text instead of pointing at whatever now sits there.
    */
+  readonly verse?: string;
+  /** The document offset at the very top of the viewport. */
   readonly top: number;
+  /**
+   * The content hash of the document `top` was read from, as a string.
+   *
+   * `Analysis.sourceHash`, taken off the parse this view had already done —
+   * nothing is hashed to produce it. Absent when the state carries no analysis
+   * yet, which is the moment before the first parse lands.
+   */
+  readonly hash?: string;
 }
 
 /**
@@ -101,10 +113,27 @@ export function chapterInView(view: EditorView): Where | null {
   // line. The first row is the honest answer and it is never wrong by much.
   const found = best ?? chapters[0];
   if (found === undefined) return null;
+
   // One pixel in and two down, so this is the first line the reader can see
   // rather than whatever is clipped at the seam.
   const top = Math.max(0, view.posAtCoords({ x: box.left + 8, y: box.top + 2 }, false));
-  return { ordinal: found.ordinal, label: found.label, top };
+  // The verse that line is in, from this view's own table. Scoped to the
+  // chapter, because verse numbers repeat and `10` alone names sixty places.
+  const rows = structureAt(view.state).verses;
+  let verse: string | undefined;
+  for (const row of rows) {
+    if (row.markerFrom < found.from) continue;
+    if (row.markerFrom > top) break;
+    verse = row.num ?? undefined;
+  }
+  const hash = structureAt(view.state).analysis?.sourceHash;
+  return {
+    ordinal: found.ordinal,
+    label: found.label,
+    top,
+    ...(hash === undefined ? {} : { hash: String(hash) }),
+    ...(verse === undefined ? {} : { verse }),
+  };
 }
 
 /** Every chapter of this view's book, front matter row included. */
