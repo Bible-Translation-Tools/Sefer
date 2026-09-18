@@ -78,34 +78,77 @@ Everything in this file was asked for in the UI build-out and either was not pos
 
 ---
 
-**Status, 2026-09-17.** Sefer is pinned to **v0.1.2** (`eca6635`, "the mask map crosses the wall"). Items **2**, **4** and **6/7** are still open. Items **8–10** below are new, and came out of building the diff playground (`src/dev/playground/`, commits `be7720b`…`2446072`) against real project text. Item **11** is not an ask — it is Will's counter-proposal to the whole `Filter` shape, written down with the measurement that bears on it.
+**Status, 2026-09-17.** Sefer is pinned to **v0.1.2** (`eca6635`, "the mask map crosses the wall"). Items **2**, **4** and **6/7** are still open. Items **8–10** below are new, and came out of building the diff playground (`src/dev/playground/`, commits `be7720b`…`2446072`) against real project text. Item **11** is not an ask — it is Will's counter-proposal to the whole `Filter` shape, written down with the measurement that bears on it, and the conclusion was to keep `Filter`.
 
-## 8. Spans on the diff's text runs
+## How items 8–10 are framed
 
-**Asked:** one diff surface that reads continuously — unchanged verses beside changed ones, in reading order (the `continuous` and `excerpts` playground experiments).
+Will, 2026-09-17, setting the rule for this round:
 
-**State:** such a surface has to render two kinds of row and there are two different maskers behind them. A CHANGED unit's words are the engine's, via `unit_text_diff` over `Filter::reader_text`. An UNCHANGED unit has no runs, so Sefer projects it itself with `core/excerpts`' `project`, which is `Filter::verse_text`. Measured against the four committed fixtures, the two agree on every reader-visible character of 59 units, differing only in trailing whitespace. **They disagree about notes**, by design on both sides:
+> What's generically reasonable for a library to support, but doesn't have to conform to Sefer's mental model or way of doing things if a reasonable workaround exists. Asking the right questions (ie is this a paragraph) is allowed, but not having to know and parse USFM in general. We want as much USFM knowledge in the tested libs in isolation.
+
+So each item below is written as a CAPABILITY a USFM library would reasonably own, not as a shape Sefer wants back. Three tests applied before anything was listed:
+
+1. **Is it already there?** Two of the four capabilities this round started from turned out to be delivered, and are therefore NOT asks — see below.
+2. **Is there a reasonable workaround?** If Sefer can get it from what already crosses, it does not go in this file.
+3. **Is it a question about USFM, or a question about Sefer?** "Is this range markup" is the former. "Give me runs shaped for my renderer" is the latter, and gets rewritten until it is the former or dropped.
+
+### Already delivered — do not ask
+
+**The diff is already complete over the whole document.** `DiffSkeleton.slots` is documented as *"The interleave: every byte of both inputs, in exactly one bearing slot"*, and `units` includes `Status::Unchanged`. Measured on the playground: Genesis produces 1,594 units of which 1,531 are unchanged. A consumer that wants a continuous surface has everything it needs; Sefer's `inOrder` walks the slots and gets reading order for free.
+
+**"Is this change only in the markup" is already answered.** `DecisionUnit.is_usfm_structure_change` — *"Not whitespace-only, but the reader-visible text is the same: markup changed and nothing else"* — and `is_whitespace_change` beside it. Both are on the wire and Sefer renders the first as a badge today.
+
+## 8. Values that describe a region of the document should say which region
+
+**The capability:** anything the library hands back that describes part of a document is addressable in that document.
+
+This is the library's own stated convention, not a Sefer preference. `mask.rs`: *"CONVENTION: **public offsets are always SOURCE bytes.** A consumer finds 'doubled word at 12..17 of the mask', calls `Mask::to_source` twice, and files its diagnostic in document coordinates."* Every other output honours it — decision units, find hits, lint findings, `Edits`, TOC rows, mask ranges, `attrs` quadruples.
+
+**The one exception:** `TextDiffRun { text: String, kind: RunKind }`. A run is a region of a document — the library found it, by lexing and masking and segmenting — and it comes back as a bare string. A consumer that wants to do anything with a run other than print it has to re-derive where it was by searching for its text, which is ambiguous and which is Sefer re-implementing the engine's own arithmetic.
+
+**Change:** `TextDiffRun { text, kind, from, to }`, in the UTF-16 space the unit's own `baseline`/`current` spans already use. Four numbers per run.
+
+**Why this is the whole ask, and why there is no workaround without it.** With a run located, Sefer needs nothing further from the library to reconcile the two readings: both masks are pure concatenations of source spans over the same document, so the verse-text reading of a reader-text run is the concatenation of the verse-text ranges its span overlaps, with `kind` carried onto each piece — `ReaderText::slice`'s loop, run in JavaScript over the mask `maskOf` already ships. WITHOUT the span there is no workaround at all: a run is an unanchored string. That is the test in rule 2, and it is the only item this round that fails it.
+
+**What the divergence is, for context.** A continuous diff surface renders changed rows from the engine's runs (`Filter::reader_text`, note prose rides in) and unchanged rows from Sefer's own projection (`Filter::verse_text`, notes dropped). Measured over the four committed fixtures the two agree on every reader-visible character of 59 units, differing only in trailing whitespace; they disagree about notes:
 
 ```
-engine (reader_text): Paul, a servant of God1:1 Some manuscripts read slave. and an apostle…
-ours  (verse_text):   Paul, a servant of God and an apostle…
+reader_text: Paul, a servant of God1:1 Some manuscripts read slave. and an apostle…
+verse_text:  Paul, a servant of God and an apostle…
 ```
 
-`Filter::reader_text`'s own doc says why it must be that way: *"Nothing is `Action::Remove`d, so no text is unreachable."* That is a diff-CORRECTNESS property, not a preference — a filter that removes text makes that text undiffable and a merge over it could lose bytes. So the diff cannot simply be handed `verse_text()`, and "let the page pick one filter" is not the fix.
+Both are correct. `reader_text` MUST keep note prose — *"Nothing is `Action::Remove`d, so no text is unreachable"* is a diff-correctness property, since text a filter removes is text a merge could lose. So the library is not being asked to change what it diffs over, only to say where the runs are.
 
-**Change:** put the source span on a run. `TextDiffRun { text, kind }` becomes `{ text, kind, from, to }`, in the same UTF-16 space the unit's own `baseline`/`current` spans already use. A consumer holding a display rule can then suppress the note bytes *inside* a run without re-diffing and without the engine giving up totality. This is the smallest change that closes the divergence.
+**Sefer side ready:** `src/dev/playground/units.tsx` renders runs and carries the finding above `sideText`; `src/app/ui/review/reading.ts` is the one place the second masker is called.
 
-**Sefer side ready:** `src/dev/playground/units.tsx` renders runs and carries the finding above `sideText`; `src/app/ui/review/reading.ts` is the one place the second masker is called. `/review` does not hit the divergence — its cards read one unit at a time and are never mixed with unchanged ones.
+## 9. What is this range made of — one structural query
 
-**This ask alone is sufficient, and it needs nothing new besides.** Given a run's source span, Sefer can re-mask it with a mask it ALREADY HAS: v0.1.2's `maskOf(text, { recipe: "verseText", utf16: true })`. Both masks are pure concatenations of source spans over the same document, so the verse-text reading of a run is the concatenation of `source[max(runFrom, r.sourceFrom) .. min(runTo, r.sourceTo)]` over the verse-text ranges the run's span overlaps — `ReaderText::slice`'s own loop, run in JavaScript, with the run's `kind` carried onto each piece. The note bytes fall out as the gaps.
+**The capability:** answer, for a source range, what USFM it is composed of — which sub-spans are marker, designator, attribute list, note shell, text; what marker owns them; and what encloses the range as a whole.
 
-That makes item 9 a convenience rather than a fix: with spans on runs, a page can agree with its own diff using the door that already shipped. Not exercised yet — there is nothing to exercise until the spans exist — but the mechanism is the one the mask map was added for.
+This is the "is this a paragraph" question in the rule above, generalised one step, and it is a question about USFM rather than about any consumer. Three unrelated callers want it:
 
-## 9. `Filter` across the wasm boundary — or at minimum `readerText`
+- **Lint / diagnostics.** Marking an unknown `\s5` means knowing the marker's extent, not just its offset. Any rule about markup needs the markup's boundaries.
+- **Toggling markup for a range.** A hit found in a projection sits inside `\add …\add*`; the wrapper is outside the hit's span, and `MaskMap.pieces` reports the gaps INSIDE a span, never the enclosure around it. `Cst::extent(node, tokens)` computes it in Rust; the exported pieces are `owners`, `parents`, `first_token`, `last_token`, and assembling them in JavaScript is exactly the "parse USFM in general" the rule excludes.
+- **Reducing a reading to a narrower one,** for a caller that would rather ask than intersect two masks.
 
-**Asked:** the same reading rule on a diff row, an excerpt card and a find hit.
+**Change:** one door, span in and spans out, in the shape `attrs` already established (`attrs(text, from, to, utf16)` — a span in, flat words out):
 
-**State:** `onion::mask::Filter` is already a wasm-shaped value — *"Config only — no predicate, no callback: one API for Rust and for a wasm caller that can only hand over data"* — with `resolve()` as the boundary pre-flight and a documented precedence (marker beats kind). The boundary throws it away. `onion_wasm::mask(text, recipe)` takes a string and accepts two names:
+```
+spansIn(text, from, to, utf16) -> [{ from, to, kind, marker?, depth? }]
+enclosing(text, from, to, utf16) -> { from, to, marker }       // or the outermost row of the above
+```
+
+**Deliberately NOT the `classify` wire.** This is the same question item 11 asks, restricted to a range the caller already has, so it costs a bounded walk and no format: no version word, no generated reader, no staleness test, and none of the 3.6 MB a whole-document classification measured. The range restriction is what makes the generic version affordable.
+
+**Workaround check:** partial, and only for one caller. A decision unit's markup is already `text.slice(unit.current.from, unit.current.to)`, because `onion-wasm::diff` documents its spans as *"UTF-16 offsets into each side's own document"* — wired up and working (`2446072`). A find hit's wrapper has no workaround, and neither does a lint rule that wants a marker's extent.
+
+**Sefer side ready:** `src/dev/playground/units.tsx` `sourceOf` for the unit case; `/find`'s excerpt cards for the hit case. A UI note from the demo: a flipped row reflows, because markup is longer than the reading of it, so the toggle probably wants to be a popover rather than an in-place swap.
+
+## 10. The library has three tested reading rules; two are reachable
+
+**The capability:** a reading rule the library defines, tests and relies on internally is one a consumer can ask for by name.
+
+Not a design ask — a packaging gap, and the cheapest item here. `onion::mask::Filter` has three presets: `verse_text()`, `reader_text()`, `structure()`. The boundary exposes two:
 
 ```rust
 "verseText" => Filter::verse_text(),
@@ -113,25 +156,13 @@ That makes item 9 a convenience rather than a fix: with spans on runs, a page ca
 other => throw_str(…expected "verseText" or "structure")
 ```
 
-`Filter::reader_text()` — the one the diff uses — **is not reachable from JavaScript at all**, and neither is any composed filter. The `Galley` handle's `mask(id, opts)` has the same two recipes.
+`Filter::reader_text()` — the rule the diff itself runs on — is not reachable from JavaScript at all. A consumer therefore cannot reproduce the reading its own diff rows are written in, which is how two maskers ended up on one page.
 
-**Change:** accept a `Filter` on the mask doors, as `{ filter: { kinds, markers, unknowns, text, newlines, attrLists, optBreaks } }` beside the existing `recipe`. If that is more surface than is wanted now, `"readerText"` as a third recipe name closes most of it. `ReaderText::new` hardcodes `Filter::reader_text()` and already takes a `Mask`, so parameterising the diff is one line — and then a page and its diff can be made to agree by construction rather than by luck.
+**Change:** `"readerText"` as a third recipe name on `mask`, `maskOf` and the handle's `mask(id, opts)`. That is the whole of it.
 
-**Keep the presets.** A free filter is more expressive than `Filter`'s three-way `Action`, which means more ways to ask for an incoherent view (keep `\f*` without `\f`). The named recipes encode the combinations that mean something; they should stay the front door.
+**Optionally, and only if a second consumer asks:** accept a `Filter` value rather than a name. The type is already built for it — *"Config only — no predicate, no callback: one API for Rust and for a wasm caller that can only hand over data"* — with `resolve()` as the boundary pre-flight and a documented precedence. But a free filter can express views that mean nothing (keep `\f*` without `\f`), and the named recipes are what encode the combinations that do, so the names should stay the front door either way.
 
-**Sefer side ready:** `src/core/galley/*` is one thin adapter per door; `core/excerpts.project` would become a mask read rather than its own walk.
-
-## 10. The enclosing node of a span
-
-**Asked:** flip ONE result to markup-visible — one find hit, one diff row, one seated range — without flipping the surface (Will, 2026-09-17: *"in find, if we wanted to flip just one result, conceptually I'd like to"*).
-
-**State:** half of it needs nothing. `onion-wasm::diff` documents its spans as *"UTF-16 offsets into each side's own document"*, which is the space a JS string is already in, so a decision unit's markup is `text.slice(unit.current.from, unit.current.to)`. That is wired up and works (`2446072`) — clicking the reference in the margin flips that row.
-
-It does not finish for a find hit. A unit is a block, so its span carries its own `\v` and `\p`. A hit is a word, and the `\add ` in front of it sits OUTSIDE the span. `MaskMap.pieces(from, to)` says where the gaps inside the span are — *"the bytes BETWEEN two pieces are exactly the markup the projection dropped"* — but nothing says where the wrapper begins. `Cst::extent(node, tokens)` computes it in Rust; the exported parts are `owners`, `parents`, `first_token`, `last_token`, and assembling them in JS is the tree-walking the no-strings-cross rule exists to prevent.
-
-**Change:** `enclosing(text, from, to, utf16) -> { from, to, marker }` — the smallest CST node covering a span, in source coordinates, with the marker spelling it holds. Total: a span in front matter answers the block it sits in. `attrs(text, from, to, utf16)` is the precedent for a span-in, words-out door.
-
-**Sefer side ready:** `src/dev/playground/units.tsx` `sourceOf` does the unit case today; `/find`'s excerpt cards are where the hit case goes. A UI note from the demo: a flipped row REFLOWS, because markup is longer than the reading of it, and in a multibuffer that shifts every excerpt below — so the flip probably wants to be a popover rather than an in-place swap.
+**Workaround check:** with item 8 landed, yes — intersecting two masks gets Sefer the same answer. This item is what makes a consumer able to ASK instead of compute, which is the rule's preference, but it is not a blocker.
 
 ## 11. `classify` instead of `mask` — Will's counter-proposal, and what the corpus says
 
@@ -147,10 +178,10 @@ Not an ask. Will, 2026-09-17: what if the primitive were `classify` rather than 
 
 It is not fine where `mask.md` already says it is not fine. Word-aligned en_ult measures **1,607,157 mask ranges, 12.9 MB of map for 4.2 MB of kept text** — *"On word-aligned text the map is larger than the projection it describes"* — and a classification of the same corpus would be 3–4× that again, 40 MB and up. So `classify` does not change the aligned story; it multiplies it.
 
-**What it does not buy.** It does not fix item 8. The footnote divergence is caused by the diff needing a TOTAL filter, not by `Filter`'s shape — under tags the diff still emits runs over a total predicate and those runs still carry no offsets, so the bug is untouched. It half-absorbs item 10: a range carrying its node id or depth would let a consumer find an enclosing extent by scanning outward while depth holds, which is genuinely one fewer door. And it reshapes item 9 cosmetically — "expose the predicate" instead of "expose the `Filter`" — where `Filter` already exists, is documented as wasm-shaped, has `resolve()` as its boundary pre-flight, and is exercised by three presets. Against that, a tag vocabulary is a new wire format: a version word, a generated reader, a staleness test at both ends per this workspace's own rule, and a migration of mask, diff, find and the Sous seam. `mask.md` also already records that `ticket`'s fixed-width vocabulary is what rules out a run-length form — the same constraint a tag word would meet.
+**What it does not buy.** It does not fix item 8. The footnote divergence is caused by the diff needing a TOTAL filter, not by `Filter`'s shape — under tags the diff still emits runs over a total predicate and those runs still carry no offsets, so the bug is untouched. It overlaps item 9, which asks the same question restricted to a range the caller already holds — and that restriction is the whole difference: a bounded walk against a whole-document format. And it reshapes item 10 cosmetically — "expose the predicate" instead of "expose a recipe name" — where `Filter` already exists, is documented as wasm-shaped, has `resolve()` as its boundary pre-flight, and is exercised by three presets. Against that, a tag vocabulary is a new wire format: a version word, a generated reader, a staleness test at both ends per this workspace's own rule, and a migration of mask, diff, find and the Sous seam. `mask.md` also already records that `ticket`'s fixed-width vocabulary is what rules out a run-length form — the same constraint a tag word would meet.
 
-**Recommendation: keep `Filter`, do items 8–10.** The insight worth keeping from this is a comment, not a refactor: `Unwrap` is "accept the child's tag, reject the parent's", which is why the three-way `Action` is the shape it is. If `Action` ever needs a FOURTH case, that is the signal the tag model has started earning its keep.
+**Recommendation: keep `Filter`, do items 8–10 as framed above.** The insight worth keeping from this is a comment, not a refactor: `Unwrap` is "accept the child's tag, reject the parent's", which is why the three-way `Action` is the shape it is. If `Action` ever needs a FOURTH case, that is the signal the tag model has started earning its keep.
 
-**Where the model would land if it were built.** It is right about the representation and wrong about the wire. Classification belongs INSIDE the engine, as what `mask` is computed from — one pass, tags on ranges, and `Filter` reduced to a tag predicate, which would be a real simplification of `Filter` (no `kinds` array, no three-way `Action`, no per-marker name resolution). What crosses the boundary stays a `MASK` buffer, cut to the predicate the caller asked for, because 645 KB of answer beats 3.6 MB of raw material a consumer has to reduce itself. Under that reading, item 9 is not "expose `Filter`" so much as "expose the predicate", and the tag vocabulary is what it should be written in.
+**Where the model would land if it were built.** It is right about the representation and wrong about the wire. Classification belongs INSIDE the engine, as what `mask` is computed from — one pass, tags on ranges, and `Filter` reduced to a tag predicate, which would be a real simplification of `Filter` (no `kinds` array, no three-way `Action`, no per-marker name resolution). What crosses the boundary stays a `MASK` buffer, cut to the predicate the caller asked for, because 645 KB of answer beats 3.6 MB of raw material a consumer has to reduce itself. Under that reading, item 10 is not "expose `Filter`" so much as "expose the predicate", and the tag vocabulary is what it should be written in — and item 9 is the same query with a range bound on it, which is the affordable half.
 
 **The cost of doing it.** The tag vocabulary becomes a wire-versioned public enum, so adding a tag is a format change; `Filter` today can gain a field without renumbering anything. And a free tag predicate can express views that do not mean anything, which is what the named recipes are for. Both are arguments for the predicate being the inner layer and the recipes staying the door.
