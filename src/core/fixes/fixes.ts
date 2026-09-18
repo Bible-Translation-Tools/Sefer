@@ -308,7 +308,7 @@ export const overlayBook = (
   try {
     galley.update(OVERLAY_TARGET, source.text);
     galley.updateReference(OVERLAY_SOURCE, sourceText, true);
-    const overlaid = galley.overlay(OVERLAY_TARGET, OVERLAY_SOURCE);
+    const overlaid = galley.overlay(OVERLAY_TARGET, OVERLAY_SOURCE, opts);
     return Result.succeed({
       bookId: book.id,
       changes: overlaid.edits.map((edit) => ({
