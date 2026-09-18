@@ -272,14 +272,47 @@ function Terms() {
    * and the whole point of fetching both skeletons at once is that the
    * highlight then costs nothing per cursor move.
    */
+  /**
+   * How much of the book to match: one chapter's number, or the whole book.
+   *
+   * Will, 2026-09-18: "kinda overwhelming to do full project on something
+   * that's going to leave holes on purpose in places." An overlay inserts an
+   * inside-verse block EMPTY on purpose — where a verse's text splits is
+   * unknowable across languages — so a whole book at once is a whole book of
+   * holes to walk back through, and a chapter is a sitting.
+   *
+   * The ENGINE has taken this since v0.1.0 (`OverlayOptions.scope`, by
+   * `{ chapter }` or `{ sid }`); this screen simply never passed one.
+   *
+   * Defaulted to the whole book rather than guessing a chapter. The screen has
+   * no caret to read — the editor is not mounted here — and a scope that
+   * silently narrowed to a chapter the reader did not pick would be a
+   * transaction smaller than the one they asked for, which is the wrong way to
+   * be wrong about a write.
+   */
+  const [scope, setScope] = createSignal<number | "book">("book", { name: "matchScope" });
+
+  /** The chapters this book has, by the number a reader reads — the `\c` label. */
+  const chapters = (): readonly number[] =>
+    shell
+      .outline()
+      .map((row) => Number.parseInt(row.label, 10))
+      .filter((n) => Number.isFinite(n));
+
   const matched = createMemo(
     (): MatchFormatting | undefined => {
       const side = target();
       const text = sourceText();
       const id = sourceId();
+      const only = scope();
       if (side === undefined || id === "" || text === "") return undefined;
       try {
-        return matchFormatting(shell.services.galley, side, { id, text });
+        return matchFormatting(
+          shell.services.galley,
+          side,
+          { id, text },
+          only === "book" ? undefined : { scope: { chapter: only } },
+        );
       } catch {
         // A book the overlay refuses — a stale address, a text the engine will
         // not parse — is not a crash on this screen: the view says there is
@@ -347,6 +380,9 @@ function Terms() {
               sourceId() === "" ? t("no source bound for this book") : fileName(sourceId())
             }
             chapters={matched() === undefined ? [] : chaptersTouched(matched()!.overlay.report)}
+            scope={scope()}
+            scopeChapters={chapters()}
+            onScope={setScope}
             appliable={shell.focused() !== undefined && sourceId() !== ""}
             onApply={applyOverlay}
             empty={

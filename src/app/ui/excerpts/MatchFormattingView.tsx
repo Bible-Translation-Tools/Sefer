@@ -47,7 +47,7 @@ import { For, Show, createMemo, createSignal } from "solid-js";
 import type { Skeleton, SkeletonRow } from "../../../core/galley";
 import { t } from "../../i18n";
 import type { MatchFormatting } from "../../workflows/stet";
-import { Badge, Button, Card, Dialog, EmptyState, cx } from "../primitives";
+import { Badge, Button, Card, Dialog, EmptyState, Select, cx } from "../primitives";
 
 /**
  * The address three things are matched on. The marker is not one of them.
@@ -180,6 +180,18 @@ export interface MatchFormattingViewProps {
   readonly sourceLabel: string;
   /** Chapters the transaction touches, for the confirm dialog. */
   readonly chapters: readonly number[];
+  /**
+   * How much of the book the overlay is being asked for: one chapter's number,
+   * or the whole book.
+   *
+   * A control and not a derived fact, because an overlay leaves empty blocks
+   * on purpose and the reader decides how many of those they want to fill in
+   * one sitting.
+   */
+  readonly scope: number | "book";
+  /** Every chapter this book has, for the picker. */
+  readonly scopeChapters: readonly number[];
+  readonly onScope: (scope: number | "book") => void;
   /** Off when there is no project book to write to. */
   readonly appliable: boolean;
   readonly onApply: () => void;
@@ -241,6 +253,33 @@ export function MatchFormattingView(props: MatchFormattingViewProps) {
                   })}
                 </Badge>
               </Show>
+              {/* The scope, beside the counts it changes: narrowing the
+                  overlay changes every badge on this row, so the control
+                  belongs with them rather than in a toolbar above. */}
+              <label class="flex items-center gap-1.5 text-smallest text-on-surface-secondary">
+                {t("Match")}
+                <Select
+                  size="sm"
+                  wrapperClass="w-36"
+                  data-testid="match-scope"
+                  value={props.scope === "book" ? "book" : String(props.scope)}
+                  onChange={(event) =>
+                    props.onScope(
+                      event.currentTarget.value === "book"
+                        ? "book"
+                        : Number(event.currentTarget.value),
+                    )
+                  }
+                >
+                  <option value="book">{t("the whole book")}</option>
+                  <For each={props.scopeChapters}>
+                    {(chapter) => (
+                      <option value={String(chapter)}>{t("chapter {chapter}", { chapter })}</option>
+                    )}
+                  </For>
+                </Select>
+              </label>
+
               <div class="ms-auto">
                 <Button
                   variant="primary"
