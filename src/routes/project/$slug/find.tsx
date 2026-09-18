@@ -245,13 +245,17 @@ function Find() {
   const [bound, setBound] = createSignal(Workflows.EMPTY, { name: "boundReferences" });
 
   createEffect(
-    () => shell.project()?.root,
-    (root) => {
-      if (root === undefined) {
+    // `project.id`, not `root`: the id is the key `Library.bind` writes under,
+    // and for a project that declares an identifier the two are different
+    // strings (`core/project/project.ts`). Keyed by root, this resolved nothing
+    // and the references scope was quietly unavailable.
+    () => shell.project()?.id,
+    (id) => {
+      if (id === undefined) {
         setBound(Workflows.EMPTY);
         return;
       }
-      void shell.services.run(Workflows.bindReferences(root)).then(setBound);
+      void shell.services.run(Workflows.bindReferences(id)).then(setBound);
     },
   );
 

@@ -28,13 +28,14 @@ import { makeMultiBook } from "../core/multibook/multibook";
 import { Observability, type ObservabilityService } from "../core/observability";
 import type { Project } from "../core/project/project";
 import { Remote } from "../core/remote/remote";
-import { emptyBlocks, withoutScrolling } from "../editor";
+import { emptyBlocks, structureAt, withoutScrolling } from "../editor";
 import type { EditorAction, EditorBook, ProjectionName } from "../editor";
 import { giteaHostFor } from "./env";
 import { t } from "./i18n";
 import type { Domain, Services } from "./services";
 import { shellKeys } from "./settings";
 import type { ShellEvent } from "./shellEvent";
+import * as References from "./workflows/references";
 
 /** What a command's `run` may return; an Effect is run on the app runtime. */
 export type CommandResult =
@@ -711,6 +712,109 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
     // one Undo step and a formatted project is one per book. The edits are
     // Onion's own (`Fixes.formatBook`); Sefer has no formatter.
     // ---------------------------------------------------------------------
+
+    // ---------------------------------------------------------------------
+    // Match formatting, from wherever the reader is.
+    //
+    // It lived only on `/terms?view=format`, which is a screen you go to — and
+    // the operation is one you want ON the text you are reading, at the size
+    // you are willing to walk back through. An overlay inserts inside-verse
+    // blocks EMPTY on purpose (the engine cannot know where a verse's text
+    // splits across languages), so "this chapter" is a sitting and "this book"
+    // is an afternoon.
+    //
+    // The palette rather than the kebab because it is where every other
+    // whole-book operation already lives, and because `when` can hide it
+    // without a menu having to render a disabled row and explain itself. Not
+    // necessarily the permanent home.
+    //
+    // ASYNC, unlike its neighbours: the source text is a Library resource read
+    // off disk, not something the shell is holding. So the command reports
+    // what it is doing and reports again when it lands, rather than looking
+    // like it did nothing for a beat.
+    // ---------------------------------------------------------------------
+
+    ...(() => {
+      /** The `\c` number the caret is inside, or `undefined` in front matter. */
+      const chapterAtCaret = (book: EditorBook): number | undefined => {
+        const at = book.state.selection.main.head;
+        const row = structureAt(book.state).chapters.find(
+          (chapter: { readonly from: number; readonly to: number }) =>
+            at >= chapter.from && at < chapter.to,
+        );
+        const number = row === undefined ? Number.NaN : Number.parseInt(row.label, 10);
+        return Number.isFinite(number) ? number : undefined;
+      };
+
+      const match = (scope: "chapter" | "book"): void => {
+        const book = bridge.focused();
+        // `project.id` and not `root` — the key `Library.bind` writes under.
+        const projectId = bridge.project()?.id;
+        if (book === undefined || projectId === undefined) return;
+        const chapter = scope === "chapter" ? chapterAtCaret(book) : undefined;
+        if (scope === "chapter" && chapter === undefined) {
+          bridge.report(t("put the cursor in a chapter first"));
+          return;
+        }
+        bridge.report(t("reading the source…"));
+        void bridge.services
+          .run(References.sourceTextForBook(projectId, book.id))
+          .then((sourceText) => {
+            if (sourceText === undefined || sourceText === null || sourceText === "") {
+              bridge.report(t("no source bound for {book}", { book: book.id }));
+              return;
+            }
+            const previewed = overlayBook(
+              bridge.services.galley,
+              book,
+              sourceText,
+              chapter === undefined ? undefined : { scope: { chapter } },
+            );
+            if (Result.isFailure(previewed)) {
+              bridge.report(previewed.failure.description);
+              return;
+            }
+            if (previewed.success.empty) {
+              bridge.report(
+                chapter === undefined
+                  ? t("{book} already matches the source", { book: book.id })
+                  : t("chapter {chapter} already matches the source", { chapter }),
+              );
+              return;
+            }
+            const applied = applyOverlay(previewed.success, book);
+            bridge.report(
+              Result.isFailure(applied)
+                ? t("match formatting refused: {reason}", {
+                    reason: applied.failure.description,
+                  })
+                : chapter === undefined
+                  ? t("matched formatting across {book}", { book: book.id })
+                  : t("matched formatting in chapter {chapter}", { chapter }),
+            );
+            bridge.changed({ kind: "book.apply", books: [book.id] });
+          });
+      };
+
+      return [
+        registerCommand({
+          id: "format.match.chapter",
+          title: t("Match formatting: this chapter"),
+          when: hasBook,
+          run: () => {
+            match("chapter");
+          },
+        }),
+        registerCommand({
+          id: "format.match.book",
+          title: t("Match formatting: this book"),
+          when: hasBook,
+          run: () => {
+            match("book");
+          },
+        }),
+      ];
+    })(),
 
     registerCommand({
       id: "format.book",

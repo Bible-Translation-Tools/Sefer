@@ -229,7 +229,7 @@ function Terms() {
   const [sourceId, setSourceId] = createSignal("", { name: "matchSourceId" });
 
   createEffect(
-    () => ({ root: shell.project()?.root, book: shell.focused()?.id, want: view() }),
+    () => ({ root: shell.project()?.id, book: shell.focused()?.id, want: view() }),
     (now) => {
       if (now.want !== "format" || now.root === undefined) return;
       void shell.services.run(References.bindReferences(now.root)).then((found) => {

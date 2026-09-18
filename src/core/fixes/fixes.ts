@@ -36,6 +36,7 @@ import {
   type Analysis,
   type EngineStamp,
   type GalleyService,
+  type OverlayOptions,
 } from "../galley";
 import type { Change, SourceStamp } from "../source/source";
 
@@ -296,6 +297,12 @@ export const overlayBook = (
   galley: GalleyService,
   book: Book,
   sourceText: string,
+  /**
+   * How much of the book to overlay — `{ chapter }` or `{ sid }`, or the whole
+   * book when absent. An overlay inserts inside-verse blocks EMPTY on purpose,
+   * so the reader decides how many of those they want to fill in one sitting.
+   */
+  opts?: OverlayOptions,
 ): Result.Result<FormatPreview, Unsupported> => {
   const source = book.source();
   try {

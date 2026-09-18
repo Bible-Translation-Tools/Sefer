@@ -90,6 +90,33 @@ const booksOf = (
  * second copy in a Solid signal per screen is a copy that can go stale against
  * the file without anything noticing.
  */
+/**
+ * The source text to match one book's formatting against, or `undefined`.
+ *
+ * `projectId` is `Project.id`, not the root — see `bindReferences`.
+ *
+ * The pairing is by BOOK CODE against the reference's file name — the same
+ * loose rule `Library.lookup` uses, loose on purpose because resource layouts
+ * vary and the manifest that would answer authoritatively is YAML. Factored
+ * out of `/terms` so the command palette and that screen cannot disagree about
+ * which file is "the source for this book".
+ */
+export const sourceTextForBook = (
+  projectId: string,
+  bookId: string,
+): Effect.Effect<string | undefined, never, Library | ProjectAnalysis | FileSystem.FileSystem> =>
+  Effect.gen(function* () {
+    const bound = yield* bindReferences(projectId);
+    const wanted = bookId.toLowerCase();
+    const match = bound.ids.find((id) =>
+      id
+        .slice(id.lastIndexOf("/") + 1)
+        .toLowerCase()
+        .includes(wanted),
+    );
+    return match === undefined ? undefined : yield* textOfReference(match);
+  });
+
 export const textOfReference = (
   id: string,
 ): Effect.Effect<string | undefined, never, FileSystem.FileSystem> =>
@@ -109,7 +136,13 @@ export const textOfReference = (
  * idempotent per id and unchanged text costs a checksum. `attachReferences`
  * replaces the whole set, so a binding the user removed stops answering.
  *
- * `projectId` is the project ROOT, which is what `Library.bind` keys on.
+ * `projectId` is `Project.id` — the key `Library.bind` actually writes under,
+ * which is NOT the root. A project that declares an identifier has an id of
+ * `${root}#${declared}` (`core/project/project.ts`), and every screen that
+ * binds a resource does so through `project.id`. Passing the root here
+ * resolved nothing for exactly the projects that declare themselves properly,
+ * and it failed SILENTLY: no bindings, no references registered, and a Match
+ * Formatting screen that said "bind a source first" to somebody who had.
  */
 export const bindReferences = (
   projectId: string,
