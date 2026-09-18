@@ -21,7 +21,11 @@ export interface BoundaryOptions {
   readonly rawAssetDirs?: readonly string[];
   /**
    * Directories of vendored, host-neutral code core may import by relative
-   * path — the pinned Galley engine (`vendor/galley`). Vendored code is checked
+   * path. Empty since 2026-09-18: the Galley engine was the only one, and it
+   * is a tagged git dependency now, so core reaches it by PACKAGE NAME like
+   * any other — which the bare-specifier rule below already allows. Kept
+   * because the next vendored thing will want it and the rule is three lines.
+   * Vendored code is checked
    * by the hash in its manifest, not by this walker.
    */
   readonly vendorDirs?: readonly string[];
@@ -260,7 +264,6 @@ const main = (): void => {
     paths,
     pathsBase: base,
     rawAssetDirs: [path.join(root, "fixtures")],
-    vendorDirs: [path.join(root, "vendor", "galley")],
   });
 
   if (violations.length === 0) {

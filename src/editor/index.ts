@@ -146,6 +146,20 @@ export {
   type SatelliteOptions,
 } from "./recipes/satellite";
 
+// Doing something to the book without moving the page (core/scroll.ts).
+export { withoutScrolling } from "./core/scroll";
+
+// Blocks a translator still has to fill: the ghost, and the set behind it.
+export {
+  annotateEmptyBlocks,
+  annotatingEmptyBlocks,
+  blockIsEmpty,
+  blockNamer,
+  emptyBlocks,
+  showEmptyBlocks,
+  type BlockNamer,
+} from "./recipes/emptyBlocks";
+
 // Views (§3.6).
 export { pickChapter, projectionFor, type ProjectionName } from "./views";
 

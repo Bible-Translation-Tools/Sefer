@@ -16,8 +16,10 @@ A capability core needs arrives as a core port that a host implements.
 
 Two relative-import exceptions exist, both listed in `tools/boundaries/check.ts`:
 `?raw` imports from `fixtures/` (the seeded dev project) and anything under
-`vendor/galley/` — the pinned Scripture Kitchen engine, which is host-neutral
-generated code whose identity is the hash in `vendor/galley/manifest.json`.
+`@wycliffeassociates/scripture-kitchen` — the pinned Scripture Kitchen engine.
+Host-neutral generated code, reached by PACKAGE NAME like any other dependency
+and pinned by tag in `package.json`; nothing is vendored and there is no
+second record of its identity.
 Only `src/core/galley` should import it; every other module reads the engine
 through that adapter.
 

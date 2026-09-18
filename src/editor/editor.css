@@ -173,7 +173,9 @@
   padding-inline-start: calc(96px + 0.9em);
 }
 .cm-mode-regular .usfm-b {
-  min-height: 0.8em;
+  /*min-height: 0.8em;*/
+  padding: 0;
+  height: 0;
 }
 
 .cm-mode-regular .usfm-verse {
@@ -947,4 +949,23 @@
   outline: none;
   background: var(--surface-primary);
   border-color: var(--brand-base);
+}
+
+/* Blocks a translator still has to fill (`src/editor/recipes/emptyBlocks.ts`).
+   A widget, so it is not in the document and cannot be typed over, selected,
+   copied or saved — it is drawn AT the offset where the words go, and the
+   caret sits in front of it. Quiet on purpose: it marks a place to work, not
+   a mistake, so it wears the muted ink and not the error one. */
+.cm-mode-regular .usfm-ghost {
+  font: 400 0.85em/1 var(--font-ui);
+  font-style: italic;
+  color: var(--editor-faint);
+  border: 1px dashed var(--editor-slot-line);
+  border-radius: 3px;
+  padding: 0.1em 0.45em;
+  margin-inline-start: 0.1em;
+  vertical-align: baseline;
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: none;
 }

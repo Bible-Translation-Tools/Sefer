@@ -22,16 +22,18 @@ import { Effect, Option, Result, type Scope } from "effect";
 import { createSignal } from "solid-js";
 
 import type { Book } from "../core/book/book";
-import { applyFormat, formatBook } from "../core/fixes/fixes";
+import { applyFormat, applyOverlay, formatBook, overlayBook } from "../core/fixes/fixes";
 import { Git } from "../core/git/git";
 import { makeMultiBook } from "../core/multibook/multibook";
 import { Observability, type ObservabilityService } from "../core/observability";
 import type { Project } from "../core/project/project";
 import { Remote } from "../core/remote/remote";
+import { emptyBlocks, withoutScrolling } from "../editor";
 import type { EditorAction, EditorBook, ProjectionName } from "../editor";
 import { giteaHostFor } from "./env";
 import { t } from "./i18n";
 import type { Domain, Services } from "./services";
+import { shellKeys } from "./settings";
 import type { ShellEvent } from "./shellEvent";
 
 /** What a command's `run` may return; an Effect is run on the app runtime. */
@@ -67,8 +69,15 @@ export interface Command extends CommandSpec {
 export interface ShellBridge {
   readonly services: Services;
   readonly project: () => Project | undefined;
-  /** The book the editor route currently shows, if any. */
-  readonly focused: () => Book | undefined;
+  /**
+   * The book the editor route currently shows, if any.
+   *
+   * An `EditorBook` and not a bare `Book`, because the shell's already is:
+   * a command that just wrote needs the book's CANONICAL STATE to ask what it
+   * did — and reading that state is the difference between a result computed
+   * over the new text and one guessed from the offsets of the old.
+   */
+  readonly focused: () => EditorBook | undefined;
   readonly mode: () => ProjectionName;
   readonly setMode: (mode: ProjectionName) => void;
   /** The clipped chapter ordinal, or null for the whole book. */
@@ -92,6 +101,13 @@ export interface ShellBridge {
   readonly openProject: (root: string) => Promise<void>;
   readonly setPaletteOpen: (open: boolean) => void;
   /** Shown in the status bar; the shell's one place for a transient message. */
+  /**
+   * Scroll the editor to an offset and flash it — the door `shell.aim`
+   * already opens for search hits and findings. On the bridge because a
+   * command that changed the document is often the only thing that knows
+   * WHERE the interesting part of its own result is.
+   */
+  readonly aim: (bookId: string, from: number, to?: number) => void;
   readonly report: (message: string) => void;
   /**
    * Tells the shell that a module's derived state moved for a reason the
@@ -720,6 +736,125 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
         );
         bridge.changed({ kind: "book.apply", books: [book.id] });
       },
+    }),
+
+    // ---------------------------------------------------------------------
+    // Match formatting. The bound SOURCE's paragraphing, carried onto the open
+    // book in one `book.apply(…, 'overlay')` — so it is one Undo step, and
+    // Undo is the preview. There is no confirm dialog on purpose: the thing a
+    // translator needs to judge is the result in their own editor, and a list
+    // of block addresses in a modal is not that.
+    // ---------------------------------------------------------------------
+
+    registerCommand({
+      id: "overlay.book",
+      title: t("Match formatting from source"),
+      when: hasBook,
+      run: () =>
+        Effect.gen(function* () {
+          const book = bridge.focused();
+          const project = bridge.project();
+          if (book === undefined || project === undefined) return;
+          // The FIRST source, because the role holds many and "match
+          // formatting" has to mean one text. A project with two sources
+          // bound is a picker this command does not have yet, and taking the
+          // first is the same order the reference column shows them in.
+          const bound = yield* bridge.services.library.resolve(project.id, "source");
+          const source = bound[0];
+          if (source === undefined) {
+            bridge.report(t("no source text is bound to this project"));
+            return;
+          }
+          const text = yield* bridge.services.library.readBook(source.id, book.id);
+          if (Option.isNone(text)) {
+            bridge.report(t("the source has no {book}", { book: book.id }));
+            return;
+          }
+          const previewed = overlayBook(bridge.services.galley, book, text.value);
+          if (Result.isFailure(previewed)) {
+            bridge.report(previewed.failure.description);
+            return;
+          }
+          if (previewed.success.empty) {
+            bridge.report(t("{book} already matches the source's formatting", { book: book.id }));
+            return;
+          }
+          /**
+           * The write must not move the page.
+           *
+           * Match formatting rewrites markers the length of the book, so every
+           * offset after the first edit shifts and CodeMirror's pixel scroll
+           * no longer points at the words the reader was looking at. `core/
+           * scroll.ts` is the tool for exactly this — it is what keeps Undo
+           * from throwing you out of a footnote — and a whole-book operation
+           * has the same claim: you asked to reformat, not to go somewhere.
+           */
+          const applied = withoutScrolling(() => applyOverlay(previewed.success, book));
+          if (Result.isFailure(applied)) {
+            bridge.report(
+              t("match formatting refused: {reason}", { reason: applied.failure.description }),
+            );
+            return;
+          }
+          bridge.changed({ kind: "book.apply", books: [book.id] });
+
+          /**
+           * What the overlay LEFT for a human.
+           *
+           * An overlay inserts a block that belongs inside a verse with no
+           * words in it, on purpose — where a verse's text splits is
+           * unknowable across languages. Those are the whole visible result of
+           * the operation, and they are counted off the book's OWN state after
+           * the write rather than from the preview's offsets: the write moved
+           * every offset after the first edit, and a number read from before
+           * it would point at the wrong line.
+           */
+          const holes = emptyBlocks(book.state);
+          if (holes.length === 0) {
+            bridge.report(t("matched {book} to {source}", { book: book.id, source: source.title }));
+            return;
+          }
+          /**
+           * And go to one — the first at or after WHERE THE READER IS, not the
+           * first in the book.
+           *
+           * Match formatting runs over the whole book, so the first hole in it
+           * is very often in chapter 2 while the reader is working in chapter
+           * 40. Jumping there answers a question nobody asked and loses their
+           * place, which is the same complaint as the scroll above. The
+           * canonical state's own selection is where they are.
+           */
+          const caret = book.state.selection.main.head;
+          const next = holes.find((hole) => hole.from >= caret) ?? holes[0];
+          bridge.aim(book.id, next.from);
+
+          /**
+           * And make sure they can be SEEN.
+           *
+           * The blocks the overlay left are invisible without
+           * `editor.annotateEmptyParagraphs`, so a reader who had it off would
+           * be sent to a blank line and told twelve of them need text. Turning
+           * a persisted preference on behind somebody's back is rude, so it is
+           * done only when it is off AND there is something to see, and the
+           * report says it happened — the setting is theirs to put back.
+           */
+          const ghostKey = shellKeys(bridge.services.settings).annotateEmptyParagraphs;
+          const wasOff = !bridge.services.settings.get(ghostKey);
+          if (wasOff) yield* bridge.services.settings.set(ghostKey, true);
+
+          bridge.report(
+            wasOff
+              ? t(
+                  "matched {book} to {source} — {count} block(s) need text; showing empty paragraphs",
+                  { book: book.id, source: source.title, count: holes.length },
+                )
+              : t("matched {book} to {source} — {count} block(s) need text", {
+                  book: book.id,
+                  source: source.title,
+                  count: holes.length,
+                }),
+          );
+        }),
     }),
 
     registerCommand({

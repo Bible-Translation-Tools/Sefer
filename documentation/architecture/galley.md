@@ -1,6 +1,6 @@
 # Galley
 
-**Galley** is the adapter over the pinned Scripture Kitchen wasm artifact in `vendor/galley/`: Onion (the USFM parser) and Sous (whole-corpus proofreading) composed upstream into one handle. `src/core/galley/` is the only importer of `vendor/`; every other module imports `src/core/galley` and reads values, never the readers.
+**Galley** is the adapter over the Scripture Kitchen wasm artifact: Onion (the USFM parser) and Sous (whole-corpus proofreading) composed upstream into one handle. The engine is a TAGGED GIT DEPENDENCY — `@wycliffeassociates/scripture-kitchen`, pinned in `package.json` and resolved in `pnpm-lock.yaml` — and nothing is vendored. `src/core/galley/` is its only importer; every other module imports `src/core/galley` and reads values, never the readers.
 
 ## The one call
 

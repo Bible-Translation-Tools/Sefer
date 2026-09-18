@@ -18,34 +18,36 @@
  * failure are for.
  */
 
-import { Context, Data, Effect, Layer, Option, Result } from "effect";
-
-import manifest from "../../../vendor/galley/manifest.json";
-import { MaskMap, FORMAT_VERSION as MASK_FORMAT_VERSION } from "../../../vendor/galley/mask-reader";
+import {
+  MaskMap,
+  FORMAT_VERSION as MASK_FORMAT_VERSION,
+} from "@wycliffeassociates/scripture-kitchen/mask-reader";
 import {
   deserialize,
   declaredVersion,
   FORMAT_VERSION as ONION_FORMAT_VERSION,
-} from "../../../vendor/galley/onion-reader";
+} from "@wycliffeassociates/scripture-kitchen/reader";
+import {
+  FindingsSnapshot,
+  FORMAT_VERSION as SOUS_FORMAT_VERSION,
+} from "@wycliffeassociates/scripture-kitchen/sous-reader";
+import {
+  Census as ProjectToc,
+  FORMAT_VERSION as TOC_FORMAT_VERSION,
+} from "@wycliffeassociates/scripture-kitchen/toc-reader";
+import type { BookCensus as BookToc } from "@wycliffeassociates/scripture-kitchen/toc-reader";
 import {
   Galley as GalleyHandle,
   initSync,
   type SousSettings as SousSettingsHandle,
-} from "../../../vendor/galley/pkg-web/usfm_galley.js";
+} from "@wycliffeassociates/scripture-kitchen/web";
 // The whole namespace as well as the two names above: Onion's stateless doors
 // (diff, merge, format…) arrive as FREE FUNCTIONS on the module rather than as
 // methods on the handle, and `diff.ts` and `format.ts` bind them by name off
 // this namespace. v0.1.0 is the build that carries them.
-import * as wasmModule from "../../../vendor/galley/pkg-web/usfm_galley.js";
-import {
-  FindingsSnapshot,
-  FORMAT_VERSION as SOUS_FORMAT_VERSION,
-} from "../../../vendor/galley/sous-reader";
-import {
-  Census as ProjectToc,
-  FORMAT_VERSION as TOC_FORMAT_VERSION,
-} from "../../../vendor/galley/toc-reader";
-import type { BookCensus as BookToc } from "../../../vendor/galley/toc-reader";
+import * as wasmModule from "@wycliffeassociates/scripture-kitchen/web";
+import { Context, Data, Effect, Layer, Option, Result } from "effect";
+
 import { Observability, type ObservabilityService } from "../observability";
 import type { Analysis, DiagnosticView } from "./analysis";
 import {
@@ -72,10 +74,10 @@ import {
 
 // The VALUE, not just the type: the corpus half's other implementation
 // (`src/platform/tauri/corpus.ts`) opens a buffer the native engine produced,
-// and the rule that nothing outside `src/core/galley` imports `vendor/` holds
+// and the rule that nothing outside `src/core/galley` imports the engine holds
 // for the reader too.
 export { FindingsSnapshot };
-export type { Finding, Pattern, BookView } from "../../../vendor/galley/sous-reader";
+export type { Finding, Pattern, BookView } from "@wycliffeassociates/scripture-kitchen/sous-reader";
 // The pattern table's own vocabulary. Re-exported (not re-declared) so that a
 // reader of the table — `src/core/findings/inventory.ts` — names the same
 // closed sets the wire does, and a channel added upstream is a type error here
@@ -86,14 +88,14 @@ export {
   OUTER_CLASSES,
   PATTERN_DIGIT_GLYPH,
   POOLS,
-} from "../../../vendor/galley/sous-reader";
+} from "@wycliffeassociates/scripture-kitchen/sous-reader";
 export type {
   Channel,
   ConventionReason,
   OuterClass,
   PatternKey,
   Pool,
-} from "../../../vendor/galley/sous-reader";
+} from "@wycliffeassociates/scripture-kitchen/sous-reader";
 // The TOC reader, same rule: `toc`/`tocAll` answer these classes, and the
 // sidebar reads chapter counts off them without learning a layout.
 //
@@ -104,11 +106,11 @@ export type {
 // TOC is what `search.md` and `resources.md` have called this thing since
 // before the door existed, so that is what it is called here.
 export { ProjectToc };
-export type { BookCensus as BookToc } from "../../../vendor/galley/toc-reader";
+export type { BookCensus as BookToc } from "@wycliffeassociates/scripture-kitchen/toc-reader";
 export type {
   ChapterRow as TocChapter,
   VerseRow as TocVerse,
-} from "../../../vendor/galley/toc-reader";
+} from "@wycliffeassociates/scripture-kitchen/toc-reader";
 
 /** The wasm module could not be instantiated at all. */
 export class EngineLoadError extends Data.TaggedError("EngineLoadError")<{
@@ -141,9 +143,14 @@ export class EngineInputError extends Data.TaggedError("EngineInputError")<{
 /** Engine identity, for the about box and for evidence in a bug report. */
 export interface EngineVersion {
   readonly engine: string;
-  /** The tag `vendor/galley` was taken from — `v0.1.0`. */
+  /**
+   * The dependency's tag — `v0.1.4`. Injected by Vite from `package.json`,
+   * which is where the engine is pinned and the only place it is written.
+   * There is no `revision` beside it: the commit a tag resolves to lives in
+   * `pnpm-lock.yaml`, and copying it here would be the second record this
+   * whole change exists to delete.
+   */
   readonly tag: string;
-  readonly revision: string;
   readonly onionFormat: number;
   readonly sousFormat: number;
   readonly findFormat: number;
@@ -692,92 +699,23 @@ export interface GalleyService {
 
 export class Galley extends Context.Service<Galley, GalleyService>()("Galley") {}
 
-/** The shape of `vendor/galley/manifest.json` that `accepts` reads. */
-export interface EngineManifest {
-  readonly wire: {
-    readonly onion: { readonly formatVersion: number };
-    readonly sous: { readonly formatVersion: number };
-    readonly find: { readonly magic: number; readonly formatVersion: number };
-    readonly toc: { readonly formatVersion: number };
-    readonly mask: { readonly formatVersion: number };
-  };
-}
-
 /**
- * Does this build's readers speak the artifact's wire formats?
+ * What engine this is, asked of the artifact itself.
  *
- * The onion and sous versions are compared against the READERS' own
- * `FORMAT_VERSION` constants rather than numbers written here, so a
- * regenerated reader and a stale `manifest.json` disagree loudly instead of
- * agreeing with a copy of neither.
- *
- * The find buffer has no generated reader — `decodeHits` in this file is it —
- * so its magic and version are compared against this module's own constants,
- * which is the same discipline with the reader and the constant in one place.
- * v0.1.0 is where the find buffer acquired a header at all (engine-asks 5).
+ * Every format version is the READER's own constant, so this cannot report a
+ * wire the installed package does not actually speak — which is what the old
+ * `manifest.json` + `accepts()` pair existed to check, and why neither
+ * survives the move to a tagged dependency: a hand-copied file could disagree
+ * with the artifact beside it, and a constant compiled out of that artifact
+ * cannot.
  */
-export const accepts = (artifact: EngineManifest): Result.Result<void, VersionMismatch> => {
-  if (artifact.wire.onion.formatVersion !== ONION_FORMAT_VERSION) {
-    return Result.fail(
-      new VersionMismatch({
-        wire: "onion",
-        found: artifact.wire.onion.formatVersion,
-        expected: ONION_FORMAT_VERSION,
-      }),
-    );
-  }
-  if (artifact.wire.sous.formatVersion !== SOUS_FORMAT_VERSION) {
-    return Result.fail(
-      new VersionMismatch({
-        wire: "sous",
-        found: artifact.wire.sous.formatVersion,
-        expected: SOUS_FORMAT_VERSION,
-      }),
-    );
-  }
-  if (artifact.wire.find.magic !== FIND_MAGIC) {
-    return Result.fail(
-      new VersionMismatch({ wire: "find", found: artifact.wire.find.magic, expected: FIND_MAGIC }),
-    );
-  }
-  if (artifact.wire.find.formatVersion !== FIND_FORMAT_VERSION) {
-    return Result.fail(
-      new VersionMismatch({
-        wire: "find",
-        found: artifact.wire.find.formatVersion,
-        expected: FIND_FORMAT_VERSION,
-      }),
-    );
-  }
-  if (artifact.wire.toc.formatVersion !== TOC_FORMAT_VERSION) {
-    return Result.fail(
-      new VersionMismatch({
-        wire: "toc",
-        found: artifact.wire.toc.formatVersion,
-        expected: TOC_FORMAT_VERSION,
-      }),
-    );
-  }
-  if (artifact.wire.mask.formatVersion !== MASK_FORMAT_VERSION) {
-    return Result.fail(
-      new VersionMismatch({
-        wire: "mask",
-        found: artifact.wire.mask.formatVersion,
-        expected: MASK_FORMAT_VERSION,
-      }),
-    );
-  }
-  return Result.succeed(undefined);
-};
-
 const engineVersion = (): EngineVersion => ({
-  engine: manifest.engine.crate,
-  tag: manifest.engine.tag,
-  revision: manifest.engine.revision,
-  onionFormat: manifest.wire.onion.formatVersion,
-  sousFormat: manifest.wire.sous.formatVersion,
-  findFormat: manifest.wire.find.formatVersion,
-  tocFormat: manifest.wire.toc.formatVersion,
+  engine: "usfm_galley",
+  tag: typeof __GALLEY_TAG__ === "string" ? __GALLEY_TAG__ : "unknown",
+  onionFormat: ONION_FORMAT_VERSION,
+  sousFormat: SOUS_FORMAT_VERSION,
+  findFormat: FIND_FORMAT_VERSION,
+  tocFormat: TOC_FORMAT_VERSION,
 });
 
 const readSettings = (held: SousSettingsHandle): SousSettings => ({
@@ -1080,7 +1018,6 @@ export const GalleyLive = (
   Layer.effect(
     Galley,
     Effect.gen(function* () {
-      yield* Effect.fromResult(accepts(manifest));
       yield* instantiate(bytes);
       const observability = yield* Effect.serviceOption(Observability);
       const handle = yield* Effect.try({

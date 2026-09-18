@@ -461,9 +461,10 @@ export const composeServices = async (
   composition.observability.note(
     "shell.services",
     "ready",
-    // The tag and the short revision, not just the crate name: which engine
-    // this build actually vendored is the first thing a bug report needs.
-    `${storageKind} galley ${version.engine} ${version.tag} ${version.revision.slice(0, 7)}`,
+    // The tag, not just the crate name: which engine this build resolved is
+    // the first thing a bug report needs. The commit behind the tag is in
+    // `pnpm-lock.yaml`, which is where a dependency's identity belongs.
+    `${storageKind} galley ${version.engine} ${version.tag}`,
   );
 
   /**

@@ -51,6 +51,7 @@ export type Origin =
   | "window"
   | "fix"
   | "format"
+  | "overlay"
   | "replace"
   | "recovery"
   | "revert"

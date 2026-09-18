@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import process from "node:process";
 
 import solid from "@solidjs/vite-plugin";
@@ -42,6 +43,33 @@ const shortGitSha = (): string | null => {
 
 const buildIdentity = (mode: string): string => `${shortGitSha() ?? "dev"}+${mode}`;
 
+/**
+ * Which engine tag this build resolved, read from the ONE place it is pinned.
+ *
+ * The engine used to be a copy under `vendor/galley` with a `manifest.json`
+ * beside it naming the tag it was copied from — two records of one fact, which
+ * is exactly how they drift. It is a tagged git dependency now, so the
+ * dependency spec IS the pin and this reads it rather than restating it. A
+ * spec without a `#tag` (a branch, a local link) reports itself as written,
+ * which is the honest answer for a build that is not on a release.
+ */
+const galleyTag = (): string => {
+  try {
+    const manifest: unknown = JSON.parse(readFileSync("package.json", "utf8"));
+    // SAFETY: one optional field read off this repository's own package.json,
+    // which `JSON.parse` types as `unknown`. Both the field and the key are
+    // checked for undefined on the next line; a package.json without them is
+    // the "unpinned" case, not a crash.
+    const spec = (manifest as { dependencies?: Record<string, string> }).dependencies?.[
+      "@wycliffeassociates/scripture-kitchen"
+    ];
+    if (spec === undefined) return "unpinned";
+    return spec.includes("#") ? spec.slice(spec.lastIndexOf("#") + 1) : spec;
+  } catch {
+    return "unknown";
+  }
+};
+
 export default defineConfig(({ mode }) => {
   // `loadEnv` so the collector may be named either in a `.env` file or, as the
   // documented command does, exported in the shell that runs `pnpm dev`.
@@ -75,6 +103,7 @@ export default defineConfig(({ mode }) => {
     ],
     define: {
       __SEFER_BUILD__: JSON.stringify(buildIdentity(mode)),
+      __GALLEY_TAG__: JSON.stringify(galleyTag()),
     },
     server: {
       port: 3000,

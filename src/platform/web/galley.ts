@@ -8,9 +8,9 @@
  * its webview fetches the same asset off the bundled frontend.
  */
 
+import wasmUrl from "@wycliffeassociates/scripture-kitchen/web/wasm?url";
 import { Effect, Layer } from "effect";
 
-import wasmUrl from "../../../vendor/galley/pkg-web/usfm_galley_bg.wasm?url";
 import {
   EngineLoadError,
   Galley,

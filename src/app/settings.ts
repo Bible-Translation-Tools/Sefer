@@ -191,6 +191,7 @@ export interface ShellKeys {
    * the picker changes it) for people who would rather read that way.
    */
   readonly preferChapterView: SettingKey<boolean>;
+  readonly annotateEmptyParagraphs: SettingKey<boolean>;
   /**
    * The findings panel's persistent filter. Edited on `/findings`, not on
    * `/settings` — see `FindingsFilterPreference`.
@@ -277,6 +278,15 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
       DEFAULT_JOURNAL_POLICY.idleMs,
     ),
     preferChapterView: settings.register("editor.preferChapterView", Schema.Boolean, false),
+    // On by default: the blocks this names are invisible without it, and the
+    // first time most readers meet one is straight after Match Formatting —
+    // where the empty blocks ARE the result, and a page of blank lines reads
+    // as the button having done nothing.
+    annotateEmptyParagraphs: settings.register(
+      "editor.annotateEmptyParagraphs",
+      Schema.Boolean,
+      true,
+    ),
     findingsFilter: settings.register(
       "findings.filter",
       FindingsFilterPreference,
@@ -360,6 +370,14 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
       key: keys.preferChapterView,
       label: "Open books one chapter at a time",
       description: "A book is one document; turn this on to clip the view to a chapter.",
+      kind: "boolean",
+      group: "editor",
+    },
+    {
+      key: keys.annotateEmptyParagraphs,
+      label: "Name paragraphs that have no text",
+      description:
+        "A paragraph or poetry marker with nothing after it is invisible. Turn this on to show its name where the words would go — it is never written to the file.",
       kind: "boolean",
       group: "editor",
     },

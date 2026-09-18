@@ -232,7 +232,8 @@ export class EngineDoorMissing extends Data.TaggedError("EngineDoorMissing")<{
  * The one sentence naming the doors, so the code, the error and the
  * documentation all say the same thing.
  *
- * They are present in scripture-kitchen v0.1.0 (`vendor/galley/manifest.json`).
+ * They are present from scripture-kitchen v0.1.0; the tag this build resolved
+ * is pinned in `package.json`.
  * Seeing this string means the vendored artifact is not that build.
  */
 export const DIFF_DOOR =

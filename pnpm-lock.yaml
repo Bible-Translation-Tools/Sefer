@@ -160,6 +160,9 @@ importers:
       '@tauri-apps/plugin-updater':
         specifier: ^2.11.0
         version: 2.11.0
+      '@wycliffeassociates/scripture-kitchen':
+        specifier: github:WycliffeAssociates/scripture-kitchen#v0.1.4
+        version: https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/0eda4905122527007379bcfea4059154e6ff35c4
       buffer:
         specifier: 6.0.3
         version: 6.0.3
@@ -1475,6 +1478,10 @@ packages:
 
   '@vitest/utils@4.1.11':
     resolution: {integrity: sha512-zTCVGpyFsGWBhllOyKlTw/vnr6D9qxsfSDyfbyZmTyjHw5N/VuvzHpHoQjm2ZJzn4RJgx5w4r7V0er69CmLgPQ==}
+
+  '@wycliffeassociates/scripture-kitchen@https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/0eda4905122527007379bcfea4059154e6ff35c4':
+    resolution: {gitHosted: true, integrity: sha512-vCC+W04lyNmrIsfI5tFej0Xi0vNcmCqaAi7EP57YAFVPd1HDDwjWqHbSZZwoGZXBiOBr8nXoNNUn8zsbx+pHFg==, tarball: https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/0eda4905122527007379bcfea4059154e6ff35c4}
+    version: 0.1.4
 
   abort-controller@3.0.0:
     resolution: {integrity: sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==}
@@ -4048,6 +4055,8 @@ snapshots:
       '@vitest/pretty-format': 4.1.11
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.1
+
+  '@wycliffeassociates/scripture-kitchen@https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/0eda4905122527007379bcfea4059154e6ff35c4': {}
 
   abort-controller@3.0.0:
     dependencies:

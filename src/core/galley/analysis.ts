@@ -5,7 +5,7 @@
  * This file is the vocabulary half of the Galley seam. `galley.ts` owns the
  * wasm handle and the single `analyze` call; everything downstream (the
  * editor's fold, findings, fixes, project analysis) imports FROM HERE and
- * never from `vendor/`. That is why the reader's types are re-exported below:
+ * never from the engine package. That is why its types are re-exported below:
  * the vendored artifact is regenerated upstream, and one import site to
  * re-point is the whole cost of a regeneration.
  *
@@ -13,17 +13,17 @@
  * functions the keystroke path calls, so they are plain and synchronous.
  */
 
-import { declaredVersion } from "../../../vendor/galley/onion-reader";
-import type { Dish, DiagnosticView } from "../../../vendor/galley/onion-reader";
+import { declaredVersion } from "@wycliffeassociates/scripture-kitchen/reader";
+import type { Dish, DiagnosticView } from "@wycliffeassociates/scripture-kitchen/reader";
 import {
   Category,
   MARKERS,
   MarkerKind,
   TOKEN_SPELLING_BIT,
   TokenKind,
-} from "../../../vendor/galley/onion-reader";
+} from "@wycliffeassociates/scripture-kitchen/reader";
 
-// The reader's surface, re-exported so `vendor/` has exactly one importer.
+// The reader's surface, re-exported so the engine has exactly one importer.
 export {
   ATTR_STRIDE,
   attrList,
@@ -54,14 +54,14 @@ export {
   TokenView,
   Tree,
   USFM_VERSIONS,
-} from "../../../vendor/galley/onion-reader";
+} from "@wycliffeassociates/scripture-kitchen/reader";
 export type {
   AttrList,
   Dish,
   FixEdit,
   ParseOptions,
   Span,
-} from "../../../vendor/galley/onion-reader";
+} from "@wycliffeassociates/scripture-kitchen/reader";
 
 /**
  * One parse, with everything needed to prove which text it describes.

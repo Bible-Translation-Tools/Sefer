@@ -15,13 +15,22 @@
  * registry's answer instead of asking for it. The one exception is Save,
  * whose `can()` is a real "there is nothing to save right now".
  *
- * The mode control has three segments and not four. Form is not built, so it
- * has no segment (planning/03-ui/design-direction.md); Key terms is a
- * NAVIGATION dressed as a mode, because that is what the mockup shows and what
- * the reader means — it is the same corpus seen as a term list, on `/terms`.
+ * The mode control has two segments. Form is not a projection — it is a
+ * data-entry SURFACE beside the editor, so it gets a route and not a segment;
+ * Key terms is a NAVIGATION dressed as a mode, because that is what the mockup
+ * shows and what the reader means — the same corpus seen as a term list, on
+ * `/terms`.
+ *
+ * The one piece of state the toolbar holds is whether a SOURCE is bound, and
+ * it holds it because the answer is an Effect and a `disabled` attribute is
+ * not. `library.resolve` is asked once per project, and again on a shell tick
+ * so that binding a source in the reference column lights the button up
+ * without a reload. The command itself re-resolves and reports when there is
+ * none: the signal decides what the button LOOKS like, never what happens.
  */
 
 import { useNavigate } from "@tanstack/solid-router";
+import ArrowLeftRight from "lucide-solid/icons/arrow-left-right";
 import Bell from "lucide-solid/icons/bell";
 import BookOpen from "lucide-solid/icons/book-open";
 import Code from "lucide-solid/icons/code";
@@ -29,7 +38,7 @@ import MoreVertical from "lucide-solid/icons/more-vertical";
 import Redo2 from "lucide-solid/icons/redo-2";
 import SearchIcon from "lucide-solid/icons/search";
 import Undo2 from "lucide-solid/icons/undo-2";
-import { Show, createSignal } from "solid-js";
+import { Show, createEffect, createSignal } from "solid-js";
 
 import { findCommand, runCommand } from "../../commands";
 import { t } from "../../i18n";
@@ -38,7 +47,7 @@ import { Card, IconButton, Input, Popover, SegmentedControl } from "../primitive
 import { bookName } from "./books";
 import { metadataOf, projectName } from "./project";
 
-/** The three segments, as literal strings so Tailwind and the reader agree. */
+/** The two segments, as literal strings so Tailwind and the reader agree. */
 type Segment = "regular" | "usfm";
 
 export function Toolbar() {
@@ -95,6 +104,31 @@ export function Toolbar() {
    */
   const can = (id: string): boolean => findCommand(id)?.available() === true;
 
+  /**
+   * Is there a source text to match formatting FROM?
+   *
+   * Re-asked when the project or the book changes. The shell has no signal for
+   * a BINDING — the reference column raises its own local one — so binding a
+   * source while the same book is open does not light this up until the next
+   * book change. The command re-resolves and reports either way, so the gap
+   * costs a hidden button and never a wrong answer.
+   */
+  const [hasSource, setHasSource] = createSignal(false, { name: "toolbarHasSource" });
+  createEffect(
+    () => ({ project: shell.project()?.id, book: shell.focused()?.id }),
+    ({ project }) => {
+      if (project === undefined) {
+        setHasSource(false);
+        return;
+      }
+      void shell.services
+        .run(shell.services.library.resolve(project, "source"))
+        .then((bound: readonly unknown[]) => {
+          setHasSource(bound.length > 0);
+        });
+    },
+  );
+
   const item =
     "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start text-small text-on-surface-primary transition-colors hover:bg-surface-secondary disabled:cursor-not-allowed disabled:text-on-surface-tertiary disabled:hover:bg-transparent";
 
@@ -115,7 +149,7 @@ export function Toolbar() {
            third segment here and it is not a mode — it is a screen, and
            picking it navigated away, which made the other two look like
            navigations too. It is a rail tile, where the other destinations
-           are. */
+           are. Form is a SURFACE, not a projection, and will not live here. */
         items={[
           { value: "regular", label: t("Regular Mode"), icon: <BookOpen size={14} /> },
           { value: "usfm", label: t("USFM"), icon: <Code size={14} /> },
@@ -162,6 +196,21 @@ export function Toolbar() {
           disabled={!can("book.redo")}
           onClick={() => runCommand("book.redo")}
         />
+
+        {/* Match formatting. Shown only when a source is bound, because a
+            button that is always there and never works teaches people to stop
+            looking at it. It writes straight to the open book — Undo is the
+            preview, and it is one step. */}
+        <Show when={hasSource()}>
+          <IconButton
+            size="sm"
+            data-testid="toolbar-overlay"
+            label={t("Match formatting from source")}
+            icon={<ArrowLeftRight size={16} />}
+            disabled={!can("overlay.book")}
+            onClick={() => runCommand("overlay.book")}
+          />
+        </Show>
 
         <span class="relative inline-flex">
           <IconButton

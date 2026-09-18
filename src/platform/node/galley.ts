@@ -20,11 +20,16 @@ import {
 } from "../../core/galley/galley";
 
 /**
- * Resolved from this module's own URL rather than from `process.cwd()`, so it
- * holds wherever the runner is started from.
+ * Resolved through the PACKAGE rather than by walking up from this file.
+ *
+ * The engine is a tagged git dependency, so where its bytes sit on disk is
+ * pnpm's business and not this module's — `import.meta.resolve` asks the
+ * resolver the same question the bundler asks on the Web path, which is what
+ * keeps the two hosts loading the same artifact without either one spelling a
+ * path into `node_modules`.
  */
 export const WASM_PATH = fileURLToPath(
-  new URL("../../../vendor/galley/pkg-web/usfm_galley_bg.wasm", import.meta.url),
+  import.meta.resolve("@wycliffeassociates/scripture-kitchen/web/wasm"),
 );
 
 /**

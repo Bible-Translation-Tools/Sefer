@@ -270,6 +270,78 @@ export const formatBook = (
 };
 
 /**
+ * MATCH FORMATTING: the source's paragraphing, carried onto the target.
+ *
+ * Same shape as `formatBook` and deliberately so — the engine's overlay door
+ * answers the same `FormatEdit` transaction `formatEdits` does, so this is one
+ * preview, one `book.apply`, one Undo step, and `applyOverlay` below is
+ * `applyFormat` with a different origin. Sefer decides nothing about where a
+ * paragraph goes; `galley/src/overlay.md` does.
+ *
+ * Both sides are registered under SCRATCH ids rather than the book's own. The
+ * target is already resident under `book.id` for proofreading, and removing
+ * that registration on the way out — which the `finally` below must do, or an
+ * overlay leaks a whole book into the engine every time it is run — would take
+ * the project's own analysis with it. The source needs `keepText`: a reference
+ * registered without it kept verse lengths only, and an overlay reads blocks.
+ *
+ * The door THROWS rather than answering a `Result` (it is probed off the wasm
+ * module by name), so the catch is the real failure path for an artifact that
+ * predates the overlay doors — not defensive noise.
+ */
+const OVERLAY_TARGET = "sefer.overlay.target";
+const OVERLAY_SOURCE = "sefer.overlay.source";
+
+export const overlayBook = (
+  galley: GalleyService,
+  book: Book,
+  sourceText: string,
+): Result.Result<FormatPreview, Unsupported> => {
+  const source = book.source();
+  try {
+    galley.update(OVERLAY_TARGET, source.text);
+    galley.updateReference(OVERLAY_SOURCE, sourceText, true);
+    const overlaid = galley.overlay(OVERLAY_TARGET, OVERLAY_SOURCE);
+    return Result.succeed({
+      bookId: book.id,
+      changes: overlaid.edits.map((edit) => ({
+        from: edit.from,
+        to: edit.to,
+        insert: edit.insert,
+      })),
+      stamp: source.stamp,
+      empty: overlaid.edits.length === 0,
+    });
+  } catch (error) {
+    return Result.fail(
+      new Unsupported({
+        operation: "overlayBook",
+        description: error instanceof Error ? error.message : String(error),
+      }),
+    );
+  } finally {
+    galley.remove(OVERLAY_TARGET);
+    galley.remove(OVERLAY_SOURCE);
+  }
+};
+
+/**
+ * Apply an overlay preview. `applyFormat`'s twin, and the difference is the
+ * ORIGIN: a receipt that said "format" would make match formatting invisible
+ * in the history, the save status and the trace, which are the three places
+ * somebody looks when they want to know what changed their paragraphing.
+ */
+export const applyOverlay = (
+  preview: FormatPreview,
+  book: Book,
+): Result.Result<Receipt, Refusal> => {
+  const current = book.source().stamp;
+  if (current.revision !== preview.stamp.revision)
+    return Result.fail(staleRefusal(book, preview.stamp, current));
+  return book.apply(preview.changes, "overlay", trustedBy("overlay"));
+};
+
+/**
  * Apply a format preview. Refuses when the Book moved since it was computed,
  * exactly as a fix preview does and for exactly the same reason: the offsets
  * would land in text nobody looked at.

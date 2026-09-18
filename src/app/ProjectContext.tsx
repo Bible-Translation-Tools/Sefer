@@ -1203,6 +1203,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     navigate,
     openProject,
     setPaletteOpen: shell.setPaletteOpen,
+    aim,
     report,
     changed,
   };

@@ -43,6 +43,8 @@ import {
   annotateRepaint,
   gestureTrace,
   assignment,
+  annotateEmptyBlocks,
+  blockNamer,
   flash,
   flashing,
   frontMatterCard,
@@ -56,11 +58,14 @@ import {
   type ProjectionName,
   keystrokeMeter,
   noteBookIs,
+  showEmptyBlocks,
   watchLocation,
 } from "../../editor";
 import { useComposition } from "../CompositionContext";
 import { textDirection } from "../language";
 import { useShell } from "../ProjectContext";
+import { shellKeys } from "../settings";
+import { nameBlock } from "./workspace/blockNames";
 import { LocationBar } from "./workspace/LocationBar";
 import { metadataOf } from "./workspace/project";
 
@@ -221,6 +226,15 @@ export function BookEditor(props: BookEditorProps) {
             meter.extension,
             flashing(),
             frontMatterCard(),
+            // Blocks with no words, named where the words go. The initial
+            // value is the reader's setting; the fiber below follows it, so
+            // turning it off moves the page rather than the next reload.
+            blockNamer.of(nameBlock),
+            annotateEmptyBlocks(
+              shell.services.settings.get(
+                shellKeys(shell.services.settings).annotateEmptyParagraphs,
+              ),
+            ),
           ]),
         });
       }
@@ -277,6 +291,18 @@ export function BookEditor(props: BookEditorProps) {
         Stream.runForEach(shell.services.projectAnalysis.watch(), () => Effect.sync(corpus)),
       );
 
+      // `editor.annotateEmptyParagraphs`, live. One effect on a mounted view
+      // rather than a compartment reconfigure: it is one boolean, and the
+      // recipe holds it in a state field for exactly this.
+      const ghostKey = shellKeys(shell.services.settings).annotateEmptyParagraphs;
+      const ghosting = shell.services.runtime.runFork(
+        Stream.runForEach(shell.services.settings.changes(ghostKey), (on) =>
+          Effect.sync(() => {
+            showEmptyBlocks(created, on);
+          }),
+        ),
+      );
+
       // The location bar's reading. One passive scroll listener, coalesced into
       // an animation frame by the recipe.
       const unwatch = watchLocation(created, (where) => {
@@ -297,6 +323,7 @@ export function BookEditor(props: BookEditorProps) {
       // the book stayed bound, and the analysis fiber outlived the screen.
       return () => {
         unwatch();
+        Effect.runFork(Fiber.interrupt(ghosting));
         unname();
         Effect.runFork(Fiber.interrupt(watching));
         unsubscribe();
