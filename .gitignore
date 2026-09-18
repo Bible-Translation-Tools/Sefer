@@ -23,3 +23,7 @@ scratchpad/
 .env
 .env.*
 !.env.example
+scratch.md
+
+# Untracked playground sketches: see src/dev/playground/registry.ts.
+src/dev/playground/local/

@@ -23,6 +23,7 @@ import { Route as ProjectSlugFindRouteImport } from './routes/project/$slug/find
 import { Route as ProjectSlugFindingsRouteImport } from './routes/project/$slug/findings'
 import { Route as ProjectSlugHistoryRouteImport } from './routes/project/$slug/history'
 import { Route as ProjectSlugInventoryRouteImport } from './routes/project/$slug/inventory'
+import { Route as ProjectSlugPlaygroundRouteImport } from './routes/project/$slug/playground'
 import { Route as ProjectSlugReviewRouteImport } from './routes/project/$slug/review'
 import { Route as ProjectSlugTermsRouteImport } from './routes/project/$slug/terms'
 import { Route as ProjectSlugBookBookRouteImport } from './routes/project/$slug/book/$book'
@@ -97,6 +98,11 @@ const ProjectSlugInventoryRoute = ProjectSlugInventoryRouteImport.update({
   path: '/inventory',
   getParentRoute: () => ProjectSlugRoute,
 } as any)
+const ProjectSlugPlaygroundRoute = ProjectSlugPlaygroundRouteImport.update({
+  id: '/playground',
+  path: '/playground',
+  getParentRoute: () => ProjectSlugRoute,
+} as any)
 const ProjectSlugReviewRoute = ProjectSlugReviewRouteImport.update({
   id: '/review',
   path: '/review',
@@ -127,6 +133,7 @@ export interface FileRoutesByFullPath {
   '/project/$slug/findings': typeof ProjectSlugFindingsRoute
   '/project/$slug/history': typeof ProjectSlugHistoryRoute
   '/project/$slug/inventory': typeof ProjectSlugInventoryRoute
+  '/project/$slug/playground': typeof ProjectSlugPlaygroundRoute
   '/project/$slug/review': typeof ProjectSlugReviewRoute
   '/project/$slug/terms': typeof ProjectSlugTermsRoute
   '/project/$slug/': typeof ProjectSlugIndexRoute
@@ -145,6 +152,7 @@ export interface FileRoutesByTo {
   '/project/$slug/findings': typeof ProjectSlugFindingsRoute
   '/project/$slug/history': typeof ProjectSlugHistoryRoute
   '/project/$slug/inventory': typeof ProjectSlugInventoryRoute
+  '/project/$slug/playground': typeof ProjectSlugPlaygroundRoute
   '/project/$slug/review': typeof ProjectSlugReviewRoute
   '/project/$slug/terms': typeof ProjectSlugTermsRoute
   '/project/$slug': typeof ProjectSlugIndexRoute
@@ -165,6 +173,7 @@ export interface FileRoutesById {
   '/project/$slug/findings': typeof ProjectSlugFindingsRoute
   '/project/$slug/history': typeof ProjectSlugHistoryRoute
   '/project/$slug/inventory': typeof ProjectSlugInventoryRoute
+  '/project/$slug/playground': typeof ProjectSlugPlaygroundRoute
   '/project/$slug/review': typeof ProjectSlugReviewRoute
   '/project/$slug/terms': typeof ProjectSlugTermsRoute
   '/project/$slug/': typeof ProjectSlugIndexRoute
@@ -186,6 +195,7 @@ export interface FileRouteTypes {
     | '/project/$slug/findings'
     | '/project/$slug/history'
     | '/project/$slug/inventory'
+    | '/project/$slug/playground'
     | '/project/$slug/review'
     | '/project/$slug/terms'
     | '/project/$slug/'
@@ -204,6 +214,7 @@ export interface FileRouteTypes {
     | '/project/$slug/findings'
     | '/project/$slug/history'
     | '/project/$slug/inventory'
+    | '/project/$slug/playground'
     | '/project/$slug/review'
     | '/project/$slug/terms'
     | '/project/$slug'
@@ -223,6 +234,7 @@ export interface FileRouteTypes {
     | '/project/$slug/findings'
     | '/project/$slug/history'
     | '/project/$slug/inventory'
+    | '/project/$slug/playground'
     | '/project/$slug/review'
     | '/project/$slug/terms'
     | '/project/$slug/'
@@ -339,6 +351,13 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof ProjectSlugInventoryRouteImport
       parentRoute: typeof ProjectSlugRoute
     }
+    '/project/$slug/playground': {
+      id: '/project/$slug/playground'
+      path: '/playground'
+      fullPath: '/project/$slug/playground'
+      preLoaderRoute: typeof ProjectSlugPlaygroundRouteImport
+      parentRoute: typeof ProjectSlugRoute
+    }
     '/project/$slug/review': {
       id: '/project/$slug/review'
       path: '/review'
@@ -370,6 +389,7 @@ interface ProjectSlugRouteChildren {
   ProjectSlugFindingsRoute: typeof ProjectSlugFindingsRoute
   ProjectSlugHistoryRoute: typeof ProjectSlugHistoryRoute
   ProjectSlugInventoryRoute: typeof ProjectSlugInventoryRoute
+  ProjectSlugPlaygroundRoute: typeof ProjectSlugPlaygroundRoute
   ProjectSlugReviewRoute: typeof ProjectSlugReviewRoute
   ProjectSlugTermsRoute: typeof ProjectSlugTermsRoute
   ProjectSlugIndexRoute: typeof ProjectSlugIndexRoute
@@ -383,6 +403,7 @@ const ProjectSlugRouteChildren: ProjectSlugRouteChildren = {
   ProjectSlugFindingsRoute: ProjectSlugFindingsRoute,
   ProjectSlugHistoryRoute: ProjectSlugHistoryRoute,
   ProjectSlugInventoryRoute: ProjectSlugInventoryRoute,
+  ProjectSlugPlaygroundRoute: ProjectSlugPlaygroundRoute,
   ProjectSlugReviewRoute: ProjectSlugReviewRoute,
   ProjectSlugTermsRoute: ProjectSlugTermsRoute,
   ProjectSlugIndexRoute: ProjectSlugIndexRoute,

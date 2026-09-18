@@ -491,6 +491,26 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       },
     }),
 
+    /**
+     * The dev playground, reachable without typing a URL.
+     *
+     * `import.meta.env.DEV` is a build-time constant, so `when` folds to
+     * `false` in a production build and the command is never offered — the same
+     * gate the route itself carries. Untranslated on purpose: it is not a
+     * feature of the product.
+     */
+    registerCommand({
+      id: "dev.playground",
+      title: "Playground (dev)",
+      when: () => import.meta.env.DEV && hasProject(),
+      run: () => {
+        void bridge.navigate({
+          to: "/project/$slug/playground",
+          params: { slug: bridge.slug() },
+        });
+      },
+    }),
+
     registerCommand({
       id: "editor.toggleMode",
       title: t("Toggle USFM / visual"),
