@@ -40,7 +40,47 @@ export const inOrder = (bench: Bench): readonly DecisionUnit[] => {
   return rows.length > 0 ? rows : [...skeleton.units];
 };
 
-/** The reader-visible text of one side of a unit, markers projected away. */
+/**
+ * The reader-visible text of one side of a unit, markers projected away.
+ *
+ * ## TWO MASKERS ON ONE PAGE, and they disagree about notes
+ *
+ * Nothing here eats markup. There are two separate things that do, and which
+ * one a row gets depends on whether the row CHANGED:
+ *
+ *   * a changed unit's words come from the ENGINE — `unit_text_diff` runs over
+ *     `ReaderText`/`Filter::reader_text` (`core/galley/diff.ts`), so the runs
+ *     arrive already masked and Sefer never sees the markers;
+ *   * an unchanged unit, and the whole-side fallback below, go through OUR
+ *     projection — `core/excerpts`' `project`, over one cached `Analysis` per
+ *     side per book (`review/reading.ts`).
+ *
+ * Measured against the four committed fixtures, the two agree on every
+ * reader-visible character of 59 units, differing only in trailing whitespace,
+ * which the projection collapses and the engine keeps.
+ *
+ * They do NOT agree about footnotes. Probed with `\f + \fr 1:1 \ft Some
+ * manuscripts read slave.\f*` inside a changed verse:
+ *
+ *   engine: "Paul, a servant of God1:1 Some manuscripts read slave. and an…"
+ *   ours:   "Paul, a servant of God and an…"
+ *
+ * The engine's reader text carries the caller and the note body; `project`
+ * drops both, by the rule the excerpt cards and Find already run under. So on
+ * a page of mixed rows the same footnote appears inline in a changed verse and
+ * vanishes from the verse above it — and the word diff will happily mark
+ * changes inside a note that the surrounding text does not show at all.
+ *
+ * Not papered over here, because the fix is not local. Masking the runs after
+ * the fact is impossible (they arrive concatenated, with no note extents), and
+ * re-diffing our own projection would throw away the engine's alignment, which
+ * is the whole reason to use it. It is the same question as the mask toggle:
+ * ONE reader-text rule, with the caller saying whether notes are in it. Worth
+ * asking Galley for alongside the mask map.
+ *
+ * Nothing in `/review` hits this today — its cards read one unit at a time and
+ * are never mixed with unchanged ones.
+ */
 export const sideText = (bench: Bench, unit: DecisionUnit, side: MergeSide): string | undefined =>
   side === "baseline"
     ? textOf(bench.galley, bench.baselineText, unit.baseline, false)
