@@ -23,14 +23,28 @@ export interface ChapterName {
 /** Where the reader is: a chapter, and how far into the document. */
 export interface Where extends ChapterName {
   /**
-   * The verse number at the very TOP of the viewport, as written — `"10"`,
-   * `"5-7"` for a bridge — or absent above the first verse of the chapter.
+   * The `\c` label of the chapter the TOP of the viewport is in — which is
+   * NOT always `label`, and conflating the two was a bug.
    *
-   * With `label` this is the place the reader had got to, and it is what puts
-   * them back: a remount builds a new `EditorView`, and where somebody had
-   * scrolled to is a fact about a view rather than about the state it is over.
-   * A reference rather than an offset, so an edit while they were away moves
-   * it with the text instead of pointing at whatever now sits there.
+   * `label` answers "which chapter am I reading", and a heading in the top
+   * half wins it the moment it lands, while the top edge is still in the
+   * chapter above. That is right for the crumb and wrong for a place: the
+   * verse scan below is scoped to a chapter, and scoping it to a chapter that
+   * has not started yet finds nothing at all.
+   *
+   * So the crumb reads `label` and the remembered place reads this, and they
+   * are allowed to disagree for the width of one heading.
+   */
+  readonly topChapter?: string;
+  /**
+   * The verse number at the very TOP of the viewport, as written — `"10"`,
+   * `"5-7"` for a bridge — or absent above the first verse of its chapter.
+   *
+   * With `topChapter` this is the place the reader had got to, and it is what
+   * puts them back: a remount builds a new `EditorView`, and where somebody
+   * had scrolled to is a fact about a view rather than about the state it is
+   * over. A reference rather than an offset, so an edit while they were away
+   * moves it with the text instead of pointing at whatever now sits there.
    */
   readonly verse?: string;
   /** The document offset at the very top of the viewport. */
@@ -43,6 +57,8 @@ export interface Where extends ChapterName {
    * yet, which is the moment before the first parse lands.
    */
   readonly hash?: string;
+  /** The document's length when `top` was read — see `LastLocation.place`. */
+  readonly length: number;
 }
 
 /**
@@ -114,15 +130,26 @@ export function chapterInView(view: EditorView): Where | null {
   const found = best ?? chapters[0];
   if (found === undefined) return null;
 
-  // One pixel in and two down, so this is the first line the reader can see
-  // rather than whatever is clipped at the seam.
-  const top = Math.max(0, view.posAtCoords({ x: box.left + 8, y: box.top + 2 }, false));
-  // The verse that line is in, from this view's own table. Scoped to the
-  // chapter, because verse numbers repeat and `10` alone names sixty places.
+  // The START of the first line the reader can see.
+  //
+  // `lineBlockAtHeight` and not `posAtCoords`, which rounds to the nearest
+  // position and so returned the NEXT line's start whenever the first line was
+  // partly scrolled off — leaving on verse 6 and coming back on verse 7. A
+  // line block is the line itself, and its `from` is where it begins.
+  const top = view.lineBlockAtHeight(box.top - docTop + 1).from;
+  // The chapter `top` is actually in — see `topChapter`. Scanned rather than
+  // assumed to be `found`, which is the chapter FILLING the viewport.
+  let holder: (typeof chapters)[number] | undefined;
+  for (const chapter of chapters) {
+    if (chapter.from > top) break;
+    holder = chapter;
+  }
+  // And the verse that offset is in, from this view's own table, scoped to
+  // that chapter — verse numbers repeat, and `10` alone names sixty places.
   const rows = structureAt(view.state).verses;
   let verse: string | undefined;
   for (const row of rows) {
-    if (row.markerFrom < found.from) continue;
+    if (holder !== undefined && row.markerFrom < holder.from) continue;
     if (row.markerFrom > top) break;
     verse = row.num ?? undefined;
   }
@@ -131,7 +158,9 @@ export function chapterInView(view: EditorView): Where | null {
     ordinal: found.ordinal,
     label: found.label,
     top,
+    length: view.state.doc.length,
     ...(hash === undefined ? {} : { hash: String(hash) }),
+    ...(holder === undefined ? {} : { topChapter: holder.label }),
     ...(verse === undefined ? {} : { verse }),
   };
 }

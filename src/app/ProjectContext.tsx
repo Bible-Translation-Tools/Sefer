@@ -878,10 +878,10 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
      * Where the reader last WAS in this book, when nothing else asked for a
      * place.
      *
-     * The aim wins when there is a live one; a remembered scroll position is
-     * only the absence of a request. Reopening a project used to land on the
-     * top of the right book however far down it the reader had been, because
-     * the only thing written down was the CLIP — and a book opens whole.
+     * The aim wins when there is a live one; a remembered place is only the
+     * absence of a request. Reopening a project used to land on the top of the
+     * right book however far down it the reader had been, because the only
+     * thing written down was the CLIP — and a book opens whole.
      */
     const held = lastLocation(staticProject.root);
     const resume = at === undefined && held?.bookId === bookId ? held.at : undefined;
@@ -894,19 +894,19 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       return;
     }
     setChapter(opening);
-    if (resume !== undefined && resume > 0) {
-      // Whole-book view scrolls instead: the `\c` anchor of the remembered
-      // chapter goes to the top of the viewport, which is exactly what a
-      // chapter click does. Marked honoured as it is made, so the next open of
-      // the same book asks the remembered location again rather than replaying
-      // this scroll.
-      const chapter = editing.structure().chapters[resume];
-      if (chapter !== undefined) {
-        const resumeAim: Reveal = { bookId, from: anchorFrom(chapter), at: "top" };
-        setReveal(resumeAim);
-        honoured = resumeAim;
-      }
-    }
+    // Whole-book view does NOT scroll from here, and used to.
+    //
+    // It manufactured a `Reveal` at the remembered chapter's `\c` anchor,
+    // which was the best this could do when a chapter was all that was written
+    // down. `BookEditor` now resumes the exact place — the offset when the
+    // document still hashes the same, else the verse, else the chapter — and
+    // two resumes fought: the aim made here made the editor's own restore
+    // stand down (an aim is an explicit request and outranks a remembered
+    // place), and the fresh view then recorded its position at the top of the
+    // book, overwriting what had been remembered. So the reader landed at the
+    // top and the memory of where they had been was gone.
+    //
+    // One resume, at the surface that knows the viewport.
     remember(bookId, opening, resume);
   };
 

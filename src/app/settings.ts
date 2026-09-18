@@ -201,6 +201,17 @@ const LastLocations = Schema.Record(
          */
         offset: Schema.optionalKey(Schema.Number),
         hash: Schema.optionalKey(Schema.String),
+        /**
+         * The document's length beside the hash, because the hash is not
+         * always THERE.
+         *
+         * `Analysis` is attached to the state by the analyzer, and a freshly
+         * created `EditorView` has not run it yet — which is why `supply()` in
+         * `BookEditor` guards on `analysis !== null`. So at the one moment the
+         * offset is wanted, the hash to check it against can be missing, and
+         * the exact rung could never fire. Length always can.
+         */
+        length: Schema.optionalKey(Schema.Number),
       }),
     ),
   }),

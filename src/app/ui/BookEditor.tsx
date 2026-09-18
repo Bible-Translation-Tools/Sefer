@@ -115,12 +115,23 @@ const placeOf = (
     readonly verse?: string;
     readonly offset?: number;
     readonly hash?: string;
+    readonly length?: number;
   },
 ): number | undefined => {
   const structureNow = structureAt(state);
+  // The hash when BOTH sides have one — a fresh view has not parsed yet, so
+  // `analysis` is routinely null exactly here (see `LastLocation.place`) — and
+  // the length otherwise. Same length is weaker than same hash: an edit that
+  // swapped one word for another of equal width would pass it, and the cost of
+  // being wrong is an offset a few characters stale, which at scroll
+  // granularity nobody can see. A different length is proof of change either
+  // way, and drops to the verse.
   const hash = structureNow.analysis?.sourceHash;
-  if (place.offset !== undefined && place.hash !== undefined && String(hash) === place.hash)
-    return Math.min(place.offset, state.doc.length);
+  const unmoved =
+    hash !== undefined && place.hash !== undefined
+      ? String(hash) === place.hash
+      : place.length === state.doc.length;
+  if (place.offset !== undefined && unmoved) return Math.min(place.offset, state.doc.length);
   const chapter = structureNow.chapters.find((row) => row.label === place.chapter);
   if (chapter === undefined) return undefined;
   if (place.verse === undefined) return chapter.from;
@@ -163,6 +174,17 @@ export function BookEditor(props: BookEditorProps) {
     () => host(),
     (parent) => {
       if (parent === undefined) return;
+      // READ FIRST, before the view exists and before `watchLocation` below
+      // starts reporting. That watcher reads its view's position the moment it
+      // attaches, and a freshly built view is at the top of the book — so
+      // taking this any later reads a value the mount has already overwritten
+      // with "chapter 1, offset 0". Which is precisely what it did.
+      const remembered = untrack(() => {
+        if (shell.reveal()?.bookId === bookId) return undefined;
+        const root = shell.project()?.root;
+        const held = root === undefined ? undefined : shell.lastLocation(root);
+        return held?.bookId === bookId ? held.place : undefined;
+      });
       // A deliberate one-time read, said so the runtime believes it: an
       // effect's callback is an untracked scope in Solid 2, and a bare
       // `props.book` there is a read it warns about. This component is keyed on
@@ -389,50 +411,42 @@ export function BookEditor(props: BookEditorProps) {
         // that knows the answer.
         if (where !== null)
           shell.noteChapterAtTop(where.ordinal, {
-            chapter: where.label,
+            // The chapter the TOP is in, not the one filling the view — the
+            // place and the crumb are different questions (see `Where`).
+            chapter: where.topChapter ?? where.label,
             offset: where.top,
+            length: where.length,
             ...(where.hash === undefined ? {} : { hash: where.hash }),
             ...(where.verse === undefined ? {} : { verse: where.verse }),
           });
       });
 
-      // Where the reader had got to, put back.
-      //
-      // This is the one place it CAN be put back: a remount builds a fresh
-      // `EditorView`, and a scroll position is a fact about a view rather than
-      // about the canonical state the view is over — so leaving for Find and
-      // coming back landed at the top of the book with everything else intact.
+      // Where the reader had got to, put back — from the value captured at
+      // the top of this effect, for the reason stated there.
       //
       // Resolved as a REFERENCE, down a ladder, because the document may have
       // moved while the reader was away — they may have been in Find for the
-      // express purpose of changing it:
-      //
-      //   the verse -> the chapter it was in -> nothing, and stay at the top.
-      //
-      // Each rung is looked up by what the document SAYS (`\c`'s label, the
-      // verse number), so a chapter that gained a line still resolves and a
-      // verse that was deleted falls to its chapter instead of landing in
-      // whatever now occupies its offsets.
+      // express purpose of changing it. See `placeOf`.
       //
       // It yields to `reveal`. A search hit or a finding is an explicit "take
       // me here", and restoring a remembered place over the top of one would
       // be answering a question nobody asked. The reveal effect below does the
       // moving in that case.
-      //
-      // Untracked, all of it: a one-time question asked at mount, not a
-      // subscription — the remembered location changes on every scroll, and
-      // depending on it would make this effect re-run for its own writes.
-      const resume = untrack(() => {
-        if (shell.reveal()?.bookId === book.id) return undefined;
-        const root = shell.project()?.root;
-        const held = root === undefined ? undefined : shell.lastLocation(root);
-        if (held?.bookId !== book.id || held.place === undefined) return undefined;
-        return placeOf(created.state, held.place);
-      });
-      if (resume !== undefined && resume > 0)
-        created.dispatch({
-          effects: EditorView.scrollIntoView(resume, { y: "start" }),
+      const resume = remembered === undefined ? undefined : placeOf(created.state, remembered);
+      if (resume !== undefined && resume > 0) {
+        created.dispatch({ effects: EditorView.scrollIntoView(resume, { y: "start" }) });
+        // TWICE, a frame apart. CodeMirror ESTIMATES the height of content it
+        // has not rendered, so a jump deep into a book lands approximately —
+        // measured at ~1,300px out, a screenful, in Genesis. The first scroll
+        // brings the region into the render window and the real heights are
+        // measured; the second lands on them. Without it the reader comes back
+        // near where they were, which is the kind of nearly-right that reads
+        // as a bug.
+        requestAnimationFrame(() => {
+          if (created.dom.isConnected)
+            created.dispatch({ effects: EditorView.scrollIntoView(resume, { y: "start" }) });
         });
+      }
 
       setBound({ view: created, projection });
 
