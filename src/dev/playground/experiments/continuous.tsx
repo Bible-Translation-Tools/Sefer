@@ -42,7 +42,7 @@ import { For, Show, createSignal } from "solid-js";
 import { Badge, Card, cx } from "../../../app/ui/primitives";
 import { unitReference, type MergeSide } from "../../../core/galley";
 import type { Experiment, ExperimentProps } from "../experiment";
-import { Gutter, UnitBody, inOrder } from "../units";
+import { Gutter, UnitBody, inOrder, type DiffTone } from "../units";
 
 function ContinuousDiff(props: ExperimentProps) {
   const [decisions, setDecisions] = createSignal<ReadonlyMap<string, MergeSide>>(new Map(), {
@@ -59,6 +59,7 @@ function ContinuousDiff(props: ExperimentProps) {
   };
 
   const split = (): boolean => props.dials.choice("layout") === "split";
+  const tone = (): DiffTone => (props.dials.choice("tone") === "was / now" ? "wasNow" : "side");
 
   const rows = () => {
     const bench = props.bench;
@@ -114,7 +115,7 @@ function ContinuousDiff(props: ExperimentProps) {
                   </span>
 
                   <div class="min-w-0 flex-1">
-                    <UnitBody bench={bench()} unit={unit} split={split()} />
+                    <UnitBody bench={bench()} unit={unit} split={split()} tone={tone()} />
                     <Show when={unit.isUsfmStructureChange && unit.status !== "unchanged"}>
                       {/* The unit every "just show me the words" layout draws as
                           blank. It has to say something. */}
@@ -137,6 +138,7 @@ export const experiment: Experiment = {
   blurb: "The whole book, reading, with the changes inside it.",
   dials: {
     layout: { kind: "choice", label: "Layout", options: ["merged", "split"], initial: "merged" },
+    tone: { kind: "choice", label: "Tone", options: ["by side", "was / now"], initial: "by side" },
     quiet: { kind: "toggle", label: "Changes only", initial: false },
   },
   view: ContinuousDiff,

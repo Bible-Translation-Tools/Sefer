@@ -39,7 +39,7 @@ import { For, Show, createMemo, createSignal } from "solid-js";
 import { Badge, Card, cx } from "../../../app/ui/primitives";
 import { unitReference, type DecisionUnit, type MergeSide } from "../../../core/galley";
 import type { Bench, Experiment, ExperimentProps } from "../experiment";
-import { Gutter, UnitBody, inOrder } from "../units";
+import { Gutter, UnitBody, inOrder, type DiffTone } from "../units";
 
 /** A run of units the reader sees, or a stretch they do not. */
 type Band =
@@ -115,6 +115,7 @@ function Excerpts(props: ExperimentProps) {
   };
 
   const split = (): boolean => props.dials.choice("layout") === "split";
+  const tone = (): DiffTone => (props.dials.choice("tone") === "was / now" ? "wasNow" : "side");
   const context = (): number => Number(props.dials.choice("context")) || 2;
   const sticky = (): boolean => props.dials.toggle("sticky");
 
@@ -205,7 +206,12 @@ function Excerpts(props: ExperimentProps) {
                                 {unitReference(unit)}
                               </span>
                               <div class="min-w-0 flex-1">
-                                <UnitBody bench={bench()} unit={unit} split={split()} />
+                                <UnitBody
+                                  bench={bench()}
+                                  unit={unit}
+                                  split={split()}
+                                  tone={tone()}
+                                />
                                 <Show
                                   when={unit.isUsfmStructureChange && unit.status !== "unchanged"}
                                 >
@@ -234,6 +240,7 @@ export const experiment: Experiment = {
   blurb: "A multibuffer: changed neighbourhoods, with the rest collapsed.",
   dials: {
     layout: { kind: "choice", label: "Layout", options: ["merged", "split"], initial: "merged" },
+    tone: { kind: "choice", label: "Tone", options: ["by side", "was / now"], initial: "by side" },
     context: { kind: "choice", label: "Context", options: ["1", "2", "4", "8"], initial: "2" },
     sticky: { kind: "toggle", label: "Sticky headers", initial: true },
   },
