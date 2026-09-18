@@ -179,6 +179,30 @@ export const Merged = (props: { readonly unit: DecisionUnit; readonly tone: Diff
   return <Runs runs={runs()} tone={props.tone} />;
 };
 
+/**
+ * One side's RAW USFM — the markup visible, for one row.
+ *
+ * This is the whole of "flip just this result", and it needs nothing from the
+ * engine that is not already on the wire: a decision unit's `baseline` and
+ * `current` are UTF-16 spans into each side's OWN document
+ * (`onion-wasm::diff`: "Spans are UTF-16 offsets into each side's own
+ * document"), which is the same space the JS string is in. So the flip is a
+ * slice.
+ *
+ * What it does NOT include is the enclosing markup. A unit is a block, so its
+ * span carries its own `\v`/`\p`; but flip a FIND hit the same way and the
+ * `\add ` in front of the matched word sits outside the span. That is the one
+ * thing JS cannot compute from what crosses today — see the note above
+ * `sideText`.
+ */
+export const sourceOf = (bench: Bench, unit: DecisionUnit, side: MergeSide): string | undefined => {
+  const range = side === "baseline" ? unit.baseline : unit.current;
+  if (range === undefined) return undefined;
+  const text = side === "baseline" ? bench.baselineText : bench.currentText;
+  const raw = text.slice(range.from, range.to);
+  return raw.trim() === "" ? undefined : raw;
+};
+
 /** The two decision buttons, small enough to live in a margin. */
 export const Gutter = (props: {
   readonly held: MergeSide | undefined;
@@ -250,6 +274,8 @@ export const UnitBody = (props: {
   readonly unit: DecisionUnit;
   readonly split: boolean;
   readonly tone: DiffTone;
+  /** Show this row's raw USFM instead of the reading. */
+  readonly markup?: boolean;
 }) => {
   /**
    * One side's reading text, or `undefined` when there is none to show.
@@ -317,32 +343,57 @@ export const UnitBody = (props: {
     </Show>
   );
 
+  const Source = (sourceProps: { readonly which: MergeSide }) => (
+    <Show when={sourceOf(props.bench, props.unit, sourceProps.which)} fallback={<Absent />}>
+      {(raw) => (
+        <code class="block break-words whitespace-pre-wrap font-mono text-smallest text-on-surface-secondary">
+          {raw()}
+        </code>
+      )}
+    </Show>
+  );
+
   return (
     <Show
-      when={props.split}
+      when={props.markup !== true}
       fallback={
-        <p class="text-small leading-relaxed text-on-surface-primary">
-          <Show
-            when={onlyOn() === undefined ? props.unit.text : undefined}
-            fallback={
-              <Show when={onlyOn()} fallback={side("current") ?? side("baseline")}>
-                {(only) => <span class={whole(only())}>{side(only())}</span>}
-              </Show>
-            }
-          >
-            <Merged unit={props.unit} tone={props.tone} />
-          </Show>
-        </p>
+        <Show
+          when={props.split}
+          fallback={<Source which={props.unit.current === undefined ? "baseline" : "current"} />}
+        >
+          <div class="grid grid-cols-2 gap-4">
+            <Source which="baseline" />
+            <Source which="current" />
+          </div>
+        </Show>
       }
     >
-      <div class="grid grid-cols-2 gap-4">
-        <p class="text-small leading-relaxed text-on-surface-secondary">
-          <Column which="baseline" />
-        </p>
-        <p class="text-small leading-relaxed text-on-surface-primary">
-          <Column which="current" />
-        </p>
-      </div>
+      <Show
+        when={props.split}
+        fallback={
+          <p class="text-small leading-relaxed text-on-surface-primary">
+            <Show
+              when={onlyOn() === undefined ? props.unit.text : undefined}
+              fallback={
+                <Show when={onlyOn()} fallback={side("current") ?? side("baseline")}>
+                  {(only) => <span class={whole(only())}>{side(only())}</span>}
+                </Show>
+              }
+            >
+              <Merged unit={props.unit} tone={props.tone} />
+            </Show>
+          </p>
+        }
+      >
+        <div class="grid grid-cols-2 gap-4">
+          <p class="text-small leading-relaxed text-on-surface-secondary">
+            <Column which="baseline" />
+          </p>
+          <p class="text-small leading-relaxed text-on-surface-primary">
+            <Column which="current" />
+          </p>
+        </div>
+      </Show>
     </Show>
   );
 };

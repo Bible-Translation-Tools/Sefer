@@ -98,6 +98,18 @@ const bandLabel = (units: readonly DecisionUnit[]): string => {
 };
 
 function Excerpts(props: ExperimentProps) {
+  const [flipped, setFlipped] = createSignal<ReadonlySet<string>>(new Set(), {
+    name: "flippedToMarkup",
+  });
+  const flip = (id: string): void => {
+    setFlipped((held) => {
+      const next = new Set(held);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const [decisions, setDecisions] = createSignal<ReadonlyMap<string, MergeSide>>(new Map(), {
     name: "excerptDecisions",
   });
@@ -202,15 +214,22 @@ function Excerpts(props: ExperimentProps) {
                                   onPick={(side) => decide(unit.id, side)}
                                 />
                               </Show>
-                              <span class="w-16 shrink-0 select-none pt-0.5 text-end font-mono text-smallest text-on-surface-tertiary">
+                              <button
+                                type="button"
+                                title="show this row's USFM"
+                                data-flipped={flipped().has(unit.id) ? "" : undefined}
+                                class="w-16 shrink-0 cursor-pointer pt-0.5 text-end font-mono text-smallest text-on-surface-tertiary transition-colors hover:text-brand data-flipped:font-semibold data-flipped:text-brand"
+                                onClick={() => flip(unit.id)}
+                              >
                                 {unitReference(unit)}
-                              </span>
+                              </button>
                               <div class="min-w-0 flex-1">
                                 <UnitBody
                                   bench={bench()}
                                   unit={unit}
                                   split={split()}
                                   tone={tone()}
+                                  markup={flipped().has(unit.id)}
                                 />
                                 <Show
                                   when={unit.isUsfmStructureChange && unit.status !== "unchanged"}
