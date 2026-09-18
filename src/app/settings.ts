@@ -165,6 +165,18 @@ const LastLocations = Schema.Record(
     bookId: Schema.String,
     chapter: Schema.NullOr(Schema.Number),
     at: Schema.optionalKey(Schema.Number),
+    /**
+     * The document offset at the TOP of the viewport — where the reader had
+     * scrolled to, not just which chapter they were in.
+     *
+     * Chapter granularity was enough when the only consumer was "which book
+     * does an Open land on". It is not enough for coming BACK: leaving the
+     * editor for Find and returning put the reader at the top of chapter 1
+     * when they had been at 20:10, because a remount builds a fresh
+     * `EditorView` and scroll position is a fact about a view, not about the
+     * canonical state it is over.
+     */
+    offset: Schema.optionalKey(Schema.Number),
   }),
 );
 

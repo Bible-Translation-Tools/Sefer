@@ -12,11 +12,25 @@ import type { EditorView } from "@codemirror/view";
 
 import { structureAt } from "../core/docStructure";
 
-export interface Where {
+/** A chapter, named. What a list of them carries. */
+export interface ChapterName {
   /** The index into the engine's chapter table — row 0 is the front matter. */
   readonly ordinal: number;
   /** `\c`'s own number, as written. Empty for the front matter. */
   readonly label: string;
+}
+
+/** Where the reader is: a chapter, and how far into the document. */
+export interface Where extends ChapterName {
+  /**
+   * The document offset at the very TOP of the viewport.
+   *
+   * Finer than the chapter, and it is what restores a scroll position: a
+   * remount builds a new `EditorView`, and where the reader had got to is a
+   * fact about a view rather than about the state it is over. The chapter is
+   * still carried because that is what the crumb and the reference panes read.
+   */
+  readonly top: number;
 }
 
 /**
@@ -86,11 +100,15 @@ export function chapterInView(view: EditorView): Where | null {
   // Nothing intersects — a viewport past the end, or a document of one empty
   // line. The first row is the honest answer and it is never wrong by much.
   const found = best ?? chapters[0];
-  return found === undefined ? null : { ordinal: found.ordinal, label: found.label };
+  if (found === undefined) return null;
+  // One pixel in and two down, so this is the first line the reader can see
+  // rather than whatever is clipped at the seam.
+  const top = Math.max(0, view.posAtCoords({ x: box.left + 8, y: box.top + 2 }, false));
+  return { ordinal: found.ordinal, label: found.label, top };
 }
 
 /** Every chapter of this view's book, front matter row included. */
-export function chapterList(view: EditorView): readonly Where[] {
+export function chapterList(view: EditorView): readonly ChapterName[] {
   return structureAt(view.state).chapters.map((chapter) => ({
     ordinal: chapter.ordinal,
     label: chapter.label,

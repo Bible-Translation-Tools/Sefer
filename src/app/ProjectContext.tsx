@@ -221,7 +221,7 @@ export interface Shell {
    * own — this is written straight into the remembered location and read
    * nowhere else.
    */
-  readonly noteChapterAtTop: (ordinal: number) => void;
+  readonly noteChapterAtTop: (ordinal: number, offset?: number) => void;
 
   /**
    * Where the reader last was in `root` — the book, the clip and the chapter
@@ -922,7 +922,21 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     if (locationWrite !== undefined) clearTimeout(locationWrite);
   });
 
-  const remember = (bookId: BookId | undefined, ordinal: number | null, at?: number): void => {
+  /**
+   * How long a scroll must settle before the position is written down. Long
+   * enough that a flick records once, short enough that leaving the screen
+   * straight after a scroll still catches it — the route change is a click
+   * away, and a click is slower than this.
+   */
+  const OFFSET_SETTLE = 250;
+  let offsetWrite: ReturnType<typeof setTimeout> | undefined;
+
+  const remember = (
+    bookId: BookId | undefined,
+    ordinal: number | null,
+    at?: number,
+    offset?: number,
+  ): void => {
     // A writer, not a reader: this runs on a focus or a chapter change and
     // records what just happened. Both reads are therefore deliberately
     // one-time — `live` for the project (see its note: a signal can answer
@@ -937,11 +951,18 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     // The scrolled-to chapter is carried forward when the caller has no
     // opinion about it: a clip change and a scroll are two different facts,
     // and the one that did not happen must not be erased by the one that did.
-    const carried = previous?.bookId === bookId ? previous.at : undefined;
+    const same = previous?.bookId === bookId;
+    const carried = same ? previous.at : undefined;
     const where = at ?? carried;
+    const scrolled = offset ?? (same ? previous.offset : undefined);
     const next: LastLocations = {
       ...held,
-      [root]: { bookId, chapter: ordinal, ...(where === undefined ? {} : { at: where }) },
+      [root]: {
+        bookId,
+        chapter: ordinal,
+        ...(where === undefined ? {} : { at: where }),
+        ...(scrolled === undefined ? {} : { offset: scrolled }),
+      },
     };
     setLocations(next);
     if (locationWrite !== undefined) clearTimeout(locationWrite);
@@ -974,7 +995,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     setCaret(offset);
   };
 
-  const noteChapterAtTop = (ordinal: number): void => {
+  const noteChapterAtTop = (ordinal: number, offset?: number): void => {
     // Every read here is a one-time snapshot, for the same reason as in
     // `remember`: this is the editor REPORTING where the viewport got to, so
     // it records the state at the moment of the scroll and subscribes to
@@ -986,8 +1007,29 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     const root = live?.root;
     if (root === undefined) return;
     const held = untrack(locations)[root];
-    if (held?.bookId === book.id && held.at === ordinal) return;
-    remember(book.id, untrack(chapter), ordinal);
+    const sameBook = held?.bookId === book.id;
+    if (sameBook && held.at === ordinal && held.offset === offset) return;
+
+    // A CHAPTER change is news — the crumb reads it, the reference panes
+    // follow it — so it goes through at once.
+    if (!sameBook || held.at !== ordinal) {
+      if (offsetWrite !== undefined) {
+        clearTimeout(offsetWrite);
+        offsetWrite = undefined;
+      }
+      remember(book.id, untrack(chapter), ordinal, offset);
+      return;
+    }
+
+    // An OFFSET change inside one chapter is not. It fires once per animation
+    // frame for the length of a scroll, and it is only ever read again after a
+    // remount — so it is throttled to the trailing edge rather than writing a
+    // store (and waking every reader of it) sixty times a second.
+    if (offsetWrite !== undefined) clearTimeout(offsetWrite);
+    offsetWrite = setTimeout(() => {
+      offsetWrite = undefined;
+      remember(book.id, untrack(chapter), ordinal, offset);
+    }, OFFSET_SETTLE);
   };
 
   const lastLocation = (root: string): LastLocation | undefined => locations()[root];

@@ -345,8 +345,36 @@ export function BookEditor(props: BookEditorProps) {
         // nothing about where in it the reader had got to, and reopening a
         // project landed on the top of the right book. This is the only place
         // that knows the answer.
-        if (where !== null) shell.noteChapterAtTop(where.ordinal);
+        if (where !== null) shell.noteChapterAtTop(where.ordinal, where.top);
       });
+
+      // Where the reader had got to, put back.
+      //
+      // This is the one place it CAN be put back: a remount builds a fresh
+      // `EditorView`, and a scroll position is a fact about a view rather than
+      // about the canonical state the view is over — so leaving for Find and
+      // coming back landed at the top of the book with everything else intact.
+      //
+      // It yields to `reveal`. A search hit or a finding is an explicit "take
+      // me here", and restoring a remembered scroll over the top of one would
+      // be answering a question nobody asked. The reveal effect below does the
+      // moving in that case.
+      //
+      // Untracked, all of it: this is a one-time question asked at mount, not
+      // a subscription — the remembered location changes on every scroll, and
+      // depending on it would make this effect re-run for its own writes.
+      const resume = untrack(() => {
+        if (shell.reveal()?.bookId === book.id) return undefined;
+        const root = shell.project()?.root;
+        const held = root === undefined ? undefined : shell.lastLocation(root);
+        return held?.bookId === book.id ? held.offset : undefined;
+      });
+      if (resume !== undefined && resume > 0)
+        created.dispatch({
+          effects: EditorView.scrollIntoView(Math.min(resume, created.state.doc.length), {
+            y: "start",
+          }),
+        });
 
       setBound({ view: created, projection });
 
