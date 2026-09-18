@@ -434,7 +434,19 @@ export function BookEditor(props: BookEditorProps) {
       // moving in that case.
       const resume = remembered === undefined ? undefined : placeOf(created.state, remembered);
       if (resume !== undefined && resume > 0) {
-        created.dispatch({ effects: EditorView.scrollIntoView(resume, { y: "start" }) });
+        // The CARET goes with the scroll, and that is not a flourish.
+        //
+        // A fresh view puts the caret at offset 0. Restore the scroll without
+        // it and the reader is looking at chapter 18 with the cursor in the
+        // front matter — so the first thing they type lands at the top of the
+        // book, and anything that follows the caret has nothing to say. The
+        // block pairing showed that plainly: the setting was on, the panes
+        // were bound, and nothing was marked until you clicked, which reads as
+        // the feature being broken rather than as the caret being elsewhere.
+        created.dispatch({
+          selection: { anchor: resume },
+          effects: EditorView.scrollIntoView(resume, { y: "start" }),
+        });
         // TWICE, a frame apart. CodeMirror ESTIMATES the height of content it
         // has not rendered, so a jump deep into a book lands approximately —
         // measured at ~1,300px out, a screenful, in Genesis. The first scroll

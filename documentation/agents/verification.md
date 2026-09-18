@@ -59,6 +59,15 @@ Chrome 136+ refuses remote debugging on the default data directory, which is als
 
 **Headless is the default because a visible rig steals the machine.** macOS activates an *application*, not a window: a headed Chrome driven by an agent raises `Google Chrome.app` and takes the keyboard away from whatever the person was doing in their own Chrome — a different profile, the same dock icon. Headless draws nothing, takes no focus, and OPFS, screenshots and tracing all work in it (verified: the imported `en_ulb` opens through Revelation headless).
 
+**Close every page you open, and if `connectOverCDP` times out, restart the rig.** Playwright attaches to every target in the browser, so pages left behind by earlier runs accumulate and eventually make the connect hang — the websocket opens and then nothing answers. Twenty-five stale tabs was enough. `pnpm verify:chrome --status` counts them; `--stop` then a fresh start is the fix, and closing them through `/json/close/<id>` did NOT revive a browser that had already wedged. In a script: `await page.close()` before `browser.close()`, since `browser.close()` on a CDP connection only disconnects.
+
+**Disable the HTTP cache before you trust a negative result.** The rig's profile is long-lived, so it holds a warm module cache, and Vite's dev server serves modules a browser is entitled to reuse. Three consecutive real fixes read as no-ops during one session because of this, including one where a `console.warn` added to the code under test never appeared — which is the tell: if instrumentation you just added does not run, you are looking at a stale bundle, not a stale hypothesis. Confirm with `curl -s http://localhost:<port>/src/path/to/file.ts | grep <your new symbol>` — if the server has it and the page does not, it is the cache. Then:
+
+    const cdp = await context.newCDPSession(page);
+    await cdp.send("Network.setCacheDisabled", { cacheDisabled: true });
+
+**Do not hand-launch a second Chrome, and do not copy the profile.** Both were tried in the same session and both cost more than they saved: a copy is ~800MB, it carries the stale cache described above, and it drifts from the rig's OPFS the moment either one is used. If the rig is unreachable, restart the rig.
+
 Worse, launching Chrome while an instance with a *different* `--user-data-dir` is already running does not start a second one — macOS activates the running process, so the person clicks Chrome and gets the rig's empty profile instead of their own, with no explanation. If someone says their profile has vanished, that is what happened: `pnpm verify:chrome --stop`, then reopen Chrome normally.
 
 **Leave the desktop as you found it: `--stop` when the run is done, and close the tabs you opened.** `--status` lists them.

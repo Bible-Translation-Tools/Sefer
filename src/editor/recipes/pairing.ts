@@ -200,29 +200,44 @@ export const pairingHere = (on = false): Extension => [
 
 const setPaired = StateEffect.define<PairedRange | null>();
 
-const thereField = StateField.define<DecorationSet>({
-  create: () => Decoration.none,
+/**
+ * The range this view was last told about, held as a RANGE rather than as
+ * decorations.
+ *
+ * That is the difference between the toggle working and the toggle only
+ * working after a reload. Holding the decorations meant turning the setting ON
+ * could not draw anything — the field had nothing but `Decoration.none` and
+ * nothing to rebuild it from — so the pane stayed blank until the caret moved
+ * and a fresh range arrived. Holding the range lets the decorations be
+ * COMPUTED from it and the toggle together, which is reactive in both
+ * directions by construction.
+ */
+const toldField = StateField.define<PairedRange | null>({
+  create: () => null,
   update(held, tr) {
-    for (const effect of tr.effects) {
-      if (effect.is(setPairing) && !effect.value) return Decoration.none;
-      if (!effect.is(setPaired)) continue;
-      return effect.value === null || !pairingBlocks(tr.state)
-        ? Decoration.none
-        : decorationsFor(tr.state.doc, effect.value);
-    }
-    // Mapped through edits like any other decoration. A reference is read-only,
-    // so this only fires when the projection reconfigures, and the alternative
-    // — dropping it — would blink the mark on every mode flip.
-    return tr.docChanged ? held.map(tr.changes) : held;
+    for (const effect of tr.effects) if (effect.is(setPaired)) return effect.value;
+    // Mapped through edits like any other position. A reference is read-only,
+    // so this only fires when the projection reconfigures — and the
+    // alternative, dropping it, would blink the mark on every mode flip.
+    if (tr.docChanged && held !== null)
+      return { from: tr.changes.mapPos(held.from), to: tr.changes.mapPos(held.to) };
+    return held;
   },
-  provide: (field) => EditorView.decorations.from(field),
+});
+
+const toldDecorations = EditorView.decorations.compute([toldField, pairingField], (state) => {
+  const range = state.field(toldField);
+  return range === null || !pairingBlocks(state)
+    ? Decoration.none
+    : decorationsFor(state.doc, range);
 });
 
 /** The reference's half: mark the range it is told. `on` is the initial state. */
 export const pairingThere = (on = false): Extension => [
   initialPairing.of(on),
   pairingField,
-  thereField,
+  toldField,
+  toldDecorations,
 ];
 
 /**
