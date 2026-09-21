@@ -2,6 +2,8 @@
 
 Sefer is a local-first scripture editor whose source of truth is exact USFM text. This scaffold uses Solid 2 release-candidate packages, not React. Use pnpm.
 
+Loadable skills live in `agents/skills/` (`.claude/skills` is a symlink to it). `design-surface` covers prototyping, the point-and-comment collector, variants and tweaks, and the designer handoff.
+
 Read only the guidance relevant to the task:
 
 - [Documentation index](documentation/README.md): scope, authority, and maintenance.
