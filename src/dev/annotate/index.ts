@@ -253,6 +253,25 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
     render();
   };
 
+  /**
+   * The one-comment path: write it, press Enter, it is on the clipboard.
+   *
+   * Worth its own function because the ordinary flow — "Add comment", then find
+   * and press "Copy" — is two deliberate actions for what is usually one
+   * thought. Enter is a genuine user gesture, so the clipboard write is allowed
+   * to ride on it, and the whole round trip becomes: click the thing, say what
+   * is wrong, Enter, paste.
+   *
+   * Batching is still there and still deliberate: "Add comment" adds without
+   * copying, so a sweep of eight notes is eight Enters' worth of typing and one
+   * Copy at the end. Shift+Enter is a newline, because some comments are two
+   * sentences.
+   */
+  const saveAndCopy = (text: string): void => {
+    saveComment(text);
+    copyBatch();
+  };
+
   const copyBatch = (): void => {
     if (comments.length === 0) return;
     const text = renderMarkdown(comments, verbosity, settings.context?.() ?? {});
@@ -352,9 +371,15 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
   };
 
   const composer = (): HTMLElement => {
-    const area = el("textarea", { placeholder: "Describe the issue or suggestion…" });
-    const save = el("button", { type: "button", class: "primary" }, ["Add comment"]);
+    const area = el("textarea", {
+      placeholder: "Describe the issue or suggestion…  ⏎ to copy, ⇧⏎ for a new line",
+    });
+    const copy = el("button", { type: "button", class: "primary" }, ["Copy ⏎"]);
+    const save = el("button", { type: "button" }, ["Add to batch"]);
     const cancel = el("button", { type: "button", class: "ghost" }, ["Cancel"]);
+    on(copy, "click", () => {
+      saveAndCopy(area.value);
+    });
     on(save, "click", () => {
       saveComment(area.value);
     });
@@ -363,9 +388,14 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
       render();
     });
     on(area, "keydown", (event) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-        saveComment(area.value);
-      }
+      if (event.key !== "Enter") return;
+      // Shift is the newline; everything else finishes the comment. The plain
+      // Enter is the point — it is a user gesture, so the clipboard write is
+      // permitted to ride on it and the whole loop is click, type, Enter, paste.
+      if (event.shiftKey) return;
+      event.preventDefault();
+      event.stopPropagation();
+      saveAndCopy(area.value);
     });
     const where =
       composing === null ? "" : (sourceOf(composing.element) ?? selectorOf(composing.element));
@@ -373,7 +403,7 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
       el("div", { class: "legend" }, ["Comment"]),
       el("div", { class: "hint" }, [where]),
       area,
-      el("div", { class: "row" }, [save, cancel]),
+      el("div", { class: "row" }, [copy, save, cancel]),
     ]);
     globalThis.requestAnimationFrame(() => {
       area.focus();
