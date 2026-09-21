@@ -26,7 +26,9 @@
     "prepare": "lefthook install",
     "build:design": "vite build --mode design",
     "verify:design": "node tools/verify/designBundle.ts",
-    "design:scaffolding": "node tools/design/scaffolding.ts"
+    "design:scaffolding": "node tools/design/scaffolding.ts",
+    "deploy:web": "node tools/deploy/web.ts",
+    "lint:release": "oxlint -c oxlint.release.config.ts ."
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.0",

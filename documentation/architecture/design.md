@@ -128,10 +128,22 @@ a global that does not exist in production is not one. `onChange` fires once on
 registration and again on every turn, so its body is a `setSignal` — the
 annotator never learns what a signal is.
 
-**This is temporary code by construction.** It cannot break production, because
-the handle is not there; what it does is accumulate. `pnpm design:scaffolding`
-lists every place it is still sitting. It exits 0 either way — a gate would
-just teach people to avoid the pattern rather than tidy up after it.
+**This is temporary code by construction**, and there are two nets under it.
+
+`pnpm design:scaffolding` lists every place it is still sitting, and exits 0
+either way — it is a reminder you can run any time.
+
+`pnpm lint:release` turns `anti-slop/no-design-scaffolding` into an error.
+That rule is OFF in `oxlint.config.ts` on purpose: a squiggle under code
+somebody is actively iterating with is how a rule teaches people to disable
+it. `tools/deploy/web.ts` runs it before a **production** build and before
+nothing else — not nightly, which comes off master all day, and certainly not
+the design build, where the scaffolding is doing its job. The scaffolding is
+inert in any build without the design surface, so this is hygiene rather than
+correctness; a release is simply the moment by which the question it was
+answering should be settled.
+
+`src/dev` is exempt from the rule: that is where the surface lives.
 
 ## The debug handle
 

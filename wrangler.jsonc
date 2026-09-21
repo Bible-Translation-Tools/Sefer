@@ -1,0 +1,80 @@
+// Sefer's web build as a Cloudflare static-assets Worker.
+//
+// STUB. Every hostname below is a placeholder and nothing deploys until they
+// are real — see `.github/workflows/release.yml`, which is deliberately
+// `workflow_dispatch` only for the same reason. Modelled on
+// scripture-editor-proto-2's `wrangler.jsonc`, which is the shape this
+// organisation already runs.
+//
+// Static-assets only: no fetch handler, no env vars, no secrets. Cloudflare
+// treats static-only workers as a separate deployment class, which is why this
+// config sits at the repository root rather than beside a worker source file.
+//
+// `directory` is `./dist/client` rather than the old repo's `./dist-web`
+// because the turnkey Solid Start plugin builds client and server environments
+// and puts the static client there. `pnpm build` writes it; `vite build
+// --outDir` is ignored by that plugin, so do not try to redirect it.
+{
+  "name": "sefer-web",
+  "compatibility_date": "2026-09-21",
+  "assets": {
+    "directory": "./dist/client",
+    // Every route is client-side; a deep link must serve the shell rather than
+    // 404, or `/project/x/book/JHN` is only reachable by navigating to it.
+    "not_found_handling": "single-page-application",
+  },
+  "env": {
+    // A tagged release. Built with `pnpm build`, so it carries NO design
+    // surface: no /design, no annotator, no data-loc stamps.
+    "production": {
+      "name": "sefer-web-production",
+      "routes": [
+        {
+          // TODO placeholder — not registered.
+          "pattern": "sefer.bibletranslationtools.org",
+          "custom_domain": true,
+          "zone_name": "bibletranslationtools.org",
+        },
+      ],
+    },
+
+    // Every push to master. Also `pnpm build`: nightly is for trying the REAL
+    // application early, and somebody testing a release candidate should not
+    // have a tool that swallows every click one keystroke away.
+    "nightly": {
+      "name": "sefer-web-nightly",
+      "routes": [
+        {
+          // TODO placeholder — not registered.
+          "pattern": "sefer-nightly.bttdev.org",
+          "custom_domain": true,
+          "zone_name": "bttdev.org",
+        },
+      ],
+    },
+
+    // The designer's prototype. Every push to master, but built with
+    // `pnpm build:design`, so this is the ONE deployed hostname that carries
+    // /design and the annotator.
+    //
+    // A third environment rather than folding it into nightly, and that is a
+    // judgement worth disagreeing with if you want to. The argument for three:
+    // nightly and the prototype have different audiences — one is "does the
+    // real thing work", the other is "which of these two layouts is better" —
+    // and a comment mode that intercepts every event does not belong in the
+    // first. The argument for two: it is one more hostname to own. Collapsing
+    // them means pointing nightly's build at `pnpm build:design` and deleting
+    // this block.
+    "design": {
+      "name": "sefer-web-design",
+      "routes": [
+        {
+          // TODO placeholder — not registered.
+          "pattern": "sefer-design.bttdev.org",
+          "custom_domain": true,
+          "zone_name": "bttdev.org",
+        },
+      ],
+    },
+  },
+}
