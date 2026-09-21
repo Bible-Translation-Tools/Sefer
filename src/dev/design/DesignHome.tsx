@@ -1,28 +1,35 @@
 /**
- * The design frame: a screen picker, whatever dials that screen declared, and
- * the screen itself. Everything it knows is in the URL.
+ * The design frame: the screen, and nothing else.
  *
- * It is not a screen of the application and it does not open a project. That
- * is the difference from the playground, which sits under `/project/$slug` so
- * an experiment is handed real books: most of what a designer polishes —
- * onboarding, settings, empty states, the shape of a list — needs no text, and
- * those screens have to run on a deployed worker where there is no filesystem
- * and no project to open.
+ * There is deliberately no header, no picker bar and no dial row. The screen
+ * picker, the variant switch, every tweak and the whole commenting flow live
+ * in the floating panel from `src/dev/annotate`, which sits in a corner and
+ * minimises to a puck. A prototyping tool that pins a strip of controls across
+ * the top of the thing being judged has misunderstood its own job — the
+ * designer is here to look at spacing, and the tool was eating forty pixels of
+ * it.
  *
- * The whole of the state is query parameters, which is the point rather than a
- * detail. A designer's workflow is sending two links and asking which is
- * better, so a screen and its dials have to survive copy, paste and reload —
- * and, because the route validates search loosely, adding a dial costs a line
- * in the screen and nothing anywhere else.
+ * The frame's whole remaining job is three things:
+ *
+ *   * choose the screen the URL asks for;
+ *   * hand the annotator a `StateAdapter` pointed at the router, so every
+ *     variant and tweak is a query parameter somebody can paste into chat;
+ *   * give each screen its own values back.
+ *
+ * It opens no project. That is the difference from the playground, which sits
+ * under `/project/$slug` so an experiment is handed real books: most of what a
+ * designer polishes needs no text, and those screens have to run on a deployed
+ * worker where there is no filesystem and no project to open.
  */
 
 import { useNavigate } from "@tanstack/solid-router";
-import { For, Show } from "solid-js";
+import { Show, createEffect, createMemo, onCleanup } from "solid-js";
 
-import { Select, SegmentedControl, Switch } from "../../app/ui/primitives";
 import { Route } from "../../routes/design";
-import { dialValues, withDial, type Dials } from "../dials";
+import { mountAnnotator, type Annotator, type StateAdapter } from "../annotate";
+import { currentVariant, isOn, readTweak } from "../annotate/state";
 import { screenById, screens } from "./registry";
+import type { Screen } from "./screen";
 
 const SCREEN_KEY = "screen";
 
@@ -41,92 +48,106 @@ export function DesignHome() {
   const search = Route.useSearch();
 
   /** The first committed screen is the landing one, so `/design` is never blank. */
-  const chosen = () => screenById(search()[SCREEN_KEY] ?? "") ?? screens[0];
+  const chosen = createMemo(
+    (): Screen | undefined => screenById(search()[SCREEN_KEY] ?? "") ?? screens[0],
+    { name: "designScreen" },
+  );
 
-  const ask = (next: Record<string, string>): void => {
-    void navigate({ to: "/design", search: next, replace: true });
+  const ask = (next: Readonly<Record<string, string>>): void => {
+    void navigate({ to: "/design", search: { ...next }, replace: true });
   };
 
-  const chooseScreen = (id: string): void => {
-    // A screen change drops the previous screen's dials rather than carrying
-    // them: they are namespaced, so they would be invisible but still in the
-    // URL, and a link nobody can read is the thing this frame is trying to
-    // avoid.
-    ask(id === screens[0]?.id ? {} : { [SCREEN_KEY]: id });
+  /**
+   * The seam. The annotator never learns what a router is; it is handed a
+   * thing that reads and writes a flat string map, and in this application
+   * that map is the URL. `subscribe` is omitted because the Solid effect below
+   * already calls `sync()` whenever search changes — one mechanism, not two
+   * racing.
+   */
+  const adapter: StateAdapter = {
+    read: () => search(),
+    write: ask,
   };
 
-  const dialsOf = (): Dials => chosen()?.dials ?? {};
-  const values = () => dialValues(chosen()?.id ?? "", dialsOf(), search);
-
-  const setDial = (key: string, value: string): void => {
-    ask(withDial(search(), chosen()?.id ?? "", dialsOf(), key, value));
+  const tweakOf = (key: string): string => {
+    const screen = chosen();
+    if (screen === undefined) return "";
+    const state = search();
+    const showing = currentVariant(screen.id, screen.variants ?? [], state);
+    const own = showing?.tweaks?.find((tweak) => tweak.key === key);
+    if (own !== undefined) return readTweak(screen.id, showing?.id ?? null, own, state);
+    const shared = screen.tweaks?.find((tweak) => tweak.key === key);
+    return shared === undefined ? "" : readTweak(screen.id, null, shared, state);
   };
+
+  let annotator: Annotator | undefined;
+
+  // Solid 2 splits the tracked read from the untracked work: the first
+  // argument is what this depends on, the second is what to do about it.
+  createEffect(
+    () => chosen(),
+    (screen) => {
+      if (screen === undefined) return;
+      const options = {
+        namespace: screen.id,
+        variants: screen.variants ?? [],
+        tweaks: screen.tweaks ?? [],
+        state: adapter,
+        context: () => ({ build: __SEFER_BUILD__, screen: screen.id }),
+        nav: {
+          label: "Screen",
+          items: screens.map((one) => ({ value: one.id, label: one.title })),
+          active: screen.id,
+          // Switching screen drops every parameter: they are namespaced to the
+          // screen leaving, so keeping them would put keys in the URL that
+          // nothing on the page can explain.
+          choose: (id: string) => {
+            ask(id === screens[0]?.id ? {} : { [SCREEN_KEY]: id });
+          },
+        },
+      };
+      if (annotator === undefined) annotator = mountAnnotator(options);
+      else annotator.update(options);
+    },
+  );
+
+  // Reading `search()` is the subscription: any change to the URL redraws the
+  // panel, which is what keeps its controls showing what the URL says even when
+  // the change came from the Back button rather than from a click on one.
+  createEffect(
+    () => search(),
+    () => {
+      annotator?.sync();
+    },
+  );
+
+  onCleanup(() => {
+    annotator?.destroy();
+    annotator = undefined;
+  });
 
   return (
     <main
-      class="flex min-h-dvh min-w-0 flex-col"
+      class="min-h-dvh min-w-0"
       data-design-surface={SENTINEL}
       data-design-screen={chosen()?.id ?? ""}
     >
-      <header class="flex flex-wrap items-center gap-3 border-b border-outline-subtle px-4 py-2">
-        <Show
-          when={screens.length > 0}
-          fallback={
-            <p class="text-smallest text-on-surface-tertiary">
-              No design screens yet — add one under <code>screens/</code> or <code>local/</code>.
-            </p>
-          }
-        >
-          <SegmentedControl
-            size="sm"
-            label="Screen"
-            value={chosen()?.id ?? ""}
-            onChange={chooseScreen}
-            items={screens.map((screen) => ({
-              value: screen.id,
-              label: screen.title,
-              title: screen.blurb,
-            }))}
-          />
-        </Show>
-
-        <For each={Object.entries(dialsOf())}>
-          {([key, dial]) => (
-            <Show
-              when={dial.kind === "choice" ? dial : undefined}
-              fallback={
-                <Switch
-                  class="text-smallest text-on-surface-secondary"
-                  checked={values().toggle(key)}
-                  onChange={(on) => setDial(key, String(on))}
-                  label={dial.label}
-                />
-              }
-            >
-              {(choice) => (
-                <label class="flex items-center gap-1.5 text-smallest text-on-surface-secondary">
-                  {choice().label}
-                  <Select
-                    size="sm"
-                    wrapperClass="w-36"
-                    value={values().choice(key)}
-                    onChange={(event) => setDial(key, event.currentTarget.value)}
-                  >
-                    <For each={choice().options}>
-                      {(option) => <option value={option}>{option}</option>}
-                    </For>
-                  </Select>
-                </label>
-              )}
-            </Show>
-          )}
-        </For>
-      </header>
-
-      <Show when={chosen()}>
+      <Show
+        when={chosen()}
+        fallback={
+          <p class="p-6 text-small text-on-surface-tertiary">
+            No design screens yet — add one under <code>screens/</code> or <code>local/</code>.
+          </p>
+        }
+      >
         {(screen) => (
-          <div class="min-w-0 flex-1" data-screen={screen().id}>
-            {screen().view({ dials: values() })}
+          <div class="min-w-0" data-screen={screen().id}>
+            {screen().view({
+              variant: () =>
+                currentVariant(screen().id, screen().variants ?? [], search())?.id ?? "",
+              tweak: tweakOf,
+              on: (key) => isOn(tweakOf(key)),
+            })}
           </div>
         )}
       </Show>

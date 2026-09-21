@@ -13,7 +13,15 @@ export interface BoundaryViolation {
 }
 
 export interface BoundaryOptions {
+  /**
+   * The self-contained directory. Named `coreDir` because `src/core` was the
+   * first, but the rule set — stay inside, no framework packages, no Node
+   * builtins — is exactly what "this folder is liftable somewhere else" means,
+   * and `src/dev/annotate` wants precisely that.
+   */
   readonly coreDir: string;
+  /** What violations call this directory; defaults to "core". */
+  readonly label?: string;
   readonly paths?: Readonly<Record<string, readonly string[]>>;
   readonly pathsBase?: string;
   readonly forbiddenPackages?: readonly string[];
@@ -121,6 +129,7 @@ export const checkCoreBoundary = (options: BoundaryOptions): BoundaryViolation[]
   const forbiddenPrefixes = options.forbiddenPrefixes ?? DEFAULT_FORBIDDEN_PREFIXES;
   const rawAssetDirs = (options.rawAssetDirs ?? []).map((directory) => path.resolve(directory));
   const vendorDirs = (options.vendorDirs ?? []).map((directory) => path.resolve(directory));
+  const label = options.label ?? "core";
   const violations: BoundaryViolation[] = [];
 
   for (const file of listSourceFiles(coreDir)) {
@@ -152,19 +161,20 @@ export const checkCoreBoundary = (options: BoundaryOptions): BoundaryViolation[]
         // Node platform layers (filesystem, engine bytes) it builds fixtures with.
         if (isTest) continue;
         if (!isInside(coreDir, resolved))
-          report(`resolves to ${path.relative(pathsBase, resolved)}, outside core`);
+          report(`resolves to ${path.relative(pathsBase, resolved)}, outside ${label}`);
         continue;
       }
 
       if (path.isAbsolute(specifier.value)) {
-        if (!isInside(coreDir, path.resolve(specifier.value))) report("absolute path outside core");
+        if (!isInside(coreDir, path.resolve(specifier.value)))
+          report(`absolute path outside ${label}`);
         continue;
       }
 
       const aliased = resolveAlias(specifier.value, paths, pathsBase);
       if (aliased !== null) {
         if (!isInside(coreDir, aliased))
-          report(`alias resolves to ${path.relative(pathsBase, aliased)}, outside core`);
+          report(`alias resolves to ${path.relative(pathsBase, aliased)}, outside ${label}`);
         continue;
       }
 
@@ -172,12 +182,12 @@ export const checkCoreBoundary = (options: BoundaryOptions): BoundaryViolation[]
 
       const bannedPrefix = forbiddenPrefixes.find((prefix) => specifier.value.startsWith(prefix));
       if (bannedPrefix !== undefined) {
-        report(`forbidden bare specifier for core (starts with "${bannedPrefix}")`);
+        report(`forbidden bare specifier for ${label} (starts with "${bannedPrefix}")`);
         continue;
       }
 
       const banned = forbidden.find((pattern) => matchesPackage(specifier.value, pattern));
-      if (banned !== undefined) report(`forbidden package for core (matches "${banned}")`);
+      if (banned !== undefined) report(`forbidden package for ${label} (matches "${banned}")`);
     }
   }
 
@@ -348,12 +358,17 @@ const main = (): void => {
       pathsBase: base,
       label: "src/dev is dev-only",
     }),
-    ...checkReach({
-      from: path.join(dev, "annotate"),
-      forbidden: [path.join(source, "core"), path.join(source, "app")],
+    // The annotator gets `src/core`'s OWN rule set rather than a weaker one of
+    // its own, because "liftable into another repository as a folder copy" and
+    // "imports no framework, no Node builtin, and nothing outside itself" are
+    // the same sentence. Solid is on the forbidden list, which is the whole
+    // point: the overlay is a DOM tool, and the day it imports `solid-js` is
+    // the day it stops being droppable into anything that is not this app.
+    ...checkCoreBoundary({
+      coreDir: path.join(dev, "annotate"),
+      label: "the annotator",
       paths,
       pathsBase: base,
-      label: "the annotator stays portable",
     }),
   ];
 

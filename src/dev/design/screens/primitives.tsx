@@ -41,21 +41,37 @@ export const primitivesScreen: Screen = {
   id: "primitives",
   title: "Primitives",
   blurb: "Every primitive at once, so a token that only works in one theme shows itself.",
-  dials: {
-    size: { kind: "choice", label: "Size", options: ["sm", "md"], initial: "md" },
-    density: { kind: "choice", label: "Density", options: ["comfortable", "tight"] },
-    disabled: { kind: "toggle", label: "Disabled" },
-  },
+  // Shared tweaks: they mean the same thing whichever variant is showing, so
+  // they survive the switch rather than resetting with it.
+  tweaks: [
+    { key: "size", label: "Size", kind: "choice", options: ["sm", "md"], initial: "md" },
+    { key: "disabled", label: "Disabled", kind: "toggle" },
+  ],
+  variants: [
+    {
+      id: "cosy",
+      label: "Cosy",
+      tweaks: [{ key: "rule", label: "Dividers", kind: "toggle", initial: true }],
+    },
+    { id: "tight", label: "Tight" },
+  ],
   view: (props) => {
-    const size = () => (props.dials.choice("size") === "sm" ? "sm" : "md");
-    const tight = () => props.dials.choice("density") === "tight";
-    const off = () => props.dials.toggle("disabled");
+    const size = () => (props.tweak("size") === "sm" ? "sm" : "md");
+    const tight = () => props.variant() === "tight";
+    const off = () => props.on("disabled");
+    const ruled = () => props.variant() === "cosy" && props.on("rule");
 
     return (
       <div class={["space-y-6", tight() ? "p-3" : "p-6"]}>
         <Card>
           <PanelHeader title="Buttons" />
-          <div class={["space-y-3", tight() ? "p-3" : "p-4"]}>
+          <div
+            class={[
+              "space-y-3",
+              tight() ? "p-3" : "p-4",
+              ruled() ? "divide-y divide-surface-border" : "",
+            ]}
+          >
             <Row label="Variants">
               <For each={VARIANTS}>
                 {(variant) => (
@@ -86,7 +102,13 @@ export const primitivesScreen: Screen = {
 
         <Card>
           <PanelHeader title="Fields" />
-          <div class={["space-y-3", tight() ? "p-3" : "p-4"]}>
+          <div
+            class={[
+              "space-y-3",
+              tight() ? "p-3" : "p-4",
+              ruled() ? "divide-y divide-surface-border" : "",
+            ]}
+          >
             <Row label="Input">
               <Input size={size()} placeholder="Placeholder" disabled={off()} />
             </Row>

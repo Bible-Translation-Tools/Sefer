@@ -191,8 +191,9 @@ arrangement that gets relitigated:
 2. ~~The two design boundary rules.~~ **Done** — `a35791f`.
 3. ~~Design mode, the build script, the route gate.~~ **Done** — `8114173`.
 4. ~~URL params on the existing playground dials.~~ **Done** — `aa1cbd8`.
-5. The overlay, DOM capture only.
-6. The oxc JSX-location plugin, wired into the overlay.
+5. ~~The overlay, DOM capture only.~~ **Done** — the floating panel, with
+   variants and tweaks moved into it and the header bar removed.
+6. ~~The oxc JSX-location plugin, wired into the overlay.~~ **Done**.
 7. The seeded text for the data-bearing tier.
 8. The handoff document.
 
