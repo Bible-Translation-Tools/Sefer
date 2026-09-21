@@ -46,9 +46,11 @@ Two new rules in `tools/boundaries/check.ts`, reusing the same walker:
     the path rule real. The route-level `import.meta.env.DEV` gate is a
     BUNDLING guarantee; this is the ARCHITECTURE guarantee, and they are
     different claims.
-  * **`src/dev/design/` imports nothing from `src/core/`.** The comment overlay
-    is a DOM tool. Keeping it ignorant of Sefer is what lets it be lifted into
-    another repository as a folder copy.
+  * **`src/dev/annotate/` imports nothing from `src/core/` or `src/app/`.** The
+    comment overlay is a DOM tool. Keeping it ignorant of Sefer is what lets it
+    be lifted into another repository as a folder copy. `src/dev/design/`, which
+    holds the screens, is under no such rule — it is supposed to reach for the
+    real components, and it is the folder the designer actually lives in.
 
 Both run inside `pnpm boundaries`, which is already in `pnpm check` and in CI.
 `import.meta.glob` specifiers are collected by the existing walker, which
@@ -63,16 +65,20 @@ production. That is three modes, not two:
 pnpm build:design    # vite build --mode design
 ```
 
-and one exported constant that every design route's `beforeLoad` consults:
+and one Vite `define` that every design route's `beforeLoad` consults:
 
 ```ts
-export const DESIGN_ENABLED = import.meta.env.DEV || import.meta.env.MODE === "design";
+__SEFER_DESIGN__: JSON.stringify(mode === "development" || mode === "design")
 ```
 
-Still a build-time constant, so a production build tree-shakes the whole
-surface exactly as it does `/dev/fixture` today. A CLI flag rather than a
-`.env` value, so it cannot be switched on by a stale file on somebody's
-machine.
+A `define` rather than an exported constant, and that is not a style choice.
+It was an exported `DESIGN_ENABLED` first: the gate folded correctly and the
+route compiled down to `throw notFound()`, and rolldown emitted the design
+page as an orphaned chunk anyway — unreachable, and shipped. `/dev/fixture`
+has never had the problem because it writes `import.meta.env.DEV` inline,
+which is a literal before any of that. A CLI flag rather than a `.env` value,
+so it cannot be switched on by a stale file on somebody's machine, and
+`pnpm verify:design` checks both directions against real builds.
 
 Deploy on every push to master. The staleness the long branch would have
 created stops existing: the prototype IS master.
@@ -159,8 +165,8 @@ erases JSX:
 
 This is worth building on its own account — it improves the developer loop
 whatever happens with the design arrangement — which is also the argument for
-keeping `src/dev/design/` free of Sefer specifics from the first commit rather
-than extracting it later.
+keeping `src/dev/annotate/` free of Sefer specifics from the first commit
+rather than extracting it later.
 
 ## Stage 5 — The handoff, written down
 
@@ -181,10 +187,10 @@ arrangement that gets relitigated:
 
 ## Order
 
-1. oxc port of the boundary walker, then TypeScript 7.
-2. The two design boundary rules.
-3. Design mode, the build script, the route gate.
-4. URL params on the existing playground dials.
+1. ~~oxc port of the boundary walker, then TypeScript 7.~~ **Done** — `7fa1c3d`.
+2. ~~The two design boundary rules.~~ **Done** — `a35791f`.
+3. ~~Design mode, the build script, the route gate.~~ **Done** — `8114173`.
+4. ~~URL params on the existing playground dials.~~ **Done** — `aa1cbd8`.
 5. The overlay, DOM capture only.
 6. The oxc JSX-location plugin, wired into the overlay.
 7. The seeded text for the data-bearing tier.
@@ -192,3 +198,15 @@ arrangement that gets relitigated:
 
 Each step is useful alone, which matters because 6 is the one that might not
 land cleanly.
+
+## Open, and deliberately not decided
+
+A `/design` screen renders inside the application's icon rail, because the
+root layout wraps every route and there is no per-route escape from it without
+restructuring into a pathless layout. That is FAITHFUL for a screen which
+really does live inside the rail, and wrong for onboarding, which does not.
+The playground escapes it only because it supplies its own `ShellGate` and
+sits below a route that has already taken the chrome off.
+
+Left alone rather than guessed at. If it wants fixing the cheap version is a
+frame-level dial — `?chrome=0` — rather than a new layout.
