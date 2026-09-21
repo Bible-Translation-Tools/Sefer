@@ -25,7 +25,8 @@
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm boundaries && pnpm test:unit && pnpm build",
     "prepare": "lefthook install",
     "build:design": "vite build --mode design",
-    "verify:design": "node tools/verify/designBundle.ts"
+    "verify:design": "node tools/verify/designBundle.ts",
+    "design:scaffolding": "node tools/design/scaffolding.ts"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.0",

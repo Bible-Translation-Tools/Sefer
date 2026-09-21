@@ -28,6 +28,7 @@ This folder holds durable project guidance for humans and agents. Root `AGENTS.m
 - Sharing a project online, reading the two clocks, or deciding what a Receive would change: [cloud sync](./architecture/sync.md).
 - Composing the services, adding a command, a route, or a design token: [application shell](./architecture/shell.md).
 - Building a screen, a reusable component, or reaching for a colour: [the UI layer](./architecture/ui.md).
+- Prototyping a screen, deploying the design build, or pointing at a pixel and saying what is wrong with it: [the design surface](./architecture/design.md).
 - Using shared product terms: [glossary](./glossary.md).
 - Adding logs, spans, or agent-visible runtime evidence: [observability shorthand](./architecture/observability.md).
 

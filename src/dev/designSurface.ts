@@ -42,6 +42,8 @@ import {
   type Annotator,
   type AnnotatorOptions,
   type StateAdapter,
+  type Tweak,
+  type Variant,
 } from "./annotate";
 
 let annotator: Annotator | undefined;
@@ -109,11 +111,84 @@ const installHandle = (): void => {
     setMode: (next: "interact" | "comment") => {
       annotator?.setMode(next);
     },
+    /** A real screen borrowing the panel for an afternoon; see `register`. */
+    register,
   };
   globalThis.__sefer = held;
 };
 
 let currentOptions: AnnotatorOptions = BASE;
+
+/**
+ * What a real screen asked for, when it wants knobs without becoming a design
+ * screen.
+ *
+ * `/design` is the place for a prototype, but iterating on a REAL screen
+ * should not require copying it into `src/dev/design/screens/` first — by the
+ * time the copy exists it is already a different file from the one that
+ * ships, and whatever you learn has to be carried back by hand.
+ *
+ * So a screen can register its own knobs in place, and it does it through
+ * `globalThis.__sefer.design` rather than an import. That is not a shortcut,
+ * it is the only door available: `pnpm boundaries` forbids `src/app` from
+ * importing `src/dev`, and rightly — but a global that simply is not there in
+ * production is no import at all. The scaffolding reads
+ *
+ *     if (import.meta.env.DEV) {
+ *       globalThis.__sefer?.design?.register({
+ *         namespace: "bookEditor",
+ *         tweaks: [{ key: "gutter", label: "Gutter", kind: "choice", options: ["narrow", "wide"] }],
+ *         onChange: (values) => { setGutter(values["bookEditor.gutter"] ?? "narrow"); },
+ *       });
+ *     }
+ *
+ * and `onChange` is where it meets Solid: it is called once on registration
+ * with the current values and again on every turn of a knob, so the body of it
+ * is a `setSignal`. The annotator never learns what a signal is.
+ *
+ * This is TEMPORARY CODE by construction — it is scaffolding for an
+ * afternoon's iteration, and `documentation/architecture/design.md` says so.
+ * `pnpm design:scaffolding` lists every place it is still sitting, because the
+ * failure mode of a pattern like this is not that it breaks, it is that
+ * everybody forgets it is there.
+ */
+interface Registration {
+  readonly namespace?: string;
+  readonly variants?: readonly Variant[];
+  readonly tweaks?: readonly Tweak[];
+  readonly onChange?: (values: Readonly<Record<string, string>>) => void;
+}
+
+let registration: Registration | undefined;
+
+/**
+ * The URL adapter with a tap on it, so a registered screen hears about its own
+ * knobs. Reads are untouched; only `write` grows the callback.
+ */
+const notifying: StateAdapter = {
+  read: urlState.read,
+  write: (next) => {
+    urlState.write(next);
+    registration?.onChange?.(next);
+  },
+};
+
+const register = (asked: Registration): (() => void) => {
+  registration = asked;
+  configureDesignSurface({
+    namespace: asked.namespace ?? "",
+    variants: asked.variants ?? [],
+    tweaks: asked.tweaks ?? [],
+    state: notifying,
+  });
+  // Once on registration, so the screen starts in step with whatever the URL
+  // already says rather than with its own defaults.
+  asked.onChange?.(notifying.read());
+  return () => {
+    registration = undefined;
+    releaseDesignSurface();
+  };
+};
 
 export const startDesignSurface = (): (() => void) => {
   if (annotator !== undefined) return () => {};
