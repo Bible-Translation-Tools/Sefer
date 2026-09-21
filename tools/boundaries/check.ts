@@ -187,6 +187,81 @@ export const checkCoreBoundary = (options: BoundaryOptions): BoundaryViolation[]
 export const formatViolation = (violation: BoundaryViolation, root: string): string =>
   `${path.relative(root, violation.file)}:${violation.line}:${violation.column} ${violation.specifier} — ${violation.reason}`;
 
+export interface ReachOptions {
+  /** Files under here are read. */
+  readonly from: string;
+  /** Subtrees of `from` this rule does not apply to. */
+  readonly except?: readonly string[];
+  /** Directories a file under `from` may not resolve a specifier into. */
+  readonly forbidden: readonly string[];
+  /**
+   * Specifier kinds that are allowed through anyway. `import()` is the one that
+   * matters: a dynamic import behind `import.meta.env.DEV` is how a route
+   * reaches dev-only code WITHOUT putting it in the production bundle, which is
+   * the opposite of the leak this rule exists to catch.
+   */
+  readonly allowKinds?: readonly string[];
+  readonly paths?: Readonly<Record<string, readonly string[]>>;
+  readonly pathsBase?: string;
+  /** Named in the violation, so the message says which rule was broken. */
+  readonly label: string;
+}
+
+/**
+ * Which directories a subtree is not allowed to REACH INTO — the mirror of
+ * `checkCoreBoundary`, which asks what a subtree may not reach OUT to.
+ *
+ * Two rules use it, and both are about the design surface:
+ *
+ *   * nothing outside `src/dev` may statically import `src/dev`. The route
+ *     gates already keep dev code out of a production bundle; this keeps a
+ *     static edge from ever being written in the first place, which is the
+ *     architectural claim rather than the bundling one. A dynamic `import()`
+ *     from a route is how the gate is spelled, so that stays allowed.
+ *   * `src/dev/design` may not import `src/core` or `src/app`. The comment
+ *     overlay is a DOM tool that happens to live here; keeping it ignorant of
+ *     Sefer is the whole reason it can be lifted into another repository as a
+ *     folder copy. Sefer-specific glue belongs in `src/dev`, above it.
+ */
+export const checkReach = (options: ReachOptions): BoundaryViolation[] => {
+  const from = path.resolve(options.from);
+  const except = (options.except ?? []).map((directory) => path.resolve(directory));
+  const forbidden = options.forbidden.map((directory) => path.resolve(directory));
+  const allowKinds = new Set(options.allowKinds ?? []);
+  const paths = options.paths ?? {};
+  const pathsBase = path.resolve(options.pathsBase ?? from);
+  const violations: BoundaryViolation[] = [];
+
+  for (const file of listSourceFiles(from)) {
+    if (except.some((directory) => isInside(directory, file))) continue;
+    const source = readFileSync(file, "utf8");
+    const positionOf = lineIndex(source);
+
+    for (const specifier of collectSpecifiers(file, source)) {
+      if (allowKinds.has(specifier.kind)) continue;
+
+      const resolved = isRelative(specifier.value)
+        ? path.resolve(path.dirname(file), withoutQuery(specifier.value))
+        : resolveAlias(withoutQuery(specifier.value), paths, pathsBase);
+      if (resolved === null) continue;
+
+      const breached = forbidden.find((directory) => isInside(directory, resolved));
+      if (breached === undefined) continue;
+
+      const { line, column } = positionOf(specifier.position);
+      violations.push({
+        file,
+        line,
+        column,
+        specifier: specifier.value,
+        reason: `${options.label}: reaches into ${path.relative(pathsBase, breached)} (${specifier.kind})`,
+      });
+    }
+  }
+
+  return violations;
+};
+
 /**
  * A tsconfig is JSON with comments, and `ts.readConfigFile` used to absorb
  * that. TypeScript 7 does not export it, so this strips what a tsconfig is
@@ -248,21 +323,46 @@ export const readTsconfigPaths = (
 
 const main = (): void => {
   const root = process.cwd();
+  const source = path.join(root, "src");
+  const dev = path.join(source, "dev");
   const { paths, base } = readTsconfigPaths(path.join(root, "tsconfig.json"));
-  const violations = checkCoreBoundary({
-    coreDir: path.join(root, "src", "core"),
-    paths,
-    pathsBase: base,
-    rawAssetDirs: [path.join(root, "fixtures")],
-  });
+
+  const violations = [
+    ...checkCoreBoundary({
+      coreDir: path.join(source, "core"),
+      paths,
+      pathsBase: base,
+      rawAssetDirs: [path.join(root, "fixtures")],
+    }),
+    ...checkReach({
+      from: source,
+      except: [dev],
+      forbidden: [dev],
+      // The route gates — `/dev/fixture`, `/project/$slug/playground` and the
+      // design routes — are exactly this: a dynamic import inside a build-time
+      // `import.meta.env` branch, which is what keeps the page out of the
+      // production bundle. Statically importing the same module would not.
+      allowKinds: ["import()"],
+      paths,
+      pathsBase: base,
+      label: "src/dev is dev-only",
+    }),
+    ...checkReach({
+      from: path.join(dev, "design"),
+      forbidden: [path.join(source, "core"), path.join(source, "app")],
+      paths,
+      pathsBase: base,
+      label: "the design tool stays portable",
+    }),
+  ];
 
   if (violations.length === 0) {
-    process.stdout.write("boundaries: src/core is clean\n");
+    process.stdout.write("boundaries: src/core is clean, src/dev is sealed\n");
     return;
   }
 
   for (const violation of violations) process.stderr.write(`${formatViolation(violation, root)}\n`);
-  process.stderr.write(`boundaries: ${violations.length} violation(s) in src/core\n`);
+  process.stderr.write(`boundaries: ${violations.length} violation(s)\n`);
   process.exitCode = 1;
 };
 
