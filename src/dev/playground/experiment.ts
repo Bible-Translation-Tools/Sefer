@@ -17,28 +17,17 @@ import type { JSX } from "@solidjs/web";
 
 import type { GalleyService } from "../../core/galley";
 import type { DiffSkeleton } from "../../core/galley/diff";
-
-/** One control in the frame's dial bar. */
-export type Dial =
-  | { readonly kind: "toggle"; readonly label: string; readonly initial?: boolean }
-  | {
-      readonly kind: "choice";
-      readonly label: string;
-      readonly options: readonly string[];
-      readonly initial?: string;
-    };
-
-export type Dials = Readonly<Record<string, Dial>>;
+import type { DialValues, Dials } from "../dials";
 
 /**
- * What the dials currently say. Untyped per-key on purpose: an experiment reads
- * its own dials and knows their kinds, and a generic map is the price of not
- * making every prototype declare a type it will rename twice this afternoon.
+ * Dials are `src/dev/dials.ts` now, shared with the `/design` frame — a knob on
+ * a prototype is the same idea whichever frame is holding it, and two copies of
+ * the type is how the two frames would start disagreeing about what a toggle
+ * is. Re-exported rather than moved out of reach, so an experiment still writes
+ * `import type { Dials } from "./experiment"` and does not have to know.
  */
-export interface DialValues {
-  readonly toggle: (key: string) => boolean;
-  readonly choice: (key: string) => string;
-}
+
+export type { Dial, Dials, DialValues } from "../dials";
 
 /**
  * Real project text, already diffed — the "half wired" part.

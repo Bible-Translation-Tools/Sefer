@@ -52,10 +52,10 @@ export const primitivesScreen: Screen = {
     const off = () => props.dials.toggle("disabled");
 
     return (
-      <div class={`space-y-6 ${tight() ? "p-3" : "p-6"}`}>
+      <div class={["space-y-6", tight() ? "p-3" : "p-6"]}>
         <Card>
           <PanelHeader title="Buttons" />
-          <div class={`space-y-3 ${tight() ? "p-3" : "p-4"}`}>
+          <div class={["space-y-3", tight() ? "p-3" : "p-4"]}>
             <Row label="Variants">
               <For each={VARIANTS}>
                 {(variant) => (
@@ -79,14 +79,14 @@ export const primitivesScreen: Screen = {
 
         <Card>
           <PanelHeader title="Badges" />
-          <div class={`flex flex-wrap gap-2 ${tight() ? "p-3" : "p-4"}`}>
+          <div class={["flex flex-wrap gap-2", tight() ? "p-3" : "p-4"]}>
             <For each={TONES}>{(tone) => <Badge tone={tone}>{tone}</Badge>}</For>
           </div>
         </Card>
 
         <Card>
           <PanelHeader title="Fields" />
-          <div class={`space-y-3 ${tight() ? "p-3" : "p-4"}`}>
+          <div class={["space-y-3", tight() ? "p-3" : "p-4"]}>
             <Row label="Input">
               <Input size={size()} placeholder="Placeholder" disabled={off()} />
             </Row>

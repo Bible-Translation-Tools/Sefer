@@ -9,78 +9,74 @@
  * Everything the frame knows how to do, it does once for every experiment:
  *
  *   * pick a book, and a baseline to put beside it (`bench.ts`);
- *   * render whatever dials an experiment declared, and remember them;
- *   * remember which experiment was open, so a reload lands back on it.
+ *   * render whatever dials an experiment declared;
+ *   * hold all of it in the URL.
  *
- * Remembered in `sessionStorage` rather than the URL: the state is "where I had
- * got to", not a place anyone should link to, and a prototype whose settings
- * live in search params grows a `validateSearch` schema nobody wants to
- * maintain. Per tab, so two tabs can show two variants side by side.
+ * That last one used to be the opposite. This file argued for `sessionStorage`
+ * on the grounds that the state was "where I had got to, not a place anyone
+ * should link to", and that search params would grow a `validateSearch` schema
+ * nobody wants to maintain.
+ *
+ * Both halves have stopped being true. A designer works here now, and the
+ * whole of that job is sending somebody two links and asking which is better —
+ * so which experiment, which book, which baseline and every dial have to
+ * survive copy, paste and reload. And the schema worry is answered by not
+ * having one: the route keeps whatever string keys it is given, dial keys are
+ * namespaced by experiment id, and adding a knob still costs one line in the
+ * experiment and nothing anywhere else.
+ *
+ * Nothing is left in storage, so two tabs still show two variants side by side
+ * — they just do it with two URLs, which is the version you can send.
  */
 
-import { For, Show, createMemo, createSignal } from "solid-js";
+import { useNavigate } from "@tanstack/solid-router";
+import { For, Show, createMemo } from "solid-js";
 
 import { useShell } from "../../app/ProjectContext";
 import { Badge, Card, SegmentedControl, Select, Switch } from "../../app/ui/primitives";
 import { ShellGate } from "../../app/ui/ShellGate";
+import { Route } from "../../routes/project/$slug/playground";
+import { dialValues, withDial, type Dials } from "../dials";
 import { benchFor } from "./bench";
-import type { Dial, DialValues, Experiment } from "./experiment";
+import type { DialValues, Experiment } from "./experiment";
 import { experiments } from "./registry";
-
-const STORE = "sefer.playground";
-
-/** One flat map for everything the frame remembers; see the module note. */
-const remembered = (): Readonly<Record<string, string>> => {
-  try {
-    const held: unknown = JSON.parse(sessionStorage.getItem(STORE) ?? "{}");
-    if (typeof held !== "object" || held === null) return {};
-    const out: Record<string, string> = {};
-    for (const [key, value] of Object.entries(held)) {
-      if (typeof value === "string") out[key] = value;
-    }
-    return out;
-  } catch {
-    return {};
-  }
-};
-
-const remember = (key: string, value: string): void => {
-  try {
-    sessionStorage.setItem(STORE, JSON.stringify({ ...remembered(), [key]: value }));
-  } catch {
-    // A prototype that refuses to render because storage is disabled would be
-    // a worse tool than one that forgets.
-  }
-};
-
-/** A remembered signal: reads once from storage, writes back on every set. */
-const stored = (key: string, fallback: string): [() => string, (value: string) => void] => {
-  const [held, setHeld] = createSignal(remembered()[key] ?? fallback, {
-    name: `playground:${key}`,
-  });
-  return [
-    held,
-    (value: string) => {
-      setHeld(value);
-      remember(key, value);
-    },
-  ];
-};
-
-const dialInitial = (dial: Dial): string =>
-  dial.kind === "toggle" ? String(dial.initial ?? false) : (dial.initial ?? dial.options[0] ?? "");
 
 function Playground() {
   const shell = useShell();
   const services = shell.services;
+  const navigate = useNavigate();
+  const search = Route.useSearch();
 
-  const [chosenId, setChosenId] = stored("experiment", experiments[0]?.id ?? "");
-  const [bookId, setBookId] = stored("book", "");
-  const [baseline, setBaseline] = stored("baseline", "draft");
-  const [density, setDensity] = stored("density", "light");
-  const [dials, setDials] = createSignal<Readonly<Record<string, string>>>(remembered(), {
-    name: "playgroundDials",
-  });
+  /**
+   * One navigation, merged over what the URL already says. `replace`, so
+   * turning a dial four times leaves one entry in the history rather than four
+   * — Back should undo the last thing you looked at, not the last keystroke.
+   */
+  const ask = (next: Record<string, string>): void => {
+    void navigate({
+      to: "/project/$slug/playground",
+      params: { slug: shell.slug() },
+      search: next,
+      replace: true,
+    });
+  };
+
+  /** A top-level frame key: written when it differs from the default, dropped when it does not. */
+  const set = (key: string, value: string, fallback: string): void => {
+    const next = { ...search() };
+    if (value === fallback) delete next[key];
+    else next[key] = value;
+    ask(next);
+  };
+
+  const chosenId = (): string => search()["experiment"] ?? experiments[0]?.id ?? "";
+  const setChosenId = (id: string): void => set("experiment", id, experiments[0]?.id ?? "");
+  const bookId = (): string => search()["book"] ?? "";
+  const setBookId = (id: string): void => set("book", id, "");
+  const baseline = (): string => search()["baseline"] ?? "draft";
+  const setBaseline = (which: string): void => set("baseline", which, "draft");
+  const density = (): string => search()["density"] ?? "light";
+  const setDensity = (how: string): void => set("density", how, "light");
 
   const chosen = createMemo(
     (): Experiment | undefined =>
@@ -90,7 +86,12 @@ function Playground() {
 
   const books = (): readonly string[] => shell.project()?.books.map((book) => book.id) ?? [];
 
-  /** The book on the bench: what was remembered, else whatever the project has first. */
+  /**
+   * The book on the bench: whatever the URL names, else the project's first.
+   * A link naming a book this project does not have falls back rather than
+   * showing nothing, because the commonest way to get one is to send a
+   * playground link to somebody with a different project open.
+   */
   const onBench = (): string | undefined => {
     const held = bookId();
     return books().includes(held) ? held : books()[0];
@@ -110,24 +111,20 @@ function Playground() {
   );
 
   /**
-   * A dial's value, defaulted from its declaration. Keyed by experiment id as
-   * well as dial key, so two experiments may both have a `layout` without
-   * inheriting each other's answer.
+   * Dials, from `src/dev/dials.ts` — shared with `/design`, because a knob on
+   * a prototype is the same idea whichever frame is holding it. Keyed by
+   * experiment id as well as dial key, so two experiments may both have a
+   * `layout` without inheriting each other's answer.
    */
-  const dialKey = (key: string): string => `${chosen()?.id ?? ""}.${key}`;
-  const dialValue = (key: string): string => {
-    const spec = chosen()?.dials?.[key];
-    if (spec === undefined) return "";
-    return dials()[dialKey(key)] ?? dialInitial(spec);
-  };
-  const setDial = (key: string, value: string): void => {
-    setDials((held) => ({ ...held, [dialKey(key)]: value }));
-    remember(dialKey(key), value);
-  };
-
+  const dialsOf = (): Dials => chosen()?.dials ?? {};
+  const current = (): DialValues => dialValues(chosen()?.id ?? "", dialsOf(), search);
   const values: DialValues = {
-    toggle: (key) => dialValue(key) === "true",
-    choice: (key) => dialValue(key),
+    toggle: (key) => current().toggle(key),
+    choice: (key) => current().choice(key),
+  };
+  const dialValue = (key: string): string => values.choice(key);
+  const setDial = (key: string, value: string): void => {
+    ask(withDial(search(), chosen()?.id ?? "", dialsOf(), key, value));
   };
 
   const stage = (): Experiment | undefined => chosen();

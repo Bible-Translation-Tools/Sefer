@@ -31,6 +31,21 @@ export const Route = createFileRoute("/project/$slug/playground")({
   beforeLoad: () => {
     if (!import.meta.env.DEV) throw notFound();
   },
+  /**
+   * Every string parameter is kept, and nothing is declared — the same bargain
+   * `/design` makes, for the same reason. An experiment's parameters ARE its
+   * dials; they change whenever somebody adds a knob, and a schema here would
+   * need editing every time, which is exactly the friction that stops the knob
+   * being added. Dial keys are namespaced by experiment id, so two experiments
+   * may both have a `layout` without inheriting each other's answer.
+   */
+  validateSearch: (search: Record<string, unknown>): Record<string, string> => {
+    const kept: Record<string, string> = {};
+    for (const [key, value] of Object.entries(search)) {
+      if (typeof value === "string" && value !== "") kept[key] = value;
+    }
+    return kept;
+  },
   head: () => ({ meta: [{ title: "Sefer — playground" }] }),
   component: lazyRouteComponent(loadPlayground),
 });
