@@ -40,7 +40,30 @@ Check `package.json` and runner configuration for executable commands. Distingui
 - `pnpm test:unit` runs the Node `core` Vitest project — every `src/**/*.test.ts` except `*.browser.test.*`, plus `tools/**/*.test.ts`. There is no jsdom project.
 - `pnpm test:browser` runs the real Chromium Browser Mode project; today that is one mount/dispose test.
 - `pnpm build` builds the shared Web frontend; `pnpm dev:tauri` starts the Tauri host.
-- `pnpm boundaries` proves `src/core` imports nothing framework- or host-specific.
+- `pnpm boundaries` proves `src/core` imports nothing framework- or host-specific, that nothing outside `src/dev` statically imports it, and that `src/dev/annotate` imports no framework at all.
+- `pnpm build:design` builds the deployed prototype — a production build that DOES carry `/design` and the design annotator. See below.
+- `pnpm verify:design` runs two real builds and proves the design surface is absent from production and present in the design build.
+- `pnpm design:scaffolding` lists real screens still borrowing the design panel through `globalThis.__sefer.design.register`. Informational; exits 0.
 - `pnpm check` runs the ordinary local gate: typecheck, lint, formatting, boundaries, unit tests, and build. `.github/workflows/check.yml` runs the same commands, plus `pnpm test:browser` in a second job.
+
+## The design build switch
+
+`__SEFER_DESIGN__` is a Vite `define` set in `vite.config.ts` to
+`mode === "development" || mode === "design"`. It is the ONE answer to
+"does this build carry the design surface": `/design`, the floating
+annotator mounted from `src/routes/__root.tsx`, and the `data-loc` JSX
+stamps from `tools/vite/jsxLocation.ts`.
+
+**It is never on in production, and there is no variable that turns it on.**
+There is deliberately no `INCLUDE_DESIGNER` or other `.env` switch: an env
+file is state on a machine that can drift into a release, whereas
+`--mode design` is a flag on a deploy job. Comment mode swallows every event
+in the capture phase, so shipping it to somebody editing scripture would be a
+foot-gun.
+
+Gate with `__SEFER_DESIGN__` directly, never through an imported constant — an
+exported constant folds at its use site but still left rolldown emitting the
+design page as an orphaned, shipped chunk. `documentation/architecture/design.md`
+has the full account; `src/vite-env.d.ts` declares it.
 
 Core modules stay independent of Solid, the router, Tauri, CodeMirror, DOM globals, and native filesystem implementations; `pnpm boundaries` is the authoritative check. TanStack Router owns navigation; it is not automatically the DI container. Effect supplies the boot program's typed failures and the observability and filesystem Layers; the filesystem port is `effect/FileSystem` and no host provides it yet. Isomorphic Git is present as a dependency for later integration work, but its lifecycle and filesystem adapter are not established by the scaffold.
