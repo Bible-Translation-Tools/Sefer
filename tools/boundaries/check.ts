@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
-import ts from "typescript";
+import { collectSpecifiers, lineIndex } from "./specifiers.ts";
 
 export interface BoundaryViolation {
   readonly file: string;
@@ -55,12 +55,6 @@ const NODE_ONLY: readonly string[] = ["node:", "@effect/platform-node"];
 const isNodeSpecifier = (specifier: string): boolean =>
   NODE_ONLY.some((prefix) => specifier.startsWith(prefix));
 
-interface RawSpecifier {
-  readonly value: string;
-  readonly position: number;
-  readonly kind: string;
-}
-
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts"]);
 
 const listSourceFiles = (directory: string): string[] => {
@@ -78,54 +72,6 @@ const listSourceFiles = (directory: string): string[] => {
   if (!statSync(directory, { throwIfNoEntry: false })?.isDirectory()) return found;
   walk(directory);
   return found.sort();
-};
-
-const stringLiteralValue = (node: ts.Node): string | null =>
-  ts.isStringLiteralLike(node) ? node.text : null;
-
-const isImportMetaGlob = (node: ts.CallExpression): boolean =>
-  ts.isPropertyAccessExpression(node.expression) &&
-  node.expression.name.text === "glob" &&
-  ts.isMetaProperty(node.expression.expression) &&
-  node.expression.expression.keywordToken === ts.SyntaxKind.ImportKeyword;
-
-const isRequireCall = (node: ts.CallExpression): boolean =>
-  ts.isIdentifier(node.expression) && node.expression.text === "require";
-
-const collectSpecifiers = (source: ts.SourceFile): RawSpecifier[] => {
-  const specifiers: RawSpecifier[] = [];
-  const push = (node: ts.Node | undefined, kind: string): void => {
-    if (node === undefined) return;
-    const value = stringLiteralValue(node);
-    if (value !== null) specifiers.push({ value, position: node.getStart(source), kind });
-  };
-
-  const visit = (node: ts.Node): void => {
-    if (ts.isImportDeclaration(node)) {
-      push(node.moduleSpecifier, node.importClause?.isTypeOnly === true ? "import type" : "import");
-    } else if (ts.isExportDeclaration(node)) {
-      push(node.moduleSpecifier, node.isTypeOnly ? "export type … from" : "export … from");
-    } else if (
-      ts.isImportEqualsDeclaration(node) &&
-      ts.isExternalModuleReference(node.moduleReference)
-    ) {
-      push(node.moduleReference.expression, "import = require");
-    } else if (ts.isCallExpression(node)) {
-      if (node.expression.kind === ts.SyntaxKind.ImportKeyword) push(node.arguments[0], "import()");
-      else if (isRequireCall(node)) push(node.arguments[0], "require()");
-      else if (isImportMetaGlob(node)) {
-        for (const argument of node.arguments) {
-          if (ts.isArrayLiteralExpression(argument))
-            for (const element of argument.elements) push(element, "import.meta.glob");
-          else push(argument, "import.meta.glob");
-        }
-      }
-    }
-    ts.forEachChild(node, visit);
-  };
-
-  visit(source);
-  return specifiers;
 };
 
 const RAW_QUERY = /\?raw(?:&|$)/;
@@ -178,22 +124,17 @@ export const checkCoreBoundary = (options: BoundaryOptions): BoundaryViolation[]
   const violations: BoundaryViolation[] = [];
 
   for (const file of listSourceFiles(coreDir)) {
-    const source = ts.createSourceFile(
-      file,
-      readFileSync(file, "utf8"),
-      ts.ScriptTarget.Latest,
-      true,
-      file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-    );
+    const source = readFileSync(file, "utf8");
+    const positionOf = lineIndex(source);
     const isTest = TEST_FILE.test(file);
 
-    for (const specifier of collectSpecifiers(source)) {
-      const { line, character } = source.getLineAndCharacterOfPosition(specifier.position);
+    for (const specifier of collectSpecifiers(file, source)) {
+      const { line, column } = positionOf(specifier.position);
       const report = (reason: string): void => {
         violations.push({
           file,
-          line: line + 1,
-          column: character + 1,
+          line,
+          column,
           specifier: specifier.value,
           reason: `${reason} (${specifier.kind})`,
         });
@@ -246,12 +187,61 @@ export const checkCoreBoundary = (options: BoundaryOptions): BoundaryViolation[]
 export const formatViolation = (violation: BoundaryViolation, root: string): string =>
   `${path.relative(root, violation.file)}:${violation.line}:${violation.column} ${violation.specifier} — ${violation.reason}`;
 
+/**
+ * A tsconfig is JSON with comments, and `ts.readConfigFile` used to absorb
+ * that. TypeScript 7 does not export it, so this strips what a tsconfig is
+ * allowed to carry beyond JSON — line and block comments, and trailing commas
+ * — while leaving anything inside a string alone. A path that happens to
+ * contain `//` is the case a naive strip gets wrong, and this repository's own
+ * config would not catch the mistake.
+ */
+const stripJsonc = (text: string): string => {
+  let out = "";
+  let inString = false;
+  let escaped = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index] ?? "";
+    if (inString) {
+      out += character;
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') {
+      inString = true;
+      out += character;
+      continue;
+    }
+    const next = text[index + 1];
+    if (character === "/" && next === "/") {
+      while (index < text.length && text[index] !== "\n") index += 1;
+      out += "\n";
+      continue;
+    }
+    if (character === "/" && next === "*") {
+      index += 2;
+      while (index < text.length && !(text[index] === "*" && text[index + 1] === "/")) index += 1;
+      index += 1;
+      continue;
+    }
+    out += character;
+  }
+  // Trailing commas, now that no comma inside a string can be mistaken for one.
+  return out.replace(/,(\s*[}\]])/g, "$1");
+};
+
 export const readTsconfigPaths = (
   tsconfigPath: string,
 ): { paths: Record<string, readonly string[]>; base: string } => {
   const base = path.dirname(path.resolve(tsconfigPath));
-  const parsed = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
-  const options = parsed.config?.compilerOptions ?? {};
+  const parsed: unknown = JSON.parse(stripJsonc(readFileSync(tsconfigPath, "utf8")));
+  // SAFETY: two optional fields read off a config file this repository owns.
+  // A tsconfig that does not have them is the ordinary case, not an error.
+  const config = parsed as {
+    compilerOptions?: { paths?: Record<string, readonly string[]>; baseUrl?: string };
+  };
+  const options = config.compilerOptions ?? {};
   const paths = options.paths ?? {};
   return { paths, base: path.resolve(base, options.baseUrl ?? ".") };
 };
