@@ -9,6 +9,7 @@ import { playwright } from "@vitest/browser-playwright";
 import { loadEnv } from "vite";
 import { configDefaults, defineConfig } from "vitest/config";
 
+import { jsxLocation } from "./tools/vite/jsxLocation.ts";
 import { lucideSolidCompat } from "./tools/vite/lucideSolid.ts";
 
 /**
@@ -71,6 +72,10 @@ const galleyTag = (): string => {
 };
 
 export default defineConfig(({ mode }) => {
+  // The one answer to "does this build carry the design surface", shared by
+  // the `__SEFER_DESIGN__` define below and the JSX-location transform.
+  const designBuild = mode === "development" || mode === "design";
+
   // `loadEnv` so the collector may be named either in a `.env` file or, as the
   // documented command does, exported in the shell that runs `pnpm dev`.
   const collector = (loadEnv(mode, process.cwd(), "VITE_").VITE_SEFER_OTLP_URL ?? "")
@@ -83,6 +88,12 @@ export default defineConfig(({ mode }) => {
     // (or a built-in shell). `vite build` prerenders the shell into
     // dist/client/index.html and emits a purely static dist/client.
     plugins: [
+      // Stamps every intrinsic JSX element with its file:line:col, so a click
+      // in the design overlay can name a place in the source. MUST come before
+      // solid(), which erases JSX — the plugin's own `enforce: "pre"` says so
+      // too, but the order here is the one somebody reads. Dev and design
+      // builds only; production never sees it.
+      jsxLocation({ enabled: designBuild, root: process.cwd() }),
       // Tailwind v4 compiles from the CSS itself: `src/app/ui/tokens.css` holds
       // the `@import "tailwindcss"`, the `@source` glob and the `@theme` bridge,
       // so there is no config file to keep in step with it.
@@ -104,7 +115,7 @@ export default defineConfig(({ mode }) => {
     define: {
       __SEFER_BUILD__: JSON.stringify(buildIdentity(mode)),
       __GALLEY_TAG__: JSON.stringify(galleyTag()),
-      __SEFER_DESIGN__: JSON.stringify(mode === "development" || mode === "design"),
+      __SEFER_DESIGN__: JSON.stringify(designBuild),
     },
     server: {
       port: 3000,
