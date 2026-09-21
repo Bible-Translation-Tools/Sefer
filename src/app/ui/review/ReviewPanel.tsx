@@ -78,6 +78,7 @@ import {
 } from "../../../core/compare";
 import { diffSkeleton, mergeWithDecisions } from "../../../core/diff/skeleton";
 import type { DecisionUnit, DiffSkeleton, MergeSide } from "../../../core/galley";
+import { Observability } from "../../../core/observability";
 import type { Restorable } from "../../../core/recovery/recovery";
 import type { SourceStamp } from "../../../core/source/source";
 import { describe } from "../../describe";
@@ -513,9 +514,37 @@ export function ReviewPanel() {
     setConfirming(false);
     setBusy(t("Applying…"));
     const toast = toasts.progress({ title: t("Applying") });
+    const operation = services.composition.observability.operation("review.apply", {
+      "review.writes": projected.writes.length,
+      "review.undecided": projected.undecided,
+      "review.target": side ?? "unknown",
+    });
+    const close = operation.span("review.apply.work", undefined, {
+      "review.writes": projected.writes.length,
+    });
+    let settled = false;
+    const finish = (
+      verdict: "passed" | "refused",
+      attrs: Readonly<Record<string, string | number | boolean>>,
+    ): void => {
+      if (settled) return;
+      settled = true;
+      close(attrs);
+      operation.end(verdict, attrs);
+    };
     void services
-      .run(applyPlan(projected, into, { allowUndecided: againstPast() }))
+      .run(
+        Effect.provideService(
+          applyPlan(projected, into, { allowUndecided: againstPast() }),
+          Observability,
+          operation,
+        ),
+      )
       .then((report) => {
+        finish("passed", {
+          "review.written": report.written.length,
+          "review.unchanged": report.unchanged,
+        });
         setBusy("");
         setDecisions(new Map());
         shell.changed({ kind: "book.apply", books: report.written });
@@ -530,6 +559,11 @@ export function ReviewPanel() {
       .catch((cause: unknown) => {
         setBusy("");
         const described = describe(cause);
+        const reason =
+          typeof cause === "object" && cause !== null && "reason" in cause
+            ? String(cause.reason)
+            : "unknown";
+        finish("refused", { "review.reason": reason });
         setNote(described);
         toasts.update(toast, { title: t("Apply refused"), message: described, tone: "error" });
       });

@@ -35,6 +35,13 @@ keystrokes; a parent would have to name one of them and lie.
 | `editor.mutation` | a Gesture that changed Source | book, revisions, phase timings, derive totals, broadcast, meter |
 | `editor.selection` | a Gesture that moved the caret | the same, minus the mutation |
 | `editor.render` | a repaint nobody typed for | derive totals, `findings.shown` |
+| `import.resource` | importing a picked folder or ZIP | source kind, stage timings, classification, book/file counts, outcome and failing phase |
+| `import.remote` | cloning a shared project | clone and registration timings, progress counts, outcome and failing phase; no URL or name |
+| `find.run` | running a nonempty, valid-length search | scope, options, scan time, hit count or refusal reason; never the query text |
+| `sync.transfer` | pressing the transfer action after any confirmation | action, transfer time, outcome and failure reason |
+| `review.apply` | applying a review plan | requested/written counts, target side, duration and refusal reason |
+| `journal.offer` | checking disk and journals when a project opens | candidate, offered and declined counts |
+| `journal.restore` / `journal.discard` | answering the recovery banner | attempted, completed and refused book counts |
 
 Inside those, as spans: `galley.parse` (with `galley.why` naming its caller),
 `file.write`, `corpus.publish`.
@@ -49,24 +56,24 @@ As events: `book.analyze`, `corpus.update`, `corpus.reference`,
 |---|---|---|
 | `project.close` | a Gesture | Mechanical; `project.open`'s shape applies directly. |
 | `journal.write` | **cause** — the Gesture that dirtied the Book | Debounced, so it needs the same `supply`-style hand-off the analysis pass uses. |
-| `journal.pending` | startup | Runs before a Project exists; belongs inside `boot` or beside it, undecided. |
-| `journal.restore` / `journal.offer` / `journal.discard` | a Gesture | Mechanical. |
+| `journal.pending` | startup | The raw pending-list operation remains separate from the open-time `journal.offer` check. |
 | `project.watch` | uncaused | A watcher declining is nobody's Gesture. Root of its own. |
 | `file.changed` | uncaused | The watcher saw disk change. Root of its own. |
-| `import.resource` | a Gesture | **Does not exist at all.** See below. |
 
 ## Still silent
 
-The survey's real finding, unchanged by the work so far:
+The remaining gaps after the import, recovery, Find, transfer and review Apply passes:
 
-- **Import emits nothing** but `library.load` / `library.add` at the very end.
-  The download → unzip → write cascade is the example everyone reaches for when
-  explaining why spans exist, and it is uninstrumented. It is also the one
-  place a user waits on a network.
-- **Review and compare** (`src/core/compare`, `src/core/save`) emit nothing.
-- **Cloud sync** (`src/core/sync`) emits nothing. Nine states, two clocks, a
-  remote — and no trace of any of it.
-- **Terms**, **Find**, **Inventory** emit nothing.
+- **Browsing the remote catalogue** remains silent. Once a repository is
+  selected, clone and local registration run under `import.remote`. The Web
+  picked-source path reports read/unzip and stage/classify/commit time, but
+  neither import path emits a per-file event.
+- **Review comparison** runs in response to source and text changes, but only
+  Apply now has an operation. A coalesced comparison should report the inputs'
+  identities and changed-book count when its performance becomes a question.
+- **Cloud state survey and incoming-plan construction** remain silent; the
+  transfer button is covered, including failures.
+- **Terms and Inventory** remain silent. Find now records scans and outcomes.
 
 Those four are the largest remaining surface, and three of them are where the
 network and the filesystem are.

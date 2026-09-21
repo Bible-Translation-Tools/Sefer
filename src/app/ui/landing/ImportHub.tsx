@@ -26,18 +26,20 @@
  */
 
 import type { JSX } from "@solidjs/web";
-import { Effect, Option } from "effect";
+import { Effect, Option, Scope } from "effect";
 import CloudDownload from "lucide-solid/icons/cloud-download";
 import FileArchive from "lucide-solid/icons/file-archive";
 import FolderOpen from "lucide-solid/icons/folder-open";
 import { For, Show, createSignal } from "solid-js";
 
+import { Observability } from "../../../core/observability";
 import { cloneRepository } from "../../../core/remote/clone";
 import { Gitea, type RemoteRepo } from "../../../core/remote/gitea";
 import { classify, commit, stage } from "../../../core/resources/import";
 import { env, giteaHostFor } from "../../env";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
+import type { Domain } from "../../services";
 import { Button, Card, Dialog, Input, cx, toasts } from "../primitives";
 import { rememberProject } from "./summaries";
 
@@ -100,6 +102,16 @@ const describe = (cause: unknown): string => {
   return text === "" || text === "[object Object]" ? "no detail" : text;
 };
 
+const failureReason = (cause: unknown): string => {
+  if (cause !== null && typeof cause === "object") {
+    // SAFETY: only the optional `reason` field is read, and its runtime type is
+    // checked before it becomes an observability attribute.
+    const reason = (cause as { readonly reason?: unknown }).reason;
+    if (typeof reason === "string" && reason !== "") return reason;
+  }
+  return "Unknown";
+};
+
 interface SourceCard {
   readonly id: string;
   readonly icon: JSX.Element;
@@ -148,29 +160,51 @@ export function ImportHub(props: { readonly onImported: () => void }) {
       message: t("Choosing a folder"),
     });
     running(title, "pick");
+    const operation = services.composition.observability.operation("import.resource", {
+      "import.source": "folder",
+      "import.host": services.hostInfo.kind(),
+    });
+    let phase = "pick";
+    const run = async <A, E>(
+      effect: Effect.Effect<A, E, Domain | Scope.Scope>,
+      stageName?: string,
+    ): Promise<A> => {
+      const stop = stageName === undefined ? undefined : operation.span(stageName);
+      try {
+        return await services.run(Effect.provideService(effect, Observability, operation));
+      } finally {
+        stop?.();
+      }
+    };
 
     void (async () => {
-      const picked = await services.run(services.dialogs.pickFolder(t("Select a project folder")));
+      const picked = await run(services.dialogs.pickFolder(t("Select a project folder")));
       const source = Option.getOrUndefined(picked);
       if (source === undefined) {
+        operation.end("declined", { "import.phase": phase });
         setProgress(undefined);
         toasts.dismiss(toast);
         return;
       }
 
       running(title, "stage");
+      phase = "stage";
       toasts.update(toast, { title: t("Importing project"), message: t("Staging files") });
-      const staged = await services.run(
+      const staged = await run(
         stage(services.fileSystem, [source], `${services.hostInfo.paths().temp}/import`),
+        "import.stage",
       );
 
       running(title, "classify");
-      const kind = await services.run(classify(services.fileSystem, staged));
+      phase = "classify";
+      const kind = await run(classify(services.fileSystem, staged), "import.classify");
 
       running(title, "commit");
+      phase = "commit";
       toasts.update(toast, { title: t("Importing project"), message: t("Committing books") });
       const into = `${services.projectsRoot}/${lastSegment(source)}`;
-      const books = await services.run(commit(services.fileSystem, staged, { root: into }));
+      const books = await run(commit(services.fileSystem, staged, { root: into }), "import.commit");
+      operation.attr({ "import.kind": kind, "import.books": books.length });
 
       finished(
         t("Ready"),
@@ -189,10 +223,12 @@ export function ImportHub(props: { readonly onImported: () => void }) {
       // The projects index learns about the project HERE, at the one moment
       // this device knows a new one exists — before the list is told to
       // re-read, so the row it draws is the one just written.
-      await services.run(rememberProject(services.projectsRoot, into, undefined));
+      await run(rememberProject(services.projectsRoot, into, undefined));
+      operation.end("passed", { "import.phase": "complete" });
       props.onImported();
     })().catch((cause: unknown) => {
       const message = describe(cause);
+      operation.end("failed", { "import.phase": phase, "import.reason": failureReason(cause) });
       finished(t("Couldn't bring it in"), message, true);
       toasts.update(toast, { title: t("Import failed"), message, tone: "error", autoClose: false });
     });
@@ -206,19 +242,38 @@ export function ImportHub(props: { readonly onImported: () => void }) {
   const importPicked = (title: string, source: "folder" | "zip"): void => {
     const toast = toasts.progress({ title: t("Importing project"), message: t("Choosing files") });
     running(title, "pick");
+    const operation = services.composition.observability.operation("import.resource", {
+      "import.source": source,
+      "import.host": services.hostInfo.kind(),
+    });
+    let phase = "pick";
+    const run = async <A, E>(
+      effect: Effect.Effect<A, E, Domain | Scope.Scope>,
+      stageName?: string,
+    ): Promise<A> => {
+      const stop = stageName === undefined ? undefined : operation.span(stageName);
+      try {
+        return await services.run(Effect.provideService(effect, Observability, operation));
+      } finally {
+        stop?.();
+      }
+    };
 
     void (async () => {
       const intake = await import("../../../platform/web/intake");
-      const picked = source === "zip" ? await intake.pickZip() : await intake.pickFolder();
+      const picked =
+        source === "zip" ? await intake.pickZip(operation) : await intake.pickFolder(operation);
       if (picked === undefined) {
+        operation.end("declined", { "import.phase": phase });
         setProgress(undefined);
         toasts.dismiss(toast);
         return;
       }
 
       running(title, "stage", t("0 of {total} files", { total: picked.files.length }));
+      phase = "stage";
       toasts.update(toast, { title: t("Importing project"), message: t("Copying files in") });
-      const staged = await services.run(
+      const staged = await run(
         intake.intake(
           services.fileSystem,
           `${services.hostInfo.paths().temp}/import`,
@@ -233,15 +288,23 @@ export function ImportHub(props: { readonly onImported: () => void }) {
               }),
             ),
         ),
+        "import.stage",
       );
 
       running(title, "classify");
-      const kind = await services.run(classify(services.fileSystem, staged));
+      phase = "classify";
+      const kind = await run(classify(services.fileSystem, staged), "import.classify");
 
       running(title, "commit");
+      phase = "commit";
       toasts.update(toast, { title: t("Importing project"), message: t("Committing books") });
       const into = `${services.projectsRoot}/${picked.name}`;
-      const books = await services.run(commit(services.fileSystem, staged, { root: into }));
+      const books = await run(commit(services.fileSystem, staged, { root: into }), "import.commit");
+      operation.attr({
+        "import.kind": kind,
+        "import.books": books.length,
+        "import.files": picked.files.length,
+      });
 
       finished(
         t("Ready"),
@@ -260,10 +323,12 @@ export function ImportHub(props: { readonly onImported: () => void }) {
       // The projects index learns about the project HERE, at the one moment
       // this device knows a new one exists — before the list is told to
       // re-read, so the row it draws is the one just written.
-      await services.run(rememberProject(services.projectsRoot, into, undefined));
+      await run(rememberProject(services.projectsRoot, into, undefined));
+      operation.end("passed", { "import.phase": "complete" });
       props.onImported();
     })().catch((cause: unknown) => {
       const message = describe(cause);
+      operation.end("failed", { "import.phase": phase, "import.reason": failureReason(cause) });
       finished(t("Couldn't bring it in"), message, true);
       toasts.update(toast, { title: t("Import failed"), message, tone: "error", autoClose: false });
     });
@@ -299,25 +364,58 @@ export function ImportHub(props: { readonly onImported: () => void }) {
     setCloneOpen(false);
     const toast = toasts.progress({ title: t("Cloning {name}", { name }) });
     running(t("Clone from cloud"), "commit");
-    void services
-      .run(cloneRepository(url, into))
-      .then(() => {
-        finished(t("Ready"), t("Cloned into {root}.", { root: into }), false);
-        toasts.update(toast, { title: t("Cloned {name}", { name }), tone: "success" });
-        void services
-          .run(rememberProject(services.projectsRoot, into, undefined))
-          .then(() => props.onImported());
-      })
-      .catch((cause: unknown) => {
-        const message = describe(cause);
-        finished(t("Couldn't bring it in"), message, true);
-        toasts.update(toast, {
-          title: t("Clone failed"),
-          message,
-          tone: "error",
-          autoClose: false,
-        });
+    const operation = services.composition.observability.operation("import.remote", {
+      "import.source": "cloud",
+      "import.host": services.hostInfo.kind(),
+    });
+    let phase = "clone";
+    let ended = false;
+    const end = (
+      verdict: "passed" | "failed",
+      attrs: Parameters<typeof operation.end>[1],
+    ): void => {
+      if (ended) return;
+      ended = true;
+      operation.end(verdict, attrs);
+    };
+    const run = async <A, E>(
+      effect: Effect.Effect<A, E, Domain | Scope.Scope>,
+      stageName: string,
+    ): Promise<A> => {
+      const stop = operation.span(stageName);
+      try {
+        return await services.run(Effect.provideService(effect, Observability, operation));
+      } finally {
+        stop();
+      }
+    };
+
+    void (async () => {
+      const cloned = await run(cloneRepository(url, into), "remote.clone");
+      operation.attr({
+        "remote.progress.phase": cloned.progress.phase,
+        "remote.progress.loaded": cloned.progress.loaded,
+        ...(cloned.progress.total === undefined
+          ? {}
+          : { "remote.progress.total": cloned.progress.total }),
       });
+      phase = "register";
+      await run(rememberProject(services.projectsRoot, into, undefined), "import.register");
+      end("passed", { "import.phase": "complete" });
+      finished(t("Ready"), t("Cloned into {root}.", { root: into }), false);
+      toasts.update(toast, { title: t("Cloned {name}", { name }), tone: "success" });
+      props.onImported();
+    })().catch((cause: unknown) => {
+      const message = describe(cause);
+      end("failed", { "import.phase": phase, "import.reason": failureReason(cause) });
+      finished(t("Couldn't bring it in"), message, true);
+      toasts.update(toast, {
+        title: t("Clone failed"),
+        message,
+        tone: "error",
+        autoClose: false,
+      });
+    });
   };
 
   /** True when the host reads a real path; false when the browser must copy. */

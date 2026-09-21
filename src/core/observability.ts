@@ -65,8 +65,13 @@ export type OperationName =
   | "journal.write"
   | "journal.pending"
   | "journal.restore"
+  | "journal.discard"
   | "journal.offer"
   | "import.resource"
+  | "import.remote"
+  | "find.run"
+  | "sync.transfer"
+  | "review.apply"
   /**
    * One command run from the palette, a keybinding or a click. The id is in
    * the name so a trace list reads as what the person did, and `command.` is a

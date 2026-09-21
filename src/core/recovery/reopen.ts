@@ -71,11 +71,13 @@ export const pendingOnOpen = (
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const observability = Option.getOrUndefined(yield* Effect.serviceOption(Observability));
+    const operation = observability?.operation("journal.offer");
 
     // No baselines exist yet, and that is the point: ask for every journal
     // with entries and let the disk comparison below be the only filter.
     const all = yield* recovery.pending(() => Option.none());
     const mine = all.filter((journal) => journal.projectId === projectId);
+    let refused = 0;
 
     const offered: Restorable[] = [];
     for (const journal of mine) {
@@ -93,17 +95,18 @@ export const pendingOnOpen = (
       // project's own bytes, so it goes without asking: a banner offering to
       // restore what is already saved teaches people to ignore the banner.
       const cleared = yield* Effect.result(recovery.discard(journal.id));
-      observability?.note(
+      if (Result.isFailure(cleared)) refused += 1;
+      operation?.note(
         "journal.offer",
         Result.isFailure(cleared) ? "declined" : "consumed",
         "matched disk",
-        { "journal.write": journal.id, "book.id": journal.bookId },
+        { "book.id": journal.bookId },
       );
     }
-    observability?.note("journal.offer", "ready", undefined, {
-      "project.id": projectId,
-      "journal.offered": offered.length,
+    operation?.end("ready", {
       "journal.candidates": mine.length,
+      "journal.offered": offered.length,
+      "journal.refused": refused,
     });
     return offered;
   });

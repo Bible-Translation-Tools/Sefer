@@ -28,6 +28,7 @@
 import { Effect, FileSystem } from "effect";
 import { unzipSync } from "fflate";
 
+import type { ObservabilityService } from "../../core/observability";
 import type { Staged } from "../../core/resources/import";
 
 /** One picked file, with the path it should have INSIDE the project root. */
@@ -120,7 +121,9 @@ const walk = async (
  * A folder, as files. `showDirectoryPicker` where it exists, and otherwise a
  * `webkitdirectory` input, whose `webkitRelativePath` carries the tree.
  */
-export const pickFolder = async (): Promise<Picked | undefined> => {
+export const pickFolder = async (
+  observability?: ObservabilityService,
+): Promise<Picked | undefined> => {
   // SAFETY: `showDirectoryPicker` is not in the DOM lib this project builds
   // against; the shape asserted here is the one the caller checks for with
   // `typeof` on the next line before ever calling it.
@@ -138,8 +141,13 @@ export const pickFolder = async (): Promise<Picked | undefined> => {
       // every browser reports that as a rejection. Nothing was picked.
       return undefined;
     }
+    const stop = observability?.span("import.pick.read", undefined, { "import.source": "folder" });
     const files: IntakeFile[] = [];
-    await walk(handle, "", files);
+    try {
+      await walk(handle, "", files);
+    } finally {
+      stop?.({ "import.files": files.length });
+    }
     return files.length === 0 ? undefined : { name: handle.name, files };
   }
 
@@ -147,11 +155,16 @@ export const pickFolder = async (): Promise<Picked | undefined> => {
   if (picked.length === 0) return undefined;
   const relative = picked.map((file) => file.webkitRelativePath || file.name);
   const { root, cut } = stripCommonRoot(relative);
+  const stop = observability?.span("import.pick.read", undefined, { "import.source": "folder" });
   const files: IntakeFile[] = [];
-  for (const [index, file] of picked.entries()) {
-    const path = (relative[index] ?? file.name).slice(cut);
-    if (!usable(path)) continue;
-    files.push({ path, bytes: new Uint8Array(await file.arrayBuffer()) });
+  try {
+    for (const [index, file] of picked.entries()) {
+      const path = (relative[index] ?? file.name).slice(cut);
+      if (!usable(path)) continue;
+      files.push({ path, bytes: new Uint8Array(await file.arrayBuffer()) });
+    }
+  } finally {
+    stop?.({ "import.files": files.length });
   }
   return files.length === 0 ? undefined : { name: root === "" ? "project" : root, files };
 };
@@ -161,13 +174,29 @@ export const pickFolder = async (): Promise<Picked | undefined> => {
  * the right trade for a scripture project: a Burrito of the whole Bible is a
  * few megabytes of text, and the streaming API costs a worker to use properly.
  */
-export const pickZip = async (): Promise<Picked | undefined> => {
+export const pickZip = async (
+  observability?: ObservabilityService,
+): Promise<Picked | undefined> => {
   const picked = await pickFiles({ accept: ".zip,application/zip" });
   const archive = picked[0];
   if (archive === undefined) return undefined;
 
-  const entries = unzipSync(new Uint8Array(await archive.arrayBuffer()));
-  const names = Object.keys(entries).filter((name) => usable(name));
+  const read = observability?.span("import.pick.read", undefined, { "import.source": "zip" });
+  let archiveBytes: ArrayBuffer;
+  try {
+    archiveBytes = await archive.arrayBuffer();
+  } finally {
+    read?.();
+  }
+  const unzip = observability?.span("import.unzip", undefined, { "import.source": "zip" });
+  let names: string[] = [];
+  let entries: Record<string, Uint8Array>;
+  try {
+    entries = unzipSync(new Uint8Array(archiveBytes));
+    names = Object.keys(entries).filter((name) => usable(name));
+  } finally {
+    unzip?.({ "import.entries": names.length });
+  }
   if (names.length === 0) return undefined;
   const { root, cut } = stripCommonRoot(names);
   const files: IntakeFile[] = [];

@@ -15,6 +15,8 @@ A save can succeed while a checkpoint fails; report both honestly. An interrupte
 
 Historical preview is not checkout by default. Back to Latest restores the current viewing context without silently throwing away working edits. Destructive restore needs product-defined confirmation and recovery semantics.
 
+The later, read-only book/chapter slider and its performance questions are captured in [Next Git considerations](../01-discussing/next-git-considerations.md). That discussion starts from the Git port and History panel now present in Sefer; this earlier slice remains a proposal rather than a current-state inventory.
+
 ## Useful proof
 
 Real temporary repositories prove init → commit → history → reopen, plus save/checkpoint overlap and operation-specific failure recovery. Inspect bytes/refs and lifecycle evidence. One desktop journey proves actual disk persistence. Use controlled failures only for unreachable interruption windows; do not mock Git to test Git lifecycle.

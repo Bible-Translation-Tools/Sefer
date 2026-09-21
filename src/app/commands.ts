@@ -410,6 +410,31 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
     }),
 
     registerCommand({
+      id: "settings.showAdvanced",
+      title: t("Show advanced settings"),
+      when: () =>
+        !bridge.services.settings.get(shellKeys(bridge.services.settings).showAdvancedSettings),
+      run: () => {
+        const key = shellKeys(bridge.services.settings).showAdvancedSettings;
+        return Effect.gen(function* () {
+          yield* bridge.services.settings.set(key, true);
+          yield* Effect.sync(() => void bridge.navigate({ to: "/settings" }));
+        });
+      },
+    }),
+
+    registerCommand({
+      id: "settings.hideAdvanced",
+      title: t("Hide advanced settings"),
+      when: () =>
+        bridge.services.settings.get(shellKeys(bridge.services.settings).showAdvancedSettings),
+      run: () => {
+        const key = shellKeys(bridge.services.settings).showAdvancedSettings;
+        return bridge.services.settings.set(key, false);
+      },
+    }),
+
+    registerCommand({
       id: "book.save",
       title: t("Save & Review…"),
       keys: "Mod-s",

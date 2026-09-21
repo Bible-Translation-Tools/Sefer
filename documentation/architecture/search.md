@@ -58,9 +58,9 @@ Each scan is a fresh `String`/`RegExp` walk of every canonical text. There is no
 
 This is a marker scan, not a parse. Galley's TOC is the real answer: when ProjectAnalysis (slice 15) can hand search an analysis per book, `refAt` should read the TOC instead. Until then a book with no analysis still needs a reference for its card.
 
-## Replace — and no global Replace All
+## Replace
 
-Sefer does not offer a project-wide Replace All over a Bible (vision §12.2). The result browser presents editable result cards and the user replaces one match at a time; nothing in this module walks the corpus and rewrites it.
+Find offers an advanced, default-off Replace all action for the current book or project search. The user enters literal replacement text, previews the scope and count, then explicitly applies. The action rechecks the setting, query options, and every book's hit stamps before writing; it reports the actual number changed if a later book refuses. Reference searches are read-only. Ordinary result cards remain editable one at a time.
 
 - `replace(hit, insert, books) → Result<Receipt, Refusal>` — one match. Refused as `Refusal { rule: "search.replace", reason: "Stale" }` when the hit no longer resolves, or `"SpansMarkup"` when it crosses dropped markup.
 - `replaceInBook(book, hits, insert)` — several hits of **one** book as a single edit, so the book publishes one receipt and the phases judge the change list together.

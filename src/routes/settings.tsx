@@ -1,9 +1,9 @@
 import type { JSX } from "@solidjs/web";
 import { createFileRoute } from "@tanstack/solid-router";
-import { Effect, Result } from "effect";
+import { Effect, Fiber, Result, Stream } from "effect";
 import Minus from "lucide-solid/icons/minus";
 import Plus from "lucide-solid/icons/plus";
-import { For, Show, createSignal } from "solid-js";
+import { For, Show, createSignal, onCleanup } from "solid-js";
 
 import { t } from "../app/i18n";
 import { useShell } from "../app/ProjectContext";
@@ -50,6 +50,18 @@ function SettingsPage() {
   const descriptors = shellSettings(services.settings);
   const [tick, setTick] = createSignal(0, { name: "settingsTick" });
   const [problem, setProblem] = createSignal("", { name: "settingsProblem" });
+  const [advancedVisible, setAdvancedVisible] = createSignal(
+    services.settings.get(keys.showAdvancedSettings),
+    { name: "showAdvancedSettings" },
+  );
+  const advancedChanges = services.runtime.runFork(
+    Stream.runForEach(services.settings.changes(keys.showAdvancedSettings), (visible) =>
+      Effect.sync(() => setAdvancedVisible(visible)),
+    ),
+  );
+  onCleanup(() => {
+    Effect.runFork(Fiber.interrupt(advancedChanges));
+  });
 
   const read = <S,>(key: SettingKey<S>): S => {
     tick();
@@ -167,7 +179,10 @@ function SettingsPage() {
 
       <For each={SETTING_GROUPS}>
         {(group) => {
-          const rows = descriptors.filter((descriptor) => descriptor.group === group.id);
+          const rows = descriptors.filter(
+            (descriptor) =>
+              descriptor.group === group.id && (group.id !== "advanced" || advancedVisible()),
+          );
           return (
             <Show when={rows.length > 0}>
               <Card class="space-y-1" data-settings-group={group.id}>

@@ -226,6 +226,8 @@ export type LastLocation = LastLocations[string];
 export interface ShellKeys {
   readonly theme: SettingKey<string>;
   readonly startInUsfmMode: SettingKey<boolean>;
+  /** Whether the settings route shows its advanced group. */
+  readonly showAdvancedSettings: SettingKey<boolean>;
   /**
    * How long typing must pause before the WORKING-STATE BACKUP is written.
    * Not the file: the file is written only when a version is recorded, so this
@@ -241,6 +243,8 @@ export interface ShellKeys {
    */
   readonly preferChapterView: SettingKey<boolean>;
   readonly annotateEmptyParagraphs: SettingKey<boolean>;
+  /** Enables the destructive multi-match action in Find. */
+  readonly enableReplaceAll: SettingKey<boolean>;
   /**
    * Mark the block the caret is in, and the block that answers it in every
    * reference beside it. Off by default: it paints on every block change, and
@@ -335,6 +339,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
   const keys: ShellKeys = {
     theme: settings.register("shell.theme", Schema.String, "system"),
     startInUsfmMode: settings.register("shell.startInUsfmMode", Schema.Boolean, false),
+    showAdvancedSettings: settings.register("shell.showAdvancedSettings", Schema.Boolean, false),
     backupIdleMs: settings.register(
       "shell.backupIdleMs",
       Schema.Number,
@@ -350,6 +355,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
       Schema.Boolean,
       true,
     ),
+    enableReplaceAll: settings.register("find.enableReplaceAll", Schema.Boolean, false),
     // Off by default, for the reason on the interface: it is a comparison
     // tool, and the comparison is not what most sessions are doing.
     pairBlocks: settings.register("editor.pairBlocks", Schema.Boolean, false),
@@ -475,6 +481,13 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
       max: 10000,
       step: 100,
       unit: "ms",
+    },
+    {
+      key: keys.enableReplaceAll,
+      label: "Enable Replace all",
+      description: "Allow Find to replace every matching occurrence in one action.",
+      kind: "boolean",
+      group: "advanced",
     },
   ];
 };

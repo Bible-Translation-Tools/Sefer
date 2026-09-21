@@ -23,6 +23,7 @@ import CloudIcon from "lucide-solid/icons/cloud";
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 
 import { Git } from "../../../core/git/git";
+import { Observability } from "../../../core/observability";
 import { Remote, type RemoteFailureReason } from "../../../core/remote/remote";
 import {
   combine,
@@ -237,6 +238,7 @@ export function CloudScreen() {
    * falls back to the ordinary description.
    */
   const transfer = (
+    action: SyncActionId,
     work: (root: string) => Effect.Effect<unknown, unknown, Git | Remote | FileSystem.FileSystem>,
     explain?: (cause: unknown) => string | undefined,
   ): void => {
@@ -244,15 +246,34 @@ export function CloudScreen() {
     if (project === undefined) return;
     setProblem("");
     setBusy(true);
+    const operation = services.composition.observability.operation("sync.transfer", {
+      "sync.action": action,
+    });
+    const close = operation.span("sync.transfer", undefined, { "sync.action": action });
+    let settled = false;
+    const finish = (
+      verdict: "passed" | "failed",
+      attrs: Readonly<Record<string, string | number | boolean>>,
+    ): void => {
+      if (settled) return;
+      settled = true;
+      close(attrs);
+      operation.end(verdict, attrs);
+    };
     void services
-      .run(work(project.root))
+      .run(Effect.provideService(work(project.root), Observability, operation))
       .then(() => {
+        finish("passed", { "sync.action": action });
         network.noteSuccess();
         setFetchedAt(Date.now());
       })
       .catch((cause: unknown) => {
         const reason = reasonOf(cause);
         if (reason !== undefined) network.noteFailure(reason);
+        finish("failed", {
+          "sync.action": action,
+          "sync.reason": reason ?? "unknown",
+        });
         setProblem(explain?.(cause) ?? describe(cause));
       })
       // A press's continuation, not a tracked scope: `refresh` reads signals
@@ -346,10 +367,10 @@ export function CloudScreen() {
   const run = (action: SyncActionId): void => {
     switch (action) {
       case "retry":
-        transfer(fetchOnly);
+        transfer(action, fetchOnly);
         return;
       case "push":
-        transfer(push);
+        transfer(action, push);
         return;
       case "pull":
         // Two presses, always: the first opens the confirmation over the plan
@@ -359,7 +380,7 @@ export function CloudScreen() {
           return;
         }
         setConfirming(false);
-        transfer(pull);
+        transfer(action, pull);
         return;
       case "combine":
         // Two presses, like a pull, and for a stronger reason: this one
@@ -371,10 +392,10 @@ export function CloudScreen() {
           return;
         }
         setCombining(undefined);
-        transfer((root) => combine({ root, author: COMBINE_AUTHOR }), explainCombine);
+        transfer(action, (root) => combine({ root, author: COMBINE_AUTHOR }), explainCombine);
         return;
       case "resolve":
-        transfer(abortMerge);
+        transfer(action, abortMerge);
         return;
       case "sign-in":
       case "attach":

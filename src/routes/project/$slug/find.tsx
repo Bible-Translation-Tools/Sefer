@@ -12,6 +12,7 @@ import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js"
 
 import { t } from "../../../app/i18n";
 import { useShell } from "../../../app/ProjectContext";
+import { shellKeys } from "../../../app/settings";
 import { createExcerptFeed, ExcerptList } from "../../../app/ui/excerpts";
 import {
   Button,
@@ -56,10 +57,9 @@ import * as Search from "../../../core/search/search";
  *  - `resolveHit` decides whether a hit can still be trusted, so a card that
  *    named a revision the book has moved past refuses instead of editing the
  *    wrong range.
- *  - Replace is **deliberately not surfaced yet**: `src/core/search` keeps
- *    `replace`, `replaceInBook` and `planReplace`, and this screen offers
- *    none of them — an edit happens through a card's Edit button, in the
- *    satellite, where the editing phases judge it like any other keystroke.
+ *  - Replace all is an optional advanced action. It previews the current
+ *    search, then applies one validated edit per book through the same Book
+ *    edit phases as a satellite edit.
  *
  * **The URL is the state**, not a seed for it: `q` and `scope` are read from
  * the search params on every render, and the controls that change them
@@ -151,6 +151,14 @@ function Find() {
   });
   const [problem, setProblem] = createSignal("", { name: "problem" });
   const [cursor, setCursor] = createSignal(0, { name: "cursor" });
+  const replaceKey = shellKeys(shell.services.settings).enableReplaceAll;
+  const replaceEnabled = () => shell.services.settings.get(replaceKey);
+  const [replacement, setReplacement] = createSignal("", { name: "replacement" });
+  const [searched, setSearched] = createSignal("", { name: "searched" });
+  const [preview, setPreview] = createSignal<
+    | { readonly signature: string; readonly hits: readonly Search.Hit[]; readonly insert: string }
+    | undefined
+  >(undefined, { name: "replacePreview" });
 
   const [box, setBox] = createSignal<HTMLInputElement | undefined>(undefined, { name: "box" });
 
@@ -283,6 +291,8 @@ function Find() {
   });
 
   const focusedBook = (): BookId | undefined => shell.focused()?.id;
+  const signature = (q: Search.Query, want: Scope): string =>
+    JSON.stringify([want, focusedBook(), q.text, q.caseSensitive, q.wholeWord, q.regex, markup()]);
 
   /**
    * One search, through whichever door the toggles name.
@@ -294,6 +304,8 @@ function Find() {
    * here registers anything.
    */
   const run = async (over?: Over): Promise<void> => {
+    setPreview(undefined);
+    setSearched("");
     const project = shell.project();
     if (project === undefined) return;
     const books = project.books;
@@ -324,6 +336,15 @@ function Find() {
       return;
     }
 
+    // A search is one user-visible answer, including the scan and its result.
+    // Keep the query itself out of telemetry: it can contain manuscript text.
+    const search = shell.services.composition.observability.operation("find.run", {
+      "find.scope": want,
+      "find.books": only === undefined ? books.length : 1,
+      "find.regex": staticQuery.regex === true,
+      "find.markup": markup(),
+    });
+
     // The reference scope is the same scan over somebody else's book, and a
     // different result shape — read-only hits, no stamp, nothing to edit — so
     // it is answered here rather than folded into the path below. Synchronous
@@ -335,15 +356,19 @@ function Find() {
         // A reference registered without its text retains no reading to cut.
         return text === undefined ? [] : [{ id, text }];
       });
+      const stop = search.span("find.scan");
       const found = Search.findInReferences(readings, references, staticQuery, options);
+      stop();
       setHits([]);
       if (Result.isFailure(found)) {
         setProblem(found.failure.description);
         setReferenceHits([]);
+        search.end("refused", { "find.reason": found.failure.reason });
         return;
       }
       setProblem("");
       setReferenceHits(found.success);
+      search.end("ready", { "find.hits": found.success.length });
       return;
     }
 
@@ -351,18 +376,88 @@ function Find() {
     // or the reading with the markup cut out — and `regex` picks the matcher.
     // They used to be the same button, because the only regex door was the raw
     // scan; the mask map is what separated them.
+    const stop = search.span("find.scan");
     const found = markup()
       ? Search.find(books, staticQuery, options)
       : Search.findInReading(readings, books, staticQuery, options);
+    stop();
     setReferenceHits([]);
     if (Result.isFailure(found)) {
       setProblem(found.failure.description);
       setHits([]);
+      search.end("refused", { "find.reason": found.failure.reason });
       return;
     }
     setProblem("");
     setCursor(0);
     setHits(found.success);
+    setSearched(signature(staticQuery, want));
+    search.end("ready", { "find.hits": found.success.length });
+  };
+
+  const previewReplace = (): void => {
+    if (!replaceEnabled() || scope() === "reference" || hits().length === 0) return;
+    const current = signature(query(), scope());
+    if (current !== searched()) {
+      setProblem(t("Run Find again before replacing."));
+      return;
+    }
+    const project = shell.project();
+    if (project === undefined) return;
+    const selected = hits();
+    for (const book of project.books) {
+      const matches = selected.filter((hit) => hit.bookId === book.id);
+      if (matches.length > 0 && Search.planReplace(book, matches, replacement()) === null) {
+        setProblem(t("Results changed or cross markup. Run Find again before replacing."));
+        return;
+      }
+    }
+    setProblem("");
+    setPreview({ signature: current, hits: selected, insert: replacement() });
+  };
+
+  const applyReplace = (): void => {
+    const snapshot = preview();
+    if (snapshot === undefined || !replaceEnabled()) return;
+    setPreview(undefined);
+    if (snapshot.signature !== searched() || snapshot.signature !== signature(query(), scope())) {
+      setProblem(t("Search options changed. Preview replacements again."));
+      return;
+    }
+    const project = shell.project();
+    if (project === undefined) return;
+    const batches = project.books.flatMap((book) => {
+      const matches = snapshot.hits.filter((hit) => hit.bookId === book.id);
+      return matches.length === 0 ? [] : [{ book, matches }];
+    });
+    // Preflight every book before writing any of them. Book.apply can still
+    // refuse a later book; the report below gives the actual partial count.
+    if (
+      batches.some(
+        ({ book, matches }) => Search.planReplace(book, matches, snapshot.insert) === null,
+      )
+    ) {
+      setProblem(t("Results changed or cross markup. Run Find again before replacing."));
+      return;
+    }
+    let replaced = 0;
+    const changed: BookId[] = [];
+    for (const { book, matches } of batches) {
+      const result = Search.replaceInBook(book, matches, snapshot.insert);
+      if (Result.isFailure(result)) break;
+      replaced += matches.length;
+      changed.push(book.id);
+    }
+    if (changed.length > 0) shell.changed({ kind: "book.apply", books: changed });
+    shell.report(
+      t("Replaced {count} match(es) in {books} book(s).", {
+        count: replaced,
+        books: changed.length,
+      }),
+    );
+    void run();
+    if (replaced !== snapshot.hits.length)
+      setProblem(t("Some replacements were refused. Review the changed books and run Find again."));
   };
 
   /**
@@ -638,6 +733,51 @@ function Find() {
             </div>
           </div>
         </Card>
+
+        <Show when={replaceEnabled() && scope() !== "reference"}>
+          <Card>
+            <div class="flex flex-wrap items-center gap-2">
+              <Input
+                aria-label={t("Replace with")}
+                placeholder={t("Replace with (literal text)")}
+                value={replacement()}
+                onInput={(event) => {
+                  setReplacement(event.currentTarget.value);
+                  setPreview(undefined);
+                }}
+              />
+              <Button size="sm" disabled={hits().length === 0} onClick={previewReplace}>
+                {t("Preview Replace all")}
+              </Button>
+            </div>
+            <Show when={preview()} keyed>
+              {(held) => (
+                <div class="mt-3 space-y-2 text-small">
+                  <p>
+                    {t("Replace {count} match(es) in {books} book(s) within {scope}.", {
+                      count: held.hits.length,
+                      books: new Set(held.hits.map((hit) => hit.bookId)).size,
+                      scope: scope() === "book" ? t("this book") : t("the project"),
+                    })}
+                  </p>
+                  <p class="text-on-surface-secondary">
+                    {t("Replacement is literal text: {replacement}", {
+                      replacement: held.insert === "" ? t("(delete matches)") : held.insert,
+                    })}
+                  </p>
+                  <div class="flex gap-2">
+                    <Button variant="primary" size="sm" onClick={applyReplace}>
+                      {t("Apply Replace all")}
+                    </Button>
+                    <Button size="sm" onClick={() => setPreview(undefined)}>
+                      {t("Cancel")}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </Show>
+          </Card>
+        </Show>
 
         <Show when={problem() !== ""}>
           <p class="rounded-md bg-surface-error px-4 py-3 text-small text-on-surface-error">

@@ -120,6 +120,9 @@ export function RecoveryBanner() {
     const journals = offered();
     if (project === undefined || journals.length === 0 || busy()) return;
     setBusy(true);
+    const operation = shell.services.composition.observability.operation("journal.restore", {
+      "journal.books": journals.length,
+    });
     const notice = toasts.progress({
       title: t("Restoring {count} book(s)…", { count: journals.length }),
     });
@@ -153,6 +156,11 @@ export function RecoveryBanner() {
         setOffered([]);
         const refused = results.filter(Result.isFailure);
         const restored = results.length - refused.length;
+        operation.end(refused.length === 0 ? "ready" : "refused", {
+          "journal.books": results.length,
+          "journal.restored": restored,
+          "journal.refused": refused.length,
+        });
         // Only the journals that actually replayed. `results` is parallel to
         // `journals`, and a refused journal moved no text, so naming it here
         // would wake its row to tell it nothing.
@@ -180,6 +188,15 @@ export function RecoveryBanner() {
             "The work is in the editor, unsaved. Save & Review shows every changed book against the file on disk.",
           ),
         });
+      })
+      .catch(() => {
+        setBusy(false);
+        operation.end("failed", { "journal.books": journals.length });
+        toasts.update(notice, {
+          tone: "error",
+          autoClose: false,
+          title: t("Could not restore the unsaved work"),
+        });
       });
   };
 
@@ -187,6 +204,9 @@ export function RecoveryBanner() {
     const journals = offered();
     if (journals.length === 0 || busy()) return;
     setBusy(true);
+    const operation = shell.services.composition.observability.operation("journal.discard", {
+      "journal.books": journals.length,
+    });
     void shell.services
       .run(
         Effect.forEach(
@@ -201,6 +221,11 @@ export function RecoveryBanner() {
         setBusy(false);
         setOffered([]);
         const refused = results.filter(Result.isFailure);
+        operation.end(refused.length === 0 ? "consumed" : "refused", {
+          "journal.books": results.length,
+          "journal.discarded": results.length - refused.length,
+          "journal.refused": refused.length,
+        });
         if (refused.length > 0) {
           toasts.error({
             title: t("Could not discard every backup"),
@@ -211,6 +236,11 @@ export function RecoveryBanner() {
         toasts.info({
           title: t("Discarded the unsaved work from the last session"),
         });
+      })
+      .catch(() => {
+        setBusy(false);
+        operation.end("failed", { "journal.books": journals.length });
+        toasts.error({ title: t("Could not discard the unsaved work") });
       });
   };
 
