@@ -44,7 +44,14 @@ import {
   renderMarkdown,
   restoreLastBatch,
 } from "./batch.ts";
-import { nearbyTextOf, selectorOf, sourceOf, themeOf, viewportOf } from "./describe.ts";
+import {
+  dataAttributesOf,
+  nearbyTextOf,
+  selectorOf,
+  sourceOf,
+  themeOf,
+  viewportOf,
+} from "./describe.ts";
 import { el, newId, on } from "./dom.ts";
 import { ON, OFF, currentVariant, isOn, readTweak, withTweak, withVariant } from "./state.ts";
 import { PAGE_STYLES, PANEL_STYLES } from "./styles.ts";
@@ -242,6 +249,7 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
       source: sourceOf(element),
       selector: selectorOf(element),
       nearby: nearbyTextOf(element),
+      data: dataAttributesOf(element),
       url: location.href,
       viewport: viewportOf(),
       theme: themeOf(),

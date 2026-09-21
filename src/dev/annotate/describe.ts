@@ -52,18 +52,72 @@ export const selectorOf = (element: Element): string => {
   return steps.join(" > ");
 };
 
-const MAX_NEARBY = 80;
+const MAX_NEARBY = 60;
 
-/** What the thing says, or what the nearest thing with words says. */
+/**
+ * What this element itself says — its OWN text, not its descendants'.
+ *
+ * `textContent` was the obvious first answer and it is wrong, because it
+ * concatenates every descendant with no separator at all. Clicking a card
+ * produced
+ *
+ *   "ButtonsVariantsprimarysecondarytertiarydangerPressedprimarysecondary…"
+ *
+ * which is not a label, is not readable, and buries the one useful line of the
+ * comment under eighty characters of run-together nouns.
+ *
+ * So: only DIRECT child text nodes. A `<button>primary</button>` still says
+ * "primary"; a container of other elements says nothing, and falls through to
+ * its accessible name if it has one. Saying nothing is the right answer there —
+ * the source location already identifies the element, and an empty quote is
+ * better than a misleading one.
+ */
 export const nearbyTextOf = (element: Element): string => {
-  const own = (element.textContent ?? "").replace(/\s+/gu, " ").trim();
+  const own = [...element.childNodes]
+    .filter((node) => node.nodeType === Node.TEXT_NODE)
+    .map((node) => node.textContent ?? "")
+    .join(" ")
+    .replace(/\s+/gu, " ")
+    .trim();
   if (own !== "") return own.length > MAX_NEARBY ? `${own.slice(0, MAX_NEARBY)}…` : own;
   const labelled =
     element.getAttribute("aria-label") ??
     element.getAttribute("placeholder") ??
+    element.getAttribute("alt") ??
     element.getAttribute("title") ??
     "";
   return labelled.trim();
+};
+
+/** Ours, and already reported on its own line — repeating them is noise. */
+const SKIPPED_DATA = new Set(["data-loc", "data-sefer-annotate", "data-sefer-annotate-mode"]);
+
+const MAX_DATA_VALUE = 32;
+
+/**
+ * The element's own `data-*` attributes, which in a hand-written codebase are
+ * usually the most identifying thing on it — `data-screen`, `data-testid`,
+ * `data-state`. Cheap to carry and often the difference between "some row" and
+ * "the row for John".
+ *
+ * Capped at three and truncated, because a serialised blob in a data attribute
+ * would otherwise take the whole comment.
+ */
+export const dataAttributesOf = (element: Element): string => {
+  // `dataset` is an HTMLElement convenience; an SVG or MathML node reached by a
+  // click has none, and reading the attributes directly works for all three.
+  const parts: string[] = [];
+  for (const attribute of element.attributes) {
+    if (!attribute.name.startsWith("data-")) continue;
+    if (SKIPPED_DATA.has(attribute.name)) continue;
+    const name = attribute.name.slice("data-".length);
+    const value = attribute.value;
+    if (value === "") continue;
+    const short = value.length > MAX_DATA_VALUE ? `${value.slice(0, MAX_DATA_VALUE)}…` : value;
+    parts.push(`${name}=${short}`);
+    if (parts.length === 3) break;
+  }
+  return parts.join(" ");
 };
 
 /**

@@ -93,7 +93,19 @@ export function DesignHome() {
         variants: screen.variants ?? [],
         tweaks: screen.tweaks ?? [],
         state: adapter,
-        context: () => ({ build: __SEFER_BUILD__, screen: screen.id }),
+        /**
+         * The header of a copied batch, and it is nearly empty on purpose.
+         *
+         * The screen is not named: the URL is right there and reproduces it
+         * exactly, and the source location names the file. The build id is
+         * named ONLY in a deployed design build, where it is the answer to
+         * "which version was the product owner looking at" — in dev it is the
+         * sha of a commit whose working tree has almost certainly moved on, so
+         * it is worse than nothing. Whoever reads the comment in dev is
+         * looking at the same checkout that produced it.
+         */
+        context: (): Readonly<Record<string, string>> =>
+          import.meta.env.DEV ? {} : { build: __SEFER_BUILD__ },
         nav: {
           label: "Screen",
           items: screens.map((one) => ({ value: one.id, label: one.title })),

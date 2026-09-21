@@ -75,8 +75,10 @@ export interface Comment {
   readonly source: string | null;
   /** A short CSS-ish path, for when there is no source location. */
   readonly selector: string;
-  /** Visible text near the click, to identify the thing in prose. */
+  /** The element's own text, when it has any of its own. */
   readonly nearby: string;
+  /** Its `data-*` attributes, which are usually what identifies it. */
+  readonly data: string;
   readonly url: string;
   readonly viewport: string;
   readonly theme: string;

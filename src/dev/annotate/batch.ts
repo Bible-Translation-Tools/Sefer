@@ -110,7 +110,8 @@ export const renderMarkdown = (
   comments.forEach((comment, index) => {
     const place = comment.source ?? comment.selector;
     const label = comment.nearby === "" ? "" : `  "${comment.nearby}"`;
-    lines.push(`${String(index + 1)}. ${place}${label}`);
+    const data = comment.data === "" ? "" : `  [${comment.data}]`;
+    lines.push(`${String(index + 1)}. ${place}${label}${data}`);
     // Every line indented, not just the first: Shift+Enter makes multi-line
     // comments, and a continuation flush against the margin reads as a new
     // numbered item rather than as more of the same one.
