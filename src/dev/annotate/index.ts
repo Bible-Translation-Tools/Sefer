@@ -100,7 +100,7 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
   let mode: Mode = "interact";
   let corner: Corner = options.corner ?? "bottom-right";
   let verbosity: Verbosity = "brief";
-  let minimised = false;
+  let minimised = options.minimised ?? false;
   let menuOpen = false;
   let comments = readComments();
   let composing: { element: Element; x: number; y: number } | null = null;
@@ -193,6 +193,11 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
       const element = elementAt(event);
       if (element === null) return;
       composing = { element, x: event.clientX, y: event.clientY };
+      // Opening the composer un-minimises, because the composer IS part of the
+      // panel: a puck has nowhere to put a textarea, so a click in comment mode
+      // while minimised would swallow the click and then show nothing at all.
+      // Somebody who has just pointed at something is about to type.
+      minimised = false;
       drawOutline(element);
       render();
     }
@@ -570,8 +575,19 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
     sync: render,
     update: (next) => {
       settings = { ...settings, ...next };
+      if (next.minimised !== undefined) minimised = next.minimised;
       render();
     },
+    comments: () => comments,
+    drain: () => {
+      const held = comments;
+      archiveComments();
+      comments = readComments();
+      render();
+      return held;
+    },
+    mode: () => mode,
+    setMode,
     destroy: () => {
       for (const type of SWALLOWED) document.removeEventListener(type, swallow, true);
       document.removeEventListener("mousemove", onMove, true);

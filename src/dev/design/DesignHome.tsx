@@ -26,8 +26,9 @@ import { useNavigate } from "@tanstack/solid-router";
 import { Show, createEffect, createMemo, onCleanup } from "solid-js";
 
 import { Route } from "../../routes/design";
-import { mountAnnotator, type Annotator, type StateAdapter } from "../annotate";
+import { type StateAdapter } from "../annotate";
 import { currentVariant, isOn, readTweak } from "../annotate/state";
+import { configureDesignSurface, releaseDesignSurface, syncDesignSurface } from "../designSurface";
 import { screenById, screens } from "./registry";
 import type { Screen } from "./screen";
 
@@ -80,8 +81,6 @@ export function DesignHome() {
     return shared === undefined ? "" : readTweak(screen.id, null, shared, state);
   };
 
-  let annotator: Annotator | undefined;
-
   // Solid 2 splits the tracked read from the untracked work: the first
   // argument is what this depends on, the second is what to do about it.
   createEffect(
@@ -118,8 +117,9 @@ export function DesignHome() {
           },
         },
       };
-      if (annotator === undefined) annotator = mountAnnotator(options);
-      else annotator.update(options);
+      // The root already mounted the one annotator; this screen borrows it
+      // rather than raising a second panel beside it.
+      configureDesignSurface({ ...options, hotkey: "c" });
     },
   );
 
@@ -129,14 +129,14 @@ export function DesignHome() {
   createEffect(
     () => search(),
     () => {
-      annotator?.sync();
+      syncDesignSurface();
     },
   );
 
-  onCleanup(() => {
-    annotator?.destroy();
-    annotator = undefined;
-  });
+  // Leaving /design hands the panel back: comment-only, no knobs, out of the
+  // way. It is not destroyed, because it belongs to the root and the next
+  // screen still wants to be commented on.
+  onCleanup(releaseDesignSurface);
 
   return (
     <main

@@ -76,6 +76,14 @@ declare global {
     | {
         observability?: ObservabilityDevSurface;
         state?: () => DevState;
+        /**
+         * The design surface's own handle, installed by `src/dev` and typed
+         * there. `unknown` here on purpose: platform must not learn the shape
+         * of a dev-only tool, and the boundary check would fail the import
+         * that taught it. Whoever reads this in a console or over CDP is not
+         * consulting these types anyway.
+         */
+        design?: unknown;
       }
     | undefined;
 }

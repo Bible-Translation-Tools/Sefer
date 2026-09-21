@@ -160,8 +160,33 @@ function Chrome() {
   );
 }
 
+/**
+ * The design annotator, on every route rather than only on `/design`.
+ *
+ * A remark like "this input does not autofocus when the dialog opens" is about
+ * a REAL screen, and the whole point of pointing at a pixel is being able to do
+ * it wherever the pixel is. Comment-only and minimised to a puck out here; see
+ * `src/dev/designSurface.ts` for why there is exactly one instance and why the
+ * hotkey is off.
+ *
+ * A dynamic import inside the build-time branch, which is how every other
+ * dev-only surface in this tree is reached — a static import would put the
+ * panel in a production bundle, and `pnpm boundaries` refuses one from here.
+ */
+const useDesignSurface = (): void => {
+  if (!__SEFER_DESIGN__) return;
+  let stop: (() => void) | undefined;
+  void import("../dev/designSurface").then((surface) => {
+    stop = surface.startDesignSurface();
+  });
+  onCleanup(() => {
+    stop?.();
+  });
+};
+
 function Root() {
   const navigate = useNavigate();
+  useDesignSurface();
   return (
     <>
       <HeadContent />

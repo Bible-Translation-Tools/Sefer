@@ -115,6 +115,13 @@ export interface AnnotatorOptions {
    */
   readonly hotkey?: string | null;
   /**
+   * Start as a puck rather than an open panel. True when the annotator is
+   * floating over a real screen, where somebody is using the application
+   * rather than designing it; false on a prototyping surface, where the panel
+   * IS the reason the page is open.
+   */
+  readonly minimised?: boolean;
+  /**
    * An optional "which page am I on" control at the top of the panel.
    *
    * Kept deliberately generic — a list of labels and a callback — because the
@@ -137,4 +144,14 @@ export interface Annotator {
   /** Swap variants/tweaks when the host moves to another screen. */
   readonly update: (options: Partial<AnnotatorOptions>) => void;
   readonly destroy: () => void;
+
+  // The rest is what an agent attached over CDP needs, and what the host
+  // re-exports on its own debug handle. Reading values needs none of this —
+  // they are in the state adapter — but reading the BATCH does, and so does
+  // acting on the mode.
+  readonly comments: () => readonly Comment[];
+  /** Read the batch and clear it: the Copy button, minus the clipboard. */
+  readonly drain: () => readonly Comment[];
+  readonly mode: () => Mode;
+  readonly setMode: (next: Mode) => void;
 }
