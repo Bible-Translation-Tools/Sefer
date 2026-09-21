@@ -27,3 +27,4 @@ scratch.md
 
 # Untracked playground sketches: see src/dev/playground/registry.ts.
 src/dev/playground/local/
+src/dev/design/local/

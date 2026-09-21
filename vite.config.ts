@@ -104,6 +104,7 @@ export default defineConfig(({ mode }) => {
     define: {
       __SEFER_BUILD__: JSON.stringify(buildIdentity(mode)),
       __GALLEY_TAG__: JSON.stringify(galleyTag()),
+      __SEFER_DESIGN__: JSON.stringify(mode === "development" || mode === "design"),
     },
     server: {
       port: 3000,

@@ -218,10 +218,11 @@ export interface ReachOptions {
  *     static edge from ever being written in the first place, which is the
  *     architectural claim rather than the bundling one. A dynamic `import()`
  *     from a route is how the gate is spelled, so that stays allowed.
- *   * `src/dev/design` may not import `src/core` or `src/app`. The comment
+ *   * `src/dev/annotate` may not import `src/core` or `src/app`. The comment
  *     overlay is a DOM tool that happens to live here; keeping it ignorant of
  *     Sefer is the whole reason it can be lifted into another repository as a
- *     folder copy. Sefer-specific glue belongs in `src/dev`, above it.
+ *     folder copy. `src/dev/design`, which holds the screens themselves, is
+ *     under no such rule — it is supposed to reach for the real components.
  */
 export const checkReach = (options: ReachOptions): BoundaryViolation[] => {
   const from = path.resolve(options.from);
@@ -348,11 +349,11 @@ const main = (): void => {
       label: "src/dev is dev-only",
     }),
     ...checkReach({
-      from: path.join(dev, "design"),
+      from: path.join(dev, "annotate"),
       forbidden: [path.join(source, "core"), path.join(source, "app")],
       paths,
       pathsBase: base,
-      label: "the design tool stays portable",
+      label: "the annotator stays portable",
     }),
   ];
 
