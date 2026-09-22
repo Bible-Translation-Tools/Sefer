@@ -72,6 +72,22 @@
     // rather than a matrix.
     "dev": {
       "name": "sefer-web-dev",
+
+      // Branch previews live here, and this line is what keeps them alive.
+      //
+      // `preview_urls` defaults to FALSE, and a deploy writes this file to
+      // Cloudflare as the source of truth — so enabling Preview URLs in the
+      // dashboard holds only until the next `wrangler deploy`, which then
+      // silently turns them back off. That is not a hypothesis: the toggle was
+      // set by hand, a branch preview served 200, a push to master deployed
+      // `dev` eighteen minutes later, and the same URL answered 404.
+      //
+      // It is `dev` and ONLY dev. A preview URL makes every uploaded version
+      // publicly reachable, which is right for the channel that already
+      // carries /design and a fixture, and wrong for one serving real
+      // translations — on production it would be a door onto unreleased code.
+      "preview_urls": true,
+
       "routes": [
         { "pattern": "sefer-dev.bttdev.org", "custom_domain": true, "zone_name": "bttdev.org" },
       ],

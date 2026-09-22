@@ -57,6 +57,13 @@ URL into the job summary.
 last deployed; a version is uploaded beside it. That is the property that makes
 this safe to run on every branch push.
 
+**If a preview URL 404s, check `preview_urls` in `wrangler.jsonc`.** It
+defaults to FALSE and a deploy writes that file to Cloudflare as the source of
+truth, so enabling Preview URLs in the dashboard lasts exactly until the next
+push to master — which then turns them off again, with nothing to see but a
+404 on a link somebody was already using. It is set to `true` on the `dev`
+environment, and deliberately nowhere else.
+
 **It builds `--mode dev`** — the same mode as the `dev` channel — so a branch
 preview carries `/design`, the comment panel and `?fixture=1`. A preview you
 cannot comment on would be missing most of the point.
