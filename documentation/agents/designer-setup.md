@@ -141,6 +141,37 @@ pnpm typecheck && pnpm lint && pnpm format:check
 That is your gate. **Do not** run `pnpm check` — it also builds and runs the
 test suite, which is slower and is not yours to worry about.
 
+### One kind of change per commit
+
+You will make two quite different kinds of change, and they want separate
+commits:
+
+* **A fix to a real screen** — the spacing was wrong, the weight was wrong.
+  This touches `src/app/ui/`.
+* **A prototype** — a new screen at `/design`, an idea with variants. This
+  touches `src/dev/`.
+
+Keep them apart. Not bureaucracy: the two get reviewed completely differently,
+and a commit holding both has to be read at both standards at once, which
+usually means one half gets no real attention. "Commit the prototype
+separately from the fix" is a thing you can just say to Claude.
+
+### When an idea wins, delete it
+
+The prototype is scaffolding. Once a variant has won, it moves into the real
+screen **and the prototype file is deleted in the same commit** — one file in
+`src/dev/design/screens/`, gone. Nothing else points at it, so there is nothing
+else to tidy.
+
+Two things that make this painless, and are worth knowing before you start:
+
+* **Put the winning link in the commit message.** The URL carries the screen,
+  the variant and every tweak, so whoever reviews it can open exactly what you
+  chose instead of guessing from the diff.
+* **The real screen should end up with no knobs.** If graduating means leaving
+  a switch in the real component so it can still render both ways, the idea
+  has not actually won yet. The product renders one thing.
+
 ## What is yours, and what is not
 
 **Yours:** how it feels. Polish, motion, hierarchy, density, spacing, and

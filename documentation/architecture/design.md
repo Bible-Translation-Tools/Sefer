@@ -135,7 +135,7 @@ nobody can read the interesting part of.
 A real screen can borrow the panel without becoming a design screen:
 
 ```ts
-if (import.meta.env.DEV) {
+if (__SEFER_DESIGN__) {
   globalThis.__sefer?.design?.register({
     namespace: "bookEditor",
     tweaks: [{ key: "gutter", label: "Gutter", kind: "choice", options: ["narrow", "wide"] }],
@@ -143,6 +143,11 @@ if (import.meta.env.DEV) {
   });
 }
 ```
+
+`__SEFER_DESIGN__` and not `import.meta.env.DEV`, for the reason this file
+opens with: the deployed prototype is a production build, so `DEV` is false
+there. A tweak gated on `DEV` works on a laptop and is silently absent on the
+one build somebody was sent a link to.
 
 Through the global rather than an import, because rule 1 forbids the import and
 a global that does not exist in production is not one. `onChange` fires once on
@@ -225,3 +230,40 @@ relitigated:
 * **Graduation is expected.** A variant that wins moves into the real screen.
   The design surface is a staging area, not a parallel application — that
   divergence is the failure this whole thing exists to avoid.
+
+### Nits and explorations are separate commits
+
+The designer produces two things that are reviewed to different standards: a
+NIT is a correction to a real screen (`src/app/ui/**`, held to the shipping
+bar), and an EXPLORATION is a prototype or scaffolding (`src/dev/**`, nearly
+review-free because `pnpm boundaries` already proves it cannot reach the
+application).
+
+They must not share a commit. A commit that does both cannot be evaluated at
+either bar — in practice the nit is waved through on the exploration's licence,
+or the exploration is relitigated at the nit's. `git show --stat` is therefore
+the first thing a reviewer reads, and a diff spanning both trees is sent back
+to be split before either half is read.
+
+### Graduation is a deletion, by construction
+
+The layout above exists so that retiring a prototype is removing files rather
+than editing them. `src/dev/design/registry.ts` finds screens with
+`import.meta.glob`, so one screen is one file and NOTHING references it by
+name: no index to update, no import to drop, no bookkeeping line in the diff.
+
+A graduation diff should read as whole files deleted under
+`src/dev/design/screens/` plus a few lines in `src/app/ui/**` carrying the
+winning values plainly. If it instead requires hunting scattered lines out of a
+real component, the question was in the wrong lane:
+
+* a **structural** question (cards or a table) is a VARIANT at `/design`,
+  because the loser has to disappear completely and a file can;
+* a **value** question (how much gutter) may be a tweak registered in place,
+  because the answer is a number replacing a number.
+
+**A graduation must not ADD an option.** A real component that emerges with a
+`variant` prop or a tweak still being read has imported the prototype's
+indecision into the product. What ships is the decision's outcome, not its
+apparatus — and the URL in the commit message is how a reviewer opens both and
+sees which one won.

@@ -146,7 +146,7 @@ file from the one that ships, and whatever you learn has to be carried back by
 hand.
 
 ```ts
-if (import.meta.env.DEV) {
+if (__SEFER_DESIGN__) {
   globalThis.__sefer?.design?.register({
     namespace: "bookEditor",
     tweaks: [{ key: "gutter", label: "Gutter", kind: "choice", options: ["narrow", "wide"] }],
@@ -159,6 +159,11 @@ Through the global rather than an import, because `pnpm boundaries` forbids
 `src/app` importing `src/dev` — and a global that does not exist in production
 is not an import. `onChange` fires once on registration and again on every
 turn, so its body is a `setSignal`.
+
+Gate on `__SEFER_DESIGN__`, **not** `import.meta.env.DEV`. The deployed
+prototype is a production build (`--mode dev`), so `DEV` is false there — a
+tweak gated on it works on a laptop and is silently absent on the one build
+you sent somebody a link to.
 
 **This is scaffolding and it has an expiry.** It is inert in any build without
 the design surface, so it cannot break anything; what it does is accumulate.
@@ -186,6 +191,92 @@ The rule of thumb: **mock what you are not looking at, never what you are
 looking at.** A mocked project list behind a dialog you are positioning is
 fine. Mocked scripture in a screen about how scripture reads is not.
 
+## Where tweaks and variants are written
+
+Three lanes. They are ranked here by **how cleanly they delete**, because
+deleting them is the last step of every one of them, and that is the property
+worth optimising for.
+
+| Lane | Lives in | Graduating costs |
+| --- | --- | --- |
+| Throwaway | `src/dev/design/local/*.tsx` (gitignored) | nothing — it was never committed |
+| Prototype | `src/dev/design/screens/<screen>.tsx` | `git rm` the file |
+| In place | `register(...)` inside a real component | hand-editing the real file |
+
+**One screen is one file, and nothing links to it.** `registry.ts` finds
+screens with `import.meta.glob`, so adding one is adding a file and removing
+one is removing a file. There is no index to update, so there is no index to
+forget, and a graduation diff has no bookkeeping line in it to argue about.
+
+**Prefer the lane that deletes.** That gives a decision procedure for where a
+question goes:
+
+* A **structural** question — cards or a table, one column or two, does this
+  step exist — is a VARIANT at `/design`. It is a whole alternative take and
+  the loser has to disappear completely, so it wants to be a file.
+* A **value** question — how much gutter, which weight, how tight — can be a
+  tweak registered on the real screen, because the answer is a number that
+  replaces a number and the scaffolding around it is a handful of lines.
+
+Putting a structural question on a real screen is how a real component grows a
+`variant` prop that outlives the decision. That is the failure this ranking
+exists to prevent.
+
+## Two kinds of commit, never in one commit
+
+The designer produces two different things, and they are reviewed to two
+different standards:
+
+* **A nit** — a correction to a real screen. Touches `src/app/ui/**`. Held to
+  the shipping bar.
+* **An exploration** — a prototype, a mock, scaffolding. Touches **only**
+  `src/dev/**`. Nearly review-free by construction: `pnpm boundaries` already
+  proves it cannot reach the application.
+
+**Keep them in separate commits.** A commit that does both cannot be evaluated
+at either bar — in practice the nit gets waved through on the exploration's
+licence, or the exploration gets relitigated at the nit's bar. Neither is the
+review anybody wanted.
+
+A reviewer's first move is therefore `git show --stat`:
+
+* all paths under `src/dev/**` → an exploration; read it for sense, not for fit
+* all paths under `src/app/ui/**` → a nit; review it properly
+* **both** → ask for it split before reading either
+
+## Graduating: it should read as a deletion
+
+A variant that wins moves into the real screen, and the diff that does it has
+a recognisable shape:
+
+* **whole files deleted** under `src/dev/design/screens/`
+* **a few changed lines** in `src/app/ui/**` — the winning values, written
+  plainly as the only thing the component does
+* **nothing else** — no index to update, no import to drop, because the
+  registry is a glob
+
+If graduating something means hunting through a real component for scattered
+lines, the question was in the wrong lane. That is a signal about the lane, not
+a reason to do the hunting.
+
+**The anti-pattern is a graduation that ADDS an option.** A real component that
+comes out of this with a `variant` prop, a `density` setting, or a tweak still
+being read has imported the prototype's indecision into the product. The
+product renders one thing. The decision was made on `/design`; what ships is
+its outcome, not its apparatus.
+
+**Which one won is answerable from the link.** The URL carries the screen, the
+variant and every tweak at a non-default value, so a graduation commit should
+name the URL it is graduating. That is the difference between "we picked the
+tighter one" and a reviewer who can open both and see.
+
+Step 4 is the whole point and the thing most likely to be skipped. The design
+surface is a staging area, not a parallel application. A prototype that lives
+in `src/dev` forever has recreated the problem this replaced — work that looks
+like the product and diverges from it every week. `pnpm design:scaffolding`
+lists the in-place lane that has outstayed its question; `pnpm lint:release`
+turns it into an error before preview and production.
+
 ## The workflow, and what it is for
 
 1. **Try it.** A committed screen in `src/dev/design/screens/`; a throwaway in
@@ -194,12 +285,8 @@ fine. Mocked scripture in a screen about how scripture reads is not.
 2. **Share it.** Copy the URL. It carries the screen, the variant and every
    tweak, so "compare a against b" is two links.
 3. **Say what is wrong.** Comment mode, then paste — or let the agent drain it.
-4. **Graduate it.** A variant that wins **moves into the real screen**.
-
-Step 4 is the whole point and the thing most likely to be skipped. The design
-surface is a staging area, not a parallel application. A prototype that lives
-in `src/dev` forever has recreated the problem this replaced — work that looks
-like the product and diverges from it every week.
+4. **Graduate it.** A variant that wins **moves into the real screen**, and the
+   prototype is deleted in the same commit.
 
 ### Reviewing the designer's work
 
