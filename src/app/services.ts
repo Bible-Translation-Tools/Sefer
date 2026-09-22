@@ -33,7 +33,6 @@ import {
   type ProjectAnalysisService,
 } from "../core/analysis/projectAnalysis";
 import type { BookId } from "../core/book/book";
-import { FixtureFileSystemLive, SMALL_NT_ROOT } from "../core/fixture/smallNt";
 import {
   Galley,
   type EngineLoadError,
@@ -102,6 +101,25 @@ export const LIBRARY_ROOT = `${WEB_PATHS.appData}/library`;
  * evaluated in a browser.
  */
 type TauriHost = typeof import("../platform/tauri/index");
+
+/**
+ * The seeded fixture, reached the same way and for the same reason.
+ *
+ * `fixtures/small-nt` is four real ULB books inlined as `?raw` text — twenty
+ * kilobytes that a release has no use for. It was a STATIC import here until
+ * 2026-09-22, and a static import puts a module in the graph however
+ * unreachable its only caller is: `grep -r "Unlocked Literal Bible" dist/`
+ * found it in a production bundle, contradicting the invariant
+ * `documentation/agents/verification.md` states.
+ *
+ * The gate at the import site below is `__SEFER_DESIGN__` and NOT the
+ * `fixture` flag, and that distinction is the whole fix. `fixture` is a
+ * runtime boolean, so `fixture ? await import(…) : undefined` still emits the
+ * chunk — the same way an exported `DESIGN_ENABLED` constant folded at its use
+ * site while rolldown shipped the design page anyway. Only the build-time
+ * literal lets the branch fold and the module leave the graph.
+ */
+type FixtureHost = typeof import("../core/fixture/smallNt");
 
 /** The engine is the one Layer that can refuse to build. */
 export type EngineFailure = EngineLoadError | VersionMismatch;
@@ -271,7 +289,7 @@ const saveLayer: Layer.Layer<
  */
 const domainLayer = (
   build: string,
-  fixture: boolean,
+  fixture: FixtureHost | undefined,
   paths: HostPaths,
   tauri: TauriHost | undefined,
 ): Layer.Layer<Exclude<Domain, Observability>, EngineFailure> => {
@@ -281,11 +299,12 @@ const domainLayer = (
 
   // Storage. Real files on desktop, OPFS in a browser; the seeded fixture when
   // a developer asks, on either host.
-  const fileSystem = fixture
-    ? FixtureFileSystemLive
-    : tauri === undefined
-      ? OpfsFileSystemLive
-      : tauri.TauriFileSystemLive;
+  const fileSystem =
+    fixture !== undefined
+      ? fixture.FixtureFileSystemLive
+      : tauri === undefined
+        ? OpfsFileSystemLive
+        : tauri.TauriFileSystemLive;
 
   // The host capabilities layer: the pinned wasm engine, the folder/file
   // pickers, and a credential store.
@@ -437,8 +456,16 @@ export const composeServices = async (
   composition: Composition,
   options: ServicesOptions = {},
 ): Promise<Services> => {
-  const fixture = options.fixture ?? false;
   const build = buildIdentity(composition);
+  /**
+   * The fixture, only in a build that carries the design surface at all. The
+   * `__SEFER_DESIGN__` half is what makes the module leave a release's graph;
+   * see `FixtureHost` above for why the runtime flag alone is not enough.
+   */
+  const fixture: FixtureHost | undefined =
+    __SEFER_DESIGN__ && (options.fixture ?? false)
+      ? await import("../core/fixture/smallNt")
+      : undefined;
   /**
    * The desktop Layers arrive through a dynamic import so a Web bundle never
    * evaluates — or even fetches — the `@tauri-apps/*` code they sit on. Vite
@@ -557,7 +584,7 @@ export const composeServices = async (
     // Desktop keeps its own projects beside its other app data; on Web that
     // subtree is all the projects list can honestly enumerate.
     projectsRoot: tauri === undefined ? PROJECTS_ROOT : `${paths.appData}/projects`,
-    fixtureProject: fixture ? SMALL_NT_ROOT : undefined,
+    fixtureProject: fixture?.SMALL_NT_ROOT,
     dispose: () => runtime.dispose(),
   };
 };
