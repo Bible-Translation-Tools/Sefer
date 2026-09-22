@@ -149,16 +149,31 @@ BUILT with, from `SEFER_UPDATER_HOST`. Move the worker to a custom domain
 without moving that variable and you get an updater that silently never finds
 anything.
 
+### Live now
+
+The updater workers are deployed:
+
+| Channel | URL |
+| --- | --- |
+| preview | `https://sefer-updater-preview.wycliffe-associates-account.workers.dev` |
+| production | `https://sefer-updater-production.wycliffe-associates-account.workers.dev` |
+
+Both answer `/versions` with `[]` and update checks with 404 — correct until a
+release exists. Their `GH_TOKEN` secrets are set.
+
+Every value CI needs is in `op://DevOps/Sefer`, including the two updater
+hosts (`updater-host-preview`, `updater-host-production`). Those are not
+secrets — a host ships inside every binary — but keeping them beside the rest
+means one place to look, and the desktop job already authenticates there.
+
 ### Still to do
 
-1. Register the hostnames and uncomment the routes
-2. Set the `SEFER_UPDATER_HOST_PREVIEW` / `SEFER_UPDATER_HOST_PRODUCTION`
-   repository variables — the desktop job reads them to write the updater
-   endpoint into the bundle
-3. Confirm the Apple material in `op://DevOps/Sefer` uses the field names the
-   desktop job expects: `p12-b64`, `apple-p12-cert-password`,
-   `keychain-password`, `app-store-connect-p8-b64`,
-   `app-store-connect-api-issuer`, `app-store-connect-api-key-id`
+1. Register the web hostnames and uncomment the `routes` blocks in
+   `wrangler.jsonc`. When the UPDATER moves to a custom domain, change
+   `updater-host-*` in 1Password in the same sitting — a binary asks the URL
+   it was built with, and a mismatch is an updater that silently finds nothing.
+2. Cut the first candidate tag and see what the desktop matrix says. It has
+   never run.
 
 ### A first release, in order
 

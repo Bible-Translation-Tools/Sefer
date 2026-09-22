@@ -275,6 +275,8 @@ jobs:
           APP_STORE_API_KEY_ID: "op://DevOps/Sefer/app-store-connect-api-key-id"
           TAURI_SIGNING_PRIVATE_KEY: "op://DevOps/Sefer/tauri-updater-private-key"
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: "op://DevOps/Sefer/tauri-updater-private-key-password"
+          UPDATER_HOST_PREVIEW: "op://DevOps/Sefer/updater-host-preview"
+          UPDATER_HOST_PRODUCTION: "op://DevOps/Sefer/updater-host-production"
 
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
@@ -295,8 +297,13 @@ jobs:
       - name: Write the updater endpoint overlay
         shell: bash
         env:
-          SEFER_UPDATER_HOST: ${{ needs.resolve.outputs.channel == 'production' && vars.SEFER_UPDATER_HOST_PRODUCTION || vars.SEFER_UPDATER_HOST_PREVIEW }}
-        run: node tools/tauri/updaterConfig.ts
+          SEFER_UPDATER_HOST: ${{ needs.resolve.outputs.channel == 'production' && steps.secrets.outputs.UPDATER_HOST_PRODUCTION || steps.secrets.outputs.UPDATER_HOST_PREVIEW }}
+        run: |
+          set -euo pipefail
+          # Empty means the built binary checks nothing and says "not
+          # configured" forever, with no error to notice. Fail loudly instead.
+          test -n "$SEFER_UPDATER_HOST"
+          node tools/tauri/updaterConfig.ts
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
