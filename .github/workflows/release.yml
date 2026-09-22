@@ -1,10 +1,12 @@
 # Deploying Sefer.
 #
-# STUB, AND DELIBERATELY NOT ARMED. `push:` is commented out below: the
-# hostnames in `wrangler.jsonc` are placeholders and there is no Sefer item in
-# the 1Password vault, so arming it now would fail on every commit and train
-# everybody to ignore a red X. `resolve` already handles the push cases, so
-# arming it is uncommenting one block.
+# ARMED. A push to master deploys `dev`; a `v*` tag releases.
+#
+# The wrangler configs currently have their custom-domain routes COMMENTED OUT,
+# so every channel lands on its `*.workers.dev` subdomain. That is deliberate
+# for now: it means a push actually deploys something today rather than failing
+# on a route for a hostname nobody has registered. Uncomment the routes in
+# `wrangler.jsonc` and `workers/sefer-updater/wrangler.toml` when DNS exists.
 #
 # Modelled on scripture-editor-proto-2's release.yml — same 1Password action,
 # same wrangler invocation, same tag-resolves-the-channel shape.
@@ -45,13 +47,17 @@ on:
         required: true
         type: choice
         options: [dev, preview, production]
+      version:
+        description: >-
+          Version to stamp, e.g. 0.3.0 or 0.3.0-1. Required for a desktop
+          build; leave empty to deploy web only. A pre-release must be a single
+          numeric identifier — Tauri's MSI bundler rejects anything else.
+        required: false
+        type: string
 
-  # TODO: arm once wrangler.jsonc has real hostnames and 1Password has a Sefer
-  # item. `resolve` below already answers all three cases.
-  #
-  # push:
-  #   branches: [master]
-  #   tags: ["v*"]
+  push:
+    branches: [master]
+    tags: ["v*"]
 
 concurrency:
   group: release-${{ github.ref }}-${{ github.event.inputs.channel || 'auto' }}
@@ -63,32 +69,57 @@ jobs:
     outputs:
       channel: ${{ steps.pick.outputs.channel }}
       desktop: ${{ steps.pick.outputs.desktop }}
+      version: ${{ steps.pick.outputs.version }}
+      tag: ${{ steps.pick.outputs.tag }}
+      prerelease: ${{ steps.pick.outputs.prerelease }}
     steps:
       - id: pick
         run: |
           set -euo pipefail
+          version=""
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             channel="${{ inputs.channel }}"
+            version="${{ inputs.version }}"
           elif [[ "${{ github.ref }}" == refs/tags/v*-* ]]; then
             channel=preview
+            version="${GITHUB_REF_NAME#v}"
           elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             channel=production
+            version="${GITHUB_REF_NAME#v}"
           else
             channel=dev
           fi
-          # Desktop is the expensive half. dev skips it on purpose; the other
-          # two are release rehearsals and must not.
-          if [ "$channel" = "dev" ]; then desktop=false; else desktop=true; fi
+
+          # Desktop is the expensive half, and it needs a version to stamp into
+          # the bundle. dev never builds it; the other two build it when they
+          # know what to call it, which a tag always does and a dispatch only
+          # does if somebody typed one.
+          if [ "$channel" = "dev" ] || [ -z "$version" ]; then
+            desktop=false
+          else
+            desktop=true
+          fi
+
+          # A pre-release is a candidate: 0.3.0-1. One numeric identifier,
+          # because Tauri's MSI bundler rejects anything else.
+          if [[ "$version" == *-* ]]; then prerelease=true; else prerelease=false; fi
+
           echo "channel=${channel}" >> "$GITHUB_OUTPUT"
           echo "desktop=${desktop}" >> "$GITHUB_OUTPUT"
-          echo "channel: ${channel} (desktop: ${desktop})" >> "$GITHUB_STEP_SUMMARY"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${prerelease}" >> "$GITHUB_OUTPUT"
+          {
+            echo "channel: ${channel}"
+            echo "desktop: ${desktop}${version:+ (v${version}, prerelease=${prerelease})}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # The same gate `pnpm check` runs locally, plus the browser project. Skipped
   # for dev: master already ran it on the push that produced this commit, and
   # paying for it twice is what makes people stop pushing.
   verify:
     needs: [resolve]
-    if: needs.resolve.outputs.desktop == 'true'
+    if: needs.resolve.outputs.channel != 'dev'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -186,21 +217,178 @@ jobs:
         run: |
           echo "updater: ${{ needs.resolve.outputs.channel }}" >> "$GITHUB_STEP_SUMMARY"
 
-  # TODO: not written yet. The updater keypair is done — tauri.conf.json
-  # carries a real pubkey. Still needed: the Apple signing material in
-  # 1Password, and tools/tauri/patchVersion.ts wired to the resolved
-  # channel. `SEFER_CHANNEL=preview` selects tauri.conf.preview.json.
+  # The expensive half: three operating systems, Rust, code signing and
+  # notarisation. Only runs when there is a version to stamp — a tag always
+  # has one, a dispatch only if somebody typed it. `dev` never gets here.
   #
-  # Version format matters here: a pre-release must be a SINGLE NUMERIC
-  # identifier (`0.3.0-1`), because Tauri's MSI bundler rejects anything
-  # else and the Windows build fails. See the release-channels skill.
-  #
-  # build-desktop:
-  #   needs: [resolve, verify]
-  #   if: needs.resolve.outputs.desktop == 'true'
-  #   strategy:
-  #     matrix:
-  #       include:
-  #         - { os: macos-latest, args: "--target universal-apple-darwin" }
-  #         - { os: ubuntu-22.04, args: "" }
-  #         - { os: windows-latest, args: "" }
+  # tauri-action creates or updates the GitHub Release and attaches the
+  # bundles plus their .sig files. Those assets ARE the updater's backing
+  # store: `workers/sefer-updater` reads this release through the GitHub API
+  # and inlines the .sig contents into the manifest it serves. Until a release
+  # exists with them, the updater correctly answers 404.
+  build-desktop:
+    needs: [resolve, verify]
+    if: needs.resolve.outputs.desktop == 'true'
+    permissions:
+      contents: write
+    strategy:
+      # Independent platforms; one failing should not cancel the others, and
+      # a partial release is easier to reason about than none.
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            args: "--target universal-apple-darwin"
+            bundles: |
+              src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz
+              src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig
+              src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          - os: windows-latest
+            args: ""
+            bundles: |
+              src-tauri/target/release/bundle/nsis/*-setup.exe
+              src-tauri/target/release/bundle/nsis/*-setup.exe.sig
+              src-tauri/target/release/bundle/msi/*.msi
+              src-tauri/target/release/bundle/msi/*.msi.sig
+          - os: ubuntu-22.04
+            args: ""
+            bundles: |
+              src-tauri/target/release/bundle/appimage/*.AppImage
+              src-tauri/target/release/bundle/appimage/*.AppImage.sig
+              src-tauri/target/release/bundle/deb/*.deb
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Source secrets
+        id: secrets
+        uses: 1password/load-secrets-action@v3
+        with:
+          export-env: false
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          APPLE_CERTIFICATE: "op://DevOps/Sefer/p12-b64"
+          APPLE_CERTIFICATE_PASSWORD: "op://DevOps/Sefer/apple-p12-cert-password"
+          KEYCHAIN_PASSWORD: "op://DevOps/Sefer/keychain-password"
+          APP_STORE_CONNECT_KEY: "op://DevOps/Sefer/app-store-connect-p8-b64"
+          APP_STORE_API_ISSUER: "op://DevOps/Sefer/app-store-connect-api-issuer"
+          APP_STORE_API_KEY_ID: "op://DevOps/Sefer/app-store-connect-api-key-id"
+          TAURI_SIGNING_PRIVATE_KEY: "op://DevOps/Sefer/tauri-updater-private-key"
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: "op://DevOps/Sefer/tauri-updater-private-key-password"
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.4.1
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Stamps package.json, tauri.conf.json and Cargo.toml. The in-tree value
+      # stays 0.0.0; this is what makes the built binary report the version the
+      # updater will compare against.
+      - name: Stamp the version
+        run: node tools/tauri/patchVersion.ts "${{ needs.resolve.outputs.version }}"
+
+      # Writes src-tauri/gen/tauri.conf.env.json with the updater endpoint.
+      # tauri-action does not go through tools/tauri/run.ts, so the overlay is
+      # written here and passed explicitly below.
+      - name: Write the updater endpoint overlay
+        shell: bash
+        env:
+          SEFER_UPDATER_HOST: ${{ needs.resolve.outputs.channel == 'production' && vars.SEFER_UPDATER_HOST_PRODUCTION || vars.SEFER_UPDATER_HOST_PREVIEW }}
+        run: node tools/tauri/updaterConfig.ts
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install Linux deps
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libglib2.0-dev \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      # --- macOS signing -----------------------------------------------------
+      # Signing and notarisation only. The keychain is created fresh on a
+      # throwaway runner, so its password is a formality rather than a secret
+      # worth protecting — it is in 1Password because the old repo put it there.
+
+      - name: Decode the App Store Connect key
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        env:
+          APP_STORE_CONNECT_KEY: ${{ steps.secrets.outputs.APP_STORE_CONNECT_KEY }}
+        run: |
+          echo "$APP_STORE_CONNECT_KEY" | base64 --decode > app-store-connect.p8
+          echo "APPLE_API_KEY_PATH=$(pwd)/app-store-connect.p8" >> "$GITHUB_ENV"
+
+      - name: Import the signing certificate
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ steps.secrets.outputs.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ steps.secrets.outputs.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ steps.secrets.outputs.KEYCHAIN_PASSWORD }}
+        run: |
+          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          rm certificate.p12
+
+      - name: Find the signing identity
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          CERT_INFO=$(security find-identity -v -p codesigning build.keychain | grep "Developer ID Application" | head -n 1)
+          CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
+          test -n "$CERT_ID"
+          echo "CERT_ID=$CERT_ID" >> "$GITHUB_ENV"
+
+      # --- build -------------------------------------------------------------
+
+      - name: Build and publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_SIGNING_IDENTITY: ${{ env.CERT_ID }}
+          APPLE_API_ISSUER: ${{ steps.secrets.outputs.APP_STORE_API_ISSUER }}
+          APPLE_API_KEY: ${{ steps.secrets.outputs.APP_STORE_API_KEY_ID }}
+          APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ steps.secrets.outputs.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ steps.secrets.outputs.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ needs.resolve.outputs.tag }}
+          releaseName: ${{ needs.resolve.outputs.tag }}
+          releaseDraft: false
+          prerelease: ${{ needs.resolve.outputs.prerelease == 'true' }}
+          # The env overlay carries the updater endpoint; the preview overlay
+          # carries the product name and identifier. Both are --config on top
+          # of tauri.conf.json, which is what tools/tauri/run.ts does locally.
+          args: >-
+            ${{ matrix.args }}
+            --config src-tauri/gen/tauri.conf.env.json
+            ${{ needs.resolve.outputs.channel == 'preview' && '--config src-tauri/tauri.conf.preview.json' || '' }}
+            --verbose --ci
+
+      - name: Keep the bundles
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}-${{ needs.resolve.outputs.channel }}
+          path: ${{ matrix.bundles }}
+          if-no-files-found: warn

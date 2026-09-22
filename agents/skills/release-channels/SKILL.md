@@ -22,6 +22,7 @@ Full rationale: `documentation/architecture/design.md` for the build switch,
 | **`data-loc` source stamps** | **yes** | no | no |
 | **Full test suite** | no | **yes** | **yes** |
 | **Desktop matrix** | no | **yes** | **yes** |
+| **GitHub release** | no | prerelease | release |
 | **Release lint** (no leftover scaffolding) | no | **yes** | **yes** |
 | **Web host** | `sefer-dev` | `sefer-preview` | `sefer` |
 | **Desktop channel** | — | Sefer Preview | Sefer |
@@ -131,23 +132,47 @@ when a desktop-only capability lands.
 
 There is no desktop `dev` channel and we are not planning one.
 
-## What is not armed yet
+## Armed, and what that currently means
 
-`.github/workflows/release.yml` is `workflow_dispatch` only. The `push:`
-trigger is commented out because the hostnames in `wrangler.jsonc` are
-placeholders and 1Password has no Sefer item. Arming it is uncommenting one
-block — `resolve` already handles all three cases.
+`push` is live: master deploys `dev`, a `v*` tag releases. Five jobs —
+`resolve`, `verify`, `deploy-web`, `deploy-updater`, `build-desktop`.
 
-Still missing, in order:
+**The custom-domain routes are commented out**, so every channel deploys to
+its own `*.workers.dev` subdomain. That is deliberate rather than unfinished:
+it means the pipeline actually runs today instead of failing on a route for a
+hostname nobody has registered. When DNS exists, uncomment the channel's
+`routes` block in `wrangler.jsonc` (web) or
+`workers/sefer-updater/wrangler.toml` (updater). Nothing else changes.
 
-1. Hostnames registered, `op://DevOps/Sefer` created with
-   `cloudflare-api-token` and `cloudflare-account-id`
-2. The desktop build job (commented stub at the foot of the workflow)
-3. The desktop signing material (Apple certs, App Store Connect key) in 1Password
+One trap that follows from that: a desktop binary asks the updater URL it was
+BUILT with, from `SEFER_UPDATER_HOST`. Move the worker to a custom domain
+without moving that variable and you get an updater that silently never finds
+anything.
 
-The updater worker itself is **done** — `workers/sefer-updater`, deployed by
-`pnpm deploy:updater <preview|production>`. It has no `dev` env: dev is
-web-only and has nothing to auto-update.
+### Still to do
 
-Until then a "deploy" means `pnpm deploy:web <channel> --dry`, which builds
-and prints the wrangler command without shipping.
+1. Register the hostnames and uncomment the routes
+2. Set the `SEFER_UPDATER_HOST_PREVIEW` / `SEFER_UPDATER_HOST_PRODUCTION`
+   repository variables — the desktop job reads them to write the updater
+   endpoint into the bundle
+3. Confirm the Apple material in `op://DevOps/Sefer` uses the field names the
+   desktop job expects: `p12-b64`, `apple-p12-cert-password`,
+   `keychain-password`, `app-store-connect-p8-b64`,
+   `app-store-connect-api-issuer`, `app-store-connect-api-key-id`
+
+### A first release, in order
+
+```sh
+# 1. a candidate — full gate, full desktop matrix, GitHub prerelease
+git tag v0.1.0-1 && git push origin v0.1.0-1
+
+# 2. check the release has .app.tar.gz / .AppImage / -setup.exe AND their .sig
+#    siblings. Those assets are what the updater serves; without them it
+#    correctly answers 404.
+
+# 3. the real thing
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+Dry runs need no credentials: `pnpm deploy:web <channel> --dry` and
+`pnpm deploy:updater <channel> --dry` build and print without shipping.

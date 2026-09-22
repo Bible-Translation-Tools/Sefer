@@ -1,8 +1,14 @@
 # Sefer updater — a pure-logic Worker serving the Tauri auto-updater manifest,
 # backed by the GitHub Releases API.
 #
-# STUB: both hostnames below are placeholders and are not registered. The
-# release workflow does not deploy this yet.
+# Routes are COMMENTED OUT until DNS exists; each env deploys to its own
+# *.workers.dev subdomain in the meantime. Uncomment an env's [[routes]] block
+# when its hostname is registered.
+#
+# The desktop app only ever asks the URL it was built with — SEFER_UPDATER_HOST
+# at build time — so that variable and the live route have to agree. Deploying
+# to workers.dev while a binary was built pointing at a custom domain is the
+# way to get an updater that silently never finds anything.
 #
 # ALWAYS pass `--config workers/sefer-updater/wrangler.toml`. Wrangler invoked
 # from the repository root without it falls back to the ROOT `wrangler.jsonc`
@@ -40,11 +46,11 @@ GH_REPO = "Bible-Translation-Tools/Sefer"
 GH_TAG_PREFIX = "v"
 CHANNEL = "stable"
 
-[[env.production.routes]]
-# TODO placeholder — not registered.
-pattern = "updater.sefer.bibletranslationtools.org"
-custom_domain = true
-zone_name = "bibletranslationtools.org"
+# Uncomment when updater.sefer.bibletranslationtools.org is registered.
+# [[env.production.routes]]
+# pattern = "updater.sefer.bibletranslationtools.org"
+# custom_domain = true
+# zone_name = "bibletranslationtools.org"
 
 # -----------------------------------------------------------------------------
 # Preview — the Sefer Preview channel.
@@ -63,8 +69,8 @@ GH_REPO = "Bible-Translation-Tools/Sefer"
 GH_TAG_PREFIX = "v"
 CHANNEL = "preview"
 
-[[env.preview.routes]]
-# TODO placeholder — not registered.
-pattern = "updater.sefer-preview.bttdev.org"
-custom_domain = true
-zone_name = "bttdev.org"
+# Uncomment when updater.sefer-preview.bttdev.org is registered.
+# [[env.preview.routes]]
+# pattern = "updater.sefer-preview.bttdev.org"
+# custom_domain = true
+# zone_name = "bttdev.org"

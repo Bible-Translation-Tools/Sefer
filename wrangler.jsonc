@@ -1,10 +1,12 @@
 // Sefer's web build as a Cloudflare static-assets Worker.
 //
-// STUB. Every hostname below is a placeholder and nothing deploys until they
-// are real — see `.github/workflows/release.yml`, which is deliberately
-// `workflow_dispatch` only for the same reason. Modelled on
-// scripture-editor-proto-2's `wrangler.jsonc`, which is the shape this
-// organisation already runs.
+// Routes are COMMENTED OUT until DNS exists. Each channel deploys to its own
+// `*.workers.dev` subdomain in the meantime, which is a real working URL and
+// lets the pipeline be armed today. Uncomment a channel's `routes` block the
+// moment its hostname is registered; nothing else changes.
+//
+// Modelled on scripture-editor-proto-2's `wrangler.jsonc`, which is the shape
+// this organisation already runs.
 //
 // Static-assets only: no fetch handler, no env vars, no secrets. Cloudflare
 // treats static-only workers as a separate deployment class, which is why this
@@ -34,31 +36,23 @@
     // release lint that refuses leftover design scaffolding.
     "production": {
       "name": "sefer-web-production",
-      "routes": [
-        {
-          // TODO placeholder — not registered.
-          "pattern": "sefer.bibletranslationtools.org",
-          "custom_domain": true,
-          "zone_name": "bibletranslationtools.org",
-        },
-      ],
+      // Uncomment when sefer.bibletranslationtools.org is registered.
+      // "routes": [
+      //   { "pattern": "sefer.bibletranslationtools.org", "custom_domain": true, "zone_name": "bibletranslationtools.org" },
+      // ],
     },
 
-    // A PROMOTION — `workflow_dispatch`, or an `-rc` tag. Not every push:
-    // building this on every commit would make it a second `dev`, and the
+    // A PROMOTION — `workflow_dispatch`, or a `v0.3.0-1` candidate tag. Not every
+    // push: building this on every commit would make it a second `dev`, and the
     // whole point is that somebody can be told to go test drive it. Same
     // build, same tests and same desktop matrix as production; nobody ships a
     // broken Preview.
     "preview": {
       "name": "sefer-web-preview",
-      "routes": [
-        {
-          // TODO placeholder — not registered.
-          "pattern": "sefer-preview.bttdev.org",
-          "custom_domain": true,
-          "zone_name": "bttdev.org",
-        },
-      ],
+      // Uncomment when sefer-preview.bttdev.org is registered.
+      // "routes": [
+      //   { "pattern": "sefer-preview.bttdev.org", "custom_domain": true, "zone_name": "bttdev.org" },
+      // ],
     },
 
     // Every push to master, web only, built `--mode dev`. The ONE deployed
@@ -70,14 +64,10 @@
     // rather than a matrix.
     "dev": {
       "name": "sefer-web-dev",
-      "routes": [
-        {
-          // TODO placeholder — not registered.
-          "pattern": "sefer-dev.bttdev.org",
-          "custom_domain": true,
-          "zone_name": "bttdev.org",
-        },
-      ],
+      // Uncomment when sefer-dev.bttdev.org is registered.
+      // "routes": [
+      //   { "pattern": "sefer-dev.bttdev.org", "custom_domain": true, "zone_name": "bttdev.org" },
+      // ],
     },
   },
 }
