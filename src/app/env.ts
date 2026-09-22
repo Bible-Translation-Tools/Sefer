@@ -18,14 +18,35 @@ const read = (value: string | undefined): string | null => {
 export interface SeferEnv {
   /** Updater worker base, e.g. https://updater.sefer.example.org; `/{{target}}/{{current_version}}` is appended by the plugin. */
   readonly updaterHost: string | null;
-  /** Gitea (WACS) base URL the Web build logs into and clones from. */
-  readonly giteaWebHost: string | null;
-  /** Gitea base URL the desktop build uses; may differ from the Web host. */
-  readonly giteaDesktopHost: string | null;
-  /** CORS proxy in front of Gitea's smart-HTTP for isomorphic-git on the Web. */
-  readonly gitCorsProxyUrl: string | null;
-  /** Value the proxy expects in `X-Requested-With`; null sends no header. */
-  readonly gitProxyRequestedWith: string | null;
+  /**
+   * The WACS endpoint the Web build talks to — ONE URL, for both git transfers
+   * and the Gitea API.
+   *
+   * It is either a Gitea instance directly, where nothing stands in front of
+   * it, or the browser proxy where something does. The proxy answers on the
+   * same paths Gitea does, so this build cannot tell the two apart and does
+   * not need to: whichever it is, the endpoint is the base of every URL.
+   *
+   * That is why there is no second "which upstream should the proxy use"
+   * setting. Each proxy deployment is pinned to one content host, so choosing
+   * the endpoint already chose the content — and a preview build pointed at
+   * the dev proxy cannot reach production content however it is configured.
+   */
+  readonly wacsWebUrl: string | null;
+  /**
+   * The same for the desktop build, which needs no proxy: git2 speaks
+   * smart-HTTP itself and is not a browser origin, so this is normally the
+   * Gitea host.
+   */
+  readonly wacsDesktopUrl: string | null;
+  /**
+   * What the proxy expects in `X-Requested-With`; null sends no header.
+   *
+   * A label rather than a credential — it ships in this bundle, so anyone can
+   * read it. The gate that matters is server-side, in the proxy's own
+   * allowlist; this only says which application is calling.
+   */
+  readonly wacsAppId: string | null;
   /** Language API for language names and directions in the shell. */
   readonly languageApiUrl: string | null;
   /** Dev-only OTLP endpoint; see composition.ts. */
@@ -45,15 +66,14 @@ export interface SeferEnv {
 
 export const env: SeferEnv = {
   updaterHost: read(import.meta.env.VITE_SEFER_UPDATER_HOST),
-  giteaWebHost: read(import.meta.env.VITE_SEFER_GITEA_WEB_HOST),
-  giteaDesktopHost: read(import.meta.env.VITE_SEFER_GITEA_DESKTOP_HOST),
-  gitCorsProxyUrl: read(import.meta.env.VITE_SEFER_GIT_CORS_PROXY_URL),
-  gitProxyRequestedWith: read(import.meta.env.VITE_SEFER_GIT_PROXY_X_REQUESTED_WITH),
+  wacsWebUrl: read(import.meta.env.VITE_SEFER_WACS_WEB_URL),
+  wacsDesktopUrl: read(import.meta.env.VITE_SEFER_WACS_DESKTOP_URL),
+  wacsAppId: read(import.meta.env.VITE_SEFER_WACS_APP_ID),
   languageApiUrl: read(import.meta.env.VITE_SEFER_LANGUAGE_API_URL),
   otlpUrl: read(import.meta.env.VITE_SEFER_OTLP_URL),
   otlpMetrics: import.meta.env.VITE_SEFER_OTLP_METRICS === "1",
 };
 
-/** The Gitea host for the host we are running on. */
-export const giteaHostFor = (host: "web" | "tauri"): string | null =>
-  host === "tauri" ? env.giteaDesktopHost : env.giteaWebHost;
+/** The WACS endpoint for the host we are running on. */
+export const wacsUrlFor = (host: "web" | "tauri"): string | null =>
+  host === "tauri" ? env.wacsDesktopUrl : env.wacsWebUrl;

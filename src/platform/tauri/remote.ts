@@ -2,8 +2,9 @@
  * The desktop answer to the `Remote` port, over the git2 commands in
  * `src-tauri/src/git.rs`.
  *
- * The desktop half is the simple one: git2 speaks smart-HTTP directly, so
- * there is no CORS proxy and no browser transport in the picture at all. What
+ * The desktop half is the simple one: git2 speaks smart-HTTP directly and is
+ * not a browser origin, so its endpoint (`VITE_SEFER_WACS_DESKTOP_URL`) is
+ * normally Gitea itself and no proxy is in the picture at all. What
  * it shares with the Web half is the rules, and those are deliberately the
  * same on both hosts:
  *
@@ -49,7 +50,7 @@ const PROGRESS_DEPTH = 64;
 
 export interface TauriRemoteOptions {
   /** `VITE_SEFER_GITEA_DESKTOP_HOST`; `null` disables publishing by name. */
-  readonly giteaHost: string | null;
+  readonly endpoint: string | null;
 }
 
 /** The wire shape of `git.rs`'s `GitProgress`. */
@@ -209,10 +210,10 @@ const makeTauriRemote = (
     /** `owner/name` or `name` on the configured host → the URL to attach. */
     const createOnGitea = (target: string): Effect.Effect<string, RemoteError> =>
       Effect.gen(function* () {
-        const host = options.giteaHost;
+        const host = options.endpoint;
         if (host === null) {
           return yield* Effect.fail(
-            fail("Unavailable", "this build has no Gitea host: set VITE_SEFER_GITEA_DESKTOP_HOST"),
+            fail("Unavailable", "this build has no WACS endpoint: set VITE_SEFER_WACS_DESKTOP_URL"),
           );
         }
         const parts = target.split("/");

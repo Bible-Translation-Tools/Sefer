@@ -34,7 +34,7 @@ import { For, Show, createMemo, createSignal } from "solid-js";
 import { cloneRepository } from "../../../core/remote/clone";
 import { catalogueFor, type CatalogueEntry, type ProjectType } from "../../catalogue";
 import { describe } from "../../describe";
-import { env, giteaHostFor } from "../../env";
+import { wacsUrlFor } from "../../env";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import {
@@ -126,9 +126,10 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
   // to keep reactive and nothing to dispose.
   const catalogue = catalogueFor();
 
-  const giteaHost = giteaHostFor(services.hostInfo.kind());
-  const transfersConfigured =
-    giteaHost !== null && (services.hostInfo.kind() !== "web" || env.gitCorsProxyUrl !== null);
+  // One endpoint, one condition: it is either configured or this build has no
+  // cloud. On the Web that endpoint is normally a proxy, but nothing here
+  // needs to know which — it answers on the same paths either way.
+  const transfersConfigured = wacsUrlFor(services.hostInfo.kind()) !== null;
 
   const [entries, setEntries] = createSignal<readonly CatalogueEntry[] | undefined>(undefined, {
     name: "catalogueEntries",

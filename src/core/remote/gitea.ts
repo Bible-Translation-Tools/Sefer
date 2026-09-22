@@ -23,8 +23,8 @@
  *   so a host that persists one persists all of it, atomically, or none.
  *
  * The base URL is the caller's — `src/app/env.ts` reads it from
- * `VITE_SEFER_GITEA_WEB_HOST` / `VITE_SEFER_GITEA_DESKTOP_HOST`. No hostname
- * appears in this file, and none should.
+ * `VITE_SEFER_WACS_WEB_URL` / `VITE_SEFER_WACS_DESKTOP_URL`, the same endpoint
+ * transfers use. No hostname appears in this file, and none should.
  */
 import { Context, Data, Effect, Layer, Option, Schema } from "effect";
 

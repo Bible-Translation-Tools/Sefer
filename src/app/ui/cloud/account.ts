@@ -15,7 +15,7 @@ import { Effect, Option } from "effect";
 import { createEffect, createSignal, type Accessor } from "solid-js";
 
 import { Gitea, type Session } from "../../../core/remote/gitea";
-import { giteaHostFor } from "../../env";
+import { wacsUrlFor } from "../../env";
 import { t } from "../../i18n";
 import type { Shell } from "../../ProjectContext";
 
@@ -64,7 +64,7 @@ export const describe = (cause: unknown): string => {
 export const createAccount = (shell: Shell): Account => {
   const { services } = shell;
   // The host is a build fact, read once.
-  const host = giteaHostFor(services.hostInfo.kind());
+  const host = wacsUrlFor(services.hostInfo.kind());
 
   const [session, setSession] = createSignal<Session | undefined>(undefined, { name: "session" });
   const [busy, setBusy] = createSignal(false, { name: "cloudBusy" });

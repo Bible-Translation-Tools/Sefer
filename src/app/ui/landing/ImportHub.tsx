@@ -36,7 +36,7 @@ import { Observability } from "../../../core/observability";
 import { cloneRepository } from "../../../core/remote/clone";
 import { Gitea, type RemoteRepo } from "../../../core/remote/gitea";
 import { classify, commit, stage } from "../../../core/resources/import";
-import { env, giteaHostFor } from "../../env";
+import { wacsUrlFor } from "../../env";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import type { Domain } from "../../services";
@@ -127,8 +127,10 @@ export function ImportHub(props: { readonly onImported: () => void }) {
   const shell = useShell();
   const { services } = shell;
   const capabilities = services.hostInfo.capabilities();
-  const giteaHost = giteaHostFor(services.hostInfo.kind());
-  const webNeedsProxy = services.hostInfo.kind() === "web" && env.gitCorsProxyUrl === null;
+  // One endpoint, one condition. This used to be two — a Gitea host AND, on
+  // the Web, a CORS proxy — which could disagree with each other; now the
+  // endpoint IS whichever of the two this build talks to.
+  const endpoint = wacsUrlFor(services.hostInfo.kind());
 
   const [progress, setProgress] = createSignal<Progress | undefined>(undefined, {
     name: "importProgress",
@@ -338,14 +340,14 @@ export function ImportHub(props: { readonly onImported: () => void }) {
   const openClone = (): void => {
     setCloneOpen(true);
     setCloneNote("");
-    if (giteaHost === null) return;
+    if (endpoint === null) return;
     void services
       .run(
         Effect.gen(function* () {
           const gitea = yield* Gitea;
-          const held = yield* gitea.session(giteaHost);
+          const held = yield* gitea.session(endpoint);
           if (Option.isNone(held)) return [];
-          return yield* gitea.listWritableRepos(giteaHost);
+          return yield* gitea.listWritableRepos(endpoint);
         }),
       )
       .then((found) => {
@@ -429,11 +431,9 @@ export function ImportHub(props: { readonly onImported: () => void }) {
         );
 
   const cloudExplainer = (): string => {
-    if (giteaHost === null)
-      return t("Cloud is not configured for this build: set VITE_SEFER_GITEA_WEB_HOST.");
-    if (webNeedsProxy)
-      return t("Transfers need a proxy for this build: set VITE_SEFER_GIT_CORS_PROXY_URL.");
-    return t("Clone a repository you can write from {host}.", { host: giteaHost });
+    if (endpoint === null)
+      return t("Cloud is not configured for this build: set VITE_SEFER_WACS_WEB_URL.");
+    return t("Clone a repository you can write from {host}.", { host: endpoint });
   };
 
   const sources = (): readonly SourceCard[] => [
@@ -464,7 +464,7 @@ export function ImportHub(props: { readonly onImported: () => void }) {
       title: t("Clone from cloud"),
       explainer: cloudExplainer(),
       action: t("Browse repositories"),
-      available: giteaHost !== null && !webNeedsProxy,
+      available: endpoint !== null,
       onRun: openClone,
     },
   ];

@@ -49,7 +49,7 @@ import { NoUpdaterLive, Updater, type UpdaterService } from "../core/host/update
 import { Observability } from "../core/observability";
 import type { Seat } from "../core/project/project";
 import { Recovery, RecoveryLive, type RecoveryService } from "../core/recovery/recovery";
-import { Gitea, GiteaLive, type GiteaService } from "../core/remote/gitea";
+import { Gitea, GiteaLive, type GiteaService, type HttpFetch } from "../core/remote/gitea";
 import { Remote, type RemoteService } from "../core/remote/remote";
 import { Library, LibraryLive, type LibraryService } from "../core/resources/library";
 import {
@@ -294,9 +294,28 @@ const domainLayer = (
   // string Sefer ever writes into someone's Gitea account; the timestamp is
   // to the second because Gitea refuses a duplicate token NAME, and a
   // day-granular one made a second sign-in from one device impossible.
+  /**
+   * The transport the Gitea API rides on.
+   *
+   * It goes to the SAME endpoint the transfers do, through the same door: on
+   * the Web that door is a proxy which gates on `X-Requested-With`, so the
+   * identifier goes on every request. Before this, git traffic was proxied and
+   * the API was not — which meant a successful sign-in was followed by
+   * "Failed to fetch" on the very next call, and read like a bad password.
+   *
+   * Desktop passes `null` and sends no header: it talks to Gitea directly.
+   */
+  const wacsFetch =
+    (appId: string | null): HttpFetch =>
+    (input, init) =>
+      globalThis.fetch(input, {
+        ...init,
+        headers: appId === null ? init?.headers : { ...init?.headers, "X-Requested-With": appId },
+      });
+
   const account = Layer.provideMerge(
     GiteaLive({
-      fetch: (input, init) => globalThis.fetch(input, init),
+      fetch: wacsFetch(tauri === undefined ? env.wacsAppId : null),
       platform: tauri === undefined ? "web" : "desktop",
     }),
     // Desktop persists tokens in the OS keychain. The Web host has no secure
@@ -364,16 +383,13 @@ const domainLayer = (
     // History: git2 through Tauri commands on desktop, isomorphic-git over the
     // same FileSystem port in a browser.
     tauri === undefined ? WebGitLive : tauri.TauriGitLive,
-    // Transfer. On desktop git2 speaks smart-HTTP itself, so there is no proxy
-    // in the picture; on Web every URL comes from `env`, and a build with no
-    // proxy configured refuses transfers by name instead of failing on CORS.
+    // Transfer. Both hosts take ONE endpoint: on desktop that is normally
+    // Gitea itself, since git2 is not a browser origin; on the Web it is
+    // whatever answers on Gitea's paths, which is a proxy wherever something
+    // stands in front of the content host.
     tauri === undefined
-      ? WebRemoteLive({
-          corsProxyUrl: env.gitCorsProxyUrl,
-          requestedWith: env.gitProxyRequestedWith,
-          giteaHost: env.giteaWebHost,
-        })
-      : tauri.TauriRemoteLive({ giteaHost: env.giteaDesktopHost }),
+      ? WebRemoteLive({ endpoint: env.wacsWebUrl, appId: env.wacsAppId })
+      : tauri.TauriRemoteLive({ endpoint: env.wacsDesktopUrl }),
     // Save, Recovery, and — rename, delete, metadata, export — ProjectAdmin.
     saveAndRecovery,
   );

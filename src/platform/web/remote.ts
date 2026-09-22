@@ -6,11 +6,13 @@
  * visible in this file:
  *
  * 1. A browser cannot speak git smart-HTTP to an arbitrary origin — the
- *    server would have to send CORS headers, and Gitea does not. So every
- *    transfer goes through a proxy, whose URL is `VITE_SEFER_GIT_CORS_PROXY_URL`
- *    (Will runs `wacs-isomorphic-git-proxy`). With no proxy configured there is
- *    no honest transfer, so every transfer refuses `Unavailable` and names the
- *    variable rather than failing later with a CORS error nobody can act on.
+ *    server would have to send CORS headers, and Gitea does not. So this host
+ *    talks to ONE endpoint, `VITE_SEFER_WACS_WEB_URL`, which is either a Gitea
+ *    instance with nothing in front of it or the proxy Will runs
+ *    (`wacs-isomorphic-git-proxy`) where something is. The proxy answers on
+ *    Gitea's own paths, so there is no `corsProxy` option here and no URL
+ *    rewriting at transfer time: the remote URL simply IS the endpoint, put
+ *    there by `attach`.
  * 2. Credentials come from the host `Credentials` service, keyed by the
  *    remote's ORIGIN. Tokens never reach a project file, and `onAuth` is the
  *    only place isomorphic-git is told one.
@@ -50,12 +52,14 @@ import {
 import "./git";
 
 export interface WebRemoteOptions {
-  /** `VITE_SEFER_GIT_CORS_PROXY_URL`; `null` disables every transfer. */
-  readonly corsProxyUrl: string | null;
-  /** `VITE_SEFER_GIT_PROXY_X_REQUESTED_WITH`; `null` sends no header. */
-  readonly requestedWith: string | null;
-  /** `VITE_SEFER_GITEA_WEB_HOST`; `null` disables publishing by name. */
-  readonly giteaHost: string | null;
+  /**
+   * `VITE_SEFER_WACS_WEB_URL` — the one endpoint, for transfers and the API
+   * alike. `null` is a build with no cloud at all, and the landing screens
+   * say so rather than offering a button that cannot work.
+   */
+  readonly endpoint: string | null;
+  /** `VITE_SEFER_WACS_APP_ID`; `null` sends no `X-Requested-With`. */
+  readonly appId: string | null;
 }
 
 /** The remote Sefer attaches and transfers; one per project, always. */
@@ -91,7 +95,6 @@ interface Wire {
   readonly http: typeof http;
   readonly dir: string;
   readonly remote: string;
-  readonly corsProxy: string;
   readonly headers: Record<string, string> | undefined;
   /**
    * Absent when nobody is signed in. isomorphic-git asks only after a 401, so
@@ -216,14 +219,10 @@ const makeWebRemote = (
       auth: "required" | "optional",
     ): Effect.Effect<Wire, RemoteError> =>
       Effect.gen(function* () {
-        if (options.corsProxyUrl === null) {
-          return yield* Effect.fail(
-            fail(
-              "Unavailable",
-              "this build has no git CORS proxy: set VITE_SEFER_GIT_CORS_PROXY_URL",
-            ),
-          );
-        }
+        // No endpoint check here, and that is deliberate: a transfer goes to
+        // the URL the PROJECT was attached to, which `attach` has already put
+        // on this build's endpoint. What the endpoint gates is starting
+        // something new — cloning, publishing — and those check it themselves.
         const url = yield* originUrl(repo);
         const held = yield* credentials.get(hostOf(url));
         // Push is the only transfer nobody can do anonymously. Refusing it
@@ -242,11 +241,11 @@ const makeWebRemote = (
           http,
           dir: repo.root,
           remote: ORIGIN,
-          corsProxy: options.corsProxyUrl,
-          headers:
-            options.requestedWith === null
-              ? undefined
-              : { "X-Requested-With": options.requestedWith },
+          // No `corsProxy`: the remote URL IS the endpoint, so isomorphic-git
+          // talks to it as if it were the git host. The proxy answers on
+          // Gitea's own paths, which is what makes that work and what lets the
+          // same code point straight at an unprotected Gitea instead.
+          headers: options.appId === null ? undefined : { "X-Requested-With": options.appId },
           onAuth:
             credential === null
               ? undefined
@@ -378,10 +377,10 @@ const makeWebRemote = (
     /** `owner/name` or `name` on the configured host → the URL to attach. */
     function createOnGitea(target: string): Effect.Effect<string, RemoteError> {
       return Effect.gen(function* () {
-        const host = options.giteaHost;
+        const host = options.endpoint;
         if (host === null) {
           return yield* Effect.fail(
-            fail("Unavailable", "this build has no Gitea host: set VITE_SEFER_GITEA_WEB_HOST"),
+            fail("Unavailable", "this build has no WACS endpoint: set VITE_SEFER_WACS_WEB_URL"),
           );
         }
         const parts = target.split("/");
