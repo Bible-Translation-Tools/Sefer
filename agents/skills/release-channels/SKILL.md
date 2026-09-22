@@ -15,7 +15,7 @@ Full rationale: `documentation/architecture/design.md` for the build switch,
 
 | | `dev` | `preview` | `production` |
 | --- | --- | --- | --- |
-| **Trigger** | every push to `master` | dispatch, or a `-rc` tag | a `v*` tag |
+| **Trigger** | every push to `master` | dispatch, or a `v*-*` candidate tag | a `v*` final tag |
 | **Vite mode** | `dev` | `production` | `production` |
 | **Script** | `pnpm build:dev` | `pnpm build` | `pnpm build` |
 | **`/design`, comment panel, `?fixture=1`** | **yes** | no | no |
@@ -48,13 +48,14 @@ gh workflow run release.yml -f channel=preview
 or tag it, which is preferred when the thing being tested has a name:
 
 ```sh
-git tag v0.3.0-rc.1 && git push origin v0.3.0-rc.1
+git tag v0.3.0-1 && git push origin v0.3.0-1
 ```
 
-By hand, web only:
+By hand:
 
 ```sh
-pnpm deploy:web preview
+pnpm deploy:web preview        # the app
+pnpm deploy:updater preview    # the updater worker, if it changed
 ```
 
 ### "Tag it for prod" / "cut a release"
@@ -77,9 +78,17 @@ pnpm verify:design    # the surface is in dev and out of production
 ## Tag format
 
 * `v0.3.0` — production. Semver, `v` prefix.
-* `v0.3.0-rc.1` — preview. The workflow matches `v*-rc*` **before** `v*`, so
-  an rc never lands on production by accident.
+* `v0.3.0-1` — preview. The candidate number is a **single numeric**
+  pre-release identifier, and that is a constraint rather than a style
+  choice: Tauri's MSI bundler accepts only a single-identifier numeric
+  pre-release (<= 65535), so `v0.3.0-rc.1` — two identifiers, the first
+  non-numeric — fails the Windows build. Inherited from the old repo, which
+  hit it.
 * Nothing else is a release tag. `dev` is not tagged; it is wherever master is.
+
+Semver orders these the way you want without special cases: `0.3.0-2` beats
+`0.3.0-1`, and `0.3.0` beats both — so somebody on a candidate rolls onto the
+final when it ships rather than being stranded until the next candidate.
 
 ## Why a push to master deploys "dev"
 
@@ -134,7 +143,11 @@ Still missing, in order:
 1. Hostnames registered, `op://DevOps/Sefer` created with
    `cloudflare-api-token` and `cloudflare-account-id`
 2. The desktop build job (commented stub at the foot of the workflow)
-3. The updater worker — `planning/02-ready/updater-worker.md`
+3. The desktop signing material (Apple certs, App Store Connect key) in 1Password
+
+The updater worker itself is **done** — `workers/sefer-updater`, deployed by
+`pnpm deploy:updater <preview|production>`. It has no `dev` env: dev is
+web-only and has nothing to auto-update.
 
 Until then a "deploy" means `pnpm deploy:web <channel> --dry`, which builds
 and prints the wrangler command without shipping.

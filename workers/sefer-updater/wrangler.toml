@@ -1,0 +1,70 @@
+# Sefer updater — a pure-logic Worker serving the Tauri auto-updater manifest,
+# backed by the GitHub Releases API.
+#
+# STUB: both hostnames below are placeholders and are not registered. The
+# release workflow does not deploy this yet.
+#
+# ALWAYS pass `--config workers/sefer-updater/wrangler.toml`. Wrangler invoked
+# from the repository root without it falls back to the ROOT `wrangler.jsonc`
+# and redeploys the SPA a second time instead of this worker — a real bug the
+# old repo hit and left a comment about.
+#
+# Two envs, matching the two DESKTOP channels. There is no `dev` here: the dev
+# channel is web-only and has nothing to auto-update.
+
+name = "sefer-updater"
+main = "src/index.ts"
+compatibility_date = "2026-09-22"
+
+[observability]
+enabled = true
+
+# GH_TOKEN is a Worker secret, pushed by the release workflow from 1Password
+# (`op://DevOps/Sefer/updater-gh-token`) so the pipeline is the single rotation
+# point and nobody runs `wrangler secret put` by hand.
+#
+# Bible-Translation-Tools/Sefer is PUBLIC, so the token is not about access —
+# the releases API reads fine without one. It is about rate limits: 60
+# requests an hour unauthenticated per IP, and a Worker shares edge IPs with
+# everyone, so a tokenless updater starts failing under load for reasons
+# nobody can reproduce locally. 5,000/hour authenticated.
+
+# -----------------------------------------------------------------------------
+# Production — the Sefer channel. Final releases only.
+# -----------------------------------------------------------------------------
+[env.production]
+name = "sefer-updater-production"
+
+[env.production.vars]
+GH_REPO = "Bible-Translation-Tools/Sefer"
+GH_TAG_PREFIX = "v"
+CHANNEL = "stable"
+
+[[env.production.routes]]
+# TODO placeholder — not registered.
+pattern = "updater.sefer.bibletranslationtools.org"
+custom_domain = true
+zone_name = "bibletranslationtools.org"
+
+# -----------------------------------------------------------------------------
+# Preview — the Sefer Preview channel.
+#
+# Same GH_TAG_PREFIX as production, which is the difference from the worker
+# this was ported from: Zephyr told its channels apart by prefix (`v` against
+# `nightly-`), and Sefer's both tag `v*`. `CHANNEL` does the filtering instead.
+# Anything other than "stable" serves candidates AND finals, so somebody on
+# 0.3.0-1 rolls onto 0.3.0 when it ships rather than being stranded.
+# -----------------------------------------------------------------------------
+[env.preview]
+name = "sefer-updater-preview"
+
+[env.preview.vars]
+GH_REPO = "Bible-Translation-Tools/Sefer"
+GH_TAG_PREFIX = "v"
+CHANNEL = "preview"
+
+[[env.preview.routes]]
+# TODO placeholder — not registered.
+pattern = "updater.sefer-preview.bttdev.org"
+custom_domain = true
+zone_name = "bttdev.org"

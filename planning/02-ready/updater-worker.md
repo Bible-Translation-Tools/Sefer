@@ -1,7 +1,17 @@
-# Handoff: the Sefer updater worker
+# The Sefer updater worker
 
-**For a fresh agent.** Self-contained: everything you need to start is below.
-Paste the prompt at the bottom, or read the whole thing first.
+> **Status: ported, 2026-09-22.** `workers/sefer-updater` exists, typechecks
+> and bundles; `pnpm deploy:updater <preview|production>` deploys it and the
+> release workflow has a `deploy-updater` job. The signing keypair is
+> generated and `tauri.conf.json` carries the public half.
+>
+> What is left is not code: real hostnames in `workers/sefer-updater/wrangler.toml`,
+> the 1Password fields, and the desktop build job that produces the release
+> assets this worker serves. Until a release exists with `.app.tar.gz` /
+> `.AppImage` / `-setup.exe` assets and their `.sig` siblings, the worker
+> answers 404 — correctly.
+>
+> The rest of this file is kept as the record of what was decided and why.
 
 ## What this is
 

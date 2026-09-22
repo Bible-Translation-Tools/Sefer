@@ -48,6 +48,7 @@ Check `package.json` and runner configuration for executable commands. Distingui
 - `pnpm boundaries` proves `src/core` imports nothing framework- or host-specific, that nothing outside `src/dev` statically imports it, and that `src/dev/annotate` imports no framework at all.
 - `pnpm build:dev` builds the `dev` channel — a production build that DOES carry `/design`, the comment panel and `?fixture=1`. See below.
 - `pnpm deploy:web <dev|preview|production>` builds for that channel and ships it; `--dry` builds and prints the wrangler command without shipping. The mode-to-channel pairing lives in `tools/deploy/web.ts`, so CI and a laptop cannot disagree.
+- `pnpm deploy:updater <preview|production>` deploys the Tauri updater worker in `workers/sefer-updater` and refreshes its GitHub token. Separate deployable, separate hostname; there is no `dev` because dev is web-only. See `workers/README.md`.
 - `pnpm lint:release` adds the rules that only have to hold at release — today, no leftover `globalThis.__sefer.design` scaffolding. Run before `preview` and `production`, never before `dev`.
 - `pnpm verify:design` runs two real builds and proves the design surface is absent from production and present in the design build.
 - `pnpm design:scaffolding` lists real screens still borrowing the design panel through `globalThis.__sefer.design.register`. Informational; exits 0.

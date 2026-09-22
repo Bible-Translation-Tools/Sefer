@@ -10,6 +10,7 @@
     "build:dev": "vite build --mode dev",
     "build:tauri": "node tools/tauri/run.ts build",
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm boundaries && pnpm test:unit && pnpm build",
+    "deploy:updater": "node tools/deploy/updater.ts",
     "deploy:web": "node tools/deploy/web.ts",
     "design:scaffolding": "node tools/design/scaffolding.ts",
     "dev": "vite",

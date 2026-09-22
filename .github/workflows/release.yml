@@ -16,7 +16,7 @@
 #                                 comment panel and ?fixture=1. Fast because
 #                                 iterating should not cost a desktop matrix.
 #
-#   dispatch / -rc   -> preview   A PROMOTION, not a consequence of pushing.
+#   dispatch / v0.3.0-1 -> preview  A PROMOTION, not a consequence of pushing.
 #                                 Full test suite, full desktop matrix. Nobody
 #                                 ships a broken Preview; it is the last
 #                                 rehearsal before a tag.
@@ -30,8 +30,10 @@
 # lives in `tools/deploy/web.ts` rather than here, so CI and a laptop cannot
 # disagree about which build carries the design surface.
 #
-# NOT HERE: the updater worker and the isomorphic-git proxy. Separate configs,
-# separate hostnames, separate deploy steps — see planning/02-ready/.
+# The updater worker deploys from `deploy-updater` below, on the two desktop
+# channels only. NOT here: the browser git proxy — it is
+# ../wacs-isomorphic-git-proxy, shared by every WACS client, and not Sefer's
+# to own. See planning/02-ready/git-proxy.md.
 
 name: release
 
@@ -67,7 +69,7 @@ jobs:
           set -euo pipefail
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             channel="${{ inputs.channel }}"
-          elif [[ "${{ github.ref }}" == refs/tags/v*-rc* ]]; then
+          elif [[ "${{ github.ref }}" == refs/tags/v*-* ]]; then
             channel=preview
           elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             channel=production
@@ -142,12 +144,56 @@ jobs:
         run: |
           echo "web: ${{ needs.resolve.outputs.channel }} from ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
 
-  # TODO: not written yet. Needs, in order: the Tauri updater keypair
-  # generated (`pnpm tauri signer generate`) and its public half in
-  # tauri.conf.json, which today still holds REPLACE_WITH_MINISIGN_PUBLIC_KEY;
-  # the Apple signing material in 1Password; and tools/tauri/patchVersion.ts
-  # wired to the resolved channel. `SEFER_CHANNEL=preview` selects
-  # src-tauri/tauri.conf.preview.json.
+  # A separate job, not a step of deploy-web: different deployable, different
+  # hostname, different failure mode. Only the two desktop channels — `dev` is
+  # web-only and has nothing to auto-update.
+  #
+  # `tools/deploy/updater.ts` passes --config explicitly, which is what stops
+  # wrangler falling back to the root wrangler.jsonc and redeploying the SPA
+  # instead. It also pushes GH_TOKEN as a Worker secret on every deploy, so
+  # rotating the token is a 1Password edit rather than a hunt.
+  deploy-updater:
+    needs: [resolve, verify]
+    if: needs.resolve.outputs.desktop == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Source secrets
+        uses: 1password/load-secrets-action@v3
+        with:
+          export-env: true
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          CLOUDFLARE_API_TOKEN: "op://DevOps/Sefer/cloudflare-api-token"
+          CLOUDFLARE_ACCOUNT_ID: "op://DevOps/Sefer/cloudflare-account-id"
+          UPDATER_GH_TOKEN: "op://DevOps/Sefer/updater-gh-token"
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.4.1
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Deploy updater
+        run: pnpm deploy:updater ${{ needs.resolve.outputs.channel }}
+
+      - name: Summary
+        run: |
+          echo "updater: ${{ needs.resolve.outputs.channel }}" >> "$GITHUB_STEP_SUMMARY"
+
+  # TODO: not written yet. The updater keypair is done — tauri.conf.json
+  # carries a real pubkey. Still needed: the Apple signing material in
+  # 1Password, and tools/tauri/patchVersion.ts wired to the resolved
+  # channel. `SEFER_CHANNEL=preview` selects tauri.conf.preview.json.
+  #
+  # Version format matters here: a pre-release must be a SINGLE NUMERIC
+  # identifier (`0.3.0-1`), because Tauri's MSI bundler rejects anything
+  # else and the Windows build fails. See the release-channels skill.
   #
   # build-desktop:
   #   needs: [resolve, verify]
