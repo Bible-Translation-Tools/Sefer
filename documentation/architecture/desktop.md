@@ -130,33 +130,39 @@ signs the v1 update channel.
 ### If DMG bundling fails locally
 
 `pnpm build:tauri` on macOS can die at `bundle_dmg.sh` with
-`hdiutil: create failed - Resource busy`. Seen on 2026-09-22 with no stale
-volumes mounted and 100 GB free.
+`hdiutil: create failed - Resource busy`.
 
-It is `create-dmg`'s decorated path that fails — it creates a read-write
-image, mounts it, positions icons, then converts — not disk images in general:
-`hdiutil create -srcfolder … Sefer.app` produces a working DMG on the same
-machine seconds later.
+**Suspect the machine, not the build.** Seen on 2026-09-22, macOS 26.5.2: it
+was not Tauri, create-dmg, or any flag they pass. Once it starts,
+`hdiutil create -srcfolder` fails for ANY source, format and destination —
+a four-byte fake app to `/tmp` fails the same way — which no amount of
+bundler configuration can explain. macOS's disk-image subsystem gets into
+this state and stays there; a reboot clears it.
 
-**It matters more than it looks**, because the DMG step aborts bundling and
-the run never reaches the updater artifact. `Sefer.app.tar.gz` is what
-`workers/sefer-updater` actually serves; the DMG is only the human download.
-Losing the former to a failure in the latter is the wrong trade.
+The diagnosis is worth repeating because the first attempts SUCCEED and then
+everything after fails, which reads exactly like a flag problem and is not.
+The test that settles it in one line:
 
-To get unstuck locally, build the app bundle alone:
+```sh
+mkdir -p /tmp/probe && echo hi > /tmp/probe/a.txt
+hdiutil create -srcfolder /tmp/probe -volname P -format UDZO /tmp/probe.dmg
+```
+
+If that fails, the machine is wedged and nothing in this repository is wrong.
+
+**It still costs more than a DMG**, which is the part worth knowing: the DMG
+step aborts bundling, so the run never reaches `Sefer.app.tar.gz` — the
+artifact `workers/sefer-updater` actually serves. The DMG is only the human
+download. To get the update path while the machine is unhappy:
 
 ```sh
 pnpm exec tauri build --bundles app
 ```
 
-That produces `Sefer.app` and `Sefer.app.tar.gz` (plus its `.sig` when the
-signing key is set) and skips the DMG entirely.
+That produces `Sefer.app`, `Sefer.app.tar.gz` and its `.sig`, and skips the
+DMG entirely.
 
-CI runs on a fresh macOS VM, where the old repository ships DMGs without
-trouble, so this is treated as local until CI says otherwise. If it does start
-failing there, the fix is to split the macOS build into two invocations —
-`--bundles app` first so the update path is never collateral damage, then the
-installer — rather than to retry the whole thing.
+CI runs on a fresh macOS VM each time, so it cannot accumulate this state.
 
 ## Release
 
