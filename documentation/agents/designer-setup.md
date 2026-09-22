@@ -9,7 +9,7 @@ installs.
 
 ## 1. Tools
 
-Four things, and that is the whole list.
+Four things, and that is the whole list. This is a suggestion for tools, but you maybe already have some installed. Check first.
 
 ```sh
 # 1. Node 24.4.1. If you have no Node at all, fnm is the smallest way in:
@@ -35,13 +35,13 @@ warning, that is the line to re-run.
 
 Two things you specifically do **not** need:
 
-* **Rust.** That is only for the desktop build. Everything here is the web one.
-* **Playwright browsers.** They are a separate ~300MB download for the test
+- **Rust.** That is only for the desktop build. Everything here is the web one.
+- **Playwright browsers.** They are a separate ~300MB download for the test
   suites, which are not yours to run. `pnpm install` does not fetch them, and
   nothing in your day asks for them.
 
 One you probably already have: **Google Chrome**, the ordinary app. Claude
-drives *that* to look at its own work (§5), which is exactly why the Playwright
+drives _that_ to look at its own work (§5), which is exactly why the Playwright
 download is unnecessary — it attaches to the Chrome you already run rather than
 downloading a second browser to launch.
 
@@ -122,7 +122,7 @@ so a single batch can be a walk — a few notes here, then move to key terms and
 a few more. Each page prints its own address, so one paste tells the whole
 story in order.
 
-**Brief / Full**, next to the Copy button, only changes what gets *written* —
+**Brief / Full**, next to the Copy button, only changes what gets _written_ —
 everything is always recorded. **Full** adds the window size and light/dark,
 which matters when whoever reads it can't open the app themselves.
 
@@ -152,22 +152,22 @@ tweaks, and how a change graduates into the real screens.
 
 Paste a comment batch and say what you want. Useful shapes:
 
-* *"Here are four comments from /design. Fix 1 and 3, tell me why 2 is harder
-  than it looks, leave 4."*
-* *"Make a variant of this screen with the actions in a right rail instead of
-  under the header. Keep the current one."*
-* *"Add a tweak for row density on this screen so I can compare three values."*
+- _"Here are four comments from /design. Fix 1 and 3, tell me why 2 is harder
+  than it looks, leave 4."_
+- _"Make a variant of this screen with the actions in a right rail instead of
+  under the header. Keep the current one."_
+- _"Add a tweak for row density on this screen so I can compare three values."_
 
 Two things to tell it when you want them:
 
-* **Screenshots.** `pnpm verify:chrome` starts a headless Chrome that Claude
+- **Screenshots.** `pnpm verify:chrome` starts a headless Chrome that Claude
   can drive and screenshot, so it can check its own work instead of asking you
   to look. Say "start the verification browser and show me" if it does not.
   It attaches to the Chrome already on your machine, so if Claude ever reports
   a missing browser executable, tell it to connect to `pnpm verify:chrome`
   over CDP rather than launching one — the downloaded browsers are for the
   test suites and are deliberately not installed here.
-* **Real text.** Ask for `?fixture=1` if it hands you an empty screen.
+- **Real text.** Ask for `?fixture=1` if it hands you an empty screen.
 
 ## 6. Committing
 
@@ -203,8 +203,8 @@ Keep a long-lived branch of your own if you like — `th`, or `design` — as a
 place your ideas live. Treat it as a **sketchbook**: something to look at and
 copy from, never something to merge.
 
-So the move is: fresh branch from `master`, then tell Claude *"reuse the card
-layout from my `th` branch"*. It reads the old work and rewrites it against
+So the move is: fresh branch from `master`, then tell Claude _"reuse the card
+layout from my `th` branch"_. It reads the old work and rewrites it against
 today's code. What you get is your idea on top of current `master`, with no
 merge and nothing stale carried along.
 
@@ -237,11 +237,11 @@ why a commit is not instant.
 Two of those five are not in your gate, so a commit can fail on something you
 were not asked to check:
 
-* **`boundaries`** fails if a file reached somewhere it is not allowed to. It
+- **`boundaries`** fails if a file reached somewhere it is not allowed to. It
   is a guardrail, not a scolding, and its message says exactly what reached
   what. Usually the fix is a one-line import change — tell Claude what it
   said.
-* **the unit tests** fail if something the code promises stopped being true.
+- **the unit tests** fail if something the code promises stopped being true.
   If this happens on a change that is purely visual, it is worth saying so out
   loud rather than making the test pass: a styling change breaking a test
   usually means the test was testing the wrong thing, and that is somebody
@@ -255,9 +255,9 @@ need to save work in a hurry, and CI will still tell the truth later.
 You will make two quite different kinds of change, and they want separate
 commits:
 
-* **A fix to a real screen** — the spacing was wrong, the weight was wrong.
+- **A fix to a real screen** — the spacing was wrong, the weight was wrong.
   This touches `src/app/ui/`.
-* **A prototype** — a new screen at `/design`, an idea with variants. This
+- **A prototype** — a new screen at `/design`, an idea with variants. This
   touches `src/dev/`.
 
 Keep them apart. Not bureaucracy: the two get reviewed completely differently,
@@ -274,10 +274,10 @@ else to tidy.
 
 Two things that make this painless, and are worth knowing before you start:
 
-* **Put the winning link in the commit message.** The URL carries the screen,
+- **Put the winning link in the commit message.** The URL carries the screen,
   the variant and every tweak, so whoever reviews it can open exactly what you
   chose instead of guessing from the diff.
-* **The real screen should end up with no knobs.** If graduating means leaving
+- **The real screen should end up with no knobs.** If graduating means leaving
   a switch in the real component so it can still render both ways, the idea
   has not actually won yet. The product renders one thing.
 
