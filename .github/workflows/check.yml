@@ -97,15 +97,37 @@ jobs:
         run: |
           set -euo pipefail
           pnpm preview:branch "${GITHUB_REF_NAME}" | tee upload.log
-          url=$(grep -oE 'https://[a-z0-9-]+\.workers\.dev' upload.log | tail -1)
+
+          # Read wrangler's own LABELLED lines rather than pattern-matching a
+          # hostname. The first attempt grepped `https://[a-z0-9-]+\.workers\.dev`
+          # and matched nothing, because the host has several labels
+          # (`<alias>-sefer-web-dev.<account>.workers.dev`) — and a grep that
+          # matches nothing exits 1, which under `set -e` failed the step after
+          # a PERFECTLY SUCCESSFUL upload. `sed -n …p` prints nothing and exits
+          # 0, so a future change to wrangler's output costs a blank line here
+          # rather than a red tick.
+          alias_url=$(sed -n 's/.*Version Preview Alias URL: *//p' upload.log | tail -1)
+          version_url=$(sed -n 's/.*Version Preview URL: *//p' upload.log | tail -1)
+          # The alias first: it is stable across pushes, so the link in a pull
+          # request keeps working as the branch moves. The version URL carries a
+          # content hash and names one upload forever, which is the right
+          # fallback and the wrong thing to send somebody.
+          url="${alias_url:-${version_url}}"
+
           {
             echo "### Branch preview"
             echo ""
-            echo "${url:-(no URL in the wrangler output — see the log above)}"
+            if [ -n "$url" ]; then
+              echo "$url"
+            else
+              echo "Uploaded, but no URL line was found in the wrangler output — see the log."
+            fi
             echo ""
             echo "A CloudflarePreview of \`${GITHUB_REF_NAME}\`, built \`--mode dev\`, so it"
-            echo "carries /design, the comment panel and ?fixture=1."
-            echo "\`sefer-dev.bttdev.org\` is untouched."
+            echo "carries \`/design\`, the comment panel and \`?fixture=1\`."
+            echo ""
+            echo "This uploaded a VERSION and deployed nothing:"
+            echo "\`sefer-dev.bttdev.org\` still serves whatever \`master\` last deployed."
           } >> "$GITHUB_STEP_SUMMARY"
 
   browser:
