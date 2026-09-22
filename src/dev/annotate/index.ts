@@ -138,7 +138,7 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
   let settings = options;
   let mode: Mode = "interact";
   let corner: Corner = options.corner ?? "bottom-right";
-  let verbosity: Verbosity = "brief";
+  let verbosity: Verbosity = options.verbosity ?? "brief";
   let minimised = options.minimised ?? false;
   let menuOpen = false;
   let comments = readComments();
@@ -327,6 +327,16 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
       return;
     }
 
+    // The menu first, and in ANY mode: it is the thing most recently opened,
+    // and it is the one surface here with no click-away (a click away in
+    // comment mode is a comment).
+    if (event.key === "Escape" && menuOpen) {
+      event.preventDefault();
+      menuOpen = false;
+      render();
+      return;
+    }
+
     if (event.key === "Escape" && mode === "comment") {
       event.preventDefault();
       if (composing !== null) {
@@ -481,6 +491,18 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
 
   const cornerMenu = (): HTMLElement => {
     const menu = el("div", { class: "menu" });
+    // A way out that is visible. Escape closes it too, but a menu whose only
+    // exit is a key you have to guess is a menu people get stuck in — and
+    // clicking away is not an option here, because in comment mode a click
+    // anywhere else is a comment.
+    const close = el("button", { type: "button", class: "ghost icon", title: "Close" }, ["×"]);
+    on(close, "click", () => {
+      menuOpen = false;
+      render();
+    });
+    menu.append(
+      el("div", { class: "menu-head" }, [el("div", { class: "legend title" }, ["Panel"]), close]),
+    );
     for (const where of CORNERS) {
       const button = el("button", { type: "button" }, [where.replace("-", " ")]);
       on(button, "click", () => {
@@ -490,15 +512,6 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
       });
       menu.append(button);
     }
-    const reset = el("button", { type: "button" }, [
-      verbosity === "brief" ? "verbosity: brief" : "verbosity: full",
-    ]);
-    on(reset, "click", () => {
-      verbosity = verbosity === "brief" ? "full" : "brief";
-      menuOpen = false;
-      render();
-    });
-    menu.append(reset);
     const record = el("button", { type: "button" }, [
       recording ? "press a key…" : `hotkey: ${describeHotkey(hotkey())}`,
     ]);
@@ -778,11 +791,27 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
         `Copy ${String(comments.length)} comment${comments.length === 1 ? "" : "s"}`,
       ]);
       on(copy, "click", copyBatch);
+      // Verbosity sits HERE, beside Copy, rather than in the kebab menu. It
+      // changes what the next paste says, so it belongs next to the button
+      // that does the pasting and it has to show which one is selected — as a
+      // menu row reading "verbosity: brief" it was both hidden and ambiguous
+      // about whether it named the current state or the action.
+      const detail = segmented(
+        [
+          { value: "brief", label: "Brief", title: "Location and words" },
+          { value: "full", label: "Full", title: "Adds selector, viewport and theme" },
+        ],
+        verbosity,
+        (value) => {
+          verbosity = value === "full" ? "full" : "brief";
+          render();
+        },
+      );
       body.append(
         el("div", { class: "section" }, [
           el("div", { class: "legend" }, ["Comments"]),
           commentList(),
-          el("div", { class: "row" }, [copy]),
+          el("div", { class: "row" }, [copy, detail]),
         ]),
       );
     } else if (mode === "comment") {

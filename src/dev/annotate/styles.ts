@@ -101,8 +101,14 @@ textarea {
 }
 textarea:focus { outline: 2px solid #3d6be0; outline-offset: -1px; }
 
+/* A normal flex child of .root, NOT absolutely positioned. Absolute with no
+   offsets left it at its static position, which for the bottom-right corner
+   pushed it off the right edge of the viewport — a menu you cannot read. As a
+   flow child it inherits the corner alignment and can only ever grow back into
+   the screen. */
 .menu {
-  position: absolute;
+  position: relative;
+  max-width: 340px;
   background: #26262c;
   border: 1px solid #3a3a44;
   border-radius: 8px;
@@ -114,6 +120,11 @@ textarea:focus { outline: 2px solid #3d6be0; outline-offset: -1px; }
 }
 .menu button { background: transparent; border: 0; text-align: left; white-space: nowrap; }
 .menu button:hover { background: #33333b; }
+.menu-head { display: flex; align-items: center; gap: 6px; padding: 2px 2px 4px 8px; }
+.menu-head .title { flex: 1; }
+/* The close button keeps the icon padding but not the left-aligned, full-width
+   shape the other menu rows have. */
+.menu-head button { flex: 0 0 auto; padding: 4px 6px; line-height: 1; }
 
 .comments { display: flex; flex-direction: column; gap: 6px; }
 .comment { display: flex; gap: 6px; align-items: flex-start; background: #232329; border: 1px solid #32323a; border-radius: 6px; padding: 6px 8px; }

@@ -88,7 +88,7 @@ act on and one you have to grep for. Then the element's own text (only its own
 `data-*` attributes, and the URL. A pasted batch reads:
 
 ```
-http://localhost:3210/design?primitives.size=sm
+## http://localhost:3210/design?primitives.size=sm
 
 [1] src/app/ui/primitives/Button.tsx:77:5  "tertiary"
     too faint against the card.
@@ -96,10 +96,27 @@ http://localhost:3210/design?primitives.size=sm
 [2] src/app/ui/primitives/Button.tsx:77:5  "primary"
 [3] src/app/ui/primitives/Button.tsx:77:5  "secondary"
     these two should swap.
+
+## http://localhost:3210/terms
+
+[4] src/app/ui/excerpts/StetView.tsx:31:7  "Key terms"
+    this heading should match the rail.
 ```
 
 Numbering runs across the whole batch, not per comment, so `[3]` in the paste
 is the pin marked `3` on the screen.
+
+**The URL is printed whenever it CHANGES**, so one batch can span a walk
+through the application — three remarks on the project list, two on key terms,
+one in the editor — and still say where each was made. The panel survives a
+client-side navigation, so that walk is the normal case rather than a trick.
+
+**Verbosity is a render-time filter, not a capture setting.** A comment always
+stores everything it could say; `brief` and `full` (the switch beside Copy)
+only choose what the paste prints, so flipping it after a sweep re-renders what
+is already there. `full` adds the selector, the viewport and the theme, and is
+the default on a DEPLOYED design build — where whoever reads the paste cannot
+open the checkout and look.
 
 **Two channels, and both matter.** The paste works everywhere, including a
 product owner on a laptop three time zones away. When an agent is attached over

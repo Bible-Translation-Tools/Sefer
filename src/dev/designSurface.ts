@@ -72,6 +72,21 @@ const BASE: AnnotatorOptions = {
   state: urlState,
   hotkey: null,
   minimised: true,
+  /**
+   * `full` on a DEPLOYED design build, `brief` on a laptop — the same
+   * distinction `context` makes two files away, and for the same reason.
+   *
+   * Running locally, whoever reads the paste has this checkout open and a
+   * source location is the whole payload; the viewport and theme are noise.
+   * On the deployed prototype the reader is usually somewhere else entirely
+   * and cannot look at anything, so those facts stop being noise and become
+   * the only way to reconstruct what was actually on screen.
+   *
+   * Only the DEFAULT. Verbosity is a render-time filter over a batch that is
+   * always captured in full, so the switch beside Copy re-renders what is
+   * already stored either way.
+   */
+  verbosity: import.meta.env.DEV ? "brief" : "full",
 };
 
 /**

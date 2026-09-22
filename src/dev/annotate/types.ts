@@ -118,6 +118,20 @@ export interface AnnotatorOptions {
   readonly context?: () => Readonly<Record<string, string>>;
   readonly corner?: Corner;
   /**
+   * How much a copied batch says. `brief` by default.
+   *
+   * An option rather than a fixed default because the right answer depends on
+   * who reads the paste. On a laptop, the reader has the checkout open and a
+   * source location is the whole payload. On a DEPLOYED prototype the reader
+   * usually cannot look at anything — so the viewport, the theme and the
+   * selector stop being noise and start being the only way to reconstruct
+   * what was on screen.
+   *
+   * The annotator does not decide which of those it is in; it has no way to
+   * know, and guessing would weld it to one host's idea of a build.
+   */
+  readonly verbosity?: Verbosity;
+  /**
    * The key that toggles comment mode. `"c"` by default, `null` for no hotkey
    * at all — click the segmented control instead. A `Hotkey` for a chord.
    *

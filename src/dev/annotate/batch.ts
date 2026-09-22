@@ -130,12 +130,24 @@ export const renderMarkdown = (
   context: Readonly<Record<string, string>>,
 ): string => {
   if (comments.length === 0) return "";
-  const first = comments[0];
-  const header = [
-    ...Object.entries(context).map(([key, value]) => `${key} ${value}`),
-    first?.url ?? "",
-  ].filter((part) => part !== "");
-  const lines: string[] = [header.join(" · "), ""];
+  const header = Object.entries(context)
+    .map(([key, value]) => `${key} ${value}`)
+    .filter((part) => part !== "");
+  const lines: string[] = header.length > 0 ? [header.join(" · "), ""] : [];
+
+  /**
+   * The URL is printed whenever it CHANGES, not once at the top.
+   *
+   * A batch is often a walk: three remarks on the project list, then two on
+   * key terms, then one in the editor. Putting the first comment's URL in the
+   * header and stopping there quietly asserted that a batch happens on one
+   * screen, so everything after the first navigation was reported against the
+   * wrong page — which is worse than not reporting the page at all.
+   *
+   * Printed as a heading between the groups, so the batch reads as the route
+   * it actually was.
+   */
+  let showing: string | null = null;
 
   // One counter across the whole batch rather than per comment, because the
   // number is also what is painted on the pin over the element. `[3]` in the
@@ -144,6 +156,10 @@ export const renderMarkdown = (
   let n = 0;
 
   for (const comment of comments) {
+    if (comment.url !== showing) {
+      showing = comment.url;
+      lines.push(`## ${comment.url}`, "");
+    }
     for (const target of comment.targets) {
       n += 1;
       const place = target.source ?? target.selector;

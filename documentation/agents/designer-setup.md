@@ -74,7 +74,7 @@ What you paste looks like this, and the file:line is why it is worth doing
 this way rather than describing the element in prose:
 
 ```
-http://localhost:3000/design?primitives.size=sm
+## http://localhost:3000/design?primitives.size=sm
 
 [1] src/app/ui/primitives/Button.tsx:77:5  "tertiary"
     too faint against the card.
@@ -82,7 +82,21 @@ http://localhost:3000/design?primitives.size=sm
 [2] src/app/ui/primitives/Button.tsx:77:5  "primary"
 [3] src/app/ui/primitives/Button.tsx:77:5  "secondary"
     these two should swap.
+
+## http://localhost:3000/terms
+
+[4] src/app/ui/excerpts/StetView.tsx:31:7  "Key terms"
+    this heading should match the rail.
 ```
+
+**You can keep going across pages.** The panel stays with you as you navigate,
+so a single batch can be a walk — a few notes here, then move to key terms and
+a few more. Each page prints its own address, so one paste tells the whole
+story in order.
+
+**Brief / Full**, next to the Copy button, only changes what gets *written* —
+everything is always recorded. **Full** adds the window size and light/dark,
+which matters when whoever reads it can't open the app themselves.
 
 On `/design`, the panel also holds **variants** (whole alternative takes on a
 page) and **tweaks** (single knobs). Everything they set goes into the URL —
