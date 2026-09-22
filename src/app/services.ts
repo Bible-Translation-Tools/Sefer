@@ -75,6 +75,7 @@ import { WebGitLive } from "../platform/web/git";
 import { OPFS_ROOT, WEB_PATHS, WebHostInfoLive } from "../platform/web/hostInfo";
 import { WebRemoteLive } from "../platform/web/remote";
 import type { Composition } from "./composition";
+import { rememberBootEndpoints, resolveEndpoints } from "./endpoints";
 import { env } from "./env";
 
 /**
@@ -373,25 +374,44 @@ const domainLayer = (
     Layer.merge(RecoveryLive({ journalRoot: paths.appData }), ProjectAdminLive),
   );
 
-  const modules = Layer.mergeAll(
+  /**
+   * Everything else, over Settings.
+   *
+   * `provideMerge` and `Layer.unwrap` rather than one flat merge because the
+   * transfer Layer now takes an endpoint a PREFERENCE may have overridden, and
+   * a preference can only be read from a built `Settings`. Settings is still
+   * exposed to everything downstream; it is just built first.
+   *
+   * The endpoint is captured here, once, which is what `bootEndpoints` records
+   * and what the settings screen offers a reload against.
+   */
+  const modules = Layer.provideMerge(
+    Layer.unwrap(
+      Effect.map(Settings, (settings) => {
+        const endpoints = resolveEndpoints(settings, tauri === undefined ? "web" : "tauri");
+        rememberBootEndpoints(endpoints);
+        return Layer.mergeAll(
+          // The project census, the held per-book analyses, and every finding.
+          ProjectAnalysisLive,
+          // Imported resources and the role bindings a project reads them through.
+          LibraryLive({ libraryRoot: `${paths.appData}/library` }),
+          // History: git2 through Tauri commands on desktop, isomorphic-git over
+          // the same FileSystem port in a browser.
+          tauri === undefined ? WebGitLive : tauri.TauriGitLive,
+          // Transfer. Both hosts take ONE endpoint: on desktop that is normally
+          // Gitea itself, since git2 is not a browser origin; on the Web it is
+          // whatever answers on Gitea's paths, which is a proxy wherever
+          // something stands in front of the content host.
+          tauri === undefined
+            ? WebRemoteLive({ endpoint: endpoints.wacsUrl, appId: env.wacsAppId })
+            : tauri.TauriRemoteLive({ endpoint: endpoints.wacsUrl }),
+          // Save, Recovery, and — rename, delete, metadata, export — ProjectAdmin.
+          saveAndRecovery,
+        );
+      }),
+    ),
     // Preferences, decoded through each owner's schema.
     SettingsLive,
-    // The project census, the held per-book analyses, and every finding.
-    ProjectAnalysisLive,
-    // Imported resources and the role bindings a project reads them through.
-    LibraryLive({ libraryRoot: `${paths.appData}/library` }),
-    // History: git2 through Tauri commands on desktop, isomorphic-git over the
-    // same FileSystem port in a browser.
-    tauri === undefined ? WebGitLive : tauri.TauriGitLive,
-    // Transfer. Both hosts take ONE endpoint: on desktop that is normally
-    // Gitea itself, since git2 is not a browser origin; on the Web it is
-    // whatever answers on Gitea's paths, which is a proxy wherever something
-    // stands in front of the content host.
-    tauri === undefined
-      ? WebRemoteLive({ endpoint: env.wacsWebUrl, appId: env.wacsAppId })
-      : tauri.TauriRemoteLive({ endpoint: env.wacsDesktopUrl }),
-    // Save, Recovery, and — rename, delete, metadata, export — ProjectAdmin.
-    saveAndRecovery,
   );
 
   return Layer.provideMerge(modules, Layer.merge(host, fileSystem));

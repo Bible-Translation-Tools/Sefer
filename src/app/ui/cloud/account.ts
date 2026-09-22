@@ -15,7 +15,7 @@ import { Effect, Option } from "effect";
 import { createEffect, createSignal, type Accessor } from "solid-js";
 
 import { Gitea, type Session } from "../../../core/remote/gitea";
-import { wacsUrlFor } from "../../env";
+import { wacsUrlFor } from "../../endpoints";
 import { t } from "../../i18n";
 import type { Shell } from "../../ProjectContext";
 
@@ -63,8 +63,11 @@ export const describe = (cause: unknown): string => {
 
 export const createAccount = (shell: Shell): Account => {
   const { services } = shell;
-  // The host is a build fact, read once.
-  const host = wacsUrlFor(services.hostInfo.kind());
+  // Read once, at the composition's endpoint: an override typed into Settings
+  // reaches the screens immediately but the transfer Layers only after a
+  // reload, and signing in against one endpoint while transferring to another
+  // is precisely the confusion this screen exists to avoid.
+  const host = wacsUrlFor(services.settings, services.hostInfo.kind());
 
   const [session, setSession] = createSignal<Session | undefined>(undefined, { name: "session" });
   const [busy, setBusy] = createSignal(false, { name: "cloudBusy" });

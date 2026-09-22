@@ -30,7 +30,7 @@ import type { Project } from "../core/project/project";
 import { Remote } from "../core/remote/remote";
 import { emptyBlocks, structureAt, withoutScrolling } from "../editor";
 import type { EditorAction, EditorBook, ProjectionName } from "../editor";
-import { wacsUrlFor } from "./env";
+import { wacsUrlFor } from "./endpoints";
 import { t } from "./i18n";
 import type { Domain, Services } from "./services";
 import { shellKeys } from "./settings";
@@ -653,9 +653,11 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
         // The sign-in form needs a password and an OTP field, which is a
         // surface, not a command; this takes the user to it. A build with no
         // Gitea host configured says so rather than opening an empty form.
-        const host = wacsUrlFor(services.hostInfo.kind());
+        const host = wacsUrlFor(services.settings, services.hostInfo.kind());
         if (host === null) {
-          bridge.report(t("no cloud host in this build: set VITE_SEFER_GITEA_WEB_HOST"));
+          bridge.report(
+            t("no WACS endpoint: set one in Settings, or VITE_SEFER_WACS_WEB_URL at build"),
+          );
           return;
         }
         const project = bridge.project();

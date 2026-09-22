@@ -33,7 +33,8 @@
 
 import { Result, Schema } from "effect";
 
-import { env } from "./env";
+import type { SettingsService } from "../core/host/settings";
+import { languageApiUrlFrom } from "./endpoints";
 
 export type ProjectType = "translation" | "gateway";
 
@@ -194,5 +195,7 @@ export const sampleCatalogue = (): CatalogueService => ({
  * a screen. There is no third state — an unreachable API surfaces as the
  * table's own error line, not as a silent swap to samples.
  */
-export const catalogueFor = (): CatalogueService =>
-  env.languageApiUrl === null ? sampleCatalogue() : languageApiCatalogue(env.languageApiUrl);
+export const catalogueFor = (settings: SettingsService): CatalogueService => {
+  const url = languageApiUrlFrom(settings);
+  return url === null ? sampleCatalogue() : languageApiCatalogue(url);
+};

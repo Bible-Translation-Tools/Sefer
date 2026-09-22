@@ -34,7 +34,7 @@ import { For, Show, createMemo, createSignal } from "solid-js";
 import { cloneRepository } from "../../../core/remote/clone";
 import { catalogueFor, type CatalogueEntry, type ProjectType } from "../../catalogue";
 import { describe } from "../../describe";
-import { wacsUrlFor } from "../../env";
+import { wacsUrlFor } from "../../endpoints";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import {
@@ -124,12 +124,12 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
   const { services } = shell;
   // One catalogue per mount. It is a pure value over `env`, so there is nothing
   // to keep reactive and nothing to dispose.
-  const catalogue = catalogueFor();
+  const catalogue = catalogueFor(services.settings);
 
   // One endpoint, one condition: it is either configured or this build has no
   // cloud. On the Web that endpoint is normally a proxy, but nothing here
   // needs to know which — it answers on the same paths either way.
-  const transfersConfigured = wacsUrlFor(services.hostInfo.kind()) !== null;
+  const transfersConfigured = wacsUrlFor(services.settings, services.hostInfo.kind()) !== null;
 
   const [entries, setEntries] = createSignal<readonly CatalogueEntry[] | undefined>(undefined, {
     name: "catalogueEntries",

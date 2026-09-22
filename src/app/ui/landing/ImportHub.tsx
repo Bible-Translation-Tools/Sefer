@@ -36,7 +36,7 @@ import { Observability } from "../../../core/observability";
 import { cloneRepository } from "../../../core/remote/clone";
 import { Gitea, type RemoteRepo } from "../../../core/remote/gitea";
 import { classify, commit, stage } from "../../../core/resources/import";
-import { wacsUrlFor } from "../../env";
+import { wacsUrlFor } from "../../endpoints";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import type { Domain } from "../../services";
@@ -130,7 +130,7 @@ export function ImportHub(props: { readonly onImported: () => void }) {
   // One endpoint, one condition. This used to be two — a Gitea host AND, on
   // the Web, a CORS proxy — which could disagree with each other; now the
   // endpoint IS whichever of the two this build talks to.
-  const endpoint = wacsUrlFor(services.hostInfo.kind());
+  const endpoint = wacsUrlFor(services.settings, services.hostInfo.kind());
 
   const [progress, setProgress] = createSignal<Progress | undefined>(undefined, {
     name: "importProgress",
@@ -432,7 +432,7 @@ export function ImportHub(props: { readonly onImported: () => void }) {
 
   const cloudExplainer = (): string => {
     if (endpoint === null)
-      return t("Cloud is not configured for this build: set VITE_SEFER_WACS_WEB_URL.");
+      return t("No WACS endpoint: set one in Settings, or VITE_SEFER_WACS_WEB_URL at build.");
     return t("Clone a repository you can write from {host}.", { host: endpoint });
   };
 

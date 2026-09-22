@@ -5,12 +5,14 @@ import Minus from "lucide-solid/icons/minus";
 import Plus from "lucide-solid/icons/plus";
 import { For, Show, createSignal, onCleanup } from "solid-js";
 
+import { endpointsChangedSinceBoot } from "../app/endpoints";
 import { t } from "../app/i18n";
 import { useShell } from "../app/ProjectContext";
 import { SETTING_GROUPS, shellKeys, shellSettings, type AnyDescriptor } from "../app/settings";
 import { CloudPanel } from "../app/ui/CloudPanel";
 import { Breadcrumb } from "../app/ui/landing/Breadcrumb";
 import {
+  Button,
   Card,
   IconButton,
   Input,
@@ -62,6 +64,19 @@ function SettingsPage() {
   onCleanup(() => {
     Effect.runFork(Fiber.interrupt(advancedChanges));
   });
+
+  /**
+   * Whether a reload would change what a transfer or a catalogue read does.
+   *
+   * The composition captured its endpoints once at boot, so a change here
+   * reaches the screens immediately and the services not at all. Saying so and
+   * offering the reload is honest; silently doing nothing until the next
+   * launch is not. `tick` is read so this re-runs after every write.
+   */
+  const drifted = (): boolean => {
+    tick();
+    return endpointsChangedSinceBoot(services.settings, services.hostInfo.kind());
+  };
 
   const read = <S,>(key: SettingKey<S>): S => {
     tick();
@@ -181,7 +196,14 @@ function SettingsPage() {
         {(group) => {
           const rows = descriptors.filter(
             (descriptor) =>
-              descriptor.group === group.id && (group.id !== "advanced" || advancedVisible()),
+              descriptor.group === group.id &&
+              (group.id !== "advanced" || advancedVisible()) &&
+              // A preference that cannot matter on this host is not drawn.
+              // The WACS endpoint is the only one: on the Web it is normally a
+              // proxy, because a browser cannot reach the content host
+              // directly, and desktop has no such problem.
+              (descriptor.hosts === undefined ||
+                descriptor.hosts.includes(services.hostInfo.kind())),
           );
           return (
             <Show when={rows.length > 0}>
@@ -209,6 +231,22 @@ function SettingsPage() {
                     )}
                   </For>
                 </div>
+                <Show when={group.id === "network" && drifted()}>
+                  <div class="flex items-center gap-3 pt-3">
+                    <p class="min-w-0 flex-1 text-smallest text-on-surface-tertiary">
+                      {t(
+                        "Screens are using the new endpoint already; transfers and the catalogue were built with the old one and change on reload.",
+                      )}
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => globalThis.location.reload()}
+                    >
+                      {t("Reload")}
+                    </Button>
+                  </div>
+                </Show>
               </Card>
             </Show>
           );

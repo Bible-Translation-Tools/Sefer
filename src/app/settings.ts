@@ -24,13 +24,22 @@ import { DEFAULT_EDITOR_FONT_SIZE, EDITOR_FONT_SIZE_RANGE } from "./ui/theme";
  * paragraph belongs to a section — the grouping is editorial, so it is declared
  * beside the label rather than inferred from the key's prefix.
  */
-export type SettingGroup = "appearance" | "editor" | "advanced";
+export type SettingGroup = "appearance" | "editor" | "network" | "advanced";
 
 interface Described {
   readonly label: string;
   /** The sentence under the label. Optional: some rows need no explaining. */
   readonly description?: string;
   readonly group: SettingGroup;
+  /**
+   * The hosts this row is worth showing on. Absent means all of them.
+   *
+   * It exists for one preference: the WACS endpoint on the Web is normally a
+   * proxy, because a browser cannot reach the content host directly, and
+   * desktop has no such problem. Offering the same box on both would invite
+   * somebody to paste a proxy URL into a build that does not need one.
+   */
+  readonly hosts?: readonly ("web" | "tauri")[];
 }
 
 export interface BooleanSetting extends Described {
@@ -246,6 +255,15 @@ export interface ShellKeys {
   /** Enables the destructive multi-match action in Find. */
   readonly enableReplaceAll: SettingKey<boolean>;
   /**
+   * The WACS endpoint, overriding the one this build was released with.
+   *
+   * Empty means "use the build's" — `src/app/endpoints.ts` resolves the two,
+   * and is the only reader of either.
+   */
+  readonly wacsUrl: SettingKey<string>;
+  /** The Language API, same rule. */
+  readonly languageApiUrl: SettingKey<string>;
+  /**
    * Mark the block the caret is in, and the block that answers it in every
    * reference beside it. Off by default: it paints on every block change, and
    * a reader who is drafting rather than matching shape does not want the page
@@ -356,6 +374,8 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
       true,
     ),
     enableReplaceAll: settings.register("find.enableReplaceAll", Schema.Boolean, false),
+    wacsUrl: settings.register("network.wacsUrl", Schema.String, ""),
+    languageApiUrl: settings.register("network.languageApiUrl", Schema.String, ""),
     // Off by default, for the reason on the interface: it is a comparison
     // tool, and the comparison is not what most sessions are doing.
     pairBlocks: settings.register("editor.pairBlocks", Schema.Boolean, false),
@@ -489,6 +509,23 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
       kind: "boolean",
       group: "advanced",
     },
+    {
+      key: keys.wacsUrl,
+      label: "WACS endpoint",
+      description:
+        "Where sign-in, the repository list and every transfer go. A Gitea instance, or the proxy in front of one — they answer on the same paths, so either works here. Empty uses this build's.",
+      kind: "string",
+      group: "network",
+      hosts: ["web"],
+    },
+    {
+      key: keys.languageApiUrl,
+      label: "Language API",
+      description:
+        "Language names and directions, and the catalogue the Find Project screen lists. Empty uses this build's.",
+      kind: "string",
+      group: "network",
+    },
   ];
 };
 
@@ -504,5 +541,10 @@ export const SETTING_GROUPS: readonly {
     subtitle: "How Sefer looks on this device.",
   },
   { id: "editor", title: "Editor", subtitle: "What a book does when it opens." },
+  {
+    id: "network",
+    title: "Network",
+    subtitle: "Which hosts this build talks to. Changing one needs a reload.",
+  },
   { id: "advanced", title: "Advanced", subtitle: "Timings and machinery." },
 ];
