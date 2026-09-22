@@ -5,12 +5,12 @@ import Minus from "lucide-solid/icons/minus";
 import Plus from "lucide-solid/icons/plus";
 import { For, Show, createSignal, onCleanup } from "solid-js";
 
-import { endpointsChangedSinceBoot } from "../app/endpoints";
-import { t } from "../app/i18n";
-import { useShell } from "../app/ProjectContext";
-import { SETTING_GROUPS, shellKeys, shellSettings, type AnyDescriptor } from "../app/settings";
-import { CloudPanel } from "../app/ui/CloudPanel";
-import { Breadcrumb } from "../app/ui/landing/Breadcrumb";
+import { endpointsChangedSinceBoot } from "../../app/endpoints";
+import { t } from "../../app/i18n";
+import { useShell } from "../../app/ProjectContext";
+import { SETTING_GROUPS, shellKeys, shellSettings, type AnyDescriptor } from "../../app/settings";
+import { CloudPanel } from "../../app/ui/CloudPanel";
+import { Breadcrumb } from "../../app/ui/landing/Breadcrumb";
 import {
   Button,
   Card,
@@ -19,11 +19,11 @@ import {
   PanelHeader,
   SegmentedControl,
   Switch,
-} from "../app/ui/primitives";
-import { ShellGate } from "../app/ui/ShellGate";
-import { applyAppearance, asTheme, type Appearance } from "../app/ui/theme";
-import { UpdatePanel } from "../app/ui/UpdatePanel";
-import type { SettingKey } from "../core/host/settings";
+} from "../../app/ui/primitives";
+import { ShellGate } from "../../app/ui/ShellGate";
+import { applyAppearance, asTheme, type Appearance } from "../../app/ui/theme";
+import { UpdatePanel } from "../../app/ui/UpdatePanel";
+import type { SettingKey } from "../../core/host/settings";
 
 /**
  * The settings screen: one card per declared group, one row per registered key,
@@ -270,7 +270,7 @@ function SettingsPage() {
   );
 }
 
-export const Route = createFileRoute("/settings")({
+export const Route = createFileRoute("/_app/settings")({
   head: () => ({ meta: [{ title: "Sefer — settings" }] }),
   component: () => <ShellGate>{() => <SettingsPage />}</ShellGate>,
 });

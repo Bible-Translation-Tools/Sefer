@@ -110,7 +110,7 @@ panel toggle, so there is an explicit one as well: `src/app/ui/workspace/BackToE
 `data-testid="back-to-editor"` button pinned to the top-right of the routed content, naming the book it
 returns to.
 
-It is rendered ONCE, by the root chrome above the `<Outlet/>` and outside the scroller, rather than by
+It is rendered ONCE, by the `_app` layout chrome above its `<Outlet/>` and outside the scroller, rather than by
 each page: a screen added later gets the door without knowing it exists, no page can forget it or spell
 it differently, and it does not scroll away with the content. The same component registers the
 `editor.back` command, so the palette lists it and Escape performs it — registered there and not in the
@@ -133,6 +133,26 @@ where an open lands.
 Three components, in `src/app/ui/workspace/`, and one rule between them: the
 RAIL answers "where in Sefer am I", the SIDEBAR answers "where in this project
 am I", and the TOOLBAR answers "what am I looking at".
+
+**Where the chrome is mounted is itself the rule.** It lives in
+`src/routes/_app.tsx`, a PATHLESS layout, and a screen wears the frame exactly
+when it sits under that layout — which is every route file under
+`src/routes/_app/`. `_app` is part of the route ID and absent from the URL, so
+`/projects` is still `/projects`; a comparison against `routeId()` has to say
+`/_app/projects`, which is the one thing that changes for a caller.
+
+Until 2026-09-22 the chrome was in `__root.tsx`, so EVERY route rendered inside
+the rail — `/design` included. That is right for a workspace screen and wrong
+for a prototype: a designer judging a screen could only ever see it wearing
+this frame. The alternative considered was a runtime dial (`?chrome=0`) and was
+rejected, because "is this screen inside the application frame" is a structural
+fact and a query parameter answers it from a URL somebody can mistype.
+
+What `__root` keeps is what every screen needs whatever its frame: the head,
+the one `<ProjectProvider>`, the theme side effect, and the design annotator.
+A prototype outside the layout still has services, a theme and the comment
+panel — but not the rail, and not `installCommandKeys`, so it does not answer
+the application's Mod-K for an application it is not part of.
 
 - **`IconRail`** is permanent and one tile wide. Its panel toggle collapses the
   sidebar and never itself. Everything below the toggle is lit from the
@@ -182,7 +202,7 @@ renumber the split and rebuild the editor's `EditorView` beside it.
 
 ### The book screen is a second split
 
-`src/routes/project/$id/book/$book.tsx` is its own `Resizable.Root`: the
+`src/routes/_app/project/$id/book/$book.tsx` is its own `Resizable.Root`: the
 reference pane, a visible handle, then the editor. The pane is
 `ReferenceColumn`, and each bound resource inside it is a read-only
 `EditorView` over the same book (see [resources](resources.md), "A reference

@@ -21,13 +21,13 @@ import { createFileRoute, lazyRouteComponent, notFound } from "@tanstack/solid-r
  */
 const loadPlayground = async () => {
   if (import.meta.env.DEV) {
-    const page = await import("../../../dev/playground/PlaygroundPage");
+    const page = await import("../../../../dev/playground/PlaygroundPage");
     return { default: page.PlaygroundPage };
   }
   throw notFound();
 };
 
-export const Route = createFileRoute("/project/$slug/playground")({
+export const Route = createFileRoute("/_app/project/$slug/playground")({
   beforeLoad: () => {
     if (!import.meta.env.DEV) throw notFound();
   },

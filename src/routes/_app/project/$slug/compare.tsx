@@ -9,7 +9,7 @@ import { createFileRoute, redirect } from "@tanstack/solid-router";
  * that takes you where the screen went. It carries no component: the redirect
  * happens before anything renders.
  */
-export const Route = createFileRoute("/project/$slug/compare")({
+export const Route = createFileRoute("/_app/project/$slug/compare")({
   beforeLoad: ({ params }) => {
     throw redirect({ to: "/project/$slug/review", params: { slug: params.slug } });
   },

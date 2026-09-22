@@ -1,164 +1,28 @@
 import { HeadContent, Outlet, createRootRoute, useNavigate } from "@tanstack/solid-router";
-import { Show, onCleanup, untrack } from "solid-js";
+import { onCleanup } from "solid-js";
 
-import { installCommandKeys, runCommand } from "../app/commands";
 import { t } from "../app/i18n";
-import { ProjectProvider, readyShell, useShell, useShellState } from "../app/ProjectContext";
-import { SIDEBAR_WIDTH } from "../app/settings";
-import { CommandPalette } from "../app/ui/CommandPalette";
-import { Kbd, Resizable, Toaster } from "../app/ui/primitives";
-import { BackToEditor } from "../app/ui/workspace/BackToEditor";
-import { IconRail } from "../app/ui/workspace/IconRail";
-import { ProjectSidebar } from "../app/ui/workspace/ProjectSidebar";
+import { ProjectProvider } from "../app/ProjectContext";
 // The appearance applier, imported for its side effect and imported HERE: it
 // writes the cached theme, interface size and scripture size onto <html> at
 // module load, and the root route is the one module every screen goes through.
 import "../app/ui/theme";
 
 /**
- * The application shell: the icon rail, the project sidebar, the palette, the
- * status line, and the one <ProjectProvider> every route reads.
+ * What every screen needs whatever frame it is in: the head, the one
+ * `<ProjectProvider>`, and the design annotator.
+ *
+ * The application's CHROME — the icon rail, the project sidebar, the palette,
+ * the status line — is deliberately NOT here. It lives in `_app.tsx`, a
+ * pathless layout, and the screens that belong inside the workspace are the
+ * ones under it. Anything outside that layout, `/design` above all, is a blank
+ * canvas: still composed, still themed, still commentable, but not wearing a
+ * frame it is not part of. The reasoning is written down in `_app.tsx`.
  *
  * The provider is here rather than in `src/App.tsx` because it needs the
  * router's `navigate` — a command that jumps to a finding is navigation — and
  * because App.tsx owns exactly one thing, the composition.
- *
- * The chrome is the mockups' workspace (planning/03-ui/design-direction.md,
- * "Overall layout"): a permanent icon RAIL for "where in Sefer am I", and
- * beside it a resizable project SIDEBAR for "where in this project am I". The
- * rail's panel toggle collapses the second, never the first.
- *
- * Why the collapsed sidebar is hidden rather than unmounted: `Resizable`
- * registers its panels DURING render, in document order, so a conditionally
- * rendered panel would renumber the split — and unmounting the sidebar's
- * SIBLING (the panel holding the routed content) would destroy and rebuild the
- * editor's `EditorView` every time someone tapped the toggle. The canonical
- * text would survive that, because it lives in the Book; the reader's scroll
- * position and selection would not.
  */
-
-function Workspace() {
-  const shell = useShell();
-  // Plain variables, not expressions in the props: `Resizable.Panel` reads its
-  // three sizes ONCE, during registration, and a JSX expression is a lazy memo
-  // Solid 2 warns about when it is read outside a tracking scope. The width is
-  // a one-time read by design — the persisted value seeds the split, and the
-  // split owns it from there (primitives/Resizable.tsx) — so it is untracked
-  // rather than merely read, which is the same statement said to the compiler.
-  const initialWidth = untrack(() => shell.sidebarWidth());
-  const minWidth = SIDEBAR_WIDTH.min;
-  const maxWidth = SIDEBAR_WIDTH.max;
-  return (
-    <Resizable.Root
-      class="h-full"
-      onSizesChange={(sizes) => {
-        const first = sizes[0];
-        if (first !== undefined) shell.setSidebarWidth(first);
-      }}
-    >
-      <Resizable.Panel
-        initialSize={initialWidth}
-        minSize={minWidth}
-        maxSize={maxWidth}
-        class={shell.sidebarShowing() ? undefined : "hidden"}
-      >
-        <ProjectSidebar />
-      </Resizable.Panel>
-      <Resizable.Handle
-        label={t("Resize the project panel")}
-        class={shell.sidebarShowing() ? undefined : "hidden"}
-      />
-      {/* The `!` is load-bearing: `Resizable.Panel` writes its share as an
-          inline `flex-basis`, and with the sidebar hidden the routed content
-          has to take the whole row back. */}
-      <Resizable.Panel class={shell.sidebarShowing() ? undefined : "[flex-basis:100%]!"}>
-        {/* `relative`, and the door OUTSIDE the scroller: a full-page screen
-            scrolls its own content, and a button that scrolled away with it
-            would be a door you have to go back to the top to find. */}
-        <div class="relative h-full">
-          <BackToEditor />
-          <div class="h-full overflow-y-auto">
-            <Outlet />
-          </div>
-        </div>
-      </Resizable.Panel>
-    </Resizable.Root>
-  );
-}
-
-function Chrome() {
-  const state = useShellState();
-
-  // The shell's chords, on the document. CodeMirror sees a keystroke inside the
-  // editor first, so nothing here competes with an editor binding. Guarded
-  // because the production build prerenders this shell under Node.
-  if (typeof document !== "undefined") onCleanup(installCommandKeys(document));
-
-  const shell = () => readyShell(state());
-
-  return (
-    <div class="flex h-screen bg-surface-secondary">
-      <Show
-        when={shell()}
-        fallback={<div class="w-13 shrink-0 border-e border-sidebar-border bg-surface-primary" />}
-      >
-        <IconRail />
-      </Show>
-
-      <div class="flex min-w-0 flex-1 flex-col">
-        <div class="min-h-0 flex-1">
-          <Show
-            when={shell()}
-            fallback={
-              <div class="h-full overflow-y-auto">
-                <Outlet />
-              </div>
-            }
-          >
-            <Workspace />
-          </Show>
-        </div>
-
-        {/* The status line, one compact row at the foot of the content column.
-            It is the shell's only permanent readout — which storage this
-            composition got, what the last operation said, and the one chord
-            that reaches everything else. */}
-        <footer
-          data-testid="status-line"
-          class="flex items-center gap-3 border-t border-sidebar-border bg-surface-primary px-3 py-1 text-smallest text-on-surface-tertiary"
-        >
-          <Show when={shell()} fallback={<span>{t("starting…")}</span>}>
-            {(ready) => (
-              <>
-                <span data-storage={ready().services.storage}>{ready().services.storage}</span>
-                <span class="truncate">{ready().status()}</span>
-                <button
-                  type="button"
-                  data-testid="status-commands"
-                  class="ms-auto flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 transition-colors hover:bg-surface-secondary hover:text-on-surface-secondary"
-                  onClick={() => runCommand("palette.open")}
-                >
-                  {t("Commands")}
-                  <Kbd>Mod-K</Kbd>
-                </button>
-              </>
-            )}
-          </Show>
-        </footer>
-      </div>
-
-      <Show when={shell()}>
-        {(ready) => (
-          <CommandPalette
-            open={ready().paletteOpen()}
-            onClose={() => ready().setPaletteOpen(false)}
-          />
-        )}
-      </Show>
-      <Toaster />
-    </div>
-  );
-}
 
 /**
  * The design annotator, on every route rather than only on `/design`.
@@ -167,7 +31,12 @@ function Chrome() {
  * a REAL screen, and the whole point of pointing at a pixel is being able to do
  * it wherever the pixel is. Comment-only and minimised to a puck out here; see
  * `src/dev/designSurface.ts` for why there is exactly one instance and why the
- * hotkey is off.
+ * hotkey is off by default.
+ *
+ * It stays on the ROOT rather than moving down with the chrome, and that is the
+ * point of it: a comment about the workspace and a comment about a prototype
+ * are the same gesture, and a panel that only existed inside one frame would
+ * be a panel you cannot use to compare them.
  *
  * A dynamic import inside the build-time branch, which is how every other
  * dev-only surface in this tree is reached — a static import would put the
@@ -194,7 +63,7 @@ function Root() {
           `go(path: string)`: that shape forced every caller to cast past the
           typed route union, which is the one thing this router is for. */}
       <ProjectProvider navigate={navigate}>
-        <Chrome />
+        <Outlet />
       </ProjectProvider>
     </>
   );

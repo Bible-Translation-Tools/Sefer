@@ -35,7 +35,7 @@ import { For, Show, createMemo } from "solid-js";
 import { useShell } from "../../app/ProjectContext";
 import { Badge, Card, SegmentedControl, Select, Switch } from "../../app/ui/primitives";
 import { ShellGate } from "../../app/ui/ShellGate";
-import { Route } from "../../routes/project/$slug/playground";
+import { Route } from "../../routes/_app/project/$slug/playground";
 import { dialValues, withDial, type Dials } from "../dials";
 import { benchFor } from "./bench";
 import type { DialValues, Experiment } from "./experiment";

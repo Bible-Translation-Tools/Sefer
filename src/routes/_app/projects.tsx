@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/solid-router";
 
-import { ProjectsLanding } from "../app/ui/landing/ProjectsLanding";
-import { ShellGate } from "../app/ui/ShellGate";
-import "../app/ui/theme";
+import { ProjectsLanding } from "../../app/ui/landing/ProjectsLanding";
+import { ShellGate } from "../../app/ui/ShellGate";
+import "../../app/ui/theme";
 
 /**
  * `/projects` — every project on this device, always.
@@ -23,7 +23,7 @@ import "../app/ui/theme";
  * project. There is nothing to track now: the URL says which you asked for.
  */
 
-export const Route = createFileRoute("/projects")({
+export const Route = createFileRoute("/_app/projects")({
   head: () => ({ meta: [{ title: "Projects · Sefer" }] }),
   component: () => <ShellGate>{() => <ProjectsLanding />}</ShellGate>,
 });

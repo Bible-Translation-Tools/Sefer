@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/solid-router";
 
-import { FindingsPanel } from "../../../app/ui/panels";
-import { ShellGate } from "../../../app/ui/ShellGate";
+import { FindingsPanel } from "../../../../app/ui/panels";
+import { ShellGate } from "../../../../app/ui/ShellGate";
 
 /**
  * `/findings` — the panel, gated on the shell.
@@ -36,7 +36,7 @@ const indexOr = (value: unknown): number | undefined => {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined;
 };
 
-export const Route = createFileRoute("/project/$slug/findings")({
+export const Route = createFileRoute("/_app/project/$slug/findings")({
   validateSearch: (search: Record<string, unknown>): FindingsSearch => {
     const code = stringOr(search.code);
     const pattern = indexOr(search.pattern);

@@ -9,29 +9,29 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppRouteImport } from './routes/_app'
 import { Route as DesignRouteImport } from './routes/design'
-import { Route as ProjectsRouteImport } from './routes/projects'
-import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as DevFixtureRouteImport } from './routes/dev/fixture'
-import { Route as ProjectSlugRouteImport } from './routes/project/$slug'
-import { Route as StartCreateRouteImport } from './routes/start/create'
-import { Route as StartFindRouteImport } from './routes/start/find'
-import { Route as ProjectSlugIndexRouteImport } from './routes/project/$slug/index'
-import { Route as ProjectSlugCloudRouteImport } from './routes/project/$slug/cloud'
-import { Route as ProjectSlugCompareRouteImport } from './routes/project/$slug/compare'
-import { Route as ProjectSlugFindRouteImport } from './routes/project/$slug/find'
-import { Route as ProjectSlugFindingsRouteImport } from './routes/project/$slug/findings'
-import { Route as ProjectSlugHistoryRouteImport } from './routes/project/$slug/history'
-import { Route as ProjectSlugInventoryRouteImport } from './routes/project/$slug/inventory'
-import { Route as ProjectSlugPlaygroundRouteImport } from './routes/project/$slug/playground'
-import { Route as ProjectSlugReviewRouteImport } from './routes/project/$slug/review'
-import { Route as ProjectSlugTermsRouteImport } from './routes/project/$slug/terms'
-import { Route as ProjectSlugBookBookRouteImport } from './routes/project/$slug/book/$book'
+import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppProjectsRouteImport } from './routes/_app/projects'
+import { Route as AppSettingsRouteImport } from './routes/_app/settings'
+import { Route as AppDevFixtureRouteImport } from './routes/_app/dev/fixture'
+import { Route as AppProjectSlugRouteImport } from './routes/_app/project/$slug'
+import { Route as AppStartCreateRouteImport } from './routes/_app/start/create'
+import { Route as AppStartFindRouteImport } from './routes/_app/start/find'
+import { Route as AppProjectSlugIndexRouteImport } from './routes/_app/project/$slug/index'
+import { Route as AppProjectSlugCloudRouteImport } from './routes/_app/project/$slug/cloud'
+import { Route as AppProjectSlugCompareRouteImport } from './routes/_app/project/$slug/compare'
+import { Route as AppProjectSlugFindRouteImport } from './routes/_app/project/$slug/find'
+import { Route as AppProjectSlugFindingsRouteImport } from './routes/_app/project/$slug/findings'
+import { Route as AppProjectSlugHistoryRouteImport } from './routes/_app/project/$slug/history'
+import { Route as AppProjectSlugInventoryRouteImport } from './routes/_app/project/$slug/inventory'
+import { Route as AppProjectSlugPlaygroundRouteImport } from './routes/_app/project/$slug/playground'
+import { Route as AppProjectSlugReviewRouteImport } from './routes/_app/project/$slug/review'
+import { Route as AppProjectSlugTermsRouteImport } from './routes/_app/project/$slug/terms'
+import { Route as AppProjectSlugBookBookRouteImport } from './routes/_app/project/$slug/book/$book'
 
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DesignRoute = DesignRouteImport.update({
@@ -39,154 +39,161 @@ const DesignRoute = DesignRouteImport.update({
   path: '/design',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProjectsRoute = ProjectsRouteImport.update({
-  id: '/projects',
-  path: '/projects',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SettingsRoute = SettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DevFixtureRoute = DevFixtureRouteImport.update({
-  id: '/dev/fixture',
-  path: '/dev/fixture',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ProjectSlugRoute = ProjectSlugRouteImport.update({
-  id: '/project/$slug',
-  path: '/project/$slug',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const StartCreateRoute = StartCreateRouteImport.update({
-  id: '/start/create',
-  path: '/start/create',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const StartFindRoute = StartFindRouteImport.update({
-  id: '/start/find',
-  path: '/start/find',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ProjectSlugIndexRoute = ProjectSlugIndexRouteImport.update({
+const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => ProjectSlugRoute,
+  getParentRoute: () => AppRoute,
 } as any)
-const ProjectSlugCloudRoute = ProjectSlugCloudRouteImport.update({
+const AppProjectsRoute = AppProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSettingsRoute = AppSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDevFixtureRoute = AppDevFixtureRouteImport.update({
+  id: '/dev/fixture',
+  path: '/dev/fixture',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProjectSlugRoute = AppProjectSlugRouteImport.update({
+  id: '/project/$slug',
+  path: '/project/$slug',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppStartCreateRoute = AppStartCreateRouteImport.update({
+  id: '/start/create',
+  path: '/start/create',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppStartFindRoute = AppStartFindRouteImport.update({
+  id: '/start/find',
+  path: '/start/find',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProjectSlugIndexRoute = AppProjectSlugIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppProjectSlugRoute,
+} as any)
+const AppProjectSlugCloudRoute = AppProjectSlugCloudRouteImport.update({
   id: '/cloud',
   path: '/cloud',
-  getParentRoute: () => ProjectSlugRoute,
+  getParentRoute: () => AppProjectSlugRoute,
 } as any)
-const ProjectSlugCompareRoute = ProjectSlugCompareRouteImport.update({
+const AppProjectSlugCompareRoute = AppProjectSlugCompareRouteImport.update({
   id: '/compare',
   path: '/compare',
-  getParentRoute: () => ProjectSlugRoute,
+  getParentRoute: () => AppProjectSlugRoute,
 } as any)
-const ProjectSlugFindRoute = ProjectSlugFindRouteImport.update({
+const AppProjectSlugFindRoute = AppProjectSlugFindRouteImport.update({
   id: '/find',
   path: '/find',
-  getParentRoute: () => ProjectSlugRoute,
+  getParentRoute: () => AppProjectSlugRoute,
 } as any)
-const ProjectSlugFindingsRoute = ProjectSlugFindingsRouteImport.update({
+const AppProjectSlugFindingsRoute = AppProjectSlugFindingsRouteImport.update({
   id: '/findings',
   path: '/findings',
-  getParentRoute: () => ProjectSlugRoute,
+  getParentRoute: () => AppProjectSlugRoute,
 } as any)
-const ProjectSlugHistoryRoute = ProjectSlugHistoryRouteImport.update({
+const AppProjectSlugHistoryRoute = AppProjectSlugHistoryRouteImport.update({
   id: '/history',
   path: '/history',
-  getParentRoute: () => ProjectSlugRoute,
+  getParentRoute: () => AppProjectSlugRoute,
 } as any)
-const ProjectSlugInventoryRoute = ProjectSlugInventoryRouteImport.update({
+const AppProjectSlugInventoryRoute = AppProjectSlugInventoryRouteImport.update({
   id: '/inventory',
   path: '/inventory',
-  getParentRoute: () => ProjectSlugRoute,
+  getParentRoute: () => AppProjectSlugRoute,
 } as any)
-const ProjectSlugPlaygroundRoute = ProjectSlugPlaygroundRouteImport.update({
-  id: '/playground',
-  path: '/playground',
-  getParentRoute: () => ProjectSlugRoute,
-} as any)
-const ProjectSlugReviewRoute = ProjectSlugReviewRouteImport.update({
+const AppProjectSlugPlaygroundRoute =
+  AppProjectSlugPlaygroundRouteImport.update({
+    id: '/playground',
+    path: '/playground',
+    getParentRoute: () => AppProjectSlugRoute,
+  } as any)
+const AppProjectSlugReviewRoute = AppProjectSlugReviewRouteImport.update({
   id: '/review',
   path: '/review',
-  getParentRoute: () => ProjectSlugRoute,
+  getParentRoute: () => AppProjectSlugRoute,
 } as any)
-const ProjectSlugTermsRoute = ProjectSlugTermsRouteImport.update({
+const AppProjectSlugTermsRoute = AppProjectSlugTermsRouteImport.update({
   id: '/terms',
   path: '/terms',
-  getParentRoute: () => ProjectSlugRoute,
+  getParentRoute: () => AppProjectSlugRoute,
 } as any)
-const ProjectSlugBookBookRoute = ProjectSlugBookBookRouteImport.update({
+const AppProjectSlugBookBookRoute = AppProjectSlugBookBookRouteImport.update({
   id: '/book/$book',
   path: '/book/$book',
-  getParentRoute: () => ProjectSlugRoute,
+  getParentRoute: () => AppProjectSlugRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
+  '/': typeof AppIndexRoute
   '/design': typeof DesignRoute
-  '/projects': typeof ProjectsRoute
-  '/settings': typeof SettingsRoute
-  '/dev/fixture': typeof DevFixtureRoute
-  '/project/$slug': typeof ProjectSlugRouteWithChildren
-  '/start/create': typeof StartCreateRoute
-  '/start/find': typeof StartFindRoute
-  '/project/$slug/cloud': typeof ProjectSlugCloudRoute
-  '/project/$slug/compare': typeof ProjectSlugCompareRoute
-  '/project/$slug/find': typeof ProjectSlugFindRoute
-  '/project/$slug/findings': typeof ProjectSlugFindingsRoute
-  '/project/$slug/history': typeof ProjectSlugHistoryRoute
-  '/project/$slug/inventory': typeof ProjectSlugInventoryRoute
-  '/project/$slug/playground': typeof ProjectSlugPlaygroundRoute
-  '/project/$slug/review': typeof ProjectSlugReviewRoute
-  '/project/$slug/terms': typeof ProjectSlugTermsRoute
-  '/project/$slug/': typeof ProjectSlugIndexRoute
-  '/project/$slug/book/$book': typeof ProjectSlugBookBookRoute
+  '/projects': typeof AppProjectsRoute
+  '/settings': typeof AppSettingsRoute
+  '/dev/fixture': typeof AppDevFixtureRoute
+  '/project/$slug': typeof AppProjectSlugRouteWithChildren
+  '/start/create': typeof AppStartCreateRoute
+  '/start/find': typeof AppStartFindRoute
+  '/project/$slug/cloud': typeof AppProjectSlugCloudRoute
+  '/project/$slug/compare': typeof AppProjectSlugCompareRoute
+  '/project/$slug/find': typeof AppProjectSlugFindRoute
+  '/project/$slug/findings': typeof AppProjectSlugFindingsRoute
+  '/project/$slug/history': typeof AppProjectSlugHistoryRoute
+  '/project/$slug/inventory': typeof AppProjectSlugInventoryRoute
+  '/project/$slug/playground': typeof AppProjectSlugPlaygroundRoute
+  '/project/$slug/review': typeof AppProjectSlugReviewRoute
+  '/project/$slug/terms': typeof AppProjectSlugTermsRoute
+  '/project/$slug/': typeof AppProjectSlugIndexRoute
+  '/project/$slug/book/$book': typeof AppProjectSlugBookBookRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
   '/design': typeof DesignRoute
-  '/projects': typeof ProjectsRoute
-  '/settings': typeof SettingsRoute
-  '/dev/fixture': typeof DevFixtureRoute
-  '/start/create': typeof StartCreateRoute
-  '/start/find': typeof StartFindRoute
-  '/project/$slug/cloud': typeof ProjectSlugCloudRoute
-  '/project/$slug/compare': typeof ProjectSlugCompareRoute
-  '/project/$slug/find': typeof ProjectSlugFindRoute
-  '/project/$slug/findings': typeof ProjectSlugFindingsRoute
-  '/project/$slug/history': typeof ProjectSlugHistoryRoute
-  '/project/$slug/inventory': typeof ProjectSlugInventoryRoute
-  '/project/$slug/playground': typeof ProjectSlugPlaygroundRoute
-  '/project/$slug/review': typeof ProjectSlugReviewRoute
-  '/project/$slug/terms': typeof ProjectSlugTermsRoute
-  '/project/$slug': typeof ProjectSlugIndexRoute
-  '/project/$slug/book/$book': typeof ProjectSlugBookBookRoute
+  '/projects': typeof AppProjectsRoute
+  '/settings': typeof AppSettingsRoute
+  '/': typeof AppIndexRoute
+  '/dev/fixture': typeof AppDevFixtureRoute
+  '/start/create': typeof AppStartCreateRoute
+  '/start/find': typeof AppStartFindRoute
+  '/project/$slug/cloud': typeof AppProjectSlugCloudRoute
+  '/project/$slug/compare': typeof AppProjectSlugCompareRoute
+  '/project/$slug/find': typeof AppProjectSlugFindRoute
+  '/project/$slug/findings': typeof AppProjectSlugFindingsRoute
+  '/project/$slug/history': typeof AppProjectSlugHistoryRoute
+  '/project/$slug/inventory': typeof AppProjectSlugInventoryRoute
+  '/project/$slug/playground': typeof AppProjectSlugPlaygroundRoute
+  '/project/$slug/review': typeof AppProjectSlugReviewRoute
+  '/project/$slug/terms': typeof AppProjectSlugTermsRoute
+  '/project/$slug': typeof AppProjectSlugIndexRoute
+  '/project/$slug/book/$book': typeof AppProjectSlugBookBookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
+  '/_app': typeof AppRouteWithChildren
   '/design': typeof DesignRoute
-  '/projects': typeof ProjectsRoute
-  '/settings': typeof SettingsRoute
-  '/dev/fixture': typeof DevFixtureRoute
-  '/project/$slug': typeof ProjectSlugRouteWithChildren
-  '/start/create': typeof StartCreateRoute
-  '/start/find': typeof StartFindRoute
-  '/project/$slug/cloud': typeof ProjectSlugCloudRoute
-  '/project/$slug/compare': typeof ProjectSlugCompareRoute
-  '/project/$slug/find': typeof ProjectSlugFindRoute
-  '/project/$slug/findings': typeof ProjectSlugFindingsRoute
-  '/project/$slug/history': typeof ProjectSlugHistoryRoute
-  '/project/$slug/inventory': typeof ProjectSlugInventoryRoute
-  '/project/$slug/playground': typeof ProjectSlugPlaygroundRoute
-  '/project/$slug/review': typeof ProjectSlugReviewRoute
-  '/project/$slug/terms': typeof ProjectSlugTermsRoute
-  '/project/$slug/': typeof ProjectSlugIndexRoute
-  '/project/$slug/book/$book': typeof ProjectSlugBookBookRoute
+  '/_app/projects': typeof AppProjectsRoute
+  '/_app/settings': typeof AppSettingsRoute
+  '/_app/': typeof AppIndexRoute
+  '/_app/dev/fixture': typeof AppDevFixtureRoute
+  '/_app/project/$slug': typeof AppProjectSlugRouteWithChildren
+  '/_app/start/create': typeof AppStartCreateRoute
+  '/_app/start/find': typeof AppStartFindRoute
+  '/_app/project/$slug/cloud': typeof AppProjectSlugCloudRoute
+  '/_app/project/$slug/compare': typeof AppProjectSlugCompareRoute
+  '/_app/project/$slug/find': typeof AppProjectSlugFindRoute
+  '/_app/project/$slug/findings': typeof AppProjectSlugFindingsRoute
+  '/_app/project/$slug/history': typeof AppProjectSlugHistoryRoute
+  '/_app/project/$slug/inventory': typeof AppProjectSlugInventoryRoute
+  '/_app/project/$slug/playground': typeof AppProjectSlugPlaygroundRoute
+  '/_app/project/$slug/review': typeof AppProjectSlugReviewRoute
+  '/_app/project/$slug/terms': typeof AppProjectSlugTermsRoute
+  '/_app/project/$slug/': typeof AppProjectSlugIndexRoute
+  '/_app/project/$slug/book/$book': typeof AppProjectSlugBookBookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -212,10 +219,10 @@ export interface FileRouteTypes {
     | '/project/$slug/book/$book'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | '/'
     | '/design'
     | '/projects'
     | '/settings'
+    | '/'
     | '/dev/fixture'
     | '/start/create'
     | '/start/find'
@@ -232,45 +239,40 @@ export interface FileRouteTypes {
     | '/project/$slug/book/$book'
   id:
     | '__root__'
-    | '/'
+    | '/_app'
     | '/design'
-    | '/projects'
-    | '/settings'
-    | '/dev/fixture'
-    | '/project/$slug'
-    | '/start/create'
-    | '/start/find'
-    | '/project/$slug/cloud'
-    | '/project/$slug/compare'
-    | '/project/$slug/find'
-    | '/project/$slug/findings'
-    | '/project/$slug/history'
-    | '/project/$slug/inventory'
-    | '/project/$slug/playground'
-    | '/project/$slug/review'
-    | '/project/$slug/terms'
-    | '/project/$slug/'
-    | '/project/$slug/book/$book'
+    | '/_app/projects'
+    | '/_app/settings'
+    | '/_app/'
+    | '/_app/dev/fixture'
+    | '/_app/project/$slug'
+    | '/_app/start/create'
+    | '/_app/start/find'
+    | '/_app/project/$slug/cloud'
+    | '/_app/project/$slug/compare'
+    | '/_app/project/$slug/find'
+    | '/_app/project/$slug/findings'
+    | '/_app/project/$slug/history'
+    | '/_app/project/$slug/inventory'
+    | '/_app/project/$slug/playground'
+    | '/_app/project/$slug/review'
+    | '/_app/project/$slug/terms'
+    | '/_app/project/$slug/'
+    | '/_app/project/$slug/book/$book'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
+  AppRoute: typeof AppRouteWithChildren
   DesignRoute: typeof DesignRoute
-  ProjectsRoute: typeof ProjectsRoute
-  SettingsRoute: typeof SettingsRoute
-  DevFixtureRoute: typeof DevFixtureRoute
-  ProjectSlugRoute: typeof ProjectSlugRouteWithChildren
-  StartCreateRoute: typeof StartCreateRoute
-  StartFindRoute: typeof StartFindRoute
 }
 
 declare module '@tanstack/solid-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
+    '/_app': {
+      id: '/_app'
+      path: ''
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+      preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/design': {
@@ -280,169 +282,192 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof DesignRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/projects': {
-      id: '/projects'
+    '/_app/': {
+      id: '/_app/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/projects': {
+      id: '/_app/projects'
       path: '/projects'
       fullPath: '/projects'
-      preLoaderRoute: typeof ProjectsRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppProjectsRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/settings': {
-      id: '/settings'
+    '/_app/settings': {
+      id: '/_app/settings'
       path: '/settings'
       fullPath: '/settings'
-      preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/dev/fixture': {
-      id: '/dev/fixture'
+    '/_app/dev/fixture': {
+      id: '/_app/dev/fixture'
       path: '/dev/fixture'
       fullPath: '/dev/fixture'
-      preLoaderRoute: typeof DevFixtureRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppDevFixtureRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/project/$slug': {
-      id: '/project/$slug'
+    '/_app/project/$slug': {
+      id: '/_app/project/$slug'
       path: '/project/$slug'
       fullPath: '/project/$slug'
-      preLoaderRoute: typeof ProjectSlugRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppProjectSlugRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/start/create': {
-      id: '/start/create'
+    '/_app/start/create': {
+      id: '/_app/start/create'
       path: '/start/create'
       fullPath: '/start/create'
-      preLoaderRoute: typeof StartCreateRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppStartCreateRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/start/find': {
-      id: '/start/find'
+    '/_app/start/find': {
+      id: '/_app/start/find'
       path: '/start/find'
       fullPath: '/start/find'
-      preLoaderRoute: typeof StartFindRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppStartFindRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/project/$slug/': {
-      id: '/project/$slug/'
+    '/_app/project/$slug/': {
+      id: '/_app/project/$slug/'
       path: '/'
       fullPath: '/project/$slug/'
-      preLoaderRoute: typeof ProjectSlugIndexRouteImport
-      parentRoute: typeof ProjectSlugRoute
+      preLoaderRoute: typeof AppProjectSlugIndexRouteImport
+      parentRoute: typeof AppProjectSlugRoute
     }
-    '/project/$slug/cloud': {
-      id: '/project/$slug/cloud'
+    '/_app/project/$slug/cloud': {
+      id: '/_app/project/$slug/cloud'
       path: '/cloud'
       fullPath: '/project/$slug/cloud'
-      preLoaderRoute: typeof ProjectSlugCloudRouteImport
-      parentRoute: typeof ProjectSlugRoute
+      preLoaderRoute: typeof AppProjectSlugCloudRouteImport
+      parentRoute: typeof AppProjectSlugRoute
     }
-    '/project/$slug/compare': {
-      id: '/project/$slug/compare'
+    '/_app/project/$slug/compare': {
+      id: '/_app/project/$slug/compare'
       path: '/compare'
       fullPath: '/project/$slug/compare'
-      preLoaderRoute: typeof ProjectSlugCompareRouteImport
-      parentRoute: typeof ProjectSlugRoute
+      preLoaderRoute: typeof AppProjectSlugCompareRouteImport
+      parentRoute: typeof AppProjectSlugRoute
     }
-    '/project/$slug/find': {
-      id: '/project/$slug/find'
+    '/_app/project/$slug/find': {
+      id: '/_app/project/$slug/find'
       path: '/find'
       fullPath: '/project/$slug/find'
-      preLoaderRoute: typeof ProjectSlugFindRouteImport
-      parentRoute: typeof ProjectSlugRoute
+      preLoaderRoute: typeof AppProjectSlugFindRouteImport
+      parentRoute: typeof AppProjectSlugRoute
     }
-    '/project/$slug/findings': {
-      id: '/project/$slug/findings'
+    '/_app/project/$slug/findings': {
+      id: '/_app/project/$slug/findings'
       path: '/findings'
       fullPath: '/project/$slug/findings'
-      preLoaderRoute: typeof ProjectSlugFindingsRouteImport
-      parentRoute: typeof ProjectSlugRoute
+      preLoaderRoute: typeof AppProjectSlugFindingsRouteImport
+      parentRoute: typeof AppProjectSlugRoute
     }
-    '/project/$slug/history': {
-      id: '/project/$slug/history'
+    '/_app/project/$slug/history': {
+      id: '/_app/project/$slug/history'
       path: '/history'
       fullPath: '/project/$slug/history'
-      preLoaderRoute: typeof ProjectSlugHistoryRouteImport
-      parentRoute: typeof ProjectSlugRoute
+      preLoaderRoute: typeof AppProjectSlugHistoryRouteImport
+      parentRoute: typeof AppProjectSlugRoute
     }
-    '/project/$slug/inventory': {
-      id: '/project/$slug/inventory'
+    '/_app/project/$slug/inventory': {
+      id: '/_app/project/$slug/inventory'
       path: '/inventory'
       fullPath: '/project/$slug/inventory'
-      preLoaderRoute: typeof ProjectSlugInventoryRouteImport
-      parentRoute: typeof ProjectSlugRoute
+      preLoaderRoute: typeof AppProjectSlugInventoryRouteImport
+      parentRoute: typeof AppProjectSlugRoute
     }
-    '/project/$slug/playground': {
-      id: '/project/$slug/playground'
+    '/_app/project/$slug/playground': {
+      id: '/_app/project/$slug/playground'
       path: '/playground'
       fullPath: '/project/$slug/playground'
-      preLoaderRoute: typeof ProjectSlugPlaygroundRouteImport
-      parentRoute: typeof ProjectSlugRoute
+      preLoaderRoute: typeof AppProjectSlugPlaygroundRouteImport
+      parentRoute: typeof AppProjectSlugRoute
     }
-    '/project/$slug/review': {
-      id: '/project/$slug/review'
+    '/_app/project/$slug/review': {
+      id: '/_app/project/$slug/review'
       path: '/review'
       fullPath: '/project/$slug/review'
-      preLoaderRoute: typeof ProjectSlugReviewRouteImport
-      parentRoute: typeof ProjectSlugRoute
+      preLoaderRoute: typeof AppProjectSlugReviewRouteImport
+      parentRoute: typeof AppProjectSlugRoute
     }
-    '/project/$slug/terms': {
-      id: '/project/$slug/terms'
+    '/_app/project/$slug/terms': {
+      id: '/_app/project/$slug/terms'
       path: '/terms'
       fullPath: '/project/$slug/terms'
-      preLoaderRoute: typeof ProjectSlugTermsRouteImport
-      parentRoute: typeof ProjectSlugRoute
+      preLoaderRoute: typeof AppProjectSlugTermsRouteImport
+      parentRoute: typeof AppProjectSlugRoute
     }
-    '/project/$slug/book/$book': {
-      id: '/project/$slug/book/$book'
+    '/_app/project/$slug/book/$book': {
+      id: '/_app/project/$slug/book/$book'
       path: '/book/$book'
       fullPath: '/project/$slug/book/$book'
-      preLoaderRoute: typeof ProjectSlugBookBookRouteImport
-      parentRoute: typeof ProjectSlugRoute
+      preLoaderRoute: typeof AppProjectSlugBookBookRouteImport
+      parentRoute: typeof AppProjectSlugRoute
     }
   }
 }
 
-interface ProjectSlugRouteChildren {
-  ProjectSlugCloudRoute: typeof ProjectSlugCloudRoute
-  ProjectSlugCompareRoute: typeof ProjectSlugCompareRoute
-  ProjectSlugFindRoute: typeof ProjectSlugFindRoute
-  ProjectSlugFindingsRoute: typeof ProjectSlugFindingsRoute
-  ProjectSlugHistoryRoute: typeof ProjectSlugHistoryRoute
-  ProjectSlugInventoryRoute: typeof ProjectSlugInventoryRoute
-  ProjectSlugPlaygroundRoute: typeof ProjectSlugPlaygroundRoute
-  ProjectSlugReviewRoute: typeof ProjectSlugReviewRoute
-  ProjectSlugTermsRoute: typeof ProjectSlugTermsRoute
-  ProjectSlugIndexRoute: typeof ProjectSlugIndexRoute
-  ProjectSlugBookBookRoute: typeof ProjectSlugBookBookRoute
+interface AppProjectSlugRouteChildren {
+  AppProjectSlugCloudRoute: typeof AppProjectSlugCloudRoute
+  AppProjectSlugCompareRoute: typeof AppProjectSlugCompareRoute
+  AppProjectSlugFindRoute: typeof AppProjectSlugFindRoute
+  AppProjectSlugFindingsRoute: typeof AppProjectSlugFindingsRoute
+  AppProjectSlugHistoryRoute: typeof AppProjectSlugHistoryRoute
+  AppProjectSlugInventoryRoute: typeof AppProjectSlugInventoryRoute
+  AppProjectSlugPlaygroundRoute: typeof AppProjectSlugPlaygroundRoute
+  AppProjectSlugReviewRoute: typeof AppProjectSlugReviewRoute
+  AppProjectSlugTermsRoute: typeof AppProjectSlugTermsRoute
+  AppProjectSlugIndexRoute: typeof AppProjectSlugIndexRoute
+  AppProjectSlugBookBookRoute: typeof AppProjectSlugBookBookRoute
 }
 
-const ProjectSlugRouteChildren: ProjectSlugRouteChildren = {
-  ProjectSlugCloudRoute: ProjectSlugCloudRoute,
-  ProjectSlugCompareRoute: ProjectSlugCompareRoute,
-  ProjectSlugFindRoute: ProjectSlugFindRoute,
-  ProjectSlugFindingsRoute: ProjectSlugFindingsRoute,
-  ProjectSlugHistoryRoute: ProjectSlugHistoryRoute,
-  ProjectSlugInventoryRoute: ProjectSlugInventoryRoute,
-  ProjectSlugPlaygroundRoute: ProjectSlugPlaygroundRoute,
-  ProjectSlugReviewRoute: ProjectSlugReviewRoute,
-  ProjectSlugTermsRoute: ProjectSlugTermsRoute,
-  ProjectSlugIndexRoute: ProjectSlugIndexRoute,
-  ProjectSlugBookBookRoute: ProjectSlugBookBookRoute,
+const AppProjectSlugRouteChildren: AppProjectSlugRouteChildren = {
+  AppProjectSlugCloudRoute: AppProjectSlugCloudRoute,
+  AppProjectSlugCompareRoute: AppProjectSlugCompareRoute,
+  AppProjectSlugFindRoute: AppProjectSlugFindRoute,
+  AppProjectSlugFindingsRoute: AppProjectSlugFindingsRoute,
+  AppProjectSlugHistoryRoute: AppProjectSlugHistoryRoute,
+  AppProjectSlugInventoryRoute: AppProjectSlugInventoryRoute,
+  AppProjectSlugPlaygroundRoute: AppProjectSlugPlaygroundRoute,
+  AppProjectSlugReviewRoute: AppProjectSlugReviewRoute,
+  AppProjectSlugTermsRoute: AppProjectSlugTermsRoute,
+  AppProjectSlugIndexRoute: AppProjectSlugIndexRoute,
+  AppProjectSlugBookBookRoute: AppProjectSlugBookBookRoute,
 }
 
-const ProjectSlugRouteWithChildren = ProjectSlugRoute._addFileChildren(
-  ProjectSlugRouteChildren,
+const AppProjectSlugRouteWithChildren = AppProjectSlugRoute._addFileChildren(
+  AppProjectSlugRouteChildren,
 )
 
+interface AppRouteChildren {
+  AppProjectsRoute: typeof AppProjectsRoute
+  AppSettingsRoute: typeof AppSettingsRoute
+  AppIndexRoute: typeof AppIndexRoute
+  AppDevFixtureRoute: typeof AppDevFixtureRoute
+  AppProjectSlugRoute: typeof AppProjectSlugRouteWithChildren
+  AppStartCreateRoute: typeof AppStartCreateRoute
+  AppStartFindRoute: typeof AppStartFindRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppProjectsRoute: AppProjectsRoute,
+  AppSettingsRoute: AppSettingsRoute,
+  AppIndexRoute: AppIndexRoute,
+  AppDevFixtureRoute: AppDevFixtureRoute,
+  AppProjectSlugRoute: AppProjectSlugRouteWithChildren,
+  AppStartCreateRoute: AppStartCreateRoute,
+  AppStartFindRoute: AppStartFindRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
+  AppRoute: AppRouteWithChildren,
   DesignRoute: DesignRoute,
-  ProjectsRoute: ProjectsRoute,
-  SettingsRoute: SettingsRoute,
-  DevFixtureRoute: DevFixtureRoute,
-  ProjectSlugRoute: ProjectSlugRouteWithChildren,
-  StartCreateRoute: StartCreateRoute,
-  StartFindRoute: StartFindRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

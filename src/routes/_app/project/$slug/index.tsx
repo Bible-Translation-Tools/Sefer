@@ -1,12 +1,12 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/solid-router";
 import { For, Show, createEffect, createSignal, untrack } from "solid-js";
 
-import { runCommand } from "../../../app/commands";
-import { t } from "../../../app/i18n";
-import { useShell } from "../../../app/ProjectContext";
-import { CloudPanel } from "../../../app/ui/CloudPanel";
-import { Badge, Button, Card, PanelHeader } from "../../../app/ui/primitives";
-import { RecoveryBanner } from "../../../app/ui/recovery/RecoveryBanner";
+import { runCommand } from "../../../../app/commands";
+import { t } from "../../../../app/i18n";
+import { useShell } from "../../../../app/ProjectContext";
+import { CloudPanel } from "../../../../app/ui/CloudPanel";
+import { Badge, Button, Card, PanelHeader } from "../../../../app/ui/primitives";
+import { RecoveryBanner } from "../../../../app/ui/recovery/RecoveryBanner";
 
 /**
  * One project: the book census, and which books have unsaved work.
@@ -160,7 +160,7 @@ function ProjectPage(props: { readonly root: string }) {
   );
 }
 
-export const Route = createFileRoute("/project/$slug/")({
+export const Route = createFileRoute("/_app/project/$slug/")({
   head: () => ({ meta: [{ title: "Sefer — project" }] }),
   // No `ShellGate` and no root param: the parent route (`project/$slug`)
   // gated on the shell AND opened the project, so by the time this renders

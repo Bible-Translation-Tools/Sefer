@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/solid-router";
 
-import { ReviewPanel } from "../../../app/ui/review";
-import { ShellGate } from "../../../app/ui/ShellGate";
+import { ReviewPanel } from "../../../../app/ui/review";
+import { ShellGate } from "../../../../app/ui/ShellGate";
 
 /**
  * `/review` — the one review screen, gated on the shell.
@@ -15,7 +15,7 @@ import { ShellGate } from "../../../app/ui/ShellGate";
  * not a search param: a picked zip has no address to put in one, and a frozen
  * comparison is session state, not a place.
  */
-export const Route = createFileRoute("/project/$slug/review")({
+export const Route = createFileRoute("/_app/project/$slug/review")({
   head: () => ({ meta: [{ title: "Sefer — review" }] }),
   component: () => <ShellGate>{() => <ReviewPanel />}</ShellGate>,
 });

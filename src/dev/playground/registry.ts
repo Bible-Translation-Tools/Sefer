@@ -17,7 +17,7 @@
  *
  * Both globs are eager and both are inside `src/dev`, which the route only
  * imports behind `import.meta.env.DEV` — so none of this reaches a production
- * bundle. See `src/routes/project/$slug/playground.tsx`.
+ * bundle. See `src/routes/_app/project/$slug/playground.tsx`.
  */
 
 import { isExperiment, type Experiment } from "./experiment";

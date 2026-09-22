@@ -6,9 +6,9 @@ Where a project comes from, and what each host can actually do about it. Everyth
 
 | route | file | what it is |
 |---|---|---|
-| `/` and `/projects` | `src/routes/index.tsx`, `src/routes/projects.tsx` | both render `ProjectsLanding` — what is on this device, plus the three ways to add to it |
-| `/start/find` | `src/routes/start/find.tsx` | the remote catalogue |
-| `/start/create` | `src/routes/start/create.tsx` | the create form, which stops one step short of writing (below) |
+| `/` and `/projects` | `src/routes/_app/index.tsx`, `src/routes/_app/projects.tsx` | both render `ProjectsLanding` — what is on this device, plus the three ways to add to it |
+| `/start/find` | `src/routes/_app/start/find.tsx` | the remote catalogue |
+| `/start/create` | `src/routes/_app/start/create.tsx` | the create form, which stops one step short of writing (below) |
 
 `/` renders the landing rather than redirecting to `/projects`, because the composition reads `?fixture=1` off `location` before the router exists and a redirect that dropped the search would compose over OPFS instead of the seeded fixture. For the same reason every crumb and every tab switch passes `search: true`.
 

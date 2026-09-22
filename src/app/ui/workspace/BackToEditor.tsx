@@ -55,8 +55,10 @@ export function BackToEditor() {
    */
   const away = (): boolean =>
     shell.project() !== undefined &&
-    routeId() !== "/project/$slug/book/$book" &&
-    routeId() !== "/project/$slug/";
+    // `_app` is the pathless layout every workspace screen sits under, so it
+    // is part of the ROUTE ID while absent from the URL. See `routes/_app.tsx`.
+    routeId() !== "/_app/project/$slug/book/$book" &&
+    routeId() !== "/_app/project/$slug/";
 
   const label = (): string => {
     const project = shell.project();

@@ -80,6 +80,12 @@ One instance, mounted from `src/routes/__root.tsx`, on **every** route. A
 remark like "this input does not autofocus when the dialog opens" is about a
 real screen, and pointing at a pixel should work wherever the pixel is.
 
+It stays on the ROOT rather than moving down with the workspace chrome into
+`_app.tsx`, and that placement is the point of it: a comment about a real
+screen and a comment about a prototype are the same gesture, and a panel that
+existed only inside one frame would be a panel you cannot use to compare them.
+`/design` therefore has no rail and no status line but does have the panel.
+
 * On a real screen: comment-only, minimised to a puck, **no hotkey** (a bare
   `c` over CodeMirror competes with the editor).
 * On `/design`: the same panel, reconfigured with that screen's variants and

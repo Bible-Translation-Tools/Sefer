@@ -2,23 +2,23 @@ import { createFileRoute, useNavigate } from "@tanstack/solid-router";
 import { Effect, Option, Result } from "effect";
 import { createEffect, createMemo, createSignal, Show, untrack } from "solid-js";
 
-import { t } from "../../../app/i18n";
-import { useShell } from "../../../app/ProjectContext";
-import { createExcerptFeed, StetView } from "../../../app/ui/excerpts";
-import { PanelHeader } from "../../../app/ui/primitives";
-import { ShellGate } from "../../../app/ui/ShellGate";
+import { t } from "../../../../app/i18n";
+import { useShell } from "../../../../app/ProjectContext";
+import { createExcerptFeed, StetView } from "../../../../app/ui/excerpts";
+import { PanelHeader } from "../../../../app/ui/primitives";
+import { ShellGate } from "../../../../app/ui/ShellGate";
 import {
   keyTermGuides,
   keyTerms,
   occurrenceRef,
   sourceReadings,
   type SourceReading,
-} from "../../../app/workflows/stet";
-import type { Ref } from "../../../core/book/book";
-import { refOccurrences, type BookText, type Occurrence } from "../../../core/excerpts/excerpts";
-import { describesExactly } from "../../../core/galley";
-import { DEFAULT_LOCALE } from "../../../core/stet/fixture";
-import type { Guide, Term } from "../../../core/stet/stet";
+} from "../../../../app/workflows/stet";
+import type { Ref } from "../../../../core/book/book";
+import { refOccurrences, type BookText, type Occurrence } from "../../../../core/excerpts/excerpts";
+import { describesExactly } from "../../../../core/galley";
+import { DEFAULT_LOCALE } from "../../../../core/stet/fixture";
+import type { Guide, Term } from "../../../../core/stet/stet";
 
 /**
  * `/terms` — Key terms (STET), its own pane.
@@ -250,7 +250,7 @@ function Terms() {
   );
 }
 
-export const Route = createFileRoute("/project/$slug/terms")({
+export const Route = createFileRoute("/_app/project/$slug/terms")({
   validateSearch: (search: Record<string, unknown>): TermsSearch => ({
     ...(typeof search["term"] === "string" && search["term"] !== ""
       ? { term: search["term"] }
