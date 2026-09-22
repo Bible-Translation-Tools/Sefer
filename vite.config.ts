@@ -168,6 +168,13 @@ export default defineConfig(({ mode }) => {
             browser: {
               enabled: true,
               provider: playwright(),
+              // Stated rather than left to the default, which is headless in
+              // CI and HEADED on a laptop — so the suite raised a Chromium
+              // window over whatever the person was doing, and on macOS took
+              // the keyboard with it. Nothing here needs to be watched: a
+              // failure is read from the terminal. `--browser.headless=false`
+              // is still there for the run where you do want to watch.
+              headless: true,
               instances: [{ browser: "chromium" }],
             },
           },
