@@ -1,9 +1,10 @@
 // Sefer's web build as a Cloudflare static-assets Worker.
 //
-// Routes are COMMENTED OUT until DNS exists. Each channel deploys to its own
-// `*.workers.dev` subdomain in the meantime, which is a real working URL and
-// lets the pipeline be armed today. Uncomment a channel's `routes` block the
-// moment its hostname is registered; nothing else changes.
+// Each channel has a custom domain. Wrangler provisions the DNS record on
+// deploy — the deploy token carries `zone.workers.routes` across the account's
+// zones, which is what a Custom Domain is created through — so the hostname
+// does not have to exist beforehand. A channel also keeps answering on its
+// `*.workers.dev` subdomain.
 //
 // Modelled on scripture-editor-proto-2's `wrangler.jsonc`, which is the shape
 // this organisation already runs.
@@ -36,10 +37,9 @@
     // release lint that refuses leftover design scaffolding.
     "production": {
       "name": "sefer-web-production",
-      // Uncomment when sefer.bibletranslationtools.org is registered.
-      // "routes": [
-      //   { "pattern": "sefer.bibletranslationtools.org", "custom_domain": true, "zone_name": "bibletranslationtools.org" },
-      // ],
+      "routes": [
+        { "pattern": "sefer.bibletranslationtools.org", "custom_domain": true, "zone_name": "bibletranslationtools.org" },
+      ],
     },
 
     // A PROMOTION — `workflow_dispatch`, or a `v0.3.0-1` candidate tag. Not every
@@ -49,10 +49,9 @@
     // broken Preview.
     "preview": {
       "name": "sefer-web-preview",
-      // Uncomment when sefer-preview.bttdev.org is registered.
-      // "routes": [
-      //   { "pattern": "sefer-preview.bttdev.org", "custom_domain": true, "zone_name": "bttdev.org" },
-      // ],
+      "routes": [
+        { "pattern": "sefer-preview.bttdev.org", "custom_domain": true, "zone_name": "bttdev.org" },
+      ],
     },
 
     // Every push to master, web only, built `--mode dev`. The ONE deployed
@@ -64,10 +63,9 @@
     // rather than a matrix.
     "dev": {
       "name": "sefer-web-dev",
-      // Uncomment when sefer-dev.bttdev.org is registered.
-      // "routes": [
-      //   { "pattern": "sefer-dev.bttdev.org", "custom_domain": true, "zone_name": "bttdev.org" },
-      // ],
+      "routes": [
+        { "pattern": "sefer-dev.bttdev.org", "custom_domain": true, "zone_name": "bttdev.org" },
+      ],
     },
   },
 }

@@ -174,8 +174,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # TODO placeholder path. The old repo uses op://DevOps/Scripture-Editor;
-      # Sefer needs its own item with these two fields before this resolves.
       - name: Source secrets
         uses: 1password/load-secrets-action@v3
         with:

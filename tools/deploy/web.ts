@@ -13,10 +13,10 @@
  * in a table here means CI cannot get it half-right, and somebody deploying by
  * hand runs the same code CI does.
  *
- * STUB, in the sense that the hostnames it deploys to are placeholders in
- * `wrangler.jsonc` and the credentials come from a 1Password vault that has no
- * Sefer entry yet. The script itself is real: `--dry` works today and prints
- * exactly what would run.
+ * Real, and armed: `wrangler.jsonc` carries each channel's custom domain, the
+ * credentials resolve from `op://DevOps/Sefer`, and wrangler provisions the
+ * hostname on the first deploy rather than needing it registered first.
+ * `--dry` still builds and prints the command without shipping.
  */
 
 import { execFileSync } from "node:child_process";
