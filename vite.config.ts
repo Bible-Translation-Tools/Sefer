@@ -73,8 +73,10 @@ const galleyTag = (): string => {
 
 export default defineConfig(({ mode }) => {
   // The one answer to "does this build carry the design surface", shared by
-  // the `__SEFER_DESIGN__` define below and the JSX-location transform.
-  const designBuild = mode === "development" || mode === "design";
+  // the `__SEFER_DESIGN__` define below and the JSX-location transform. The
+  // mode is `dev` because that is the channel it deploys to; the define keeps
+  // its own name because it describes the payload, not the channel.
+  const designBuild = mode === "development" || mode === "dev";
 
   // `loadEnv` so the collector may be named either in a `.env` file or, as the
   // documented command does, exported in the shell that runs `pnpm dev`.

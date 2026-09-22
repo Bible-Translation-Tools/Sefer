@@ -62,13 +62,13 @@ matters because the playground registry globs its experiments.
 production. That is three modes, not two:
 
 ```
-pnpm build:design    # vite build --mode design
+pnpm build:dev    # vite build --mode dev
 ```
 
 and one Vite `define` that every design route's `beforeLoad` consults:
 
 ```ts
-__SEFER_DESIGN__: JSON.stringify(mode === "development" || mode === "design")
+__SEFER_DESIGN__: JSON.stringify(mode === "development" || mode === "dev")
 ```
 
 A `define` rather than an exported constant, and that is not a style choice.

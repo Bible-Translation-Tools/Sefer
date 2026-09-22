@@ -1,90 +1,122 @@
-# Deploying the web build to Cloudflare.
+# Deploying Sefer.
 #
-# STUB, AND DELIBERATELY NOT ARMED. The trigger is `workflow_dispatch` only:
-# the hostnames in `wrangler.jsonc` are placeholders, and there is no Sefer
-# entry in the 1Password vault yet, so a `push:` trigger would do nothing but
-# fail on every commit and train everybody to ignore a red X. Add the triggers
-# in the commented block below once both exist.
+# STUB, AND DELIBERATELY NOT ARMED. `push:` is commented out below: the
+# hostnames in `wrangler.jsonc` are placeholders and there is no Sefer item in
+# the 1Password vault, so arming it now would fail on every commit and train
+# everybody to ignore a red X. `resolve` already handles the push cases, so
+# arming it is uncommenting one block.
 #
-# Modelled on scripture-editor-proto-2's release.yml, which is the shape this
-# organisation already runs — same channel resolution, same 1Password action,
-# same wrangler invocation.
+# Modelled on scripture-editor-proto-2's release.yml — same 1Password action,
+# same wrangler invocation, same tag-resolves-the-channel shape.
 #
-# Channels:
+# ## Three channels, and the asymmetry is the point
 #
-#   push to master   -> nightly  (the real application, no design surface)
-#                    -> design   (the same commit, WITH /design — the designer's
-#                                 prototype, which is why it is master rather
-#                                 than a long-lived branch)
-#   tag v*           -> production
+#   push to master   -> dev       web only, --mode dev, ~1 minute.
+#                                 The one deployed thing carrying /design, the
+#                                 comment panel and ?fixture=1. Fast because
+#                                 iterating should not cost a desktop matrix.
+#
+#   dispatch / -rc   -> preview   A PROMOTION, not a consequence of pushing.
+#                                 Full test suite, full desktop matrix. Nobody
+#                                 ships a broken Preview; it is the last
+#                                 rehearsal before a tag.
+#
+#   tag v*           -> production  Preview with the label changed.
+#
+# Building preview on every push would make it a second dev and leave nobody
+# able to say "go test drive this". That is why the middle row is manual.
 #
 # The build mode and the wrangler environment have to agree, and that pairing
 # lives in `tools/deploy/web.ts` rather than here, so CI and a laptop cannot
 # disagree about which build carries the design surface.
+#
+# NOT HERE: the updater worker and the isomorphic-git proxy. Separate configs,
+# separate hostnames, separate deploy steps — see planning/02-ready/.
 
 name: release
 
 on:
   workflow_dispatch:
     inputs:
-      environment:
-        description: Which Cloudflare environment to deploy
+      channel:
+        description: Which channel to publish
         required: true
         type: choice
-        options: [nightly, design, production]
+        options: [dev, preview, production]
 
-  # TODO: arm these once wrangler.jsonc has real hostnames and 1Password has a
-  # Sefer entry. `compute-channel` below already resolves both cases.
+  # TODO: arm once wrangler.jsonc has real hostnames and 1Password has a Sefer
+  # item. `resolve` below already answers all three cases.
   #
   # push:
   #   branches: [master]
   #   tags: ["v*"]
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.ref }}-${{ github.event.inputs.channel || 'auto' }}
   cancel-in-progress: false
 
 jobs:
-  # Kept even though the current trigger passes the environment directly: it is
-  # what makes arming `push:` a one-line change rather than a rewrite.
-  compute-channel:
+  resolve:
     runs-on: ubuntu-24.04
     outputs:
-      environments: ${{ steps.resolve.outputs.environments }}
+      channel: ${{ steps.pick.outputs.channel }}
+      desktop: ${{ steps.pick.outputs.desktop }}
     steps:
-      - id: resolve
+      - id: pick
         run: |
           set -euo pipefail
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            environments='["${{ inputs.environment }}"]'
+            channel="${{ inputs.channel }}"
+          elif [[ "${{ github.ref }}" == refs/tags/v*-rc* ]]; then
+            channel=preview
           elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            environments='["production"]'
+            channel=production
           else
-            # One commit, two hostnames: the nightly build for people trying
-            # the real thing, and the design build for the prototype.
-            environments='["nightly","design"]'
+            channel=dev
           fi
-          echo "environments=${environments}" >> "$GITHUB_OUTPUT"
-          echo "deploying: ${environments}" >> "$GITHUB_STEP_SUMMARY"
+          # Desktop is the expensive half. dev skips it on purpose; the other
+          # two are release rehearsals and must not.
+          if [ "$channel" = "dev" ]; then desktop=false; else desktop=true; fi
+          echo "channel=${channel}" >> "$GITHUB_OUTPUT"
+          echo "desktop=${desktop}" >> "$GITHUB_OUTPUT"
+          echo "channel: ${channel} (desktop: ${desktop})" >> "$GITHUB_STEP_SUMMARY"
+
+  # The same gate `pnpm check` runs locally, plus the browser project. Skipped
+  # for dev: master already ran it on the push that produced this commit, and
+  # paying for it twice is what makes people stop pushing.
+  verify:
+    needs: [resolve]
+    if: needs.resolve.outputs.desktop == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.4.1
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test:browser
+      - name: The design surface is in dev and out of production
+        run: pnpm verify:design
 
   deploy-web:
-    needs: [compute-channel]
+    needs: [resolve, verify]
+    # `always()` so dev — which skips verify — still deploys, while a real
+    # verify failure still stops preview and production.
+    if: always() && needs.resolve.result == 'success' && needs.verify.result != 'failure'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: read
-    strategy:
-      # Independent hostnames; one failing should not cancel the other.
-      fail-fast: false
-      matrix:
-        environment: ${{ fromJSON(needs.compute-channel.outputs.environments) }}
     steps:
       - uses: actions/checkout@v4
 
-      # TODO placeholder path. The old editor uses op://DevOps/Scripture-Editor;
-      # Sefer needs its own item before this resolves.
+      # TODO placeholder path. The old repo uses op://DevOps/Scripture-Editor;
+      # Sefer needs its own item with these two fields before this resolves.
       - name: Source secrets
-        id: secrets
         uses: 1password/load-secrets-action@v3
         with:
           export-env: true
@@ -94,21 +126,35 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: "op://DevOps/Sefer/cloudflare-account-id"
 
       - uses: pnpm/action-setup@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 24.4.1
           cache: pnpm
+      - run: pnpm install --frozen-lockfile
 
-      - name: Install
-        run: pnpm install --frozen-lockfile
-
-      # Builds and deploys in one step on purpose: `tools/deploy/web.ts` owns
-      # the mode-to-environment pairing, and splitting them here would be the
-      # place that pairing could quietly come apart.
+      # Builds and deploys in one step on purpose: tools/deploy/web.ts owns the
+      # mode-to-channel pairing, and splitting them here is exactly where that
+      # pairing could quietly come apart.
       - name: Deploy
-        run: pnpm deploy:web ${{ matrix.environment }}
+        run: pnpm deploy:web ${{ needs.resolve.outputs.channel }}
 
       - name: Summary
         run: |
-          echo "deployed ${{ matrix.environment }} from ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "web: ${{ needs.resolve.outputs.channel }} from ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+
+  # TODO: not written yet. Needs, in order: the Tauri updater keypair
+  # generated (`pnpm tauri signer generate`) and its public half in
+  # tauri.conf.json, which today still holds REPLACE_WITH_MINISIGN_PUBLIC_KEY;
+  # the Apple signing material in 1Password; and tools/tauri/patchVersion.ts
+  # wired to the resolved channel. `SEFER_CHANNEL=preview` selects
+  # src-tauri/tauri.conf.preview.json.
+  #
+  # build-desktop:
+  #   needs: [resolve, verify]
+  #   if: needs.resolve.outputs.desktop == 'true'
+  #   strategy:
+  #     matrix:
+  #       include:
+  #         - { os: macos-latest, args: "--target universal-apple-darwin" }
+  #         - { os: ubuntu-22.04, args: "" }
+  #         - { os: windows-latest, args: "" }

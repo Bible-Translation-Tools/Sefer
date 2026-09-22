@@ -116,7 +116,7 @@ endpoint override. Settings → About drives the first flow (`src/app/ui/UpdateP
 Endpoints never live in the repository. `tauri.conf.json` cannot read the environment, so
 `tools/tauri/updaterConfig.ts` writes `src-tauri/gen/tauri.conf.env.json` from `SEFER_UPDATER_HOST`
 with `plugins.updater.endpoints: ["<host>/{{target}}/{{current_version}}"]`, and `pnpm dev:tauri` /
-`pnpm build:tauri` pass it as `--config` (plus `tauri.conf.nightly.json` when `SEFER_CHANNEL=nightly`).
+`pnpm build:tauri` pass it as `--config` (plus `tauri.conf.preview.json` when `SEFER_CHANNEL=preview`).
 Host unset means no endpoints and a check that reports "not configured" — there is no fallback URL.
 The TS side reads the same host from `VITE_SEFER_UPDATER_HOST` for the two routes the plugin does not
 cover. See [configuration](configuration.md).
@@ -129,9 +129,15 @@ signs the v1 update channel.
 
 ## Release
 
-`.github/workflows/release.yml` — a `v*` tag builds Stable, the nightly schedule builds Nightly
-(prerelease, `nightly-<version>`, product name "Sefer Nightly", identifier
-`org.wycliffe.sefer.nightly`, which is also how the app knows its own channel).
+`.github/workflows/release.yml` — a `v*` tag builds Stable; a `-rc` tag or a `workflow_dispatch`
+builds Preview (prerelease, product name "Sefer Preview", identifier
+`org.wycliffe.sefer.preview`, which is also how the app knows its own channel).
+
+Preview was called Nightly until 2026-09-22. It has never built on a schedule — it builds when
+somebody promotes a commit — so the word described something this repository does not do, which is
+roughly why nobody used it. Both desktop channels carry the full test suite and the full platform
+matrix: Preview is the last rehearsal before a tag, not a place to put something broken. The web
+`dev` channel is the fast one, and it is web-only for exactly that reason.
 `tools/tauri/patchVersion.ts` stamps the release version into `package.json`, `tauri.conf.json` and
 `Cargo.toml`; the in-tree value stays `0.0.0`. macOS builds universal, Windows and Ubuntu x86_64, and
 `tauri-action` attaches the bundles and the `.sig` files to the GitHub release.

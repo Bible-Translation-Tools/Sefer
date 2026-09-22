@@ -31,12 +31,12 @@ production never does.
 | Command | `/design` | Panel | `data-loc` stamps |
 | --- | --- | --- | --- |
 | `pnpm dev` | yes | yes | yes |
-| `pnpm build:design` | yes | yes | yes |
+| `pnpm build:dev` | yes | yes | yes |
 | `pnpm build` | **no** | **no** | **no** |
 
 The middle one is the deployed prototype — a production build in every respect
 except that it carries the surface. That is why the switch is
-`--mode design` and not `import.meta.env.DEV`.
+`--mode dev` and not `import.meta.env.DEV`.
 
 **Gate on `__SEFER_DESIGN__` directly, never through an imported constant.** An
 exported constant folds at its use site and rolldown still shipped the design
@@ -137,9 +137,9 @@ turn, so its body is a `setSignal`.
 **This is scaffolding and it has an expiry.** It is inert in any build without
 the design surface, so it cannot break anything; what it does is accumulate.
 `pnpm design:scaffolding` lists what is still there. `pnpm lint:release` makes
-it an error, and `tools/deploy/web.ts` runs that before a **production** build
-and nothing else — not nightly, not the design build. Settle the question, then
-remove the scaffolding.
+it an error, and `tools/deploy/web.ts` runs that before **preview and production**
+and not before `dev` — because scaffolding is exactly what `dev` is for.
+Settle the question, then remove the scaffolding.
 
 ## Data: real first, mocks where they earn it
 
@@ -193,7 +193,7 @@ like the product and diverges from it every week.
 | Command | What it does |
 | --- | --- |
 | `pnpm dev` | Dev server; `/design` and the panel are on |
-| `pnpm build:design` | The deployed prototype build |
+| `pnpm build:dev` | The deployed prototype build |
 | `pnpm deploy:web design --dry` | Build and print what would ship |
 | `pnpm verify:design` | Proves the surface is in the design build and out of production |
 | `pnpm boundaries` | The three path rules |

@@ -19,8 +19,14 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
-/** The two channels the release workflow publishes. */
-export type Channel = "stable" | "nightly";
+/**
+ * The two channels the release workflow publishes.
+ *
+ * `preview` was `nightly` until 2026-09-22. It builds on a promotion — a
+ * dispatch or an `-rc` tag — not on a schedule, so "nightly" described
+ * something this repository never did, which is why nobody used the word.
+ */
+export type Channel = "stable" | "preview";
 
 export interface UpdaterOverlay {
   readonly plugins?: {
@@ -44,7 +50,7 @@ export const overlayFor = (host: string | undefined): UpdaterOverlay => {
 };
 
 export const channelOf = (value: string | undefined): Channel =>
-  value?.trim() === "nightly" ? "nightly" : "stable";
+  value?.trim() === "preview" ? "preview" : "stable";
 
 /** Writes the overlay and returns its repository-relative path. */
 export const writeUpdaterConfig = (repoRoot: string): string => {

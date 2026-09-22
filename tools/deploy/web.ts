@@ -1,17 +1,17 @@
 /**
  * Build the web frontend for one Cloudflare environment and ship it.
  *
- *     pnpm deploy:web production     # a tagged release, no design surface
- *     pnpm deploy:web nightly        # master, no design surface
- *     pnpm deploy:web design         # master, WITH /design and the annotator
- *     pnpm deploy:web design --dry   # build and print the command, ship nothing
+ *     pnpm deploy:web dev           # every push to master, WITH the design surface
+ *     pnpm deploy:web preview       # a promotion: "go test drive this"
+ *     pnpm deploy:web production    # a v* tag
+ *     pnpm deploy:web dev --dry     # build and print the command, ship nothing
  *
  * One script rather than three workflow steps, because the build mode and the
  * wrangler environment have to agree and that agreement is the whole point:
- * `design` is the only environment built with `--mode design`, and the only
- * one that ends up carrying a tool which swallows every click. Putting the
- * pairing in a table here means CI cannot get it half-right, and somebody
- * deploying by hand runs the same code CI does.
+ * `dev` is the only environment built with `--mode dev`, and the only one
+ * that ends up carrying a tool which swallows every click. Putting the pairing
+ * in a table here means CI cannot get it half-right, and somebody deploying by
+ * hand runs the same code CI does.
  *
  * STUB, in the sense that the hostnames it deploys to are placeholders in
  * `wrangler.jsonc` and the credentials come from a 1Password vault that has no
@@ -23,21 +23,30 @@ import { execFileSync } from "node:child_process";
 import process from "node:process";
 
 /**
- * Which Vite mode builds each Cloudflare environment, and which of them has to
- * be clean of design scaffolding first.
+ * The three channels, and the one table that decides what each one is.
  *
- * `release` is the gate: `pnpm lint:release` fails if application code still
- * calls `globalThis.__sefer.design`. Only PRODUCTION runs it. Scaffolding a
- * real screen with tweaks is how a question gets settled, it is inert in any
- * build without the design surface, and blocking nightly — which comes off
- * master all day — would be the same friction as blocking `pnpm check`. By the
- * time something is tagged for release the question should be settled, and
- * that is the moment worth checking.
+ * `dev` is every push to master. It is the only channel built `--mode dev`,
+ * so it is the only deployed thing carrying `/design`, the comment panel and
+ * `?fixture=1`. Web only, and fast on purpose: iterating should not cost a
+ * desktop matrix.
+ *
+ * `preview` is a PROMOTION, not a consequence of pushing — `workflow_dispatch`
+ * or an `-rc` tag. Building it on every commit would make it another `dev`,
+ * and the point of the channel is that somebody can be told to test drive it.
+ * Nobody ships a broken Preview, so it carries the full test suite and the
+ * full desktop matrix; it is the last rehearsal before a tag.
+ *
+ * `production` is a `v*` tag, and is `preview` with the label changed.
+ *
+ * `release` is the scaffolding gate: `pnpm lint:release` fails if application
+ * code still calls `globalThis.__sefer.design`. Preview and production run it;
+ * `dev` does not, because scaffolding is exactly what `dev` is for. A channel
+ * that people are asked to test drive should not contain half-finished knobs.
  */
 const ENVIRONMENTS = {
   production: { mode: "production", design: false, release: true },
-  nightly: { mode: "production", design: false, release: false },
-  design: { mode: "design", design: true, release: false },
+  preview: { mode: "production", design: false, release: true },
+  dev: { mode: "dev", design: true, release: false },
 } as const;
 
 type Environment = keyof typeof ENVIRONMENTS;
@@ -64,7 +73,7 @@ const main = (): void => {
   if (name === undefined || !isEnvironment(name)) {
     process.stderr.write(
       `deploy:web: expected one of ${Object.keys(ENVIRONMENTS).join(", ")}\n` +
-        "  pnpm deploy:web design --dry\n",
+        "  pnpm deploy:web dev --dry\n",
     );
     process.exitCode = 1;
     return;

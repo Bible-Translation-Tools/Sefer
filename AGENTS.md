@@ -43,7 +43,7 @@ Check `package.json` and runner configuration for executable commands. Distingui
 - `pnpm test:browser` runs the real Chromium Browser Mode project — today five files: the app's mount/dispose, the composition, the fixture page, the OPFS `fileSystemContract` suite, and web git. There is no end-to-end suite that drives a built app, and no Tauri WebDriver suite.
 - `pnpm build` builds the shared Web frontend; `pnpm dev:tauri` starts the Tauri host.
 - `pnpm boundaries` proves `src/core` imports nothing framework- or host-specific, that nothing outside `src/dev` statically imports it, and that `src/dev/annotate` imports no framework at all.
-- `pnpm build:design` builds the deployed prototype — a production build that DOES carry `/design` and the design annotator. See below.
+- `pnpm build:dev` builds the deployed prototype — a production build that DOES carry `/design` and the design annotator. See below.
 - `pnpm verify:design` runs two real builds and proves the design surface is absent from production and present in the design build.
 - `pnpm design:scaffolding` lists real screens still borrowing the design panel through `globalThis.__sefer.design.register`. Informational; exits 0.
 - `pnpm check` runs the ordinary local gate: typecheck, lint, formatting, boundaries, unit tests, and build. `.github/workflows/check.yml` runs the same commands, plus `pnpm test:browser` in a second job.
@@ -51,7 +51,7 @@ Check `package.json` and runner configuration for executable commands. Distingui
 ## The design build switch
 
 `__SEFER_DESIGN__` is a Vite `define` set in `vite.config.ts` to
-`mode === "development" || mode === "design"`. It is the ONE answer to
+`mode === "development" || mode === "dev"`. It is the ONE answer to
 "does this build carry the design surface": `/design`, the floating
 annotator mounted from `src/routes/__root.tsx`, and the `data-loc` JSX
 stamps from `tools/vite/jsxLocation.ts`.
@@ -59,7 +59,7 @@ stamps from `tools/vite/jsxLocation.ts`.
 **It is never on in production, and there is no variable that turns it on.**
 There is deliberately no `INCLUDE_DESIGNER` or other `.env` switch: an env
 file is state on a machine that can drift into a release, whereas
-`--mode design` is a flag on a deploy job. Comment mode swallows every event
+`--mode dev` is a flag on a deploy job. Comment mode swallows every event
 in the capture phase, so shipping it to somebody editing scripture would be a
 foot-gun.
 

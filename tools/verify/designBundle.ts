@@ -77,12 +77,12 @@ const main = (): void => {
   if (leaked === null) process.stdout.write("production: design surface absent ✓\n");
   else failures.push(`production build ships the design surface: ${leaked}`);
 
-  build("design");
+  build("dev");
   const present = containsSentinel(DIST);
   if (present === null) {
-    failures.push("design build does NOT ship the design surface — the gate is off in both modes");
+    failures.push("dev build does NOT ship the design surface — the gate is off in both modes");
   } else {
-    process.stdout.write("design: design surface present ✓\n");
+    process.stdout.write("dev: design surface present ✓\n");
   }
 
   // Left as the design build, which is not what anybody wants to deploy.

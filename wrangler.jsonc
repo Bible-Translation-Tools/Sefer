@@ -14,6 +14,12 @@
 // because the turnkey Solid Start plugin builds client and server environments
 // and puts the static client there. `pnpm build` writes it; `vite build
 // --outDir` is ignored by that plugin, so do not try to redirect it.
+//
+// THE UPDATER WORKER IS NOT HERE. It is its own config, its own hostname and
+// its own deploy step — see `planning/02-ready/updater-worker.md`. The old
+// repo hit a real bug where wrangler invoked from a subdirectory fell back to
+// the root config and redeployed the SPA twice instead of the updater; pass
+// `--config` explicitly when that worker lands.
 {
   "name": "sefer-web",
   "compatibility_date": "2026-09-21",
@@ -24,8 +30,8 @@
     "not_found_handling": "single-page-application",
   },
   "env": {
-    // A tagged release. Built with `pnpm build`, so it carries NO design
-    // surface: no /design, no annotator, no data-loc stamps.
+    // A `v*` tag. `pnpm build`, full test suite, full desktop matrix, and the
+    // release lint that refuses leftover design scaffolding.
     "production": {
       "name": "sefer-web-production",
       "routes": [
@@ -38,39 +44,36 @@
       ],
     },
 
-    // Every push to master. Also `pnpm build`: nightly is for trying the REAL
-    // application early, and somebody testing a release candidate should not
-    // have a tool that swallows every click one keystroke away.
-    "nightly": {
-      "name": "sefer-web-nightly",
+    // A PROMOTION — `workflow_dispatch`, or an `-rc` tag. Not every push:
+    // building this on every commit would make it a second `dev`, and the
+    // whole point is that somebody can be told to go test drive it. Same
+    // build, same tests and same desktop matrix as production; nobody ships a
+    // broken Preview.
+    "preview": {
+      "name": "sefer-web-preview",
       "routes": [
         {
           // TODO placeholder — not registered.
-          "pattern": "sefer-nightly.bttdev.org",
+          "pattern": "sefer-preview.bttdev.org",
           "custom_domain": true,
           "zone_name": "bttdev.org",
         },
       ],
     },
 
-    // The designer's prototype. Every push to master, but built with
-    // `pnpm build:design`, so this is the ONE deployed hostname that carries
-    // /design and the annotator.
+    // Every push to master, web only, built `--mode dev`. The ONE deployed
+    // hostname carrying `/design`, the comment panel and `?fixture=1`.
     //
-    // A third environment rather than folding it into nightly, and that is a
-    // judgement worth disagreeing with if you want to. The argument for three:
-    // nightly and the prototype have different audiences — one is "does the
-    // real thing work", the other is "which of these two layouts is better" —
-    // and a comment mode that intercepts every event does not belong in the
-    // first. The argument for two: it is one more hostname to own. Collapsing
-    // them means pointing nightly's build at `pnpm build:design` and deleting
-    // this block.
-    "design": {
-      "name": "sefer-web-design",
+    // Named for the channel rather than for the designer on purpose: the
+    // comment collector is a feedback mechanism for anyone slinging code here,
+    // not a designer-only tool. Desktop is skipped so a push costs a minute
+    // rather than a matrix.
+    "dev": {
+      "name": "sefer-web-dev",
       "routes": [
         {
           // TODO placeholder — not registered.
-          "pattern": "sefer-design.bttdev.org",
+          "pattern": "sefer-dev.bttdev.org",
           "custom_domain": true,
           "zone_name": "bttdev.org",
         },

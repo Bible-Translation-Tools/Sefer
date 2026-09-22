@@ -11,14 +11,14 @@ Read this before touching `src/dev/design`, `src/dev/annotate`,
 | Command | Mode | `/design` | Annotator | `data-loc` |
 | --- | --- | --- | --- | --- |
 | `pnpm dev` | `development` | yes | yes | yes |
-| `pnpm build:design` | `design` | yes | yes | yes |
+| `pnpm build:dev` | `design` | yes | yes | yes |
 | `pnpm build` | `production` | **no** | **no** | **no** |
 
 The middle row is the one that needs explaining. The deployed prototype — the
 URL a designer sends a product owner — is a PRODUCTION build in every sense
 that matters: minified, served from a worker, no dev server. So
 `import.meta.env.DEV` would switch the design surface off exactly where it is
-wanted. `vite build --mode design` makes a third build that is production in
+wanted. `vite build --mode dev` makes a third build that is production in
 every respect except that it carries the surface.
 
 A CLI flag rather than a `VITE_` variable, deliberately. An env file is a piece
@@ -31,7 +31,7 @@ name for the same idea and a second thing to keep in step.
 
 ```ts
 // vite.config.ts
-const designBuild = mode === "development" || mode === "design";
+const designBuild = mode === "development" || mode === "dev";
 define: { __SEFER_DESIGN__: JSON.stringify(designBuild) }
 ```
 
@@ -137,8 +137,8 @@ either way — it is a reminder you can run any time.
 That rule is OFF in `oxlint.config.ts` on purpose: a squiggle under code
 somebody is actively iterating with is how a rule teaches people to disable
 it. `tools/deploy/web.ts` runs it before a **production** build and before
-nothing else — not nightly, which comes off master all day, and certainly not
-the design build, where the scaffolding is doing its job. The scaffolding is
+nothing else — `preview` and `production` run it, `dev` does not, because
+scaffolding is exactly what `dev` is for. The scaffolding is
 inert in any build without the design surface, so this is hygiene rather than
 correctness; a release is simply the moment by which the question it was
 answering should be settled.
