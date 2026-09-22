@@ -78,6 +78,13 @@ sharing a 28-character prefix would share a URL; that is accepted, because an
 alias somebody can read and retype is worth more than collision-proofing, and
 the cost is one preview overwriting another rather than anything being lost.
 
+**Read the URL out of the output; do not rebuild it from the branch name.** The
+truncation is easy to forget, and a hand-assembled URL 404s exactly like a
+broken deploy does — `worktree-wrangler-observability` is served at
+`worktree-wrangler-observabil-…`. The command prints `Version Preview Alias
+URL:`, and `check.yml` copies that line into the job summary. That is the one
+to open.
+
 ## The commands
 
 ### "Deploy to dev"
@@ -212,12 +219,30 @@ There is no desktop `dev` channel and we are not planning one.
 `push` is live: master deploys `dev`, a `v*` tag releases. Five jobs —
 `resolve`, `verify`, `deploy-web`, `deploy-updater`, `build-desktop`.
 
-**The custom-domain routes are commented out**, so every channel deploys to
-its own `*.workers.dev` subdomain. That is deliberate rather than unfinished:
-it means the pipeline actually runs today instead of failing on a route for a
-hostname nobody has registered. When DNS exists, uncomment the channel's
-`routes` block in `wrangler.jsonc` (web) or
-`workers/sefer-updater/wrangler.toml` (updater). Nothing else changes.
+**Web has its custom domains; the updater does not yet.** All three web
+channels carry `routes` in `wrangler.jsonc`:
+
+| Channel | Hostname | Answering? |
+| --- | --- | --- |
+| dev | `sefer-dev.bttdev.org` | yes — every push to master |
+| preview | `sefer-preview.bttdev.org` | not yet deployed |
+| production | `sefer.bibletranslationtools.org` | not yet deployed |
+
+The last two are configured, not live: nothing has been promoted and nothing
+has been tagged, so those Workers do not exist yet and the hostnames do not
+resolve. That is expected, not a fault — the first promotion creates them.
+
+Declaring a route turns the `*.workers.dev` subdomain off, so once a channel
+IS deployed its custom domain is the only hostname it has. That is the point —
+one canonical URL per channel rather than two that can drift — but it also
+means there is no fallback URL to fall back to.
+
+The UPDATER's routes are still commented out in
+`workers/sefer-updater/wrangler.toml`, so both its channels deploy to
+`*.workers.dev` (listed below). That is deliberate rather than unfinished — it
+means the pipeline runs today instead of failing on a hostname nobody has
+registered. When DNS exists, uncomment that channel's `routes` block. Nothing
+else changes.
 
 One trap that follows from that: a desktop binary asks the updater URL it was
 BUILT with, from `SEFER_UPDATER_HOST`. Move the worker to a custom domain

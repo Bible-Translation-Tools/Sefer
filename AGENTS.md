@@ -30,7 +30,7 @@ Read only the guidance relevant to the task:
 
 `src/App.tsx` calls `composeApplication()` exactly once; services reach components through `useComposition()` (`src/app/CompositionContext.tsx`).
 
-In a dev build, `/dev/fixture` runs over a seeded in-memory copy of `fixtures/small-nt/` merged over the one composition, and lists it through the `FileSystem` service. The route is generated from `src/routes/dev/fixture.tsx` in every build, but the page (`src/dev/FixturePage.tsx`) is imported only inside an `import.meta.env.DEV` branch, so production bundles none of the fixture code and answers the path with the not-found boundary.
+In a dev build, `/dev/fixture` runs over a seeded in-memory copy of `fixtures/small-nt/` merged over the one composition, and lists it through the `FileSystem` service. The route is generated from `src/routes/_app/dev/fixture.tsx` in every build, but the page (`src/dev/FixturePage.tsx`) is imported only inside an `import.meta.env.DEV` branch, so production bundles none of the fixture code and answers the path with the not-found boundary.
 `pnpm verify:launch [--check]` starts a dev server on a free port against that route, writes artifacts to `.verify/<runId>/`, and prints one JSON line with `url`, `runId`, `runDir`, and `pid`.
 
 In a dev build, `globalThis.__sefer.observability` exposes `recent()`, `export()` (JSONL), `level()`, and `setLevel()`, and `globalThis.__sefer.state()` reports the boot result, the seeded fixture, and the ring depth — use them to read what the running application actually did instead of adding logging.
