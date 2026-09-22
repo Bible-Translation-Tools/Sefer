@@ -145,8 +145,49 @@ Work on a branch, never on `master`:
 git checkout -b design/onboarding-cards
 ```
 
-Claude can do the git for you — "commit this and open a PR" works. Before you
-push, run:
+Claude can do the git for you — "commit this and open a PR" works.
+
+### Always branch from a fresh `master`
+
+```sh
+git checkout master && git pull
+git checkout -b design/onboarding-cards
+```
+
+Start every piece of work this way, even when the last one is barely cold.
+Branching from `master` each time means your changes sit on top of everything
+that has happened since — and since somebody else may be committing a dozen
+times a day, "since" is a lot. A branch that has been alive for two weeks is
+the one that hurts to merge.
+
+**You should never be the person resolving a merge.** If a branch has fallen
+behind far enough to conflict, say so rather than fighting it — the fix is
+almost always to start a fresh branch from `master` and bring the change over,
+which takes minutes.
+
+### Your old work is a reference, not something to merge
+
+Keep a long-lived branch of your own if you like — `th`, or `design` — as a
+place your ideas live. Treat it as a **sketchbook**: something to look at and
+copy from, never something to merge.
+
+So the move is: fresh branch from `master`, then tell Claude *"reuse the card
+layout from my `th` branch"*. It reads the old work and rewrites it against
+today's code. What you get is your idea on top of current `master`, with no
+merge and nothing stale carried along.
+
+### Somebody can look at your branch without you merging anything
+
+Push the branch and CI builds it to its own URL — something like
+`design-onboarding-cards-sefer-web-dev.…workers.dev` — which appears in the
+Actions summary for that push. It carries `/design`, the comment panel and
+`?fixture=1`, exactly like the shared dev site.
+
+That link is safe to send to anyone. It does not touch `sefer-dev.bttdev.org`,
+and it does not require your work to be merged, reviewed, or finished. It is
+there so you never have to push to `master` just to show somebody something.
+
+Before you push, run:
 
 ```sh
 pnpm typecheck && pnpm lint && pnpm format:check

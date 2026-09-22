@@ -38,6 +38,20 @@ This is the shared vocabulary for planning and implementation. Terms marked **ag
 
 Use `Source` for canonical editable text, `Disk bytes` for persisted representation, `Revision` for a session identity, and `Snapshot` for a captured input. Say `Save`, `Recovery`, or `Checkpoint` explicitly when describing persistence. Avoid calling all three a “version.” The Record a version… command is product copy for one Save; it does not make “version” a term.
 
+## Deployment names
+
+Two different things are called "preview", by us and by Cloudflare, and they
+are not related. Say which one every time; "preview" alone is never enough, and
+the failure it invites — promoting to the wrong place — is expensive and quiet.
+
+| Term | Status | Meaning |
+| --- | --- | --- |
+| Channel | agreed | One of the three things Sefer deploys as: `dev`, `preview`, `production`. A channel is a build mode paired with a wrangler environment, and the pairing lives in `tools/deploy/web.ts` so CI and a laptop cannot disagree. |
+| ChannelPreview | agreed | The `preview` CHANNEL: `sefer-web-preview` on `sefer-preview.bttdev.org`. A promotion — a `workflow_dispatch` or a `v0.3.0-1` candidate tag, never a consequence of pushing. Full test suite, full desktop matrix. This is the one somebody is told to go test drive. |
+| CloudflarePreview | agreed | Cloudflare's **version preview**: `wrangler versions upload` publishes a new VERSION of a Worker without deploying it, reachable at its own hostname. Ours are aliased per branch off `sefer-web-dev`, so a branch gets a URL without touching what `sefer-dev.bttdev.org` serves. Nothing to do with the ChannelPreview. |
+| Branch preview | agreed | A CloudflarePreview of one branch, built `--mode dev` so it carries `/design`, the comment panel and `?fixture=1`. What a designer sends somebody to look at. |
+| Version | agreed | Cloudflare's unit of upload. Uploading a version does not change what a hostname serves; deploying one does. This distinction is what makes a branch preview safe. |
+
 ## Observability names
 
 Every event the application records is named **`<thing>.<what happened to it>`**, where the thing is a term from the table above.

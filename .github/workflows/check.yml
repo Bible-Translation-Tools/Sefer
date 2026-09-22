@@ -50,6 +50,64 @@ jobs:
             echo "| $step | $((SECONDS - start)) |" >> "$GITHUB_STEP_SUMMARY"
           done
 
+  # A URL for this branch, so "go look at this" does not mean "push to master".
+  #
+  # This is a CloudflarePreview — `wrangler versions upload` publishes a new
+  # VERSION of the sefer-web-dev Worker and changes nothing about what
+  # sefer-dev.bttdev.org serves. It is NOT the preview CHANNEL, which is a
+  # promotion with the full desktop matrix behind it. See
+  # documentation/glossary.md, "Deployment names".
+  #
+  # Needs `repository` to have passed: a URL for a branch that does not
+  # typecheck is a URL that wastes somebody's afternoon.
+  #
+  # Skipped when the secret is absent, which is what a pull request from a FORK
+  # looks like — GitHub withholds secrets there, and a job that failed for that
+  # reason would be a red tick nobody can act on.
+  preview:
+    needs: [repository]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # At JOB level, not on the step: a step's `if` cannot read its own `env:`
+    # block, so guarding the 1Password step on a token declared inside it would
+    # have been a condition that is always false.
+    env:
+      OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.4.1
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Source secrets
+        if: env.OP_SERVICE_ACCOUNT_TOKEN != ''
+        uses: 1password/load-secrets-action@v3
+        with:
+          export-env: true
+        env:
+          CLOUDFLARE_API_TOKEN: "op://DevOps/Sefer/cloudflare-api-token"
+          CLOUDFLARE_ACCOUNT_ID: "op://DevOps/Sefer/cloudflare-account-id"
+
+      - name: Upload a version for this branch
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        run: |
+          set -euo pipefail
+          pnpm preview:branch "${GITHUB_REF_NAME}" | tee upload.log
+          url=$(grep -oE 'https://[a-z0-9-]+\.workers\.dev' upload.log | tail -1)
+          {
+            echo "### Branch preview"
+            echo ""
+            echo "${url:-(no URL in the wrangler output — see the log above)}"
+            echo ""
+            echo "A CloudflarePreview of \`${GITHUB_REF_NAME}\`, built \`--mode dev\`, so it"
+            echo "carries /design, the comment panel and ?fixture=1."
+            echo "\`sefer-dev.bttdev.org\` is untouched."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   browser:
     runs-on: ubuntu-24.04
     timeout-minutes: 20

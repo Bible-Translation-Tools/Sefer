@@ -28,6 +28,49 @@ Full rationale: `documentation/architecture/design.md` for the build switch,
 | **Desktop channel** | — | Sefer Preview | Sefer |
 | **Roughly** | ~1 minute | ~20 minutes | ~20 minutes |
 
+## "Preview" means two unrelated things. Always say which
+
+This is the one piece of vocabulary in the repository that is worth being
+pedantic about, because getting it wrong means promoting to the wrong place and
+the mistake is quiet.
+
+| Say | For |
+| --- | --- |
+| **ChannelPreview** | the `preview` CHANNEL in the table above — `sefer-preview.bttdev.org`, a promotion, full suite, full desktop matrix |
+| **CloudflarePreview** | `wrangler versions upload` — a new VERSION of a Worker that is *not deployed*, on its own hostname |
+| **Branch preview** | a CloudflarePreview of one branch, built `--mode dev` |
+
+`documentation/glossary.md` holds the canonical definitions.
+
+## A URL for a branch, without deploying anything
+
+    pnpm preview:branch                  # alias from the current branch
+    pnpm preview:branch design/cards     # or name it
+    pnpm preview:branch --dry            # build, print the command, ship nothing
+
+Uploads a VERSION of the `sefer-web-dev` Worker and prints a URL like
+`design-cards-sefer-web-dev.<account>.workers.dev`. `check.yml` does this
+automatically on every push to a branch that is not `master`, and writes the
+URL into the job summary.
+
+**It does not deploy.** `sefer-dev.bttdev.org` keeps serving whatever master
+last deployed; a version is uploaded beside it. That is the property that makes
+this safe to run on every branch push.
+
+**It builds `--mode dev`** — the same mode as the `dev` channel — so a branch
+preview carries `/design`, the comment panel and `?fixture=1`. A preview you
+cannot comment on would be missing most of the point.
+
+Why it exists: master was the only thing that deployed a web build, so "let
+somebody look at this" meant "push to master" — the busiest branch, and the one
+with no pre-merge gate. Now a branch is enough.
+
+The alias is a hostname label, so the branch name is slugified and truncated
+(`design/onboarding-cards` → `design-onboarding-cards`). Two long branches
+sharing a 28-character prefix would share a URL; that is accepted, because an
+alias somebody can read and retype is worth more than collision-proofing, and
+the cost is one preview overwriting another rather than anything being lost.
+
 ## The commands
 
 ### "Deploy to dev"
