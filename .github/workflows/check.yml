@@ -96,7 +96,7 @@ jobs:
         if: env.CLOUDFLARE_API_TOKEN != ''
         run: |
           set -euo pipefail
-          pnpm preview:branch "${GITHUB_REF_NAME}" | tee upload.log
+          pnpm branch:preview "${GITHUB_REF_NAME}" | tee upload.log
 
           # Read wrangler's own LABELLED lines rather than pattern-matching a
           # hostname. The first attempt grepped `https://[a-z0-9-]+\.workers\.dev`

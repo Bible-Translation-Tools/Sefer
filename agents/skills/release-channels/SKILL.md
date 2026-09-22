@@ -44,9 +44,9 @@ the mistake is quiet.
 
 ## A URL for a branch, without deploying anything
 
-    pnpm preview:branch                  # alias from the current branch
-    pnpm preview:branch design/cards     # or name it
-    pnpm preview:branch --dry            # build, print the command, ship nothing
+    pnpm branch:preview                  # alias from the current branch
+    pnpm branch:preview design/cards     # or name it
+    pnpm branch:preview --dry            # build, print the command, ship nothing
 
 Uploads a VERSION of the `sefer-web-dev` Worker and prints a URL like
 `design-cards-sefer-web-dev.<account>.workers.dev`. `check.yml` does this

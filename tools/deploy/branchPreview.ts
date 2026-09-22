@@ -1,9 +1,9 @@
 /**
  * A URL for one branch, without deploying anything.
  *
- *     pnpm preview:branch                      # alias from the current branch
- *     pnpm preview:branch design/cards         # or name it
- *     pnpm preview:branch --dry                # build, print the command, ship nothing
+ *     pnpm branch:preview                      # alias from the current branch
+ *     pnpm branch:preview design/cards         # or name it
+ *     pnpm branch:preview --dry                # build, print the command, ship nothing
  *
  * ## What this is, and what it is NOT
  *
@@ -92,14 +92,14 @@ const main = (): void => {
   const alias = aliasFor(branch);
 
   if (alias === "") {
-    process.stderr.write(`preview:branch: "${branch}" has no usable alias in it\n`);
+    process.stderr.write(`branch:preview: "${branch}" has no usable alias in it\n`);
     process.exitCode = 1;
     return;
   }
 
   if (branch === "master" || branch === "HEAD") {
     process.stderr.write(
-      "preview:branch: master already deploys the dev channel on every push; " +
+      "branch:preview: master already deploys the dev channel on every push; " +
         "a version preview of it would only be a second URL for the same commit.\n",
     );
     process.exitCode = 1;
@@ -107,7 +107,7 @@ const main = (): void => {
   }
 
   process.stdout.write(
-    `preview:branch: ${branch} -> alias "${alias}", ` +
+    `branch:preview: ${branch} -> alias "${alias}", ` +
       `vite mode "${MODE}", uploading a VERSION of the ${CHANNEL} worker (not deploying it)\n`,
   );
 
@@ -133,17 +133,17 @@ const main = (): void => {
   // one costs a rebuild rather than a mystery.
   const missing = REQUIRED.filter((key) => (process.env[key] ?? "") === "");
   if (dry) {
-    process.stdout.write(`preview:branch: dry run — would run: pnpm ${args.join(" ")}\n`);
+    process.stdout.write(`branch:preview: dry run — would run: pnpm ${args.join(" ")}\n`);
     if (missing.length > 0) {
       process.stdout.write(
-        `preview:branch: (${missing.join(", ")} not set; a real run needs them)\n`,
+        `branch:preview: (${missing.join(", ")} not set; a real run needs them)\n`,
       );
     }
     return;
   }
   if (missing.length > 0) {
     process.stderr.write(
-      `preview:branch: ${missing.join(", ")} not set. In CI these come from 1Password; ` +
+      `branch:preview: ${missing.join(", ")} not set. In CI these come from 1Password; ` +
         "locally, export them or pass --dry.\n",
     );
     process.exitCode = 1;
