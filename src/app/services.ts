@@ -185,9 +185,23 @@ export interface ServicesOptions {
   readonly fixture?: boolean;
 }
 
-/** `?fixture=1`, honoured only in a dev build. */
+/**
+ * `?fixture=1`, honoured in any build that carries the design surface.
+ *
+ * Widened from `import.meta.env.DEV` on 2026-09-22. The deployed prototype is
+ * a production build (`--mode design`), so DEV alone switched this off exactly
+ * where it is most useful: on a worker there is no filesystem and no OPFS
+ * project to open, and without it every data-bearing screen — the editor,
+ * review, the inventory — is an empty state. With it, a link like
+ * `/projects?fixture=1` opens four real ULB books over the in-memory
+ * `fixtures/small-nt`, which is what makes those screens shareable at all.
+ *
+ * Still not production: `__SEFER_DESIGN__` is the same build-time literal that
+ * gates `/design` itself, so a real release cannot be talked into composing
+ * over a fixture by a query parameter.
+ */
 export const fixtureRequested = (): boolean => {
-  if (!import.meta.env.DEV || typeof location !== "object") return false;
+  if (!__SEFER_DESIGN__ || typeof location !== "object") return false;
   return new URLSearchParams(location.search).get("fixture") === "1";
 };
 
