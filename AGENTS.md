@@ -40,7 +40,7 @@ Check `package.json` and runner configuration for executable commands. Distingui
 - `pnpm lint` runs Oxlint over the repository.
 - `pnpm format:check` verifies Oxfmt without rewriting files.
 - `pnpm test:unit` runs the Node `core` Vitest project — every `src/**/*.test.ts` except `*.browser.test.*`, plus `tools/**/*.test.ts`. There is no jsdom project.
-- `pnpm test:browser` runs the real Chromium Browser Mode project; today that is one mount/dispose test.
+- `pnpm test:browser` runs the real Chromium Browser Mode project — today five files: the app's mount/dispose, the composition, the fixture page, the OPFS `fileSystemContract` suite, and web git. There is no end-to-end suite that drives a built app, and no Tauri WebDriver suite.
 - `pnpm build` builds the shared Web frontend; `pnpm dev:tauri` starts the Tauri host.
 - `pnpm boundaries` proves `src/core` imports nothing framework- or host-specific, that nothing outside `src/dev` statically imports it, and that `src/dev/annotate` imports no framework at all.
 - `pnpm build:design` builds the deployed prototype — a production build that DOES carry `/design` and the design annotator. See below.
