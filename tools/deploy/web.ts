@@ -22,6 +22,8 @@
 import { execFileSync } from "node:child_process";
 import process from "node:process";
 
+import { channelEnv } from "./channels.ts";
+
 /**
  * The three channels, and the one table that decides what each one is.
  *
@@ -61,9 +63,13 @@ const isEnvironment = (value: string): value is Environment => Object.hasOwn(ENV
  */
 const REQUIRED = ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"] as const;
 
-const run = (command: string, args: readonly string[]): void => {
+const run = (
+  command: string,
+  args: readonly string[],
+  options: { readonly env?: NodeJS.ProcessEnv } = {},
+): void => {
   process.stdout.write(`$ ${command} ${args.join(" ")}\n`);
-  execFileSync(command, [...args], { stdio: "inherit" });
+  execFileSync(command, [...args], { stdio: "inherit", ...options });
 };
 
 const main = (): void => {
@@ -91,7 +97,32 @@ const main = (): void => {
     run("pnpm", ["run", "lint:release"]);
   }
 
-  run("pnpm", ["exec", "vite", "build", "--mode", target.mode]);
+  /**
+   * The channel's hosts, from the one table in `channels.ts`.
+   *
+   * Nothing set these before, so every deployed build had `null` for all of
+   * them and the cloud screens correctly reported "not configured" — the
+   * feature was invisible on every channel, whatever the code did.
+   *
+   * They go in the child's environment rather than an `.env.<mode>` file
+   * because `preview` and `production` are both built `--mode production` and
+   * a mode file cannot tell them apart, which is the whole reason the pairing
+   * lives in a table here. A value already exported wins, so a laptop can
+   * point one build somewhere else without editing this file.
+   */
+  const endpoints = channelEnv(name);
+  const inherited = Object.fromEntries(
+    Object.entries(endpoints).filter(([key]) => (process.env[key] ?? "") !== ""),
+  );
+  for (const [key, value] of Object.entries(endpoints)) {
+    process.stdout.write(
+      `deploy:web: ${key}=${process.env[key] ?? value}${key in inherited ? " (from the environment)" : ""}\n`,
+    );
+  }
+
+  run("pnpm", ["exec", "vite", "build", "--mode", target.mode], {
+    env: { ...endpoints, ...process.env },
+  });
 
   // Checked AFTER the build, so a missing credential costs nothing but a
   // rebuild, and so `--dry` never needs them at all.

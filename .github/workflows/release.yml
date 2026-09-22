@@ -332,6 +332,13 @@ jobs:
           test -n "$SEFER_UPDATER_HOST"
           node tools/tauri/updaterConfig.ts
 
+      # tauri-action builds the frontend itself, so it needs the same endpoint
+      # variables `pnpm deploy:web` sets — and from the same table, so the two
+      # cannot end up pointed at different content hosts for one channel.
+      - name: Endpoints for this channel
+        shell: bash
+        run: node tools/deploy/channelEnv.ts "${{ needs.resolve.outputs.channel }}" >> "$GITHUB_ENV"
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
