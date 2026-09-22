@@ -35,7 +35,12 @@ export interface ObservabilityDevSurface {
     readonly recent: (query?: number | TraceQuery) => readonly AssembledSpan[];
     readonly print: (query?: number | TraceQuery) => string;
   };
-  /** Everything that belongs to no operation: boot, watchers, bare logs. */
+  /**
+   * Everything that belongs to no operation: watchers, bare logs, notes made
+   * outside any piece of work. NOT boot — boot is an operation and comes out
+   * of `traces`, which is worth saying because this comment named it as an
+   * example for long enough to mislead two tests.
+   */
   readonly logs: { readonly recent: (limit?: number) => readonly ObservabilityEvent[] };
   /** The lossless format: one JSON object per line, every event in the ring. */
   readonly export: ObservabilityService["export"];
