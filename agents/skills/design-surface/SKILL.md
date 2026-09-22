@@ -1,6 +1,6 @@
 ---
 name: design-surface
-description: How design work happens in Sefer — the /design route, the point-and-comment collector, variants and tweaks, and how a designer's change reaches the real screens. Use when prototyping a screen, adding or changing a design screen, wiring tweaks onto a real screen, reading a pasted batch of design comments, deploying the prototype, or reviewing a pull request from the designer.
+description: How design work happens in Sefer — the /design route, the point-and-comment collector, variants and tweaks, the branch-and-share lifecycle, and how a designer's change reaches the real screens. Use when prototyping a screen, adding or changing a design screen, wiring tweaks onto a real screen, reading a pasted batch of design comments, starting or branching design work, getting a shareable URL for a branch, deploying the prototype, or reviewing a pull request from the designer.
 ---
 
 # Working on design in Sefer
@@ -8,6 +8,19 @@ description: How design work happens in Sefer — the /design route, the point-a
 A designer who is not a developer works in this repository. This skill is the
 operating guide: what the tools are, how a remark becomes a change, and what
 is deliberately not allowed.
+
+**Assume you are the git.** He should not have to branch, rebase, resolve a
+conflict, or work out how to let somebody see a change. Loading this file means
+you own all of that — the lifecycle is below, and it is as much a part of the
+job as the CSS.
+
+**This file should be enough on its own.** If something he asks for is not
+answered here, that is a gap worth saying out loud rather than improvising
+around. Two files are deliberately elsewhere:
+`documentation/agents/designer-setup.md` for anything about HIS MACHINE
+(installs, the dev server, why a commit paused), and
+`agents/skills/release-channels/SKILL.md` for shipping beyond a branch preview,
+which is not his to do.
 
 It is **not** a design guide. Voice, brand, typography, what "quiet" means here
 — none of that is settled in this file, and a sentence in here should never be
@@ -294,13 +307,63 @@ like the product and diverges from it every week. `pnpm design:scaffolding`
 lists the in-place lane that has outstayed its question; `pnpm lint:release`
 turns it into an error before preview and production.
 
-## The workflow, and what it is for
+## The lifecycle: branch, push, share, graduate
+
+The designer does not work on `master` and should never resolve a merge. As
+the agent, you own the git so he does not have to.
+
+**1. Always start from a fresh `master`.**
+
+```sh
+git checkout master && git pull
+git checkout -b design/onboarding-cards
+```
+
+Every piece of work, even when the last one is an hour old. Branching from
+current `master` each time is what keeps a rebase from ever being necessary —
+somebody else may be committing a dozen times a day.
+
+**If a branch has fallen behind far enough to conflict, do not fight it.**
+Start a fresh branch from `master` and bring the change across. That takes
+minutes; teaching a designer to resolve a merge does not.
+
+**2. His long-lived branch is a SKETCHBOOK, not a merge source.** He may keep
+one — `th`, `design` — full of ideas. Read from it and rewrite against today's
+code when he says *"reuse the card layout from my `th` branch"*. Never merge
+it. What he gets is his idea on top of current `master`, with nothing stale
+carried along.
+
+**3. Push, and the branch gets its own URL.** `check.yml` runs
+`pnpm branch:preview` on every push to a non-master branch and writes the link
+into the Actions summary:
+
+```
+design-onboarding-cards-sefer-web-dev.<account>.workers.dev
+```
+
+It is a **CloudflarePreview** — a Worker *version*, uploaded and not deployed —
+built `--mode dev`, so it carries `/design`, the comment panel and
+`?fixture=1`. It does not touch `sefer-dev.bttdev.org`, it needs no review and
+no merge, and the alias is stable: pushing again updates what that same link
+serves.
+
+That link is the answer to "can somebody look at this". Nothing here ever
+requires pushing to `master` to show somebody something.
+
+Run it by hand with `pnpm branch:preview` (add `--dry` to build and print
+without uploading).
+
+**4. Graduate it**, which is the step below and the only one that reaches the
+real screens.
+
+## The four steps, once he is on a branch
 
 1. **Try it.** A committed screen in `src/dev/design/screens/`; a throwaway in
    `src/dev/design/local/`, which is gitignored and never appears in a diff.
    Or register tweaks on the real screen in place.
-2. **Share it.** Copy the URL. It carries the screen, the variant and every
-   tweak, so "compare a against b" is two links.
+2. **Share it.** The branch preview URL for a person; the localhost URL for
+   yourself. Either carries the screen, the variant and every tweak, so
+   "compare a against b" is two links.
 3. **Say what is wrong.** Comment mode, then paste — or let the agent drain it.
 4. **Graduate it.** A variant that wins **moves into the real screen**, and the
    prototype is deleted in the same commit.
@@ -322,14 +385,22 @@ turns it into an error before preview and production.
 
 | Command | What it does |
 | --- | --- |
-| `pnpm dev` | Dev server; `/design` and the panel are on |
-| `pnpm build:dev` | The deployed prototype build |
-| `pnpm deploy:web design --dry` | Build and print what would ship |
+| `pnpm dev` | Dev server on :3000; `/design` and the panel are on |
+| `pnpm branch:preview` | **A shareable URL for this branch.** Uploads a Worker version; deploys nothing |
+| `pnpm build:dev` | The `dev`-channel build — the one carrying the design surface |
+| `pnpm deploy:web dev --dry` | Build and print what would ship, without shipping |
 | `pnpm verify:design` | Proves the surface is in the design build and out of production |
 | `pnpm boundaries` | The three path rules |
 | `pnpm design:scaffolding` | Lists scaffolding still in application code (exits 0) |
 | `pnpm lint:release` | Makes that scaffolding an error |
-| `pnpm verify:chrome` | Headless Chrome with CDP, for driving the app and reading the handle |
+| `pnpm verify:chrome` | Attaches to the machine's own Chrome over CDP, for driving the app and reading the handle |
+
+His gate before pushing is `pnpm typecheck && pnpm lint && pnpm format:check` —
+not `pnpm check`, which also builds. The `pre-commit` hook runs those three
+plus `boundaries` and the unit tests anyway, so a commit can fail on something
+he was not asked to check; `documentation/agents/designer-setup.md` explains
+both to him, and it is the right place to send him for anything about his
+machine rather than about the design.
 
 ## The debug handle
 
