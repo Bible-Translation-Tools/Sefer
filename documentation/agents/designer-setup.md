@@ -9,30 +9,58 @@ installs.
 
 ## 1. Tools
 
+Four things, and that is the whole list.
+
 ```sh
-# Node 24.4.1 — if you have none, install via https://github.com/Schniz/fnm
+# 1. Node 24.4.1. If you have no Node at all, fnm is the smallest way in:
+#    https://github.com/Schniz/fnm
 fnm install 24.4.1 && fnm use 24.4.1
 
-# pnpm, which is the package manager this repo uses. Not npm, not yarn.
-corepack enable && corepack prepare pnpm@latest --activate
+# 2. pnpm — the package manager this repo uses. Not npm, not yarn.
+npm install -g pnpm@12.0.0-rc.11
 
-# Claude Code
+# 3. Claude Code
 npm install -g @anthropic-ai/claude-code
+
+# 4. the GitHub CLI, so Claude can open pull requests for you
+brew install gh && gh auth login     # or https://cli.github.com
 ```
 
-You do **not** need Rust. That is only for the desktop build, and everything
-below is the web one.
+**pnpm is installed directly rather than through corepack.** Corepack reads
+the version out of `package.json` and installs it on the fly, which sounds
+tidier and has been moving around between Node releases; a direct global
+install is one thing that either works or doesn't. The version above matches
+`packageManager` in `package.json` — if you ever see a version-mismatch
+warning, that is the line to re-run.
+
+Two things you specifically do **not** need:
+
+* **Rust.** That is only for the desktop build. Everything here is the web one.
+* **Playwright browsers.** They are a separate ~300MB download for the test
+  suites, which are not yours to run. `pnpm install` does not fetch them, and
+  nothing in your day asks for them.
+
+One you probably already have: **Google Chrome**, the ordinary app. Claude
+drives *that* to look at its own work (§5), which is exactly why the Playwright
+download is unnecessary — it attaches to the Chrome you already run rather than
+downloading a second browser to launch.
+
+You also need **write access to the repository** — ask for it before you start
+rather than discovering it on your first push.
 
 ## 2. The repository
 
 ```sh
-git clone <repo-url> Sefer
+git clone https://github.com/Bible-Translation-Tools/Sefer.git
 cd Sefer
 pnpm install
 pnpm dev
 ```
 
 Open <http://localhost:3000>. If the port is busy, `pnpm dev --port 3210`.
+
+`pnpm install` also installs git hooks. That is why your first commit pauses
+for a few seconds — see §6.
 
 ## 3. Your two routes
 
@@ -135,6 +163,10 @@ Two things to tell it when you want them:
 * **Screenshots.** `pnpm verify:chrome` starts a headless Chrome that Claude
   can drive and screenshot, so it can check its own work instead of asking you
   to look. Say "start the verification browser and show me" if it does not.
+  It attaches to the Chrome already on your machine, so if Claude ever reports
+  a missing browser executable, tell it to connect to `pnpm verify:chrome`
+  over CDP rather than launching one — the downloaded browsers are for the
+  test suites and are deliberately not installed here.
 * **Real text.** Ask for `?fixture=1` if it hands you an empty screen.
 
 ## 6. Committing
@@ -193,8 +225,30 @@ Before you push, run:
 pnpm typecheck && pnpm lint && pnpm format:check
 ```
 
-That is your gate. **Do not** run `pnpm check` — it also builds and runs the
-test suite, which is slower and is not yours to worry about.
+That is your gate. **Do not** run `pnpm check` — it also builds, which is
+slower and is not yours to worry about.
+
+### Your commit runs its own checks, and may fail on one
+
+Committing triggers a git hook that runs five things in parallel — the three
+above, plus `boundaries` and the unit tests. It takes a few seconds, and it is
+why a commit is not instant.
+
+Two of those five are not in your gate, so a commit can fail on something you
+were not asked to check:
+
+* **`boundaries`** fails if a file reached somewhere it is not allowed to. It
+  is a guardrail, not a scolding, and its message says exactly what reached
+  what. Usually the fix is a one-line import change — tell Claude what it
+  said.
+* **the unit tests** fail if something the code promises stopped being true.
+  If this happens on a change that is purely visual, it is worth saying so out
+  loud rather than making the test pass: a styling change breaking a test
+  usually means the test was testing the wrong thing, and that is somebody
+  else's to fix.
+
+Neither is a reason to stop. `git commit --no-verify` skips the hook if you
+need to save work in a hurry, and CI will still tell the truth later.
 
 ### One kind of change per commit
 
