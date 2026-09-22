@@ -127,6 +127,37 @@ Put the public half in `tauri.conf.json`'s `plugins.updater.pubkey`, which today
 `TAURI_SIGNING_PRIVATE_KEY` / `_PASSWORD` secrets. The v1 app's key is deliberately not reused: it
 signs the v1 update channel.
 
+### If DMG bundling fails locally
+
+`pnpm build:tauri` on macOS can die at `bundle_dmg.sh` with
+`hdiutil: create failed - Resource busy`. Seen on 2026-09-22 with no stale
+volumes mounted and 100 GB free.
+
+It is `create-dmg`'s decorated path that fails — it creates a read-write
+image, mounts it, positions icons, then converts — not disk images in general:
+`hdiutil create -srcfolder … Sefer.app` produces a working DMG on the same
+machine seconds later.
+
+**It matters more than it looks**, because the DMG step aborts bundling and
+the run never reaches the updater artifact. `Sefer.app.tar.gz` is what
+`workers/sefer-updater` actually serves; the DMG is only the human download.
+Losing the former to a failure in the latter is the wrong trade.
+
+To get unstuck locally, build the app bundle alone:
+
+```sh
+pnpm exec tauri build --bundles app
+```
+
+That produces `Sefer.app` and `Sefer.app.tar.gz` (plus its `.sig` when the
+signing key is set) and skips the DMG entirely.
+
+CI runs on a fresh macOS VM, where the old repository ships DMGs without
+trouble, so this is treated as local until CI says otherwise. If it does start
+failing there, the fix is to split the macOS build into two invocations —
+`--bundles app` first so the update path is never collateral damage, then the
+installer — rather than to retry the whole thing.
+
 ## Release
 
 `.github/workflows/release.yml` — a `v*` tag builds Stable; a `-rc` tag or a `workflow_dispatch`
