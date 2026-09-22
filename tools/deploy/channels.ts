@@ -34,7 +34,15 @@ export interface ChannelEndpoints {
    * speaks smart-HTTP and is not a browser origin, so no proxy is involved.
    */
   readonly wacsDesktopUrl: string;
-  /** What the proxy expects in `X-Requested-With`; a label, not a credential. */
+  /**
+   * What the proxy expects in `X-Requested-With`.
+   *
+   * One per channel, not one per application. It is a label rather than a
+   * credential — it ships in this bundle — so its whole value is telling the
+   * proxy's logs which build made a request, and letting one channel be
+   * dropped from an allowlist without touching another. A single shared
+   * identifier would throw both away for nothing.
+   */
   readonly wacsAppId: string;
   /**
    * Language names, directions and the catalogue.
@@ -53,17 +61,17 @@ export const CHANNEL_ENDPOINTS: Readonly<Record<Channel, ChannelEndpoints>> = {
   production: {
     wacsWebUrl: "https://wacs-proxy.bibletranslationtools.org",
     wacsDesktopUrl: "https://content.bibletranslationtools.org",
-    wacsAppId: "sefer-web",
+    wacsAppId: "sefer-prod",
   },
   preview: {
     wacsWebUrl: "https://wacs-proxy.bttdev.org",
     wacsDesktopUrl: "https://content.wacsdev.org",
-    wacsAppId: "sefer-web",
+    wacsAppId: "sefer-preview",
   },
   dev: {
     wacsWebUrl: "https://wacs-proxy.bttdev.org",
     wacsDesktopUrl: "https://content.wacsdev.org",
-    wacsAppId: "sefer-web",
+    wacsAppId: "sefer-dev",
   },
 };
 

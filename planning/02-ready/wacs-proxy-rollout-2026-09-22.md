@@ -11,12 +11,27 @@ is below.
 
 ## Before a deployed Sefer can reach WACS
 
-1. **`ALLOWED_APPS_CSV` gains `sefer-web`, in both environments.** The values
-   live in 1Password now — `op://DevOps/wacs-browser-git-proxy/allowed-apps-prod`
-   and `-dev` — and `pnpm deploy:prod` / `pnpm deploy:dev` push them on every
-   deploy. The items have to exist first; nothing else in the chain works
-   without this and everything fails with a clear 403 until it does.
-   Only `sefer-web` is needed. Desktop never touches the proxy.
+1. **One 1Password item, `DevOps / wacs-proxy`, with four fields.**
+   `cloudflare-api-token`, `cloudflare-account-id`, and the two allowlists:
+
+   | field | value |
+   | --- | --- |
+   | `allowed-apps-prod` | `sefer-prod` |
+   | `allowed-apps-dev` | `sefer-dev,sefer-preview,sefer-local` |
+
+   Three identifiers on dev because three channels point there — every push to
+   master, the preview promotion, and a laptop running `pnpm dev`. Production
+   is the only channel reaching real content and has its own Worker, secret and
+   identifier. Desktop never touches the proxy and needs none.
+
+   Setting the secret REPLACES the allowlist rather than adding to it, so check
+   what each environment currently holds first — as of 2026-09-22 the deployed
+   value looked like `scripture-editor-web,scripture-editor-local`, and leaving
+   an existing client out of the list is how it stops working.
+
+   `pnpm deploy:prod` / `pnpm deploy:dev` push these on every deploy; the item
+   has to exist before either will run. Nothing else in the chain works until
+   it does, and everything fails with a clear 403 until then.
 
 2. **The two custom domains.** `wrangler.toml` declares
    `wacs-proxy.bibletranslationtools.org` and `wacs-proxy.bttdev.org` as custom
@@ -24,10 +39,11 @@ is below.
    Cloudflare account. `tools/deploy/channels.ts` already points the channels
    at those names, so nothing in Sefer changes when they come up.
 
-3. **Do not put Cloudflare Access in front of either.** Access answers with a
-   login redirect, which to a browser `fetch` is an opaque CORS failure — the
-   exact symptom this whole change removes — and it would make anonymous clone
-   impossible. Access on the versioned preview URLs is fine.
+3. **Do not put Cloudflare Access in front of either.** Confirmed 2026-09-22.
+   Access answers with a login redirect, which to a browser `fetch` is an
+   opaque CORS failure — the exact symptom this whole change removes — and it
+   would make anonymous clone impossible. Access on the versioned
+   `*.workers.dev` preview URLs is fine; those are for eyeballing a deploy.
 
 ## Decisions taken, worth not re-litigating
 
