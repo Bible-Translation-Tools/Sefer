@@ -3,8 +3,13 @@
 // Each channel has a custom domain. Wrangler provisions the DNS record on
 // deploy — the deploy token carries `zone.workers.routes` across the account's
 // zones, which is what a Custom Domain is created through — so the hostname
-// does not have to exist beforehand. A channel also keeps answering on its
-// `*.workers.dev` subdomain.
+// does not have to exist beforehand.
+//
+// Declaring `routes` turns the `*.workers.dev` subdomain OFF: `workers_dev`
+// defaults to false once a route exists. That is the behaviour we want — one
+// canonical hostname per channel rather than two that can drift — but it does
+// mean the workers.dev URL stops answering the moment a channel is armed.
+// Set `"workers_dev": true` on a channel to keep both.
 //
 // Modelled on scripture-editor-proto-2's `wrangler.jsonc`, which is the shape
 // this organisation already runs.
