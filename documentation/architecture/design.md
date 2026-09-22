@@ -267,3 +267,13 @@ real component, the question was in the wrong lane:
 indecision into the product. What ships is the decision's outcome, not its
 apparatus — and the URL in the commit message is how a reviewer opens both and
 sees which one won.
+
+**Graduation is deliberately not gated, and that was decided rather than
+overlooked.** The two safety directions are not symmetrical. "This cannot break
+production" is fully mechanical — the three boundary rules, the `define`, and
+`verify:design` — because the cost of getting it wrong is a broken release.
+"This should eventually graduate" is left to judgement: a committed screen that
+has outlived its question is untidy, not dangerous, and the obvious gate (an
+expiry date on `Screen`, failed at release) buys tidiness with a release that
+can be blocked by a calendar. Do not add one. Prune screens as the work passes
+through them.

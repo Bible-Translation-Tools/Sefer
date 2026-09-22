@@ -28,3 +28,10 @@ scratch.md
 # Untracked playground sketches: see src/dev/playground/registry.ts.
 src/dev/playground/local/
 src/dev/design/local/
+
+# Vitest browser mode writes a screenshot and an attachment when a test FAILS.
+# They are evidence of one run on one machine, they regenerate on the next, and
+# they appear beside the source rather than in a build directory — so without
+# these two lines a red suite leaves untracked debris scattered through src/.
+.vitest-attachments/
+**/__screenshots__/
