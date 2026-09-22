@@ -60,14 +60,28 @@ To report something: Comment → click the thing → type → **Enter**. That co
 the whole batch to your clipboard. Paste it into Claude. If you have several
 things to say, use **Add to batch** for each and Copy once at the end.
 
+**One comment about several things.** Hold **Shift** while clicking to gather
+elements instead of commenting on each. Click the last one without Shift and
+you get one box for all of them. Each gets a numbered pin on the screen, and
+the same numbers appear in what you paste — so "1 should go where 2 is" means
+something to whoever reads it.
+
+**Changing the hotkey.** The `⋯` menu has `hotkey: …`. Click it and press the
+keys you want — `⌥C` is a good one, because it works even where a plain letter
+would collide with the editor. `⌫` while recording turns it off.
+
 What you paste looks like this, and the file:line is why it is worth doing
 this way rather than describing the element in prose:
 
 ```
 http://localhost:3000/design?primitives.size=sm
 
-1. src/app/ui/primitives/Button.tsx:77:5  "tertiary"
-   too faint against the card.
+[1] src/app/ui/primitives/Button.tsx:77:5  "tertiary"
+    too faint against the card.
+
+[2] src/app/ui/primitives/Button.tsx:77:5  "primary"
+[3] src/app/ui/primitives/Button.tsx:77:5  "secondary"
+    these two should swap.
 ```
 
 On `/design`, the panel also holds **variants** (whole alternative takes on a

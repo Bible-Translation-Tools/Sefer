@@ -61,6 +61,25 @@ the whole loop is click, type, Enter, paste. Shift+Enter is a newline. "Add to
 batch" saves without copying, for a sweep of several notes and one Copy at the
 end.
 
+**Shift+click gathers.** A plain click comments on one element. Shift+click
+collects it and waits, so the next plain click opens ONE composer holding all
+of them. "These two should swap" and "move 1 to where 2 is" are among the most
+natural things to say about a layout, and they used to cost two comments that
+each described half a thought.
+
+Every collected place gets a number, painted on a pin at the element's corner
+and printed as `[2]` in the paste. The same number in both is the point — it is
+what lets the sentence refer to them. Pins are drawn from the live element's
+rect, so they follow scrolling and reflow; they show only in comment mode, and
+only for this page visit (the comments survive a reload, the pins do not).
+
+**The hotkey is recordable.** Kebab → `hotkey: …` → press the keys. It is
+stored per browser in `localStorage` and outranks whatever the host passed,
+including a recorded "none" (`⌫` while recording). This is how the hotkey gets
+turned back ON over a real screen: `⌥C` is safe over CodeMirror in a way a bare
+`c` is not. Matching is on `event.code`, because macOS turns Option+C into
+`event.key === "ç"`.
+
 **What a comment carries.** A source location first — `data-loc` is stamped
 onto every intrinsic JSX element in dev and design builds by
 `tools/vite/jsxLocation.ts`, and it is the difference between a note you can
@@ -71,9 +90,16 @@ act on and one you have to grep for. Then the element's own text (only its own
 ```
 http://localhost:3210/design?primitives.size=sm
 
-1. src/app/ui/primitives/Button.tsx:77:5  "tertiary"
-   too faint against the card.
+[1] src/app/ui/primitives/Button.tsx:77:5  "tertiary"
+    too faint against the card.
+
+[2] src/app/ui/primitives/Button.tsx:77:5  "primary"
+[3] src/app/ui/primitives/Button.tsx:77:5  "secondary"
+    these two should swap.
 ```
+
+Numbering runs across the whole batch, not per comment, so `[3]` in the paste
+is the pin marked `3` on the screen.
 
 **Two channels, and both matter.** The paste works everywhere, including a
 product owner on a laptop three time zones away. When an agent is attached over

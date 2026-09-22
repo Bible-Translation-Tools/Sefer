@@ -131,6 +131,45 @@ textarea:focus { outline: 2px solid #3d6be0; outline-offset: -1px; }
 
 .empty { color: #74747f; }
 .hint { color: #74747f; font-size: 10px; }
+
+/* Pins. The layer is inert and the pins themselves are not, so a pin can be
+   hovered for its text while every pixel between them still belongs to the
+   application underneath. */
+.pins { position: fixed; inset: 0; pointer-events: none; }
+.pin {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  width: 20px; height: 20px;
+  border-radius: 999px;
+  background: #3d6be0;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 35%);
+  display: grid; place-items: center;
+  font-size: 10px; font-weight: 700; color: #fff;
+  pointer-events: auto;
+  cursor: default;
+}
+/* A pin waiting for its sentence, in the colour of something unfinished. */
+.pin[data-pending="true"] { background: #d08a2c; }
+.pin .bubble {
+  display: none;
+  position: absolute;
+  top: 16px; left: 12px;
+  width: max-content;
+  max-width: 260px;
+  background: #1c1c20;
+  border: 1px solid #34343c;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 45%);
+  padding: 6px 8px;
+  font-size: 11px; font-weight: 400;
+  color: #dcdce4;
+  text-align: left;
+  white-space: pre-wrap;
+}
+.pin:hover { z-index: 1; }
+.pin:hover .bubble { display: block; }
+.pin .bubble .where { color: #8d8d98; font-size: 10px; word-break: break-all; }
 `;
 
 /**

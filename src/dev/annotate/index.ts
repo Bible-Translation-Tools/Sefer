@@ -32,6 +32,18 @@
  * that is the difference between a note an agent can act on and a note it has
  * to grep for. Without it, a short selector and the nearby words, so this
  * module is still useful dropped into a project that has not set that up.
+ *
+ * ## One sentence, several places
+ *
+ * A plain click comments on what is under it. SHIFT+click collects the element
+ * and waits, so the next plain click opens one composer holding all of them.
+ * "These two should swap" and "move 1 to where 2 is" are among the most natural
+ * things to say about a layout, and before this they cost two comments that
+ * each described half a thought.
+ *
+ * Every collected place gets a number, painted on a pin over the element and
+ * printed as `[2]` in the paste. The same number in both is the whole point:
+ * it is what lets the sentence refer to them.
  */
 
 import {
@@ -53,6 +65,15 @@ import {
   viewportOf,
 } from "./describe.ts";
 import { el, newId, on } from "./dom.ts";
+import {
+  asHotkey,
+  describeHotkey,
+  hotkeyFrom,
+  hotkeyMatches,
+  readSavedHotkey,
+  saveHotkey,
+  type Hotkey,
+} from "./hotkey.ts";
 import { ON, OFF, currentVariant, isOn, readTweak, withTweak, withVariant } from "./state.ts";
 import { PAGE_STYLES, PANEL_STYLES } from "./styles.ts";
 import {
@@ -62,6 +83,7 @@ import {
   type Comment,
   type Corner,
   type Mode,
+  type Target,
   type Tweak,
   type Variant,
   type Verbosity,
@@ -95,6 +117,23 @@ const isTyping = (event: KeyboardEvent): boolean => {
   );
 };
 
+/** A described place and the element it was described from. */
+interface Placed {
+  readonly target: Target;
+  readonly element: Element;
+}
+
+const place = (element: Element): Placed => ({
+  element,
+  target: {
+    id: newId(),
+    source: sourceOf(element),
+    selector: selectorOf(element),
+    nearby: nearbyTextOf(element),
+    data: dataAttributesOf(element),
+  },
+});
+
 export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
   let settings = options;
   let mode: Mode = "interact";
@@ -103,8 +142,24 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
   let minimised = options.minimised ?? false;
   let menuOpen = false;
   let comments = readComments();
-  let composing: { element: Element; x: number; y: number } | null = null;
+  /** Shift-clicked places waiting for the sentence that will be about them. */
+  let pending: Placed[] = [];
+  let composing: readonly Placed[] | null = null;
+  let recording = false;
   let status = "";
+
+  /**
+   * Where a pin goes: the live element, kept in memory beside the serialisable
+   * target.
+   *
+   * Deliberately NOT stored coordinates. A click point goes stale the moment
+   * anything scrolls, and a pin three inches from the thing it marks is worse
+   * than no pin. Holding the element means the pin is recomputed from its rect
+   * and therefore tracks reflow, a scrolling container, a resize, everything.
+   * The cost is that pins do not survive a reload — the comments do, the pins
+   * do not, which is the honest trade and the one that never lies.
+   */
+  const placed = new Map<string, Element>();
 
   // ---- the tool's own DOM, sealed off from the page ------------------------
 
@@ -115,6 +170,8 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
   host.style.zIndex = "2147483000";
   const shadow = host.attachShadow({ mode: "open" });
   shadow.append(el("style", {}, [PANEL_STYLES]));
+  const pins = el("div", { class: "pins" });
+  shadow.append(pins);
   const root = el("div", { class: "root" });
   root.style.pointerEvents = "auto";
   shadow.append(root);
@@ -192,7 +249,22 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
     if (event.type === "click" && event instanceof MouseEvent) {
       const element = elementAt(event);
       if (element === null) return;
-      composing = { element, x: event.clientX, y: event.clientY };
+      const chosen = place(element);
+      placed.set(chosen.target.id, element);
+
+      // Shift collects instead of composing. Holding a modifier to mean "and
+      // this one too" is how every list in every file manager works, so it
+      // needs no explaining — and it keeps the plain click meaning exactly what
+      // it meant before.
+      if (event.shiftKey) {
+        pending = [...pending, chosen];
+        drawOutline(element);
+        render();
+        return;
+      }
+
+      composing = [...pending, chosen];
+      pending = [];
       // Opening the composer un-minimises, because the composer IS part of the
       // panel: a puck has nowhere to put a textarea, so a click in comment mode
       // while minimised would swallow the click and then show nothing at all.
@@ -213,7 +285,48 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
     "submit",
   ] as const;
 
+  /**
+   * What actually toggles comment mode here and now.
+   *
+   * A recorded chord outranks whatever the host passed, INCLUDING a recorded
+   * "none" — otherwise turning the shortcut off would last until the next
+   * render. `undefined` from storage means nothing was recorded, which is the
+   * only case where the host's own setting is consulted.
+   */
+  const hotkey = (): Hotkey | null => {
+    const saved = readSavedHotkey();
+    if (saved !== undefined) return saved;
+    return asHotkey(settings.hotkey === undefined ? "c" : settings.hotkey);
+  };
+
   const onKey = (event: KeyboardEvent): void => {
+    // Recording takes every keystroke, because the chord being recorded might
+    // be anything — Escape cancels and Backspace clears, so those two are the
+    // only keys that cannot be recorded, which is a price worth paying for an
+    // exit that always works.
+    if (recording) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === "Escape") {
+        recording = false;
+        render();
+        return;
+      }
+      if (event.key === "Backspace" || event.key === "Delete") {
+        saveHotkey(null);
+        recording = false;
+        flash("Hotkey cleared.");
+        return;
+      }
+      const chord = hotkeyFrom(event);
+      // A modifier on its own is somebody part-way through a chord, not a chord.
+      if (chord === null) return;
+      saveHotkey(chord);
+      recording = false;
+      flash(`Hotkey is ${describeHotkey(chord)}.`);
+      return;
+    }
+
     if (event.key === "Escape" && mode === "comment") {
       event.preventDefault();
       if (composing !== null) {
@@ -221,19 +334,31 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
         render();
         return;
       }
+      if (pending.length > 0) {
+        pending = [];
+        hideOutline();
+        render();
+        return;
+      }
       setMode("interact");
       return;
     }
-    const hotkey = settings.hotkey === undefined ? "c" : settings.hotkey;
-    if (hotkey === null || event.key !== hotkey) return;
-    if (event.metaKey || event.ctrlKey || event.altKey) return;
-    if (isTyping(event)) return;
+
+    const chord = hotkey();
+    if (chord === null || !hotkeyMatches(event, chord)) return;
+    // A chord with a modifier is safe in a text field; a bare letter is not.
+    const bare = !chord.alt && !chord.ctrl && !chord.meta;
+    if (bare && isTyping(event)) return;
+    event.preventDefault();
     setMode(mode === "comment" ? "interact" : "comment");
   };
 
   const setMode = (next: Mode): void => {
     mode = next;
     composing = null;
+    // Places collected but never spoken about are not notes; leaving them to
+    // reappear on the next visit to comment mode would be a small haunting.
+    pending = [];
     if (next === "comment") {
       document.documentElement.setAttribute(MODE_ATTRIBUTE, "comment");
       edge.style.display = "block";
@@ -246,15 +371,11 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
   };
 
   const saveComment = (text: string): void => {
-    if (composing === null || text.trim() === "") return;
-    const { element } = composing;
+    if (composing === null || composing.length === 0 || text.trim() === "") return;
     const comment: Comment = {
       id: newId(),
       text: text.trim(),
-      source: sourceOf(element),
-      selector: selectorOf(element),
-      nearby: nearbyTextOf(element),
-      data: dataAttributesOf(element),
+      targets: composing.map((held) => held.target),
       url: location.href,
       viewport: viewportOf(),
       theme: themeOf(),
@@ -285,6 +406,19 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
     copyBatch();
   };
 
+  let statusTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+
+  /** A line under the panel that says what just happened, and then stops saying it. */
+  const flash = (message: string): void => {
+    status = message;
+    globalThis.clearTimeout(statusTimer);
+    statusTimer = globalThis.setTimeout(() => {
+      status = "";
+      render();
+    }, 2600);
+    render();
+  };
+
   const copyBatch = (): void => {
     if (comments.length === 0) return;
     const text = renderMarkdown(comments, verbosity, settings.context?.() ?? {});
@@ -292,15 +426,9 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
       if (ok) {
         archiveComments();
         comments = readComments();
-        status = "Copied. Paste into Claude.";
-      } else {
-        status = "Could not reach the clipboard.";
+        placed.clear();
       }
-      render();
-      globalThis.setTimeout(() => {
-        status = "";
-        render();
-      }, 2600);
+      flash(ok ? "Copied. Paste into Claude." : "Could not reach the clipboard.");
     });
   };
 
@@ -371,6 +499,16 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
       render();
     });
     menu.append(reset);
+    const record = el("button", { type: "button" }, [
+      recording ? "press a key…" : `hotkey: ${describeHotkey(hotkey())}`,
+    ]);
+    on(record, "click", () => {
+      recording = true;
+      status = "Press the keys you want. Esc cancels, ⌫ clears.";
+      globalThis.clearTimeout(statusTimer);
+      render();
+    });
+    menu.append(record);
     if (readLastBatch().length > 0) {
       const restore = el("button", { type: "button" }, ["restore last batch"]);
       on(restore, "click", () => {
@@ -410,11 +548,23 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
       event.stopPropagation();
       saveAndCopy(area.value);
     });
-    const where =
-      composing === null ? "" : (sourceOf(composing.element) ?? selectorOf(composing.element));
+    // Every place this sentence is about, numbered to match the pins on the
+    // screen, so "1 should go where 2 is" has something to refer to.
+    const held = composing ?? [];
+    const numbers = numbering();
+    const where = el("div", { class: "hint" });
+    for (const one of held) {
+      where.append(
+        el("div", {}, [
+          `[${String(numbers.get(one.target.id) ?? 0)}] ${one.target.source ?? one.target.selector}`,
+        ]),
+      );
+    }
     const section = el("div", { class: "section" }, [
-      el("div", { class: "legend" }, ["Comment"]),
-      el("div", { class: "hint" }, [where]),
+      el("div", { class: "legend" }, [
+        held.length > 1 ? `Comment on ${String(held.length)}` : "Comment",
+      ]),
+      where,
       area,
       el("div", { class: "row" }, [copy, save, cancel]),
     ]);
@@ -424,20 +574,87 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
     return section;
   };
 
+  /**
+   * Every place in play, in the order it was pointed at: the saved comments'
+   * targets first, then whatever is collected but not yet written about.
+   *
+   * One sequence for the panel, the pins and the paste, computed once. Three
+   * places deriving their own numbering is three chances for the number on the
+   * screen to disagree with the number in the text, which would make the
+   * numbering worse than useless.
+   */
+  const rows = (): { target: Target; n: number; text: string | null }[] => {
+    const all: { target: Target; n: number; text: string | null }[] = [];
+    let n = 0;
+    for (const comment of comments) {
+      for (const target of comment.targets) {
+        n += 1;
+        all.push({ target, n, text: comment.text });
+      }
+    }
+    for (const held of [...pending, ...(composing ?? [])]) {
+      n += 1;
+      all.push({ target: held.target, n, text: null });
+    }
+    return all;
+  };
+
+  const numbering = (): Map<string, number> => new Map(rows().map((row) => [row.target.id, row.n]));
+
+  /**
+   * The pins, drawn from the live elements rather than from stored coordinates.
+   *
+   * Only in comment mode, and that restraint is the point of the whole tool:
+   * the panel floats in a corner and the pins appear over the design precisely
+   * when somebody is pointing at it. Leaving eight numbered dots on top of a
+   * screen that is being JUDGED would obstruct the one thing being looked at.
+   */
+  const renderPins = (): void => {
+    pins.replaceChildren();
+    if (mode !== "comment") return;
+    for (const row of rows()) {
+      const element = placed.get(row.target.id);
+      if (element === undefined || !element.isConnected) continue;
+      const box = element.getBoundingClientRect();
+      if (box.width === 0 && box.height === 0) continue;
+      const pin = el(
+        "div",
+        { class: "pin", ...(row.text === null ? { "data-pending": "true" } : {}) },
+        [String(row.n)],
+      );
+      pin.style.left = `${String(box.right)}px`;
+      pin.style.top = `${String(box.top)}px`;
+      pin.append(
+        el("div", { class: "bubble" }, [
+          el("div", { class: "where" }, [row.target.source ?? row.target.selector]),
+          row.text ?? "Waiting for a sentence.",
+        ]),
+      );
+      pins.append(pin);
+    }
+  };
+
   const commentList = (): HTMLElement => {
     const list = el("div", { class: "comments" });
+    const numbers = numbering();
     for (const comment of comments) {
       const drop = el("button", { type: "button", class: "ghost icon", title: "Remove" }, ["×"]);
       on(drop, "click", () => {
+        for (const target of comment.targets) placed.delete(target.id);
         comments = removeComment(comment.id);
         render();
       });
+      const where = el("div", { class: "where" });
+      for (const target of comment.targets) {
+        where.append(
+          el("div", {}, [
+            `[${String(numbers.get(target.id) ?? 0)}] ${target.source ?? target.selector}`,
+          ]),
+        );
+      }
       list.append(
         el("div", { class: "comment" }, [
-          el("div", {}, [
-            el("div", { class: "where" }, [comment.source ?? comment.selector]),
-            el("div", { class: "what" }, [comment.text]),
-          ]),
+          el("div", {}, [where, el("div", { class: "what" }, [comment.text])]),
           drop,
         ]),
       );
@@ -448,6 +665,7 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
   function render(): void {
     root.replaceChildren();
     root.setAttribute("data-corner", corner);
+    renderPins();
 
     if (minimised) {
       const puck = el("div", { class: "puck", "data-mode": mode, title: "Open the design panel" }, [
@@ -477,12 +695,14 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
 
     const body = el("div", { class: "body" });
 
+    const chord = hotkey();
+    const press = chord === null ? "" : ` (${describeHotkey(chord)})`;
     body.append(
       el("div", { class: "section" }, [
         segmented(
           [
-            { value: "interact", label: "Interact", title: "Use the application (c)" },
-            { value: "comment", label: "Comment", title: "Point at things (c)" },
+            { value: "interact", label: "Interact", title: `Use the application${press}` },
+            { value: "comment", label: "Comment", title: `Point at things${press}` },
           ],
           mode,
           (value) => {
@@ -493,6 +713,29 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
     );
 
     if (composing !== null) body.append(composer());
+    else if (pending.length > 0) {
+      const write = el("button", { type: "button", class: "primary" }, [
+        `Comment on ${String(pending.length)}`,
+      ]);
+      on(write, "click", () => {
+        composing = pending;
+        pending = [];
+        render();
+      });
+      const clear = el("button", { type: "button", class: "ghost" }, ["Clear"]);
+      on(clear, "click", () => {
+        pending = [];
+        hideOutline();
+        render();
+      });
+      body.append(
+        el("div", { class: "section" }, [
+          el("div", { class: "legend" }, [`${String(pending.length)} selected`]),
+          el("div", { class: "hint" }, ["Shift+click to add another, or click one without Shift."]),
+          el("div", { class: "row" }, [write, clear]),
+        ]),
+      );
+    }
 
     const nav = settings.nav;
     if (nav !== undefined && nav.items.length > 1) {
@@ -545,7 +788,9 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
     } else if (mode === "comment") {
       body.append(
         el("div", { class: "section" }, [
-          el("div", { class: "hint" }, ["Click anything to comment on it. Esc to stop."]),
+          el("div", { class: "hint" }, [
+            "Click anything to comment on it. Shift+click to gather several into one comment. Esc to stop.",
+          ]),
         ]),
       );
     }
@@ -562,9 +807,25 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
 
   // ---- wiring --------------------------------------------------------------
 
+  /**
+   * Pins are positioned from live rects, so anything that moves an element
+   * moves its pin. Capture-phase `scroll` because a scrolling container does
+   * not bubble one, and a frame gate because both of these fire in floods.
+   */
+  let frame = 0;
+  const repaint = (): void => {
+    if (frame !== 0) return;
+    frame = globalThis.requestAnimationFrame(() => {
+      frame = 0;
+      renderPins();
+    });
+  };
+
   for (const type of SWALLOWED) document.addEventListener(type, swallow, true);
   document.addEventListener("mousemove", onMove, true);
   document.addEventListener("keydown", onKey, true);
+  document.addEventListener("scroll", repaint, true);
+  globalThis.addEventListener("resize", repaint);
   const unsubscribe = settings.state.subscribe?.(() => {
     render();
   });
@@ -583,6 +844,7 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
       const held = comments;
       archiveComments();
       comments = readComments();
+      placed.clear();
       render();
       return held;
     },
@@ -592,6 +854,9 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
       for (const type of SWALLOWED) document.removeEventListener(type, swallow, true);
       document.removeEventListener("mousemove", onMove, true);
       document.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("scroll", repaint, true);
+      globalThis.removeEventListener("resize", repaint);
+      globalThis.clearTimeout(statusTimer);
       unsubscribe?.();
       document.documentElement.removeAttribute(MODE_ATTRIBUTE);
       host.remove();
@@ -609,6 +874,9 @@ export type {
   Corner,
   Mode,
   StateAdapter,
+  Target,
   Tweak,
   Variant,
 } from "./types.ts";
+export type { Hotkey } from "./hotkey.ts";
+export { describeHotkey, forgetHotkey, readSavedHotkey } from "./hotkey.ts";

@@ -23,7 +23,7 @@
  * nearby text for the ones where the words are not enough.
  */
 
-import type { Comment, Verbosity } from "./types.ts";
+import type { Comment, Target, Verbosity } from "./types.ts";
 
 const ACTIVE = "sefer.annotate.comments";
 const LAST = "sefer.annotate.lastBatch";
@@ -44,10 +44,40 @@ const isComment = (value: unknown): value is Comment => {
   );
 };
 
+/**
+ * Bring a stored comment up to the current shape.
+ *
+ * A comment used to carry one place, flat: `source`, `selector`, `nearby`,
+ * `data`. It now carries a list of `targets`, because one sentence is often
+ * about two elements. A reload mid-review would otherwise throw away the
+ * morning's notes — or worse, render them with `undefined` where the location
+ * should be — so the old shape is lifted into a single target.
+ */
+const lift = (comment: Comment): Comment => {
+  if (Array.isArray(comment.targets)) return comment;
+  // SAFETY: reached only when `targets` is absent, which means this is the
+  // older flat shape written by this same module. Every field is read through
+  // `Partial`, so a comment that is neither shape yields empty strings rather
+  // than `undefined` in the paste.
+  const flat = comment as unknown as Partial<Target>;
+  return {
+    ...comment,
+    targets: [
+      {
+        id: `${comment.id}t0`,
+        source: flat.source ?? null,
+        selector: flat.selector ?? "",
+        nearby: flat.nearby ?? "",
+        data: flat.data ?? "",
+      },
+    ],
+  };
+};
+
 const readList = (key: string): readonly Comment[] => {
   try {
     const held: unknown = JSON.parse(sessionStorage.getItem(key) ?? "[]");
-    return Array.isArray(held) ? held.filter(isComment) : [];
+    return Array.isArray(held) ? held.filter(isComment).map(lift) : [];
   } catch {
     // A tool that refuses to open because storage is disabled would be a worse
     // tool than one that forgets.
@@ -107,25 +137,31 @@ export const renderMarkdown = (
   ].filter((part) => part !== "");
   const lines: string[] = [header.join(" · "), ""];
 
-  comments.forEach((comment, index) => {
-    const place = comment.source ?? comment.selector;
-    const label = comment.nearby === "" ? "" : `  "${comment.nearby}"`;
-    const data = comment.data === "" ? "" : `  [${comment.data}]`;
-    lines.push(`${String(index + 1)}. ${place}${label}${data}`);
-    // Every line indented, not just the first: Shift+Enter makes multi-line
-    // comments, and a continuation flush against the margin reads as a new
-    // numbered item rather than as more of the same one.
-    for (const line of comment.text.split("\n")) lines.push(`   ${line}`);
+  // One counter across the whole batch rather than per comment, because the
+  // number is also what is painted on the pin over the element. `[3]` in the
+  // paste and the `3` on the screen have to be the same thing, or the numbering
+  // is decoration.
+  let n = 0;
+
+  for (const comment of comments) {
+    for (const target of comment.targets) {
+      n += 1;
+      const place = target.source ?? target.selector;
+      const label = target.nearby === "" ? "" : `  "${target.nearby}"`;
+      const data = target.data === "" ? "" : `  [${target.data}]`;
+      const selector =
+        verbosity === "full" && target.source !== null ? `  · ${target.selector}` : "";
+      lines.push(`[${String(n)}] ${place}${label}${data}${selector}`);
+    }
+    // Indented under its targets, every line of it: Shift+Enter makes
+    // multi-line comments, and a continuation flush against the margin reads as
+    // a new item rather than as more of the same one.
+    for (const line of comment.text.split("\n")) lines.push(`    ${line}`);
     if (verbosity === "full") {
-      const facts = [
-        comment.source === null ? null : `selector ${comment.selector}`,
-        `viewport ${comment.viewport}`,
-        `theme ${comment.theme}`,
-      ].filter((fact): fact is string => fact !== null);
-      lines.push(`   (${facts.join(" · ")})`);
+      lines.push(`    (viewport ${comment.viewport} · theme ${comment.theme})`);
     }
     lines.push("");
-  });
+  }
 
   return lines.join("\n").trimEnd();
 };

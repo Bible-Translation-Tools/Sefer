@@ -13,6 +13,8 @@
  * changes.
  */
 
+import type { Hotkey } from "./hotkey.ts";
+
 /** Where the panel sits. A kebab menu moves it; a designer works in a corner. */
 export type Corner = "bottom-right" | "bottom-left" | "top-right" | "top-left";
 
@@ -67,10 +69,16 @@ export interface StateAdapter {
   readonly subscribe?: (onChange: () => void) => () => void;
 }
 
-/** One thing somebody pointed at and said something about. */
-export interface Comment {
+/**
+ * One element somebody pointed at.
+ *
+ * Split out of `Comment` because a comment can be about MORE than one place.
+ * "These two should swap" and "move 1 to where 2 is" are the most natural
+ * things to say about a layout, and saying them used to cost two comments that
+ * each described half a thought.
+ */
+export interface Target {
   readonly id: string;
-  readonly text: string;
   /** From the `data-loc` stamp, when the JSX-location transform is running. */
   readonly source: string | null;
   /** A short CSS-ish path, for when there is no source location. */
@@ -79,6 +87,14 @@ export interface Comment {
   readonly nearby: string;
   /** Its `data-*` attributes, which are usually what identifies it. */
   readonly data: string;
+}
+
+/** One thing somebody said, about one or more places. */
+export interface Comment {
+  readonly id: string;
+  readonly text: string;
+  /** At least one, in the order they were clicked. */
+  readonly targets: readonly Target[];
   readonly url: string;
   readonly viewport: string;
   readonly theme: string;
@@ -103,7 +119,7 @@ export interface AnnotatorOptions {
   readonly corner?: Corner;
   /**
    * The key that toggles comment mode. `"c"` by default, `null` for no hotkey
-   * at all — click the segmented control instead.
+   * at all — click the segmented control instead. A `Hotkey` for a chord.
    *
    * Configurable rather than fixed because a bare letter is a different
    * proposition depending on what it is floating over. On a design surface,
@@ -112,8 +128,13 @@ export interface AnnotatorOptions {
    * competes with the application's own bindings, and `null` is the honest
    * setting. `Escape` always leaves comment mode regardless, because an exit
    * you cannot find is worse than no shortcut at all.
+   *
+   * Whatever the host passes, a hotkey RECORDED in the panel wins — including
+   * a recorded "none". That is the point of recording one: `⌥C` is safe over
+   * an editor in a way a bare letter is not, so the person at the keyboard can
+   * turn the shortcut back on in the places the host had to disable it.
    */
-  readonly hotkey?: string | null;
+  readonly hotkey?: string | Hotkey | null;
   /**
    * Start as a puck rather than an open panel. True when the annotator is
    * floating over a real screen, where somebody is using the application

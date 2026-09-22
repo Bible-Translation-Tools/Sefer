@@ -85,6 +85,21 @@ real screen, and pointing at a pixel should work wherever the pixel is.
 * On `/design`: the same panel, reconfigured with that screen's variants and
   tweaks, opened, hotkey `c`.
 
+Those are defaults, not a ceiling. A chord RECORDED in the panel (kebab →
+`hotkey: …`) is kept in `localStorage` and outranks both, a recorded "none"
+included — which is how the hotkey comes back on over a real screen, since
+`⌥C` collides with nothing the way a bare letter does. `src/dev/annotate/
+hotkey.ts` matches on `event.code`, because macOS turns Option+C into
+`event.key === "ç"` and matching on `key` would fail for exactly the chords
+worth recording.
+
+A comment is about one or more **targets**: a plain click composes, Shift+click
+gathers. Each target carries its own `data-loc`, selector, own text and
+`data-*`, gets a numbered pin drawn from its live rect (comment mode only), and
+appears as `[n]` in the paste under one shared sentence. The numbering runs
+across the batch rather than per comment, so the pin and the paste agree —
+without that, "move 1 to where 2 is" has nothing to refer to.
+
 Production never has it, and that is not negotiable: comment mode swallows
 every event in the capture phase, which in the hands of somebody editing
 scripture is a foot-gun.
