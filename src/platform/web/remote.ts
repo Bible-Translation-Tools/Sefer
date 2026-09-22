@@ -160,6 +160,36 @@ export const hostOf = (url: string): string => {
   }
 };
 
+/**
+ * The same repository, addressed through THIS build's endpoint.
+ *
+ * Gitea hands out absolute URLs and so does the catalogue — `clone_url` and
+ * `repo_url` both name the content host directly. Taken at face value in a
+ * browser they go straight at the origin this host cannot reach, which is the
+ * failure the endpoint exists to avoid, reintroduced by the one field nobody
+ * rewrote. Downloading from the catalogue is the first thing most people
+ * click, so that was the first thing that would have broken.
+ *
+ * The rewrite is a path move and nothing more, because the proxy answers on
+ * Gitea's own paths: origin from the endpoint, path and query from the URL.
+ * It is idempotent, so a URL already on the endpoint passes through unchanged.
+ *
+ * Web only. Desktop attaches exactly what it was given — git2 can reach any
+ * host it likes, and rewriting a URL that would have worked would be a
+ * regression rather than a fix.
+ */
+const onEndpoint = (endpoint: string | null, url: string): string => {
+  if (endpoint === null) return url;
+  try {
+    const target = new URL(url);
+    return `${endpoint.replace(/\/+$/u, "")}${target.pathname}${target.search}`;
+  } catch {
+    // Not an absolute URL. Nothing to re-base, and guessing would be worse
+    // than handing it on for isomorphic-git to refuse by itself.
+    return url;
+  }
+};
+
 const makeWebRemote = (
   options: WebRemoteOptions,
   fileSystem: FileSystem.FileSystem,
@@ -190,8 +220,19 @@ const makeWebRemote = (
         (branch) => branch ?? DEFAULT_BRANCH,
       );
 
-    const attach = (repo: Repo, url: string): Effect.Effect<void, RemoteError> =>
+    /**
+     * Records where this project's bytes come from.
+     *
+     * Every URL reaches the far side through here — cloning, publishing, the
+     * cloud panel's attach — so re-basing onto the endpoint at this one point
+     * covers every caller, including ones that do not exist yet. What ends up
+     * in `.git/config` is therefore the endpoint, which is also the right
+     * answer: a project remembers the door it came through, and keeps syncing
+     * there even if this build is later pointed somewhere else.
+     */
+    const attach = (repo: Repo, requested: string): Effect.Effect<void, RemoteError> =>
       Effect.gen(function* () {
+        const url = onEndpoint(options.endpoint, requested);
         const remotes = yield* attempt(() => git.listRemotes({ fs, dir: repo.root }));
         const existing = remotes.find((entry) => entry.remote === ORIGIN);
         if (existing?.url === url) return;
