@@ -81,8 +81,10 @@ apart in the first place.
 
 There is likewise no "which upstream should the proxy use" setting. Each proxy
 deployment is pinned to one content host, so choosing the endpoint already
-chose the content — and that pinning is what stops a preview build reaching
-production content however anyone configures it. See the proxy's own README in
+chose the content — one URL, one unambiguous answer to "what am I looking at".
+Which is also why any build can be pointed at any environment from the Network
+card: a production build that needs to look at dev WACS types the dev proxy's
+URL, and does not need a special build to do it. See the proxy's own README in
 `wacs-isomorphic-git-proxy`.
 
 `.env*` files are never committed (this table is the reference; there is no `.env.example`). Do not add a second reader of

@@ -16,13 +16,18 @@ is below.
 
    | field | value |
    | --- | --- |
-   | `allowed-apps-prod` | `sefer-prod` |
-   | `allowed-apps-dev` | `sefer-dev,sefer-preview,sefer-local` |
+   | `allowed-apps-prod` | `sefer-prod,sefer-preview,sefer-dev,sefer-local` |
+   | `allowed-apps-dev` | `sefer-prod,sefer-preview,sefer-dev,sefer-local` |
 
-   Three identifiers on dev because three channels point there — every push to
-   master, the preview promotion, and a laptop running `pnpm dev`. Production
-   is the only channel reaching real content and has its own Worker, secret and
-   identifier. Desktop never touches the proxy and needs none.
+   The same four in both, deliberately. The endpoint is a setting, so any build
+   can be pointed at either environment from `/settings` — a production build
+   looking at dev WACS is an ordinary thing to want — and an allowlist that
+   permitted only "its own" channel would turn that into a 403 nobody could
+   diagnose. The environments are separated by the upstream pinning, which is
+   the thing that actually separates them; the allowlist is for attribution and
+   revocation, and neither wants the lists to differ.
+
+   Desktop never touches a proxy and needs no identifier.
 
    Setting the secret REPLACES the allowlist rather than adding to it, so check
    what each environment currently holds first — as of 2026-09-22 the deployed
@@ -58,9 +63,17 @@ is below.
   ships in a public bundle — so a limit on both classes is what would actually
   deter bulk scraping. The scrapers discussed so far are meta-bot-class, which
   the Worker not being linked anywhere already handles.
-- **No `UPSTREAM_ALLOWED_HOSTS_CSV`.** One pinned upstream per environment is
-  what makes "a preview build cannot write to real content" a guarantee rather
-  than a client-side convention.
+- **No `UPSTREAM_ALLOWED_HOSTS_CSV`.** One pinned upstream per Worker is what
+  makes an ENDPOINT mean exactly one content host. That is worth keeping on its
+  own terms; it is not a statement about which build is allowed to reach what.
+
+- **`preview` points at production content.** Preview is a release channel in
+  the Zed sense — ahead of stable, but people doing real work in it — so
+  pointing it at a copy of the content would be the surprise. `dev` is the
+  channel that gets dev content: every push to master, carrying the design
+  surface and the comment panel that swallows clicks. What keeps real
+  translations safe is Gitea auth — a push needs a token with write access —
+  and never was the build's compiled-in hostname.
 
 ## Still missing, and small
 

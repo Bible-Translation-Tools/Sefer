@@ -12,12 +12,26 @@
  * out loud, which is exactly the failure `web.ts` exists to prevent for the
  * mode-to-channel pairing.
  *
- * `preview` points at DEV content deliberately. Preview is the channel people
- * are asked to go and test drive, and somebody clicking around a release
- * candidate must not be able to push at real translations. The separation is
- * not enforced here — it is enforced by each proxy deployment being pinned to
- * one upstream, so a preview build physically cannot reach production content.
- * This table only decides which door the build knocks on.
+ * These are DEFAULTS, not destinations. The endpoint is a preference as well as
+ * a build value (`src/app/endpoints.ts`), so any build can be pointed at any
+ * environment from the Network card of `/settings` — a production build can
+ * look at dev WACS by typing the dev proxy's URL, and does not need a special
+ * build to do it. What this table decides is only where a build points when
+ * nobody has said otherwise.
+ *
+ * `preview` therefore points at PRODUCTION content. Preview is a release
+ * channel in the Zed sense — ahead of stable, but people doing real work in
+ * it — not a staging environment, so a preview user opening their own
+ * translations is the ordinary case and pointing them at a copy would be the
+ * surprise. `dev` is the channel that gets dev content: it is every push to
+ * master, it carries the design surface and the comment panel that swallows
+ * clicks, and it is the one somebody is invited to poke rather than use.
+ *
+ * What keeps real translations safe is not this table and never was. It is
+ * Gitea auth: a push needs a token with write access to that repository. The
+ * proxies still pin one upstream each, so an ENDPOINT reaches exactly the
+ * content it says it does — that is a property worth keeping, and it is a
+ * different property from "which build am I running".
  */
 
 /** The three web channels, plus the two the desktop matrix builds. */
@@ -64,8 +78,8 @@ export const CHANNEL_ENDPOINTS: Readonly<Record<Channel, ChannelEndpoints>> = {
     wacsAppId: "sefer-prod",
   },
   preview: {
-    wacsWebUrl: "https://wacs-proxy.bttdev.org",
-    wacsDesktopUrl: "https://content.wacsdev.org",
+    wacsWebUrl: "https://wacs-proxy.bibletranslationtools.org",
+    wacsDesktopUrl: "https://content.bibletranslationtools.org",
     wacsAppId: "sefer-preview",
   },
   dev: {
