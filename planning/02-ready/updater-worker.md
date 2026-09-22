@@ -99,6 +99,31 @@ Keep the private key somewhere real as well as in 1Password. Losing it means
 existing installs can never be updated again — you would have to ship a new
 signed app and ask people to reinstall.
 
+#### One key, and `tauri.conf.preview.json` does not hold it
+
+The preview config is an OVERLAY. `tools/tauri/run.ts` passes it as a second
+`--config` on top of `src-tauri/tauri.conf.json`, so it carries only what
+differs between channels — product name, identifier, window title. The pubkey
+lives in the base config and both channels inherit it. Do not copy it in;
+duplicating it is how the two would eventually disagree.
+
+Nor do the channels want separate keypairs. They are kept apart by
+**identifier and endpoint**, not by signature: `org.wycliffe.sefer` and
+`org.wycliffe.sefer.preview` install side by side and each asks its own
+updater URL. A second key would isolate a compromise in theory, but both
+private halves would live in the same 1Password item and pass through the same
+CI, so the blast radius is identical in practice and the operational cost is
+not. One key per app is also what the old repo does — a single
+`zephyr-updater.key` for both its channels.
+
+So the three moving parts sit in three places, each for its own reason:
+
+| What | Where | Why |
+| --- | --- | --- |
+| Public key | `tauri.conf.json`, committed | Same for every channel; it is public |
+| Identity | `tauri.conf.preview.json` overlay | The only thing a channel changes |
+| Endpoint | `SEFER_UPDATER_HOST` in the environment | Differs per channel, and `documentation/architecture/desktop.md` is explicit that endpoints never live in the repository |
+
 ### The updater GitHub token
 
 Fine-grained PAT, `Contents: Read`, this repository only →
