@@ -51,8 +51,59 @@ following an existing decision, not making one.
 
 **`GH_TOKEN`.** The original refreshes it as a Worker secret on every deploy,
 sourced from 1Password, so the pipeline is the single rotation point and
-nobody runs `wrangler secret put` by hand. Keep that. It needs `public_repo`
-only.
+nobody runs `wrangler secret put` by hand. Keep that.
+
+`Bible-Translation-Tools/Sefer` is **public**, so this token is not about
+access — the releases API is readable without one. It is about **rate
+limits**: unauthenticated GitHub allows 60 requests an hour per IP, and a
+Cloudflare Worker shares egress IPs with everyone else on the edge, so an
+updater with no token will start returning nothing under load for reasons
+nobody can reproduce locally. Authenticated is 5,000/hour.
+
+Fine-grained token, `Contents: Read`, scoped to this repository only. Set an
+expiry and a calendar reminder; the pipeline rotating the Worker secret on
+every deploy means renewing is a 1Password edit and a redeploy, not a hunt.
+
+## Secrets to create before this starts
+
+Two things a human has to do once. Neither needs the worker to exist yet, and
+doing them now unblocks the rest.
+
+### The updater signing keypair
+
+```sh
+pnpm exec tauri signer generate -w ~/.sefer-updater.key
+```
+
+It prompts for a password — set one, do not leave it empty. That writes
+`~/.sefer-updater.key` (private) and `~/.sefer-updater.key.pub` (public).
+
+Then:
+
+| Where it goes | What |
+| --- | --- |
+| `src-tauri/tauri.conf.json`, `plugins.updater.pubkey` | the `.pub` contents — **committed**, it is public |
+| `op://DevOps/Sefer/tauri-updater-private-key` | the contents of `~/.sefer-updater.key` |
+| `op://DevOps/Sefer/tauri-updater-private-key-password` | the password |
+
+The config today holds the literal `REPLACE_WITH_MINISIGN_PUBLIC_KEY`, so it
+is obvious when this is still undone. In CI these become
+`TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
+
+**Generate a new one; do not copy Zephyr's.** This keypair is the trust root
+for auto-updates — reuse means a Zephyr-signed manifest validates for Sefer
+clients and the reverse. `documentation/architecture/desktop.md` already states
+the policy: the v1 app's key is deliberately not reused either.
+
+Keep the private key somewhere real as well as in 1Password. Losing it means
+existing installs can never be updated again — you would have to ship a new
+signed app and ask people to reinstall.
+
+### The updater GitHub token
+
+Fine-grained PAT, `Contents: Read`, this repository only →
+`op://DevOps/Sefer/updater-gh-token`. See the rate-limit note above for why a
+public repo still wants one.
 
 ## Where it goes
 

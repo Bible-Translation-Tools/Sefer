@@ -2,7 +2,10 @@
 
 Sefer is a local-first scripture editor whose source of truth is exact USFM text. This scaffold uses Solid 2 release-candidate packages, not React. Use pnpm.
 
-Loadable skills live in `agents/skills/` (`.claude/skills` is a symlink to it). `design-surface` covers prototyping, the point-and-comment collector, variants and tweaks, and the designer handoff.
+Loadable skills live in `agents/skills/` (`.claude/skills` is a symlink to it):
+
+- [Release channels](agents/skills/release-channels/SKILL.md): read before deploying, tagging, or answering "what does a push to master do"; the dev/preview/production matrix, the tag format, the exact commands, and why master deploys `dev`.
+- [The design surface](agents/skills/design-surface/SKILL.md): read before design work; prototyping on `/design`, the point-and-comment collector, variants and tweaks, and how a designer's change graduates into the real screens.
 
 Read only the guidance relevant to the task:
 
@@ -43,10 +46,20 @@ Check `package.json` and runner configuration for executable commands. Distingui
 - `pnpm test:browser` runs the real Chromium Browser Mode project — today five files: the app's mount/dispose, the composition, the fixture page, the OPFS `fileSystemContract` suite, and web git. There is no end-to-end suite that drives a built app, and no Tauri WebDriver suite.
 - `pnpm build` builds the shared Web frontend; `pnpm dev:tauri` starts the Tauri host.
 - `pnpm boundaries` proves `src/core` imports nothing framework- or host-specific, that nothing outside `src/dev` statically imports it, and that `src/dev/annotate` imports no framework at all.
-- `pnpm build:dev` builds the deployed prototype — a production build that DOES carry `/design` and the design annotator. See below.
+- `pnpm build:dev` builds the `dev` channel — a production build that DOES carry `/design`, the comment panel and `?fixture=1`. See below.
+- `pnpm deploy:web <dev|preview|production>` builds for that channel and ships it; `--dry` builds and prints the wrangler command without shipping. The mode-to-channel pairing lives in `tools/deploy/web.ts`, so CI and a laptop cannot disagree.
+- `pnpm lint:release` adds the rules that only have to hold at release — today, no leftover `globalThis.__sefer.design` scaffolding. Run before `preview` and `production`, never before `dev`.
 - `pnpm verify:design` runs two real builds and proves the design surface is absent from production and present in the design build.
 - `pnpm design:scaffolding` lists real screens still borrowing the design panel through `globalThis.__sefer.design.register`. Informational; exits 0.
 - `pnpm check` runs the ordinary local gate: typecheck, lint, formatting, boundaries, unit tests, and build. `.github/workflows/check.yml` runs the same commands, plus `pnpm test:browser` in a second job.
+
+## Channels
+
+`dev` is every push to master — web only, `--mode dev`, the only deployed thing carrying `/design`, the comment panel and `?fixture=1`. `preview` is a PROMOTION (a dispatch or a `v*-rc*` tag), with the full test suite and the full desktop matrix. `production` is a `v*` tag. Desktop has two channels, not three, because a desktop build costs twenty minutes and a web build costs one.
+
+Master deploying the least-stable channel reads oddly and is deliberate: the alternative is a long-lived `dev` branch, which means a merge train and divergence, and the person most often working here does not use git. One trunk keeps history linear, and it keeps `dev` and `preview` the same commit built two ways — so a difference between them can only ever be the design surface, never drift.
+
+Commands, tag format and what is not armed yet: [release channels](agents/skills/release-channels/SKILL.md).
 
 ## The design build switch
 
