@@ -114,14 +114,17 @@ jobs:
             echo "desktop: ${desktop}${version:+ (v${version}, prerelease=${prerelease})}"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # The same gate `pnpm check` runs locally, plus the browser project. Skipped
-  # for dev: master already ran it on the push that produced this commit, and
-  # paying for it twice is what makes people stop pushing.
+  # Runs for EVERY channel, and that is a correction. `check.yml` fires on the
+  # same push as this workflow, so relying on it meant the two raced and dev
+  # could deploy while the gate was still running — or had already failed.
+  #
+  # dev pays for the cheap half only. Browser and end-to-end suites need a
+  # Playwright download, which is most of the minute; the release channels are
+  # rehearsals and pay it, dev is not and does not.
   verify:
     needs: [resolve]
-    if: needs.resolve.outputs.channel != 'dev'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -130,16 +133,40 @@ jobs:
           node-version: 24.4.1
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+
+      # typecheck, lint, format, boundaries, unit tests, build.
       - run: pnpm check
-      - run: pnpm test:browser
+
+      - name: Install browsers
+        if: needs.resolve.outputs.channel != 'dev'
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Browser project
+        if: needs.resolve.outputs.channel != 'dev'
+        run: pnpm test:browser
+
+      # Drives the BUILT application. The only check here that would notice a
+      # bundle which passes every other gate and then fails to boot.
+      - name: End to end
+        if: needs.resolve.outputs.channel != 'dev'
+        run: pnpm test:e2e
+
       - name: The design surface is in dev and out of production
+        if: needs.resolve.outputs.channel != 'dev'
         run: pnpm verify:design
+
+      - name: Keep the traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-traces-${{ needs.resolve.outputs.channel }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
 
   deploy-web:
     needs: [resolve, verify]
-    # `always()` so dev — which skips verify — still deploys, while a real
-    # verify failure still stops preview and production.
-    if: always() && needs.resolve.result == 'success' && needs.verify.result != 'failure'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:

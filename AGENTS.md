@@ -43,7 +43,8 @@ Check `package.json` and runner configuration for executable commands. Distingui
 - `pnpm lint` runs Oxlint over the repository.
 - `pnpm format:check` verifies Oxfmt without rewriting files.
 - `pnpm test:unit` runs the Node `core` Vitest project — every `src/**/*.test.ts` except `*.browser.test.*`, plus `tools/**/*.test.ts`. There is no jsdom project.
-- `pnpm test:browser` runs the real Chromium Browser Mode project — today five files: the app's mount/dispose, the composition, the fixture page, the OPFS `fileSystemContract` suite, and web git. There is no end-to-end suite that drives a built app, and no Tauri WebDriver suite.
+- `pnpm test:browser` runs the real Chromium Browser Mode project — today five files: the app's mount/dispose, the composition, the fixture page, the OPFS `fileSystemContract` suite, and web git.
+- `pnpm test:e2e` builds the app, serves `dist/client` through `vite preview`, and drives it with Playwright (`e2e/`). Three smoke assertions: it mounts, a deep link resolves through the SPA fallback, and a production build carries no design surface. Deliberately says nothing about how a screen looks — behaviour is still moving, and a suite that breaks on every redesign is one people delete. There is still no Tauri WebDriver suite.
 - `pnpm build` builds the shared Web frontend; `pnpm dev:tauri` starts the Tauri host.
 - `pnpm boundaries` proves `src/core` imports nothing framework- or host-specific, that nothing outside `src/dev` statically imports it, and that `src/dev/annotate` imports no framework at all.
 - `pnpm build:dev` builds the `dev` channel — a production build that DOES carry `/design`, the comment panel and `?fixture=1`. See below.
