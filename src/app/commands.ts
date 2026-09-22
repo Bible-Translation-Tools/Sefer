@@ -21,7 +21,6 @@ import type { UseNavigateResult } from "@tanstack/solid-router";
 import { Effect, Option, Result, type Scope } from "effect";
 import { createSignal } from "solid-js";
 
-import type { Book } from "../core/book/book";
 import { applyFormat, applyOverlay, formatBook, overlayBook } from "../core/fixes/fixes";
 import { Git } from "../core/git/git";
 import { makeMultiBook } from "../core/multibook/multibook";

@@ -18,10 +18,7 @@
  * failure are for.
  */
 
-import {
-  MaskMap,
-  FORMAT_VERSION as MASK_FORMAT_VERSION,
-} from "@wycliffeassociates/scripture-kitchen/mask-reader";
+import { MaskMap } from "@wycliffeassociates/scripture-kitchen/mask-reader";
 import {
   deserialize,
   declaredVersion,

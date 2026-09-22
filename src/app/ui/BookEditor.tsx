@@ -32,7 +32,6 @@
 
 import { Compartment, StateEffect, type EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { useNavigate } from "@tanstack/solid-router";
 import { Effect, Fiber, Stream } from "effect";
 import { createEffect, createRenderEffect, createSignal, untrack } from "solid-js";
 
@@ -63,7 +62,6 @@ import {
   showEmptyBlocks,
   watchLocation,
 } from "../../editor";
-import { useComposition } from "../CompositionContext";
 import { textDirection } from "../language";
 import { useShell } from "../ProjectContext";
 import { shellKeys } from "../settings";
@@ -157,7 +155,6 @@ export function BookEditor(props: BookEditorProps) {
   const direction = (): "ltr" | "rtl" => textDirection(metadataOf(shell.project()));
   // The book this instance is for, read once — see the mount effect below.
   const bookId = untrack(() => props.book.id);
-  const observability = useComposition().observability;
   const [stamp, setStamp] = createSignal<SourceStamp | undefined>(undefined, { name: "stamp" });
   const [bound, setBound] = createSignal<Bound | undefined>(undefined, { name: "boundView" });
   const [host, setHost] = createSignal<HTMLDivElement | undefined>(undefined, {

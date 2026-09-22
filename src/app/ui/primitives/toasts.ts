@@ -138,6 +138,12 @@ export const dismiss = (id: string): void => {
 };
 
 export const dismissAll = (): void => {
+  // The spread is a copy on purpose: `clearTimer` deletes from `timers`, so
+  // this mutates the very map it walks. A Map iterator does define that case,
+  // which is why the lint rule calls the copy useless — but the safety here
+  // rests on a spec subtlety rather than on anything a reader can see, and the
+  // copy costs one small array per "dismiss all".
+  // oxlint-disable-next-line unicorn/no-useless-spread
   for (const id of [...timers.keys()]) clearTimer(id);
   setList([]);
 };
