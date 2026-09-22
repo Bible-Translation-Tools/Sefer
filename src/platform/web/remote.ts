@@ -93,7 +93,12 @@ interface Wire {
   readonly remote: string;
   readonly corsProxy: string;
   readonly headers: Record<string, string> | undefined;
-  readonly onAuth: () => { readonly username: string; readonly password: string };
+  /**
+   * Absent when nobody is signed in. isomorphic-git asks only after a 401, so
+   * a public clone never reaches for this — which is exactly what makes an
+   * anonymous fetch work rather than fail with a credential error.
+   */
+  readonly onAuth: (() => { readonly username: string; readonly password: string }) | undefined;
   readonly onProgress: (event: GitProgress) => void;
 }
 
@@ -205,7 +210,11 @@ const makeWebRemote = (
      * callback while the port promises the caller one final `Progress`: the
      * last event seen is that answer.
      */
-    const wireFor = (repo: Repo, last: { current: Progress }): Effect.Effect<Wire, RemoteError> =>
+    const wireFor = (
+      repo: Repo,
+      last: { current: Progress },
+      auth: "required" | "optional",
+    ): Effect.Effect<Wire, RemoteError> =>
       Effect.gen(function* () {
         if (options.corsProxyUrl === null) {
           return yield* Effect.fail(
@@ -217,12 +226,17 @@ const makeWebRemote = (
         }
         const url = yield* originUrl(repo);
         const held = yield* credentials.get(hostOf(url));
-        if (Option.isNone(held)) {
+        // Push is the only transfer nobody can do anonymously. Refusing it
+        // here rather than letting the server answer 401 is what turns "sign
+        // in first" into advice instead of a status code; fetch and pull run
+        // without a credential, because WACS content is public and cloning a
+        // translation is how somebody gets started.
+        if (auth === "required" && Option.isNone(held)) {
           return yield* Effect.fail(
             fail("Unauthorized", `no credential for ${hostOf(url)}; sign in first`),
           );
         }
-        const credential = held.value;
+        const credential = Option.getOrNull(held);
         return {
           fs,
           http,
@@ -233,7 +247,10 @@ const makeWebRemote = (
             options.requestedWith === null
               ? undefined
               : { "X-Requested-With": options.requestedWith },
-          onAuth: () => ({ username: credential.username, password: credential.token }),
+          onAuth:
+            credential === null
+              ? undefined
+              : () => ({ username: credential.username, password: credential.token }),
           onProgress: (event: GitProgress) => {
             const progress: Progress = {
               phase: event.phase,
@@ -255,11 +272,12 @@ const makeWebRemote = (
      */
     const transfer = (
       repo: Repo,
+      auth: "required" | "optional",
       call: (wire: Wire, branch: string) => Promise<unknown>,
     ): Effect.Effect<Progress, RemoteError> =>
       Effect.gen(function* () {
         const last = { current: { phase: "done", loaded: 0 } satisfies Progress };
-        const wire = yield* wireFor(repo, last);
+        const wire = yield* wireFor(repo, last, auth);
         const branch = yield* branchOf(repo);
         yield* attempt(() => call(wire, branch));
         return last.current;
@@ -280,7 +298,7 @@ const makeWebRemote = (
       // in the work tree, which is what makes it the safe thing to offer
       // someone who wants to know whether anything arrived.
       fetch: (repo) =>
-        transfer(repo, (wire, branch) =>
+        transfer(repo, "optional", (wire, branch) =>
           git.fetch({ ...wire, ref: branch, remoteRef: branch, singleBranch: true, prune: true }),
         ),
 
@@ -288,7 +306,7 @@ const makeWebRemote = (
       // carries an author. Fast-forward is not forced: a genuine divergence
       // must surface as `Rejected` rather than being silently resolved.
       pull: (repo) =>
-        transfer(repo, (wire, branch) =>
+        transfer(repo, "optional", (wire, branch) =>
           git.pull({ ...wire, ref: branch, singleBranch: true, author: MERGE_AUTHOR }),
         ),
 
@@ -297,7 +315,9 @@ const makeWebRemote = (
       // `onAuth` and retries; that first refusal is expected and never reaches
       // `classify` unless the retry fails too.
       push: (repo) =>
-        transfer(repo, (wire, branch) => git.push({ ...wire, ref: branch, remoteRef: branch })),
+        transfer(repo, "required", (wire, branch) =>
+          git.push({ ...wire, ref: branch, remoteRef: branch }),
+        ),
 
       /**
        * First publish. `target` is either a full URL — attach it and push — or
@@ -312,7 +332,7 @@ const makeWebRemote = (
         Effect.gen(function* () {
           const url = target.startsWith("http") ? target : yield* createOnGitea(target);
           yield* attach(repo, url);
-          yield* transfer(repo, (wire, branch) =>
+          yield* transfer(repo, "required", (wire, branch) =>
             git.push({ ...wire, ref: branch, remoteRef: branch }),
           );
         }),

@@ -114,14 +114,37 @@ fn transport_failure(error: git2::Error) -> String {
 /// access token is presented as HTTP basic userpass, which is what the server
 /// expects. No SSH agent and no key file: Sefer authenticates with a token or
 /// not at all.
-fn remote_callbacks_for_token(username: &str, token: &str) -> RemoteCallbacks<'static> {
-    let username = username.to_string();
-    let token = token.to_string();
+///
+/// `None` is ANONYMOUS, and that is an ordinary case rather than a missing
+/// value. WACS content is public: browsing the catalogue and cloning a
+/// translation is how somebody gets started, and demanding a sign-in first
+/// turns the front door into a wall. So no credentials callback is installed
+/// at all — libgit2 asks only when the server challenges, and a callback that
+/// has nothing to answer with reports a public fetch as an auth failure.
+/// Push is the other way round and always carries one; `git_push` says so in
+/// its signature.
+fn remote_callbacks(credential: Option<(&str, &str)>) -> RemoteCallbacks<'static> {
     let mut callbacks = RemoteCallbacks::new();
-    callbacks.credentials(move |_url, _username_from_url, _allowed| {
-        Cred::userpass_plaintext(&username, &token)
-    });
+    if let Some((username, token)) = credential {
+        let username = username.to_string();
+        let token = token.to_string();
+        callbacks.credentials(move |_url, _username_from_url, _allowed| {
+            Cred::userpass_plaintext(&username, &token)
+        });
+    }
     callbacks
+}
+
+/// Both halves or neither. A half-filled pair is a bug on the TS side rather
+/// than a reason to try a nameless token against the server.
+fn credential_pair<'a>(
+    username: &'a Option<String>,
+    token: &'a Option<String>,
+) -> Option<(&'a str, &'a str)> {
+    match (username, token) {
+        (Some(username), Some(token)) => Some((username.as_str(), token.as_str())),
+        _ => None,
+    }
 }
 
 /// Repository-relative or nothing.
@@ -663,8 +686,7 @@ fn fetch_branch(
     repo: &Repository,
     remote_name: &str,
     branch: &str,
-    username: &str,
-    token: &str,
+    credential: Option<(&str, &str)>,
 ) -> Result<GitProgress, String> {
     let mut remote = repo
         .find_remote(remote_name)
@@ -672,7 +694,7 @@ fn fetch_branch(
     let refspec = format!("+refs/heads/{branch}:refs/remotes/{remote_name}/{branch}");
 
     let mut options = FetchOptions::new();
-    options.remote_callbacks(remote_callbacks_for_token(username, token));
+    options.remote_callbacks(remote_callbacks(credential));
     remote
         .fetch(&[refspec.as_str()], Some(&mut options), None)
         .map_err(transport_failure)?;
@@ -689,12 +711,12 @@ fn fetch_branch(
 pub fn git_fetch(
     root: String,
     remote: String,
-    username: String,
-    token: String,
+    username: Option<String>,
+    token: Option<String>,
 ) -> Result<GitProgress, String> {
     let repo = open_repo(&root)?;
     let branch = current_branch(&repo)?;
-    fetch_branch(&repo, &remote, &branch, &username, &token)
+    fetch_branch(&repo, &remote, &branch, credential_pair(&username, &token))
 }
 
 /// Fetch, then fast-forward the current branch onto the remote's tip.
@@ -707,12 +729,12 @@ pub fn git_fetch(
 pub fn git_pull(
     root: String,
     remote: String,
-    username: String,
-    token: String,
+    username: Option<String>,
+    token: Option<String>,
 ) -> Result<GitProgress, String> {
     let repo = open_repo(&root)?;
     let branch = current_branch(&repo)?;
-    let transferred = fetch_branch(&repo, &remote, &branch, &username, &token)?;
+    let transferred = fetch_branch(&repo, &remote, &branch, credential_pair(&username, &token))?;
 
     let remote_ref = format!("refs/remotes/{remote}/{branch}");
     let target = match repo.find_reference(&remote_ref) {
@@ -765,6 +787,10 @@ pub fn git_pull(
 ///
 /// A non-fast-forward is `Rejected`, not `Io`: it is the one transport failure
 /// with a specific remedy (pull first), and the sync surface says so.
+///
+/// Unlike fetch and pull this takes a credential rather than an `Option`:
+/// nobody pushes anonymously, so a missing sign-in is refused on the TS side
+/// before it reaches here rather than being discovered as a 401 mid-transfer.
 #[tauri::command]
 pub fn git_push(
     root: String,
@@ -786,7 +812,7 @@ pub fn git_push(
     // stats it keeps for a fetch, so the last report is latched here.
     let sent = Arc::new(AtomicUsize::new(0));
     let expected = Arc::new(AtomicUsize::new(0));
-    let mut callbacks = remote_callbacks_for_token(&username, &token);
+    let mut callbacks = remote_callbacks(Some((&username, &token)));
     {
         let sent = Arc::clone(&sent);
         let expected = Arc::clone(&expected);

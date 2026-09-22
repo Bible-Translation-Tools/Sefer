@@ -11,7 +11,9 @@
  *     job someone asked for.
  *  2. The credential comes from the host `Credentials` service, keyed by the
  *     origin of the remote's URL — a token belongs to a Gitea instance, not to
- *     one repository. Tokens never reach a project file.
+ *     one repository. Tokens never reach a project file. Nobody signed in is
+ *     an ANSWER, not a failure: WACS content is public, so fetch and pull run
+ *     anonymously and only push insists on a credential.
  *  3. A pull fast-forwards or reports `Rejected`. Sefer does not merge USFM
  *     behind a translator's back; conflict markers inside scripture are worse
  *     than a question.
@@ -148,20 +150,24 @@ const makeTauriRemote = (
             : Effect.succeed(url),
       );
 
+    /**
+     * The credential for a URL's origin, or `None` when nobody has signed in.
+     *
+     * `None` is deliberately not an error. Browsing the catalogue and cloning
+     * a public translation is how somebody gets started, and the Rust side
+     * installs no credentials callback at all when this is absent — which is
+     * what makes an anonymous fetch succeed rather than report a 401.
+     */
     const credentialFor = (
       url: string,
-    ): Effect.Effect<{ readonly username: string; readonly token: string }, RemoteError> =>
-      Effect.flatMap(credentials.get(hostOf(url)), (held) =>
-        Option.match(held, {
-          onNone: () =>
-            Effect.fail(fail("Unauthorized", `no credential for ${hostOf(url)}; sign in first`)),
-          onSome: (credential) =>
-            Effect.succeed({ username: credential.username, token: credential.token }),
-        }),
+    ): Effect.Effect<Option.Option<{ readonly username: string; readonly token: string }>> =>
+      Effect.map(
+        credentials.get(hostOf(url)),
+        Option.map((credential) => ({ username: credential.username, token: credential.token })),
       );
 
     /**
-     * The one shape all three transfers share: find the origin, find the
+     * The one shape all three transfers share: find the origin, look for a
      * credential, run the command, publish what it reported. git2 reports
      * progress through callbacks inside one blocking command, so what reaches
      * the stream is the transfer's final tally rather than a live trickle —
@@ -169,15 +175,28 @@ const makeTauriRemote = (
      * live readout needs the Rust side to emit Tauri events; that is a
      * TODO(seam), not a reason to fake intermediate numbers here.
      */
-    const transfer = (command: string, repo: Repo): Effect.Effect<Progress, RemoteError> =>
+    const transfer = (
+      command: string,
+      repo: Repo,
+      auth: "required" | "optional",
+    ): Effect.Effect<Progress, RemoteError> =>
       Effect.gen(function* () {
         const url = yield* originUrl(repo);
-        const credential = yield* credentialFor(url);
+        const held = yield* credentialFor(url);
+        // Push is the only transfer nobody can do anonymously, and refusing it
+        // here rather than letting the server answer 401 is what turns "sign
+        // in first" into advice instead of a status code.
+        if (auth === "required" && Option.isNone(held)) {
+          return yield* Effect.fail(
+            fail("Unauthorized", `no credential for ${hostOf(url)}; sign in first`),
+          );
+        }
+        const credential = Option.getOrNull(held);
         const wire = yield* call<WireProgress>(command, {
           root: repo.root,
           remote: ORIGIN,
-          username: credential.username,
-          token: credential.token,
+          username: credential?.username ?? null,
+          token: credential?.token ?? null,
         });
         const progress = progressOf(wire);
         yield* PubSub.publish(events, progress);
@@ -218,14 +237,14 @@ const makeTauriRemote = (
           call<string | null>("git_remote_url", { root: repo.root, name: ORIGIN }),
           Option.fromNullishOr,
         ),
-      fetch: (repo) => transfer("git_fetch", repo),
-      pull: (repo) => transfer("git_pull", repo),
-      push: (repo) => transfer("git_push", repo),
+      fetch: (repo) => transfer("git_fetch", repo, "optional"),
+      pull: (repo) => transfer("git_pull", repo, "optional"),
+      push: (repo) => transfer("git_push", repo, "required"),
       publish: (repo, target) =>
         Effect.gen(function* () {
           const url = target.startsWith("http") ? target : yield* createOnGitea(target);
           yield* attach(repo, url);
-          yield* transfer("git_push", repo);
+          yield* transfer("git_push", repo, "required");
         }),
       // The two local moves. No origin, no credential, no transport — git2
       // does the whole thing, and the refusals (a branch that is not checked
