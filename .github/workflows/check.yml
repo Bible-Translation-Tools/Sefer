@@ -1,7 +1,15 @@
 name: check
 
 on:
+  # Every branch EXCEPT master. A push to master already runs `release.yml`,
+  # whose `verify` job is `pnpm check` plus the promotion-only extras and gates
+  # every deploy — so running this one there as well meant the same six
+  # commands ran twice, concurrently, on every push to the trunk.
+  #
+  # The gate on master is therefore `verify`, not this. This workflow covers
+  # what a release never reaches: feature branches, and pull requests.
   push:
+    branches-ignore: [master]
   pull_request:
 
 concurrency:
@@ -13,11 +21,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24.4.1
           cache: pnpm
@@ -46,11 +54,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24.4.1
           cache: pnpm

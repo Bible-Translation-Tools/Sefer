@@ -68,6 +68,10 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       channel: ${{ steps.pick.outputs.channel }}
+      # "Is this a rehearsal for shipping?" Decided ONCE, here, rather than
+      # re-derived as `channel != 'dev'` at each step that wants to know —
+      # which is how one of them ends up spelled differently from the rest.
+      full: ${{ steps.pick.outputs.full }}
       desktop: ${{ steps.pick.outputs.desktop }}
       version: ${{ steps.pick.outputs.version }}
       tag: ${{ steps.pick.outputs.tag }}
@@ -104,6 +108,13 @@ jobs:
           # because Tauri's MSI bundler rejects anything else.
           if [[ "$version" == *-* ]]; then prerelease=true; else prerelease=false; fi
 
+          # preview and production are rehearsals for shipping and pay the full
+          # gate. dev is not, and pays the cheap half. Preview is deliberately
+          # on the expensive side of this line: it is the last rehearsal before
+          # a tag, so it must not be a second dev.
+          if [ "$channel" = "dev" ]; then full=false; else full=true; fi
+
+          echo "full=${full}" >> "$GITHUB_OUTPUT"
           echo "channel=${channel}" >> "$GITHUB_OUTPUT"
           echo "desktop=${desktop}" >> "$GITHUB_OUTPUT"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
@@ -114,21 +125,28 @@ jobs:
             echo "desktop: ${desktop}${version:+ (v${version}, prerelease=${prerelease})}"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # Runs for EVERY channel, and that is a correction. `check.yml` fires on the
-  # same push as this workflow, so relying on it meant the two raced and dev
-  # could deploy while the gate was still running — or had already failed.
+  # Runs for EVERY channel, and it is now the ONLY gate on master: `check.yml`
+  # no longer fires there, because it was running the same six commands as
+  # `pnpm check` below, twice and concurrently, on every push to the trunk.
   #
-  # dev pays for the cheap half only. Browser and end-to-end suites need a
-  # Playwright download, which is most of the minute; the release channels are
-  # rehearsals and pay it, dev is not and does not.
+  # What dev skips is the pair that needs a full second BUILD — end-to-end
+  # serves `dist/` through `vite preview`, and `verify:design` builds twice to
+  # prove the surface is in one and out of the other. Those are rehearsals for
+  # shipping, and dev is not shipping.
+  #
+  # What dev does NOT skip is the browser project, which only needs a Chromium
+  # download. `check.yml` used to supply that on master as a side effect of
+  # running there at all, so dropping it here would have cost the one channel
+  # that deploys on every push its only real-browser coverage — an invisible
+  # loss, which is the worst kind.
   verify:
     needs: [resolve]
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 24.4.1
           cache: pnpm
@@ -137,27 +155,35 @@ jobs:
       # typecheck, lint, format, boundaries, unit tests, build.
       - run: pnpm check
 
+      # Every channel, dev included. `check.yml` used to provide this on master
+      # as a side effect of running there at all; it no longer runs on master,
+      # so skipping it here would have quietly dropped browser coverage from
+      # the one channel that deploys on every push. It is four files and about
+      # half a minute — far too cheap to be the thing that makes dev fast.
       - name: Install browsers
-        if: needs.resolve.outputs.channel != 'dev'
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Browser project
-        if: needs.resolve.outputs.channel != 'dev'
         run: pnpm test:browser
 
-      # Drives the BUILT application. The only check here that would notice a
-      # bundle which passes every other gate and then fails to boot.
-      - name: End to end
-        if: needs.resolve.outputs.channel != 'dev'
-        run: pnpm test:e2e
-
-      - name: The design surface is in dev and out of production
-        if: needs.resolve.outputs.channel != 'dev'
-        run: pnpm verify:design
+      # The rehearsal half, in ONE gated step rather than a condition repeated
+      # per command. Both of these need a second full BUILD — end-to-end serves
+      # `dist/` through `vite preview`, and `verify:design` builds twice to
+      # prove the surface is in one and out of the other — which is the whole
+      # reason dev does not pay for them.
+      #
+      # `pnpm test:e2e` is the only check anywhere that would notice a bundle
+      # passing every other gate and then failing to boot.
+      - name: Rehearsal checks (preview and production)
+        if: needs.resolve.outputs.full == 'true'
+        run: |
+          set -euo pipefail
+          pnpm test:e2e
+          pnpm verify:design
 
       - name: Keep the traces
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: e2e-traces-${{ needs.resolve.outputs.channel }}
           path: |
@@ -172,7 +198,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Source secrets
         uses: 1password/load-secrets-action@v3
@@ -183,8 +209,8 @@ jobs:
           CLOUDFLARE_API_TOKEN: "op://DevOps/Sefer/cloudflare-api-token"
           CLOUDFLARE_ACCOUNT_ID: "op://DevOps/Sefer/cloudflare-account-id"
 
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 24.4.1
           cache: pnpm
@@ -216,7 +242,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Source secrets
         uses: 1password/load-secrets-action@v3
@@ -228,8 +254,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: "op://DevOps/Sefer/cloudflare-account-id"
           UPDATER_GH_TOKEN: "op://DevOps/Sefer/updater-gh-token"
 
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 24.4.1
           cache: pnpm
@@ -283,7 +309,7 @@ jobs:
               src-tauri/target/release/bundle/deb/*.deb
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Source secrets
         id: secrets
@@ -303,8 +329,8 @@ jobs:
           UPDATER_HOST_PREVIEW: "op://DevOps/Sefer/updater-host-preview"
           UPDATER_HOST_PRODUCTION: "op://DevOps/Sefer/updater-host-production"
 
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 24.4.1
           cache: pnpm
@@ -426,7 +452,7 @@ jobs:
 
       - name: Keep the bundles
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.os }}-${{ needs.resolve.outputs.channel }}
           path: ${{ matrix.bundles }}
