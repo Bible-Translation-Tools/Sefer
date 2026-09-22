@@ -9,7 +9,7 @@ For evaluating the new app by hand. One line per thing a person can do. Tags:
 - **Open a project** — same. _changed:_ books are analyzed once on open and every book is registered with the corpus, so Findings covers the whole project without opening files.
 - **Import a zip** — same on Web (unzipped into app storage, classified, committed). Tauri: native folder picker only, zip via same intake if a file picker is wired — check.
 - **Open a folder** — same on Tauri (real path). _changed:_ on Web the folder is copied into app storage instead of read in place (the browser gives handles, not paths).
-- **Clone from cloud** — partial. Gitea sign-in + repo list + clone exist; needs `VITE_SEFER_GITEA_WEB_HOST`.
+- **Clone from cloud** — partial. Gitea sign-in + repo list + clone exist; needs `VITE_SEFER_WACS_WEB_URL`, or an endpoint set on the Network card of `/settings`.
 - **Find a project in the catalogue and download it** — partial. The Find Project screen renders with filters, sort, search; rows are sample data unless `VITE_SEFER_LANGUAGE_API_URL` is set; Region and Date columns show a dash (not in the API).
 - **Create a new project** — stubbed. Form validasrito metadata; the Create button is disabled "not available yet" (no `ProjectAdmin.create`). Old app had no create flow either.
 - **Rename** — new (old had it in specs). Kebab on the row → dialog → metadata name + index update; folder does not move.

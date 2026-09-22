@@ -1,0 +1,63 @@
+# WACS proxy rollout: what is left, and it is not code
+
+The client and the Worker both landed on 2026-09-22. Everything below needs an
+account, a dashboard or a decision, so it is here rather than in a commit.
+
+Replaces `planning/02-ready/git-proxy.md` and
+`planning/01-discussing/rfc-wacs-proxy-2026-09-17.md`, both of which described
+work that is now done. What those documents settled is recorded in
+`documentation/architecture/configuration.md` and `git.md`; what they left open
+is below.
+
+## Before a deployed Sefer can reach WACS
+
+1. **`ALLOWED_APPS_CSV` gains `sefer-web`, in both environments.** The values
+   live in 1Password now — `op://DevOps/wacs-browser-git-proxy/allowed-apps-prod`
+   and `-dev` — and `pnpm deploy:prod` / `pnpm deploy:dev` push them on every
+   deploy. The items have to exist first; nothing else in the chain works
+   without this and everything fails with a clear 403 until it does.
+   Only `sefer-web` is needed. Desktop never touches the proxy.
+
+2. **The two custom domains.** `wrangler.toml` declares
+   `wacs-proxy.bibletranslationtools.org` and `wacs-proxy.bttdev.org` as custom
+   domains; the first deploy provisions them, and needs both zones in the
+   Cloudflare account. `tools/deploy/channels.ts` already points the channels
+   at those names, so nothing in Sefer changes when they come up.
+
+3. **Do not put Cloudflare Access in front of either.** Access answers with a
+   login redirect, which to a browser `fetch` is an opaque CORS failure — the
+   exact symptom this whole change removes — and it would make anonymous clone
+   impossible. Access on the versioned preview URLs is fine.
+
+## Decisions taken, worth not re-litigating
+
+- **The CF skip rule on the content origin should come off** once traffic is
+  going through the Worker. While it stands, the Worker's server-side gate is
+  decorative. Measured on 2026-09-17, the rule was also skipping for everyone
+  and not actually matching the header it names.
+- **Rate limiting is a dashboard decision, not code.** The `api` class is cheap
+  to call in a loop where `git` is self-limiting, so if a limit goes anywhere it
+  goes there first. Worth being honest that the `git` class already permits
+  anonymous full clone to anyone holding the app identifier, and that identifier
+  ships in a public bundle — so a limit on both classes is what would actually
+  deter bulk scraping. The scrapers discussed so far are meta-bot-class, which
+  the Worker not being linked anywhere already handles.
+- **No `UPSTREAM_ALLOWED_HOSTS_CSV`.** One pinned upstream per environment is
+  what makes "a preview build cannot write to real content" a guarantee rather
+  than a client-side convention.
+
+## Still missing, and small
+
+- **The Language API's two URLs.** `tools/deploy/channels.ts` leaves
+  `VITE_SEFER_LANGUAGE_API_URL` unset on every channel because neither the
+  production nor the dev URL is written down in this repository. Until they are,
+  Find Project shows its sample catalogue and says so. One line each.
+
+## How to know it worked
+
+Not a unit test. Drive it: `pnpm verify:chrome` against a `dev` build, download
+a translation from the Find Project catalogue **signed out** — that exercises
+the endpoint, the re-based clone URL, the git route class and anonymous pull in
+one click — then sign in and list repositories, which exercises the api class
+and the `X-Requested-With` gate. `GET <endpoint>/__meta` answers whether the
+endpoint and the identifier agree before any of that is worth trying.

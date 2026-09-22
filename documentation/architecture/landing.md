@@ -54,7 +54,7 @@ The rule the import hub is built around: a source this host cannot serve is rend
 |---|---|---|---|
 | Import zip | yes | yes | nothing: the archive is read in the page (`fflate`) and written into OPFS |
 | Open folder | yes | yes | web copies the folder's files into its own storage; Tauri reads the real path |
-| Clone from cloud | needs a proxy | yes | `VITE_SEFER_GITEA_WEB_HOST` (and `VITE_SEFER_GIT_CORS_PROXY_URL` for the web, whose fetches are cross-origin) |
+| Clone from cloud | yes | yes | `VITE_SEFER_WACS_WEB_URL` / `VITE_SEFER_WACS_DESKTOP_URL` — one endpoint per host, normally a proxy on the web because its fetches are cross-origin. Overridable in Settings |
 
 Every source ends in the same pipeline — `stage → classify → commit` from `src/core/resources/import.ts`, run one step at a time so the dialog can name the step it is on. Nothing touches the project root until `commit`, so cancelling or failing leaves a staging directory and nothing else.
 

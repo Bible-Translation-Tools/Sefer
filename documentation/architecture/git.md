@@ -76,19 +76,33 @@ and id) in the host `Credentials` service and nowhere else — never a project f
 only thing needing a host. Repository listings resolve `/api/v1/user` first and pass `uid` to
 `/repos/search`: without it the search is instance-wide and reads as empty for someone who owns repos.
 
-`WebRemoteLive({ corsProxyUrl, requestedWith, giteaHost })` (`src/platform/web/remote.ts`) answers the
-port with isomorphic-git's `http/web`. A browser cannot speak git smart-HTTP to Gitea directly — no CORS
-headers — so every transfer goes through the proxy Will runs (`wacs-isomorphic-git-proxy`); with no
-proxy configured every transfer refuses `Unavailable` and names the variable instead of failing later on
-CORS. `onAuth` reads `Credentials.get(origin-of-the-remote-URL)`, one credential per Gitea instance.
+`WebRemoteLive({ endpoint, appId })` (`src/platform/web/remote.ts`) answers the port with
+isomorphic-git's `http/web`. A browser cannot speak git smart-HTTP to Gitea directly — no CORS headers,
+and a managed challenge in front of the content host — so the Web build talks to ONE endpoint, which is
+either a Gitea instance with nothing in front of it or the proxy Will runs (`wacs-isomorphic-git-proxy`)
+where something is. The proxy answers on Gitea's own paths, so there is no `corsProxy` option and no URL
+rewriting at transfer time: `attach` puts every remote URL on the endpoint, once, and what lands in
+`.git/config` is therefore the door the project came through. Gitea's `clone_url` and the catalogue's
+`repo_url` both name the content host directly, so re-basing at that single point is what stops a
+browser build going straight at an origin it cannot reach. Desktop attaches what it was given — git2
+can reach any host it likes. `onAuth` reads `Credentials.get(origin-of-the-remote-URL)`, one credential
+per endpoint.
+
+Anonymous is allowed, and that is a decision rather than an omission: WACS content is public, so fetch
+and pull run without a credential on both hosts — the Web omits `onAuth`, and `git_fetch`/`git_pull`
+take `Option<String>` and install no libgit2 credentials callback. Browsing the catalogue and
+downloading a translation is how somebody gets started, and both layers used to refuse it before the
+transport was ever reached. Push still insists, in the same words, because nobody pushes anonymously.
 `publish(repo, target)` takes a URL, or a `name`/`owner/name` on the configured host that it creates
 first, then attaches, then pushes. `progress()` is a sliding `PubSub`, so a panel watching a transfer
 can never hold it back. Desktop answers the same port through git2 in Rust (`src/platform/tauri`), where
 no proxy is involved.
 
-Configuration is `src/app/env.ts` only (see [configuration.md](configuration.md)):
-`VITE_SEFER_GITEA_WEB_HOST`, `VITE_SEFER_GITEA_DESKTOP_HOST`, `VITE_SEFER_GIT_CORS_PROXY_URL`,
-`VITE_SEFER_GIT_PROXY_X_REQUESTED_WITH`. The SURFACE is `/cloud` (`src/app/ui/cloud/`), which owns the state, the two clocks, the incoming
+Configuration is `src/app/env.ts` for the build's defaults and `src/app/endpoints.ts` for the
+preference that may override them (see [configuration.md](configuration.md)):
+`VITE_SEFER_WACS_WEB_URL`, `VITE_SEFER_WACS_DESKTOP_URL`, `VITE_SEFER_WACS_APP_ID`. The Gitea API rides
+the same endpoint and sends the same `X-Requested-With` the transfers do; before that it went direct and
+a successful sign-in was followed immediately by "Failed to fetch". The SURFACE is `/cloud` (`src/app/ui/cloud/`), which owns the state, the two clocks, the incoming
 plan and the one right button — see [sync.md](sync.md). `src/app/ui/CloudPanel.tsx` keeps the
 attach-and-publish half beside a project and shares the account half with it; the commands are
 `remote.login`, `remote.pull`, `remote.push`. `RemoteUnavailableLive` remains for a

@@ -1,20 +1,43 @@
-# Build-time configuration
+# Configuration
 
-Every URL Sefer talks to is a Vite build-time variable read in exactly one
-place, `src/app/env.ts`. The release workflow sets them per channel; a dev build
-reads them from `.env.local`. An unset value is `null` and the feature that
-needs it degrades visibly (a disabled panel, "not configured for this build")
-rather than guessing a host. Names are `VITE_SEFER_`-prefixed so they cannot
-collide with the v1 app's variables on one machine.
+Every URL Sefer talks to enters through a Vite build-time variable read in
+exactly one place, `src/app/env.ts`. `tools/deploy/channels.ts` sets them per
+channel; a dev build reads them from `.env.local`. An unset value is `null` and
+the feature that needs it degrades visibly (a disabled panel, "not configured
+for this build") rather than guessing a host. Names are `VITE_SEFER_`-prefixed
+so they cannot collide with the v1 app's variables on one machine.
+
+## The two network endpoints can be overridden at runtime
+
+The build's values are DEFAULTS for the WACS endpoint and the Language API.
+Somebody testing a deployed build has to be able to point it at the dev content
+host, and a self-hoster at their own, without either waiting for a release — so
+both are also preferences, on the Network card of `/settings`.
+
+The one-reader rule survives the change rather than being bent by it.
+`env.ts` is still the only reader of `import.meta.env`; `src/app/endpoints.ts`
+is the only reader of the override, and resolves `preference ?? build ?? null`.
+Nothing else reads either, and there is still no fallback literal anywhere: an
+endpoint nobody configured is `null` and says so.
+
+Empty is not a value. A stored override of `""` means "use this build's",
+which is what makes clearing the box an answer rather than a way to break the
+application.
+
+An override reaches the SCREENS immediately — they call `wacsUrlFor(settings,
+host)` each time — and the SERVICES not at all, because `composeApplication()`
+runs once and the transfer Layers close over the string they were handed. The
+Network card records what the composition captured (`bootEndpoints`) and offers
+a Reload exactly when the two have drifted. `endpoints.ts` carries a dated TODO
+for making the endpoint live instead.
 
 | variable | used by | meaning |
 | --- | --- | --- |
 | `VITE_SEFER_UPDATER_HOST` | desktop updater | updater worker base; the plugin appends `/{{target}}/{{current_version}}`, the version picker reads `/versions` and `/{{target}}/at/{{version}}` |
-| `VITE_SEFER_GITEA_WEB_HOST` | Web remote sync | Gitea (WACS) base URL the Web build logs into and clones from |
-| `VITE_SEFER_GITEA_DESKTOP_HOST` | desktop remote sync | Gitea base URL for the desktop build; may differ |
-| `VITE_SEFER_GIT_CORS_PROXY_URL` | Web remote sync | CORS proxy in front of Gitea smart-HTTP for isomorphic-git |
-| `VITE_SEFER_GIT_PROXY_X_REQUESTED_WITH` | Web remote sync | value the proxy expects in `X-Requested-With`; empty sends none |
-| `VITE_SEFER_LANGUAGE_API_URL` | shell | language names and directions |
+| `VITE_SEFER_WACS_WEB_URL` | Web remote sync | the ONE endpoint a browser build uses, for transfers and the Gitea API alike. Overridable in Settings |
+| `VITE_SEFER_WACS_DESKTOP_URL` | desktop remote sync | the same for desktop, which needs no proxy and so is normally Gitea itself |
+| `VITE_SEFER_WACS_APP_ID` | Web remote sync | what the proxy expects in `X-Requested-With`; empty sends none |
+| `VITE_SEFER_LANGUAGE_API_URL` | shell | language names and directions. Overridable in Settings |
 | `VITE_SEFER_OTLP_URL` | dev only | OTLP endpoint merged beside the observability ring; traces and logs only |
 | `VITE_SEFER_OTLP_METRICS` | dev only | `1` to send OTLP metrics as well. Off by default — see below |
 | `VITE_SEFER_LOG` / `SEFER_LOG` | dev only | the RAW sink: one JSONL line per event to stderr, under a Node-shaped host |
@@ -42,5 +65,26 @@ environment. `tools/tauri/updaterConfig.ts` writes a config overlay from
 Tauri build is invoked with `--config` pointing at it. See
 [desktop host](desktop.md).
 
+## One endpoint, not a host and a proxy
+
+There used to be two variables for WACS on the Web: a Gitea host and, in front
+of it, a CORS proxy. They had to name the same content or every transfer failed
+at the proxy, and nothing checked that they did.
+
+There is one now, because the proxy is route-transparent — it answers on
+Gitea's own paths — so the endpoint is simply the base of every URL and the
+application cannot tell which of the two it is talking to. A deployment with
+nothing in front of it gets its own URL here; one behind Cloudflare gets the
+proxy's. isomorphic-git's `corsProxy` option is deliberately unused: its URL
+shape (`/{host}/{owner}/{repo}.git/...`) is what forced the two variables
+apart in the first place.
+
+There is likewise no "which upstream should the proxy use" setting. Each proxy
+deployment is pinned to one content host, so choosing the endpoint already
+chose the content — and that pinning is what stops a preview build reaching
+production content however anyone configures it. See the proxy's own README in
+`wacs-isomorphic-git-proxy`.
+
 `.env*` files are never committed (this table is the reference; there is no `.env.example`). Do not add a second reader of
-`import.meta.env`; add a field to `env.ts`.
+`import.meta.env`; add a field to `env.ts`. Do not read a network preference
+anywhere but `endpoints.ts`.
