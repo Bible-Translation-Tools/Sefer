@@ -31,6 +31,24 @@
 {
   "name": "sefer-web",
   "compatibility_date": "2026-09-21",
+
+  // Workers Logs, on for every channel. `observability` is an INHERITABLE key,
+  // so the three envs below pick it up without repeating it — unlike
+  // `preview_urls`, which is per-environment and had to be set on `dev` itself.
+  //
+  // Expect it to record little today: this is a static-assets Worker with no
+  // `main`, and a request served straight from assets never invokes a Worker,
+  // so there is no invocation to log. It is set now so the first time something
+  // here does run code — a fetch handler, a redirect, a header rule — its logs
+  // are already being kept, rather than the first incident being what teaches
+  // us this was off. The updater worker, which IS pure logic, has had it since
+  // it landed (`workers/sefer-updater/wrangler.toml`).
+  //
+  // `head_sampling_rate` is left at its default of 1. The volume is a static
+  // SPA's, and sampling a log you only ever read after something broke is how
+  // the one request you needed turns out to be the one that was dropped.
+  "observability": { "enabled": true },
+
   "assets": {
     "directory": "./dist/client",
     // Every route is client-side; a deep link must serve the shell rather than

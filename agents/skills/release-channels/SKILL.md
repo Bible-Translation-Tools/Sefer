@@ -126,6 +126,31 @@ pnpm test:browser     # the real Chromium project
 pnpm verify:design    # the surface is in dev and out of production
 ```
 
+### "What did that channel actually do?" — logs
+
+Workers Logs are on for every channel. Both configs set
+`observability.enabled`, and it is an inheritable key, so one line at the top
+of each file covers all of that file's environments.
+
+```sh
+wrangler tail --env dev                                          # web, live
+wrangler tail --env preview --config workers/sefer-updater/wrangler.toml
+```
+
+Retained logs are in the dashboard under the Worker's **Logs** tab; `tail`
+only shows what happens while you are watching.
+
+Temper the expectation on the WEB worker: it is static assets with no `main`,
+and a request served from assets never invokes a Worker, so there is usually
+nothing to log. The setting is there so the first code that does run here is
+already recorded. The UPDATER worker is pure logic, and its logs are real —
+that is the one to tail when a desktop client says there is no update.
+
+This is unrelated to Sefer's own `Observability` service, which is an
+in-process ring inside the running app
+([observability](../../../documentation/architecture/observability.md)).
+Nothing in the browser reaches Cloudflare's logs.
+
 ## Tag format
 
 * `v0.3.0` — production. Semver, `v` prefix.
