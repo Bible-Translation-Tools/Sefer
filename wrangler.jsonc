@@ -38,7 +38,11 @@
     "production": {
       "name": "sefer-web-production",
       "routes": [
-        { "pattern": "sefer.bibletranslationtools.org", "custom_domain": true, "zone_name": "bibletranslationtools.org" },
+        {
+          "pattern": "sefer.bibletranslationtools.org",
+          "custom_domain": true,
+          "zone_name": "bibletranslationtools.org",
+        },
       ],
     },
 
