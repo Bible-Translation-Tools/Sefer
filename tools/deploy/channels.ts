@@ -61,12 +61,16 @@ export interface ChannelEndpoints {
   /**
    * Language names, directions and the catalogue.
    *
-   * TODO(2026-09-22): the two deployments of this exist — there is a dev build
-   * of the Language API sitting against dev WACS — but their URLs are not
-   * written down anywhere in this repository, so filling them in is somebody
-   * else's one-line change. Until then every channel leaves it unset and the
-   * Find Project screen shows its sample catalogue and says so, which is the
-   * honest state rather than a guessed hostname.
+   * The production URL is the one `scripture-editor-proto-2/.env.example`
+   * documents, and it is the endpoint `src/app/catalogue.ts` already decodes
+   * (`ConsolidatedRepos`, with the `repo_url` rows Find Project lists).
+   *
+   * TODO(2026-09-22): the dev deployment — the one built against dev WACS —
+   * has no URL written down anywhere in this estate, so `dev` leaves this
+   * unset and shows the sample catalogue while saying so. Pointing dev at the
+   * PRODUCTION catalogue would be worse than the sample: its rows would be
+   * re-based onto the dev endpoint by `attach`, and every download would look
+   * for a production repository on the dev content host and 404.
    */
   readonly languageApiUrl?: string;
 }
@@ -76,11 +80,13 @@ export const CHANNEL_ENDPOINTS: Readonly<Record<Channel, ChannelEndpoints>> = {
     wacsWebUrl: "https://wacs-proxy.bibletranslationtools.org",
     wacsDesktopUrl: "https://content.bibletranslationtools.org",
     wacsAppId: "sefer-prod",
+    languageApiUrl: "https://api.bibleineverylanguage.org/api/rest/consolidated-repos",
   },
   preview: {
     wacsWebUrl: "https://wacs-proxy.bibletranslationtools.org",
     wacsDesktopUrl: "https://content.bibletranslationtools.org",
     wacsAppId: "sefer-preview",
+    languageApiUrl: "https://api.bibleineverylanguage.org/api/rest/consolidated-repos",
   },
   dev: {
     wacsWebUrl: "https://wacs-proxy.bttdev.org",

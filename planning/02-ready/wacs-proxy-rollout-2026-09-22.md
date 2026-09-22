@@ -16,8 +16,14 @@ is below.
 
    | field | value |
    | --- | --- |
-   | `allowed-apps-prod` | `sefer-prod,sefer-preview,sefer-dev,sefer-local` |
-   | `allowed-apps-dev` | `sefer-prod,sefer-preview,sefer-dev,sefer-local` |
+   | `allowed-apps-prod` | `WA-Tool-Dovetail,sefer-prod,sefer-preview,sefer-dev,sefer-local` |
+   | `allowed-apps-dev` | `WA-Tool-Dovetail,sefer-prod,sefer-preview,sefer-dev,sefer-local` |
+
+   `WA-Tool-Dovetail` is scripture-editor-proto-2, the one other browser client
+   through this proxy — its `.env` points at the Worker and sends that. A
+   Workers secret cannot be read back, so confirm the live list with
+   `node scripts/probeAllowedApps.mjs --endpoint <url>` in the proxy repo
+   before pushing; `wrangler secret put` replaces rather than appends.
 
    The same four in both, deliberately. The endpoint is a setting, so any build
    can be pointed at either environment from `/settings` — a production build
@@ -52,10 +58,19 @@ is below.
 
 ## Decisions taken, worth not re-litigating
 
-- **The CF skip rule on the content origin should come off** once traffic is
-  going through the Worker. While it stands, the Worker's server-side gate is
-  decorative. Measured on 2026-09-17, the rule was also skipping for everyone
-  and not actually matching the header it names.
+- **The CF rule on the content origin must NOT simply come off.** The RFC said
+  it should, and that was written without knowing what it carries. The rule is
+  `any(http.request.headers["x-requested-with"][*] contains "WA-Tool-")`, and
+  it is how the whole server-side fleet gets past the RATE LIMITER: Orature,
+  the BIEL frontend service worker, BIEL mobile, wacsTopicManager,
+  SendAllReposToAPI, the gitea-dashboard ingest. None of those come through
+  this proxy. Removing the rule breaks all of them.
+
+  What can come off is whatever part of it lets a BROWSER past the managed
+  challenge, if that is separable — which is a question for whoever owns the
+  Cloudflare config, not an obvious yes. Measured on 2026-09-17 the rule also
+  appeared to be skipping for everyone regardless of header, so working out
+  what it actually matches comes first.
 - **Rate limiting is a dashboard decision, not code.** The `api` class is cheap
   to call in a loop where `git` is self-limiting, so if a limit goes anywhere it
   goes there first. Worth being honest that the `git` class already permits
@@ -77,10 +92,14 @@ is below.
 
 ## Still missing, and small
 
-- **The Language API's two URLs.** `tools/deploy/channels.ts` leaves
-  `VITE_SEFER_LANGUAGE_API_URL` unset on every channel because neither the
-  production nor the dev URL is written down in this repository. Until they are,
-  Find Project shows its sample catalogue and says so. One line each.
+- **The Language API's DEV url.** Production and preview now carry
+  `https://api.bibleineverylanguage.org/api/rest/consolidated-repos`, found in
+  `scripture-editor-proto-2/.env.example` and already the shape
+  `src/app/catalogue.ts` decodes. The dev deployment built against dev WACS has
+  no URL written down anywhere, so `dev` stays on the sample catalogue —
+  deliberately, because pointing it at the production catalogue would be worse
+  than the sample: `attach` re-bases every row onto the dev endpoint, so each
+  download would hunt for a production repository on the dev content host.
 
 ## How to know it worked
 
