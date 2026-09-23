@@ -24,6 +24,8 @@
  * `documentation/agents/verification.md`.
  */
 
+import { fileURLToPath } from "node:url";
+
 import { defineConfig, devices } from "@playwright/test";
 
 const PORT = 4321;
@@ -46,6 +48,9 @@ export default defineConfig({
     // modules that a production bundle might have dropped, which is exactly
     // the class of failure this suite is here to catch.
     command: `pnpm build && pnpm exec vite preview --port ${String(PORT)} --strictPort`,
+    // The repository root, not this file's directory (Playwright's default):
+    // `pnpm build` has to find the root package.json.
+    cwd: fileURLToPath(new URL("..", import.meta.url)),
     url: `http://localhost:${String(PORT)}/`,
     reuseExistingServer: process.env["CI"] === undefined,
     timeout: 180_000,
