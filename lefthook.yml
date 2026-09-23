@@ -11,3 +11,8 @@ pre-commit:
       run: pnpm boundaries
     unit:
       run: pnpm test:unit
+    # Regenerates the generated half of documentation/lint-results.md and
+    # stages it, so every commit records what it leaves unfixed. Deterministic:
+    # the file only changes when a finding appears or goes away.
+    lint-results:
+      run: pnpm lint:results && git add documentation/lint-results.md

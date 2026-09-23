@@ -55,6 +55,7 @@ Check `package.json` and runner configuration for executable commands. Distingui
 - `pnpm verify:design` runs two real builds and proves the design surface is absent from production and present in the design build.
 - `pnpm design:scaffolding` lists real screens still borrowing the design panel through `globalThis.__sefer.design.register`. Informational; exits 0.
 - `pnpm deadcode` fails on an unused file, export, type or dependency, or an import cycle; `release.yml`'s `verify` runs it before every deploy (not `pnpm check`, so a branch may carry a half-wired file). `pnpm exec fallow dead-code | dupes | health` is the full, advisory report; `.fallowrc.jsonc` holds the entries and the dependencies it cannot see. [First pass](planning/01-discussing/fallow-2026-09-23.md), [follow-ups](planning/01-discussing/fallow-followups-2026-09-23.md).
+- `pnpm lint:results` regenerates the generated half of [`documentation/lint-results.md`](documentation/lint-results.md): every warning left, every suppression comment and fallow exception, and the dead-code and duplication numbers. The pre-commit hook runs it and stages the file, so each commit records what it leaves unfixed; the prose above the marker says why, and is updated by hand when a class of exception appears or goes.
 - `pnpm check` runs the ordinary local gate: typecheck, lint, formatting, boundaries, unit tests, and build. `.github/workflows/check.yml` runs the same commands, plus `pnpm test:browser` in a second job.
 
 ## Channels

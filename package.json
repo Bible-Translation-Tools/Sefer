@@ -20,6 +20,7 @@
     "format": "oxfmt . '!**/*.gen.*' '!**/*.md' '!**/*.yaml' '!**/*.yml' '!vendor/**'",
     "format:check": "oxfmt --check . '!**/*.gen.*' '!**/*.md' '!**/*.yaml' '!**/*.yml' '!vendor/**'",
     "lint": "oxlint .",
+    "lint:results": "node tools/quality/lintResults.ts",
     "lint:release": "oxlint -c oxlint.release.config.ts .",
     "prepare": "lefthook install",
     "serve": "vite preview",
