@@ -4,8 +4,9 @@ This folder holds durable project guidance for humans and agents. Root `AGENTS.m
 
 ## Start here
 
+- What each service is, what is wrong with it, and where to focus: [services at a glance](./services.md). The rules every module keeps: [invariants](./INVARIANTS.md).
 - Choosing or changing tests: [testing strategy](./architecture/testing.md).
-- Deciding whether a test double is justified: [nearly no mocks proposal](../planning/00-ideas/nearly-no-mocks-testing.md).
+- Deciding whether a test double is justified: [test doubles](./architecture/test-doubles.md).
 - Checking a feature in a running application: [agent verification](./agents/verification.md).
 - Working with Solid or investigating reactivity: [Solid development and diagnostics](./architecture/solid.md).
 - Understanding Web/Tauri composition: [composition](./architecture/composition.md).

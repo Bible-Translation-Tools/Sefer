@@ -1,8 +1,8 @@
 # Nearly no mocks testing
 
-- **Status:** provisional testing policy; not implementation authorization
+- **Status:** the test-double policy (moved from planning 2026-09-23)
 - **Goal:** maximize evidence from real behavior while keeping the ordinary feedback loop fast and deterministic
-- **Related guidance:** [`documentation/architecture/testing.md`](../../documentation/architecture/testing.md)
+- **Related guidance:** [`documentation/architecture/testing.md`](testing.md)
 
 ## Thesis
 

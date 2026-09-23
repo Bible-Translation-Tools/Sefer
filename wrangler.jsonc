@@ -24,7 +24,7 @@
 // --outDir` is ignored by that plugin, so do not try to redirect it.
 //
 // THE UPDATER WORKER IS NOT HERE. It is its own config, its own hostname and
-// its own deploy step — see `planning/02-ready/updater-worker.md`. The old
+// its own deploy step — see `workers/README.md`. The old
 // repo hit a real bug where wrangler invoked from a subdirectory fell back to
 // the root config and redeployed the SPA twice instead of the updater; pass
 // `--config` explicitly when that worker lands.

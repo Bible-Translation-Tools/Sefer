@@ -182,7 +182,7 @@ Every event carries the correlation `<bookId>#<trace seq>`, so one keystroke's s
 ## What was not ported
 
 - **`attrs`/`attrResolve`** — the aligned-word popover needs two engine free functions the pinned wasm handle does not export. The half-ported popover threw a `TODO(seam)` and nothing installed it, so it is parked: [parked code](../../planning/04-parked/parked.md).
-- **`formatEdits` / `format` / `locate`** — the engine's normalisation, likewise not on the handle. Nothing in `src/editor` references them; formatting is [Fixes](../../planning/00-ideas/v2-module-seams.md)' seam when the handle grows them.
+- **`formatEdits` / `format` / `locate`** — the engine's normalisation, likewise not on the handle. Nothing in `src/editor` references them; formatting is [Fixes](findings.md)' seam.
 - **`startEngine` / `runAnalyze`** — replaced by the `Galley` Layer and the analyzer facet.
 
 ## The file map, by responsibility

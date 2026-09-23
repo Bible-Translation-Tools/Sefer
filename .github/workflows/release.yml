@@ -35,7 +35,7 @@
 # The updater worker deploys from `deploy-updater` below, on the two desktop
 # channels only. NOT here: the browser git proxy — it is
 # ../wacs-isomorphic-git-proxy, shared by every WACS client, and not Sefer's
-# to own. See planning/02-ready/git-proxy.md.
+# to own. See documentation/architecture/configuration.md.
 
 name: release
 

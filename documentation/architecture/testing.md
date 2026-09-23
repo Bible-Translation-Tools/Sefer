@@ -1,6 +1,6 @@
 # Testing strategy
 
-Status: agreed direction; adopt incrementally as capabilities arrive. This document defines ownership, not a claim that every suite exists today. For exploratory checks, read [agent verification](../agents/verification.md). The provisional test-double policy is [nearly no mocks](../../planning/00-ideas/nearly-no-mocks-testing.md).
+Status: agreed direction; adopt incrementally as capabilities arrive. This document defines ownership, not a claim that every suite exists today. For exploratory checks, read [agent verification](../agents/verification.md). The test-double policy is [test doubles](test-doubles.md).
 
 ## Current scaffold commands
 

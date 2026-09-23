@@ -27,6 +27,6 @@ invocation so nobody has to remember.
 
 The browser git proxy. It is `../wacs-isomorphic-git-proxy`, it is shared by
 every WACS browser client, and it is not Sefer's to own — see
-`planning/02-ready/git-proxy.md`. The test is whether another application
+`documentation/architecture/configuration.md`. The test is whether another application
 would want the same instance: if yes, it is a shared service and lives on its
 own; if no, it belongs here.
