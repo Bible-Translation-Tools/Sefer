@@ -50,6 +50,29 @@ jobs:
             echo "| $step | $((SECONDS - start)) |" >> "$GITHUB_STEP_SUMMARY"
           done
 
+      # Advisory on a branch, a gate on master. `pnpm deadcode` (unused files,
+      # exports, types, dependencies, cycles) blocks every deploy in
+      # release.yml; here it only REPORTS, so a designer's branch with a
+      # half-wired file still gets its preview URL, and whoever (or whichever
+      # agent) reads the run sees what would stop the merge from deploying.
+      - name: Dead code (advisory)
+        # Reported even when a check above failed: it is information, not a gate.
+        if: ${{ !cancelled() }}
+        run: |
+          set -uo pipefail
+          if pnpm deadcode > deadcode.txt 2>&1; then
+            echo "deadcode: clean" >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "### Dead code — would block the deploy on master"
+              echo '```'
+              cat deadcode.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=Dead code::pnpm deadcode found issues that would block a deploy from master; see the job summary"
+          fi
+          exit 0
+
   # A URL for this branch, so "go look at this" does not mean "push to master".
   #
   # This is a CloudflarePreview — `wrangler versions upload` publishes a new
