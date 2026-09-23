@@ -4,11 +4,11 @@ Where a project comes from, and what each host can actually do about it. Everyth
 
 ## The routes
 
-| route | file | what it is |
-|---|---|---|
+| route               | file                                                        | what it is                                                                               |
+| ------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `/` and `/projects` | `src/routes/_app/index.tsx`, `src/routes/_app/projects.tsx` | both render `ProjectsLanding` — what is on this device, plus the three ways to add to it |
-| `/start/find` | `src/routes/_app/start/find.tsx` | the remote catalogue |
-| `/start/create` | `src/routes/_app/start/create.tsx` | the create form, which stops one step short of writing (below) |
+| `/start/find`       | `src/routes/_app/start/find.tsx`                            | the remote catalogue                                                                     |
+| `/start/create`     | `src/routes/_app/start/create.tsx`                          | the create form, which stops one step short of writing (below)                           |
 
 `/` renders the landing rather than redirecting to `/projects`, because the composition reads `?fixture=1` off `location` before the router exists and a redirect that dropped the search would compose over OPFS instead of the seeded fixture. For the same reason every crumb and every tab switch passes `search: true`.
 
@@ -50,11 +50,11 @@ Every row carries a kebab of three `ProjectAdmin` calls. (The port also has `met
 
 The rule the import hub is built around: a source this host cannot serve is rendered DISABLED with the reason in place of its explainer — never hidden, never offered-then-failed. `HostInfo.capabilities()` and `env` are asked before the button exists.
 
-| source | web | Tauri | needs |
-|---|---|---|---|
-| Import zip | yes | yes | nothing: the archive is read in the page (`fflate`) and written into OPFS |
-| Open folder | yes | yes | web copies the folder's files into its own storage; Tauri reads the real path |
-| Clone from cloud | yes | yes | `VITE_SEFER_WACS_WEB_URL` / `VITE_SEFER_WACS_DESKTOP_URL` — one endpoint per host, normally a proxy on the web because its fetches are cross-origin. Overridable in Settings |
+| source           | web | Tauri | needs                                                                                                                                                                        |
+| ---------------- | --- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Import zip       | yes | yes   | nothing: the archive is read in the page (`fflate`) and written into OPFS                                                                                                    |
+| Open folder      | yes | yes   | web copies the folder's files into its own storage; Tauri reads the real path                                                                                                |
+| Clone from cloud | yes | yes   | `VITE_SEFER_WACS_WEB_URL` / `VITE_SEFER_WACS_DESKTOP_URL` — one endpoint per host, normally a proxy on the web because its fetches are cross-origin. Overridable in Settings |
 
 Every source ends in the same pipeline — `stage → classify → commit` from `src/core/resources/import.ts` ([resources](resources.md) owns the steps), run one step at a time so the dialog can name the step it is on. Nothing touches the project root until `commit`, so cancelling or failing leaves a staging directory and nothing else.
 

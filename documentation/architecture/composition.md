@@ -27,7 +27,7 @@ The Layer's scope belongs to the application, not to `boot`. `composeApplication
 
 The entry composes once and never disposes: the runtime lives as long as the page. Tests dispose in `afterEach` or a `finally`. `CompositionOptions` carries `fileSystem?: Layer<FileSystem>` and a general `layers?: Layer<never>` for anything else a caller wants merged over the root.
 
-A page that needs a service the root does not provide merges a child Layer over the root's *built* services rather than recomposing: `composition.layer` is `Layer.succeedContext` of `runtime.context()` — the context the runtime built once — so `Effect.provide(program, Layer.merge(composition.layer, ChildLive))` reuses the same Observability ring and adds only what is new. The dev fixture page does exactly this with `FixtureFileSystemLive`.
+A page that needs a service the root does not provide merges a child Layer over the root's _built_ services rather than recomposing: `composition.layer` is `Layer.succeedContext` of `runtime.context()` — the context the runtime built once — so `Effect.provide(program, Layer.merge(composition.layer, ChildLive))` reuses the same Observability ring and adds only what is new. The dev fixture page does exactly this with `FixtureFileSystemLive`.
 
 TanStack Router owns route matching, navigation, loaders, and route code splitting. It is not the dependency injection mechanism; services reach components through `useComposition()` and the shell's services.
 

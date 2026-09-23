@@ -41,11 +41,11 @@ production never does.
 
 ## Three builds
 
-| Command | `/design` | Panel | `data-loc` stamps |
-| --- | --- | --- | --- |
-| `pnpm dev` | yes | yes | yes |
-| `pnpm build:dev` | yes | yes | yes |
-| `pnpm build` | **no** | **no** | **no** |
+| Command          | `/design` | Panel  | `data-loc` stamps |
+| ---------------- | --------- | ------ | ----------------- |
+| `pnpm dev`       | yes       | yes    | yes               |
+| `pnpm build:dev` | yes       | yes    | yes               |
+| `pnpm build`     | **no**    | **no** | **no**            |
 
 The middle one is the deployed prototype — a production build in every respect
 except that it carries the surface. That is why the switch is
@@ -68,7 +68,7 @@ a half-mode where some clicks fall through produces bug reports about the app
 being broken. Hover outlines the element; click opens a composer. `Esc` cancels
 the composer, `Esc` again leaves the mode.
 
-**Enter copies.** A plain Enter saves the comment *and* puts the batch on the
+**Enter copies.** A plain Enter saves the comment _and_ puts the batch on the
 clipboard — Enter is a user gesture, which is what the clipboard API wants, so
 the whole loop is click, type, Enter, paste. Shift+Enter is a newline. "Add to
 batch" saves without copying, for a sweep of several notes and one Copy at the
@@ -160,12 +160,12 @@ Both live in the URL, namespaced so two screens cannot collide:
 
 Rules that are easy to get wrong:
 
-* Toggles are `on`/`off`, never `true`/`false`. TanStack serialises search
+- Toggles are `on`/`off`, never `true`/`false`. TanStack serialises search
   params as JSON, so the string `"false"` is written quoted (`%22false%22`) —
   correct on the round trip, unreadable in a link, and un-editable by hand.
-* A value at its declared default is **dropped** from the URL, not written. A
+- A value at its declared default is **dropped** from the URL, not written. A
   link carrying every default is one nobody can read the interesting part of.
-* Switching variant drops the outgoing variant's own tweaks and keeps the
+- Switching variant drops the outgoing variant's own tweaks and keeps the
   shared ones.
 
 ### From anywhere, not just from `/design`
@@ -180,7 +180,9 @@ if (__SEFER_DESIGN__) {
   globalThis.__sefer?.design?.register({
     namespace: "bookEditor",
     tweaks: [{ key: "gutter", label: "Gutter", kind: "choice", options: ["narrow", "wide"] }],
-    onChange: (values) => { setGutter(values["bookEditor.gutter"] ?? "narrow"); },
+    onChange: (values) => {
+      setGutter(values["bookEditor.gutter"] ?? "narrow");
+    },
   });
 }
 ```
@@ -227,11 +229,11 @@ Three lanes. They are ranked here by **how cleanly they delete**, because
 deleting them is the last step of every one of them, and that is the property
 worth optimising for.
 
-| Lane | Lives in | Graduating costs |
-| --- | --- | --- |
+| Lane      | Lives in                                  | Graduating costs                 |
+| --------- | ----------------------------------------- | -------------------------------- |
 | Throwaway | `src/dev/design/local/*.tsx` (gitignored) | nothing — it was never committed |
-| Prototype | `src/dev/design/screens/<screen>.tsx` | `git rm` the file |
-| In place | `register(...)` inside a real component | hand-editing the real file |
+| Prototype | `src/dev/design/screens/<screen>.tsx`     | `git rm` the file                |
+| In place  | `register(...)` inside a real component   | hand-editing the real file       |
 
 **One screen is one file, and nothing links to it.** `registry.ts` finds
 screens with `import.meta.glob`, so adding one is adding a file and removing
@@ -241,10 +243,10 @@ forget, and a graduation diff has no bookkeeping line in it to argue about.
 **Prefer the lane that deletes.** That gives a decision procedure for where a
 question goes:
 
-* A **structural** question — cards or a table, one column or two, does this
+- A **structural** question — cards or a table, one column or two, does this
   step exist — is a VARIANT at `/design`. It is a whole alternative take and
   the loser has to disappear completely, so it wants to be a file.
-* A **value** question — how much gutter, which weight, how tight — can be a
+- A **value** question — how much gutter, which weight, how tight — can be a
   tweak registered on the real screen, because the answer is a number that
   replaces a number and the scaffolding around it is a handful of lines.
 
@@ -257,9 +259,9 @@ exists to prevent.
 The designer produces two different things, and they are reviewed to two
 different standards:
 
-* **A nit** — a correction to a real screen. Touches `src/app/ui/**`. Held to
+- **A nit** — a correction to a real screen. Touches `src/app/ui/**`. Held to
   the shipping bar.
-* **An exploration** — a prototype, a mock, scaffolding. Touches **only**
+- **An exploration** — a prototype, a mock, scaffolding. Touches **only**
   `src/dev/**`. Nearly review-free by construction: `pnpm boundaries` already
   proves it cannot reach the application.
 
@@ -270,19 +272,19 @@ review anybody wanted.
 
 A reviewer's first move is therefore `git show --stat`:
 
-* all paths under `src/dev/**` → an exploration; read it for sense, not for fit
-* all paths under `src/app/ui/**` → a nit; review it properly
-* **both** → ask for it split before reading either
+- all paths under `src/dev/**` → an exploration; read it for sense, not for fit
+- all paths under `src/app/ui/**` → a nit; review it properly
+- **both** → ask for it split before reading either
 
 ## Graduating: it should read as a deletion
 
 A variant that wins moves into the real screen, and the diff that does it has
 a recognisable shape:
 
-* **whole files deleted** under `src/dev/design/screens/`
-* **a few changed lines** in `src/app/ui/**` — the winning values, written
+- **whole files deleted** under `src/dev/design/screens/`
+- **a few changed lines** in `src/app/ui/**` — the winning values, written
   plainly as the only thing the component does
-* **nothing else** — no index to update, no import to drop, because the
+- **nothing else** — no index to update, no import to drop, because the
   registry is a glob
 
 If graduating something means hunting through a real component for scattered
@@ -330,7 +332,7 @@ minutes; teaching a designer to resolve a merge does not.
 
 **2. His long-lived branch is a SKETCHBOOK, not a merge source.** He may keep
 one — `th`, `design` — full of ideas. Read from it and rewrite against today's
-code when he says *"reuse the card layout from my `th` branch"*. Never merge
+code when he says _"reuse the card layout from my `th` branch"_. Never merge
 it. What he gets is his idea on top of current `master`, with nothing stale
 carried along.
 
@@ -342,7 +344,7 @@ into the Actions summary:
 design-onboarding-cards-sefer-web-dev.<account>.workers.dev
 ```
 
-It is a **CloudflarePreview** — a Worker *version*, uploaded and not deployed —
+It is a **CloudflarePreview** — a Worker _version_, uploaded and not deployed —
 built `--mode dev`, so it carries `/design`, the comment panel and
 `?fixture=1`. It does not touch `sefer-dev.bttdev.org`, it needs no review and
 no merge, and the alias is stable: pushing again updates what that same link
@@ -371,30 +373,30 @@ real screens.
 
 ### Reviewing the designer's work
 
-* **He owns** feel, polish, motion, hierarchy, density, spacing, and colour
+- **He owns** feel, polish, motion, hierarchy, density, spacing, and colour
   within the semantic tokens. Those are his calls; do not relitigate them in
   review.
-* **Review is for** fit with the architecture, the developer idiom, the
+- **Review is for** fit with the architecture, the developer idiom, the
   boundaries, naming, and the single Solid/Book subscription rule.
-* **Two bars, two folders.** `src/dev/**` answers a question. It should still
+- **Two bars, two folders.** `src/dev/**` answers a question. It should still
   be good, and it is written by somebody who does not think like a developer;
   it is not held to the shipping bar. `src/app/ui/**` is.
-* A diff touching only `src/dev/**` is nearly review-free by construction — the
+- A diff touching only `src/dev/**` is nearly review-free by construction — the
   boundary checks already prove it cannot reach the application.
 
 ## Commands
 
-| Command | What it does |
-| --- | --- |
-| `pnpm dev` | Dev server on :3000; `/design` and the panel are on |
-| `pnpm branch:preview` | **A shareable URL for this branch.** Uploads a Worker version; deploys nothing |
-| `pnpm build:dev` | The `dev`-channel build — the one carrying the design surface |
-| `pnpm deploy:web dev --dry` | Build and print what would ship, without shipping |
-| `pnpm verify:design` | Proves the surface is in the design build and out of production |
-| `pnpm boundaries` | The three path rules |
-| `pnpm design:scaffolding` | Lists scaffolding still in application code (exits 0) |
-| `pnpm lint:release` | Makes that scaffolding an error |
-| `pnpm verify:chrome` | Attaches to the machine's own Chrome over CDP, for driving the app and reading the handle |
+| Command                     | What it does                                                                              |
+| --------------------------- | ----------------------------------------------------------------------------------------- |
+| `pnpm dev`                  | Dev server on :3000; `/design` and the panel are on                                       |
+| `pnpm branch:preview`       | **A shareable URL for this branch.** Uploads a Worker version; deploys nothing            |
+| `pnpm build:dev`            | The `dev`-channel build — the one carrying the design surface                             |
+| `pnpm deploy:web dev --dry` | Build and print what would ship, without shipping                                         |
+| `pnpm verify:design`        | Proves the surface is in the design build and out of production                           |
+| `pnpm boundaries`           | The three path rules                                                                      |
+| `pnpm design:scaffolding`   | Lists scaffolding still in application code (exits 0)                                     |
+| `pnpm lint:release`         | Makes that scaffolding an error                                                           |
+| `pnpm verify:chrome`        | Attaches to the machine's own Chrome over CDP, for driving the app and reading the handle |
 
 His gate before pushing is `pnpm typecheck && pnpm lint && pnpm format:check` —
 not `pnpm check`, which also builds. The `pre-commit` hook runs those three
@@ -407,11 +409,11 @@ machine rather than about the design.
 
 `globalThis.__sefer.design`, beside the observability handle:
 
-| Call | Gives |
-| --- | --- |
-| `declarations()` | The knobs that exist — the one thing a URL cannot carry |
-| `values()` | What is set, i.e. the URL |
-| `set(key, value)` | Turn one |
-| `comments()` / `drain()` | The batch; `drain` reads and clears |
-| `mode()` / `setMode()` | The pointer |
-| `register(...)` | Scaffolding, above |
+| Call                     | Gives                                                   |
+| ------------------------ | ------------------------------------------------------- |
+| `declarations()`         | The knobs that exist — the one thing a URL cannot carry |
+| `values()`               | What is set, i.e. the URL                               |
+| `set(key, value)`        | Turn one                                                |
+| `comments()` / `drain()` | The batch; `drain` reads and clears                     |
+| `mode()` / `setMode()`   | The pointer                                             |
+| `register(...)`          | Scaffolding, above                                      |

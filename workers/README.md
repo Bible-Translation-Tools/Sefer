@@ -9,8 +9,8 @@ hostnames and its own deploy step. One `pnpm install` at the root covers them
 all, which is what lets wrangler resolve a worker's dependencies when it is
 deployed from the root with `--config`.
 
-| Worker | What | Deploy |
-| --- | --- | --- |
+| Worker          | What                                                        | Deploy                                      |
+| --------------- | ----------------------------------------------------------- | ------------------------------------------- |
 | `sefer-updater` | Serves the Tauri auto-updater manifest from GitHub Releases | `pnpm deploy:updater <preview\|production>` |
 
 ## The rule that is easy to get wrong

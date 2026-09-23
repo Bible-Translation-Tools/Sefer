@@ -8,11 +8,11 @@ Read this before touching `src/dev/design`, `src/dev/annotate`,
 
 ## There are three builds, not two
 
-| Command | Mode | `/design` | Annotator | `data-loc` |
-| --- | --- | --- | --- | --- |
-| `pnpm dev` | `development` | yes | yes | yes |
-| `pnpm build:dev` | `dev` | yes | yes | yes |
-| `pnpm build` | `production` | **no** | **no** | **no** |
+| Command          | Mode          | `/design` | Annotator | `data-loc` |
+| ---------------- | ------------- | --------- | --------- | ---------- |
+| `pnpm dev`       | `development` | yes       | yes       | yes        |
+| `pnpm build:dev` | `dev`         | yes       | yes       | yes        |
+| `pnpm build`     | `production`  | **no**    | **no**    | **no**     |
 
 The middle row is the one that needs explaining. The deployed prototype — the
 URL a designer sends a product owner — is a PRODUCTION build in every sense
@@ -32,7 +32,9 @@ name for the same idea and a second thing to keep in step.
 ```ts
 // vite.config.ts
 const designBuild = mode === "development" || mode === "dev";
-define: { __SEFER_DESIGN__: JSON.stringify(designBuild) }
+define: {
+  __SEFER_DESIGN__: JSON.stringify(designBuild);
+}
 ```
 
 It was an exported `DESIGN_ENABLED` constant first, and that was subtly wrong.
@@ -52,15 +54,15 @@ touching the gate.
 
 ## What is where
 
-| Path | What it is |
-| --- | --- |
-| `src/routes/design.tsx` | The gated route. Loose `validateSearch`: every string key is kept. |
-| `src/dev/design/` | The screens, and the frame that renders them. May use the real components — that is the point. |
-| `src/dev/design/screens/` | Committed screens. Travel with the repository. |
-| `src/dev/design/local/` | Gitignored sketches. Appear in the picker on save, never in a diff. |
-| `src/dev/annotate/` | The floating panel. A plain DOM module; see below. |
-| `src/dev/designSurface.ts` | Mounts the one annotator app-wide, installs the debug handle. |
-| `tools/vite/jsxLocation.ts` | Stamps `data-loc="file:line:col"` on intrinsic JSX. |
+| Path                        | What it is                                                                                     |
+| --------------------------- | ---------------------------------------------------------------------------------------------- |
+| `src/routes/design.tsx`     | The gated route. Loose `validateSearch`: every string key is kept.                             |
+| `src/dev/design/`           | The screens, and the frame that renders them. May use the real components — that is the point. |
+| `src/dev/design/screens/`   | Committed screens. Travel with the repository.                                                 |
+| `src/dev/design/local/`     | Gitignored sketches. Appear in the picker on save, never in a diff.                            |
+| `src/dev/annotate/`         | The floating panel. A plain DOM module; see below.                                             |
+| `src/dev/designSurface.ts`  | Mounts the one annotator app-wide, installs the debug handle.                                  |
+| `tools/vite/jsxLocation.ts` | Stamps `data-loc="file:line:col"` on intrinsic JSX.                                            |
 
 ## Three boundary rules, all in `pnpm boundaries`
 
@@ -86,9 +88,9 @@ screen and a comment about a prototype are the same gesture, and a panel that
 existed only inside one frame would be a panel you cannot use to compare them.
 `/design` therefore has no rail and no status line but does have the panel.
 
-* On a real screen: comment-only, minimised to a puck, **no hotkey** (a bare
+- On a real screen: comment-only, minimised to a puck, **no hotkey** (a bare
   `c` over CodeMirror competes with the editor).
-* On `/design`: the same panel, reconfigured with that screen's variants and
+- On `/design`: the same panel, reconfigured with that screen's variants and
   tweaks, opened, hotkey `c`.
 
 Those are defaults, not a ceiling. A chord RECORDED in the panel (kebab →
@@ -139,7 +141,9 @@ if (__SEFER_DESIGN__) {
   globalThis.__sefer?.design?.register({
     namespace: "bookEditor",
     tweaks: [{ key: "gutter", label: "Gutter", kind: "choice", options: ["narrow", "wide"] }],
-    onChange: (values) => { setGutter(values["bookEditor.gutter"] ?? "narrow"); },
+    onChange: (values) => {
+      setGutter(values["bookEditor.gutter"] ?? "narrow");
+    },
   });
 }
 ```
@@ -176,14 +180,14 @@ answering should be settled.
 
 `globalThis.__sefer.design`, alongside the observability handle:
 
-| Call | What it gives |
-| --- | --- |
-| `declarations()` | The knobs that EXIST — the one thing a URL cannot carry |
-| `values()` | What is set, i.e. the URL |
-| `set(key, value)` | Turn one |
-| `comments()` / `drain()` | The batch; `drain` is Copy minus the clipboard |
-| `mode()` / `setMode()` | The pointer |
-| `register(...)` | See above |
+| Call                     | What it gives                                           |
+| ------------------------ | ------------------------------------------------------- |
+| `declarations()`         | The knobs that EXIST — the one thing a URL cannot carry |
+| `values()`               | What is set, i.e. the URL                               |
+| `set(key, value)`        | Turn one                                                |
+| `comments()` / `drain()` | The batch; `drain` is Copy minus the clipboard          |
+| `mode()` / `setMode()`   | The pointer                                             |
+| `register(...)`          | See above                                               |
 
 `drain()` is why it exists: an agent attached over CDP (`pnpm verify:chrome`)
 can read a batch and never make anybody paste. The paste stays the channel that
@@ -218,17 +222,17 @@ rendered.
 The arrangement, written down because one nobody wrote down is one that gets
 relitigated:
 
-* **The designer owns** feel, polish, motion, hierarchy, density, spacing, and
+- **The designer owns** feel, polish, motion, hierarchy, density, spacing, and
   colour within the semantic tokens.
-* **Review is for** fit with the architecture, the developer idiom, the
+- **Review is for** fit with the architecture, the developer idiom, the
   boundaries, naming, and the single-subscription rule — not for taste that was
   his call to make.
-* **Two bars, two folders.** Code under `src/dev/**` answers a question. It
+- **Two bars, two folders.** Code under `src/dev/**` answers a question. It
   should still be good, and it is written by somebody who does not think like a
   developer; it is not held to the shipping bar. `src/app/ui/**` is.
-* **Mocked data is acceptable** on screens that need none. Real text is
+- **Mocked data is acceptable** on screens that need none. Real text is
   preferred wherever it is available.
-* **Graduation is expected.** A variant that wins moves into the real screen.
+- **Graduation is expected.** A variant that wins moves into the real screen.
   The design surface is a staging area, not a parallel application — that
   divergence is the failure this whole thing exists to avoid.
 
@@ -258,9 +262,9 @@ A graduation diff should read as whole files deleted under
 winning values plainly. If it instead requires hunting scattered lines out of a
 real component, the question was in the wrong lane:
 
-* a **structural** question (cards or a table) is a VARIANT at `/design`,
+- a **structural** question (cards or a table) is a VARIANT at `/design`,
   because the loser has to disappear completely and a file can;
-* a **value** question (how much gutter) may be a tweak registered in place,
+- a **value** question (how much gutter) may be a tweak registered in place,
   because the answer is a number replacing a number.
 
 **A graduation must not ADD an option.** A real component that emerges with a

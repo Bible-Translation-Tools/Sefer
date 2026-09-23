@@ -1,6 +1,6 @@
 # Parked code
 
-Code that was built, then removed because nothing used it, and kept here as a way back. Unlike `00-ideas`, these were real, working pieces of the app. They're parked because no screen wanted them *yet*, not because the idea was rejected.
+Code that was built, then removed because nothing used it, and kept here as a way back. Unlike `00-ideas`, these were real, working pieces of the app. They're parked because no screen wanted them _yet_, not because the idea was rejected.
 
 Every entry names the commit the code can be read from. Recover a file with `git show <commit>:<path>`. Nothing here is compiled, linted or analysed, which is the point: parked code shouldn't keep being typechecked against a codebase that has moved on.
 
@@ -35,5 +35,5 @@ Every entry names the commit the code can be read from. Recover a file with `git
 - **was:** `severityOf(code)` in `src/core/findings/finding.ts`
 - **read it at:** `git show c7d68af:src/core/findings/finding.ts`
 - **parked:** 2026-09-23. It was written for a severity legend or filter list that was never built.
-- **what it did:** the severity an Onion code carries with no declared `\usfm` version (the catalogue's base rung). Deliberately *not* a finding's severity, since several codes escalate once a version is declared.
+- **what it did:** the severity an Onion code carries with no declared `\usfm` version (the catalogue's base rung). Deliberately _not_ a finding's severity, since several codes escalate once a version is declared.
 - **would need:** the legend.

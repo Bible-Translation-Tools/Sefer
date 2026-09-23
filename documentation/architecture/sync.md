@@ -27,14 +27,14 @@ Two consequences run through everything below:
 translation point — `src/app/ui/cloud/copy.ts` — and past it nobody sees branch, commit, HEAD,
 merge, rebase, fetch or origin.
 
-| In core | On screen |
-| --- | --- |
-| the remote, `origin` | the shared project |
-| a commit | a version |
-| fetch | check for changes |
-| pull | receive updates |
-| push | send my changes |
-| squash onto the remote head | combine |
+| In core                     | On screen          |
+| --------------------------- | ------------------ |
+| the remote, `origin`        | the shared project |
+| a commit                    | a version          |
+| fetch                       | check for changes  |
+| pull                        | receive updates    |
+| push                        | send my changes    |
+| squash onto the remote head | combine            |
 
 The glossary is one module keyed by the state enum because v1's chip, banner, popover and settings
 rows each grew their own wording for the same situations and drifted apart. Every string for a
@@ -52,17 +52,17 @@ facts in. That is what
 makes every state reachable from a dev fixture with no Gitea instance, and it is why the whole
 policy fits in one ladder.
 
-| State | What it means | Primary action |
-| --- | --- | --- |
-| `detached` | No shared project is attached to this one. | Choose a shared project |
-| `unpublished` | Attached, but the shared project has no copy of this branch yet. | Publish this project |
-| `attached-clean` | Both sides hold the same versions. | Check for changes |
-| `ahead` | This device has versions the shared project does not. | Send my changes |
-| `behind` | The shared project has versions this device does not. | Receive updates |
-| `diverged` | Both are true. | Combine, or Compare |
-| `conflicted` | A transfer stopped part-way; the work tree is mid-merge. | Finish the transfer |
-| `offline` | No network, or the last transfer failed on the way out. | Check for changes |
-| `unauthorized` | No session for the shared project's host, or it was rejected. | Sign in |
+| State            | What it means                                                    | Primary action          |
+| ---------------- | ---------------------------------------------------------------- | ----------------------- |
+| `detached`       | No shared project is attached to this one.                       | Choose a shared project |
+| `unpublished`    | Attached, but the shared project has no copy of this branch yet. | Publish this project    |
+| `attached-clean` | Both sides hold the same versions.                               | Check for changes       |
+| `ahead`          | This device has versions the shared project does not.            | Send my changes         |
+| `behind`         | The shared project has versions this device does not.            | Receive updates         |
+| `diverged`       | Both are true.                                                   | Combine, or Compare     |
+| `conflicted`     | A transfer stopped part-way; the work tree is mid-merge.         | Finish the transfer     |
+| `offline`        | No network, or the last transfer failed on the way out.          | Check for changes       |
+| `unauthorized`   | No session for the shared project's host, or it was rejected.    | Sign in                 |
 
 The public door is `sync(reading, contested)` (`src/core/sync/state.ts`), which answers the state, the two clocks and the one primary action as one value. Inside it, the private `syncStateOf` is a ladder, and **the order is the policy**:
 
@@ -95,9 +95,9 @@ including the broken ones.
 
 ```ts
 interface Clock {
-  at: number | undefined;   // when this side last recorded any version
-  unshared: number;         // versions it holds that the other side does not
-  by: string | undefined;   // who recorded the newest one, when worth saying
+  at: number | undefined; // when this side last recorded any version
+  unshared: number; // versions it holds that the other side does not
+  by: string | undefined; // who recorded the newest one, when worth saying
 }
 ```
 
@@ -124,10 +124,10 @@ already brought down, so it costs no second transfer and can be shown before the
 interface IncomingBook {
   bookId: string;
   path: string;
-  kind: ChangeKind;                // added, modified or deleted
-  chapters: readonly number[];   // what the shared project changed; 0 is the front matter
-  alsoHere: readonly number[];   // of those, what this device also changed
-  contested: boolean;            // both sides touched this book
+  kind: ChangeKind; // added, modified or deleted
+  chapters: readonly number[]; // what the shared project changed; 0 is the front matter
+  alsoHere: readonly number[]; // of those, what this device also changed
+  contested: boolean; // both sides touched this book
 }
 ```
 
@@ -185,17 +185,17 @@ The file is in two halves and the split is the point. The private `planCombine` 
 survey of facts in, one decision out — so every refusal can be decided with no repository, and the
 ladder's ORDER is policy the same way `syncStateOf`'s is:
 
-| Refusal | What it means |
-| --- | --- |
-| `no-branch` | HEAD is detached or unborn; there is no branch to move. |
-| `no-work-here` | No versions on this device to replay. |
-| `no-cloud-copy` | The shared project has no copy of this branch. Publish first. |
-| `no-shared-version` | No version in common, so no base to measure "what I changed" against. |
-| `not-diverged` | Only one side moved: send or receive instead. |
-| `contested` | Both sides changed the same file. Never merged; compared. |
-| `unrecorded-work` | Files written but not recorded. The move is forced — they would be discarded. |
-| `deletion` | `Git.commit` stages receipts, and a receipt cannot say "this file is gone". |
-| `nothing-to-replay` | This device's versions changed no file. |
+| Refusal             | What it means                                                                 |
+| ------------------- | ----------------------------------------------------------------------------- |
+| `no-branch`         | HEAD is detached or unborn; there is no branch to move.                       |
+| `no-work-here`      | No versions on this device to replay.                                         |
+| `no-cloud-copy`     | The shared project has no copy of this branch. Publish first.                 |
+| `no-shared-version` | No version in common, so no base to measure "what I changed" against.         |
+| `not-diverged`      | Only one side moved: send or receive instead.                                 |
+| `contested`         | Both sides changed the same file. Never merged; compared.                     |
+| `unrecorded-work`   | Files written but not recorded. The move is forced — they would be discarded. |
+| `deletion`          | `Git.commit` stages receipts, and a receipt cannot say "this file is gone".   |
+| `nothing-to-replay` | This device's versions changed no file.                                       |
 
 `contested` outranks every mechanical objection below it: when two people wrote the same book, that
 is the thing to say, not that some third file happens to be unsaved. It is decided per FILE as well

@@ -122,7 +122,6 @@ The recovery banner is mounted on the book route as well as the project route, f
 unsaved work found on open is the first thing to answer, and the project page is not where an open
 lands.
 
-
 ## The workspace chrome
 
 Three components, in `src/app/ui/workspace/`, and one rule between them: the
@@ -162,6 +161,7 @@ the application's Mod-K for an application it is not part of.
   History and Settings are always offered; Projects is lit on `/start/*` as
   well as `/projects`, because bringing a project in is the chooser's second
   half and `ProjectSidebar` reads the same two prefixes.
+
 - **`ProjectSidebar`** is the book list, the review pills from
   `ProjectAnalysis.census`, and the chapter grid of the FOCUSED book — the one
   place a chapter is chosen. There is no chapter `<select>` on the editor page.
@@ -251,7 +251,7 @@ An Effect-returning command is run on the app runtime by the runner `registerShe
 
 `runCommand(id, argument?)` passes the argument straight to `run`. Almost nothing reads it; `project.rename` does, because the dialog that would ask for a name is another slice's surface and renaming a project to something nobody typed is not an option. Pressed with nothing, it says so.
 
-**The editor's chords are bound twice.** `editor.insert.verse` / `.paragraph` / `.poetry` / `.footnote` are registered here with `Mod-Shift-v/p/l/n` *and* inside CodeMirror's own keymap (`usfmKeys`), because an insertion needs the caret. The document listener skips an event the editor already consumed (`event.defaultPrevented`), so a chord fires once. The footnote is `Mod-Shift-n` — for **n**ote — and not `Mod-Shift-f`, which is `search.open`: one chord meaning "footnote" inside the editor and "find in project" outside it is two commands wearing one press. `editor.frontmatter.edit` has no chord and focuses the front matter card's first field. See [the editor](editor.md), "Structured entry".
+**The editor's chords are bound twice.** `editor.insert.verse` / `.paragraph` / `.poetry` / `.footnote` are registered here with `Mod-Shift-v/p/l/n` _and_ inside CodeMirror's own keymap (`usfmKeys`), because an insertion needs the caret. The document listener skips an event the editor already consumed (`event.defaultPrevented`), so a chord fires once. The footnote is `Mod-Shift-n` — for **n**ote — and not `Mod-Shift-f`, which is `search.open`: one chord meaning "footnote" inside the editor and "find in project" outside it is two commands wearing one press. `editor.frontmatter.edit` has no chord and focuses the front matter card's first field. See [the editor](editor.md), "Structured entry".
 
 `format.book` and `format.project` apply Onion's own whole-book transaction through `Fixes.formatBook`/`applyFormat` — see [findings](findings.md), "Format". `format.project` and the every-book overlay run through the shell's one `MultiBook`: one instance over a thunk of the project's books, so the cross-book Undo offer has somewhere to live.
 
@@ -265,6 +265,6 @@ Every user-visible string goes through `t()` (`src/app/i18n.ts`) — an identity
 
 ## What is stubbed
 
-- **Opening an arbitrary folder on the Web host.** `WebDialogsLive.pickFolder` returns a picked handle's *name*, not a path the OPFS layer can read. `/projects` lists the OPFS subtree Sefer owns and says so.
+- **Opening an arbitrary folder on the Web host.** `WebDialogsLive.pickFolder` returns a picked handle's _name_, not a path the OPFS layer can read. `/projects` lists the OPFS subtree Sefer owns and says so.
 - **Drafting** (`src/app/workflows/drafting.ts`) is a typed stub that `Effect.die`s. Its header says what it composes and why the missing piece is domain vocabulary rather than code.
 - **Settings enumeration.** `SettingsService` has no "list every registered key" — a key belongs to the module that declared it. `src/app/settings.ts` is the shell's own set, and `/settings` renders exactly those.

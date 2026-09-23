@@ -8,10 +8,10 @@ The page is `src/app/ui/inventory/`; the reading is `src/core/findings/inventory
 
 Two halves of the **same publication**, joined.
 
-| half | what it is | where it comes from |
-|---|---|---|
-| the **pattern table** | one row per `(glyph, channel, key)` with a numerator, a denominator, a share in basis points, a band and a book count | `FindingsSnapshot.patterns()` |
-| the **Convention findings** | one row per convicted site, each naming a row of that table | the snapshot's per-book findings, `kind === "Convention"` |
+| half                        | what it is                                                                                                            | where it comes from                                       |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| the **pattern table**       | one row per `(glyph, channel, key)` with a numerator, a denominator, a share in basis points, a band and a book count | `FindingsSnapshot.patterns()`                             |
+| the **Convention findings** | one row per convicted site, each naming a row of that table                                                           | the snapshot's per-book findings, `kind === "Convention"` |
 
 Nothing else. The module never reads the project's text — the excerpt beside a flagged site is the only place text is touched, and that is the page's, for display (see [The flagged site's excerpt](#the-flagged-sites-excerpt)).
 
@@ -37,7 +37,7 @@ Its limits, plainly:
 
 - It is **not a count of the text**. Nothing in this module re-reads a book. A count would be a second measurement of the project, and the one measurement should be the engine's.
 - A glyph the engine measured on only **one narrow channel** reports that channel's population and nothing wider.
-- **The table is not a census.** Sous emits a pattern row when a channel has a claim to make about a glyph, not one row per character in the project. On a small corpus that can mean the inventory contains *only the convicted characters* — which is exactly what the `fixtures/small-nt` project produces: eleven pattern rows over ten glyphs, nine of them `Rarity`, every one of them flagged. A short table is not a tidy project, and the page says so above the list rather than letting the reader infer it.
+- **The table is not a census.** Sous emits a pattern row when a channel has a claim to make about a glyph, not one row per character in the project. On a small corpus that can mean the inventory contains _only the convicted characters_ — which is exactly what the `fixtures/small-nt` project produces: eleven pattern rows over ten glyphs, nine of them `Rarity`, every one of them flagged. A short table is not a tidy project, and the page says so above the list rather than letting the reader infer it.
 
 ## What is not shown
 
@@ -53,7 +53,7 @@ Its limits, plainly:
 
 `src/routes/_app/project/$slug/inventory.tsx` is a `createFileRoute` and a `<ShellGate>`, like every other route. The screen is three parts:
 
-- a filter row — a text box that accepts a character, a name or a `U+` code; an `All | Flagged | Quiet` lens; and a pool select over the engine's own eight names, classified from the code point (a glyph's own `PooledNeighbor` rows classify its *neighbours*, so the filter needs a classifier rather than a lookup);
+- a filter row — a text box that accepts a character, a name or a `U+` code; an `All | Flagged | Quiet` lens; and a pool select over the engine's own eight names, classified from the code point (a glyph's own `PooledNeighbor` rows classify its _neighbours_, so the filter needs a classifier rather than a lookup);
 - the glyph table, most sites first, the character set in the scripture family in a tinted tile because a comma and a maqaf are three pixels apart in a UI sans;
 - the detail card, one sub-table per channel group, and the flagged sites with the convicted character marked inside a quotation of the reading.
 

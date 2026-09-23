@@ -7,21 +7,26 @@ Status: agreed workflow direction. This is not yet an executable app-specific sk
 Status: this section describes code that exists.
 
 - **The dev fixture route** is `/dev/fixture`, usable only under the dev server. It is an ordinary generated file route — `src/routes/_app/dev/fixture.tsx`, in `src/routeTree.gen.ts` like any other — but a thin shell: its `beforeLoad` throws `notFound()` when `!import.meta.env.DEV`, and its component is a `lazyRouteComponent` whose loader `import()`s the page only inside an `import.meta.env.DEV` branch. `import.meta.env.DEV` is a build-time constant, so a production build drops that branch and never bundles the page; production answers `/dev/fixture` through the root not-found boundary. The page itself is `src/dev/FixturePage.tsx` — not under `src/routes/`, so it is never a route file. After `pnpm build`, `grep -r small-nt dist/`, `grep -r usfm dist/`, `grep -r __sefer dist/`, and `grep -r FixturePage dist/` all come back empty; the literal `/dev/fixture` path string does appear, because the route is registered in every build.
-- **What the page does.** It takes the one application composition from `useComposition()` and runs its listing Effect over `Layer.merge(composition.layer, FixtureFileSystemLive)` — the running application's own services with one addition, not a second boot — and renders the boot result, then every file of the `small-nt` project read back *through* the `FileSystem` service with its byte length. `reset` reseeds a fresh in-memory Layer; `?keep=1` keeps the instance already seeded. The seeded project is in-memory and page-scoped: it lives in the Layer instance for the life of the page and a reload starts from the same bytes. The route emits one `fixture` `ready` note carrying `small-nt: <n> files`.
+- **What the page does.** It takes the one application composition from `useComposition()` and runs its listing Effect over `Layer.merge(composition.layer, FixtureFileSystemLive)` — the running application's own services with one addition, not a second boot — and renders the boot result, then every file of the `small-nt` project read back _through_ the `FileSystem` service with its byte length. `reset` reseeds a fresh in-memory Layer; `?keep=1` keeps the instance already seeded. The seeded project is in-memory and page-scoped: it lives in the Layer instance for the life of the page and a reload starts from the same bytes. The route emits one `fixture` `ready` note carrying `small-nt: <n> files`.
 - **The fixture data** is `fixtures/small-nt/` — four real ULB books plus one deliberately malformed file — vendored and described in `fixtures/README.md`. `src/core/fixture/smallNt.ts` imports them with Vite `?raw` and exports `FixtureFileSystemLive`, the in-memory FileSystem Layer seeded under `/small-nt`.
 - **`?fixture=1` reaches that module through a dynamic import**, in `src/app/services.ts`, gated on `__SEFER_DESIGN__ && options.fixture`. The build-time half of that condition is the load-bearing one: until 2026-09-22 the import was static, and a static import keeps a module in the graph however unreachable its caller is — a production `dist/` carried the whole twenty kilobytes of ULB inside `ProjectContext-*.js`, and the invariant above was false. Gating on the runtime flag alone would not have fixed it; rolldown would still emit the chunk. In a design build the fixture is now its own lazily fetched `smallNt-*.js`, requested only when the parameter is present.
 - **Dev surfaces on `globalThis.__sefer`**, under the dev server only (`import.meta.env.DEV`; `pnpm build:dev` does not carry them): `observability` (`traces.recent()` and `traces.print()` for assembled operations, `logs.recent()` for loose events, `errors()` for client failures, `export()`, `level()`, `setLevel()`, `stream()`) and, once the fixture route has seeded, `state()` returning `{ boot, fixture: { project, files, seededAt }, observability }`, where `files` is `{ path, bytes }` per file and `observability` is the number of events currently in the ring.
 - **The launch helper** is `pnpm verify:launch [--check]` (`tools/verify/launch.ts`, Node built-ins only). It picks a free port, creates `.verify/<runId>/` (gitignored), starts `vite --port <p> --strictPort` with `SEFER_LOG=1` and `VITE_SEFER_LOG=1`, tees the child's stderr into `<runDir>/observability.jsonl` (stdout goes to `<runDir>/server.log`), polls `http://localhost:<p>/dev/fixture` with an `accept: text/html` header until it answers 200 or 60 s pass, and prints exactly one JSON line to stdout:
 
 ```json
-{"url":"http://localhost:60634/dev/fixture","runId":"2026-09-06T21-52-51-542Z-9fdaca8a","runDir":"/…/Sefer/.verify/2026-09-06T21-52-51-542Z-9fdaca8a","pid":9032}
+{
+  "url": "http://localhost:60634/dev/fixture",
+  "runId": "2026-09-06T21-52-51-542Z-9fdaca8a",
+  "runDir": "/…/Sefer/.verify/2026-09-06T21-52-51-542Z-9fdaca8a",
+  "pid": 9032
+}
 ```
 
-  Without `--check` it stays up until SIGINT or SIGTERM, then kills the dev server and exits 0. With `--check` it exits as soon as the route is ready — readiness is around 1.7 s on a warm cache.
+Without `--check` it stays up until SIGINT or SIGTERM, then kills the dev server and exits 0. With `--check` it exits as soon as the route is ready — readiness is around 1.7 s on a warm cache.
 
-  The `accept: text/html` header is not optional: `@solidjs/vite-plugin` runs in client mode with `appType: "custom"`, and its dev page middleware only answers requests that ask for HTML. A plain `curl` or `fetch` with `accept: */*` gets `Cannot GET /` from every path, including `/`.
+The `accept: text/html` header is not optional: `@solidjs/vite-plugin` runs in client mode with `appType: "custom"`, and its dev page middleware only answers requests that ask for HTML. A plain `curl` or `fetch` with `accept: */*` gets `Cannot GET /` from every path, including `/`.
 
-  What the artifact directory does *not* yet contain is browser-side observability. `SEFER_LOG` reaches the Vite process, not the page; in a browser the ring mirrors `note` events to `console.debug` and is read through `__sefer.observability`. `observability.jsonl` currently holds the dev server's own stderr.
+What the artifact directory does _not_ yet contain is browser-side observability. `SEFER_LOG` reaches the Vite process, not the page; in a browser the ring mirrors `note` events to `console.debug` and is read through `__sefer.observability`. `observability.jsonl` currently holds the dev server's own stderr.
 
 ## Exploration and regression tests have different jobs
 
@@ -58,7 +63,7 @@ It prints one JSON line; `cdp` is the endpoint for `chromium.connectOverCDP(...)
 
 Chrome 136+ refuses remote debugging on the default data directory, which is also where a person's real browsing lives, so the rig has its own long-lived `--user-data-dir` at `~/.sefer-cdp-profile`. That directory is also where its OPFS lives — which is why the profile is named and kept: a corpus imported once is still there next week.
 
-**Headless is the default because a visible rig steals the machine.** macOS activates an *application*, not a window: a headed Chrome driven by an agent raises `Google Chrome.app` and takes the keyboard away from whatever the person was doing in their own Chrome — a different profile, the same dock icon. Headless draws nothing, takes no focus, and OPFS, screenshots and tracing all work in it (verified: the imported `en_ulb` opens through Revelation headless).
+**Headless is the default because a visible rig steals the machine.** macOS activates an _application_, not a window: a headed Chrome driven by an agent raises `Google Chrome.app` and takes the keyboard away from whatever the person was doing in their own Chrome — a different profile, the same dock icon. Headless draws nothing, takes no focus, and OPFS, screenshots and tracing all work in it (verified: the imported `en_ulb` opens through Revelation headless).
 
 **Close every page you open, and if `connectOverCDP` times out, restart the rig.** Playwright attaches to every target in the browser, so pages left behind by earlier runs accumulate and eventually make the connect hang — the websocket opens and then nothing answers. Twenty-five stale tabs was enough. `pnpm verify:chrome --status` counts them; `--stop` then a fresh start is the fix, and closing them through `/json/close/<id>` did NOT revive a browser that had already wedged. In a script: `await page.close()` before `browser.close()`, since `browser.close()` on a CDP connection only disconnects.
 
@@ -69,7 +74,7 @@ Chrome 136+ refuses remote debugging on the default data directory, which is als
 
 **Do not hand-launch a second Chrome, and do not copy the profile.** Both were tried in the same session and both cost more than they saved: a copy is ~800MB, it carries the stale cache described above, and it drifts from the rig's OPFS the moment either one is used. If the rig is unreachable, restart the rig.
 
-Worse, launching Chrome while an instance with a *different* `--user-data-dir` is already running does not start a second one — macOS activates the running process, so the person clicks Chrome and gets the rig's empty profile instead of their own, with no explanation. If someone says their profile has vanished, that is what happened: `pnpm verify:chrome --stop`, then reopen Chrome normally.
+Worse, launching Chrome while an instance with a _different_ `--user-data-dir` is already running does not start a second one — macOS activates the running process, so the person clicks Chrome and gets the rig's empty profile instead of their own, with no explanation. If someone says their profile has vanished, that is what happened: `pnpm verify:chrome --stop`, then reopen Chrome normally.
 
 **Leave the desktop as you found it: `--stop` when the run is done, and close the tabs you opened.** `--status` lists them.
 

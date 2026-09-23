@@ -4,12 +4,12 @@ Four files, copied **verbatim** from `public/stet/` in the
 `scripture-editor-proto-2` repository, where they were the shipped Spiritual
 Terms Evaluation data:
 
-| File | Bytes | What it is |
-| --- | --- | --- |
-| `index.json` | 577 | The guide manifest: one row per locale with its pinned `provenanceId` and file name. |
-| `en.json` | 1.3 MB | English guide — 102 terms, 4 865 frozen reference verses. |
-| `es-419.json` | 1.8 MB | Latin-American Spanish guide. |
-| `pt-br.json` | 1.7 MB | Brazilian Portuguese guide. |
+| File          | Bytes  | What it is                                                                           |
+| ------------- | ------ | ------------------------------------------------------------------------------------ |
+| `index.json`  | 577    | The guide manifest: one row per locale with its pinned `provenanceId` and file name. |
+| `en.json`     | 1.3 MB | English guide — 102 terms, 4 865 frozen reference verses.                            |
+| `es-419.json` | 1.8 MB | Latin-American Spanish guide.                                                        |
+| `pt-br.json`  | 1.7 MB | Brazilian Portuguese guide.                                                          |
 
 ## Where the bytes came from
 
@@ -27,11 +27,11 @@ re-derives them; the generator:
 The pinned snapshots, which are the `provenanceId` in each envelope and in
 `index.json`:
 
-| Locale | Repository | Commit |
-| --- | --- | --- |
-| `en` | `WA-Catalog/en_ulb` | `8baaf2076f7813ac7ab5f3e7988627ec0f9d91dc` |
+| Locale   | Repository              | Commit                                     |
+| -------- | ----------------------- | ------------------------------------------ |
+| `en`     | `WA-Catalog/en_ulb`     | `8baaf2076f7813ac7ab5f3e7988627ec0f9d91dc` |
 | `es-419` | `WA-Catalog/es-419_ulb` | `c54e36d1cc27ae58c6b8ae85238eb884d5f1a3d1` |
-| `pt-br` | `WA-Catalog/pt-br_ulb` | `f63e8b13f2cba842ce5acd6cfc4398c3ad250c40` |
+| `pt-br`  | `WA-Catalog/pt-br_ulb`  | `f63e8b13f2cba842ce5acd6cfc4398c3ad250c40` |
 
 Each envelope's `reference.sourceUrl` is the content-addressed archive for its
 commit, e.g.

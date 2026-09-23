@@ -12,7 +12,7 @@ Everything downstream is a function of that facet rather than of a global: `engi
 
 ## The editor-backed Book
 
-`editorBook(plain, { analyze, extensions?, observability? })` is the Plain → Instantiated transition ([project](project.md), [source and book](source.md)). The state is created **from** `plain.source().text`, and from that moment the state *is* the canonical text: `source()` derives the string from it, cached per `EditorState`, and the stamp's `revision` continues from the plain Book's and increments once per accepted doc-changing transaction.
+`editorBook(plain, { analyze, extensions?, observability? })` is the Plain → Instantiated transition ([project](project.md), [source and book](source.md)). The state is created **from** `plain.source().text`, and from that moment the state _is_ the canonical text: `source()` derives the string from it, cached per `EditorState`, and the stamp's `revision` continues from the plain Book's and increments once per accepted doc-changing transaction.
 
 `apply(changes, origin, trust?)` builds one transaction — `userEvent: input.<origin>`, `trusted` when the trust says so, `isolateHistory` for a `project.*` origin so a cross-book operation is one undo step per book — and runs it through the phases. Accepted: `Result.succeed(receipt)`. Refused (the doc did not change): `Result.fail(Refusal)`, whose `rule` names the phase rule when one recorded a refusal on the trace and `editor.phases` otherwise.
 
@@ -40,12 +40,12 @@ Four insertions and one card. All of them build a `TransactionSpec` against the 
 
 `core/insert.ts` holds the four; `core/actions.ts` names them so the shell can ask for one without importing CodeMirror, and `EditorBook.perform(action)` runs it against whichever seat is canonical — the bound view when there is one, the held state when there is not. That is the same door `undo`/`redo` go through.
 
-| gesture | key | what it builds |
-|---|---|---|
-| `insert.verse` | `Mod-Shift-v` | `\v N ` at the caret with **N selected**, so the first keystroke replaces it. `N` is the highest verse already opened in this chapter at or before the caret, plus one (a `\v 1-2` range answers 3). A caret inside a word moves forward to the word's far edge first — an aligned `\w …\w*` wrapper counts as one word. A leading space is supplied when the caret is hard against a glyph. |
-| `insert.paragraph` | `Mod-Shift-p` | at a block's content head, converts that block's marker to `\p`; anywhere else, splits the line: `\n\p ` at the caret. |
-| `insert.poetry` | `Mod-Shift-l` | the same two shapes with `\q1`, and **by repeat**: pressed inside a `\q1` it writes `\q2`. `insertPoetry(structureAt, 1 \| 2)` takes the level as an argument instead. |
-| `insert.footnote` | `Mod-Shift-n` | `\f + \ft …\f*` with the selection as the body, caret at the end of the `\ft` content. |
+| gesture            | key           | what it builds                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------ | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `insert.verse`     | `Mod-Shift-v` | `\v N ` at the caret with **N selected**, so the first keystroke replaces it. `N` is the highest verse already opened in this chapter at or before the caret, plus one (a `\v 1-2` range answers 3). A caret inside a word moves forward to the word's far edge first — an aligned `\w …\w*` wrapper counts as one word. A leading space is supplied when the caret is hard against a glyph. |
+| `insert.paragraph` | `Mod-Shift-p` | at a block's content head, converts that block's marker to `\p`; anywhere else, splits the line: `\n\p ` at the caret.                                                                                                                                                                                                                                                                       |
+| `insert.poetry`    | `Mod-Shift-l` | the same two shapes with `\q1`, and **by repeat**: pressed inside a `\q1` it writes `\q2`. `insertPoetry(structureAt, 1 \| 2)` takes the level as an argument instead.                                                                                                                                                                                                                       |
+| `insert.footnote`  | `Mod-Shift-n` | `\f + \ft …\f*` with the selection as the body, caret at the end of the `\ft` content.                                                                                                                                                                                                                                                                                                       |
 
 Two rulings worth knowing:
 
@@ -66,11 +66,11 @@ not follow and the rows were a picture of the notes rather than the notes.
 
 Three gestures, and `NoteGesture` names them:
 
-| Click | What happens |
-| --- | --- |
-| a caller | the page goes to that note's row and tints it for a moment |
-| a row's mark or reference | the page goes back to the caller |
-| a row's body | the body becomes editable in place |
+| Click                     | What happens                                               |
+| ------------------------- | ---------------------------------------------------------- |
+| a caller                  | the page goes to that note's row and tints it for a moment |
+| a row's mark or reference | the page goes back to the caller                           |
+| a row's body              | the body becomes editable in place                         |
 
 The editable body is a **satellite** (`recipes/satellite.ts`) mounted into the
 row's own `.usfm-note-edit` slot. It holds no copy of the text: every keystroke
@@ -165,11 +165,11 @@ clip's own window rather than outside it.
 
 **Levels.** `observabilityTracer` reads `observability.level()` **once**, when the trace begins — a keystroke must not change policy halfway through.
 
-| level | what reaches Sefer's ring |
-|---|---|
-| `off` | nothing |
-| `verdicts` | ONE note per transaction, and only when a stage did not pass: the first such stage. A paragraph of ordinary typing writes nothing. |
-| `spans` / `all` | a span per frame (`editor.phase.<name>`, `editor.command.<name>`, with ms) **and** a note per frame verdict, in pipeline order |
+| level           | what reaches Sefer's ring                                                                                                          |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `off`           | nothing                                                                                                                            |
+| `verdicts`      | ONE note per transaction, and only when a stage did not pass: the first such stage. A paragraph of ordinary typing writes nothing. |
+| `spans` / `all` | a span per frame (`editor.phase.<name>`, `editor.command.<name>`, with ms) **and** a note per frame verdict, in pipeline order     |
 
 Every event carries the correlation `<bookId>#<trace seq>`, so one keystroke's stages group together and pair with the `book.apply` note the same gesture produced. Detail is counts and positions, never document text.
 
@@ -187,16 +187,16 @@ Every event carries the correlation `<bookId>#<trace seq>`, so one keystroke's s
 
 ## The file map, by responsibility
 
-| what | where |
-|---|---|
-| the engine seam | `core/analyzer.ts` |
-| the fold (structure) | `core/docStructure.ts`, `cst.ts`, `fold.ts`, `lineTable.ts`, `blockTable.ts`, `notes.ts`, `designators.ts` |
-| classification, then policy | `core/mapping.ts` → `core/registry.ts` |
-| the plan, owned targets, paint, stops | `core/plan.ts`, `owned.ts`, `paint.ts`, `stops.ts`, `exceptions.ts`, `scroll.ts` |
-| rules and commands | `core/phases.ts`, `compose.ts`, `sealed.ts`, `clip.ts`, `input.ts`, `deletion.ts`, `caret.ts`, `kernel.ts` |
-| structured entry | `core/insert.ts`, `actions.ts`, `frontmatter.ts` |
-| rendering | `core/decorations.ts`, `render.ts`, `editorState.ts`, `editor.css` |
-| instruments | `core/instrument.ts`, `meter.ts`, `timing.ts`, `trace.ts`, `../observability.ts` |
-| the Book, the funnel, views | `book.ts`, `funnel.ts`, `views.ts` |
-| recipes over the editor | `recipes/lint.ts`, `lintHover.ts`, `satellite.ts`, `noteEditor.ts`, `emptyBlocks.ts`, `flash.ts`, `pairing.ts`, `reference.ts`, `whereAmI.ts` |
-| test tools (not tests) | `testing/harness.ts`, `testing/mount.ts` |
+| what                                  | where                                                                                                                                         |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| the engine seam                       | `core/analyzer.ts`                                                                                                                            |
+| the fold (structure)                  | `core/docStructure.ts`, `cst.ts`, `fold.ts`, `lineTable.ts`, `blockTable.ts`, `notes.ts`, `designators.ts`                                    |
+| classification, then policy           | `core/mapping.ts` → `core/registry.ts`                                                                                                        |
+| the plan, owned targets, paint, stops | `core/plan.ts`, `owned.ts`, `paint.ts`, `stops.ts`, `exceptions.ts`, `scroll.ts`                                                              |
+| rules and commands                    | `core/phases.ts`, `compose.ts`, `sealed.ts`, `clip.ts`, `input.ts`, `deletion.ts`, `caret.ts`, `kernel.ts`                                    |
+| structured entry                      | `core/insert.ts`, `actions.ts`, `frontmatter.ts`                                                                                              |
+| rendering                             | `core/decorations.ts`, `render.ts`, `editorState.ts`, `editor.css`                                                                            |
+| instruments                           | `core/instrument.ts`, `meter.ts`, `timing.ts`, `trace.ts`, `../observability.ts`                                                              |
+| the Book, the funnel, views           | `book.ts`, `funnel.ts`, `views.ts`                                                                                                            |
+| recipes over the editor               | `recipes/lint.ts`, `lintHover.ts`, `satellite.ts`, `noteEditor.ts`, `emptyBlocks.ts`, `flash.ts`, `pairing.ts`, `reference.ts`, `whereAmI.ts` |
+| test tools (not tests)                | `testing/harness.ts`, `testing/mount.ts`                                                                                                      |

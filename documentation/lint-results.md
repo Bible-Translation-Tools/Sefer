@@ -2,24 +2,24 @@
 
 What the linters say about this commit, and every place we deliberately told one to look away. Green everywhere is the aim; a tool as broad as fallow, or a lint plugin written for Solid 1, will not always get there, so what is left is written down rather than left to be rediscovered.
 
-The **numbers and inventory below the marker are generated** by `pnpm lint:results`, and the pre-commit hook regenerates and stages this file, so it describes the commit it is in. The prose above the marker is written by a person and says *why*: update it when a new class of exception appears or one is resolved.
+The **numbers and inventory below the marker are generated** by `pnpm lint:results`, and the pre-commit hook regenerates and stages this file, so it describes the commit it is in. The prose above the marker is written by a person and says _why_: update it when a new class of exception appears or one is resolved.
 
 ## What is gated, and where
 
-| check | command | blocks |
-| --- | --- | --- |
-| TypeScript | `pnpm typecheck` | every commit (lefthook), `pnpm check`, CI |
-| Oxlint errors | `pnpm lint` | every commit, `pnpm check`, CI. Warnings never block. |
-| Formatting | `pnpm format:check` | every commit, `pnpm check`, CI |
-| Boundaries | `pnpm boundaries` | every commit, `pnpm check`, CI ([boundaries](architecture/boundaries.md)) |
-| Unused files, exports, types, dependencies; import cycles | `pnpm deadcode` (fallow) | every deploy (`release.yml` `verify`); **advisory** on branches (`check.yml` reports, never fails) |
-| Duplication, health, similar code | `pnpm exec fallow dupes \| health \| similar-code` | nothing — run by hand before a cleanup |
+| check                                                     | command                                            | blocks                                                                                             |
+| --------------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| TypeScript                                                | `pnpm typecheck`                                   | every commit (lefthook), `pnpm check`, CI                                                          |
+| Oxlint errors                                             | `pnpm lint`                                        | every commit, `pnpm check`, CI. Warnings never block.                                              |
+| Formatting                                                | `pnpm format:check`                                | every commit, `pnpm check`, CI                                                                     |
+| Boundaries                                                | `pnpm boundaries`                                  | every commit, `pnpm check`, CI ([boundaries](architecture/boundaries.md))                          |
+| Unused files, exports, types, dependencies; import cycles | `pnpm deadcode` (fallow)                           | every deploy (`release.yml` `verify`); **advisory** on branches (`check.yml` reports, never fails) |
+| Duplication, health, similar code                         | `pnpm exec fallow dupes \| health \| similar-code` | nothing — run by hand before a cleanup                                                             |
 
 ## Keeping this true
 
 The generated half looks after itself; the judgement half does not. When a gate runs:
 
-1. **A gate fails.** Fix the finding. If it genuinely should stand, suppress it *at the site* with the reason in the comment (`// fallow-ignore-next-line unused-export -- <why>`, `// oxlint-disable-next-line <rule> -- <why>`), never with a file- or config-wide switch when a line will do. The reason is what appears in the table below, so write it for a reader who was not there.
+1. **A gate fails.** Fix the finding. If it genuinely should stand, suppress it _at the site_ with the reason in the comment (`// fallow-ignore-next-line unused-export -- <why>`, `// oxlint-disable-next-line <rule> -- <why>`), never with a file- or config-wide switch when a line will do. The reason is what appears in the table below, so write it for a reader who was not there.
 2. **A new kind of exception appears** — a rule not listed under "Accepted exceptions", a new config ignore, a warning class nobody has looked at — add a paragraph there saying what it is and why it is accepted, or list it under "still to do".
 3. **An exception is resolved** — the warnings are fixed, a suppression is deleted, a stub is wired — delete its paragraph. A stale reason is worse than none.
 4. **Commit.** The pre-commit hook regenerates the inventory and stages this file. A commit made with `--no-verify` skips it; run `pnpm lint:results` before the next one, or the next ordinary commit will catch up.

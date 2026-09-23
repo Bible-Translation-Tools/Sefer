@@ -8,7 +8,7 @@ A **Source** is one book's canonical text, the stamp that identifies it, and the
 
 Canonical text is always LF and never carries a byte order mark. That has not changed, and everything derived from a Source — stamps, baselines, diffs, hashes, search offsets — speaks it.
 
-What is new is that `decode` no longer *forgets* what it normalised. It records two facts about the bytes on `Source.form`:
+What is new is that `decode` no longer _forgets_ what it normalised. It records two facts about the bytes on `Source.form`:
 
 - **`eol`** — the file's DOMINANT line ending. CRLF and bare LF each get a vote and the majority wins; a tie, including a file with no line ending at all, is `lf`. A bare CR (classic Mac) is normalised to LF on the way in and does not vote. `dominantEol(text)` is exported for anyone who needs the same answer about a string.
 - **`bom`** — whether the file began with a UTF-8 byte order mark. The mark is stripped from the text and put back by `encode`.

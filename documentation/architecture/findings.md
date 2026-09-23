@@ -4,14 +4,14 @@ Galley produces diagnostics in the same call that produces structure. This is wh
 
 ## The sinks, as they now exist
 
-| sink | who | when | code |
-|---|---|---|---|
-| 1a · editor inline, Onion | the editor's lint recipe | synchronously, every keystroke, from the current state's analysis | `src/editor` |
-| 1b · editor inline, Sous | `sousField`, pushed in by `showCorpusFindings` | when ProjectAnalysis publishes — never on the keystroke path | `src/editor`, fed from `src/app/ui/BookEditor.tsx` |
-| 2 · Findings, per book | `fromAnalysis(bookId, analysis, stamp)` | off the keystroke path for other books; from the editor's own analysis for the instantiated one | `src/core/findings/` |
-| 3 · ProjectAnalysis | `census`, `findings`, `crossBook`, `watch` | debounced ~150 ms after a publish; once per project open | `src/core/analysis/` |
-| 4 · Observability | `note('book.analyze', …)` with `book.id`, `analysis.diagnostics`, `analysis.errors`; a `corpus.publish` span | per analysis; per publication | inside ProjectAnalysis |
-| 5 · Fixes | `preview(finding, book, analysis)` | on demand, per finding | `src/core/fixes/` |
+| sink                      | who                                                                                                          | when                                                                                            | code                                               |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| 1a · editor inline, Onion | the editor's lint recipe                                                                                     | synchronously, every keystroke, from the current state's analysis                               | `src/editor`                                       |
+| 1b · editor inline, Sous  | `sousField`, pushed in by `showCorpusFindings`                                                               | when ProjectAnalysis publishes — never on the keystroke path                                    | `src/editor`, fed from `src/app/ui/BookEditor.tsx` |
+| 2 · Findings, per book    | `fromAnalysis(bookId, analysis, stamp)`                                                                      | off the keystroke path for other books; from the editor's own analysis for the instantiated one | `src/core/findings/`                               |
+| 3 · ProjectAnalysis       | `census`, `findings`, `crossBook`, `watch`                                                                   | debounced ~150 ms after a publish; once per project open                                        | `src/core/analysis/`                               |
+| 4 · Observability         | `note('book.analyze', …)` with `book.id`, `analysis.diagnostics`, `analysis.errors`; a `corpus.publish` span | per analysis; per publication                                                                   | inside ProjectAnalysis                             |
+| 5 · Fixes                 | `preview(finding, book, analysis)`                                                                           | on demand, per finding                                                                          | `src/core/fixes/`                                  |
 
 Sink 4 carries counts and codes only. A diagnostic's message quotes the document, so it lives in sinks 1, 2 and 5 and never in telemetry.
 
@@ -24,7 +24,7 @@ The editor can recompute Onion's diagnostics for free — it already parses the 
 
 `sousField` then enforces the same rule from the other side: **any document change empties it**. Nothing maps a corpus offset through a `ChangeSet`, because the result would be an underline in a plausible but unmeasured place — exactly the failure the two stamps exist to prevent. The next publication refills it within the scheduler's quiet window, and until then the reader sees Onion's marks alone.
 
-The field is declared to the linter through `needsRefresh`, not through `forceLinting` alone. CodeMirror's lint plugin schedules a run on a document change and `force()` only shortens a run it has already scheduled — and a corpus publication arrives *after* that run finished, by construction. `needsRefresh` is what makes a second, document-independent source legal at all.
+The field is declared to the linter through `needsRefresh`, not through `forceLinting` alone. CodeMirror's lint plugin schedules a run on a document change and `force()` only shortens a run it has already scheduled — and a corpus publication arrives _after_ that run finished, by construction. `needsRefresh` is what makes a second, document-independent source legal at all.
 
 Both halves are drawn by the one `linter`, so there is one gutter, one popover and one keyboard order over them. `source` is what distinguishes them for a reader: `onion/<code>` or `sous/<code>`. Only the Onion half carries an action — `fixes.preview` refuses a Sous finding `NotEngineFix`, and offering a button that always refuses would be a lie in the interface. The action applies through the bound view, which is `book.fromView`, which is the one write path: Undo, Save, Recovery and the panel all hear the receipt. It re-analyzes the live document first and discards the edits if the engine stamp moved.
 
@@ -71,12 +71,12 @@ Filtering and grouping are presentation policy. `findings.ts` orders findings by
 
 What persists and what does not (vision §11.4: "category and severity filters should be persistent user preferences"):
 
-| part | where it lives | why |
-|---|---|---|
-| `severities`, `producers`, `hideStale` | `findings.filter` in Settings, declared in `src/app/settings.ts` | lasting choices about how someone reads |
-| `text` | a session signal on `/findings` | a remembered text filter presents as an empty project |
-| `books` | a session signal | a remembered book set hides the book you just opened |
-| the view (by book, by code, by severity, or flat) | a session signal | a way of looking at what is on screen now |
+| part                                              | where it lives                                                   | why                                                   |
+| ------------------------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------- |
+| `severities`, `producers`, `hideStale`            | `findings.filter` in Settings, declared in `src/app/settings.ts` | lasting choices about how someone reads               |
+| `text`                                            | a session signal on `/findings`                                  | a remembered text filter presents as an empty project |
+| `books`                                           | a session signal                                                 | a remembered book set hides the book you just opened  |
+| the view (by book, by code, by severity, or flat) | a session signal                                                 | a way of looking at what is on screen now             |
 
 `findings.filter` is a `Schema.Struct`, and the `/settings` form draws one widget per `kind` (`boolean | string | number`) — so the key is registered in `shellKeys` but deliberately left out of `shellSettings`. Its editor is the panel's own filter toolbar (`src/app/ui/panels/FindingsFilters.tsx`), which seeds from `Settings.get`, writes through `Settings.set` on every click (no debounce — a click is a deliberate act) and stays live on a fiber over `settings.changes`, exactly as `ProjectContext` does for `editor.preferChapterView`.
 
@@ -86,7 +86,7 @@ Core cannot navigate. `navigateTarget` returns a value; the shell calls `project
 
 `/findings` is sink 2 on screen: `src/app/ui/panels/FindingsPanel.tsx`, `findingsFeed.ts` beside it, the filter toolbar above, and nothing else.
 
-**It is the Find multibuffer — the same component, not a lookalike.** Will, 2026-09-15: *"it must be the SAME consistent multibuffer the reader already knows from Find."* The purpose is that a reader scanning a place sees everything that might be wrong there in one go, with the workflow they already have from searching. So a finding is not a row: it is a line in the header of the CARD for the verse it falls in, and the card is `ExcerptCard` under `ExcerptList` over `createExcerptFeed`, with the same projected body, the same verse numbers, the same context verses either side and their expand chevrons, the same outline column, the same sticky headers, the same windowing (`primitives/VirtualList`), and the same Edit-as-satellite over the canonical Book. The page adds nothing to the card but an `ExcerptDecor`: a label, a notes block, a mark's tone, a section header, an outline label and a height hint — every field optional, every default what Find already did.
+**It is the Find multibuffer — the same component, not a lookalike.** Will, 2026-09-15: _"it must be the SAME consistent multibuffer the reader already knows from Find."_ The purpose is that a reader scanning a place sees everything that might be wrong there in one go, with the workflow they already have from searching. So a finding is not a row: it is a line in the header of the CARD for the verse it falls in, and the card is `ExcerptCard` under `ExcerptList` over `createExcerptFeed`, with the same projected body, the same verse numbers, the same context verses either side and their expand chevrons, the same outline column, the same sticky headers, the same windowing (`primitives/VirtualList`), and the same Edit-as-satellite over the canonical Book. The page adds nothing to the card but an `ExcerptDecor`: a label, a notes block, a mark's tone, a section header, an outline label and a height hint — every field optional, every default what Find already did.
 
 **An occurrence remembers its finding.** `findingsFeed.ts` turns each filtered finding into an `Occurrence` carrying the `Finding` itself, and `core/excerpts` hands the very objects back on `Excerpt.hits` — so a card is asked what it is about rather than re-matching offsets, which is the arithmetic that silently answers "the wrong ones" when two findings share a span. `group` then does what it does for Find: one excerpt per verse sid, ± one verse, per-book groups with counts.
 
@@ -154,11 +154,11 @@ The options are not offered either. `FormatOpts` has a dozen switches (`verse_br
 
 Three commands, one implementation (`src/app/commands.ts`):
 
-| command | scope | writes |
-| --- | --- | --- |
-| `overlay.chapter` | the chapter at the cursor (`{ scope: { chapter } }`) | one `apply`, one Undo step |
-| `overlay.book` | the focused book (also the toolbar button) | one `apply`, one Undo step |
-| `overlay.project` | every book the source also has | `MultiBook.runAcrossBooks('overlay', …)`: one `apply` per book, origin `project.overlay` |
+| command           | scope                                                | writes                                                                                   |
+| ----------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `overlay.chapter` | the chapter at the cursor (`{ scope: { chapter } }`) | one `apply`, one Undo step                                                               |
+| `overlay.book`    | the focused book (also the toolbar button)           | one `apply`, one Undo step                                                               |
+| `overlay.project` | every book the source also has                       | `MultiBook.runAcrossBooks('overlay', …)`: one `apply` per book, origin `project.overlay` |
 
 - **The source is the first resource bound under the `source` role**, read through `Library.readBook`. Never a `reference`: a reference is read beside the text, not a shape to take. A project with two sources bound needs a picker these commands do not have yet.
 - **No preview, no confirm.** Undo is the preview: the thing to judge is the result in the reader's own editor.
@@ -169,12 +169,12 @@ Three commands, one implementation (`src/app/commands.ts`):
 
 v0.1.0 gave Sous two more rule codes and two more channels, and `corpusCode`/`corpusSeverity` in `src/core/findings/finding.ts` name all of them:
 
-| wire | code | severity | on by default |
-|---|---|---|---|
-| `Presence` | `sous.presence.Missing` / `.Extra` / `.Empty` | `warning` | yes |
-| `SourceCopy` | `sous.source-copy` | `info` | **no** |
-| channel `LetterRun` | `sous.convention.LetterRun` | `info` | yes |
-| channel `SentenceStart` | `sous.convention.SentenceStart` | `info` | yes |
+| wire                    | code                                          | severity  | on by default |
+| ----------------------- | --------------------------------------------- | --------- | ------------- |
+| `Presence`              | `sous.presence.Missing` / `.Extra` / `.Empty` | `warning` | yes           |
+| `SourceCopy`            | `sous.source-copy`                            | `info`    | **no**        |
+| channel `LetterRun`     | `sous.convention.LetterRun`                   | `info`    | yes           |
+| channel `SentenceStart` | `sous.convention.SentenceStart`               | `info`    | yes           |
 
 Presence is a `warning` because a verse coverage gap is usually real and occasionally deliberate; everything statistical stays `info`. Source-copy is off in the engine's defaults because a borrowed proper name would otherwise be a finding in every verse that carries one, and turning it on needs references registered with their text — `Galley.wordlessReferences()` counts the ones that were not.
 

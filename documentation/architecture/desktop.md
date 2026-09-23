@@ -7,15 +7,15 @@ dialogs, OS paths and locale, native git, an OS keychain, and self-update. Each 
 
 ## Layers and what they sit on
 
-| Port                                   | Layer                               | Backed by                                                                         |
-| -------------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------- |
-| `effect/FileSystem`                    | `TauriFileSystemLive`               | `@tauri-apps/plugin-fs`; `watch` is a real `Stream`, `rename` replaces atomically |
-| `HostInfo`                             | `TauriHostInfoLive(build)`          | `@tauri-apps/api/path` + `plugin-os`; all capabilities true                       |
+| Port                                   | Layer                               | Backed by                                                                                                                                                   |
+| -------------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `effect/FileSystem`                    | `TauriFileSystemLive`               | `@tauri-apps/plugin-fs`; `watch` is a real `Stream`, `rename` replaces atomically                                                                           |
+| `HostInfo`                             | `TauriHostInfoLive(build)`          | `@tauri-apps/api/path` + `plugin-os`; all capabilities true                                                                                                 |
 | `Dialogs`                              | `TauriDialogsLive`                  | `plugin-dialog`; returns real absolute paths, unlike the Web pickers. `pickSaveFile` is desktop-only in practice — Web answers `None` and downloads instead |
-| `Credentials`                          | `TauriCredentialsLive`              | `credentials_*` commands over the `keyring` crate, service `org.wycliffe.sefer`   |
-| `Git`                                  | `TauriGitLive`                      | `git_*` commands over `git2`                                                      |
-| `Remote`                               | `TauriRemoteLive({ giteaHost })`    | `git_ensure_remote/fetch/pull/push`; `publish` needs `Gitea` for repo creation    |
-| `Updater` (`src/core/host/updater.ts`) | `TauriUpdaterLive({ updaterHost })` | `plugin-updater` + `install_update_from_endpoint`                                 |
+| `Credentials`                          | `TauriCredentialsLive`              | `credentials_*` commands over the `keyring` crate, service `org.wycliffe.sefer`                                                                             |
+| `Git`                                  | `TauriGitLive`                      | `git_*` commands over `git2`                                                                                                                                |
+| `Remote`                               | `TauriRemoteLive({ giteaHost })`    | `git_ensure_remote/fetch/pull/push`; `publish` needs `Gitea` for repo creation                                                                              |
+| `Updater` (`src/core/host/updater.ts`) | `TauriUpdaterLive({ updaterHost })` | `plugin-updater` + `install_update_from_endpoint`                                                                                                           |
 
 `CorpusEngine` is **not** in that table any more. Desktop ran the whole-corpus half natively —
 `corpus_*` commands over a `usfm_galley` Expediter on one owner thread, rayon inside `publish` — and
@@ -46,26 +46,26 @@ path outside it comes back as `PermissionDenied` rather than as a silent empty r
 version switch. The git2 half is one
 command per port member, and the whole `Git` port is answered — no member refuses by name any more:
 
-| Rust command                 | TS member                             | Port     |
-| ---------------------------- | ------------------------------------- | -------- |
-| `git_open`                   | `Git.open`                            | `Git`    |
-| `git_init`                   | `Git.init`                            | `Git`    |
-| `git_status`                 | `Git.status`                          | `Git`    |
-| `git_commit`                 | `Git.commit`                          | `Git`    |
-| `git_log`                    | `Git.log`                             | `Git`    |
-| `git_previous_versions`      | `Git.previousVersions`                | `Git`    |
-| `git_show`                   | `Git.show`                            | `Git`    |
-| `git_log_from`               | `Git.logFrom`                         | `Git`    |
-| `git_resolve_ref`            | `Git.resolve`                         | `Git`    |
-| `git_current_branch`         | `Git.branch`                          | `Git`    |
-| `git_changed_paths_between`  | `Git.changedPathsBetween`             | `Git`    |
-| `git_ensure_remote`          | `Remote.attach`                       | `Remote` |
-| `git_remote_url`             | `Remote.origin`                       | `Remote` |
-| `git_fetch`                  | `Remote.fetch`                        | `Remote` |
-| `git_pull`                   | `Remote.pull`                         | `Remote` |
-| `git_push`                   | `Remote.push`, and `publish`'s second half | `Remote` |
-| `git_move_branch`            | `Remote.moveBranch`                   | `Remote` |
-| `git_abort_merge`            | `Remote.abortMerge`                   | `Remote` |
+| Rust command                | TS member                                  | Port     |
+| --------------------------- | ------------------------------------------ | -------- |
+| `git_open`                  | `Git.open`                                 | `Git`    |
+| `git_init`                  | `Git.init`                                 | `Git`    |
+| `git_status`                | `Git.status`                               | `Git`    |
+| `git_commit`                | `Git.commit`                               | `Git`    |
+| `git_log`                   | `Git.log`                                  | `Git`    |
+| `git_previous_versions`     | `Git.previousVersions`                     | `Git`    |
+| `git_show`                  | `Git.show`                                 | `Git`    |
+| `git_log_from`              | `Git.logFrom`                              | `Git`    |
+| `git_resolve_ref`           | `Git.resolve`                              | `Git`    |
+| `git_current_branch`        | `Git.branch`                               | `Git`    |
+| `git_changed_paths_between` | `Git.changedPathsBetween`                  | `Git`    |
+| `git_ensure_remote`         | `Remote.attach`                            | `Remote` |
+| `git_remote_url`            | `Remote.origin`                            | `Remote` |
+| `git_fetch`                 | `Remote.fetch`                             | `Remote` |
+| `git_pull`                  | `Remote.pull`                              | `Remote` |
+| `git_push`                  | `Remote.push`, and `publish`'s second half | `Remote` |
+| `git_move_branch`           | `Remote.moveBranch`                        | `Remote` |
+| `git_abort_merge`           | `Remote.abortMerge`                        | `Remote` |
 
 Every command returns `Result<T, String>` where the string is `"<Reason>: <detail>"` — the vocabulary
 is in `src-tauri/src/errors.rs` (`NotARepository`, `Io`, `Conflict`, `Refused`, `AuthFailed`,

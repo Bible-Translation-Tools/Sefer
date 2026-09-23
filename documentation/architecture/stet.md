@@ -104,16 +104,16 @@ describes it.
 
 ## Where things are
 
-| Path | What |
-| --- | --- |
+| Path                                      | What                                                                  |
+| ----------------------------------------- | --------------------------------------------------------------------- |
 | `src/routes/_app/project/$slug/terms.tsx` | The screen: guide → references → occurrences → feed, all off the URL. |
-| `src/routes/_app/project/$slug/find.tsx` | Find only, plus the `?mode=stet` redirect. |
-| `src/core/stet/stet.ts` | Envelope schema, `Term`/`TermOccurrence`, the `StetCatalog` port. |
-| `src/core/stet/fixture.ts` | The committed guides as a layer, one dynamic chunk per locale. |
-| `src/core/excerpts/excerpts.ts` | `refOccurrences` — the reference → project mapping. |
-| `src/app/ui/excerpts/feed.ts` | `createExcerptFeed`, shared by Find and Key terms. |
-| `src/app/ui/excerpts/StetView.tsx` | The two-column view and the source/target pair. |
-| `src/app/workflows/stet.ts` | `keyTermGuides`, `keyTerms`, `occurrenceRef`, `sourceReadings`. |
-| `src/app/workflows/references.ts` | Library bindings → texts → `ProjectAnalysis.attachReferences`. |
-| `src/core/galley/overlay.ts` | The overlay wire: addresses, skeletons, the report. |
-| `fixtures/stet/` | The four committed guide files and their provenance. |
+| `src/routes/_app/project/$slug/find.tsx`  | Find only, plus the `?mode=stet` redirect.                            |
+| `src/core/stet/stet.ts`                   | Envelope schema, `Term`/`TermOccurrence`, the `StetCatalog` port.     |
+| `src/core/stet/fixture.ts`                | The committed guides as a layer, one dynamic chunk per locale.        |
+| `src/core/excerpts/excerpts.ts`           | `refOccurrences` — the reference → project mapping.                   |
+| `src/app/ui/excerpts/feed.ts`             | `createExcerptFeed`, shared by Find and Key terms.                    |
+| `src/app/ui/excerpts/StetView.tsx`        | The two-column view and the source/target pair.                       |
+| `src/app/workflows/stet.ts`               | `keyTermGuides`, `keyTerms`, `occurrenceRef`, `sourceReadings`.       |
+| `src/app/workflows/references.ts`         | Library bindings → texts → `ProjectAnalysis.attachReferences`.        |
+| `src/core/galley/overlay.ts`              | The overlay wire: addresses, skeletons, the report.                   |
+| `fixtures/stet/`                          | The four committed guide files and their provenance.                  |

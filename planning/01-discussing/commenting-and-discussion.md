@@ -12,11 +12,11 @@ The useful part of Upwelling is a discussion alongside a reviewable unit of work
 
 Three targets have different survival rules:
 
-| Thread target | Created from | What stays stable |
-| --- | --- | --- |
-| Passage | A selection or verse in an open Book | The thread ID and its original quote; its current highlight may move or detach. |
-| Review change | A decision unit between two exact texts | The two compared versions and the review question, even after Apply. |
-| Recorded version | The explicit Record a version action | The recorded version and rationale, even after later revisions. |
+| Thread target    | Created from                            | What stays stable                                                               |
+| ---------------- | --------------------------------------- | ------------------------------------------------------------------------------- |
+| Passage          | A selection or verse in an open Book    | The thread ID and its original quote; its current highlight may move or detach. |
+| Review change    | A decision unit between two exact texts | The two compared versions and the review question, even after Apply.            |
+| Recorded version | The explicit Record a version action    | The recorded version and rationale, even after later revisions.                 |
 
 A thread has an independent ID and history. Its anchor is a versioned claim about a location, not its identity. Deleting the selected text must not delete the discussion. Resolving a thread is an explicit action.
 

@@ -13,21 +13,21 @@ Full rationale: `documentation/architecture/design.md` for the build switch,
 
 ## The matrix
 
-| | `dev` | `preview` | `production` |
-| --- | --- | --- | --- |
-| **Trigger** | every push to `master` | dispatch, or a `v*-*` candidate tag | a `v*` final tag |
-| **Vite mode** | `dev` | `production` | `production` |
-| **Script** | `pnpm build:dev` | `pnpm build` | `pnpm build` |
-| **`/design`, comment panel, `?fixture=1`** | **yes** | no | no |
-| **`data-loc` source stamps** | **yes** | no | no |
-| **Gate** | check, deadcode, test:browser | + test:e2e, verify:design | + test:e2e, verify:design |
-| **Desktop matrix** | no | **yes** | **yes** |
-| **GitHub release** | no | prerelease | release |
-| **Release lint** (no leftover scaffolding) | no | **yes** | **yes** |
-| **Web Worker** | `sefer-web-dev` | `sefer-web-preview` | `sefer-web-production` |
-| **Web hostname** | `sefer-dev.bttdev.org` | `sefer-preview.bttdev.org` | `sefer.bibletranslationtools.org` |
-| **Desktop channel** | — | Sefer Preview | Sefer |
-| **Roughly** | ~1 minute | ~20 minutes | ~20 minutes |
+|                                            | `dev`                         | `preview`                           | `production`                      |
+| ------------------------------------------ | ----------------------------- | ----------------------------------- | --------------------------------- |
+| **Trigger**                                | every push to `master`        | dispatch, or a `v*-*` candidate tag | a `v*` final tag                  |
+| **Vite mode**                              | `dev`                         | `production`                        | `production`                      |
+| **Script**                                 | `pnpm build:dev`              | `pnpm build`                        | `pnpm build`                      |
+| **`/design`, comment panel, `?fixture=1`** | **yes**                       | no                                  | no                                |
+| **`data-loc` source stamps**               | **yes**                       | no                                  | no                                |
+| **Gate**                                   | check, deadcode, test:browser | + test:e2e, verify:design           | + test:e2e, verify:design         |
+| **Desktop matrix**                         | no                            | **yes**                             | **yes**                           |
+| **GitHub release**                         | no                            | prerelease                          | release                           |
+| **Release lint** (no leftover scaffolding) | no                            | **yes**                             | **yes**                           |
+| **Web Worker**                             | `sefer-web-dev`               | `sefer-web-preview`                 | `sefer-web-production`            |
+| **Web hostname**                           | `sefer-dev.bttdev.org`        | `sefer-preview.bttdev.org`          | `sefer.bibletranslationtools.org` |
+| **Desktop channel**                        | —                             | Sefer Preview                       | Sefer                             |
+| **Roughly**                                | ~1 minute                     | ~20 minutes                         | ~20 minutes                       |
 
 ## "Preview" means two unrelated things. Always say which
 
@@ -35,11 +35,11 @@ This is the one piece of vocabulary in the repository that is worth being
 pedantic about, because getting it wrong means promoting to the wrong place and
 the mistake is quiet.
 
-| Say | For |
-| --- | --- |
-| **ChannelPreview** | the `preview` CHANNEL in the table above — `sefer-preview.bttdev.org`, a promotion, full suite, full desktop matrix |
-| **CloudflarePreview** | `wrangler versions upload` — a new VERSION of a Worker that is *not deployed*, on its own hostname |
-| **Branch preview** | a CloudflarePreview of one branch, built `--mode dev` |
+| Say                   | For                                                                                                                 |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| **ChannelPreview**    | the `preview` CHANNEL in the table above — `sefer-preview.bttdev.org`, a promotion, full suite, full desktop matrix |
+| **CloudflarePreview** | `wrangler versions upload` — a new VERSION of a Worker that is _not deployed_, on its own hostname                  |
+| **Branch preview**    | a CloudflarePreview of one branch, built `--mode dev`                                                               |
 
 `documentation/glossary.md` holds the canonical definitions.
 
@@ -156,14 +156,14 @@ Nothing in the browser reaches Cloudflare's logs.
 
 ## Tag format
 
-* `v0.3.0` — production. Semver, `v` prefix.
-* `v0.3.0-1` — preview. The candidate number is a **single numeric**
+- `v0.3.0` — production. Semver, `v` prefix.
+- `v0.3.0-1` — preview. The candidate number is a **single numeric**
   pre-release identifier, and that is a constraint rather than a style
   choice: Tauri's MSI bundler accepts only a single-identifier numeric
   pre-release (<= 65535), so `v0.3.0-rc.1` — two identifiers, the first
   non-numeric — fails the Windows build. Inherited from the old repo, which
   hit it.
-* Nothing else is a release tag. `dev` is not tagged; it is wherever master is.
+- Nothing else is a release tag. `dev` is not tagged; it is wherever master is.
 
 Semver orders these the way you want without special cases: `0.3.0-2` beats
 `0.3.0-1`, and `0.3.0` beats both — so somebody on a candidate rolls onto the
@@ -230,9 +230,9 @@ anything.
 
 The updater workers are deployed:
 
-| Channel | URL |
-| --- | --- |
-| preview | `https://sefer-updater-preview.wycliffe-associates-account.workers.dev` |
+| Channel    | URL                                                                        |
+| ---------- | -------------------------------------------------------------------------- |
+| preview    | `https://sefer-updater-preview.wycliffe-associates-account.workers.dev`    |
 | production | `https://sefer-updater-production.wycliffe-associates-account.workers.dev` |
 
 Both answer `/versions` with `[]` and update checks with 404 — correct until a

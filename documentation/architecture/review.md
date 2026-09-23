@@ -7,7 +7,7 @@ file and offered Revert; Compare put the project beside a zip and offered
 Apply. They had different words for the same things (`baseline`/`working`
 against `left`/`right`), two ideas of what a difference is (a verse row against
 a line hunk), two inline diffs, and one of them had the file hard-coded on one
-side. Will, 2026-09-15: *"yes on one screen"*.
+side. Will, 2026-09-15: _"yes on one screen"_.
 
 `/history?review=1` redirects here. `/history` keeps the commit
 timeline, which is the screen about what HAS happened rather than what is about
@@ -29,10 +29,10 @@ current project**. Both sides implement one port, `CompareSource`
 
 ```ts
 interface CompareSource {
-  readonly id: string;             // stable within a session
-  readonly label: string;          // "In the editor", "On disk", "shared-nt"
-  readonly kind: CompareSourceKind;// "project" | "folder" | an open string ("disk", "recorded")
-  readonly canApply: boolean;      // may this side be written?
+  readonly id: string; // stable within a session
+  readonly label: string; // "In the editor", "On disk", "shared-nt"
+  readonly kind: CompareSourceKind; // "project" | "folder" | an open string ("disk", "recorded")
+  readonly canApply: boolean; // may this side be written?
   books(): Effect<readonly BookId[], CompareError>;
   read(bookId): Effect<{ text: string; stamp?: SourceStamp }, CompareError>;
   apply?(bookId, text): Effect<Receipt, CompareError>; // required iff canApply
@@ -45,13 +45,13 @@ run from a component, a command or a test with one `run` and no context.
 
 Core has four kinds, and the LEFT and RIGHT pickers (`src/app/ui/review/sources.ts`) offer five choices over them:
 
-| picker choice | core source | what | writable |
-| --- | --- | --- | --- |
-| In the editor | `currentProjectSource` (`project`) | the books as the editor holds them, unsaved keystrokes included | **yes** |
-| On disk | `savedSource` (`disk`, `src/core/compare/pastSources.ts`) | the bytes in the project's files (`SaveCoordinator.baseline`) | no |
-| Last recorded | `recordedSource` (`recorded`, same file) | the blobs at HEAD, read once per commit (`src/app/ui/panels/recorded.ts`) | no |
-| A zip | `folderSource` (`folder`) | a `.zip` unpacked into a scratch folder first — a zip is not a kind in core | no |
-| A folder | `folderSource` (`folder`) | any directory the `FileSystem` port can read | no |
+| picker choice | core source                                               | what                                                                        | writable |
+| ------------- | --------------------------------------------------------- | --------------------------------------------------------------------------- | -------- |
+| In the editor | `currentProjectSource` (`project`)                        | the books as the editor holds them, unsaved keystrokes included             | **yes**  |
+| On disk       | `savedSource` (`disk`, `src/core/compare/pastSources.ts`) | the bytes in the project's files (`SaveCoordinator.baseline`)               | no       |
+| Last recorded | `recordedSource` (`recorded`, same file)                  | the blobs at HEAD, read once per commit (`src/app/ui/panels/recorded.ts`)   | no       |
+| A zip         | `folderSource` (`folder`)                                 | a `.zip` unpacked into a scratch folder first — a zip is not a kind in core | no       |
+| A folder      | `folderSource` (`folder`)                                 | any directory the `FileSystem` port can read                                | no       |
 
 Left defaults to the editor and right to the file on disk, because that is the
 comparison a reader wants nine times in ten — **not** because the screen knows
@@ -118,9 +118,10 @@ A reviewer reads "1:4", not "lines 12–14".
 
 That shape is the engine's. `onion/src/diff.rs` cuts each side into blocks at
 its own table-of-contents anchors, pairs them by a deliberately loose key (book
-+ chapter + verse START, so a moved or rebridged verse still pairs and a
-renumbered one reads as a delete plus an add), and reports coalesced bridges,
-duplicate contexts, pure relabels and markup-only changes.
+
+- chapter + verse START, so a moved or rebridged verse still pairs and a
+  renumbered one reads as a delete plus an add), and reports coalesced bridges,
+  duplicate contexts, pure relabels and markup-only changes.
 
 `src/core/galley/diff.ts` mirrors that wire in TypeScript — `DiffSkeleton`,
 `DecisionUnit`, `Slot`, `Addr`, `CoveredBy`, `UnitTextDiff` — and binds the
@@ -253,11 +254,11 @@ The only automatic write left in the product is Recovery's journal: the
 after", `shell.backupIdleMs`, default 500 ms), it lives outside the project,
 and it is neither the file nor a version.
 
-| What | Written by | When |
-| --- | --- | --- |
-| The working-state backup | `Recovery` | a moment after typing pauses |
-| The project file | `SaveCoordinator.saveAll` | "Record a version" |
-| The version | `Git.commit` | "Record a version", straight after the write |
+| What                     | Written by                | When                                         |
+| ------------------------ | ------------------------- | -------------------------------------------- |
+| The working-state backup | `Recovery`                | a moment after typing pauses                 |
+| The project file         | `SaveCoordinator.saveAll` | "Record a version"                           |
+| The version              | `Git.commit`              | "Record a version", straight after the write |
 
 A write that fails records nothing — there is no half-recorded version. A
 commit that fails after a write that succeeded is reported as exactly that: the
@@ -328,7 +329,7 @@ History's baseline, and it is now also one of the five sources by name.
 
 `adopt(book)` seeds a baseline from a book's current text, as "what disk
 holds". It exists because "no baseline" and "not saved" are not the same thing:
-a book Sefer just READ has no baseline, but the text in hand *is* the bytes on
+a book Sefer just READ has no baseline, but the text in hand _is_ the bytes on
 disk. The shell calls it where it opens a book (`ProjectContext.focus`) and
 where Recovery replays one, so `dirty(book)` is the only question a marker has
 to ask. Adopting is refused quietly when a baseline already exists or when the

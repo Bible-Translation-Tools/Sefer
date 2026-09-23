@@ -4,12 +4,12 @@
 
 ## The four states
 
-| state | who holds the canonical text | where the transition lives |
-| --- | --- | --- |
-| Unloaded | nobody; paths known | `discoverBooks(fs, root)` |
-| Plain | a `Source` in a plain `Book` | `openProject` — `openBook` per discovered path |
-| Instantiated | the editor seat's CodeMirror state | `project.instantiate(id)` |
-| Mounted | the same state, with a view bound | the editor; Project never sees a view |
+| state        | who holds the canonical text       | where the transition lives                     |
+| ------------ | ---------------------------------- | ---------------------------------------------- |
+| Unloaded     | nobody; paths known                | `discoverBooks(fs, root)`                      |
+| Plain        | a `Source` in a plain `Book`       | `openProject` — `openBook` per discovered path |
+| Instantiated | the editor seat's CodeMirror state | `project.instantiate(id)`                      |
+| Mounted      | the same state, with a view bound  | the editor; Project never sees a view          |
 
 `project.release(id)` goes Instantiated → Plain, rebuilding the plain Book from the seat's **current** text so unsaved edits survive. It is refused with `ProjectError { reason: "Refused" }` when the seat reports attached views.
 
@@ -18,8 +18,11 @@
 Core cannot import CodeMirror (`pnpm boundaries`), so the editor layer supplies the factory:
 
 ```ts
-openProject(root, { seat: (book: Book) => Seated })
-interface Seated extends Book { attached?(): number; close?(): void }
+openProject(root, { seat: (book: Book) => Seated });
+interface Seated extends Book {
+  attached?(): number;
+  close?(): void;
+}
 ```
 
 Instantiating **replaces the object** that holds a book's canonical text, and Project cannot re-point subscribers registered against the old object — `book.changes` belongs to the Book. So Project keeps one mutable seat per id and publishes the swap to the listeners registered with `project.changed(fn)`; readers re-resolve through `project.book(id)` and re-subscribe. A permanent forwarding proxy was rejected: it would add a hop to the keystroke path. **Holding a `Book` reference across an `instantiate` or `release` is a bug in the holder.**

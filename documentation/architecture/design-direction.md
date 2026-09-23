@@ -16,6 +16,7 @@ Working notes for the Tailwind rebuild. Source of truth for look is the designer
 Page ground is a cool light gray (`surface-secondary`). Content sits in white cards with 12–16px radii and a very soft shadow.
 
 Left: a **project sidebar**, white, resizable (corvu Resizable), collapsible to an **icon rail**.
+
 - Header card: project name in bold ("Shila"), language id beneath in muted ("bem-x-shila"), chevron → opens the project switcher / Find Project.
 - Search field "Search 'Luke 1'…" (navigation dropdown mockup) that jumps to a book/chapter.
 - Book list: rows with a book icon, the name, a chevron. Section labels ("Old Testament", "New Testament") between groups. The open book is brand-blue with a filled icon and expands a **chapter grid** of 4 columns of rounded tiles; the current chapter tinted `brand-95`/`brand-40` text. A book with findings shows a small pill on the right ("⚠ Review" in warning tint).
@@ -31,7 +32,7 @@ Right: the **editor card**, white, generous padding, scripture in a serif (Chari
 
 ## Find Project ("Sefer / Find Project / Start" mockup)
 
-Breadcrumb top-left "Sefer / Find Project / Start" in muted text. Left filter card "Find Project" with a "← Go back" link; segmented toggles: Language name (Natural | Anglicized) with a small explainer line; Project type (Translation | Gateway) with explainer; Region select "🌐 All regions  654 ▾"; outlined full-width "+ Create new project" button. Right: a large rounded search field "Search 'english' or 'axd'…"; a table with sortable headers Code | Language | Region | Date and a "⬇ Download" link per row. Rows: code muted mono-ish, language bold.
+Breadcrumb top-left "Sefer / Find Project / Start" in muted text. Left filter card "Find Project" with a "← Go back" link; segmented toggles: Language name (Natural | Anglicized) with a small explainer line; Project type (Translation | Gateway) with explainer; Region select "🌐 All regions 654 ▾"; outlined full-width "+ Create new project" button. Right: a large rounded search field "Search 'english' or 'axd'…"; a table with sortable headers Code | Language | Region | Date and a "⬇ Download" link per row. Rows: code muted mono-ish, language bold.
 
 This is the remote catalogue browser. Local projects list (proto's IndexRoute/ProjectList) and the import hub (zip / folder / cloud) sit on the same landing screen as tabs or sections: "Your projects" first, "Find project" second.
 
@@ -45,7 +46,7 @@ STET is the same multibuffer: the list of excerpts is **prebaked on the source s
 
 ## Find (multibuffer, read-only until asked)
 
-Not a modal over the text. A pane beside the text. Results are a virtualized list grouped under a **sticky header per book** (the project/book is our "file"): "PHM · Philemon  ·  3 hits".
+Not a modal over the text. A pane beside the text. Results are a virtualized list grouped under a **sticky header per book** (the project/book is our "file"): "PHM · Philemon · 3 hits".
 
 Differs from Zed's multibuffer deliberately:
 
@@ -74,7 +75,7 @@ Inline lint tooltips and gutter popovers use tokens (opaque surface, readable te
 3. **Cloud sync narrative.** Wanted. The old state machine (incoming plan, diverged squash, dual clocks, plain-language plan) was about right; port its shape.
 4. **Format.** Wanted, for a book or the project, from the kebab and the command palette; call it "Format". Match-formatting is NOT this — it needs an Onion overlay of two texts first (engine work), then show source text with the equivalent block highlighted.
 5. **Key terms.** Same data the old app used is fine for now. Find and Key terms are SEPARATE panes/routes with similar UI, not a mode toggle on one page.
-6. **Save model: explicit only.** The real file is written only by Save & Review, which writes and commits as one action ("Record a version"). The automatic debounced write is the working-state BACKUP, never the file — Will: *"Write to disk is work in progress backups (and memory of course) but actual file is only written with a commit."* The setting is "Back up work after"; Mod-S opens Save & Review with the message focused; the book status line says unsaved / recorded / on disk, not recorded. Files are written back in whatever line-ending form they arrived in — Will: *"Files might should theoretically write whatever the dominant form is on way back to actual disk."*
+6. **Save model: explicit only.** The real file is written only by Save & Review, which writes and commits as one action ("Record a version"). The automatic debounced write is the working-state BACKUP, never the file — Will: _"Write to disk is work in progress backups (and memory of course) but actual file is only written with a commit."_ The setting is "Back up work after"; Mod-S opens Save & Review with the message focused; the book status line says unsaved / recorded / on disk, not recorded. Files are written back in whatever line-ending form they arrived in — Will: _"Files might should theoretically write whatever the dominant form is on way back to actual disk."_
 7. **Recovery.** Wanted: on project open, one IO check for backups; clear a backup when the disk file (normalized LF) matches it; otherwise Keep/Discard banner. Debounced journal, never per-keystroke writes, resilient.
 8. **Project index.** No Dexie. Don't rescan every project on open. A small JSON index updated on import/create/rename/delete/open, assumed correct, with cheap repair (names-only listing). Export as zip (fflate is now a dependency) and rename: yes.
 9. **Metadata page.** Deferred; to be reworked. Needed regardless: a pipeline hook that refreshes the burrito's md5 checksums on write (web needs a JS md5 — no SubtleCrypto md5).

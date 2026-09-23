@@ -105,28 +105,28 @@ the block is the mockup's.
 `src/app/ui/primitives/` is the reusable layer, behind one `index.ts`. Screens
 import from the directory, never from a file inside it.
 
-| Export | Shape |
-| --- | --- |
-| `cx(...parts)` | Flattens Solid's own `JSX.ClassValue` into one string. (`cx.ts` also holds `variants`, the lookup-table-to-class helper the primitives use internally.) |
-| `Button` | `variant` primary/secondary/tertiary/danger, `size` sm/md, `icon`, `loading`, plus every `<button>` prop. `aria-pressed` styles itself. |
-| `IconButton` | `label` (REQUIRED — the `aria-label` and the tooltip), `icon`, `variant` subtle/filled/outlined, `size`. |
-| `Input` | Every `<input>` prop except `size`; `size` sm/md, `icon` (leading slot), `wrapperClass`. |
-| `Select` | Native `<select>`, styled, with a drawn chevron; `size`, `wrapperClass`. |
-| `SegmentedControl` | `items` (`{ value, label, icon?, disabled? }`), `value`, `onChange`, `label`, `size`. A radio group; arrows move. |
-| `Switch` | `checked`, `onChange`, `label` or `aria-label`, `id`, `disabled`. |
-| `Badge` | `tone` neutral/brand/warning/error/success/muted, `size`. `severityTone(severity)` maps a finding's severity to one. |
-| `Card` | Every `<section>` prop, plus `padded` (off for full-bleed bodies). |
-| `PanelHeader` | `title`, `subtitle`, `actions`, `level` 2/3. |
-| `Table*` | `Table`, `TableHead`, `TableBody`, `TableRow`, `TableHeader` (`sort` asc/desc/none + `onSort` makes it a sort control and sets `aria-sort`), `TableCell`. |
-| `Tooltip` | `label`, `side`, `children` (the element it wraps). |
-| `Popover` | `trigger`, `children`, `label`, `side`, `align`, optional `open`/`onOpenChange`. |
-| `Dialog` | `open`, `onOpenChange`, `title` (required), `description`, `footer`. |
-| `Resizable` | `.Root` (`orientation`, `onSizesChange`), `.Panel` (`initialSize`, `minSize`, `maxSize`), `.Handle` (`label`). |
-| `Kbd` | A keycap. Show the chord exactly as `src/app/commands.ts` spells it. |
-| `EmptyState` | `icon`, `title`, `description`, one `action`. |
-| `FilterList` | `items`, `match(item, query)`, `key`, `children(item)`, `onPick`, `current`, `placeholder`, `label`. A list you can type at: a filter box that takes focus, arrows, Enter. The book and chapter pickers and the palette are its shape. |
-| `VirtualList` | `sections` (each a key plus keyed rows with a height estimate), `header(section, ref)`, `row(item, key)` — `section` and `item` are ACCESSORS, because a row outlives the model it was built from — `pinned`, `focus`, `onActive`, `empty`, `ref(goTo)`. Sticky section headers over a windowed list. |
-| `toasts` + `Toaster` | `info`/`success`/`error`/`progress`/`update`/`dismiss` over a module-level list; `<Toaster />` is the viewport, mounted once in `src/routes/_app.tsx`. |
+| Export               | Shape                                                                                                                                                                                                                                                                                                 |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cx(...parts)`       | Flattens Solid's own `JSX.ClassValue` into one string. (`cx.ts` also holds `variants`, the lookup-table-to-class helper the primitives use internally.)                                                                                                                                               |
+| `Button`             | `variant` primary/secondary/tertiary/danger, `size` sm/md, `icon`, `loading`, plus every `<button>` prop. `aria-pressed` styles itself.                                                                                                                                                               |
+| `IconButton`         | `label` (REQUIRED — the `aria-label` and the tooltip), `icon`, `variant` subtle/filled/outlined, `size`.                                                                                                                                                                                              |
+| `Input`              | Every `<input>` prop except `size`; `size` sm/md, `icon` (leading slot), `wrapperClass`.                                                                                                                                                                                                              |
+| `Select`             | Native `<select>`, styled, with a drawn chevron; `size`, `wrapperClass`.                                                                                                                                                                                                                              |
+| `SegmentedControl`   | `items` (`{ value, label, icon?, disabled? }`), `value`, `onChange`, `label`, `size`. A radio group; arrows move.                                                                                                                                                                                     |
+| `Switch`             | `checked`, `onChange`, `label` or `aria-label`, `id`, `disabled`.                                                                                                                                                                                                                                     |
+| `Badge`              | `tone` neutral/brand/warning/error/success/muted, `size`. `severityTone(severity)` maps a finding's severity to one.                                                                                                                                                                                  |
+| `Card`               | Every `<section>` prop, plus `padded` (off for full-bleed bodies).                                                                                                                                                                                                                                    |
+| `PanelHeader`        | `title`, `subtitle`, `actions`, `level` 2/3.                                                                                                                                                                                                                                                          |
+| `Table*`             | `Table`, `TableHead`, `TableBody`, `TableRow`, `TableHeader` (`sort` asc/desc/none + `onSort` makes it a sort control and sets `aria-sort`), `TableCell`.                                                                                                                                             |
+| `Tooltip`            | `label`, `side`, `children` (the element it wraps).                                                                                                                                                                                                                                                   |
+| `Popover`            | `trigger`, `children`, `label`, `side`, `align`, optional `open`/`onOpenChange`.                                                                                                                                                                                                                      |
+| `Dialog`             | `open`, `onOpenChange`, `title` (required), `description`, `footer`.                                                                                                                                                                                                                                  |
+| `Resizable`          | `.Root` (`orientation`, `onSizesChange`), `.Panel` (`initialSize`, `minSize`, `maxSize`), `.Handle` (`label`).                                                                                                                                                                                        |
+| `Kbd`                | A keycap. Show the chord exactly as `src/app/commands.ts` spells it.                                                                                                                                                                                                                                  |
+| `EmptyState`         | `icon`, `title`, `description`, one `action`.                                                                                                                                                                                                                                                         |
+| `FilterList`         | `items`, `match(item, query)`, `key`, `children(item)`, `onPick`, `current`, `placeholder`, `label`. A list you can type at: a filter box that takes focus, arrows, Enter. The book and chapter pickers and the palette are its shape.                                                                |
+| `VirtualList`        | `sections` (each a key plus keyed rows with a height estimate), `header(section, ref)`, `row(item, key)` — `section` and `item` are ACCESSORS, because a row outlives the model it was built from — `pinned`, `focus`, `onActive`, `empty`, `ref(goTo)`. Sticky section headers over a windowed list. |
+| `toasts` + `Toaster` | `info`/`success`/`error`/`progress`/`update`/`dismiss` over a module-level list; `<Toaster />` is the viewport, mounted once in `src/routes/_app.tsx`.                                                                                                                                                |
 
 Icons are `lucide-solid`, imported one at a time
 (`import Search from "lucide-solid/icons/search"`), never from the barrel.

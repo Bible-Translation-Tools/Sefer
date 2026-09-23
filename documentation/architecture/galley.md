@@ -55,4 +55,4 @@ It is one handle because `parse(id)` and `lint(id)` answer off the text a handle
 
 The Sous **census** (engine-asks item 2) is open and deliberately so: Will did not build it. The pattern table therefore still holds a row only where a channel had a claim to make, and `/inventory` still labels itself "the characters the engine measured" rather than a census. See [Character inventory](inventory.md).
 
-Chapter labels (`\cl` / `\cp`) are Onion's job and deferred (item 4). 
+Chapter labels (`\cl` / `\cp`) are Onion's job and deferred (item 4).

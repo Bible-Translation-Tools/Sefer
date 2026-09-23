@@ -5,15 +5,15 @@ Everything Sefer cannot do by itself arrives as one of seven Effect Layers. Each
 host in `src/platform/{web,tauri,node}/`. Core policy asks the service; only `src/platform` names a
 host, and `pnpm boundaries` enforces that direction.
 
-| Layer | Interface | Web | Tauri | Tests / dev |
-| --- | --- | --- | --- | --- |
-| HostInfo | `src/core/host/hostInfo.ts` | `WebHostInfoLive(build)` | `TauriHostInfoLive(build)` | `HostInfoLive(values)` |
-| FileSystem | `effect/FileSystem` | `OpfsFileSystemLive` | `TauriFileSystemLive` | `MemoryFileSystemLive`, `NodeFileSystemLive` |
-| Observability | `src/core/observability.ts` | `ObservabilityLive({ sink: hostSink() })` | same | same |
-| Settings | `src/core/host/settings.ts` | `SettingsLive` | `SettingsLive` | — |
-| Credentials | `src/core/host/credentials.ts` | `WebCredentialsLive` (`localStorage`) | `TauriCredentialsLive` (OS keychain) | — |
-| Dialogs | `src/core/host/dialogs.ts` | `WebDialogsLive` | `TauriDialogsLive` | — |
-| Updater | `src/core/host/updater.ts` | `NoUpdaterLive(build)` | `TauriUpdaterLive({ updaterHost })` | `NoUpdaterLive(build)` |
+| Layer         | Interface                      | Web                                       | Tauri                                | Tests / dev                                  |
+| ------------- | ------------------------------ | ----------------------------------------- | ------------------------------------ | -------------------------------------------- |
+| HostInfo      | `src/core/host/hostInfo.ts`    | `WebHostInfoLive(build)`                  | `TauriHostInfoLive(build)`           | `HostInfoLive(values)`                       |
+| FileSystem    | `effect/FileSystem`            | `OpfsFileSystemLive`                      | `TauriFileSystemLive`                | `MemoryFileSystemLive`, `NodeFileSystemLive` |
+| Observability | `src/core/observability.ts`    | `ObservabilityLive({ sink: hostSink() })` | same                                 | same                                         |
+| Settings      | `src/core/host/settings.ts`    | `SettingsLive`                            | `SettingsLive`                       | —                                            |
+| Credentials   | `src/core/host/credentials.ts` | `WebCredentialsLive` (`localStorage`)     | `TauriCredentialsLive` (OS keychain) | —                                            |
+| Dialogs       | `src/core/host/dialogs.ts`     | `WebDialogsLive`                          | `TauriDialogsLive`                   | —                                            |
+| Updater       | `src/core/host/updater.ts`     | `NoUpdaterLive(build)`                    | `TauriUpdaterLive({ updaterHost })`  | `NoUpdaterLive(build)`                       |
 
 ## What each one owns
 
@@ -73,7 +73,7 @@ What `domainLayer(build, fixture, paths, tauri)` wires, in dependency order:
 - **FileSystem** — `OpfsFileSystemLive` or `TauriFileSystemLive`, and `FixtureFileSystemLive` on either
   host when `?fixture=1` asked for the seeded project.
 - **Credentials** — `WebCredentialsLive` on Web (`localStorage`: survives a reload, as safe as the page
-  itself; `src/platform/web/credentials.ts` says why) or `TauriCredentialsLive` over the OS keychain. `GiteaLive` is provided *over* it
+  itself; `src/platform/web/credentials.ts` says why) or `TauriCredentialsLive` over the OS keychain. `GiteaLive` is provided _over_ it
   (`Layer.provideMerge`), because Gitea needs the credential store and the browser's `fetch`.
 - **Dialogs** — `WebDialogsLive` (File System Access API) or `TauriDialogsLive` (native pickers).
 - **Updater** — `NoUpdaterLive(build)`, which refuses honestly, or `TauriUpdaterLive`.
@@ -87,5 +87,5 @@ Recovery's and Library's roots, which are passed as plain strings resolved from 
 Layers are built (`WEB_PATHS`, or `await tauriPaths()`).
 
 Both host branches merge the same shape, so nothing above `composeServices` learns which host it is
-on: the shell reads `hostInfo.kind()` when it wants to *say* which one, never to decide behaviour.
+on: the shell reads `hostInfo.kind()` when it wants to _say_ which one, never to decide behaviour.
 See [the shell](shell.md), [boundaries](boundaries.md) and [storage](storage.md).

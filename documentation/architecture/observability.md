@@ -74,19 +74,19 @@ Not present yet: JSONL files on disk, rotation, retention, and cross-process cor
 
 An operation is one end-to-end piece of work — one thing a person did, or one piece of background work no gesture caused — written once, when it finishes, carrying everything known by then. Inside it a **span** is a hop that crosses a boundary and can vary or fail on its own; a **note** is a decision or a refusal; everything else is a field. Work that merely followed — anything debounced — is its own operation, never a child. `OperationName` in `src/core/observability.ts` is the closed list.
 
-| Operation | Opened by | Carries |
-|---|---|---|
-| `boot` | the application starting | `session.id`, `build.id`, `app.host`, `boot.phase` |
-| `project.open` | opening a Project | `project.root`, `project.books`; metadata, Seats and Baselines inside it |
-| `save` | Save | `book.id`, `fs.path`, `fs.bytes`, `book.revision`; `file.write` inside it |
-| `analysis.pass` | the gestures that armed it | `analysis.books`, `analysis.refreshed`; `galley.parse` and `corpus.publish` inside it |
-| `editor.mutation` / `editor.selection` / `editor.render` | a transaction that changed the text / moved the caret / a repaint | book, revisions, phase timings, derive totals, meter |
-| `command.<id>` | one command, from the palette, a keybinding or a click | the command id in the name |
-| `import.resource` / `import.remote` | importing a picked folder or ZIP / cloning a shared project | stage timings, counts, outcome and failing phase; no URL or name |
-| `find.run` | a valid search | scope, options, scan time, hit count or refusal; never the query text |
-| `sync.transfer` | the transfer action | action, time, outcome |
-| `review.apply` | applying a review plan | requested/written counts, target side, refusal |
-| `journal.offer` / `journal.restore` / `journal.discard` | the recovery check on open / the banner's answer | candidate, offered, completed and refused counts |
+| Operation                                                | Opened by                                                         | Carries                                                                               |
+| -------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `boot`                                                   | the application starting                                          | `session.id`, `build.id`, `app.host`, `boot.phase`                                    |
+| `project.open`                                           | opening a Project                                                 | `project.root`, `project.books`; metadata, Seats and Baselines inside it              |
+| `save`                                                   | Save                                                              | `book.id`, `fs.path`, `fs.bytes`, `book.revision`; `file.write` inside it             |
+| `analysis.pass`                                          | the gestures that armed it                                        | `analysis.books`, `analysis.refreshed`; `galley.parse` and `corpus.publish` inside it |
+| `editor.mutation` / `editor.selection` / `editor.render` | a transaction that changed the text / moved the caret / a repaint | book, revisions, phase timings, derive totals, meter                                  |
+| `command.<id>`                                           | one command, from the palette, a keybinding or a click            | the command id in the name                                                            |
+| `import.resource` / `import.remote`                      | importing a picked folder or ZIP / cloning a shared project       | stage timings, counts, outcome and failing phase; no URL or name                      |
+| `find.run`                                               | a valid search                                                    | scope, options, scan time, hit count or refusal; never the query text                 |
+| `sync.transfer`                                          | the transfer action                                               | action, time, outcome                                                                 |
+| `review.apply`                                           | applying a review plan                                            | requested/written counts, target side, refusal                                        |
+| `journal.offer` / `journal.restore` / `journal.discard`  | the recovery check on open / the banner's answer                  | candidate, offered, completed and refused counts                                      |
 
 Inside those, as spans: `galley.parse` (with `galley.why` naming its caller), `file.write`, `corpus.publish`. As notes: `book.analyze`, `corpus.update`, `corpus.reference`, `baseline.adopt`, `seat.open`, `seat.close`, `project.metadata`, `book.apply` (only when no gesture is open), `journal.*`, `conflict.resolve`, `library.*`.
 
@@ -109,7 +109,7 @@ keystroke · ready · gesture=4.6ms render=21.3ms analyzes=1 analyze=2.1 decorat
 Read it left to right:
 
 - **`gesture`** — the JS work: the DOM event to the LAST state update of the gesture. This is the part Sefer's own code owns.
-- **`render`** — the same event to after the browser painted. The Event Timing API answers it where the browser offers one, and the line then prints it as **`input=`**; otherwise it is measured by waiting a frame and then a macrotask inside it (a `requestAnimationFrame` callback runs *before* the paint) and prints as `render=`. Omitted entirely when neither observed anything — a headless state, a background tab — rather than printed as a guess. It is always larger than `gesture` and it is not a sum: between the last update and the paint sit CodeMirror's measure pass, style and layout.
+- **`render`** — the same event to after the browser painted. The Event Timing API answers it where the browser offers one, and the line then prints it as **`input=`**; otherwise it is measured by waiting a frame and then a macrotask inside it (a `requestAnimationFrame` callback runs _before_ the paint) and prints as `render=`. Omitted entirely when neither observed anything — a headless state, a background tab — rather than printed as a guess. It is always larger than `gesture` and it is not a sum: between the last update and the paint sit CodeMirror's measure pass, style and layout.
 - **`analyzes`** — parses the gesture actually caused, counted by `Analysis.revision` moving, so a memo hit is not counted.
 - **the per-span totals** — exclusive milliseconds per span inside the gesture, biggest first: `analyze` (the engine parse, timed in `core/analyzer.ts`), the derivation spans `scan`, `index`, `decorate`, `paint`, and one `phase:<name>` per editing phase that cost anything. Buckets under 0.05 ms are dropped from the line.
 - **`other`** — gesture milliseconds no span accounted for.
