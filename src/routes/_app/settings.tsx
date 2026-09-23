@@ -194,23 +194,26 @@ function SettingsPage() {
 
       <For each={SETTING_GROUPS}>
         {(group) => {
-          const rows = descriptors.filter(
-            (descriptor) =>
-              descriptor.group === group.id &&
-              (group.id !== "advanced" || advancedVisible()) &&
-              // A preference that cannot matter on this host is not drawn.
-              // The WACS endpoint is the only one: on the Web it is normally a
-              // proxy, because a browser cannot reach the content host
-              // directly, and desktop has no such problem.
-              (descriptor.hosts === undefined ||
-                descriptor.hosts.includes(services.hostInfo.kind())),
-          );
+          // A function, not a value: `advancedVisible` changes while the
+          // screen is open, and the rows must follow it.
+          const rows = () =>
+            descriptors.filter(
+              (descriptor) =>
+                descriptor.group === group.id &&
+                (group.id !== "advanced" || advancedVisible()) &&
+                // A preference that cannot matter on this host is not drawn.
+                // The WACS endpoint is the only one: on the Web it is normally a
+                // proxy, because a browser cannot reach the content host
+                // directly, and desktop has no such problem.
+                (descriptor.hosts === undefined ||
+                  descriptor.hosts.includes(services.hostInfo.kind())),
+            );
           return (
-            <Show when={rows.length > 0}>
+            <Show when={rows().length > 0}>
               <Card class="space-y-1" data-settings-group={group.id}>
                 <PanelHeader level={3} title={t(group.title)} subtitle={t(group.subtitle)} />
                 <div class="divide-y divide-surface-border">
-                  <For each={rows}>
+                  <For each={rows()}>
                     {(descriptor) => (
                       <div class="flex items-center gap-6 py-3" data-setting={descriptor.key.name}>
                         <label

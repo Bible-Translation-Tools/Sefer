@@ -714,7 +714,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   const closeProject = async (): Promise<void> => {
     // A deliberate one-time read: we close exactly the project that was open
     // when the call was made, not whatever is open when the await returns.
-    const staticOpen = project();
+    const staticOpen = untrack(() => project());
     unwatchSeats?.();
     unwatchSeats = undefined;
     live = undefined;

@@ -47,10 +47,13 @@ function ProjectPage(props: { readonly root: string }) {
       // moment the project opened, not a place that then follows them around.
       const where = untrack(() => shell.lastLocation(root));
       if (where === undefined || !held.books.some((book) => book.id === where.bookId)) return;
-      void navigate({
-        to: "/project/$slug/book/$book",
-        params: { slug: shell.slugFor(root), book: encodeURIComponent(where.bookId) },
-        replace: true,
+      // Untracked too: building the location reads the router's own state.
+      untrack(() => {
+        void navigate({
+          to: "/project/$slug/book/$book",
+          params: { slug: shell.slugFor(root), book: encodeURIComponent(where.bookId) },
+          replace: true,
+        });
       });
     },
   );
