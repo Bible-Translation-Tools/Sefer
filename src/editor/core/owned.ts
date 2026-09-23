@@ -12,7 +12,7 @@
 import { NOTE_PART } from "#core/galley";
 
 import { lineIndexAt, type DocStructure } from "./docStructure";
-import { paintOver, type Paint as PaintIndex } from "./paint";
+import { paintOver, type PaintIndex } from "./paint";
 import type { DocPlan, PlanSpan, ResolvedNote, ResolvedSlot, ResolvedWord } from "./plan";
 import {
   type Assignment,
@@ -20,7 +20,7 @@ import {
   type Mutability,
   type OwnedSetName,
   type OwnershipBit,
-  type Paint,
+  type PaintReach,
   CLASS_KEYS,
   ownershipOf,
   paintsItsOwnLineAmbient,
@@ -49,7 +49,7 @@ interface TargetFacts {
   readonly paintedSpans: readonly PlanSpan[];
   readonly hiddenSpans: readonly PlanSpan[];
   readonly scope: PlanSpan | null;
-  readonly paint: Paint;
+  readonly paint: PaintReach;
   readonly mutability: Mutability;
   readonly policy: OwnershipBit | null;
   readonly paintsOwnLine: boolean;

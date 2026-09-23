@@ -11,12 +11,12 @@
 
 import { Facet, type EditorState } from "@codemirror/state";
 
-export type Paint = "point" | "boundary" | "ambient" | "none";
+export type PaintReach = "point" | "boundary" | "ambient" | "none";
 
 export type Mutability = "direct" | "via-anchor" | "trusted-only" | "immortal";
 
 export interface Cell {
-  paint: Paint;
+  paint: PaintReach;
   mutability: Mutability;
 }
 

@@ -26,7 +26,7 @@ import {
   type WordRange,
 } from "./docStructure";
 import { buildOwnedIndex, type OwnedIndex } from "./owned";
-import type { Assignment, ClassKey, Paint, Registry, WidgetKey } from "./registry";
+import type { Assignment, ClassKey, PaintReach, Registry, WidgetKey } from "./registry";
 import { armed, span } from "./timing";
 
 export interface PlanSpan {
@@ -169,7 +169,7 @@ class Spans {
 }
 
 function resolveNote(n: NoteRange, rows: Registry): ResolvedNote {
-  const paint = (cls: ClassKey): Paint => rows[cls].cell.paint;
+  const paint = (cls: ClassKey): PaintReach => rows[cls].cell.paint;
   const head = { from: n.from, to: n.to, kind: n.kind, parts: n.parts, mark: "" };
   if (paint("note.markup") === "none" && paint("note.body") === "none") {
     return paint("note.caller") === "none"
@@ -262,7 +262,7 @@ function ownedIndexOf(s: DocStructure, plan: DocPlan, a: Assignment): OwnedIndex
 
 export function resolvePlan(s: DocStructure, a: Assignment): DocPlan {
   const rows = a.rows;
-  const paint = (cls: ClassKey): Paint => rows[cls].cell.paint;
+  const paint = (cls: ClassKey): PaintReach => rows[cls].cell.paint;
   const pipped = (cls: ClassKey): boolean => a.clamped.some((c) => c.cls === cls && c.to === "pip");
 
   const notes: ResolvedNote[] = [];

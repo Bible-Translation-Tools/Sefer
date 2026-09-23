@@ -12,7 +12,7 @@
 import { lineIndexAt, type DocStructure } from "./docStructure";
 import type { DocPlan } from "./plan";
 
-export interface Paint {
+export interface PaintIndex {
   hidden(from: number, to: number): boolean;
   draws(pos: number): boolean;
   joined(pos: number): boolean;
@@ -20,7 +20,7 @@ export interface Paint {
 
 type Gather = (out: number[], from: number, t: number) => void;
 
-export function paintOver(s: DocStructure, plan: DocPlan): Paint {
+export function paintOver(s: DocStructure, plan: DocPlan): PaintIndex {
   if (plan.revision !== s.revision)
     throw new Error(`stale plan: revision ${plan.revision} over a fold at ${s.revision}`);
   const lines = s.lines;

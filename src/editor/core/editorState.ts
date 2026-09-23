@@ -32,7 +32,7 @@ import {
 } from "./decorations";
 import { docText, structureAt, structureField } from "./docStructure";
 import { type PaintPort, modeFacet } from "./kernel";
-import { paintOver, type Paint } from "./paint";
+import { paintOver, type PaintIndex } from "./paint";
 import { renderRangeAt, renderRangeField } from "./render";
 
 export { editableClipAt, pickField, structureAt, structureField, type ClipRange };
@@ -149,9 +149,9 @@ export const decoField = StateField.define<Built>({
   provide: (f) => EditorView.decorations.from(f, (b) => b.set),
 });
 
-const renderingCache = new WeakMap<EditorState, Paint>();
+const renderingCache = new WeakMap<EditorState, PaintIndex>();
 
-function paintAt(state: EditorState): Paint {
+function paintAt(state: EditorState): PaintIndex {
   let r = renderingCache.get(state);
   if (!r) {
     const done = span("paint");
