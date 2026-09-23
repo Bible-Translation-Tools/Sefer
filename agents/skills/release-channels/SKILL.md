@@ -20,11 +20,12 @@ Full rationale: `documentation/architecture/design.md` for the build switch,
 | **Script** | `pnpm build:dev` | `pnpm build` | `pnpm build` |
 | **`/design`, comment panel, `?fixture=1`** | **yes** | no | no |
 | **`data-loc` source stamps** | **yes** | no | no |
-| **Full test suite** | no | **yes** | **yes** |
+| **Gate** | check, deadcode, test:browser | + test:e2e, verify:design | + test:e2e, verify:design |
 | **Desktop matrix** | no | **yes** | **yes** |
 | **GitHub release** | no | prerelease | release |
 | **Release lint** (no leftover scaffolding) | no | **yes** | **yes** |
-| **Web host** | `sefer-dev` | `sefer-preview` | `sefer` |
+| **Web Worker** | `sefer-web-dev` | `sefer-web-preview` | `sefer-web-production` |
+| **Web hostname** | `sefer-dev.bttdev.org` | `sefer-preview.bttdev.org` | `sefer.bibletranslationtools.org` |
 | **Desktop channel** | — | Sefer Preview | Sefer |
 | **Roughly** | ~1 minute | ~20 minutes | ~20 minutes |
 
@@ -122,7 +123,9 @@ runs the full gate, builds the desktop matrix and deploys the web.
 
 ```sh
 pnpm check            # typecheck, lint, format, boundaries, unit, build
+pnpm deadcode         # unused files, exports, dependencies, cycles
 pnpm test:browser     # the real Chromium project
+pnpm lint:release     # preview/production only; deploy:web runs it for you
 pnpm verify:design    # the surface is in dev and out of production
 ```
 
@@ -212,12 +215,11 @@ There is no desktop `dev` channel and we are not planning one.
 `push` is live: master deploys `dev`, a `v*` tag releases. Five jobs —
 `resolve`, `verify`, `deploy-web`, `deploy-updater`, `build-desktop`.
 
-**The custom-domain routes are commented out**, so every channel deploys to
-its own `*.workers.dev` subdomain. That is deliberate rather than unfinished:
-it means the pipeline actually runs today instead of failing on a route for a
-hostname nobody has registered. When DNS exists, uncomment the channel's
-`routes` block in `wrangler.jsonc` (web) or
-`workers/sefer-updater/wrangler.toml` (updater). Nothing else changes.
+**The web custom domains are live**: each environment in `wrangler.jsonc`
+declares its hostname as a custom-domain route (table above), which also turns
+its `*.workers.dev` subdomain off. **The updater routes are still commented
+out** in `workers/sefer-updater/wrangler.toml`, so the updater serves from its
+`*.workers.dev` subdomain until its hostname is registered.
 
 One trap that follows from that: a desktop binary asks the updater URL it was
 BUILT with, from `SEFER_UPDATER_HOST`. Move the worker to a custom domain
@@ -243,10 +245,10 @@ means one place to look, and the desktop job already authenticates there.
 
 ### Still to do
 
-1. Register the web hostnames and uncomment the `routes` blocks in
-   `wrangler.jsonc`. When the UPDATER moves to a custom domain, change
-   `updater-host-*` in 1Password in the same sitting — a binary asks the URL
-   it was built with, and a mismatch is an updater that silently finds nothing.
+1. Register the updater hostnames and uncomment the `routes` blocks in
+   `workers/sefer-updater/wrangler.toml`. Change `updater-host-*` in
+   1Password in the same sitting — a binary asks the URL it was built with,
+   and a mismatch is an updater that silently finds nothing.
 2. Cut the first candidate tag and see what the desktop matrix says. It has
    never run.
 

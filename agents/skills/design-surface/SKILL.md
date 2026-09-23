@@ -101,7 +101,7 @@ act on and one you have to grep for. Then the element's own text (only its own
 `data-*` attributes, and the URL. A pasted batch reads:
 
 ```
-## http://localhost:3210/design?primitives.size=sm
+## http://localhost:3000/design?primitives.size=sm
 
 [1] src/app/ui/primitives/Button.tsx:77:5  "tertiary"
     too faint against the card.
@@ -110,7 +110,7 @@ act on and one you have to grep for. Then the element's own text (only its own
 [3] src/app/ui/primitives/Button.tsx:77:5  "secondary"
     these two should swap.
 
-## http://localhost:3210/terms
+## http://localhost:3000/project/small-nt/terms
 
 [4] src/app/ui/excerpts/StetView.tsx:31:7  "Key terms"
     this heading should match the rail.
@@ -300,7 +300,8 @@ variant and every tweak at a non-default value, so a graduation commit should
 name the URL it is graduating. That is the difference between "we picked the
 tighter one" and a reviewer who can open both and see.
 
-Step 4 is the whole point and the thing most likely to be skipped. The design
+Graduating — step 4 of the four steps below — is the whole point and the thing
+most likely to be skipped. The design
 surface is a staging area, not a parallel application. A prototype that lives
 in `src/dev` forever has recreated the problem this replaced — work that looks
 like the product and diverges from it every week. `pnpm design:scaffolding`

@@ -1,6 +1,6 @@
 # Working in Sefer
 
-Sefer is a local-first scripture editor whose source of truth is exact USFM text. This scaffold uses Solid 2 release-candidate packages, not React. Use pnpm.
+Sefer is a local-first scripture editor whose source of truth is exact USFM text. It uses Solid 2 release-candidate packages, not React. Use pnpm.
 
 Loadable skills live in `agents/skills/` (`.claude/skills` is a symlink to it):
 
@@ -9,7 +9,8 @@ Loadable skills live in `agents/skills/` (`.claude/skills` is a symlink to it):
 
 Read only the guidance relevant to the task:
 
-- [Documentation index](documentation/README.md): scope, authority, and maintenance.
+- [Documentation index](documentation/README.md): the full index of every chapter, plus scope, authority, and maintenance. The list below is only the chapters agents reach for most.
+- [Services](documentation/services.md): one page per service, at a glance — what it owns, where it lives, and its known gaps.
 - [Solid development and diagnostics](documentation/architecture/solid.md): read before Solid changes or reactive debugging; includes versioned skill locations and evidence capture.
 - [Testing](documentation/architecture/testing.md): coverage ownership, runner choice, cadence, and current commands.
 - [Agent verification](documentation/agents/verification.md): explore the running app, capture evidence, and decide what earns a regression test.
@@ -31,10 +32,10 @@ Read only the guidance relevant to the task:
 
 `src/App.tsx` calls `composeApplication()` exactly once; services reach components through `useComposition()` (`src/app/CompositionContext.tsx`).
 
-In a dev build, `/dev/fixture` runs over a seeded in-memory copy of `fixtures/small-nt/` merged over the one composition, and lists it through the `FileSystem` service. The route is generated from `src/routes/dev/fixture.tsx` in every build, but the page (`src/dev/FixturePage.tsx`) is imported only inside an `import.meta.env.DEV` branch, so production bundles none of the fixture code and answers the path with the not-found boundary.
+Under the dev server (`pnpm dev`, where `import.meta.env.DEV` is true — not `pnpm build:dev`), `/dev/fixture` runs over a seeded in-memory copy of `fixtures/small-nt/` merged over the one composition, and lists it through the `FileSystem` service. The route is generated from `src/routes/_app/dev/fixture.tsx` in every build, but the page (`src/dev/FixturePage.tsx`) is imported only inside an `import.meta.env.DEV` branch, so production bundles none of the fixture code and answers the path with the not-found boundary.
 `pnpm verify:launch [--check]` starts a dev server on a free port against that route, writes artifacts to `.verify/<runId>/`, and prints one JSON line with `url`, `runId`, `runDir`, and `pid`.
 
-In a dev build, `globalThis.__sefer.observability` exposes `recent()`, `export()` (JSONL), `level()`, and `setLevel()`, and `globalThis.__sefer.state()` reports the boot result, the seeded fixture, and the ring depth — use them to read what the running application actually did instead of adding logging.
+Under the dev server, `globalThis.__sefer.observability` exposes `traces.recent()` and `traces.print()` (assembled operations), `logs.recent()` (loose events), `export()` (JSONL), `level()`, `setLevel()`, and `stream()` (console streaming), and `globalThis.__sefer.state()` reports the boot result, the seeded fixture, and the ring depth — use them to read what the running application actually did instead of adding logging.
 
 Check `package.json` and runner configuration for executable commands. Distinguish intended tooling from working setup, and preserve unrelated worktree changes.
 
@@ -47,7 +48,7 @@ Check `package.json` and runner configuration for executable commands. Distingui
 - `pnpm test:browser` runs the real Chromium Browser Mode project — today four files: the composition's dev observability surface, the fixture page, the OPFS `fileSystemContract` suite, and web git. It is for real browser APIs at module level; the built artifact belongs to `pnpm test:e2e`.
 - `pnpm test:e2e` builds the app, serves `dist/client` through `vite preview`, and drives it with Playwright (`e2e/`). Three smoke assertions: it mounts, a deep link resolves through the SPA fallback, and a production build carries no design surface. Deliberately says nothing about how a screen looks — behaviour is still moving, and a suite that breaks on every redesign is one people delete. There is still no Tauri WebDriver suite.
 - `pnpm build` builds the shared Web frontend; `pnpm dev:tauri` starts the Tauri host.
-- `pnpm boundaries` proves `src/core` imports nothing framework- or host-specific, that nothing outside `src/dev` statically imports it, and that `src/dev/annotate` imports no framework at all.
+- `pnpm boundaries` proves `src/core` imports nothing framework- or host-specific, that nothing outside `src/dev` statically imports `src/dev`, and that `src/dev/annotate` imports no framework at all.
 - `pnpm build:dev` builds the `dev` channel — a production build that DOES carry `/design`, the comment panel and `?fixture=1`. See below.
 - `pnpm deploy:web <dev|preview|production>` builds for that channel and ships it; `--dry` builds and prints the wrangler command without shipping. The mode-to-channel pairing lives in `tools/deploy/web.ts`, so CI and a laptop cannot disagree.
 - `pnpm branch:preview [branch]` gives one BRANCH its own URL without deploying anything: it builds `--mode dev` and uploads a Cloudflare *version* of the `sefer-web-dev` Worker under a per-branch alias, so `sefer-dev.bttdev.org` is untouched. `check.yml` runs it on every push to a non-master branch. Two unrelated things are called "preview" here — **ChannelPreview** is the `preview` channel, **CloudflarePreview** is this — so always say which; [glossary](documentation/glossary.md), "Deployment names".
@@ -57,11 +58,11 @@ Check `package.json` and runner configuration for executable commands. Distingui
 - `pnpm design:scaffolding` lists real screens still borrowing the design panel through `globalThis.__sefer.design.register`. Informational; exits 0.
 - `pnpm deadcode` fails on an unused file, export, type or dependency, or an import cycle; `release.yml`'s `verify` runs it before every deploy (not `pnpm check`, so a branch may carry a half-wired file). `pnpm exec fallow dead-code | dupes | health` is the full, advisory report; `.fallowrc.jsonc` holds the entries and the dependencies it cannot see. [First pass](planning/01-discussing/fallow-2026-09-23.md), [follow-ups](planning/01-discussing/fallow-followups-2026-09-23.md).
 - `pnpm lint:results` regenerates the inventory half of `documentation/lint-results.md`; the pre-commit hook runs it for you.
-- `pnpm check` runs the ordinary local gate: typecheck, lint, formatting, boundaries, unit tests, and build. `.github/workflows/check.yml` runs the same commands, plus `pnpm test:browser` in a second job.
+- `pnpm check` runs the ordinary local gate: typecheck, lint, formatting, boundaries, unit tests, and build. `.github/workflows/check.yml` runs it on every branch except master, plus `pnpm test:browser` in a second job. Master's gate is `release.yml`'s `verify` job: `pnpm check`, `pnpm deadcode` and `pnpm test:browser`; preview and production add `pnpm test:e2e` and `pnpm verify:design`.
 
 ## Channels
 
-`dev` is every push to master — web only, `--mode dev`, the only deployed thing carrying `/design`, the comment panel and `?fixture=1`. `preview` is a PROMOTION (a dispatch or a `v*-rc*` tag), with the full test suite and the full desktop matrix. `production` is a `v*` tag. Desktop has two channels, not three, because a desktop build costs twenty minutes and a web build costs one.
+`dev` is every push to master — web only, `--mode dev`, the only deployed thing carrying `/design`, the comment panel and `?fixture=1`. `preview` is a PROMOTION (a dispatch or a `v*-N` tag such as `v0.3.0-1`; `-rc.1` breaks Tauri's MSI bundler), with the full test suite and the full desktop matrix. `production` is a `v*` tag. Desktop has two channels, not three, because a desktop build costs twenty minutes and a web build costs one.
 
 Master deploying the least-stable channel reads oddly and is deliberate: the alternative is a long-lived `dev` branch, which means a merge train and divergence, and the person most often working here does not use git. One trunk keeps history linear, and it keeps `dev` and `preview` the same commit built two ways — so a difference between them can only ever be the design surface, never drift.
 
@@ -87,4 +88,4 @@ exported constant folds at its use site but still left rolldown emitting the
 design page as an orphaned, shipped chunk. `documentation/architecture/design.md`
 has the full account; `src/vite-env.d.ts` declares it.
 
-Core modules stay independent of Solid, the router, Tauri, CodeMirror, DOM globals, and native filesystem implementations; `pnpm boundaries` is the authoritative check. TanStack Router owns navigation; it is not automatically the DI container. Effect supplies the boot program's typed failures and the observability and filesystem Layers; the filesystem port is `effect/FileSystem` and no host provides it yet. Isomorphic Git is present as a dependency for later integration work, but its lifecycle and filesystem adapter are not established by the scaffold.
+Core modules stay independent of Solid, the router, Tauri, CodeMirror, DOM globals, and native filesystem implementations; `pnpm boundaries` is the authoritative check. TanStack Router owns navigation; it is not automatically the DI container. Effect supplies the boot program's typed failures and the observability and filesystem Layers; the filesystem port is `effect/FileSystem`, provided by OPFS on the Web and by the Tauri filesystem on desktop (`src/app/services.ts`). The Git port runs on isomorphic-git on the Web (`src/platform/web/git.ts`) and on git2 on desktop.
