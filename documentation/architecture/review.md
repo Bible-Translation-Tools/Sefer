@@ -147,42 +147,33 @@ two answers.
 
 `Galley.diff` is still a `Result`, and that is not hedging. The doors are free
 functions probed by name off the wasm module, so an artifact that is not the
-vendored build is a real failure mode: the screen says "this build's engine has
+pinned build is a real failure mode: the screen says "this build's engine has
 no diff door" and offers no plan for that book. One refused book withdraws the
 whole plan, because a partial plan is a write nobody asked for.
 
 ### Word marks
 
 `diff` takes a TEXT MODE as its third argument (`"none" | "words" | "chars"`)
-and Sefer asks for `"words"` — UAX-29 runs over the engine's own reader-text
-mask. `DecisionUnit.text` is therefore populated, and in the reading the card
-uses those runs verbatim: they are over the same string the columns show.
+and Sefer asks for `"words"`. Each unit then carries runs
+`{from, to, kind, what}` that TILE the unit's span on each side, markup
+included: `what` is `"markup" | "text" | "whitespace"`. `decodeSkeleton` slices
+each run's `text` from its own side, so a `TextRun` is located and readable.
 
-The **markup view** is the one place the engine has no answer, because its runs
-never mention a marker — there is no engine opinion about which characters of a
-`\q1 …` line changed. Those columns keep the word LCS in
-`core/diff/inline.ts`. It decides nothing: the alignment, the units and the
-decisions are all the engine's, and this only tints characters inside a unit
-the engine already paired.
-
-`inline.ts` was a character LCS and is now a word one. Characters were visibly
-the wrong unit: changing "multitude" to "crowd" marked `m`, `ulti`, `ude`
-against `c`, `r`, `w`, because the two words share letters in order, and the
-reader had to reassemble the word from the scraps. A token is a run of letters
-and digits (combining marks included, so a diacritic is never torn off its
-base), a run of whitespace, or one other character. Whitespace is its own token
-rather than attached to a word, which is what keeps the concatenation of every
-segment exactly the input — the renderer splits the segments back onto lines,
-and a tokenizer that swallowed a newline would silently join two lines of
-scripture.
+Both views are marked from those runs and nothing else. The markup view uses
+every run; the reading uses `readingRuns` (the non-markup ones). There is no
+Sefer-side word LCS any more. It decides nothing the engine had not already
+decided, and a second opinion about which words changed is the thing the
+sid-aligned rule exists to prevent.
 
 ### Two readings, and the "markup only" badge
 
 The header's **Show USFM markup** switch changes what both columns show:
 
-- the **reading** (default) — `core/excerpts`' `project`: text tokens, note
-  bodies dropped, whitespace collapsed. The sentence a translator is deciding
-  about.
+- the **reading** (default) — the engine's `"text"` mask (reader text: note
+  prose kept), cut to the unit's span through `GalleyService.readerMask`
+  (`src/app/ui/review/reading.ts`). It is the same reading the engine's runs are
+  over, so changed and unchanged rows agree about footnotes, and a change
+  inside a note alone is visible.
 - the **source** — the exact USFM bytes of the unit's span. The only reading in
   which `\p` becoming `\m` is visible at all.
 

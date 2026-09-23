@@ -8,7 +8,7 @@ One section per service: what it is in plain words, what is wrong or constrained
 
 1. **Location / references** — the next feature foundation. See [Location](#location-and-reference) and `planning/01-discussing/editor-primitives-consistency.md`.
 2. **Git, top to bottom** — history time travel is next, and the pull/push/lifecycle flow needs one careful pass before anything else is added to it. See [Git](#git).
-3. **One diff** — adopt the engine's located runs and reader-text recipe, then retire the line diff. See [Diff](#diff) and `planning/01-discussing/engine-asks-2026-09-14.md`.
+3. **One diff and sync model** — after the primitives settle: retire the line diff, stop reading and diffing every book, one change classification for History, Review and Cloud. See [Diff](#diff) and `planning/01-discussing/diff-and-sync-model-2026-09-23.md`.
 4. **Data safety in Recovery** — a journal must know what text it started from. See [Recovery](#recovery).
 
 ## The graph
@@ -149,15 +149,12 @@ A bounded ring of events, spans and verdicts, with JSONL export. The dev surface
 The pinned Scripture Kitchen WASM build (tagged git dependency, v0.1.4). Onion parses, Sous proofreads, and Galley composes both. It is one in-process synchronous handle: `analyze`, the corpus (`update`, `updateReference`, `publish`), `find`, `lint`, `toc`, `mask`, `diff`/`merge`, `formatEdits`, `skeleton`/`overlay`. `src/core/galley`; loading happens in `src/platform/{web,node}/galley.ts`. → [galley](architecture/galley.md)
 
 ### Constraints and known bugs
-- Three capabilities shipped in v0.1.3 that Sefer does not use yet (engine-asks 8, 9, 10):
-  - located diff runs `{from, to, kind, what}`: `TextRun` is still `{text, kind}` in `core/galley/diff.ts`.
-  - `spansIn`/`enclosing`
-  - the `readerText` mask recipe
-
-  Without them, `review/reading.ts` and the playground run a second masker.
+- `Tree.spansIn`/`Tree.enclosing` (engine-ask 9) are available and unused: nothing yet needs a markup extent.
+- Upstream diff quirk (reported): a footnote inserted straight after a word marks that word changed on both sides, and note prose joins the word with no space ("servant1:1").
 - Still open upstream: the Sous character census (engine-asks 2) and chapter labels (engine-asks 4).
 
 ### Ideas / future
+- Block extents (the skeleton-row RFC, `planning/01-discussing/rfc-skeleton-row-spans-2026-09-18.md`) and an engine mechanism for legacy non-standard markers such as `\s5`, both coming upstream.
 - An xxh3 hash as a free function on the module. It would serve Recovery's base check, and Git's per-chapter cache.
 - A Worker for whole-project analysis, only if a measurement asks for it.
 
@@ -208,7 +205,7 @@ Book codes, the canon table and a forgiving reference parser (`src/core/referenc
 
 ### Constraints and known bugs
 - Two address types (`Reference` in reference.ts, `Ref` in book.ts).
-- Four places turn an offset into a verse on their own: search's `buildRefTable`/`refFrom`, Library's `CHAPTER` regex, the `showReference` scan in ProjectContext, and the findings/inventory exact-stamp + `toc.at`.
+- The rule: Sefer never scans for `\c`/`\v` with a regex or keeps its own diff; the engine's TOC and decision units answer. Four places still turn an offset into a verse on their own: search's `buildRefTable`/`refFrom`, Library's `CHAPTER` regex, the `showReference` scan in ProjectContext, and the findings/inventory exact-stamp + `toc.at`.
 
 ### Ideas / future
 - **Next up:** a `src/core/location` module:
@@ -327,14 +324,14 @@ The multibuffer shared by Find and Key terms: occurrences grouped into verse exc
 ## Diff
 
 ### Overview
-There are two diffs today. The engine skeleton (decision units addressed by sid, `core/diff/skeleton.ts` + `core/galley/diff.ts`) feeds `/review`. A legacy line diff (`core/diff/diff.ts`) still feeds History hunks and Revert, `compareBooks`, and `projectSource.apply`. → [review](architecture/review.md), [diff and multibook](architecture/diff-and-multibook.md)
+There are two diffs today. The engine skeleton (decision units addressed by sid, `core/diff/skeleton.ts` + `core/galley/diff.ts`) feeds `/review`, and both its views mark words from the engine's located runs over the engine's reader text. A legacy line diff (`core/diff/diff.ts`) still feeds History hunks and Revert, `compareBooks`, and `projectSource.apply`. → [review](architecture/review.md), [diff and multibook](architecture/diff-and-multibook.md)
 
 ### Constraints and known bugs
 - The line diff breaks the sid-aligned-only rule.
-- Review's reading of a changed row comes from a second masker (see [Galley](#galley)).
+- `compareBooks` reads and line-diffs every book on both sides, untouched ones included, only to decide "identical" and count hunks, which Review no longer shows. Nothing is skipped by stamp.
 
 ### Ideas / future
-- Move History, `compareBooks` and `projectSource` onto decision units, consume the located runs, then delete `core/diff/diff.ts`.
+- The plan: `planning/01-discussing/diff-and-sync-model-2026-09-23.md`. Skip by stamp, read only changed books, one change classification shared by History, Review and Cloud, then move History, `compareBooks` and `projectSource` onto decision units and delete `core/diff/diff.ts`.
 - The diff UI redesign is paused on `/project/$slug/playground`.
 - **Default baseline: the file on disk against the working session, not the last commit.**
 
@@ -396,7 +393,7 @@ The flow needs one top-to-bottom pass before more is added.
 - Web `previousVersions` walks the whole log with no `depth`.
 
 ### Ideas / future
-- **Next up:** book time travel: a read-only historical pane with previous/next, and a bounded log. Then chapter filtering via Location, with a per-(blob, chapter) hash cache and an LRU. Plan: `planning/01-discussing/next-git-considerations.md`.
+- **Next up:** book time travel: a read-only historical pane with previous/next, and a bounded log. Then chapter filtering via Location, with a per-(blob, chapter) hash cache and an LRU. Plan: `planning/01-discussing/next-git-considerations.md`, which folds into the diff and sync model.
 - Detect Git changes made outside Sefer; add "back to latest" and an unhealthy-repository recovery flow.
 
 ---
@@ -492,7 +489,6 @@ Composed exactly once (`composeApplication`), with services reached through `use
 
 ### Constraints and known bugs
 - Localisation: `t` is an identity function (`src/app/i18n.ts`). No i18n library has been chosen.
-- `configuration.md` says `env.ts` is the only reader of `import.meta.env`, but the OTLP, log and stream variables are read in `composition.ts` and `platform/observability.ts`.
 
 ### Ideas / future
 - Lingui, with the catalogue chosen from `HostInfo.locale()`.
