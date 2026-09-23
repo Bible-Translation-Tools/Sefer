@@ -19,6 +19,8 @@ import {
   installObservabilityDevSurface,
 } from "#platform/observability";
 
+import { env } from "./env";
+
 const buildIdentity = (): string | undefined =>
   typeof __SEFER_BUILD__ === "string" ? __SEFER_BUILD__ : undefined;
 
@@ -122,11 +124,11 @@ const nanos = (ms: number): bigint => BigInt(Math.round(ms * 1e6));
 const OTLP_PROXY_PATH = "/__otlp";
 
 const telemetryBridge = async (): Promise<Telemetry | undefined> => {
-  const url = (import.meta.env.VITE_SEFER_OTLP_URL ?? "").trim();
   // A browser, because the export goes through the dev server's proxy and a
   // relative URL needs an origin to resolve against. The prerender pass and
   // the dev server's own SSR render run here too, and neither has one.
-  if (!import.meta.env.DEV || url === "" || typeof location !== "object") return undefined;
+  if (!import.meta.env.DEV || env.otlpUrl === null || typeof location !== "object")
+    return undefined;
   const [tracer, logger, metrics, serialization, http] = await Promise.all([
     import("effect/unstable/observability/OtlpTracer"),
     import("effect/unstable/observability/OtlpLogger"),
@@ -151,7 +153,7 @@ const telemetryBridge = async (): Promise<Telemetry | undefined> => {
       logger.layer({ url: `${OTLP_PROXY_PATH}/v1/logs`, resource, mergeWithExisting: false }),
       transport(),
     ),
-    import.meta.env.VITE_SEFER_OTLP_METRICS === "1"
+    env.otlpMetrics
       ? Layer.provide(
           metrics.layer({ url: `${OTLP_PROXY_PATH}/v1/metrics`, resource }),
           transport(),
@@ -310,7 +312,7 @@ export const composeApplication = async (
   // surface `traces.recent()` reads. They cannot drift, because there is one
   // tree and three renderers rather than three reconstructions.
   const rings = devRings();
-  const stream = consoleStream();
+  const stream = consoleStream(env.stream);
   const assembled = [rings.sinks, stream, telemetry].filter(
     (one): one is AssemblerSinks => one !== undefined,
   );
@@ -326,7 +328,7 @@ export const composeApplication = async (
   // evidence format, and it must not wait for an operation to finish.
   // SAFETY: an assembler takes one `ObservabilityEvent` and returns nothing,
   // which is a sink's shape minus the JSONL line it does not read.
-  const sinks = [hostSink(), assemble as ObservabilitySink].filter(
+  const sinks = [hostSink(env.log), assemble as ObservabilitySink].filter(
     (sink): sink is ObservabilitySink => sink !== undefined,
   );
   // The session stamp: what every event of this run has in common, which

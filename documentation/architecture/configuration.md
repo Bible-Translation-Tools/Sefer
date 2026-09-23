@@ -1,7 +1,7 @@
 # Configuration
 
-Every URL Sefer talks to enters through a Vite build-time variable read in
-exactly one place, `src/app/env.ts`. `tools/deploy/channels.ts` sets them per
+Every URL Sefer talks to, and every dev telemetry switch, enters through a
+Vite build-time variable read in exactly one place, `src/app/env.ts`. `tools/deploy/channels.ts` sets them per
 channel; a dev build reads them from `.env.local`. An unset value is `null` and
 the feature that needs it degrades visibly (a disabled panel, "not configured
 for this build") rather than guessing a host. Names are `VITE_SEFER_`-prefixed
@@ -88,10 +88,11 @@ card: a production build that needs to look at dev WACS types the dev proxy's
 URL, and does not need a special build to do it. See the proxy's own README in
 `wacs-isomorphic-git-proxy`.
 
-`.env*` files are never committed (this table is the reference; there is no `.env.example`). Do not add a second reader of
-`import.meta.env`; add a field to `env.ts`. The current exceptions are the
-dev-only observability switches: `src/app/composition.ts` reads
-`VITE_SEFER_OTLP_URL` and `VITE_SEFER_OTLP_METRICS`, and
-`src/platform/observability.ts` reads `VITE_SEFER_LOG` and
-`VITE_SEFER_STREAM`. Do not read a network preference
-anywhere but `endpoints.ts`.
+`.env*` files are never committed (this table is the reference; there is no `.env.example`). Do not add a second reader of a
+`VITE_SEFER_*` variable; add a field to `env.ts`. That includes the dev-only
+observability switches (`VITE_SEFER_OTLP_URL`, `VITE_SEFER_OTLP_METRICS`,
+`VITE_SEFER_LOG`, `VITE_SEFER_STREAM`): composition passes them to
+`src/platform/observability.ts`, which never reads the environment itself.
+`import.meta.env.DEV` is different: it is a build-time constant Vite folds so
+dev-only code is dropped from production, and it belongs wherever that branch
+is. Do not read a network preference anywhere but `endpoints.ts`.

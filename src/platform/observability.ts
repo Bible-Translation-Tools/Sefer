@@ -102,12 +102,12 @@ const nodeRuntime = (): NodeRuntime | undefined => {
   return candidate?.stderr === undefined ? undefined : candidate;
 };
 
-const requested = (runtime: NodeRuntime | undefined): boolean =>
-  (runtime?.env?.SEFER_LOG ?? "") !== "" || (import.meta.env.VITE_SEFER_LOG ?? "") !== "";
+const requested = (runtime: NodeRuntime | undefined, log: string): boolean =>
+  (runtime?.env?.SEFER_LOG ?? "") !== "" || log !== "";
 
-const stderrSink = (runtime: NodeRuntime): ObservabilitySink | undefined => {
+const stderrSink = (runtime: NodeRuntime, log: string): ObservabilitySink | undefined => {
   const stderr = runtime.stderr;
-  if (stderr === undefined || !requested(runtime)) return undefined;
+  if (stderr === undefined || !requested(runtime, log)) return undefined;
   return (_event, line) => {
     stderr.write(line);
   };
@@ -166,9 +166,8 @@ const wanted = (name: string, filters: readonly string[], exclude: readonly stri
  * writes JSONL to stderr under Node, the other prints trees to a browser
  * console, and wanting one has never implied wanting the other.
  */
-const streamed = (): StreamOptions => {
+const streamed = (raw: string): StreamOptions => {
   if (!import.meta.env.DEV) return { enabled: false };
-  const raw = (import.meta.env.VITE_SEFER_STREAM ?? "").trim();
   if (raw === "" || raw === "0" || raw === "false") return { enabled: false };
   if (raw === "1" || raw === "true") return { enabled: true };
   const asked = raw
@@ -182,13 +181,14 @@ const streamed = (): StreamOptions => {
   };
 };
 
-export const consoleStream = (): ConsoleStream => {
+/** `stream` is `VITE_SEFER_STREAM`, which `src/app/env.ts` reads. */
+export const consoleStream = (stream = ""): ConsoleStream => {
   const backlog: { readonly head: string; readonly body: unknown }[] = [];
   const schedule = idle();
   let armed = false;
   // On from the start when the env asked; otherwise `stream()` turns it on at
   // runtime, which is the point — no restart to watch something.
-  const asked = streamed();
+  const asked = streamed(stream);
   let enabled = asked.enabled;
   let filters: readonly string[] = asked.filters ?? [];
   let exclude: readonly string[] = asked.exclude ?? [];
@@ -264,9 +264,10 @@ export const devRings = (capacity = 100): DevRings => {
   };
 };
 
-export const hostSink = (): ObservabilitySink | undefined => {
+/** `log` is `VITE_SEFER_LOG`, which `src/app/env.ts` reads; Node's `SEFER_LOG` also counts. */
+export const hostSink = (log = ""): ObservabilitySink | undefined => {
   const runtime = nodeRuntime();
-  return runtime === undefined ? undefined : stderrSink(runtime);
+  return runtime === undefined ? undefined : stderrSink(runtime, log);
 };
 
 export const installDevState = (state: () => DevState): void => {

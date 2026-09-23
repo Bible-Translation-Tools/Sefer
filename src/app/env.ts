@@ -1,6 +1,7 @@
 // env.ts
 //
-// Every build-time URL Sefer talks to, read in exactly one place. Vite inlines
+// Every build-time `VITE_SEFER_*` value, read in exactly one place: the URLs
+// Sefer talks to and the dev-only telemetry switches. Vite inlines
 // `import.meta.env.VITE_*` at build, so the release workflow sets these per
 // channel (dev / preview / production) and the code never carries a hostname. An unset
 // value is `null`, and each consumer degrades visibly (a disabled panel, a
@@ -63,6 +64,10 @@ export interface SeferEnv {
    * them.
    */
   readonly otlpMetrics: boolean;
+  /** Non-empty asks for the raw JSONL sink on stderr under Node; see `hostSink`. */
+  readonly log: string;
+  /** Dev-only console stream: `1`, or comma-separated prefixes; see `consoleStream`. */
+  readonly stream: string;
 }
 
 export const env: SeferEnv = {
@@ -73,4 +78,6 @@ export const env: SeferEnv = {
   languageApiUrl: cleanUrl(import.meta.env.VITE_SEFER_LANGUAGE_API_URL),
   otlpUrl: cleanUrl(import.meta.env.VITE_SEFER_OTLP_URL),
   otlpMetrics: import.meta.env.VITE_SEFER_OTLP_METRICS === "1",
+  log: (import.meta.env.VITE_SEFER_LOG ?? "").trim(),
+  stream: (import.meta.env.VITE_SEFER_STREAM ?? "").trim(),
 };
