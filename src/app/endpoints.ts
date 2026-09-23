@@ -80,9 +80,6 @@ export const rememberBootEndpoints = (resolved: ResolvedEndpoints): void => {
   booted ??= resolved;
 };
 
-/** `null` before the composition has built anything. */
-export const bootEndpoints = (): ResolvedEndpoints | null => booted;
-
 /** Whether a reload would change what a transfer or a catalogue read does. */
 export const endpointsChangedSinceBoot = (settings: SettingsService, host: HostKind): boolean => {
   const at = booted;

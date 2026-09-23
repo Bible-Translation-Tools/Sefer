@@ -27,8 +27,9 @@ application.
 An override reaches the SCREENS immediately — they call `wacsUrlFor(settings,
 host)` each time — and the SERVICES not at all, because `composeApplication()`
 runs once and the transfer Layers close over the string they were handed. The
-Network card records what the composition captured (`bootEndpoints`) and offers
-a Reload exactly when the two have drifted. `endpoints.ts` carries a dated TODO
+composition records the endpoints it built with (`rememberBootEndpoints`), and
+the settings page's Network card offers a Reload exactly when
+`endpointsChangedSinceBoot` says the preference has drifted from them. `endpoints.ts` carries a dated TODO
 for making the endpoint live instead.
 
 | variable | used by | meaning |

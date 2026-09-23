@@ -398,7 +398,7 @@ const domainLayer = (
    * a preference can only be read from a built `Settings`. Settings is still
    * exposed to everything downstream; it is just built first.
    *
-   * The endpoint is captured here, once, which is what `bootEndpoints` records
+   * The endpoint is captured here, once, which is what `rememberBootEndpoints` records
    * and what the settings screen offers a reload against.
    */
   const modules = Layer.provideMerge(
