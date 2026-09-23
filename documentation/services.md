@@ -156,6 +156,7 @@ A bounded ring of events, spans and verdicts, with JSONL export. The dev surface
 
 ### Ideas / future
 
+- Open questions and leans (no severity ladder, one write API, measure before lowering the default, close the coverage gaps, export diagnostics): `planning/01-discussing/logging-and-tracing.md`.
 - Desktop JSONL under the `logs` root, with a bounded queue and rotation. Correlate with Rust logs (`tauri-plugin-log`).
 - A user-facing "export diagnostics".
 - Measure the overhead with telemetry off and at `all`.
