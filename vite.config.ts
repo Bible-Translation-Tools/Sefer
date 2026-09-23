@@ -111,7 +111,11 @@ export default defineConfig(({ mode }) => {
       // Client mode only for now: TanStack's SSR needs per-request router
       // wiring (router.load() + dehydration) that the generated streaming
       // entry doesn't perform — see the README's SSR note.
-      solid({ start: true, diagnostics: true }),
+      //
+      // `observe`: production builds run Solid's observe runtime, which keeps
+      // component owner names and the diagnostics channels, so a `client.error`
+      // from a release says which component threw. About 6 KB gzipped.
+      solid({ start: true, diagnostics: true, observe: true }),
     ],
     define: {
       __SEFER_BUILD__: JSON.stringify(buildIdentity(mode)),
