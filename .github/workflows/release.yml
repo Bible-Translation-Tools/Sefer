@@ -155,11 +155,11 @@ jobs:
       # typecheck, lint, format, boundaries, unit tests, build.
       - run: pnpm check
 
-      # Unused files, unused dependencies and import cycles, all at zero when
-      # this was added (2026-09-23) and cheap to keep there. Deliberately not
-      # unused exports: that count is a cleanup in progress, see
-      # planning/01-discussing/fallow-followups-2026-09-23.md. Here and not in
-      # `pnpm check`, so a feature branch can carry a half-wired file.
+      # Unused files, exports, types and dependencies, and import cycles — all
+      # at zero since 2026-09-23 and cheap to keep there. Something built ahead
+      # of its screen says so with a `fallow-ignore` naming what it waits for.
+      # Here and not in `pnpm check`, so a feature branch can carry a
+      # half-wired file.
       - run: pnpm deadcode
 
       # Every channel, dev included. `check.yml` used to provide this on master
