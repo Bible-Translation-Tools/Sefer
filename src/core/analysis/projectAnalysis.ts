@@ -406,14 +406,6 @@ const make = (
     };
 
     /**
-     * One whole-corpus publication, through whichever door this host got. The
-     * span carries the engine kind so a reading of the ring says which one ran
-     * and how long it took there.
-     *
-     * A refused publication RETAINS the previous snapshot: known-stale
-     * cross-book findings beat an apparently clean project.
-     */
-    /**
      * Drop one id from the corpus, never mind whether it was there.
      *
      * `remove` answers `false` for an id it never knew, which is not a failure
@@ -429,6 +421,14 @@ const make = (
       }
     };
 
+    /**
+     * One whole-corpus publication, through whichever door this host got. The
+     * span carries the engine kind so a reading of the ring says which one ran
+     * and how long it took there.
+     *
+     * A refused publication RETAINS the previous snapshot: known-stale
+     * cross-book findings beat an apparently clean project.
+     */
     const publishCorpus = (into: ObservabilityService | undefined = observability): void => {
       const done = into?.span("corpus.publish");
       try {

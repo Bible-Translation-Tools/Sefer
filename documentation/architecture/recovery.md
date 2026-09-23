@@ -86,7 +86,7 @@ keep the only other copy of the work.
 `src/app/ui/recovery/RecoveryBanner.tsx` is the surface, mounted at the top of
 the projects landing when a project is open, and exported so the project route
 can mount it too. It runs the check once per open project — keyed on the
-project's id, not on `shell.tick()`, because an edit cannot change the answer.
+project's id, not on any edit event, because an edit cannot change the answer.
 
 - **Keep** is `project.instantiate(bookId)` and then `recovery.restore`. The
   replay goes through `book.apply(changes, 'recovery', trustedBy('recovery'))`

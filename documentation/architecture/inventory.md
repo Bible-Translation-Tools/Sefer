@@ -47,7 +47,7 @@ Its limits, plainly:
 
 ## Where it is computed
 
-`ProjectAnalysis.inventory()` is memoised beside `findings()` and invalidated by the same `invalidateCaches()`, so it is recomputed when a publication lands and never on the keystroke path. The page reads it through `shell.tick()` like every other derived screen; it holds no subscription of its own (see [the application shell](shell.md), "The Solid/Book boundary").
+`ProjectAnalysis.inventory()` is memoised beside `findings()` and invalidated by the same `invalidateCaches()`, so it is recomputed when a publication lands and never on the keystroke path. The page reads it from the shell's `inventory` store, which a Publication replaces, like every other derived screen; it holds no subscription of its own (see [the application shell](shell.md), "The Solid/Book boundary").
 
 ## The page
 

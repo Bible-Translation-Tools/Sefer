@@ -71,8 +71,7 @@ The layer is provided in `src/app/workflows/stet.ts` (`withCatalog`), not in `sr
 
 This is the only genuinely new arithmetic, and it lives in `src/core/excerpts/excerpts.ts` because it is a fact about the project's text, not about the guide.
 
-- **`verseAnchor(analysis, ref)`** is the whole mapping: it walks the verse spans Onion's table of contents gives and answers with the source span of the verse the reference names. A bridge answers for every verse it spans, so a reference to `JUD 1:2` is found inside a `\v 1-2` the project happens to have — dropping it would be the one case where the reader most wants to see how the target differs.
-- **`refOccurrences(book, refs)`** is the feed: one **zero-width** occurrence at each verse of `refs` that this book actually has, in document order.
+- **`refOccurrences(book, refs)`** is the whole mapping, and the feed: it walks the verse spans Onion's table of contents gives (`verseSpans`), once per book, and answers with one **zero-width** occurrence at each verse of `refs` that this book actually has, in document order. A bridge answers for every verse it spans, so a reference to `JUD 1:2` is found inside a `\v 1-2` the project happens to have — dropping it would be the one case where the reader most wants to see how the target differs.
 
 Zero width is the honest span. A search hit knows which characters matched; a reference does not — the guide's offsets index into the guide's own reading, and this project may put the term elsewhere in the verse, or render it with another word entirely, which is the very thing the reviewer is here to judge. So the **target card carries no highlight** and the **source card carries the guide's**. The excerpt's `focus` still dims the verses either side, so the reference is still visually located.
 
@@ -180,7 +179,7 @@ resident twice on desktop, for a view a translator opens deliberately.
 | `src/routes/find.tsx` | Find only, plus the `?mode=stet` redirect. |
 | `src/core/stet/stet.ts` | Envelope schema, `Term`/`TermOccurrence`, the `StetCatalog` port. |
 | `src/core/stet/fixture.ts` | The committed guides as a layer, one dynamic chunk per locale. |
-| `src/core/excerpts/excerpts.ts` | `verseAnchor`, `refOccurrences` — the reference → project mapping. |
+| `src/core/excerpts/excerpts.ts` | `verseSpans`, `refOccurrences` — the reference → project mapping. |
 | `src/app/ui/excerpts/feed.ts` | `createExcerptFeed`, shared by Find and Key terms. |
 | `src/app/ui/excerpts/StetView.tsx` | The two-column view and the source/target pair. |
 | `src/app/ui/excerpts/MatchFormattingView.tsx` | The two block columns, the report badges, the confirm dialog. |

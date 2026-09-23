@@ -21,17 +21,18 @@ Wiring facts that carry meaning, not taste:
 
 The open `Project`, the focused book, the mode, the clipped chapter, the findings cursor and the status line live in one Solid context above the router. TanStack owns navigation, not lifetimes: a route match is destroyed on every navigation, and a Project owns Book lifetimes.
 
-`shell.unsaved(book)` is exactly `SaveCoordinator.dirty(book)` plus a `tick()` read for reactivity. It
-used to add a revision check of its own, because a book opened from disk had no baseline and so read
-dirty untouched; the shell now tells Save what disk holds instead, with `adopt` at focus ([save](review.md)).
+`shell.unsaved(book)` reads that book's row of the save-state store: `unsaved` when Save holds a
+baseline for it and `SaveCoordinator.dirty(book)` says the text differs. The row is computed when an
+event names the book, never during a render, because `dirty` can cost an engine hash. A book opened from
+disk has its baseline `adopt`ed at focus, so an untouched book never reads dirty ([save](review.md)).
 
 The context carries a stable handle — `useShellState()` (always available) and `useShell()` (only inside a `ShellGate`) — because a Solid 2 context value is read when the provider is created and cannot be swapped later.
 
 ## The Solid/Book boundary
 
-**One subscription per book, in `src/app/ui/BookEditor.tsx`, and nowhere else.** That component creates the `EditorView` over `book.state`, routes every transaction through `book.fromView`, and in its `book.changes` callback does three things: writes a stamp signal, hands the editor's own `Analysis` to `ProjectAnalysis.supply` (so a keystroke costs no second wasm call), and calls `shell.bump()`.
+**One subscription per book, in `src/app/ui/BookEditor.tsx`, and nowhere else.** That component creates the `EditorView` over `book.state`, routes every transaction through `book.fromView`, and in its `book.changes` callback does three things: writes a stamp signal, hands the editor's own `Analysis` to `ProjectAnalysis.supply` (so a keystroke costs no second wasm call), and calls `shell.changed({ kind: "book.apply", books: [book.id] })`.
 
-`bump()` increments one signal. Every derived screen — the census, the dirty markers, the findings list, the stale badges — reads `shell.tick()` and re-reads its module. No other component subscribes to a Book, and nothing outside that file holds text.
+`changed` is the one door into the shell's stores (`src/app/shellStores.ts`). Each `ShellEvent` (`src/app/shellEvent.ts`, a closed union) names the books it moved; the coordinator recomputes those books' rows — save state, stamp, undo depth — and a Publication replaces the findings, the census and the inventory. Every derived screen reads a store row, so an edit in one book leaves every other book's readers asleep. No other component subscribes to a Book, and nothing outside that file holds text. (This replaced a single `bump()`/`tick()` counter that woke every reader on every event; see `planning/01-discussing/ui-state-stores-2026-09-16.md`.)
 
 Mode and chapter are dispatched into the canonical state through a compartment. Neither is a document change, so `fromView` ignores them: a projection is presentation and a clip is a view choice.
 

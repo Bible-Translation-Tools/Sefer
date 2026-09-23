@@ -357,7 +357,7 @@ export function ImportHub(props: { readonly onImported: () => void }) {
       .catch((cause: unknown) => setCloneNote(describe(cause)));
   };
 
-  /** Exposed so the catalogue's Download column can reuse the same flow. */
+  /** Clone a remote repository into a new project under the projects root. */
   const clone = (url: string): void => {
     if (url.trim() === "") return;
     const name = lastSegment(url.replace(/\.git$/u, ""));

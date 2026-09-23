@@ -478,11 +478,6 @@ function Find() {
   };
 
   /**
-   * An accepted edit, and the search re-run over what the text now says. The
-   * feed does the waiting — a book's corpus registration is a scheduler pass
-   * behind its text — and calls this when the project has republished.
-   */
-  /**
    * What the multibuffer is fed, whichever scope answered.
    *
    * The reference scope searches somebody else's book and shows YOURS: its
@@ -499,6 +494,9 @@ function Find() {
   const feed = createExcerptFeed({
     hits: feedHits,
     name: "find",
+    // An accepted edit, and the search re-run over what the text now says. The
+    // feed does the waiting — a book's corpus registration is a scheduler pass
+    // behind its text — and calls this when the project has republished.
     onEdited: () => {
       void run();
     },

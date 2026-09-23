@@ -734,12 +734,6 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
     }),
 
     // ---------------------------------------------------------------------
-    // Format. One `book.apply(…, 'format')` per book, so a formatted book is
-    // one Undo step and a formatted project is one per book. The edits are
-    // Onion's own (`Fixes.formatBook`); Sefer has no formatter.
-    // ---------------------------------------------------------------------
-
-    // ---------------------------------------------------------------------
     // Match formatting, from wherever the reader is.
     //
     // It lived only on `/terms?view=format`, which is a screen you go to — and
@@ -841,6 +835,12 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
         }),
       ];
     })(),
+
+    // ---------------------------------------------------------------------
+    // Format. One `book.apply(…, 'format')` per book, so a formatted book is
+    // one Undo step and a formatted project is one per book. The edits are
+    // Onion's own (`Fixes.formatBook`); Sefer has no formatter.
+    // ---------------------------------------------------------------------
 
     registerCommand({
       id: "format.book",
