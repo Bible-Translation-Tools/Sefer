@@ -51,7 +51,9 @@ export function AccountCard(props: { readonly account: Account }) {
         when={props.account.host}
         fallback={
           <p class="text-small text-on-surface-tertiary" data-cloud="unconfigured">
-            {t("Cloud sync is not configured for this build: set VITE_SEFER_GITEA_WEB_HOST.")}
+            {t(
+              "Cloud sync has no server for this build. Set the WACS endpoint on the Network card in Settings.",
+            )}
           </p>
         }
       >
