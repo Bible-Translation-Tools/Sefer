@@ -27,7 +27,7 @@ import {
 } from "./kernel";
 import type { Addressed, OwnedIndex, ResolvedOwnedTarget } from "./owned";
 import type { PlanSpan } from "./plan";
-import { note, noteTr, type Verdict as TraceVerdict } from "./trace";
+import { note, noteTr, type TraceVerdict } from "./trace";
 
 function spaceBefore(state: EditorState, at: number): string {
   const next = state.doc.sliceString(at, at + 1);

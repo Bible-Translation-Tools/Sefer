@@ -29,7 +29,7 @@ import {
 } from "./editorState";
 import { guardedEnter, setBlockMarker } from "./input";
 import { insertFootnote, insertParagraph, insertPoetry, insertVerse } from "./insert";
-import { traceFor, type Verdict } from "./instrument";
+import { traceFor, type TraceVerdict } from "./instrument";
 import type { ChangeRule, TransactionRule } from "./kernel";
 import { MARKUP_TOKEN_KINDS } from "./mapping";
 import { HOOK, PHASES, type ParserPort, type PhaseRule, type RuleName } from "./phases";
@@ -127,7 +127,7 @@ export const readingLayer: Extension = [
  * ranges — which is not itself a refusal (the rest of the change lands), so it
  * reads as `passed` with the ranges as detail.
  */
-const changeVerdict = (out: boolean | readonly number[]): [Verdict, string | undefined] =>
+const changeVerdict = (out: boolean | readonly number[]): [TraceVerdict, string | undefined] =>
   out === true
     ? ["passed", undefined]
     : out === false
@@ -139,7 +139,7 @@ const changeVerdict = (out: boolean | readonly number[]): [Verdict, string | und
  * handed it back (passed), returned nothing at all (refused — CodeMirror drops
  * the transaction), or returned something else (rewrote).
  */
-const transactionVerdict = (tr: Transaction, out: unknown): [Verdict, string | undefined] =>
+const transactionVerdict = (tr: Transaction, out: unknown): [TraceVerdict, string | undefined] =>
   out === tr
     ? ["passed", undefined]
     : Array.isArray(out) && out.length === 0

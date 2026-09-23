@@ -53,7 +53,7 @@ import {
   type TraceEmit,
   type TraceEntry,
   type Tracer,
-  type Verdict as TraceVerdict,
+  type TraceVerdict,
 } from "./core/instrument";
 
 /**

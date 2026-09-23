@@ -40,7 +40,7 @@ import type {
 } from "./fold";
 import { Lines, NO_LINES } from "./lineTable";
 import {
-  type Verdict,
+  type Mapping,
   containsBlocks,
   isMapped,
   isPoetryBlock,
@@ -196,7 +196,7 @@ export function buildStructure(
       blockLast.push(lastLine);
       continue;
     }
-    const verdict: Verdict = facts.row.verdict;
+    const verdict: Mapping = facts.row.verdict;
     if (!isMapped(verdict) || verdict.class !== "char") continue;
     if (!wanted(facts.from, facts.to) || at < 0) continue;
     const node = new NodeView(cst.tree, facts.id);

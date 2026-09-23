@@ -38,12 +38,12 @@ import { EditorState, Facet, type Transaction } from "@codemirror/state";
 import { onDerived } from "./timing";
 
 /** The spike's vocabulary, unchanged: what a rule decided about a keystroke. */
-export type Verdict = "refused" | "rewrote" | "moved" | "consumed" | "declined" | "passed";
+export type TraceVerdict = "refused" | "rewrote" | "moved" | "consumed" | "declined" | "passed";
 
 /** What a rule says about itself, in its own words. */
 export interface TraceStep {
   rule: string;
-  verdict: Verdict;
+  verdict: TraceVerdict;
   detail?: string;
 }
 
@@ -65,7 +65,7 @@ export interface TraceEntry {
   /** The phase for a stage ("admission" …); "" for everything else. */
   readonly phase: string;
   readonly name: string;
-  readonly verdict: Verdict;
+  readonly verdict: TraceVerdict;
   readonly detail?: string;
   readonly ms: number;
   /** A monotonic step counter, so entries from several traces still order. */
@@ -98,7 +98,7 @@ export interface TraceSummary {
 }
 
 /** The closer a frame hands back. Ignored if the rule noted its own verdict. */
-export type CloseFrame = (verdict: Verdict, detail?: string) => void;
+export type CloseFrame = (verdict: TraceVerdict, detail?: string) => void;
 
 export interface Trace {
   readonly seq: number;
@@ -191,7 +191,7 @@ interface Frame {
   kind: FrameKind;
   phase: string;
   name: string;
-  verdict: Verdict | null;
+  verdict: TraceVerdict | null;
   detail: string | undefined;
   started: number;
   record: (entry: TraceEntry) => void;
@@ -230,7 +230,7 @@ export const makeTracer = (emit: Emitter | null): Tracer => ({
       kind: EntryKind,
       phase: string,
       name: string,
-      verdict: Verdict,
+      verdict: TraceVerdict,
       detail: string | undefined,
       ms: number,
       record: ((entry: TraceEntry) => void) | null,

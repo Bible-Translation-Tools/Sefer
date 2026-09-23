@@ -50,15 +50,15 @@ export interface NodeShape {
 
 export type UnmappedKind = "table" | "sidebar" | "needs-ruling" | "undecided";
 
-export type Verdict = { class: ClassKey } | { unmapped: UnmappedKind; why: string };
+export type Mapping = { class: ClassKey } | { unmapped: UnmappedKind; why: string };
 
-export const isMapped = (v: Verdict): v is { class: ClassKey } => "class" in v;
+export const isMapped = (v: Mapping): v is { class: ClassKey } => "class" in v;
 
 export interface Row<S> {
   id: string;
   kinds?: readonly number[];
   when?: (s: S) => boolean;
-  verdict: Verdict;
+  verdict: Mapping;
   set?: OwnedSetName;
   line?: true;
   block?: true;
@@ -68,9 +68,9 @@ export interface Row<S> {
 
 export type AnyRow = Row<TokenShape> | Row<NodeShape>;
 
-const cls = (c: ClassKey): Verdict => ({ class: c });
+const cls = (c: ClassKey): Mapping => ({ class: c });
 
-const unmapped = (unmappedKind: UnmappedKind, why: string): Verdict => ({
+const unmapped = (unmappedKind: UnmappedKind, why: string): Mapping => ({
   unmapped: unmappedKind,
   why,
 });
@@ -503,7 +503,7 @@ export function rowForNode(n: NodeShape): Row<NodeShape> {
   return row;
 }
 
-const classify = (t: TokenShape): Verdict => rowForToken(t).verdict;
+const classify = (t: TokenShape): Mapping => rowForToken(t).verdict;
 
 export function notePartOf(t: TokenShape): number {
   const v = classify(t);

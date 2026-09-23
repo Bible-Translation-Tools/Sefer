@@ -24,7 +24,7 @@ import {
 } from "./instrument";
 
 export { note, noteTr, tracing } from "./instrument";
-export type { TraceStep, Verdict } from "./instrument";
+export type { TraceStep, TraceVerdict } from "./instrument";
 
 /**
  * One decision, flat. `docLength`/`head` are the trace's — the state the
