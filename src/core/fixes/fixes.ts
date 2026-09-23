@@ -18,7 +18,7 @@
 //   preview  the analysis must describe the Book's text EXACTLY
 //            (`describesExactly`) and must be the analysis the finding came
 //            from (`engine` hash + length).
-//   apply    the Book's revision must still be the one the preview stamped.
+//   applyFix the Book's revision must still be the one the preview stamped.
 //
 // Edits go in through `book.apply(changes, 'fix', trustedBy('fix'))`: a fix is
 // a trusted origin, so it bypasses the keyboard guards the way a fix-it does,
@@ -43,7 +43,7 @@ import type { Change, SourceStamp } from "../source/source";
 /**
  * One offered repair, resolved into Sefer's own vocabulary and stamped with
  * the text it was computed against. Hold it across a confirmation dialog if
- * you like — `apply` refuses it once the Book has moved on.
+ * you like — `applyFix` refuses it once the Book has moved on.
  */
 export interface FixPreview {
   readonly finding: Finding;
@@ -161,7 +161,7 @@ const staleRefusal = (book: Book, previewed: SourceStamp, current: SourceStamp):
  * that would break structure is refused by the rules rather than by a check in
  * this module.
  */
-export const apply = (fix: FixPreview, book: Book): Result.Result<Receipt, Refusal> => {
+export const applyFix = (fix: FixPreview, book: Book): Result.Result<Receipt, Refusal> => {
   const current = book.source().stamp;
   if (current.revision !== fix.stamp.revision)
     return Result.fail(staleRefusal(book, fix.stamp, current));

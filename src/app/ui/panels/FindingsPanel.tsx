@@ -336,7 +336,7 @@ export function FindingsPanel() {
   const apply = (fix: Fixes.FixPreview): void => {
     const book = shell.services.seated(fix.finding.bookId);
     if (book === undefined) return;
-    const applied = Fixes.apply(fix, book);
+    const applied = Fixes.applyFix(fix, book);
     setNote(
       Result.isSuccess(applied)
         ? t("applied {label}", { label: fix.label })

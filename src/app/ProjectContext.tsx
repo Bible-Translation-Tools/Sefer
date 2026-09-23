@@ -1180,7 +1180,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       report(t("no fix: {reason}", { reason: previewed.failure.reason }));
       return;
     }
-    const applied = Fixes.apply(previewed.success, book);
+    const applied = Fixes.applyFix(previewed.success, book);
     report(
       Result.isSuccess(applied)
         ? t("applied {label}", { label: previewed.success.label })
