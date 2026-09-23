@@ -183,7 +183,7 @@ const TOC2 = /^\\toc2[ \t]+(.+)$/m;
  * that would answer for every translation is the translation's own front
  * matter, and this is it.
  */
-export const bookName = (text: string, bookId: BookId): string => {
+const bookName = (text: string, bookId: BookId): string => {
   const header = HEADER.exec(text) ?? TOC2.exec(text);
   const found = header?.[1]?.trim();
   return found === undefined || found === "" ? bookId : found;
@@ -464,7 +464,7 @@ interface VerseSpan {
  * them, and it is here rather than in the engine because "how much text does
  * this verse own" is a display question — the anchor is the fact.
  */
-export const verseSpans = (analysis: Analysis): readonly VerseSpan[] => {
+const verseSpans = (analysis: Analysis): readonly VerseSpan[] => {
   const chapters = analysis.dish.toc.chapters();
   const ends = new Map<number, number>();
   for (const chapter of chapters) ends.set(chapter.number, chapter.to);
@@ -722,7 +722,7 @@ const buildExcerpt = (
  * the book — rather than being dropped, because a match the reader can see is
  * a match the list must show.
  */
-export const excerptsOf = (book: BookText, hits: readonly Occurrence[]): readonly Excerpt[] => {
+const excerptsOf = (book: BookText, hits: readonly Occurrence[]): readonly Excerpt[] => {
   if (hits.length === 0) return [];
   const spans = verseSpans(book.analysis);
   const name = bookName(book.text, book.bookId);
@@ -832,7 +832,7 @@ export const group = (
  * found inside a `\v 1-2` the project happens to have — dropping it would be
  * the one case where the reader most wants to see how the target differs.
  */
-export const verseAnchor = (analysis: Analysis, ref: Ref): Mark | undefined => {
+const verseAnchor = (analysis: Analysis, ref: Ref): Mark | undefined => {
   if (ref.verse === undefined) return undefined;
   const wanted = ref.verse;
   for (const span of verseSpans(analysis))

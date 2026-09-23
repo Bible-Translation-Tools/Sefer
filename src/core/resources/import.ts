@@ -43,9 +43,9 @@ export interface Staged {
   readonly files: readonly string[];
 }
 
-export type ImportRefusal = "Unreadable" | "Unclassified" | "InvalidBook" | "Io";
+type ImportRefusal = "Unreadable" | "Unclassified" | "InvalidBook" | "Io";
 
-export class ImportError extends Data.TaggedError("ImportError")<{
+class ImportError extends Data.TaggedError("ImportError")<{
   readonly reason: ImportRefusal;
   readonly description: string;
 }> {}

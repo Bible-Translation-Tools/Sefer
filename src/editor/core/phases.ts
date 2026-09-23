@@ -28,7 +28,7 @@ export interface ParserPort {
   chapterCount: (doc: string) => number;
 }
 
-export const PHASE_ORDER = ["admission", "normalization", "protection", "settlement"] as const;
+const PHASE_ORDER = ["admission", "normalization", "protection", "settlement"] as const;
 
 export type Phase = (typeof PHASE_ORDER)[number];
 
@@ -101,4 +101,4 @@ export const PHASES = [
 
 export type RuleName = (typeof PHASES)[number]["name"];
 
-export const RULE_NAMES: readonly RuleName[] = PHASES.map((r) => r.name);
+const RULE_NAMES: readonly RuleName[] = PHASES.map((r) => r.name);

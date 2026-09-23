@@ -24,7 +24,7 @@ import {
 import { localized, type ProjectMetadata } from "../../../core/resources/projectMetadata";
 
 export { CANON, testamentOf, parseReference };
-export type { CanonicalBook, Testament, Reference, ReferenceLookup };
+export type { Testament, ReferenceLookup };
 
 const BY_ID = new Map(CANON.map((book) => [book.id, book]));
 

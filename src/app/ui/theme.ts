@@ -17,7 +17,7 @@
  * a page that flashes light before turning dark is the thing this avoids.
  */
 
-export const THEMES = ["system", "light", "dark"] as const;
+const THEMES = ["system", "light", "dark"] as const;
 
 export type Theme = (typeof THEMES)[number];
 
@@ -29,11 +29,11 @@ export interface Appearance {
   readonly zoom: number;
 }
 
-export const DEFAULT_APPEARANCE: Appearance = { theme: "system", fontSize: 16, zoom: 100 };
+const DEFAULT_APPEARANCE: Appearance = { theme: "system", fontSize: 16, zoom: 100 };
 
 /** The bounds the widgets offer and the cache is clamped to. */
-export const FONT_SIZE_RANGE = { min: 12, max: 24 } as const;
-export const ZOOM_RANGE = { min: 50, max: 200 } as const;
+const FONT_SIZE_RANGE = { min: 12, max: 24 } as const;
+const ZOOM_RANGE = { min: 50, max: 200 } as const;
 
 /**
  * The scripture surface's own size, in px, and its bounds.
@@ -64,12 +64,12 @@ export const asTheme = (value: string): Theme =>
 const clamp = (value: number, low: number, high: number): number =>
   Number.isFinite(value) ? Math.min(high, Math.max(low, Math.round(value))) : low;
 
-export const asFontSize = (value: number): number =>
+const asFontSize = (value: number): number =>
   clamp(value, FONT_SIZE_RANGE.min, FONT_SIZE_RANGE.max);
 
-export const asZoom = (value: number): number => clamp(value, ZOOM_RANGE.min, ZOOM_RANGE.max);
+const asZoom = (value: number): number => clamp(value, ZOOM_RANGE.min, ZOOM_RANGE.max);
 
-export const asEditorFontSize = (value: number): number =>
+const asEditorFontSize = (value: number): number =>
   clamp(value, EDITOR_FONT_SIZE_RANGE.min, EDITOR_FONT_SIZE_RANGE.max);
 
 /**
@@ -92,7 +92,7 @@ export const applyEditorFontSize = (px: number): void => {
 };
 
 /** The cached scripture size, or the default. */
-export const cachedEditorFontSize = (): number => {
+const cachedEditorFontSize = (): number => {
   try {
     const held = Number(globalThis.localStorage?.getItem(EDITOR_CACHE_KEY));
     return Number.isFinite(held) && held > 0 ? asEditorFontSize(held) : DEFAULT_EDITOR_FONT_SIZE;
@@ -130,7 +130,7 @@ const cache = (appearance: Appearance): void => {
 };
 
 /** The cached appearance, or the defaults. Shape is re-checked, not trusted. */
-export const cachedAppearance = (): Appearance => {
+const cachedAppearance = (): Appearance => {
   try {
     const held: unknown = JSON.parse(globalThis.localStorage?.getItem(CACHE_KEY) ?? "null");
     if (typeof held !== "object" || held === null) return DEFAULT_APPEARANCE;

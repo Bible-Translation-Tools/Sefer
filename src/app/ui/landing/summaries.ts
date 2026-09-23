@@ -59,7 +59,7 @@ const isUsfm = (path: string): boolean => path.toLowerCase().endsWith(".usfm");
  * zero book count, because a project that has become unreadable is exactly the
  * thing someone needs to see on this screen.
  */
-export const summarize = (
+const summarize = (
   root: string,
   lastOpened: string | undefined,
   fixture: boolean,
@@ -95,7 +95,7 @@ export const summarize = (
   });
 
 /** A summary as the index stores it: the four facts, minus how we drew them. */
-export const asRow = (summary: ProjectSummary): ProjectRow => ({
+const asRow = (summary: ProjectSummary): ProjectRow => ({
   root: summary.root,
   name: summary.name,
   language: summary.language,

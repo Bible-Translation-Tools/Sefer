@@ -407,7 +407,7 @@ export const funnelFor = (book: EditorBook): Funnel => ({
  * the user opens. Core cannot import CodeMirror, so this is how the editor
  * layer reaches Project — one function, passed in at composition.
  */
-export const seatFor =
+const seatFor =
   (options: EditorBookOptions): Seat =>
   (plain: Book): Seated =>
     editorBook(plain, options);

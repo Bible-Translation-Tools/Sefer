@@ -12,138 +12,35 @@
  */
 
 // The engine seam: how a state reaches Galley (see core/analyzer.ts).
-export { analyzeCount, analyzed, analyzer, type Analyze } from "./core/analyzer";
+export { analyzer } from "./core/analyzer";
 
 // The assembled editor.
-export {
-  RULE_NAMES,
-  commandsLayer,
-  enginePort,
-  historyLayer,
-  install,
-  readingLayer,
-  rulesLayer,
-  usfmEditor,
-  usfmEditorHeadless,
-  usfmKeys,
-  viewLayer,
-  type ClipRange,
-  type EditorOptions,
-  type RuleName,
-  type ViewOptions,
-} from "./core/compose";
-export {
-  HOOK,
-  PHASES,
-  PHASE_ORDER,
-  type ParserPort,
-  type Phase,
-  type PhaseRule,
-} from "./core/phases";
+export { commandsLayer, readingLayer, viewLayer } from "./core/compose";
 
 // Structured entry: the named insert gestures, and the front matter card.
-export { EDITOR_ACTIONS, actionCommand, type EditorAction } from "./core/actions";
-export {
-  insertBlock,
-  insertFootnote,
-  insertParagraph,
-  insertPoetry,
-  insertVerse,
-  nextPoetryLevel,
-  nextVerseNumber,
-  wordBoundaryAt,
-} from "./core/insert";
-export {
-  focusFrontMatter,
-  frontMatterCard,
-  frontMatterRows,
-  type FrontRow,
-} from "./core/frontmatter";
+export { type EditorAction } from "./core/actions";
+export { frontMatterCard } from "./core/frontmatter";
 
 // Policy as data: which class paints how, under which projection.
-export { PROJECTIONS, assignment, type AssignmentDelta } from "./core/registry";
-export {
-  modeFacet,
-  newlineIsABreak,
-  trusted,
-  type GetStructure,
-  type Mode,
-  type PaintPort,
-} from "./core/kernel";
+export { assignment } from "./core/registry";
+export { modeFacet } from "./core/kernel";
 
 // State: structure, plan, paint, decorations, render window.
-export {
-  PAINT_PORT,
-  caretClipAt,
-  decoField,
-  docText,
-  drawsAt,
-  isHiddenSpan,
-  optsFacet,
-  paintAt,
-  pickedChapter,
-  planAt,
-  structureAt,
-  structureField,
-  type Built,
-} from "./core/editorState";
-export {
-  RENDER_MARGIN,
-  renderRangeAt,
-  renderRangeField,
-  renderWindow,
-  setRenderRange,
-  widen,
-  type RenderRange,
-} from "./core/render";
-export {
-  anchorFrom,
-  chapterContaining,
-  editableClipAt,
-  pickField,
-  pullSelectionsIntoTheClip,
-  setPick,
-  visibleClipAt,
-  type Extents,
-} from "./core/clip";
-export {
-  EMPTY_STRUCTURE,
-  borrowedStructure,
-  isBlankLine,
-  isDesignatorLine,
-  lineIndexAt,
-  opensAParagraph,
-  paintsItsOwnLine,
-  parseStructure,
-  type Block,
-  type BlockTable,
-  type ChapterRow,
-  type DocLine,
-  type DocStructure,
-  type LineTable,
-  type NoteRange,
-  type VerseRow,
-  type WordRange,
-} from "./core/docStructure";
+export { structureAt } from "./core/editorState";
+export { anchorFrom } from "./core/clip";
+export { type ChapterRow } from "./core/docStructure";
 
 // The editor-backed Book (editor-and-save §1.2) and the port other surfaces
 // submit through (§3.5).
-export { editorBook, funnelFor, seatFor, type EditorBook, type EditorBookOptions } from "./book";
-export { changesOf, fromCanonical, type Funnel, type Receive } from "./funnel";
+export { editorBook, type EditorBook } from "./book";
 
 // Satellites and windows (§3.9).
-export { openWindow, type ClipWindow, type WindowOptions } from "./window";
 export {
   clippedToScope,
-  collapseOutside,
   markedRanges,
   reclip,
   mountSatellite,
-  repaintMarks,
-  satelliteRange,
-  type MarkedRange,
   type Satellite,
-  type SatelliteOptions,
 } from "./recipes/satellite";
 
 // Doing something to the book without moving the page (core/scroll.ts).
@@ -152,100 +49,34 @@ export { withoutScrolling } from "./core/scroll";
 // Blocks a translator still has to fill: the ghost, and the set behind it.
 export {
   annotateEmptyBlocks,
-  annotatingEmptyBlocks,
-  blockIsEmpty,
   blockNamer,
   emptyBlocks,
   showEmptyBlocks,
-  type BlockNamer,
 } from "./recipes/emptyBlocks";
 
 // Views (§3.6).
 export { pickChapter, projectionFor, type ProjectionName } from "./views";
 
 // The read-only reference pane: another resource's book, same projection.
-export { mountReference, type ReferenceMount, type ReferenceOptions } from "./recipes/reference";
-export {
-  pairingHere,
-  pairingThere,
-  showBlockPairs,
-  showPaired,
-  pairingBlocks,
-  type PairedRange,
-} from "./recipes/pairing";
+export { mountReference, type ReferenceMount } from "./recipes/reference";
+export { pairingHere, showBlockPairs, type PairedRange } from "./recipes/pairing";
 
 // Arriving somewhere: the brief mark that says the jump landed.
-export { flash, flashing, type FlashRange } from "./recipes/flash";
+export { flash, flashing } from "./recipes/flash";
 
 // Diagnostics, sink 1 (editor-and-save §2).
-export {
-  applyFix,
-  corpusFindings,
-  findings,
-  hiddenByPaint,
-  setCorpusFindings,
-  showCorpusFindings,
-  sousField,
-  usfmLinter,
-  type CorpusFinding,
-  type Finding,
-  type HiddenTest,
-} from "./recipes/lint";
-export { HOVER_GRACE_MS, lintHoverGrace } from "./recipes/lintHover";
-export {
-  chapterInView,
-  chapterList,
-  watchLocation,
-  type ChapterName,
-  type Where,
-} from "./recipes/whereAmI";
-export { editingNote, noteBookIs, noteEditing } from "./recipes/noteEditor";
+export { showCorpusFindings, usfmLinter, type CorpusFinding } from "./recipes/lint";
+export { lintHoverGrace } from "./recipes/lintHover";
+export { watchLocation } from "./recipes/whereAmI";
+export { noteBookIs, noteEditing } from "./recipes/noteEditor";
 
 // Clipboard and the attribute popover.
-export {
-  COPY_PROFILES,
-  copyFold,
-  copyProfile,
-  copyProfileFacet,
-  type CopyProfile,
-  type EmitRule,
-} from "./recipes/copy";
-export { alignedWordTooltip, attrSpans, type AttrSpan } from "./recipes/attrs";
 
 // Instruments. `core/instrument.ts` is the one instrument for the pipeline —
 // one trace per transaction, the stages in order — and `observabilityTracer`
 // is the one bridge into Sefer's ring. `core/timing.ts` is the local span ring
 // the keystroke meter attributes time with; `core/trace.ts` is the flat
 // per-event adapter over the same instrument.
-export { keystrokeMeter, type Measured, type Meter } from "./core/meter";
-export { onSpan, recent, span, summary, type TimingSpan } from "./core/timing";
-export {
-  clearRefusal,
-  dumpTrace,
-  flushTrace,
-  lastRefusal,
-  localTracer,
-  makeTracer,
-  traceFor,
-  tracer,
-  traces,
-  tracing,
-  type Emitter,
-  type Trace,
-  type TraceEmit,
-  type TraceEntry,
-  type TraceSummary,
-  type Tracer,
-} from "./core/instrument";
-export {
-  ringSink,
-  sinkTracer,
-  traceSink,
-  type TraceEvent,
-  type TraceSink,
-  type TraceStep,
-  type Verdict,
-} from "./core/trace";
-export { annotateRepaint, gestureTrace, observabilityTracer } from "./observability";
+export { keystrokeMeter } from "./core/meter";
+export { annotateRepaint, gestureTrace } from "./observability";
 export { annotateOpen } from "./core/instrument";
-export { inspect } from "./core/inspect";

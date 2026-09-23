@@ -131,7 +131,7 @@ export const fromBurrito = (metadata: BurritoMetadata): ProjectMetadata => {
  * for everyone else. That is the correct answer and not a workaround: a
  * one-language name IS available in exactly one locale.
  */
-export const fromResourceContainer = (manifest: ResourceContainerManifest): ProjectMetadata => {
+const fromResourceContainer = (manifest: ResourceContainerManifest): ProjectMetadata => {
   const core = manifest.dublin_core;
   const locale = core.language.identifier;
   const bookNames: Record<string, LocalizedText> = {};
@@ -155,7 +155,7 @@ export const fromResourceContainer = (manifest: ResourceContainerManifest): Proj
   };
 };
 
-export class MetadataError extends Data.TaggedError("MetadataError")<{
+class MetadataError extends Data.TaggedError("MetadataError")<{
   /** `Syntax` — not JSON, or not YAML. `Shape` — parsed, but not the format. */
   readonly reason: "Syntax" | "Shape";
   readonly description: string;

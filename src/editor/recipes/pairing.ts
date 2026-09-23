@@ -93,8 +93,7 @@ const pairingField = StateField.define<boolean>({
 });
 
 /** Is this state drawing them? */
-export const pairingBlocks = (state: EditorState): boolean =>
-  state.field(pairingField, false) ?? false;
+const pairingBlocks = (state: EditorState): boolean => state.field(pairingField, false) ?? false;
 
 /**
  * Turn the marks on or off on a live view.

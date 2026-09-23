@@ -61,14 +61,7 @@ export type {
   VerseRow,
   WordRange,
 } from "./fold";
-export { NO_BLOCKS } from "./blockTable";
-export {
-  NO_LINES,
-  isBlankLine,
-  isDesignatorLine,
-  opensAParagraph,
-  paintsItsOwnLine,
-} from "./lineTable";
+export { isBlankLine, isDesignatorLine, opensAParagraph, paintsItsOwnLine } from "./lineTable";
 
 export interface DocStructure {
   revision: number;
@@ -81,7 +74,7 @@ export interface DocStructure {
   analysis: Analysis | null;
 }
 
-export const EMPTY_STRUCTURE: DocStructure = {
+const EMPTY_STRUCTURE: DocStructure = {
   revision: 0,
   lines: NO_LINES,
   blocks: NO_BLOCKS,
@@ -370,7 +363,7 @@ export function lineIndexAt(s: DocStructure, pos: number): number {
  * caller that holds text and an analyzer but no `EditorState` (a satellite's
  * first paint, a probe, a fix preview).
  */
-export function parseStructure(doc: string, analyze: Analyze): DocStructure {
+function parseStructure(doc: string, analyze: Analyze): DocStructure {
   // The spike took a `clip` here and handed it to the engine, which ignored
   // it; it never reached `buildStructure`. Dropped rather than carried as a
   // parameter that does nothing.
@@ -378,7 +371,7 @@ export function parseStructure(doc: string, analyze: Analyze): DocStructure {
 }
 
 let lastScanMs = 0;
-export const structureMs = () => lastScanMs;
+const structureMs = () => lastScanMs;
 
 const docCache = new WeakMap<EditorState, string>();
 

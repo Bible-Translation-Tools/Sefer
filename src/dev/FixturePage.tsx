@@ -54,7 +54,7 @@ const bootLabel = (result: Composition["boot"]): string =>
 
 let held: DevFixtureState | undefined;
 
-export const fixtureSession = async (
+const fixtureSession = async (
   composition: Composition,
   keep: boolean,
 ): Promise<DevFixtureState> => {

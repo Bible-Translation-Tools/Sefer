@@ -73,7 +73,7 @@ const normalise = (specs: readonly PanelSpec[]): readonly number[] => {
 const clamp = (value: number, low: number, high: number): number =>
   Math.min(high, Math.max(low, value));
 
-export interface ResizableRootProps {
+interface ResizableRootProps {
   readonly orientation?: "horizontal" | "vertical";
   readonly onSizesChange?: (sizes: readonly number[]) => void;
   readonly class?: ClassValue;
@@ -160,7 +160,7 @@ function Root(props: ResizableRootProps) {
   );
 }
 
-export interface ResizablePanelProps {
+interface ResizablePanelProps {
   /** A fraction of 1. Panels that name none share what is left, equally. */
   readonly initialSize?: number;
   readonly minSize?: number;
@@ -188,7 +188,7 @@ function Panel(props: ResizablePanelProps) {
   );
 }
 
-export interface ResizableHandleProps {
+interface ResizableHandleProps {
   /** Names the divider for a screen reader. */
   readonly label?: string;
   readonly class?: ClassValue;

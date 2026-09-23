@@ -226,7 +226,7 @@ export function backspaceAt(ix: OwnedIndex, pos: number): Verdict {
   return whole("delete.usfm.owned", "own-whole", `take own(${t.set}) whole`);
 }
 
-export function deleteAt(ix: OwnedIndex, pos: number): Verdict {
+function deleteAt(ix: OwnedIndex, pos: number): Verdict {
   const a = ix.addressedForward(pos);
   const t = a.target;
   const onePaint = (say: string): Verdict =>
@@ -346,7 +346,7 @@ export function mergeParagraphBackwards(structureAt: GetStructure): StateCommand
   };
 }
 
-export interface RangePlan {
+interface RangePlan {
   readonly lo: number;
   readonly hi: number;
   readonly keep: readonly PlanSpan[];
@@ -437,7 +437,7 @@ const gapsAround = (lo: number, hi: number, keep: readonly PlanSpan[]) => {
   return out;
 };
 
-export type RangeAct =
+type RangeAct =
   | { readonly act: "pass"; readonly say: string }
   | { readonly act: "refuse"; readonly say: string }
   | {
@@ -463,7 +463,7 @@ const RANGE_TRACED: Record<RangeAct["act"], TraceVerdict> = {
   rewrite: "rewrote",
 };
 
-export function rangeVerdict(
+function rangeVerdict(
   plan: RangePlan,
   asked: { from: number; to: number },
   pasted: string | null,

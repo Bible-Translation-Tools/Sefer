@@ -216,7 +216,7 @@ export const compare = (book: Book, baseline: BaselineLike): readonly Hunk[] => 
  * length is compared too because that is the SourceStamp rule (length never
  * identifies text by itself, but a mismatch is proof of movement).
  */
-export const stale = (hunk: Hunk, book: Book): boolean => {
+const stale = (hunk: Hunk, book: Book): boolean => {
   const stamp = book.source().stamp;
   return (
     hunk.bookId !== book.id ||

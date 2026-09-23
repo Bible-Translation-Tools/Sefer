@@ -30,7 +30,7 @@ import {
 } from "@codemirror/view";
 
 /** How long the popover survives after the pointer has left it and its range. */
-export const HOVER_GRACE_MS = 400;
+const HOVER_GRACE_MS = 400;
 
 /** How far outside the popover still counts as "on" it, in pixels. */
 const EDGE = 6;

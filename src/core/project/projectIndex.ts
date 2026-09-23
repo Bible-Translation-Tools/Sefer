@@ -42,7 +42,7 @@ import { joinPath } from "../fileSystem/path";
  * project. A leading dot so the folder scan below can skip it by one rule
  * rather than by name, and so no project scan mistakes it for content.
  */
-export const PROJECT_INDEX_FILE = ".sefer/projects.json";
+const PROJECT_INDEX_FILE = ".sefer/projects.json";
 
 const Row = Schema.Struct({
   /** The project's root path — its identity in the index. */
@@ -87,7 +87,7 @@ const Index = Schema.Struct({ v: Schema.Literal(INDEX_VERSION), rows: Schema.Arr
 
 const decodeIndex = Schema.decodeUnknownResult(Index);
 
-export const projectIndexPath = (projectsRoot: string): string =>
+const projectIndexPath = (projectsRoot: string): string =>
   joinPath(projectsRoot, PROJECT_INDEX_FILE);
 
 /**
@@ -96,7 +96,7 @@ export const projectIndexPath = (projectsRoot: string): string =>
  * to a reader — nothing is known — and the repair below is what fixes it. A
  * landing screen must not refuse to draw because a JSON file went bad.
  */
-export const readProjectIndex = (
+const readProjectIndex = (
   fileSystem: FileSystem.FileSystem,
   projectsRoot: string,
 ): Effect.Effect<readonly ProjectRow[]> =>
@@ -114,7 +114,7 @@ export const readProjectIndex = (
   });
 
 /** Rewrites the whole index, atomically. Small enough that a patch would be theatre. */
-export const writeProjectIndex = (
+const writeProjectIndex = (
   fileSystem: FileSystem.FileSystem,
   projectsRoot: string,
   rows: readonly ProjectRow[],

@@ -90,8 +90,7 @@ const editingField = StateField.define<number | null>({
 });
 
 /** The note under the reader's caret in the apparatus, if any. */
-export const editingNote = (state: EditorState): number | null =>
-  state.field(editingField, false) ?? null;
+const editingNote = (state: EditorState): number | null => state.field(editingField, false) ?? null;
 
 /** How long the flash on a followed note lasts. */
 const FLASH_MS = 900;

@@ -242,7 +242,7 @@ export const decodeBlockSkeleton = (json: string): Skeleton => {
 };
 
 /** `overlayReport()`'s JSON as an `OverlayReport`. */
-export const decodeReport = (json: string): OverlayReport => {
+const decodeReport = (json: string): OverlayReport => {
   const parsed: unknown = JSON.parse(json);
   if (!isRecord(parsed)) return { inserted: [], removed: [], collapsed: [], unpaired: [] };
   return {

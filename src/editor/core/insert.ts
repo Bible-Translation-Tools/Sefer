@@ -59,7 +59,7 @@ const isWordChar = (state: EditorState, at: number): boolean =>
  * first: its interior is one indivisible thing, and its `to` is past the
  * closer, not past the surface.
  */
-export function wordBoundaryAt(state: EditorState, s: DocStructure, pos: number): number {
+function wordBoundaryAt(state: EditorState, s: DocStructure, pos: number): number {
   const line = s.lines.maybe(state.doc.lineAt(pos).number - 1);
   const wrapper = line?.words.find((w) => pos > w.from && pos < w.to);
   if (wrapper) return wrapper.to;
@@ -78,7 +78,7 @@ export function wordBoundaryAt(state: EditorState, s: DocStructure, pos: number)
  * or numbers a range `\v 1-2` still answers sensibly — the trailing digit run
  * is what a range's "last verse" is. A chapter with no verse yet answers 1.
  */
-export function nextVerseNumber(s: DocStructure, pos: number): string {
+function nextVerseNumber(s: DocStructure, pos: number): string {
   const chapter = chapterContaining(s.chapters, pos);
   const floor = chapter === null ? 0 : chapter.from;
   let last = 0;
@@ -133,7 +133,7 @@ export function insertVerse(structureAt: GetStructure): StateCommand {
  * level by repetition (`\q1` pressed again is `\q2`); a caller that knows the
  * level passes a constant.
  */
-export function insertBlock(
+function insertBlock(
   structureAt: GetStructure,
   event: string,
   pick: (current: string | null) => string,
@@ -183,7 +183,7 @@ export function insertBlock(
 const POETRY_LEVELS = ["q1", "q2"];
 
 /** `\q1`, or the next level when the caret is already in one (the repeat). */
-export const nextPoetryLevel = (current: string | null): string => {
+const nextPoetryLevel = (current: string | null): string => {
   const at = current === null ? -1 : POETRY_LEVELS.indexOf(current === "q" ? "q1" : current);
   return POETRY_LEVELS[(at + 1) % POETRY_LEVELS.length] ?? "q1";
 };

@@ -27,9 +27,9 @@ import {
 } from "./registry";
 import { armed, span } from "./timing";
 
-export type OwnedSetId = number & { readonly __brand: "OwnedSetId" };
+type OwnedSetId = number & { readonly __brand: "OwnedSetId" };
 
-export type TargetForm = "spans" | "box" | "ambient" | "elided";
+type TargetForm = "spans" | "box" | "ambient" | "elided";
 
 export type Direction = "backward" | "forward";
 
@@ -113,7 +113,7 @@ const SET_OF_CLASS: ReadonlyMap<ClassKey, OwnedSetName> = new Map(
 const byWholeSpan = (x: ResolvedOwnedTarget, y: ResolvedOwnedTarget): number =>
   x.wholeSpan.from - y.wholeSpan.from || x.wholeSpan.to - y.wholeSpan.to;
 
-export function illegalTarget(t: ResolvedOwnedTarget): string | null {
+function illegalTarget(t: ResolvedOwnedTarget): string | null {
   const inside = (sp: PlanSpan) => sp.from >= t.wholeSpan.from && sp.to <= t.wholeSpan.to;
   let shared = 0;
   for (const sp of t.paintedSpans) {

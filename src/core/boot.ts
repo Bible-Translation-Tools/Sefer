@@ -8,11 +8,11 @@ export interface BootInfo {
   readonly phase: "ready";
 }
 
-export class UnknownHost extends Data.TaggedError("UnknownHost")<{
+class UnknownHost extends Data.TaggedError("UnknownHost")<{
   readonly received: string;
 }> {}
 
-export class MissingBuildIdentity extends Data.TaggedError("MissingBuildIdentity")<{}> {}
+class MissingBuildIdentity extends Data.TaggedError("MissingBuildIdentity")<{}> {}
 
 export type BootError = UnknownHost | MissingBuildIdentity;
 

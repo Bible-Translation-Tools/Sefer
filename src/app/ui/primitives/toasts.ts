@@ -73,7 +73,7 @@ const arm = (id: string, autoClose: number | false | undefined): void => {
 };
 
 /** Raises one, or replaces the one already under `options.id`. */
-export const show = (options: ToastOptions, loading = false): string => {
+const show = (options: ToastOptions, loading = false): string => {
   const id = options.id ?? nextId();
   const toast: Toast = {
     id,
@@ -137,7 +137,7 @@ export const dismiss = (id: string): void => {
   setList((held) => held.filter((each) => each.id !== id));
 };
 
-export const dismissAll = (): void => {
+const dismissAll = (): void => {
   // The spread is a copy on purpose: `clearTimer` deletes from `timers`, so
   // this mutates the very map it walks. A Map iterator does define that case,
   // which is why the lint rule calls the copy useless — but the safety here

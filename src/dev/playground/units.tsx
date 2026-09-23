@@ -81,7 +81,7 @@ export const inOrder = (bench: Bench): readonly DecisionUnit[] => {
  * Nothing in `/review` hits this today — its cards read one unit at a time and
  * are never mixed with unchanged ones.
  */
-export const sideText = (bench: Bench, unit: DecisionUnit, side: MergeSide): string | undefined =>
+const sideText = (bench: Bench, unit: DecisionUnit, side: MergeSide): string | undefined =>
   side === "baseline"
     ? textOf(bench.galley, bench.baselineText, unit.baseline, false)
     : textOf(bench.galley, bench.currentText, unit.current, false);
@@ -128,7 +128,7 @@ const RUN_TONE: Record<DiffTone, Record<TextRun["kind"], string>> = {
   },
 };
 
-export const Runs = (props: { readonly runs: readonly TextRun[]; readonly tone: DiffTone }) => (
+const Runs = (props: { readonly runs: readonly TextRun[]; readonly tone: DiffTone }) => (
   <For each={props.runs}>
     {(run) => (
       <span data-run={run.kind} class={RUN_TONE[props.tone][run.kind]}>
@@ -148,7 +148,7 @@ export const Runs = (props: { readonly runs: readonly TextRun[]; readonly tone: 
  * so walking both and emitting the shared runs once reconstructs the sentence
  * with both edits inside it.
  */
-export const Merged = (props: { readonly unit: DecisionUnit; readonly tone: DiffTone }) => {
+const Merged = (props: { readonly unit: DecisionUnit; readonly tone: DiffTone }) => {
   const runs = createMemo((): readonly TextRun[] => {
     const text = props.unit.text;
     if (text === undefined) return [];
@@ -195,7 +195,7 @@ export const Merged = (props: { readonly unit: DecisionUnit; readonly tone: Diff
  * thing JS cannot compute from what crosses today — see the note above
  * `sideText`.
  */
-export const sourceOf = (bench: Bench, unit: DecisionUnit, side: MergeSide): string | undefined => {
+const sourceOf = (bench: Bench, unit: DecisionUnit, side: MergeSide): string | undefined => {
   const range = side === "baseline" ? unit.baseline : unit.current;
   if (range === undefined) return undefined;
   const text = side === "baseline" ? bench.baselineText : bench.currentText;

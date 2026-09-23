@@ -1,3 +1,4 @@
+// fallow-ignore-file unused-export unused-type -- the editor tests that use these come back once behaviour locks.
 /**
  * The headless test surface: build a state, press a key, read what is on screen.
  *

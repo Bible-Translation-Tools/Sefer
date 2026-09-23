@@ -270,7 +270,7 @@ export const codePointLabel = (codePoint: number): string =>
  * category as a phrase, else the code point itself. Never a guess that reads
  * like a fact.
  */
-export const glyphName = (codePoint: number): string => {
+const glyphName = (codePoint: number): string => {
   if (codePoint === PATTERN_DIGIT_GLYPH) return "digits";
   const known = NAMES.get(codePoint);
   if (known !== undefined) return known;
@@ -297,7 +297,7 @@ const DASHES = "-‐‑‒–—―−֊᐀゠";
 const TERMINALS = ".!?…؟۔։。！．？।॥";
 const SEPARATORS = ",;:·،؛、，：；⁄/";
 
-export const poolOf = (codePoint: number): Pool => {
+const poolOf = (codePoint: number): Pool => {
   if (codePoint === PATTERN_DIGIT_GLYPH) return "Digit";
   const char = String.fromCodePoint(codePoint);
   if (QUOTES.includes(char)) return "Quote";
@@ -518,5 +518,5 @@ export const EMPTY: Inventory = {
  * a caller holding only a code point (the editor's lint tooltip, a Findings
  * filter) reaches for, so the grouping rule lives in one place.
  */
-export const sitesOfGlyph = (held: Inventory, codePoint: number): readonly FlaggedSite[] =>
+const sitesOfGlyph = (held: Inventory, codePoint: number): readonly FlaggedSite[] =>
   held.glyphs.find((glyph) => glyph.codePoint === codePoint)?.flagged ?? [];

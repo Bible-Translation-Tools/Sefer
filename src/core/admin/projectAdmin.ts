@@ -36,7 +36,7 @@ import {
  * Where a project's name lives when it is not a burrito. `.sefer/` is Sefer's
  * own corner of a project folder — never something another tool reads.
  */
-export const SEFER_PROJECT_FILE = ".sefer/project.json";
+const SEFER_PROJECT_FILE = ".sefer/project.json";
 
 export type ExportFormat = "burrito" | "usfm-zip";
 

@@ -73,7 +73,7 @@ const LocalizedName = Schema.Struct({
   abbr: Schema.optionalKey(LocalizedText),
 });
 
-export const BurritoMetadata = Schema.Struct({
+const BurritoMetadata = Schema.Struct({
   format: Schema.Literal("scripture burrito"),
   meta: Meta,
   idAuthorities: Schema.optionalKey(Schema.Record(Schema.String, IdAuthority)),
@@ -88,7 +88,7 @@ export type BurritoMetadata = typeof BurritoMetadata.Type;
 
 export type BurritoIngredient = typeof Ingredient.Type;
 
-export type BurritoLanguage = typeof Language.Type;
+type BurritoLanguage = typeof Language.Type;
 
 const decode = Schema.decodeUnknownResult(BurritoMetadata);
 

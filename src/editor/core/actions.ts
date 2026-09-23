@@ -45,6 +45,6 @@ const COMMANDS: Record<EditorAction, () => StateCommand> = {
 // SAFETY: COMMANDS is `Record<EditorAction, …>` written as a literal with
 // every member of the union spelled out, so its own keys are exactly
 // `EditorAction`; `Object.keys` only widens them to string.
-export const EDITOR_ACTIONS = Object.keys(COMMANDS) as readonly EditorAction[];
+const EDITOR_ACTIONS = Object.keys(COMMANDS) as readonly EditorAction[];
 
 export const actionCommand = (action: EditorAction): StateCommand => COMMANDS[action]();

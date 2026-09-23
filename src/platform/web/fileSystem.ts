@@ -62,7 +62,7 @@ const segmentsOf = (path: string): string[] =>
 const bytesOf = async (handle: FileSystemFileHandle): Promise<Uint8Array> =>
   new Uint8Array(await (await handle.getFile()).arrayBuffer());
 
-export const makeOpfsFileSystem = (): FileSystem.FileSystem => {
+const makeOpfsFileSystem = (): FileSystem.FileSystem => {
   let cachedRoot: Promise<FileSystemDirectoryHandle> | undefined;
   let unique = 0;
 

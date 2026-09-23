@@ -3,8 +3,7 @@
  * reaches into the files.
  */
 
-export { ExcerptCard, type ExcerptCardProps, type MarkTone } from "./ExcerptCard";
-export { ExcerptEditor, type ExcerptEditorProps } from "./ExcerptEditor";
-export { ExcerptList, type ExcerptDecor, type ExcerptListProps } from "./ExcerptList";
-export { createExcerptFeed, readBooks, type ExcerptFeed, type ExcerptFeedOptions } from "./feed";
-export { StetView, type StetViewProps } from "./StetView";
+export { type MarkTone } from "./ExcerptCard";
+export { ExcerptList, type ExcerptDecor } from "./ExcerptList";
+export { createExcerptFeed, readBooks, type ExcerptFeed } from "./feed";
+export { StetView } from "./StetView";

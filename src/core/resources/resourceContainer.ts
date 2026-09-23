@@ -38,7 +38,7 @@ const Project = Schema.Struct({
   categories: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
-export const ResourceContainerManifest = Schema.Struct({
+const ResourceContainerManifest = Schema.Struct({
   dublin_core: DublinCore,
   checking: Schema.optionalKey(Checking),
   projects: Schema.Array(Project),
@@ -46,9 +46,9 @@ export const ResourceContainerManifest = Schema.Struct({
 
 export type ResourceContainerManifest = typeof ResourceContainerManifest.Type;
 
-export type ResourceContainerProject = typeof Project.Type;
+type ResourceContainerProject = typeof Project.Type;
 
-export type ResourceContainerLanguage = typeof Language.Type;
+type ResourceContainerLanguage = typeof Language.Type;
 
 const decode = Schema.decodeUnknownResult(ResourceContainerManifest);
 

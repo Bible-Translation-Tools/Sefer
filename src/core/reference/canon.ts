@@ -93,9 +93,7 @@ export const CANON: readonly CanonicalBook[] = [
   { id: "REV", name: "Revelation", testament: "nt" },
 ];
 
-export const BY_ID: ReadonlyMap<string, CanonicalBook> = new Map(
-  CANON.map((book) => [book.id, book]),
-);
+const BY_ID: ReadonlyMap<string, CanonicalBook> = new Map(CANON.map((book) => [book.id, book]));
 
 /**
  * Which testament a book belongs to. An id the canon does not know is `nt`,

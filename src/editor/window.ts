@@ -37,7 +37,7 @@ import { borrowedStructure } from "./core/docStructure";
 import { trusted } from "./core/kernel";
 import { changesOf, fromCanonical } from "./funnel";
 
-export interface WindowOptions {
+interface WindowOptions {
   /** The engine for the one turn the window is out of step with the book. */
   readonly analyze: Analyze;
   readonly extensions?: Extension;
@@ -61,7 +61,7 @@ const RETURNED: TransactionSpec = {
   filter: false,
 };
 
-export interface ClipWindow {
+interface ClipWindow {
   /** The window's own state: the bound view's when bound, else the held one. */
   readonly state: EditorState;
   /** The editable extent of the picked chapter, or null when nothing is picked. */
@@ -86,11 +86,7 @@ export interface ClipWindow {
  * is the ordinary case, and a window over a position that no longer exists
  * would clip to nothing and read as an empty chapter.
  */
-export const openWindow = (
-  book: EditorBook,
-  at: number,
-  options: WindowOptions,
-): ClipWindow | null => {
+const openWindow = (book: EditorBook, at: number, options: WindowOptions): ClipWindow | null => {
   const canonical = book.state;
   if (at < 0 || at > canonical.doc.length) return null;
 

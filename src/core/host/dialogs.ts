@@ -55,14 +55,14 @@ export class Dialogs extends Context.Service<Dialogs, DialogsService>()("Dialogs
  * the port with a deterministic host, not a mock: the same question always
  * gets the same configured answer, and the defaults are the refusing ones.
  */
-export interface DialogAnswers {
+interface DialogAnswers {
   readonly folder?: string | undefined;
   readonly files?: readonly string[] | undefined;
   readonly savePath?: string | undefined;
   readonly confirm?: boolean | undefined;
 }
 
-export const HeadlessDialogsLive = (answers: DialogAnswers = {}): Layer.Layer<Dialogs> =>
+const HeadlessDialogsLive = (answers: DialogAnswers = {}): Layer.Layer<Dialogs> =>
   Layer.succeed(Dialogs, {
     pickFolder: () => Effect.succeed(Option.fromUndefinedOr(answers.folder)),
     pickFiles: () => Effect.succeed(answers.files ?? []),

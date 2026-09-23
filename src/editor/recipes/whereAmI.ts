@@ -96,7 +96,7 @@ export interface Where extends ChapterName {
  * on what happens to be in the DOM. A clipped chapter has zero height and
  * therefore contributes nothing, which is what a hidden chapter should do.
  */
-export function chapterInView(view: EditorView): Where | null {
+function chapterInView(view: EditorView): Where | null {
   const structure = structureAt(view.state);
   const chapters = structure.chapters;
   if (chapters.length === 0) return null;
@@ -166,7 +166,7 @@ export function chapterInView(view: EditorView): Where | null {
 }
 
 /** Every chapter of this view's book, front matter row included. */
-export function chapterList(view: EditorView): readonly ChapterName[] {
+function chapterList(view: EditorView): readonly ChapterName[] {
   return structureAt(view.state).chapters.map((chapter) => ({
     ordinal: chapter.ordinal,
     label: chapter.label,

@@ -236,7 +236,7 @@ export class EngineDoorMissing extends Data.TaggedError("EngineDoorMissing")<{
  * is pinned in `package.json`.
  * Seeing this string means the vendored artifact is not that build.
  */
-export const DIFF_DOOR =
+const DIFF_DOOR =
   "the module-level diff(baseline, current, textMode), " +
   "merge(baseline, current, decisions, default) and formatEdits(text, opts) " +
   "exports of the galley wasm — present since scripture-kitchen v0.1.0, so an " +
@@ -271,7 +271,7 @@ const blockKind = (chapter: number, first: number): BlockKind =>
  * (`onion/src/diff.rs`, `impl Display for Addr`) and `###` is its "unknown
  * book" rendering, which is kept as the empty code.
  */
-export const parseAddr = (sid: string): Addr => {
+const parseAddr = (sid: string): Addr => {
   const parts = SID.exec(sid);
   if (parts === null)
     return {
@@ -307,7 +307,7 @@ export const parseAddr = (sid: string): Addr => {
  * and its name is in the header, and "PHM PHM 1:4" is what happens when two
  * layers each believe they are the one saying it.
  */
-export const referenceOf = (addr: Addr | undefined): string => {
+const referenceOf = (addr: Addr | undefined): string => {
   if (addr === undefined) return "";
   if (addr.kind === "frontMatter") return "front";
   if (addr.kind === "chapterOpen") return `${addr.chapter}`;
@@ -464,7 +464,7 @@ const readSlot = (value: unknown): Slot | undefined => {
  * The engine's JSON as a `DiffSkeleton`. Exported because the desktop door
  * would read the same string off IPC, exactly as `decodeHits` is.
  */
-export const decodeSkeleton = (json: string): DiffSkeleton => {
+const decodeSkeleton = (json: string): DiffSkeleton => {
   const parsed: unknown = JSON.parse(json);
   if (!isRecord(parsed))
     return { units: [], slots: [], baselineLen: 0, currentLen: 0, engine: true };
@@ -490,7 +490,7 @@ export const decodeSkeleton = (json: string): DiffSkeleton => {
 };
 
 /** The decision map as the wire's object. Only decided units appear. */
-export const encodeDecisions = (decisions: DecisionMap): string => {
+const encodeDecisions = (decisions: DecisionMap): string => {
   const out: Record<string, MergeSide> = {};
   for (const [id, side] of decisions) out[id] = side;
   return JSON.stringify(out);
@@ -506,7 +506,7 @@ export const encodeDecisions = (decisions: DecisionMap): string => {
  * exist yet rather than a version number Sefer would have to keep in step with
  * the artifact.
  */
-export interface DiffCapableModule {
+interface DiffCapableModule {
   readonly diff?: (baseline: string, current: string, textMode: string) => string;
   readonly merge?: (
     baseline: string,

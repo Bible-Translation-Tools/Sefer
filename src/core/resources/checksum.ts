@@ -51,7 +51,7 @@ const rotateLeft = (value: number, by: number): number => (value << by) | (value
  * The md5 of `bytes`, as 32 lowercase hex digits — the spelling Scripture
  * Burrito's `checksum.md5` uses.
  */
-export const md5 = (bytes: Uint8Array): string => {
+const md5 = (bytes: Uint8Array): string => {
   const length = bytes.length;
   // The message, 0x80, zeroes, then the bit length as 8 little-endian bytes,
   // rounded up to a whole number of 64-byte blocks.
@@ -141,12 +141,12 @@ const hexWordLittleEndian = (word: number): string => {
 };
 
 /** What an ingredient records about its bytes. */
-export interface IngredientFingerprint {
+interface IngredientFingerprint {
   readonly md5: string;
   readonly size: number;
 }
 
-export const fingerprint = (bytes: Uint8Array): IngredientFingerprint => ({
+const fingerprint = (bytes: Uint8Array): IngredientFingerprint => ({
   md5: md5(bytes),
   size: bytes.length,
 });

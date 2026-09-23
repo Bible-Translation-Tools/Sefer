@@ -61,7 +61,7 @@ export interface FixPreview {
  * analysis or the Book has moved since the finding was computed, so the offsets
  * name text that no longer exists.
  */
-export class NoFix extends Data.TaggedError("NoFix")<{
+class NoFix extends Data.TaggedError("NoFix")<{
   readonly reason: "NoFixOffered" | "NotEngineFix" | "Stale";
   readonly description: string;
 }> {}
@@ -73,7 +73,7 @@ export class NoFix extends Data.TaggedError("NoFix")<{
  * empty`). Since scripture-kitchen v0.1.0 this is only reachable from an
  * artifact that is not the vendored build.
  */
-export class Unsupported extends Data.TaggedError("Unsupported")<{
+class Unsupported extends Data.TaggedError("Unsupported")<{
   readonly operation: string;
   readonly description: string;
 }> {}
@@ -179,10 +179,7 @@ export const apply = (fix: FixPreview, book: Book): Result.Result<Receipt, Refus
  * Book's own range checks, not filtered here: silently dropping one of two
  * overlapping repairs would produce a document neither fix intended.
  */
-export const applyAll = (
-  previews: readonly FixPreview[],
-  book: Book,
-): Result.Result<Receipt, Refusal> => {
+const applyAll = (previews: readonly FixPreview[], book: Book): Result.Result<Receipt, Refusal> => {
   const current = book.source().stamp;
   const changes: Change[] = [];
   for (const one of previews) {

@@ -60,7 +60,7 @@ const isUsfmIngredient = (name: string, mimeType: string): boolean =>
  * canon. Comparison is codepoint order, not locale order, so the same folder
  * lists the same way on every host.
  */
-export const canonicalOrder = (paths: readonly string[]): readonly string[] =>
+const canonicalOrder = (paths: readonly string[]): readonly string[] =>
   [...paths].sort((left, right) => {
     const leftName = lastSegment(left);
     const rightName = lastSegment(right);

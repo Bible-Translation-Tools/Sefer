@@ -132,7 +132,7 @@ export interface DocPlan {
   readonly targets: () => OwnedIndex;
 }
 
-export function callerMark(i: number): string {
+function callerMark(i: number): string {
   let s = "";
   i += 1;
   while (i > 0) {

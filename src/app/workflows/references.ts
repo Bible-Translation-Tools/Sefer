@@ -117,7 +117,7 @@ export const sourceTextForBook = (
     return match === undefined ? undefined : yield* textOfReference(match);
   });
 
-export const textOfReference = (
+const textOfReference = (
   id: string,
 ): Effect.Effect<string | undefined, never, FileSystem.FileSystem> =>
   Effect.gen(function* () {

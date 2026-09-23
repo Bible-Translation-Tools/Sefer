@@ -27,7 +27,7 @@ import type { DialValues, Dials } from "../dials";
  * `import type { Dials } from "./experiment"` and does not have to know.
  */
 
-export type { Dial, Dials, DialValues } from "../dials";
+export type { Dials, DialValues } from "../dials";
 
 /**
  * Real project text, already diffed — the "half wired" part.

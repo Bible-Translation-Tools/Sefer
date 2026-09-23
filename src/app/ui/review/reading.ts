@@ -40,7 +40,7 @@ const cache = new Map<string, Analysis | undefined>();
  * on every render. The caller falls back to the raw slice, which is still a
  * true reading of the bytes.
  */
-export const analysisOf = (galley: GalleyService, text: string): Analysis | undefined => {
+const analysisOf = (galley: GalleyService, text: string): Analysis | undefined => {
   if (text === "") return undefined;
   if (cache.has(text)) return cache.get(text);
   let held: Analysis | undefined;

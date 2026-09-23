@@ -59,7 +59,7 @@ const EnvelopeTerm = Schema.Struct({
   glossRanges: Schema.Record(Schema.String, Schema.Array(Range)),
 });
 
-export const StetEnvelope = Schema.Struct({
+const StetEnvelope = Schema.Struct({
   schemaVersion: Schema.Literal(1),
   locale: Schema.String,
   reference: Schema.Struct({
@@ -73,10 +73,10 @@ export const StetEnvelope = Schema.Struct({
   terms: Schema.Array(EnvelopeTerm),
 });
 
-export type StetEnvelope = typeof StetEnvelope.Type;
+type StetEnvelope = typeof StetEnvelope.Type;
 
 /** One row of the guide manifest: a locale that can be loaded, unloaded. */
-export const StetManifest = Schema.Struct({
+const StetManifest = Schema.Struct({
   schemaVersion: Schema.Literal(1),
   guides: Schema.Array(
     Schema.Struct({
@@ -88,7 +88,7 @@ export const StetManifest = Schema.Struct({
   ),
 });
 
-export type StetManifest = typeof StetManifest.Type;
+type StetManifest = typeof StetManifest.Type;
 
 // ---------------------------------------------------------------------------
 // The shape callers see
@@ -169,7 +169,7 @@ export class StetError extends Data.TaggedError("StetError")<{
  * resource under the `glossary` role, or a remote guides API, is another layer
  * and nothing above this interface changes when one arrives.
  */
-export interface StetCatalogService {
+interface StetCatalogService {
   /** The guides that can be loaded, without loading any of them. */
   readonly guides: () => Effect.Effect<readonly Guide[], StetError>;
   /** Every term of one guide, in the order the guide lists them. */
@@ -203,7 +203,7 @@ interface ParsedSid {
 }
 
 /** The canonical single verse a sid names, or `undefined` for anything else. */
-export const parseSid = (raw: string): ParsedSid | undefined => {
+const parseSid = (raw: string): ParsedSid | undefined => {
   const found = SID.exec(raw.trim());
   if (found === null) return undefined;
   const book = found[1] ?? "";
@@ -247,7 +247,7 @@ const idsFor = (terms: readonly { readonly englishTerm: string }[]): readonly st
  * the guide does not get, which is what the old application's warnings said in
  * more words.
  */
-export const termsOf = (envelope: StetEnvelope): readonly Term[] => {
+const termsOf = (envelope: StetEnvelope): readonly Term[] => {
   const ids = idsFor(envelope.terms);
   return envelope.terms.map((term, index) => {
     const curated = new Set<string>();

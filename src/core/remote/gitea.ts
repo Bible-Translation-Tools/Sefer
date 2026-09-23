@@ -157,7 +157,7 @@ export class Gitea extends Context.Service<Gitea, GiteaService>()("Gitea") {}
  * that matters for sync; the reads are what the project and account screens
  * need. A token is never minted with more than this — notably not `write:admin`.
  */
-export const SESSION_TOKEN_SCOPES: readonly string[] = [
+const SESSION_TOKEN_SCOPES: readonly string[] = [
   "read:activitypub",
   "read:issue",
   "write:misc",

@@ -47,14 +47,14 @@ import {
 } from "../../core/stet/stet";
 
 /** Per-reference agreement between a project book and a reference resource. */
-export interface Comparison {
+interface Comparison {
   readonly resourceId: string;
   readonly agreed: number;
   readonly differing: readonly string[];
 }
 
 /** One side of a match-formatting view: a registered id and the text behind it. */
-export const stetCompare = (_project: Project, _resource: Resource): Effect.Effect<Comparison> =>
+const stetCompare = (_project: Project, _resource: Resource): Effect.Effect<Comparison> =>
   // TODO(seam): the read-only half of the same alignment.
   Effect.die(new Error("stetCompare: not implemented (seams §5.3, slice 27)"));
 
@@ -159,7 +159,7 @@ export const sourceReadings = (
  * project's own text for a source it does not have — `Library.resolve` is
  * explicit about an empty binding for the same reason.
  */
-export const sourceResource = (
+const sourceResource = (
   library: LibraryService,
   projectId: string,
 ): Effect.Effect<Option.Option<Resource>> =>

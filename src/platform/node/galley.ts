@@ -28,7 +28,7 @@ import {
  * keeps the two hosts loading the same artifact without either one spelling a
  * path into `node_modules`.
  */
-export const WASM_PATH = fileURLToPath(
+const WASM_PATH = fileURLToPath(
   import.meta.resolve("@wycliffeassociates/scripture-kitchen/web/wasm"),
 );
 

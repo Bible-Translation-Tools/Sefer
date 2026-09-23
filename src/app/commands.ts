@@ -136,7 +136,7 @@ const [registry, setRegistry] = createSignal<readonly Command[]>([], {
 });
 
 /** Every registered command, in registration order. */
-export const commands = (): readonly Command[] => registry();
+const commands = (): readonly Command[] => registry();
 
 /** The registered commands whose `when` currently allows them. */
 export const availableCommands = (): readonly Command[] =>
@@ -151,7 +151,7 @@ let narrator: ObservabilityService | undefined;
  * reason: a command registered before there is a composition has nowhere to
  * narrate to, and silently dropping it would be worse than not trying.
  */
-export const setCommandObservability = (observability: ObservabilityService): void => {
+const setCommandObservability = (observability: ObservabilityService): void => {
   narrator = observability;
 };
 
@@ -160,7 +160,7 @@ export const setCommandObservability = (observability: ObservabilityService): vo
  * `registerShellCommands`; a command registered before there is a runtime and
  * then invoked fails loudly rather than silently doing nothing.
  */
-export const setCommandRunner = (
+const setCommandRunner = (
   run: (effect: Effect.Effect<unknown, unknown, Domain | Scope.Scope>) => void,
 ): void => {
   runner = run;

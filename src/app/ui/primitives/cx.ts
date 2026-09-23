@@ -48,7 +48,7 @@ type Axis = Record<string, string>;
 type Axes = Record<string, Axis>;
 
 /** The choice a caller may make on each axis — all optional, defaults fill in. */
-export type Choices<A extends Axes> = {
+type Choices<A extends Axes> = {
   readonly [K in keyof A]?: (keyof A[K] & string) | undefined;
 };
 

@@ -11,7 +11,7 @@ export const SMALL_NT = "small-nt";
 
 export const SMALL_NT_ROOT = "/small-nt";
 
-export const smallNtSeed = (): MemorySeed => ({
+const smallNtSeed = (): MemorySeed => ({
   [`${SMALL_NT_ROOT}/19-PSA.usfm`]: psalms,
   [`${SMALL_NT_ROOT}/58-PHM.usfm`]: philemon,
   [`${SMALL_NT_ROOT}/65-3JN.usfm`]: thirdJohn,

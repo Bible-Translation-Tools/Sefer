@@ -74,7 +74,7 @@ import { renderRangeAt, renderRangeField } from "../core/render";
  * nothing shows the marker itself, which is wrong for a translator and exactly
  * right for a test.
  */
-export type BlockNamer = (marker: string) => string;
+type BlockNamer = (marker: string) => string;
 
 export const blockNamer = Facet.define<BlockNamer, BlockNamer>({
   combine: (values) => values[0] ?? ((marker) => `\\${marker}`),
@@ -106,7 +106,7 @@ const annotateField = StateField.define<boolean>({
 });
 
 /** Is this state drawing them? */
-export const annotatingEmptyBlocks = (state: EditorState): boolean =>
+const annotatingEmptyBlocks = (state: EditorState): boolean =>
   state.field(annotateField, false) ?? false;
 
 /**

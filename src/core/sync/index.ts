@@ -9,16 +9,12 @@
  */
 
 export {
-  clocksOf,
   emptyReading,
   notIn,
-  primaryActionOf,
   sync,
-  syncStateOf,
   trackingRef,
   wantsPlan,
   type Clock,
-  type Clocks,
   type Sync,
   type SyncActionId,
   type SyncReading,
@@ -27,14 +23,9 @@ export {
 
 export {
   FRONT_MATTER,
-  chapterSlices,
-  chaptersChanged,
-  combinePlan,
   emptyPlan,
   incomingPlan,
-  type CombinePlan,
   type IncomingBook,
-  type IncomingFile,
   type IncomingPlan,
 } from "./plan";
 
@@ -42,15 +33,10 @@ export {
   combine,
   CombineError,
   combineMessage,
-  planCombine,
   previewCombine,
-  type CombineDecision,
-  type CombineOptions,
   type CombineRefusal,
   type CombineReplay,
-  type CombineResult,
   type CombineState,
-  type CombineSurvey,
 } from "./combine";
 
-export { mergeBase, surveyIncoming, type IncomingSurvey, type SurveyOptions } from "./survey";
+export { mergeBase, surveyIncoming } from "./survey";

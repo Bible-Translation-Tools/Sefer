@@ -69,7 +69,7 @@ export interface SaveReceipt {
   readonly at: number;
 }
 
-export type SaveFailure =
+type SaveFailure =
   | "PermissionDenied"
   | "DiskFull"
   /** The file changed under us and the difference is unresolved. */
@@ -78,7 +78,7 @@ export type SaveFailure =
   | "Refused"
   | "Io";
 
-export class SaveError extends Data.TaggedError("SaveError")<{
+class SaveError extends Data.TaggedError("SaveError")<{
   readonly reason: SaveFailure;
   readonly bookId: BookId;
   readonly path: string;

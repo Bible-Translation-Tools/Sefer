@@ -26,7 +26,7 @@ function hasContent(l: DocLine, state: EditorState): boolean {
   return state.doc.sliceString(chromeEnd(l), l.to).trim().length > 0;
 }
 
-export const usfmScrollTo = (pos: number) => EditorView.scrollIntoView(pos, { y: "center" });
+const usfmScrollTo = (pos: number) => EditorView.scrollIntoView(pos, { y: "center" });
 
 const show = (s: string) =>
   s === "" ? "∅" : s.replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t");
@@ -53,11 +53,7 @@ export interface CaretInfo {
   enter: string;
 }
 
-export function inspect(
-  state: EditorState,
-  structureAt: GetStructure,
-  plansAt: GetPlan,
-): CaretInfo {
+function inspect(state: EditorState, structureAt: GetStructure, plansAt: GetPlan): CaretInfo {
   const s = structureAt(state);
   const sel = state.selection.main;
   const pos = sel.head;

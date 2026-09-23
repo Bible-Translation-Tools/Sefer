@@ -37,12 +37,12 @@ import { joinPath, parentPath } from "../fileSystem/path";
 import { Observability, type ObservabilityService } from "../observability";
 import { HostInfo } from "./hostInfo";
 
-export const SETTINGS_FILE = "settings.json";
+const SETTINGS_FILE = "settings.json";
 
 const RULE = "settings";
 
 /** A settings operation that could not be completed. `set` is the only caller. */
-export class SettingsError extends Data.TaggedError("SettingsError")<{
+class SettingsError extends Data.TaggedError("SettingsError")<{
   readonly operation: "read" | "write" | "validate";
   readonly key: string;
   readonly reason: string;
@@ -87,7 +87,7 @@ export class Settings extends Context.Service<Settings, SettingsService>()("Sett
  * profile is not an error — and fails only when the bytes exist and cannot be
  * understood, which the caller downgrades to "start from defaults".
  */
-export interface SettingsStore {
+interface SettingsStore {
   readonly load: Effect.Effect<Readonly<Record<string, unknown>>, SettingsError>;
   readonly save: (values: Readonly<Record<string, unknown>>) => Effect.Effect<void, SettingsError>;
 }
@@ -107,7 +107,7 @@ interface Change {
  * service directly (optional) because it is called from a Layer that may be
  * built before, or without, the ring.
  */
-export const makeSettings = (
+const makeSettings = (
   store: SettingsStore,
   observability?: ObservabilityService | undefined,
 ): Effect.Effect<SettingsService> =>
@@ -191,10 +191,7 @@ export const makeSettings = (
   });
 
 /** The persistent store: one JSON file, read once, written whole and atomically. */
-export const fileSettingsStore = (
-  fileSystem: FileSystem.FileSystem,
-  path: string,
-): SettingsStore => ({
+const fileSettingsStore = (fileSystem: FileSystem.FileSystem, path: string): SettingsStore => ({
   load: Effect.gen(function* () {
     const present = yield* fileSystem.exists(path);
     if (!present) return {};
@@ -228,9 +225,7 @@ export const fileSettingsStore = (
 });
 
 /** The in-memory store: same contract, no host. Used by tests and dev pages. */
-export const memorySettingsStore = (
-  seed: Readonly<Record<string, unknown>> = {},
-): SettingsStore => {
+const memorySettingsStore = (seed: Readonly<Record<string, unknown>> = {}): SettingsStore => {
   let held: Readonly<Record<string, unknown>> = seed;
   return {
     load: Effect.sync(() => held),
@@ -255,7 +250,7 @@ export const SettingsLive: Layer.Layer<Settings, never, FileSystem.FileSystem | 
     }),
   );
 
-export const MemorySettingsLive: Layer.Layer<Settings> = Layer.effect(
+const MemorySettingsLive: Layer.Layer<Settings> = Layer.effect(
   Settings,
   Effect.gen(function* () {
     const observability = yield* Effect.serviceOption(Observability);

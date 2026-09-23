@@ -80,7 +80,7 @@ export interface ExternalChange {
  * duplicate `\id`, and host failures reading the root (whose `PlatformError`
  * text is carried in the description rather than widening this error).
  */
-export class ProjectError extends Data.TaggedError("ProjectError")<{
+class ProjectError extends Data.TaggedError("ProjectError")<{
   readonly reason: "NotADirectory" | "NoBooks" | "Refused";
   readonly description: string;
 }> {}

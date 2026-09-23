@@ -42,7 +42,7 @@ function wordAt(s: DocStructure, pos: number): WordRange | null {
   return null;
 }
 
-export interface AttrSpan {
+interface AttrSpan {
   key: string;
   value: string;
   keyFrom: number;
@@ -52,7 +52,7 @@ export interface AttrSpan {
   resolution: number;
 }
 
-export function attrSpans(doc: string, w: WordRange): AttrSpan[] {
+function attrSpans(doc: string, w: WordRange): AttrSpan[] {
   if (w.attrTo <= w.attrFrom) return [];
   const out: AttrSpan[] = [];
   for (const a of attrList(attrs(doc, w.attrFrom, w.attrTo)).attrs) {
@@ -94,7 +94,7 @@ const KEY_TITLE: Record<number, string> = {
 
 const EDITABLE_KEYS = false;
 
-export function alignedWordTooltip(structureAt: (s: EditorState) => DocStructure) {
+function alignedWordTooltip(structureAt: (s: EditorState) => DocStructure) {
   return hoverTooltip(
     (view, pos) => {
       const w = wordAt(structureAt(view.state), pos);

@@ -37,24 +37,24 @@ export const pickField = StateField.define<number | null>({
   },
 });
 
-export function resolvePick(s: DocStructure, doc: Text, at: number | null): ChapterRow | null {
+function resolvePick(s: DocStructure, doc: Text, at: number | null): ChapterRow | null {
   if (at === null) return null;
   return chapterContaining(s.chapters, Math.max(0, Math.min(at, doc.length)));
 }
 
 export type ClipRange = { from: number; to: number } | null;
 
-export function pickedChapter(st: EditorState): ChapterRow | null {
+function pickedChapter(st: EditorState): ChapterRow | null {
   const s = st.field(structureField, false);
   return s ? resolvePick(s, st.doc, st.field(pickField, false) ?? null) : null;
 }
 
-export interface Extents {
+interface Extents {
   visible: { from: number; to: number };
   editable: { from: number; to: number };
 }
 
-export function chapterExtents(ch: ChapterRow, doc: Text): Extents {
+function chapterExtents(ch: ChapterRow, doc: Text): Extents {
   const to = Math.min(ch.to, doc.length);
   const visible = { from: ch.from, to };
   if (!ch.label) return { visible, editable: visible };

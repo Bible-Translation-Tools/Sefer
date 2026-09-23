@@ -38,7 +38,7 @@ const CHAPTER_MARKER = /^\\c[ \t]+(\d+)/gmu;
  * thing USFM guarantees about where a chapter begins, and a wrong answer here
  * costs a slightly coarse sentence, never a wrong edit.
  */
-export const chapterSlices = (text: string): ReadonlyMap<number, string> => {
+const chapterSlices = (text: string): ReadonlyMap<number, string> => {
   const slices = new Map<number, string>();
   const starts: { readonly number: number; readonly at: number }[] = [];
   CHAPTER_MARKER.lastIndex = 0;
@@ -64,7 +64,7 @@ export const chapterSlices = (text: string): ReadonlyMap<number, string> => {
  * A chapter present on one side only counts as changed — that is an added or
  * deleted chapter, and it is exactly the kind of thing a plan must mention.
  */
-export const chaptersChanged = (before: string, after: string): readonly number[] => {
+const chaptersChanged = (before: string, after: string): readonly number[] => {
   if (before === after) return [];
   const left = chapterSlices(before);
   const right = chapterSlices(after);

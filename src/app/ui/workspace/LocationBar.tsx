@@ -37,7 +37,7 @@ export interface LocationBarProps {
 }
 
 /** What a chapter row is called when it has no `\c` number: the front matter. */
-export const INTRO_LABEL = "Intro";
+const INTRO_LABEL = "Intro";
 
 export function LocationBar(props: LocationBarProps) {
   const shell = useShell();

@@ -83,7 +83,7 @@ const LABELS: Record<string, string> = {
   mt3: "Subtitle",
 };
 
-export interface FrontRow {
+interface FrontRow {
   /** The marker as written, no backslash. */
   readonly marker: string;
   readonly label: string;
@@ -103,7 +103,7 @@ export interface FrontRow {
  * introduction gives the same six — `\ip` is content, and content is the
  * editor's job, not the card's.
  */
-export function frontMatterRows(state: EditorState, s: DocStructure): FrontRow[] {
+function frontMatterRows(state: EditorState, s: DocStructure): FrontRow[] {
   const out: FrontRow[] = [];
   const doc = state.doc;
   for (let i = 0; i < s.lines.length; i++) {

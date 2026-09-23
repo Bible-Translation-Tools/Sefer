@@ -13,16 +13,11 @@ import type { DocStructure } from "../core/docStructure";
 import { docText, structureAt } from "../core/editorState";
 import { modeFacet } from "../core/kernel";
 
-export type EmitRule = "omit" | "verbatim" | "newline" | "space";
+type EmitRule = "omit" | "verbatim" | "newline" | "space";
 
-export type CopyProfile = "source" | "as-seen" | "text-only" | "verses-and-text";
+type CopyProfile = "source" | "as-seen" | "text-only" | "verses-and-text";
 
-export const COPY_PROFILES: readonly CopyProfile[] = [
-  "source",
-  "as-seen",
-  "text-only",
-  "verses-and-text",
-];
+const COPY_PROFILES: readonly CopyProfile[] = ["source", "as-seen", "text-only", "verses-and-text"];
 
 interface ProfileRules {
   content: EmitRule;
@@ -127,7 +122,7 @@ function pieces(doc: string, s: DocStructure, wantVerseSlots: boolean): Piece[] 
   return flat;
 }
 
-export function copyFold(
+function copyFold(
   doc: string,
   s: DocStructure,
   profile: CopyProfile,
@@ -157,11 +152,11 @@ export function copyFold(
     .replace(/  +/g, " ");
 }
 
-export const copyProfileFacet = Facet.define<CopyProfile, CopyProfile>({
+const copyProfileFacet = Facet.define<CopyProfile, CopyProfile>({
   combine: (v) => v[0] ?? "source",
 });
 
-export const copyProfile: Extension = EditorView.clipboardOutputFilter.of((text, state) => {
+const copyProfile: Extension = EditorView.clipboardOutputFilter.of((text, state) => {
   const profile = state.facet(copyProfileFacet);
   if (profile === "source" || state.facet(modeFacet) !== "regular") return text;
   const sel = state.selection.main;

@@ -15,13 +15,13 @@ export interface RenderRange {
   to: number;
 }
 
-export const RENDER_MARGIN = 2000;
+const RENDER_MARGIN = 2000;
 
-export function widen(len: number, from: number, to: number, margin = RENDER_MARGIN): RenderRange {
+function widen(len: number, from: number, to: number, margin = RENDER_MARGIN): RenderRange {
   return { from: Math.max(0, from - margin), to: Math.min(len, to + margin) };
 }
 
-export const setRenderRange = StateEffect.define<RenderRange | null>();
+const setRenderRange = StateEffect.define<RenderRange | null>();
 
 export const renderRangeField = StateField.define<RenderRange | null>({
   create: () => null,

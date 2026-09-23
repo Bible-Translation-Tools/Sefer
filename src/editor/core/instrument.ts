@@ -327,7 +327,7 @@ let key: EditorState | null = null;
 let current: Trace | null = null;
 
 /** Ends the open trace, if any. Called for you; exported for a dev surface. */
-export const flushTrace = (): void => {
+const flushTrace = (): void => {
   current?.end();
   current = null;
   key = null;
@@ -366,13 +366,13 @@ export const traceOf = (state: EditorState): Trace | null =>
   key === state && current !== null ? current : null;
 
 /** The last traces, newest last. Flushes the open one so the view is current. */
-export const traces = (limit = RING): readonly TraceSummary[] => {
+const traces = (limit = RING): readonly TraceSummary[] => {
   flushTrace();
   return limit >= ring.length ? ring : ring.slice(ring.length - limit);
 };
 
 /** One trace as a person reads it: the stages in order, with their verdicts. */
-export const dumpTrace = (t: TraceSummary): string =>
+const dumpTrace = (t: TraceSummary): string =>
   [
     `trace #${t.seq} ${t.origin} doc=${t.docLength} head=${t.head} ${t.ms}ms` +
       (t.refusedBy === null ? "" : ` REFUSED by ${t.refusedBy}`),

@@ -74,9 +74,9 @@ export const CLASS_KEYS: readonly ClassKey[] = [
 const PAINTS: readonly Paint[] = ["point", "boundary", "ambient", "none"];
 const MUTABILITIES: readonly Mutability[] = ["direct", "via-anchor", "trusted-only", "immortal"];
 
-export const cellKey = (c: Cell) => `${c.paint}×${c.mutability}`;
+const cellKey = (c: Cell) => `${c.paint}×${c.mutability}`;
 
-export const STRUCK: Record<string, string> = {
+const STRUCK: Record<string, string> = {
   "none×direct":
     "H3 (orphan chrome) / P1–P2 (invisible edits) — the content_from-swallowed-space bug, as a law",
   "boundary×direct": "C2 — a boundary is never self-owned; its referent is the following anchor",
@@ -85,11 +85,11 @@ export const STRUCK: Record<string, string> = {
   "ambient×trusted-only": "unused",
 };
 
-export const RESERVED = new Set(["point×trusted-only"]);
+const RESERVED = new Set(["point×trusted-only"]);
 
-export const isLawful = (c: Cell) => !(cellKey(c) in STRUCK);
+const isLawful = (c: Cell) => !(cellKey(c) in STRUCK);
 
-export function allCells(): Cell[] {
+function allCells(): Cell[] {
   const out: Cell[] = [];
   for (const paint of PAINTS)
     for (const mutability of MUTABILITIES) out.push({ paint, mutability });
@@ -111,7 +111,7 @@ export interface RegistryRow {
 
 export type Registry = Record<ClassKey, RegistryRow>;
 
-export const DEFAULT_REGISTRY: Registry = {
+const DEFAULT_REGISTRY: Registry = {
   content: { cell: { paint: "point", mutability: "direct" } },
   pad: {
     cell: { paint: "point", mutability: "direct" },
@@ -208,7 +208,7 @@ export const DEFAULT_REGISTRY: Registry = {
   },
 };
 
-export interface OwnedSet {
+interface OwnedSet {
   painting: ClassKey[];
   hidden: ClassKey[];
 }
@@ -232,7 +232,7 @@ export type OwnedSetName = keyof typeof OWNED_SETS;
 
 // SAFETY: `OwnedSetName` is `keyof typeof OWNED_SETS`, so the object's own
 // keys are exactly that type; `Object.keys` only widens it to string.
-export const OWNED_SET_NAMES = Object.keys(OWNED_SETS) as OwnedSetName[];
+const OWNED_SET_NAMES = Object.keys(OWNED_SETS) as OwnedSetName[];
 
 export function setsPaintedBy(cls: ClassKey): OwnedSetName[] {
   // SAFETY: every value of OWNED_SETS is an OwnedSet; the assertion only
@@ -247,7 +247,7 @@ export interface Assignment {
   clamped: { cls: ClassKey; to: "pip" | "freeze"; set: OwnedSetName }[];
 }
 
-export class UnclampableDelta extends Error {}
+class UnclampableDelta extends Error {}
 
 const clone = (r: Registry): Registry => {
   // SAFETY: the loop immediately below assigns every CLASS_KEYS entry, and
@@ -258,7 +258,7 @@ const clone = (r: Registry): Registry => {
   return out;
 };
 
-export function resolve(base: Registry, deltas: readonly AssignmentDelta[]): Assignment {
+function resolve(base: Registry, deltas: readonly AssignmentDelta[]): Assignment {
   const rows = clone(base);
   const clamped: Assignment["clamped"] = [];
 
@@ -311,7 +311,7 @@ export function resolve(base: Registry, deltas: readonly AssignmentDelta[]): Ass
   return { rows, clamped };
 }
 
-export const DEFAULT_ASSIGNMENT: Assignment = resolve(DEFAULT_REGISTRY, []);
+const DEFAULT_ASSIGNMENT: Assignment = resolve(DEFAULT_REGISTRY, []);
 
 export const PROJECTIONS: Record<string, AssignmentDelta> = {
   default: {},
@@ -357,14 +357,14 @@ export function assignmentAt(state: EditorState): Assignment {
   return a;
 }
 
-export function cellAt(state: EditorState, cls: ClassKey): Cell {
+function cellAt(state: EditorState, cls: ClassKey): Cell {
   return assignmentAt(state).rows[cls].cell;
 }
 
 export const rowAt = (state: EditorState, cls: ClassKey): RegistryRow =>
   assignmentAt(state).rows[cls];
 
-export const isKeystrokeImmutable = (state: EditorState, cls: ClassKey) => {
+const isKeystrokeImmutable = (state: EditorState, cls: ClassKey) => {
   const m = cellAt(state, cls).mutability;
   return m === "immortal" || m === "trusted-only";
 };
@@ -372,7 +372,7 @@ export const isKeystrokeImmutable = (state: EditorState, cls: ClassKey) => {
 export const keyboardMutable = (row: RegistryRow) =>
   row.cell.mutability === "direct" || row.typable === true;
 
-export const isElided = (state: EditorState, cls: ClassKey) => rowAt(state, cls).elided === true;
+const isElided = (state: EditorState, cls: ClassKey) => rowAt(state, cls).elided === true;
 
 export const pipActive = (state: EditorState, cls: ClassKey) =>
   assignmentAt(state).clamped.some((c) => c.cls === cls && c.to === "pip");
@@ -380,7 +380,7 @@ export const pipActive = (state: EditorState, cls: ClassKey) =>
 export const ownershipOf = (row: RegistryRow): OwnershipBit | undefined =>
   row.ownership === "DISSOLVE" && row.cell.mutability === "immortal" ? undefined : row.ownership;
 
-export const ownershipAt = (state: EditorState, cls: ClassKey): OwnershipBit | undefined =>
+const ownershipAt = (state: EditorState, cls: ClassKey): OwnershipBit | undefined =>
   ownershipOf(rowAt(state, cls));
 
 export const paintsItsOwnLineAmbient = (cls: ClassKey): boolean =>

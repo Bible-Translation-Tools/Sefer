@@ -41,7 +41,7 @@ import { PAINT_PORT } from "../core/editorState";
 import { trusted } from "../core/kernel";
 import { span } from "../core/timing";
 
-export interface Finding {
+interface Finding {
   code: number;
   name: string;
   severity: "error" | "warning" | "info" | "hint" | null;
@@ -64,9 +64,9 @@ export type HiddenTest = (state: EditorState, from: number, to: number) => boole
  * nothing is noise — so a finding is marked `hidden` when the painter covered
  * its whole span, and `usfmLinter` drops those by default.
  */
-export const hiddenByPaint: HiddenTest = (state, from, to) => PAINT_PORT.hidden(state, from, to);
+const hiddenByPaint: HiddenTest = (state, from, to) => PAINT_PORT.hidden(state, from, to);
 
-export function findings(state: EditorState, isHidden?: HiddenTest): Finding[] {
+function findings(state: EditorState, isHidden?: HiddenTest): Finding[] {
   const analysis = structureAt(state).analysis;
   if (!analysis) return [];
   const done = span("diagnostics-render");
@@ -96,7 +96,7 @@ export function findings(state: EditorState, isHidden?: HiddenTest): Finding[] {
   return out;
 }
 
-export function applyFix(
+function applyFix(
   view: EditorView,
   fix: { from: number; to: number; insert: string }[],
   stamp?: EngineStamp,
@@ -155,7 +155,7 @@ export interface CorpusFinding {
 const NO_CORPUS: readonly CorpusFinding[] = [];
 
 /** Replace the corpus findings shown for the book in this state. */
-export const setCorpusFindings = StateEffect.define<readonly CorpusFinding[]>();
+const setCorpusFindings = StateEffect.define<readonly CorpusFinding[]>();
 
 /**
  * Sink 1's second source: the Sous findings for the instantiated book.
@@ -168,7 +168,7 @@ export const setCorpusFindings = StateEffect.define<readonly CorpusFinding[]>();
  * failure the stamps exist to prevent; the next publication brings a correct
  * set within the scheduler's quiet window.
  */
-export const sousField = StateField.define<readonly CorpusFinding[]>({
+const sousField = StateField.define<readonly CorpusFinding[]>({
   create: () => NO_CORPUS,
   update(held, tr) {
     if (tr.docChanged) return NO_CORPUS;
@@ -178,7 +178,7 @@ export const sousField = StateField.define<readonly CorpusFinding[]>({
 });
 
 /** What the linter is currently showing from the corpus half. */
-export const corpusFindings = (state: EditorState): readonly CorpusFinding[] =>
+const corpusFindings = (state: EditorState): readonly CorpusFinding[] =>
   state.field(sousField, false) ?? NO_CORPUS;
 
 /**

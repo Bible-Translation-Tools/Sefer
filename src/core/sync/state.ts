@@ -157,7 +157,7 @@ export const emptyReading: SyncReading = {
  * 5. `unpublished` — attached to a repository the branch has never reached.
  * 6. the clocks — diverged, ahead, behind, clean.
  */
-export const syncStateOf = (reading: SyncReading): SyncState => {
+const syncStateOf = (reading: SyncReading): SyncState => {
   if (reading.mergeInProgress) return "conflicted";
   if (!reading.online || reading.lastFailure === "Network") return "offline";
   if (!reading.signedIn || reading.lastFailure === "Unauthorized") return "unauthorized";
@@ -171,7 +171,7 @@ export const syncStateOf = (reading: SyncReading): SyncState => {
   return "attached-clean";
 };
 
-export const clocksOf = (reading: SyncReading): Clocks => ({
+const clocksOf = (reading: SyncReading): Clocks => ({
   local: { at: reading.localHead?.at, unshared: reading.ahead.length, by: undefined },
   shared: {
     at: reading.remoteHead?.at,
@@ -217,7 +217,7 @@ export type SyncActionId =
  * answer: a diverged project with contested books is sent to Compare instead
  * of being offered a combine that would have to guess.
  */
-export const primaryActionOf = (state: SyncState, contested = false): SyncActionId => {
+const primaryActionOf = (state: SyncState, contested = false): SyncActionId => {
   switch (state) {
     case "conflicted":
       return "resolve";

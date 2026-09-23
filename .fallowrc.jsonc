@@ -2,7 +2,13 @@
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
   // The Solid vite plugin's turnkey client mode generates the real entries
   // around these two by file-name convention; nothing imports them.
-  "entry": ["src/App.tsx", "src/Document.tsx"],
+  "entry": [
+    "src/App.tsx",
+    "src/Document.tsx",
+    // tools/vite/lucideSolid.ts redirects lucide-solid's `solid-js` imports
+    // here, so its exports are consumed through a Vite alias no static tool sees.
+    "tools/vite/lucideSolidShim.ts",
+  ],
   "ignorePatterns": ["src/routeTree.gen.ts"],
   "ignoreDependencies": [
     // Spawned as a binary by tools/tauri/run.ts (`pnpm exec tauri`).

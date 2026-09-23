@@ -61,7 +61,7 @@ const SPACING: Record<string, number> = { light: 29, normal: 11, heavy: 4 };
  * Deterministic by position, with no randomness at all: the same book always
  * produces the same draft, so two runs of the playground can be compared.
  */
-export const syntheticDraft = (text: string, spacing: number): string => {
+const syntheticDraft = (text: string, spacing: number): string => {
   const lines = text.split("\n");
   const out: string[] = [];
   let verse = 0;

@@ -25,7 +25,7 @@ export const WEB_PATHS: HostPaths = {
   temp: `${OPFS_ROOT}/temp`,
 };
 
-export const DEFAULT_LOCALE = "en";
+const DEFAULT_LOCALE = "en";
 
 /**
  * A browser without `navigator` is not hypothetical: core tests and SSR both

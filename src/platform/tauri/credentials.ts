@@ -28,7 +28,7 @@ import { Credentials, type Credential } from "../../core/host/credentials";
  * same person talking to the same Gitea, and making them sign in twice would
  * teach nobody anything.
  */
-export const KEYCHAIN_SERVICE = "org.wycliffe.sefer";
+const KEYCHAIN_SERVICE = "org.wycliffe.sefer";
 
 const decode = (secret: string): Option.Option<Credential> => {
   try {

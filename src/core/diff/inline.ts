@@ -94,7 +94,7 @@ const SPACE = /\s/u;
  * deciding whether to ask (`skeleton.ts`'s cap), and because "what is a word
  * here" is a decision worth being able to read rather than infer.
  */
-export const tokenize = (text: string): readonly string[] => {
+const tokenize = (text: string): readonly string[] => {
   const out: string[] = [];
   let at = 0;
   while (at < text.length) {

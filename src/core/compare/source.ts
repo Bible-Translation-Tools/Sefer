@@ -111,7 +111,7 @@ export const sourceRef = (source: CompareSource): SourceRef => ({
   canApply: source.canApply,
 });
 
-export const compareError = (reason: CompareError["reason"], description: string): CompareError =>
+const compareError = (reason: CompareError["reason"], description: string): CompareError =>
   new CompareError({ reason, description });
 
 export const failCompare = (

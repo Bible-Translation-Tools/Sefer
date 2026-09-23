@@ -128,7 +128,7 @@ class VersePipWidget extends WidgetType {
   }
 }
 
-export const WIDGETS: Record<WidgetKey, (arg: string) => WidgetType> = {
+const WIDGETS: Record<WidgetKey, (arg: string) => WidgetType> = {
   versePip: (num) => new VersePipWidget(num),
   join: () => new JoinWidget(" "),
   joinSigil: () => new JoinWidget("\u21b5"),
@@ -170,7 +170,7 @@ export function noteApparatusText(doc: string, note: NoteRange, part: number): s
 }
 
 /** What an empty note body says, so that there is something to click. */
-export const EMPTY_NOTE_BODY = "Add note text";
+const EMPTY_NOTE_BODY = "Add note text";
 
 /**
  * Paints one apparatus row's body span.
@@ -275,7 +275,7 @@ class NotesWidget extends WidgetType {
  */
 export type NoteGesture = "caller" | "back" | "edit";
 
-export let toggleNote: (view: EditorView, at: number, how: NoteGesture) => void = () => {};
+let toggleNote: (view: EditorView, at: number, how: NoteGesture) => void = () => {};
 export function setNoteToggler(fn: typeof toggleNote) {
   toggleNote = fn;
 }
@@ -741,7 +741,7 @@ function clipTo(add: Pending[], doc: string, from: number, to: number): Pending[
   return out;
 }
 
-export const baseTheme = EditorView.theme({
+const baseTheme = EditorView.theme({
   "&": { height: "100%" },
   ".cm-scroller": { overflow: "auto" },
 });

@@ -146,7 +146,7 @@ export const saveHotkey = (hotkey: Hotkey | null): void => {
   }
 };
 
-export const forgetHotkey = (): void => {
+const forgetHotkey = (): void => {
   try {
     localStorage.removeItem(STORAGE);
   } catch {

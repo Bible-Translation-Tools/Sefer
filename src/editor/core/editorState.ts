@@ -23,14 +23,11 @@ import { Decoration, type DecorationSet, EditorView } from "@codemirror/view";
 import { canonicalCaret } from "./caret";
 import {
   anchorFrom,
-  chapterExtents,
   editableClipAt,
   pickField,
-  pickedChapter,
   setPick,
   visibleClipAt,
   type ClipRange,
-  type Extents,
 } from "./clip";
 import {
   type BuildOpts,
@@ -41,40 +38,24 @@ import {
   isIsolate,
   isUnit,
 } from "./decorations";
-import { docText, structureAt, structureField, structureMs } from "./docStructure";
+import { docText, structureAt, structureField } from "./docStructure";
 import { type Mode, type PaintPort, modeFacet } from "./kernel";
 import { paintOver, type Paint } from "./paint";
 import { renderRangeAt, renderRangeField } from "./render";
 
-export {
-  anchorFrom,
-  chapterExtents,
-  docText,
-  editableClipAt,
-  pickField,
-  pickedChapter,
-  setPick,
-  structureAt,
-  structureField,
-  structureMs,
-  visibleClipAt,
-  type ClipRange,
-  type Extents,
-};
+export { docText, editableClipAt, pickField, structureAt, structureField, type ClipRange };
 
-export { type Mode, modeFacet };
+export {};
 import { type DocPlan, resolvePlan } from "./plan";
 import { PROJECTIONS, assignment, assignmentAt } from "./registry";
 import { span } from "./timing";
-import { clearStateError, stateError, stateFailed } from "./trace";
-
-export { clearStateError, stateError };
+import { stateFailed } from "./trace";
 
 export const optsFacet = Facet.define<BuildOpts, BuildOpts>({
   combine: (v) => v[0] ?? DEFAULT_BUILD_OPTS,
 });
 
-export function buildOptsAt(state: EditorState): BuildOpts {
+function buildOptsAt(state: EditorState): BuildOpts {
   const base = state.facet(optsFacet);
   return {
     ...base,
@@ -108,7 +89,7 @@ export function caretClipAt(st: EditorState): ClipRange {
   return { from: Math.max(win.from, Math.min(from, win.to)), to: win.to };
 }
 
-export interface Built {
+interface Built {
   set: DecorationSet;
   atomic: DecorationSet;
   isolates: DecorationSet;
@@ -177,7 +158,7 @@ export const decoField = StateField.define<Built>({
   provide: (f) => EditorView.decorations.from(f, (b) => b.set),
 });
 
-export function isHiddenSpan(state: EditorState, from: number, to: number): boolean {
+function isHiddenSpan(state: EditorState, from: number, to: number): boolean {
   if (state.facet(modeFacet) !== "regular") return false;
   const built = state.field(decoField, false);
   if (!built) return false;
@@ -193,7 +174,7 @@ export function isHiddenSpan(state: EditorState, from: number, to: number): bool
 
 const renderingCache = new WeakMap<EditorState, Paint>();
 
-export function paintAt(state: EditorState): Paint {
+function paintAt(state: EditorState): Paint {
   let r = renderingCache.get(state);
   if (!r) {
     const done = span("paint");
@@ -204,7 +185,7 @@ export function paintAt(state: EditorState): Paint {
   return r;
 }
 
-export function drawsAt(state: EditorState, pos: number): boolean {
+function drawsAt(state: EditorState, pos: number): boolean {
   if (state.facet(modeFacet) !== "regular") return false;
   return paintAt(state).draws(pos);
 }

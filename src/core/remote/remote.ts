@@ -44,15 +44,13 @@ export class RemoteError extends Data.TaggedError("RemoteError")<{
  * does not depend on the host `Credentials` service. Composition supplies the
  * lookup; nothing here reads or stores a token.
  */
-export interface CredentialLike {
+interface CredentialLike {
   readonly username: string;
   readonly token: string;
 }
 
 /** `Credentials.get(remote)` seen as a plain port. */
-export type CredentialLookup = (
-  remote: string,
-) => Effect.Effect<Option.Option<CredentialLike>, never>;
+type CredentialLookup = (remote: string) => Effect.Effect<Option.Option<CredentialLike>, never>;
 
 export interface RemoteService {
   /** Records `url` as the repository's origin. Does not transfer anything. */
@@ -124,7 +122,7 @@ const unavailable = <A>(): Effect.Effect<A, RemoteError> =>
  * than let a sync surface claim a project is up to date with a remote it
  * never reached.
  */
-export const RemoteUnavailableLive: Layer.Layer<Remote> = Layer.succeed(Remote, {
+const RemoteUnavailableLive: Layer.Layer<Remote> = Layer.succeed(Remote, {
   attach: () => unavailable(),
   // `None`, not a refusal: nothing was ever attached, which is true.
   origin: () => Effect.succeed(Option.none()),

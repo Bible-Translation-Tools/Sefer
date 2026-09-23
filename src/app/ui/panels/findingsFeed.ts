@@ -156,7 +156,7 @@ const asFinding = (hit: Occurrence): Finding | undefined =>
  * Checked rather than assumed, on a field only a `Finding` has: a hit from
  * anywhere else is skipped rather than mistaken for one.
  */
-export const findingsOf = (excerpt: Excerpt): readonly Finding[] => {
+const findingsOf = (excerpt: Excerpt): readonly Finding[] => {
   const out: Finding[] = [];
   for (const hit of excerpt.hits) {
     const held = asFinding(hit);

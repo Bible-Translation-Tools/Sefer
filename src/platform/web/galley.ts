@@ -19,7 +19,7 @@ import {
 } from "../../core/galley/galley";
 
 /** The bundled asset's URL. Exported for evidence in a boot failure report. */
-export const WASM_URL: string = wasmUrl;
+const WASM_URL: string = wasmUrl;
 
 export const WebGalleyLive: Layer.Layer<Galley, EngineLoadError | VersionMismatch> = Layer.unwrap(
   Effect.tryPromise({

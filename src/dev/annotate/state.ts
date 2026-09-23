@@ -15,7 +15,7 @@
 
 import type { Tweak, Variant } from "./types.ts";
 
-export const VARIANT_KEY = "v";
+const VARIANT_KEY = "v";
 
 /**
  * A toggle reads "on"/"off" rather than "true"/"false", and that is not taste.
@@ -30,7 +30,7 @@ export const OFF = "off";
 
 export const isOn = (value: string): boolean => value === ON;
 
-export const defaultOf = (tweak: Tweak): string => {
+const defaultOf = (tweak: Tweak): string => {
   if (tweak.kind === "toggle") return tweak.initial === true ? ON : OFF;
   if (typeof tweak.initial === "string") return tweak.initial;
   return tweak.options?.[0] ?? "";
@@ -39,9 +39,9 @@ export const defaultOf = (tweak: Tweak): string => {
 const prefixed = (namespace: string, rest: string): string =>
   namespace === "" ? rest : `${namespace}.${rest}`;
 
-export const variantKey = (namespace: string): string => prefixed(namespace, VARIANT_KEY);
+const variantKey = (namespace: string): string => prefixed(namespace, VARIANT_KEY);
 
-export const tweakKey = (namespace: string, variantId: string | null, key: string): string =>
+const tweakKey = (namespace: string, variantId: string | null, key: string): string =>
   prefixed(namespace, variantId === null ? key : `${variantId}.${key}`);
 
 /** The variant showing, defaulting to the first declared one. */

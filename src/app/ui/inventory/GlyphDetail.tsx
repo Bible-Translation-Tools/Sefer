@@ -47,7 +47,7 @@ import {
 import { GlyphTile } from "./GlyphTile";
 
 /** Basis points as a percentage. `0.02%` is a real answer; `0%` is not. */
-export const share = (bp: number): string => `${(bp / 100).toFixed(2)}%`;
+const share = (bp: number): string => `${(bp / 100).toFixed(2)}%`;
 
 /**
  * A one-line quotation around a span, from the raw USFM.

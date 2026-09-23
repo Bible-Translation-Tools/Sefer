@@ -54,9 +54,7 @@ export interface BookChanges {
   readonly firstTime?: boolean;
 }
 
-export const countsOf = (
-  hunks: readonly Hunk[],
-): { readonly added: number; readonly removed: number } => {
+const countsOf = (hunks: readonly Hunk[]): { readonly added: number; readonly removed: number } => {
   let added = 0;
   let removed = 0;
   for (const hunk of hunks) {

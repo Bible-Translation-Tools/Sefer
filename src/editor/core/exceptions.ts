@@ -34,7 +34,7 @@ export function inDesignatorDelimiter(s: DocStructure, pos: number): boolean {
   return isDesignatorLine(l) && l.num !== null && pos >= l.numTo && pos < l.contentFrom;
 }
 
-export const DEFAULT_BLOCK = "p";
+const DEFAULT_BLOCK = "p";
 
 export const blockKindForEnter = (b: Block | null): string =>
   b && b.cls !== "block.heading" && b.cls !== "block.meta" ? b.kind : DEFAULT_BLOCK;

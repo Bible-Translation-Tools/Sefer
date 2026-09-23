@@ -24,7 +24,7 @@ interface NodeRuntime {
  * already answer, and the editor's own instruments were a third — they remain
  * the hot-path SOURCE, feeding the ring, but not a parallel thing to read.
  */
-export interface ObservabilityDevSurface {
+interface ObservabilityDevSurface {
   /**
    * The operations — end-to-end pieces of work — as NESTED objects: the wide
    * event with its notes as `events` and its spans as `children`. `recent(10)`

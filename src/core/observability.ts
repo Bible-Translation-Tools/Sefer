@@ -188,9 +188,9 @@ export interface ObservabilityOptions {
   readonly host?: string | undefined;
 }
 
-export const DEFAULT_CAPACITY = 2000;
+const DEFAULT_CAPACITY = 2000;
 
-export const DEFAULT_LEVEL: Level = "all";
+const DEFAULT_LEVEL: Level = "all";
 
 export const MAX_TEXT = 512;
 
@@ -199,7 +199,7 @@ export const MAX_TEXT = 512;
  * question gets answered without a second run — but the ring holds `capacity`
  * of them in a browser tab, so width is bounded rather than trusted.
  */
-export const MAX_ATTRS = 32;
+const MAX_ATTRS = 32;
 
 const VOLUME: Readonly<Record<Level, number>> = { off: 0, verdicts: 1, spans: 2, all: 3 };
 
@@ -543,9 +543,9 @@ export interface AssemblerOptions {
   readonly maxEvents?: number;
 }
 
-export const DEFAULT_MAX_TRACES = 64;
+const DEFAULT_MAX_TRACES = 64;
 
-export const DEFAULT_MAX_EVENTS = 256;
+const DEFAULT_MAX_EVENTS = 256;
 
 /**
  * Feed it the ring's events; it calls `operation` when one completes.

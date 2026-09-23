@@ -23,7 +23,7 @@ import { ShellGate } from "../../../../app/ui/ShellGate";
  * dropped rather than refused — a stale bookmark should open the findings
  * page, not an error.
  */
-export interface FindingsSearch {
+interface FindingsSearch {
   readonly code?: string;
   readonly pattern?: number;
 }

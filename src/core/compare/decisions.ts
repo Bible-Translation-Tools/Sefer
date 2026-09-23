@@ -19,22 +19,22 @@ import { wholeBookHunkId, type BookComparison, type CompareResult, type HunkId }
 import { failCompare, type CompareError, type CompareSource, type SourceRef } from "./source";
 
 /** Undecided is a real state, not a missing one: Apply refuses while it lasts. */
-export type Decision = "left" | "right" | "undecided";
+type Decision = "left" | "right" | "undecided";
 
 /** Hunk id → decision. Absent reads as `undecided`. */
-export type Decisions = ReadonlyMap<HunkId, Decision>;
+type Decisions = ReadonlyMap<HunkId, Decision>;
 
-export const noDecisions: Decisions = new Map();
+const noDecisions: Decisions = new Map();
 
-export const decisionFor = (decisions: Decisions, id: HunkId): Decision =>
+const decisionFor = (decisions: Decisions, id: HunkId): Decision =>
   decisions.get(id) ?? "undecided";
 
 /** Every id a book asks a question about: its hunks, or the book itself. */
-export const decisionIds = (book: BookComparison): readonly HunkId[] =>
+const decisionIds = (book: BookComparison): readonly HunkId[] =>
   book.presence === "both" ? book.hunks.map((hunk) => hunk.id) : [wholeBookHunkId(book.bookId)];
 
 /** One choice, as a new map — the old one is never mutated. */
-export const decide = (decisions: Decisions, id: HunkId, decision: Decision): Decisions => {
+const decide = (decisions: Decisions, id: HunkId, decision: Decision): Decisions => {
   const next = new Map(decisions);
   if (decision === "undecided") next.delete(id);
   else next.set(id, decision);
@@ -42,11 +42,7 @@ export const decide = (decisions: Decisions, id: HunkId, decision: Decision): De
 };
 
 /** The bulk stamp: a whole book, or a whole comparison, in one click. */
-export const decideMany = (
-  decisions: Decisions,
-  ids: Iterable<HunkId>,
-  decision: Decision,
-): Decisions => {
+const decideMany = (decisions: Decisions, ids: Iterable<HunkId>, decision: Decision): Decisions => {
   const next = new Map(decisions);
   for (const id of ids) {
     if (decision === "undecided") next.delete(id);
@@ -55,7 +51,7 @@ export const decideMany = (
   return next;
 };
 
-export interface Completeness {
+interface Completeness {
   readonly total: number;
   readonly decided: number;
   readonly undecided: number;
@@ -73,18 +69,18 @@ const count = (ids: readonly HunkId[], decisions: Decisions): Completeness => {
 };
 
 /** "N decided of M", for one book. An identical book asks nothing. */
-export const bookCompleteness = (book: BookComparison, decisions: Decisions): Completeness =>
+const bookCompleteness = (book: BookComparison, decisions: Decisions): Completeness =>
   count(book.identical ? [] : decisionIds(book), decisions);
 
 /** "N decided of M", for the whole comparison. */
-export const completeness = (result: CompareResult, decisions: Decisions): Completeness =>
+const completeness = (result: CompareResult, decisions: Decisions): Completeness =>
   count(
     result.books.filter((book) => !book.identical).flatMap((book) => decisionIds(book)),
     decisions,
   );
 
 /** Every id in the comparison, for "Keep all left" / "Take all right". */
-export const allDecisionIds = (result: CompareResult): readonly HunkId[] =>
+const allDecisionIds = (result: CompareResult): readonly HunkId[] =>
   result.books.filter((book) => !book.identical).flatMap((book) => decisionIds(book));
 
 /**
@@ -103,7 +99,7 @@ export const allDecisionIds = (result: CompareResult): readonly HunkId[] =>
  * into a right-hand target — a merge tool quietly changing a document nobody
  * touched, which is the single worst thing this module could do.
  */
-export const mergedText = (
+const mergedText = (
   book: BookComparison,
   decisions: Decisions,
   fallback: "left" | "right" = "left",
@@ -163,7 +159,7 @@ const sideText = (book: BookComparison, side: "left" | "right"): string | undefi
  * this-project-on-the-left comparison. Which side is the target does not
  * change the merged text; it changes only what counts as a change.
  */
-export const plan = (
+const plan = (
   result: CompareResult,
   decisions: Decisions,
   target: "left" | "right" = "left",

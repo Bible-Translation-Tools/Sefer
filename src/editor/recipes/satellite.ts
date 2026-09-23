@@ -56,10 +56,7 @@ export const reclip = (view: EditorView, range: { from: number; to: number }): v
   view.dispatch({ effects: windowEffect.of(range) });
 };
 
-export function collapseOutside(
-  state: EditorState,
-  range: { from: number; to: number },
-): DecorationSet {
+function collapseOutside(state: EditorState, range: { from: number; to: number }): DecorationSet {
   const len = state.doc.length;
   const out = [];
   const from = Math.max(0, Math.min(range.from, len));
@@ -120,7 +117,7 @@ export const markedRanges = (ranges: readonly MarkedRange[]): Extension => [
   markField,
 ];
 
-export const repaintMarks = (view: EditorView, ranges: readonly MarkedRange[]): void => {
+const repaintMarks = (view: EditorView, ranges: readonly MarkedRange[]): void => {
   view.dispatch({ effects: setMarks.of(ranges) });
 };
 

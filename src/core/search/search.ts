@@ -116,9 +116,9 @@ export interface Hit {
  * was to say the gap is there (`galley/src/find.md`, "Replacement is the
  * caller's").
  */
-export const spansMarkup = (hit: Hit): boolean => (hit.pieces?.length ?? 1) > 1;
+const spansMarkup = (hit: Hit): boolean => (hit.pieces?.length ?? 1) > 1;
 
-export class SearchError extends Data.TaggedError("SearchError")<{
+class SearchError extends Data.TaggedError("SearchError")<{
   /**
    * The pattern is not a regular expression. The ONLY way a search fails now:
    * every scan here runs in this process over strings this module was handed,
@@ -252,7 +252,7 @@ const refFrom = (table: RefTable, book: BookId, pos: number): Ref => {
  * Convenience wrapper: it builds a marker table for the whole text, so call it
  * for a handful of positions, not once per hit — `find` shares one table.
  */
-export const refAt = (text: string, pos: number, book: BookId = ""): Ref =>
+const refAt = (text: string, pos: number, book: BookId = ""): Ref =>
   refFrom(buildRefTable(text), book, pos);
 
 // ---------------------------------------------------------------------------
@@ -604,7 +604,7 @@ const isFresh = (hit: Hit, book: Book): boolean =>
  * through here first, so a stale card refuses rather than editing the wrong
  * range.
  */
-export const resolveHit = (
+const resolveHit = (
   hit: Hit,
   books: readonly Book[],
 ): { readonly book: Book; readonly from: number; readonly to: number } | null => {
@@ -638,7 +638,7 @@ const spansMarkupRefusal = (hit: Hit): Refusal =>
  * Refused as `SpansMarkup` before any of that when the hit crosses markup the
  * projection dropped (`spansMarkup`): there is no single range to replace.
  */
-export const replace = (
+const replace = (
   hit: Hit,
   insert: string,
   books: readonly Book[],

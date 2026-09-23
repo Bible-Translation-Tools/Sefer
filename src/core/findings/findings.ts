@@ -13,8 +13,7 @@ import type { BookId, Ref } from "../book/book";
 import type { Analysis } from "../galley";
 import type { Finding } from "./finding";
 
-export { stale } from "./finding";
-export type { Finding, FixRef, Producer, Severity } from "./finding";
+export type { Finding } from "./finding";
 
 /** Errors first within a book, so the panel's first row is the worst one. */
 const RANK: Readonly<Record<Finding["severity"], number>> = { error: 0, warning: 1, info: 2 };

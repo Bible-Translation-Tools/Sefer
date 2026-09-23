@@ -24,7 +24,7 @@ import {
 } from "../../core/host/hostInfo";
 
 /** Everything the desktop host can do. `none` is not a capability. */
-export const TAURI_CAPABILITIES: HostCapabilities = {
+const TAURI_CAPABILITIES: HostCapabilities = {
   nativeDisk: true,
   nativeGit: true,
   fsWatch: true,
@@ -32,7 +32,7 @@ export const TAURI_CAPABILITIES: HostCapabilities = {
   secureStore: true,
 };
 
-export const DEFAULT_LOCALE = "en";
+const DEFAULT_LOCALE = "en";
 
 const asPosix = (path: string): string => path.replace(/\\/gu, "/").replace(/\/+$/u, "");
 

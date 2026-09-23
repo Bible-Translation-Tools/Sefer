@@ -59,7 +59,7 @@ export interface CatalogueEntry {
   readonly cloneUrl: string;
 }
 
-export class CatalogueError extends Error {
+class CatalogueError extends Error {
   override readonly name = "CatalogueError";
 }
 
@@ -121,7 +121,7 @@ const toEntry = (repo: typeof ConsolidatedRepo.Type): CatalogueEntry => ({
  * The Language API implementation. One GET, no auth, no paging — the whole view
  * arrives at once, which is why the table sorts and filters in memory.
  */
-export const languageApiCatalogue = (origin: string): CatalogueService => ({
+const languageApiCatalogue = (origin: string): CatalogueService => ({
   source: "live",
   origin,
   entries: async () => {
@@ -139,7 +139,7 @@ export const languageApiCatalogue = (origin: string): CatalogueService => ({
  * built and looked at without a network. They are SAMPLE data and the table
  * says so; nothing here is downloadable, because none of these URLs is real.
  */
-export const SAMPLE_CATALOGUE: readonly CatalogueEntry[] = [
+const SAMPLE_CATALOGUE: readonly CatalogueEntry[] = [
   ["en", "English", "English", "Americas", "2026-08-30", "wa-catalog", "en_ulb"],
   [
     "es-419",
@@ -183,7 +183,7 @@ export const SAMPLE_CATALOGUE: readonly CatalogueEntry[] = [
   cloneUrl: "",
 }));
 
-export const sampleCatalogue = (): CatalogueService => ({
+const sampleCatalogue = (): CatalogueService => ({
   source: "sample",
   origin: "sample data",
   entries: () => Promise.resolve(SAMPLE_CATALOGUE),

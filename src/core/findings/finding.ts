@@ -151,7 +151,7 @@ export const fromAnalysis = (
  * This is what lets a project open with every badge already right, having
  * parsed nothing.
  */
-export const fromDiagnostics = (input: {
+const fromDiagnostics = (input: {
   readonly bookId: BookId;
   readonly stamp: SourceStamp;
   readonly engine: EngineStamp;
@@ -363,7 +363,7 @@ export const stale = (finding: Finding, book: { source: () => { stamp: SourceSta
  * `null` for a code that says nothing (its severity is absent, or it is a
  * `form` observation), and for a name that is not in the catalogue at all.
  */
-export const severityOf = (code: string): Severity | null => {
+const severityOf = (code: string): Severity | null => {
   const row = CODES.find((entry) => entry.name === code);
   if (row === undefined) return null;
   switch (row.severity) {

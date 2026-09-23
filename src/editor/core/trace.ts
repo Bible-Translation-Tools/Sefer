@@ -43,7 +43,7 @@ export interface TraceEvent extends TraceStep {
 export type TraceSink = (e: TraceEvent) => void;
 
 /** A flat sink as a `Tracer`. The adapter, and the only one. */
-export const sinkTracer = (sink: TraceSink): Tracer => {
+const sinkTracer = (sink: TraceSink): Tracer => {
   const emit: Emitter = (trace) => {
     const one = (e: TraceEntry): void => {
       sink({
@@ -77,9 +77,9 @@ export const traceSink = {
  * A verdict carried on a transaction, for a rule that decides in one place and
  * is only sure in another (a view plugin, an async lint).
  */
-export const traceStep = StateEffect.define<TraceStep>();
+const traceStep = StateEffect.define<TraceStep>();
 
-export const traceListener: Extension = EditorView.updateListener.of((u) => {
+const traceListener: Extension = EditorView.updateListener.of((u) => {
   for (const tr of u.transactions)
     for (const e of tr.effects) if (e.is(traceStep)) note(u.state, e.value);
 });
@@ -91,7 +91,7 @@ export const traceListener: Extension = EditorView.updateListener.of((u) => {
  * the view all move the caret, and this is the answer they agreed on. Noted as
  * a `press` so it reads as the end of the gesture rather than a rule's verdict.
  */
-export const landingListener: Extension = EditorView.updateListener.of((u) => {
+const landingListener: Extension = EditorView.updateListener.of((u) => {
   if (!u.selectionSet) return;
   const before = u.startState.selection.main;
   const after = u.state.selection.main;
@@ -106,7 +106,7 @@ export const landingListener: Extension = EditorView.updateListener.of((u) => {
   );
 });
 
-export function ringSink(size = 512): {
+function ringSink(size = 512): {
   sink: TraceSink;
   events(): TraceEvent[];
   dump(match?: string): string;
@@ -154,8 +154,8 @@ export function ringSink(size = 512): {
 }
 
 let lastError: string | null = null;
-export const stateError = () => lastError;
-export const clearStateError = () => {
+const stateError = () => lastError;
+const clearStateError = () => {
   lastError = null;
 };
 export const stateFailed = (where: string, err: unknown) => {

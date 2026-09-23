@@ -27,8 +27,6 @@
 import type { ProjectMetadata } from "../core/resources/projectMetadata";
 import { localized } from "../core/resources/projectMetadata";
 
-export { localized };
-
 /** The project's declared language tag, or "" when it declares none. */
 export const languageTag = (metadata: ProjectMetadata | undefined): string =>
   metadata?.language.tag ?? "";

@@ -19,7 +19,7 @@ import { cx, type ClassValue } from "../primitives";
 const BLANK = "␣";
 
 /** True for anything that would draw no ink: separators, controls, formats. */
-export const invisible = (char: string): boolean => char === "" || /^[\p{Z}\p{C}]$/u.test(char);
+const invisible = (char: string): boolean => char === "" || /^[\p{Z}\p{C}]$/u.test(char);
 
 export interface GlyphTileProps {
   /** The character; empty for the pooled digit lane. */

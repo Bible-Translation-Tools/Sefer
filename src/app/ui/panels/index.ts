@@ -12,16 +12,5 @@
  * still needs — `changes.ts`, `recorded.ts` and the unified `DiffView`.
  */
 
-export { DiffView, type DiffViewProps } from "./DiffView";
-export { FindingsFilters, type FindingsFiltersProps } from "./FindingsFilters";
-export {
-  createFindingsFilter,
-  VIEWS,
-  type FindingsFilterState,
-  type FindingsView,
-} from "./findingsFilter";
 export { FindingsPanel } from "./FindingsPanel";
 export { HistoryPanel } from "./HistoryPanel";
-export { changesOf, countsOf, recordedChanges, unsavedChanges, type BookChanges } from "./changes";
-export { createRecordedVersion, type Recorded, type RecordedVersion } from "./recorded";
-export { ago, exact, lines } from "./format";

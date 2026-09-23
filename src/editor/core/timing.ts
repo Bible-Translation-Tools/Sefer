@@ -15,7 +15,7 @@
  * trace is open the callback returns immediately.
  */
 
-export interface TimingSpan {
+interface TimingSpan {
   name: string;
   ms: number;
   note: string;
@@ -37,7 +37,7 @@ const listeners = new Set<() => void>();
 let bucket: Map<string, SpanTotal> | null = null;
 let stack: number[] | null = null;
 
-export const recent = (): readonly TimingSpan[] => ring;
+const recent = (): readonly TimingSpan[] => ring;
 
 /**
  * A closed span, for whoever is assembling the wider picture. ONE listener —
@@ -55,7 +55,7 @@ export const onDerived = (fn: Derived): void => {
 
 export const armed = (): boolean => listeners.size > 0 || bucket !== null;
 
-export function onSpan(fn: () => void): () => void {
+function onSpan(fn: () => void): () => void {
   listeners.add(fn);
   return () => listeners.delete(fn);
 }
@@ -72,7 +72,7 @@ export function closeGesture(): Gesture | null {
   return held;
 }
 
-export function summary(): { name: string; n: number; last: number; avg: number; max: number }[] {
+function summary(): { name: string; n: number; last: number; avg: number; max: number }[] {
   const by = new Map<string, { n: number; last: number; sum: number; max: number }>();
   for (const s of ring) {
     const e = by.get(s.name) ?? { n: 0, last: s.ms, sum: 0, max: 0 };

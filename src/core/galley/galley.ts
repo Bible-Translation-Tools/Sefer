@@ -102,7 +102,6 @@ export type {
 // `ChapterRow` is the editor's own row in `src/editor/core/docStructure.ts`.
 // TOC is what `search.md` and `resources.md` have called this thing since
 // before the door existed, so that is what it is called here.
-export { ProjectToc };
 export type { BookCensus as BookToc } from "@wycliffeassociates/scripture-kitchen/toc-reader";
 export type {
   ChapterRow as TocChapter,
@@ -267,10 +266,10 @@ export interface EngineHit {
  * with a magic and a version, and the find buffer did not, so a reordered
  * record could only be caught by the nonsense it produced.
  */
-export const FIND_MAGIC = 0x444e_4946;
+const FIND_MAGIC = 0x444e_4946;
 
 /** The layout `decodeHits` below knows. A buffer claiming another one stops. */
-export const FIND_FORMAT_VERSION = 1;
+const FIND_FORMAT_VERSION = 1;
 
 /**
  * Decodes the find buffer both engine doors emit — the wasm handle here and
@@ -308,7 +307,7 @@ const findOptions = (query: FindQuery, scope?: FindScope): Record<string, unknow
   ...(scope === undefined ? {} : { scope }),
 });
 
-export const decodeHits = (bytes: Uint8Array): readonly EngineHit[] => {
+const decodeHits = (bytes: Uint8Array): readonly EngineHit[] => {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const word = (index: number): number => view.getUint32(index * 4, true);
 

@@ -216,7 +216,7 @@ export const narrate = (
 };
 
 /** "the front matter", "chapter 3" — one chapter, as a person names it. */
-export const chapterLabel = (chapter: number): string =>
+const chapterLabel = (chapter: number): string =>
   chapter === FRONT_MATTER ? t("the front matter") : t("chapter {number}", { number: chapter });
 
 /** "1, 3 and 4", "the front matter and chapter 2" — a list, not a JSON array. */

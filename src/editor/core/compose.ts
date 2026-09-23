@@ -32,13 +32,12 @@ import { insertFootnote, insertParagraph, insertPoetry, insertVerse } from "./in
 import { traceFor, type Verdict } from "./instrument";
 import type { ChangeRule, TransactionRule } from "./kernel";
 import { MARKUP_TOKEN_KINDS } from "./mapping";
-import { HOOK, PHASES, RULE_NAMES, type ParserPort, type PhaseRule, type RuleName } from "./phases";
+import { HOOK, PHASES, type ParserPort, type PhaseRule, type RuleName } from "./phases";
 import { renderRangeField, renderWindow } from "./render";
 import { scrollGuard } from "./scroll";
 import { span } from "./timing";
 
-export type { ClipRange, RuleName };
-export { RULE_NAMES };
+export type { RuleName };
 
 export interface EditorOptions {
   /**
@@ -92,7 +91,7 @@ function marksUpInContext(
  * engine singleton to close over: each state's rules are installed with that
  * state's analyzer.
  */
-export const enginePort = (analyze: Analyze): ParserPort => ({
+const enginePort = (analyze: Analyze): ParserPort => ({
   marksUp: (d, f, t) => marksUpInContext(d, f, t, (x) => analyzed(analyze, x)),
   chapterCount: (d) => buildStructure(d, analyzed(analyze, d), null).chapters.length,
 });
@@ -147,7 +146,7 @@ const transactionVerdict = (tr: Transaction, out: unknown): [Verdict, string | u
       ? ["refused", "dropped the transaction"]
       : ["rewrote", undefined];
 
-export function install(
+function install(
   rules: readonly PhaseRule[],
   parser: ParserPort,
   omit: ReadonlySet<string>,
@@ -196,7 +195,7 @@ export function install(
   return [...change, ...transaction.reverse()];
 }
 
-export function rulesLayer(options: EditorOptions): Extension {
+function rulesLayer(options: EditorOptions): Extension {
   return install(
     PHASES,
     options.parser ?? enginePort(options.analyze),

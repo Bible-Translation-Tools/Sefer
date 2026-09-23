@@ -173,4 +173,3 @@ export const sourceChoices = (context: ChoiceContext): readonly SourceChoice[] =
  * Re-exported rather than written a third time: `src/app/describe.ts` is the
  * one renderer of a tagged failure.
  */
-export { describe } from "../../describe";

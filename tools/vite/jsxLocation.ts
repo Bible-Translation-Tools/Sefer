@@ -54,7 +54,7 @@ import type { Plugin } from "vite";
 import { lineIndex } from "../oxc/lines.ts";
 
 /** What the overlay reads, and what a pasted comment prints. */
-export const LOCATION_ATTRIBUTE = "data-loc";
+const LOCATION_ATTRIBUTE = "data-loc";
 
 interface AstNode {
   readonly [key: string]: unknown;

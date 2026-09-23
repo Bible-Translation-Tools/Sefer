@@ -24,7 +24,7 @@
  * their own script should not get an empty URL segment, and transliterating
  * their language name into ASCII would be a worse answer than a neutral one.
  */
-export const slugify = (name: string, fallback = "project"): string => {
+const slugify = (name: string, fallback = "project"): string => {
   const folded = name
     .normalize("NFKD")
     // The combining marks NFKD just separated out.

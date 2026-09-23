@@ -896,16 +896,4 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
   };
 };
 
-export type {
-  Annotator,
-  AnnotatorOptions,
-  Comment,
-  Corner,
-  Mode,
-  StateAdapter,
-  Target,
-  Tweak,
-  Variant,
-} from "./types.ts";
-export type { Hotkey } from "./hotkey.ts";
-export { describeHotkey, forgetHotkey, readSavedHotkey } from "./hotkey.ts";
+export type { Annotator, AnnotatorOptions, StateAdapter, Tweak, Variant } from "./types.ts";

@@ -1,7 +1,7 @@
 import type { Effect as EffectType, FileSystem, PlatformError } from "effect";
 import { Effect } from "effect";
 
-export const TEMPORARY_SUFFIX = ".sefer-tmp";
+const TEMPORARY_SUFFIX = ".sefer-tmp";
 
 export const temporaryPathFor = (path: string): string => `${path}${TEMPORARY_SUFFIX}`;
 

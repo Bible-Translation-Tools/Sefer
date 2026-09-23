@@ -160,7 +160,7 @@ const facetsOf = (
  * thousand findings is four throwaway arrays of twenty thousand strings before
  * any counting starts.
  */
-export const facets = (findings: Iterable<Finding>): Facets => {
+const facets = (findings: Iterable<Finding>): Facets => {
   const severities = new Map<Severity, number>();
   const producers = new Map<Producer, number>();
   const books = new Map<BookId, number>();
@@ -218,7 +218,7 @@ export type GroupKind = "book" | "code" | "severity";
  * One collapsible section of the panel. `key` is stable for a given kind, so
  * a `<For>` keyed on it keeps a section's open/closed state across a refresh.
  */
-export interface FindingGroup {
+interface FindingGroup {
   readonly key: string;
   readonly count: number;
   readonly findings: readonly Finding[];
@@ -240,7 +240,7 @@ const rankOf = (key: string): number => {
  * first is the one at the top. An empty input yields no groups, which is the
  * shape `<Show>` wants for the "nothing to report" line.
  */
-export const groupBy = (findings: readonly Finding[], kind: GroupKind): readonly FindingGroup[] => {
+const groupBy = (findings: readonly Finding[], kind: GroupKind): readonly FindingGroup[] => {
   const keyOf = (finding: Finding): string =>
     kind === "book" ? finding.bookId : kind === "code" ? finding.code : finding.severity;
   const grouped = new Map<string, Finding[]>();

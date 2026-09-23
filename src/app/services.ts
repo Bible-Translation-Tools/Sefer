@@ -86,7 +86,7 @@ import { env } from "./env";
  * honestly is list the projects Sefer itself owns, which all live in one OPFS
  * subtree — this one.
  */
-export const PROJECTS_ROOT = `${OPFS_ROOT}/projects`;
+const PROJECTS_ROOT = `${OPFS_ROOT}/projects`;
 
 /**
  * The desktop host's whole Layer set, as a TYPE only.

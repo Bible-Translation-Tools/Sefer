@@ -45,7 +45,7 @@ export class Credentials extends Context.Service<Credentials, CredentialsService
  * the one tests use, because "forgotten on reload" is the real Web behaviour
  * rather than a stand-in for something better.
  */
-export const SessionCredentialsLive: Layer.Layer<Credentials> = Layer.sync(Credentials, () => {
+const SessionCredentialsLive: Layer.Layer<Credentials> = Layer.sync(Credentials, () => {
   const held = new Map<string, Credential>();
   return {
     get: (remote) => Effect.sync(() => Option.fromUndefinedOr(held.get(remote))),

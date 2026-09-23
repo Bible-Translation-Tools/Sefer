@@ -104,7 +104,7 @@ export class CombineError extends Data.TaggedError("CombineError")<{
 }> {}
 
 /** Everything `planCombine` needs, as facts rather than as ports. */
-export interface CombineSurvey {
+interface CombineSurvey {
   /** The branch HEAD is on; `undefined` on a detached or unborn HEAD. */
   readonly branch: string | undefined;
   /** This device's newest version. */
@@ -163,7 +163,7 @@ const no = (refusal: CombineRefusal, detail: string): CombineDecision => ({
  * objection below it on purpose: when two people wrote the same book, that is
  * the thing to say, not that some third file happens to be unsaved.
  */
-export const planCombine = (survey: CombineSurvey): CombineDecision => {
+const planCombine = (survey: CombineSurvey): CombineDecision => {
   if (survey.branch === undefined) {
     return no("no-branch", "HEAD is detached or unborn; there is no branch to move");
   }

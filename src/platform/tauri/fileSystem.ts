@@ -149,7 +149,7 @@ const watchEventsOf = (event: TauriWatchEvent): FileSystem.WatchEvent[] => {
 /** The flags that mean "create, but refuse if it is already there". */
 const CREATE_EXCLUSIVE = new Set(["wx", "wx+", "ax", "ax+"]);
 
-export const makeTauriFileSystem = (): FileSystem.FileSystem => {
+const makeTauriFileSystem = (): FileSystem.FileSystem => {
   let unique = 0;
 
   const access: FileSystem.FileSystem["access"] = (path) =>

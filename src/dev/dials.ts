@@ -45,14 +45,14 @@ export interface DialValues {
   readonly choice: (key: string) => string;
 }
 
-export const dialInitial = (dial: Dial): string =>
+const dialInitial = (dial: Dial): string =>
   dial.kind === "toggle" ? String(dial.initial ?? false) : (dial.initial ?? dial.options[0] ?? "");
 
 /**
  * Query keys are namespaced per screen, so two screens may both have a
  * `density` dial and a link to one does not quietly set the other's.
  */
-export const dialKey = (screenId: string, key: string): string => `${screenId}.${key}`;
+const dialKey = (screenId: string, key: string): string => `${screenId}.${key}`;
 
 /**
  * A reader over whatever the URL currently says, falling back to each dial's

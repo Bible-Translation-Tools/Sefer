@@ -137,10 +137,7 @@ const refuse = (error: SourceChangeError): Refusal =>
  * splices before it. Overlapping ranges are refused as out of range once the
  * earlier splice has moved them.
  */
-export const applyAll = (
-  source: Source,
-  changes: readonly Change[],
-): Result.Result<Source, Refusal> => {
+const applyAll = (source: Source, changes: readonly Change[]): Result.Result<Source, Refusal> => {
   const ordered = [...changes].sort((a, b) => b.from - a.from);
   let current = source;
   for (const change of ordered) {

@@ -57,7 +57,7 @@ export interface Restorable {
   readonly entries: readonly JournalEntry[];
 }
 
-export type RecoveryFailure =
+type RecoveryFailure =
   /** No journal with that id, on disk or in memory. */
   | "NotFound"
   /** The journal file is not the JSONL Recovery writes. */
@@ -68,7 +68,7 @@ export type RecoveryFailure =
   | "Refused"
   | "Io";
 
-export class RecoveryError extends Data.TaggedError("RecoveryError")<{
+class RecoveryError extends Data.TaggedError("RecoveryError")<{
   readonly reason: RecoveryFailure;
   readonly id: string;
   readonly description: string;

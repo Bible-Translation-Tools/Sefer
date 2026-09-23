@@ -84,9 +84,9 @@ export interface Passage {
   readonly text: string;
 }
 
-export type LibraryRefusal = "Unclassified" | "NotFound" | "Io";
+type LibraryRefusal = "Unclassified" | "NotFound" | "Io";
 
-export class LibraryError extends Data.TaggedError("LibraryError")<{
+class LibraryError extends Data.TaggedError("LibraryError")<{
   readonly reason: LibraryRefusal;
   readonly description: string;
 }> {}

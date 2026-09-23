@@ -94,7 +94,7 @@ const MARKER_KINDS: readonly number[] = [
   TokenKind.Milestone,
 ];
 
-export const TOKEN_ROWS: readonly Row<TokenShape>[] = [
+const TOKEN_ROWS: readonly Row<TokenShape>[] = [
   { id: "slot.v", when: (t) => t.designatorOf === "verse", verdict: cls("slot.v") },
   { id: "slot.c", when: (t) => t.designatorOf === "chapter", verdict: cls("slot.c") },
   {
@@ -263,7 +263,7 @@ const TOKEN_FALLBACK: Row<TokenShape> = {
   verdict: unmapped("undecided", "no row matched — add one, do not branch at the call site"),
 };
 
-export const NODE_ROWS: readonly Row<NodeShape>[] = [
+const NODE_ROWS: readonly Row<NodeShape>[] = [
   {
     id: "note",
     when: (n) => n.markerKind === MarkerKind.Note,
@@ -448,7 +448,7 @@ const TOKEN_ROWS_BY_KIND: readonly (readonly Row<TokenShape>[])[] = (() => {
   return out;
 })();
 
-export const tokenRowsFor = (kind: number): readonly Row<TokenShape>[] =>
+const tokenRowsFor = (kind: number): readonly Row<TokenShape>[] =>
   TOKEN_ROWS_BY_KIND[kind] ?? TOKEN_ROWS;
 
 export function kindsReaching(ids: readonly string[]): Uint8Array {
@@ -458,7 +458,7 @@ export function kindsReaching(ids: readonly string[]): Uint8Array {
   return mask;
 }
 
-export function rowForTokenLinear(t: TokenShape): Row<TokenShape> {
+function rowForTokenLinear(t: TokenShape): Row<TokenShape> {
   for (const r of TOKEN_ROWS)
     if ((!r.kinds || r.kinds.includes(t.kind)) && (!r.when || r.when(t))) return r;
   return TOKEN_FALLBACK;
@@ -474,14 +474,14 @@ export function rowForToken(t: TokenShape): Row<TokenShape> {
   return TOKEN_FALLBACK;
 }
 
-export function rowForNodeLinear(n: NodeShape): Row<NodeShape> {
+function rowForNodeLinear(n: NodeShape): Row<NodeShape> {
   for (const r of NODE_ROWS) if (!r.when || r.when(n)) return r;
   return NODE_FALLBACK;
 }
 
 const NODE_ROW_MEMO = new Map<number, Row<NodeShape>>();
 
-export function nodeShapeKey(n: NodeShape): number {
+function nodeShapeKey(n: NodeShape): number {
   if (n.markerKind >>> 4 || n.category >>> 5 || n.ctx >>> 5 || n.close >>> 2 || n.ws >>> 3)
     return -1;
   return (
@@ -505,9 +505,9 @@ export function rowForNode(n: NodeShape): Row<NodeShape> {
   return row;
 }
 
-export const classify = (t: TokenShape): Verdict => rowForToken(t).verdict;
+const classify = (t: TokenShape): Verdict => rowForToken(t).verdict;
 
-export const classifyNode = (n: NodeShape): Verdict => rowForNode(n).verdict;
+const classifyNode = (n: NodeShape): Verdict => rowForNode(n).verdict;
 
 export function notePartOf(t: TokenShape): number {
   const v = classify(t);
@@ -522,7 +522,7 @@ export const lineOwnerRow = (byToken: Row<TokenShape>, byNode: Row<NodeShape> | 
 
 export const ownsItsLine = (row: AnyRow | null): boolean => row?.line === true;
 
-export const UNOWNED_LINE_CLASS: ClassKey = "block.para";
+const UNOWNED_LINE_CLASS: ClassKey = "block.para";
 
 export function paintedClassOf(row: AnyRow | null): ClassKey {
   const painting = row?.set ? OWNED_SETS[row.set]?.painting : undefined;

@@ -27,7 +27,7 @@ export interface SourceForm {
 }
 
 /** What a text with no file behind it is written as: LF, no mark. */
-export const CANONICAL_FORM: SourceForm = { eol: "lf", bom: false };
+const CANONICAL_FORM: SourceForm = { eol: "lf", bom: false };
 
 export interface Source {
   readonly text: string;

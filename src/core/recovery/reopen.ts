@@ -41,7 +41,7 @@ import type { RecoveryService, Restorable } from "./recovery";
  * characters at the same offset, and that is the right way to be wrong — the
  * outcome is a journal kept and offered, never one deleted in error.
  */
-export const reachedDisk = (text: string, journal: Restorable): boolean => {
+const reachedDisk = (text: string, journal: Restorable): boolean => {
   if (text.length !== journal.lastStamp.length) return false;
   const last = journal.entries.at(-1);
   if (last === undefined) return false;
