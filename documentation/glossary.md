@@ -33,10 +33,12 @@ This is the shared vocabulary for planning and implementation. Terms marked **ag
 | Journal | agreed | The Recovery log of accepted edits not yet written to the file. Not a Save. |
 | Gesture | agreed | One thing the person did: a keystroke, a click, a command. Not a transaction — one Gesture can produce several — and it is the unit an Operation covers. |
 | Source stamp | agreed | A Source's freshness pair: its Revision and its length. Equal stamps mean equal text. Not a content hash and not a Checkpoint. |
+| Format | agreed | Rewriting a Book's USFM into the engine's own canonical shape (`Fixes.formatBook`). No other text is involved: formatting consults nothing but the Book itself. One apply per Book, so one Undo step each. |
+| Overlay | agreed | Formatting a Book *from* a source Resource: the source's paragraphing carried onto the Book (`Fixes.overlayBook`; where each paragraph goes is the engine's call, not Sefer's). Not Format, which consults no other text. Scoped to the chapter at the cursor, the Book, or the Project, and applied directly with no preview — Undo is the preview. Recorded with its own origin, `overlay`, so history never shows it as a format. |
 
 ## Naming rules
 
-Use `Source` for canonical editable text, `Disk bytes` for persisted representation, `Revision` for a session identity, and `Snapshot` for a captured input. Say `Save`, `Recovery`, or `Checkpoint` explicitly when describing persistence. Avoid calling all three a “version.” The Record a version… command is product copy for one Save; it does not make “version” a term.
+Use `Source` for canonical editable text, `Disk bytes` for persisted representation, `Revision` for a session identity, and `Snapshot` for a captured input. Say `Save`, `Recovery`, or `Checkpoint` explicitly when describing persistence. Avoid calling all three a “version.” Say `Format` only when no other text is consulted; the moment a source Resource decides the layout it is an `Overlay`, whatever a menu currently calls it. The Record a version… command is product copy for one Save; it does not make “version” a term.
 
 ## Deployment names
 
