@@ -92,7 +92,6 @@ The Library pass runs only over what the guide did not answer, and short-circuit
 - **`done` counts are always 0.** Marking an occurrence settled needs a store that survives a reload, and nothing in Sefer keeps one yet. The term list says so in a muted line rather than showing progress that is not being recorded.
 - **The guide is a fixture.** A key-terms guide is properly a Library resource under the `glossary` role, or a remote guides API. The port exists so that swapping the layer is the only change.
 - **No replace, no in-editor highlight.** The same non-goals the previous application had. An edit happens through a card's Edit button, in the satellite, where the editing phases judge it like any other keystroke.
-- **`stetCompare` still dies.** The read-only comparison against a Library resource has no screen asking for it yet.
 
 ## Match formatting
 

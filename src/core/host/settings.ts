@@ -15,9 +15,8 @@
  * Keys we did not register are carried through untouched: another host, or a
  * newer build, may own them.
  *
- * `SettingsLive` and `MemorySettingsLive` are the same `makeSettings` logic
- * over two stores; only the store differs, so there is one code path to reason
- * about and the memory store is a real implementation, not a mock.
+ * `SettingsLive` is `makeSettings` over the file store; the logic and the
+ * store are separate so a second store is a store, not a second code path.
  */
 import {
   Context,
@@ -224,18 +223,6 @@ const fileSettingsStore = (fileSystem: FileSystem.FileSystem, path: string): Set
     ),
 });
 
-/** The in-memory store: same contract, no host. Used by tests and dev pages. */
-const memorySettingsStore = (seed: Readonly<Record<string, unknown>> = {}): SettingsStore => {
-  let held: Readonly<Record<string, unknown>> = seed;
-  return {
-    load: Effect.sync(() => held),
-    save: (values) =>
-      Effect.sync(() => {
-        held = values;
-      }),
-  };
-};
-
 export const SettingsLive: Layer.Layer<Settings, never, FileSystem.FileSystem | HostInfo> =
   Layer.effect(
     Settings,
@@ -249,11 +236,3 @@ export const SettingsLive: Layer.Layer<Settings, never, FileSystem.FileSystem | 
       );
     }),
   );
-
-const MemorySettingsLive: Layer.Layer<Settings> = Layer.effect(
-  Settings,
-  Effect.gen(function* () {
-    const observability = yield* Effect.serviceOption(Observability);
-    return yield* makeSettings(memorySettingsStore(), Option.getOrUndefined(observability));
-  }),
-);

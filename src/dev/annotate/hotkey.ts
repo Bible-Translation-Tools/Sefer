@@ -145,11 +145,3 @@ export const saveHotkey = (hotkey: Hotkey | null): void => {
     // Forgetting beats failing; the recorded chord still applies to this page.
   }
 };
-
-const forgetHotkey = (): void => {
-  try {
-    localStorage.removeItem(STORAGE);
-  } catch {
-    // As above.
-  }
-};

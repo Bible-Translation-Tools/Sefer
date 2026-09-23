@@ -24,7 +24,7 @@
  *    agree.
  *  - It is NOT the mapping onto a project. An occurrence names a reference,
  *    and turning a reference into a span of the target book's own text is
- *    `core/excerpts`' `verseAnchor` — the guide knows nothing about the
+ *    `core/excerpts`' `refOccurrences` — the guide knows nothing about the
  *    project, which is the whole point of comparing against it.
  */
 

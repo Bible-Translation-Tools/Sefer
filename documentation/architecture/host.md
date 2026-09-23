@@ -10,9 +10,9 @@ host, and `pnpm boundaries` enforces that direction.
 | HostInfo | `src/core/host/hostInfo.ts` | `WebHostInfoLive(build)` | `TauriHostInfoLive(build)` | `HostInfoLive(values)` |
 | FileSystem | `effect/FileSystem` | `OpfsFileSystemLive` | `TauriFileSystemLive` | `MemoryFileSystemLive`, `NodeFileSystemLive` |
 | Observability | `src/core/observability.ts` | `ObservabilityLive({ sink: hostSink() })` | same | same |
-| Settings | `src/core/host/settings.ts` | `SettingsLive` | `SettingsLive` | `MemorySettingsLive` |
-| Credentials | `src/core/host/credentials.ts` | `SessionCredentialsLive` | `TauriCredentialsLive` (OS keychain) | `SessionCredentialsLive` |
-| Dialogs | `src/core/host/dialogs.ts` | `WebDialogsLive` | `TauriDialogsLive` | `HeadlessDialogsLive(answers)` |
+| Settings | `src/core/host/settings.ts` | `SettingsLive` | `SettingsLive` | — |
+| Credentials | `src/core/host/credentials.ts` | `WebCredentialsLive` (`localStorage`) | `TauriCredentialsLive` (OS keychain) | — |
+| Dialogs | `src/core/host/dialogs.ts` | `WebDialogsLive` | `TauriDialogsLive` | — |
 | Updater | `src/core/host/updater.ts` | `NoUpdaterLive(build)` | `TauriUpdaterLive({ updaterHost })` | `NoUpdaterLive(build)` |
 
 ## What each one owns
@@ -71,8 +71,8 @@ What `domainLayer(build, fixture, paths, tauri)` wires, in dependency order:
   boot result the composition already validated rather than from `__SEFER_BUILD__` a second time.
 - **FileSystem** — `OpfsFileSystemLive` or `TauriFileSystemLive`, and `FixtureFileSystemLive` on either
   host when `?fixture=1` asked for the seeded project.
-- **Credentials** — `SessionCredentialsLive` on Web (no secure store, so tokens deliberately do not
-  survive a reload) or `TauriCredentialsLive` over the OS keychain. `GiteaLive` is provided *over* it
+- **Credentials** — `WebCredentialsLive` on Web (`localStorage`: survives a reload, as safe as the page
+  itself; `src/platform/web/credentials.ts` says why) or `TauriCredentialsLive` over the OS keychain. `GiteaLive` is provided *over* it
   (`Layer.provideMerge`), because Gitea needs the credential store and the browser's `fetch`.
 - **Dialogs** — `WebDialogsLive` (File System Access API) or `TauriDialogsLive` (native pickers).
 - **Updater** — `NoUpdaterLive(build)`, which refuses honestly, or `TauriUpdaterLive`.

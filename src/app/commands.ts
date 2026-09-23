@@ -135,9 +135,6 @@ const [registry, setRegistry] = createSignal<readonly Command[]>([], {
   ownedWrite: true,
 });
 
-/** Every registered command, in registration order. */
-const commands = (): readonly Command[] => registry();
-
 /** The registered commands whose `when` currently allows them. */
 export const availableCommands = (): readonly Command[] =>
   registry().filter((command) => command.available());

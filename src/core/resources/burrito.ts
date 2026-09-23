@@ -88,8 +88,6 @@ export type BurritoMetadata = typeof BurritoMetadata.Type;
 
 export type BurritoIngredient = typeof Ingredient.Type;
 
-type BurritoLanguage = typeof Language.Type;
-
 const decode = Schema.decodeUnknownResult(BurritoMetadata);
 
 export const decodeBurritoMetadata = (

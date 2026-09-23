@@ -67,8 +67,6 @@ Filtering and grouping are presentation policy. `findings.ts` orders findings by
 
 - `applyFilter(findings, filter, isStale?)` is **subtractive only, and never re-orders**. The caller's order is `list`'s order, and a filter that re-sorted would quietly override it. `isStale` is consulted only when `hideStale` is set, so the default panel pays for no freshness checks.
 - `FindingsFilter` has two kinds of field. `severities` and `producers` are allow-lists (absent = hidden). `books` and `codes` are `null` for "no restriction", which is **not** `[]` — an empty list matches nothing, and the helper honours that literally; the chip row normalises a set the reader has emptied back to `null` so the UI cannot strand them on a blank screen.
-- `facets(findings)` counts every filterable value over the **unfiltered** list. A chip whose count fell to zero because the chip itself is off would be a chip nobody could turn back on.
-- `groupBy(findings, 'book' | 'code' | 'severity')` returns ordered groups, each keeping its own order. Group order differs per axis on purpose: books in project order (first appearance — sorting ids would put 3 John before Jude), severity on the ladder, codes by descending count so the code to deal with first is at the top.
 
 **A filter never deletes a finding.** Nothing on the panel writes to `ProjectAnalysis`; the census, the inline marks and the corpus counts are untouched by a chip. The header therefore always reads "N of TOTAL shown", so a filtered panel can never present as a clean project (vision §11.4), and stale rows are dimmed with their badge rather than dropped unless the reader asks.
 
@@ -111,7 +109,7 @@ Core cannot navigate. `navigateTarget` returns a value; the shell calls `project
 
 **The keyboard cursor walks cards, and only once it has been moved.** `j`/`k` and the arrows step, Enter opens the card's first finding in the editor, and the card the cursor is on wears Find's ring. Until the reader presses a key there is no current card: the ring and the scroll belong to a gesture somebody made. The cursor is LOCAL to this route, deliberately — the shell has its own findings cursor over the unfiltered list (`editor.findings.next` walks the whole project, which is what that command means), and a cursor here that honoured the filter but shared that state would make the palette command jump according to a filter it never mentioned.
 
-**Two helpers are waiting for core.** `markupSlice` (the raw slice around a span, cut from `Excerpt.source`) and `foldRuns` (the identical-run fold) are pure functions over values core already owns and belong beside `quote` and `groupBy`; they live in `findingsFeed.ts` until a pass is allowed to edit `src/core`.
+**Two helpers are waiting for core.** `markupSlice` (the raw slice around a span, cut from `Excerpt.source`) and `foldRuns` (the identical-run fold) are pure functions over values core already owns and belong beside `quote`; they live in `findingsFeed.ts` until a pass is allowed to edit `src/core`.
 
 **The list opens at the top, and Edit opens a card.** Both were broken here and on `/find` in exactly the same way until 2026-09-16, because both are one component: the list arrived scrolled 8,154px down, and a card asked to edit sat on "Opening…" for ever. Neither was about findings — the two causes are the measurement and the reconciliation of `primitives/VirtualList`, written up in [the UI layer](ui.md#the-multibuffer-virtual-core-and-why-not-solid-virtual).
 

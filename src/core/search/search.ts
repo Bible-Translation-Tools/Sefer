@@ -244,17 +244,6 @@ const refFrom = (table: RefTable, book: BookId, pos: number): Ref => {
   return verse > 0 ? { book, chapter, verse } : { book, chapter };
 };
 
-/**
- * The reference containing `pos`, from the `\c`/`\v` markers before it.
- * `chapter` is 0 when `pos` precedes the first `\c` (front matter); `verse` is
- * absent when no `\v` has opened in that chapter.
- *
- * Convenience wrapper: it builds a marker table for the whole text, so call it
- * for a handful of positions, not once per hit — `find` shares one table.
- */
-const refAt = (text: string, pos: number, book: BookId = ""): Ref =>
-  refFrom(buildRefTable(text), book, pos);
-
 // ---------------------------------------------------------------------------
 // Find
 // ---------------------------------------------------------------------------
@@ -591,63 +580,11 @@ export const findInReferences = (
 // Replace
 // ---------------------------------------------------------------------------
 
-const bookFor = (hit: Hit, books: readonly Book[]): Book | undefined =>
-  books.find((book) => book.id === hit.bookId);
-
 const isFresh = (hit: Hit, book: Book): boolean =>
   book.source().stamp.revision === hit.stamp.revision;
 
-/**
- * Turns a hit back into live coordinates, or `null` when it cannot be trusted:
- * the book is no longer in `books`, or its text has moved on since the scan.
- * Every action on a result — replace, open a window, scroll to it — goes
- * through here first, so a stale card refuses rather than editing the wrong
- * range.
- */
-const resolveHit = (
-  hit: Hit,
-  books: readonly Book[],
-): { readonly book: Book; readonly from: number; readonly to: number } | null => {
-  const book = bookFor(hit, books);
-  if (book === undefined || !isFresh(hit, book)) return null;
-  return { book, from: hit.from, to: hit.to };
-};
-
 const stale = (description: string): Refusal =>
   new Refusal({ rule: "search.replace", reason: "Stale", description });
-
-/**
- * A projected hit whose source is several pieces cannot be replaced here. The
- * markup between the pieces either survives the replacement or does not, and
- * that is the editor's decision, not this module's — so the refusal is the
- * honest answer rather than a guess dressed as a success.
- */
-const spansMarkupRefusal = (hit: Hit): Refusal =>
-  new Refusal({
-    rule: "search.replace",
-    reason: "SpansMarkup",
-    description: `${hit.bookId} hit crosses markup in ${hit.pieces?.length ?? 0} pieces`,
-  });
-
-/**
- * Replaces one match. Refused as `Stale` when the hit no longer resolves;
- * otherwise the change goes through the book's one write path as an UNTRUSTED
- * `"replace"` edit, and the editor's rules decide — a replacement that would
- * break markup comes back as their refusal, not as a success.
- *
- * Refused as `SpansMarkup` before any of that when the hit crosses markup the
- * projection dropped (`spansMarkup`): there is no single range to replace.
- */
-const replace = (
-  hit: Hit,
-  insert: string,
-  books: readonly Book[],
-): Result.Result<Receipt, Refusal> => {
-  if (spansMarkup(hit)) return Result.fail(spansMarkupRefusal(hit));
-  const found = resolveHit(hit, books);
-  if (found === null) return Result.fail(stale(`${hit.bookId} moved past r${hit.stamp.revision}`));
-  return found.book.apply([{ from: found.from, to: found.to, insert }], "replace", UNTRUSTED);
-};
 
 /**
  * The change list for replacing several hits of ONE book in one edit, in

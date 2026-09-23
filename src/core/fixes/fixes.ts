@@ -169,44 +169,6 @@ export const apply = (fix: FixPreview, book: Book): Result.Result<Receipt, Refus
 };
 
 /**
- * Apply several previews for ONE book in a single `apply`, so the whole set is
- * one Undo step and subscribers see one receipt (seams §3.8 `applyAll`).
- *
- * Every preview must belong to `book` and to the revision it currently holds;
- * one stale member refuses the whole set, because a partially applied batch is
- * the failure mode slice 15 names first — "invalid or partially applicable
- * edits fail with source unchanged". Overlapping edits are refused by the
- * Book's own range checks, not filtered here: silently dropping one of two
- * overlapping repairs would produce a document neither fix intended.
- */
-const applyAll = (previews: readonly FixPreview[], book: Book): Result.Result<Receipt, Refusal> => {
-  const current = book.source().stamp;
-  const changes: Change[] = [];
-  for (const one of previews) {
-    if (one.finding.bookId !== book.id)
-      return Result.fail(
-        new Refusal({
-          rule: "fixes.applyAll",
-          reason: "WrongBook",
-          description: `a fix for ${one.finding.bookId} was offered to ${book.id}`,
-        }),
-      );
-    if (one.stamp.revision !== current.revision)
-      return Result.fail(staleRefusal(book, one.stamp, current));
-    changes.push(...one.changes);
-  }
-  if (changes.length === 0)
-    return Result.fail(
-      new Refusal({
-        rule: "fixes.applyAll",
-        reason: "NothingToApply",
-        description: `no fix edits were offered for ${book.id}`,
-      }),
-    );
-  return book.apply(changes, "fix", trustedBy("fix"));
-};
-
-/**
  * A whole book's normalisation, stamped with the text it was computed against.
  *
  * Not a `FixPreview`: there is no finding behind it. Format is not a repair

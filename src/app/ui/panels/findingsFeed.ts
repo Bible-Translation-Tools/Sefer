@@ -35,7 +35,7 @@
  * ### What belongs in core later
  *
  * `markupSlice` and `foldRuns` are pure functions over values core already
- * owns, and both would sit comfortably beside `quote` and `groupBy`. They are
+ * owns, and both would sit comfortably beside `quote`. They are
  * here because this pass may not edit `src/core`; nothing in either reaches
  * for Solid, the router or a host.
  */
@@ -297,7 +297,7 @@ const bucketed = (
   const out = [...buckets.values()];
   const countOf = (bucket: Bucket): number =>
     [...bucket.findings.values()].reduce((sum, held) => sum + held.length, 0);
-  // The same orders `core/findings/filter.groupBy` uses: codes by descending
+  // Codes by descending
   // count, because the code to deal with first belongs at the top; severities
   // on the ladder.
   if (view === "code") out.sort((a, b) => countOf(b) - countOf(a) || (a.key < b.key ? -1 : 1));

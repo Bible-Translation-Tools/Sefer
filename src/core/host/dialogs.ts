@@ -10,7 +10,7 @@
  * are display names of picked handles, which is a known gap — see the TODO in
  * `src/platform/web/dialogs.ts`.
  */
-import { Context, Effect, Layer, Option } from "effect";
+import { Context, Effect, Option } from "effect";
 
 /** One entry in a file picker's type list, in the shape both hosts can render. */
 export interface FileFilter {
@@ -49,23 +49,3 @@ export interface DialogsService {
 }
 
 export class Dialogs extends Context.Service<Dialogs, DialogsService>()("Dialogs") {}
-
-/**
- * Scripted answers for tests and dev pages. This is a real implementation of
- * the port with a deterministic host, not a mock: the same question always
- * gets the same configured answer, and the defaults are the refusing ones.
- */
-interface DialogAnswers {
-  readonly folder?: string | undefined;
-  readonly files?: readonly string[] | undefined;
-  readonly savePath?: string | undefined;
-  readonly confirm?: boolean | undefined;
-}
-
-const HeadlessDialogsLive = (answers: DialogAnswers = {}): Layer.Layer<Dialogs> =>
-  Layer.succeed(Dialogs, {
-    pickFolder: () => Effect.succeed(Option.fromUndefinedOr(answers.folder)),
-    pickFiles: () => Effect.succeed(answers.files ?? []),
-    pickSaveFile: () => Effect.succeed(Option.fromUndefinedOr(answers.savePath)),
-    confirm: () => Effect.succeed(answers.confirm ?? false),
-  });

@@ -154,29 +154,6 @@ const facetsOf = (
 });
 
 /**
- * ONE loop, four tallies.
- *
- * It used to be four `map`s into four `tally`s, which on a project with twenty
- * thousand findings is four throwaway arrays of twenty thousand strings before
- * any counting starts.
- */
-const facets = (findings: Iterable<Finding>): Facets => {
-  const severities = new Map<Severity, number>();
-  const producers = new Map<Producer, number>();
-  const books = new Map<BookId, number>();
-  const codes = new Map<string, number>();
-  let total = 0;
-  for (const finding of findings) {
-    total += 1;
-    severities.set(finding.severity, (severities.get(finding.severity) ?? 0) + 1);
-    producers.set(finding.producer, (producers.get(finding.producer) ?? 0) + 1);
-    books.set(finding.bookId, (books.get(finding.bookId) ?? 0) + 1);
-    codes.set(finding.code, (codes.get(finding.code) ?? 0) + 1);
-  }
-  return facetsOf(total, severities, producers, books, codes);
-};
-
-/**
  * What a HEADER needs, in one pass and without a list.
  *
  * "20,352 of 20,352 shown" and a row of filter chips are counts, and counts do
@@ -213,49 +190,3 @@ export const summarise = (
 
 /** The three axes a reader can group by. `flat` is the absence of grouping. */
 export type GroupKind = "book" | "code" | "severity";
-
-/**
- * One collapsible section of the panel. `key` is stable for a given kind, so
- * a `<For>` keyed on it keeps a section's open/closed state across a refresh.
- */
-interface FindingGroup {
-  readonly key: string;
-  readonly count: number;
-  readonly findings: readonly Finding[];
-}
-
-/** A group key's place on the ladder; unknown keys sort last rather than throw. */
-const rankOf = (key: string): number => {
-  const found = SEVERITIES.findIndex((severity) => severity === key);
-  return found === -1 ? SEVERITIES.length : found;
-};
-
-/**
- * The findings, in ordered groups, with each group's own order preserved.
- *
- * Group order is chosen per axis, because the useful order differs: by book it
- * is the project's canonical order (first appearance, since the caller already
- * grouped that way — sorting ids would put 3 John before Jude); by severity it
- * is the ladder; by code it is descending count, so the code to deal with
- * first is the one at the top. An empty input yields no groups, which is the
- * shape `<Show>` wants for the "nothing to report" line.
- */
-const groupBy = (findings: readonly Finding[], kind: GroupKind): readonly FindingGroup[] => {
-  const keyOf = (finding: Finding): string =>
-    kind === "book" ? finding.bookId : kind === "code" ? finding.code : finding.severity;
-  const grouped = new Map<string, Finding[]>();
-  for (const finding of findings) {
-    const key = keyOf(finding);
-    const held = grouped.get(key);
-    if (held === undefined) grouped.set(key, [finding]);
-    else held.push(finding);
-  }
-  const groups: FindingGroup[] = [...grouped].map(([key, held]) => ({
-    key,
-    count: held.length,
-    findings: held,
-  }));
-  if (kind === "code") groups.sort((a, b) => b.count - a.count || (a.key < b.key ? -1 : 1));
-  if (kind === "severity") groups.sort((a, b) => rankOf(a.key) - rankOf(b.key));
-  return groups;
-};

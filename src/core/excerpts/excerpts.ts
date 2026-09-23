@@ -821,27 +821,6 @@ export const group = (
 // ---------------------------------------------------------------------------
 
 /**
- * The source span of the verse a reference names, or `undefined`.
- *
- * This is the whole of the reference → project mapping, and it is arithmetic
- * over Onion's table of contents rather than a lookup table: the guide that
- * says "grace occurs at PHM 1:3" has never seen this project's text, and the
- * only thing that can say where PHM 1:3 IS in it is the parse of the book.
- *
- * A bridge answers for every verse it spans, so a reference to `JUD 1:2` is
- * found inside a `\v 1-2` the project happens to have — dropping it would be
- * the one case where the reader most wants to see how the target differs.
- */
-const verseAnchor = (analysis: Analysis, ref: Ref): Mark | undefined => {
-  if (ref.verse === undefined) return undefined;
-  const wanted = ref.verse;
-  for (const span of verseSpans(analysis))
-    if (span.chapter === ref.chapter && wanted >= span.first && wanted <= span.last)
-      return { from: span.from, to: span.to };
-  return undefined;
-};
-
-/**
  * A reference feed's hits: one ZERO-WIDTH occurrence at each verse of `refs`
  * that this book actually has, in document order.
  *

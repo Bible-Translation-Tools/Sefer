@@ -92,8 +92,8 @@ is on a side. A comparison is still a snapshot — this simply takes a new one.
 
 ### The screen never says "left" or "right"
 
-`left` and `right` are the model's words — `CompareHunk`, `Decision` and `plan`
-keep them, and should, because the model has two sides and no opinion about
+`left` and `right` are the model's words — `CompareHunk` and the screen's
+decision map keep them, and should, because the model has two sides and no opinion about
 them. `baseline` and `current` are the ENGINE's words for the same two sides
 (right and left respectively), and the decision wire uses them verbatim. The
 SCREEN says what each source calls itself, and each choice carries a
@@ -214,7 +214,7 @@ The one concession the past sources get is `applyPlan`'s `allowUndecided`: for
 a review against the reader's own past (`disk`, `recorded`), an undecided unit
 is not an unanswered question but the ordinary state of the ninety-nine units
 they are content with, and reverting one verse must not mean ruling on every
-other verse in the book first. `plan` already makes that safe — an undecided
+other verse in the book first. The plan already makes that safe — an undecided
 difference keeps the TARGET's own text, so a plan full of them writes nothing.
 For a foreign copy the old rule stands: half a decision map is not a text
 anybody asked for.

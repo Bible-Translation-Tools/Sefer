@@ -4,14 +4,14 @@
  *
  * The port exists so Git and Remote can ask for a credential without knowing
  * whether the answer came from an OS keychain or from a map that dies with the
- * tab. `SessionCredentialsLive` is the Web answer and is deliberately the
- * weaker one: a browser has nowhere trustworthy to persist a token, so we do
- * not persist it at all — never into project files, never into settings.
+ * tab. Tokens never go into project files or settings; where each host keeps
+ * them is its own business (`WebCredentialsLive` uses `localStorage`,
+ * `TauriCredentialsLive` the OS keychain).
  *
  * `remote` is the key: a remote URL or name as Git spells it. Core does not
  * parse it; it is opaque to everything but the host that stores it.
  */
-import { Context, Effect, Layer, Option } from "effect";
+import { Context, Effect, Option } from "effect";
 
 export interface Credential {
   readonly username: string;
@@ -39,23 +39,3 @@ export interface CredentialsService {
 export class Credentials extends Context.Service<Credentials, CredentialsService>()(
   "Credentials",
 ) {}
-
-/**
- * In-memory for the lifetime of the composition. The Web implementation, and
- * the one tests use, because "forgotten on reload" is the real Web behaviour
- * rather than a stand-in for something better.
- */
-const SessionCredentialsLive: Layer.Layer<Credentials> = Layer.sync(Credentials, () => {
-  const held = new Map<string, Credential>();
-  return {
-    get: (remote) => Effect.sync(() => Option.fromUndefinedOr(held.get(remote))),
-    set: (remote, credential) =>
-      Effect.sync(() => {
-        held.set(remote, credential);
-      }),
-    clear: (remote) =>
-      Effect.sync(() => {
-        held.delete(remote);
-      }),
-  };
-});

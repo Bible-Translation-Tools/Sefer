@@ -46,10 +46,6 @@ const ResourceContainerManifest = Schema.Struct({
 
 export type ResourceContainerManifest = typeof ResourceContainerManifest.Type;
 
-type ResourceContainerProject = typeof Project.Type;
-
-type ResourceContainerLanguage = typeof Language.Type;
-
 const decode = Schema.decodeUnknownResult(ResourceContainerManifest);
 
 export const decodeResourceContainerManifest = (

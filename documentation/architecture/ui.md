@@ -126,7 +126,7 @@ import from the directory, never from a file inside it.
 | `Kbd` | A keycap. Show the chord exactly as `src/app/commands.ts` spells it. |
 | `EmptyState` | `icon`, `title`, `description`, one `action`. |
 | `VirtualList` | `sections` (each a key plus keyed rows with a height estimate), `header(section, ref)`, `row(item, key)` — `section` and `item` are ACCESSORS, because a row outlives the model it was built from — `pinned`, `focus`, `onActive`, `empty`, `ref(goTo)`. Sticky section headers over a windowed list. |
-| `toasts` + `Toaster` | `show`/`info`/`success`/`error`/`progress`/`update`/`dismiss`/`dismissAll` over a module-level list; `<Toaster />` is the viewport, mounted once in `src/routes/__root.tsx`. |
+| `toasts` + `Toaster` | `info`/`success`/`error`/`progress`/`update`/`dismiss` over a module-level list; `<Toaster />` is the viewport, mounted once in `src/routes/__root.tsx`. |
 
 Icons are `lucide-solid`, imported one at a time
 (`import Search from "lucide-solid/icons/search"`), never from the barrel.

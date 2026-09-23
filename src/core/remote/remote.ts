@@ -10,7 +10,7 @@
  * (`src/platform/web/remote.ts`, `src/platform/tauri`), and `./gitea.ts` is
  * the account half — signing in and finding a repository to attach to.
  */
-import { Context, Data, Effect, Layer, Option, Stream } from "effect";
+import { Context, Data, Effect, Option, Stream } from "effect";
 
 import type { Repo } from "../git/git";
 
@@ -38,19 +38,6 @@ export class RemoteError extends Data.TaggedError("RemoteError")<{
   readonly reason: RemoteFailureReason;
   readonly description?: string | undefined;
 }> {}
-
-/**
- * The shape of a credential Remote needs, declared structurally so the port
- * does not depend on the host `Credentials` service. Composition supplies the
- * lookup; nothing here reads or stores a token.
- */
-interface CredentialLike {
-  readonly username: string;
-  readonly token: string;
-}
-
-/** `Credentials.get(remote)` seen as a plain port. */
-type CredentialLookup = (remote: string) => Effect.Effect<Option.Option<CredentialLike>, never>;
 
 export interface RemoteService {
   /** Records `url` as the repository's origin. Does not transfer anything. */
@@ -101,38 +88,3 @@ export interface RemoteService {
 }
 
 export class Remote extends Context.Service<Remote, RemoteService>()("Remote") {}
-
-// Loud, typed refusal — never a silent success that would let a sync surface
-// claim a project is up to date with a remote it never reached.
-const unavailable = <A>(): Effect.Effect<A, RemoteError> =>
-  Effect.fail(
-    new RemoteError({
-      reason: "Unavailable",
-      description: "RemoteUnavailableLive: no remote transport is wired yet",
-    }),
-  );
-
-/**
- * The refusing implementation, for a host with no transport at all.
- *
- * It is no longer the only one — `WebRemoteLive` (`src/platform/web/remote.ts`)
- * answers this port with isomorphic-git through a CORS proxy, and desktop
- * answers it with git2 behind Tauri commands. This Layer stays because a
- * composition that has neither must still build, and it must say so rather
- * than let a sync surface claim a project is up to date with a remote it
- * never reached.
- */
-const RemoteUnavailableLive: Layer.Layer<Remote> = Layer.succeed(Remote, {
-  attach: () => unavailable(),
-  // `None`, not a refusal: nothing was ever attached, which is true.
-  origin: () => Effect.succeed(Option.none()),
-  fetch: () => unavailable(),
-  pull: () => unavailable(),
-  push: () => unavailable(),
-  publish: () => unavailable(),
-  // Local operations, but still refused here: a host with no transport has no
-  // fetched cloud head to move onto and no interrupted transfer to abort.
-  moveBranch: () => unavailable(),
-  abortMerge: () => unavailable(),
-  progress: () => Stream.empty,
-} satisfies RemoteService);

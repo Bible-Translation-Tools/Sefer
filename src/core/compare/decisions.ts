@@ -1,128 +1,18 @@
 // decisions.ts
 //
-// The decision map, the plan it projects to, and the one write.
+// The plan a review's decisions project to, and the one write.
 //
-// The shape is the proto's and the reason is the proto's: choosing a side
-// changes NOTHING but an in-memory map. No text moves while the reader is
-// reading. `plan` turns the whole map into the resulting text per book, and
-// `applyPlan` is the only function here that writes anything — one apply per
-// book, so the reader's Undo takes back one book at a time, which is what a
-// reader means by "undo that".
-//
-// Everything except `applyPlan` is pure, synchronous and total: a screen may
-// call `plan` on every click.
+// Choosing a side changes NOTHING but an in-memory map, and that map lives
+// with the screen (`ReviewPanel`, over the engine's decision units). What
+// lives here is the other end: `Plan` is the resulting text per book, and
+// `applyPlan` is the only function that writes anything — one apply per book,
+// so the reader's Undo takes back one book at a time, which is what a reader
+// means by "undo that".
 
 import { Effect } from "effect";
 
 import type { BookId, Receipt } from "../book/book";
-import { wholeBookHunkId, type BookComparison, type CompareResult, type HunkId } from "./compare";
 import { failCompare, type CompareError, type CompareSource, type SourceRef } from "./source";
-
-/** Undecided is a real state, not a missing one: Apply refuses while it lasts. */
-type Decision = "left" | "right" | "undecided";
-
-/** Hunk id → decision. Absent reads as `undecided`. */
-type Decisions = ReadonlyMap<HunkId, Decision>;
-
-const noDecisions: Decisions = new Map();
-
-const decisionFor = (decisions: Decisions, id: HunkId): Decision =>
-  decisions.get(id) ?? "undecided";
-
-/** Every id a book asks a question about: its hunks, or the book itself. */
-const decisionIds = (book: BookComparison): readonly HunkId[] =>
-  book.presence === "both" ? book.hunks.map((hunk) => hunk.id) : [wholeBookHunkId(book.bookId)];
-
-/** One choice, as a new map — the old one is never mutated. */
-const decide = (decisions: Decisions, id: HunkId, decision: Decision): Decisions => {
-  const next = new Map(decisions);
-  if (decision === "undecided") next.delete(id);
-  else next.set(id, decision);
-  return next;
-};
-
-/** The bulk stamp: a whole book, or a whole comparison, in one click. */
-const decideMany = (decisions: Decisions, ids: Iterable<HunkId>, decision: Decision): Decisions => {
-  const next = new Map(decisions);
-  for (const id of ids) {
-    if (decision === "undecided") next.delete(id);
-    else next.set(id, decision);
-  }
-  return next;
-};
-
-interface Completeness {
-  readonly total: number;
-  readonly decided: number;
-  readonly undecided: number;
-  readonly complete: boolean;
-}
-
-const count = (ids: readonly HunkId[], decisions: Decisions): Completeness => {
-  const decided = ids.filter((id) => decisionFor(decisions, id) !== "undecided").length;
-  return {
-    total: ids.length,
-    decided,
-    undecided: ids.length - decided,
-    complete: decided === ids.length,
-  };
-};
-
-/** "N decided of M", for one book. An identical book asks nothing. */
-const bookCompleteness = (book: BookComparison, decisions: Decisions): Completeness =>
-  count(book.identical ? [] : decisionIds(book), decisions);
-
-/** "N decided of M", for the whole comparison. */
-const completeness = (result: CompareResult, decisions: Decisions): Completeness =>
-  count(
-    result.books.filter((book) => !book.identical).flatMap((book) => decisionIds(book)),
-    decisions,
-  );
-
-/** Every id in the comparison, for "Keep all left" / "Take all right". */
-const allDecisionIds = (result: CompareResult): readonly HunkId[] =>
-  result.books.filter((book) => !book.identical).flatMap((book) => decisionIds(book));
-
-/**
- * What one book's text becomes under these decisions.
- *
- * The walk relies on the one property `core/diff` guarantees: the spans
- * BETWEEN hunks are identical on both sides. So the merge is the left text
- * with the chosen slice substituted at each hunk, in order — the right text
- * never has to be walked, and an all-right map reproduces the right text
- * exactly because every span it contributes came from the right side.
- *
- * An undecided hunk keeps `fallback`, which defaults to the left side and which
- * `plan` sets to the side being WRITTEN. That is the only answer that reads
- * right: "undecided" means nobody has asked for a change, so the target keeps
- * what it holds. A fallback fixed at "left" would silently adopt the left text
- * into a right-hand target — a merge tool quietly changing a document nobody
- * touched, which is the single worst thing this module could do.
- */
-const mergedText = (
-  book: BookComparison,
-  decisions: Decisions,
-  fallback: "left" | "right" = "left",
-): string | undefined => {
-  if (book.presence !== "both") {
-    const chosen = decisionFor(decisions, wholeBookHunkId(book.bookId));
-    if (chosen === "right") return book.rightText;
-    if (chosen === "left") return book.leftText;
-    // Undecided: nothing changes, so the side that already holds it wins.
-    return fallback === "right" ? book.rightText : book.leftText;
-  }
-
-  const left = book.leftText ?? "";
-  let at = 0;
-  let out = "";
-  for (const hunk of book.hunks) {
-    out += left.slice(at, hunk.leftFrom);
-    const chosen = decisionFor(decisions, hunk.id);
-    out += (chosen === "undecided" ? fallback : chosen) === "right" ? hunk.right : hunk.left;
-    at = hunk.leftTo;
-  }
-  return out + left.slice(at);
-};
 
 /** What Apply would do to one book. */
 export interface BookPlan {
@@ -148,51 +38,6 @@ export interface Plan {
   readonly undecided: number;
   readonly complete: boolean;
 }
-
-const sideText = (book: BookComparison, side: "left" | "right"): string | undefined =>
-  side === "left" ? book.leftText : book.rightText;
-
-/**
- * The whole decision map, as what would be written.
- *
- * `target` names the side being written — "left" for the ordinary
- * this-project-on-the-left comparison. Which side is the target does not
- * change the merged text; it changes only what counts as a change.
- */
-const plan = (
-  result: CompareResult,
-  decisions: Decisions,
-  target: "left" | "right" = "left",
-): Plan => {
-  const books: BookPlan[] = [];
-  for (const book of result.books) {
-    const undecided = bookCompleteness(book, decisions).undecided;
-    // The TARGET is the fallback: an undecided difference leaves the side
-    // being written exactly as it is, whichever side that is.
-    const text = mergedText(book, decisions, target);
-    const targetText = sideText(book, target);
-    const operation: BookPlan["operation"] =
-      text === undefined
-        ? targetText === undefined
-          ? "keep"
-          : "remove"
-        : targetText === undefined
-          ? "add"
-          : text === targetText
-            ? "keep"
-            : "write";
-    books.push({ bookId: book.bookId, operation, text, targetText, undecided });
-  }
-
-  const undecided = books.reduce((total, book) => total + book.undecided, 0);
-  return {
-    target: target === "left" ? result.left : result.right,
-    books,
-    writes: books.filter((book) => book.operation !== "keep"),
-    undecided,
-    complete: undecided === 0,
-  };
-};
 
 export interface ApplyReport {
   readonly written: readonly BookId[];

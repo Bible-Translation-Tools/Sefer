@@ -105,8 +105,7 @@ the same endpoint and sends the same `X-Requested-With` the transfers do; before
 a successful sign-in was followed immediately by "Failed to fetch". The SURFACE is `/cloud` (`src/app/ui/cloud/`), which owns the state, the two clocks, the incoming
 plan and the one right button — see [sync.md](sync.md). `src/app/ui/CloudPanel.tsx` keeps the
 attach-and-publish half beside a project and shares the account half with it; the commands are
-`remote.login`, `remote.pull`, `remote.push`. `RemoteUnavailableLive` remains for a
-host with no transport.
+`remote.login`, `remote.pull`, `remote.push`.
 
 ## ProjectAdmin
 

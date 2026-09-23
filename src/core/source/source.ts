@@ -26,9 +26,6 @@ export interface SourceForm {
   readonly bom: boolean;
 }
 
-/** What a text with no file behind it is written as: LF, no mark. */
-const CANONICAL_FORM: SourceForm = { eol: "lf", bom: false };
-
 export interface Source {
   readonly text: string;
   readonly stamp: SourceStamp;
