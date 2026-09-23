@@ -157,7 +157,7 @@ function ContinuousDiff(props: ExperimentProps) {
   );
 }
 
-export const experiment: Experiment = {
+const experiment: Experiment = {
   id: "continuous",
   title: "Continuous",
   blurb: "The whole book, reading, with the changes inside it.",
@@ -168,3 +168,5 @@ export const experiment: Experiment = {
   },
   view: ContinuousDiff,
 };
+
+export default experiment;

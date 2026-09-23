@@ -9,6 +9,12 @@
  *     afternoon lives there, appears in the picker the moment the file is
  *     saved, and never turns up in a diff.
  *
+ * Each file's DEFAULT export is its experiment (`export default experiment`).
+ * A default rather than a named `experiment` export in every file, because
+ * that is the contract a glob-loaded module has, and one name exported from
+ * every sibling reads to a tool as a clash. `collect` accepts any exported
+ * value that is an experiment, so a file may still export helpers beside it.
+ *
  * Globbing rather than a hand-maintained array because the list is the one part
  * of a prototyping surface guaranteed to rot: an index nobody updates is how a
  * playground ends up with four experiments in the tree and two in the menu.

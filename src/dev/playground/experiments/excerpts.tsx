@@ -254,7 +254,7 @@ function Excerpts(props: ExperimentProps) {
   );
 }
 
-export const experiment: Experiment = {
+const experiment: Experiment = {
   id: "excerpts",
   title: "Excerpts",
   blurb: "A multibuffer: changed neighbourhoods, with the rest collapsed.",
@@ -266,3 +266,5 @@ export const experiment: Experiment = {
   },
   view: Excerpts,
 };
+
+export default experiment;
