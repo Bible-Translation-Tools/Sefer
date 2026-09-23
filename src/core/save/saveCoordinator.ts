@@ -52,6 +52,7 @@ import {
 import { trustedBy, type Book, type BookId } from "../book/book";
 import { writeFileAtomic } from "../fileSystem/atomic";
 import { Observability, type ObservabilityService } from "../observability";
+import type { ExternalChange } from "../project/project";
 import { Recovery } from "../recovery/recovery";
 import { decode, encode, type SourceStamp } from "../source/source";
 import type { Baseline } from "./baseline";
@@ -90,12 +91,6 @@ class SaveError extends Data.TaggedError("SaveError")<{
  * the watcher and the real type; Save only needs these three fields, and
  * depending on Project would invert the seam.
  */
-export interface ExternalChange {
-  readonly bookId: BookId;
-  readonly path: string;
-  readonly kind: "changed" | "removed";
-}
-
 /** The part of Project `externalChanges` needs, structurally. */
 export interface ExternalChangeSource {
   readonly books: readonly Book[];

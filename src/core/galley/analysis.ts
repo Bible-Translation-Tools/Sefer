@@ -25,19 +25,10 @@ import {
 
 // The reader's surface, re-exported so the engine has exactly one importer.
 export {
-  ATTR_STRIDE,
-  attrList,
-  AttrResolution,
   Category,
   CloseReason,
-  CODES,
-  declaredVersion,
-  Diagnostics,
   DiagnosticView,
-  HEADER_BYTES,
   isMarkerKind,
-  MalformedAttr,
-  Marker,
   MARKERS,
   MarkerKind,
   NODE_ID_BIT,
@@ -45,23 +36,14 @@ export {
   NONE,
   SpecContext,
   StructuralWhitespaceRequirement,
-  Toc,
   TOKEN_BLANK,
   TOKEN_DELIMITER_FOLDED,
   TOKEN_SPELLING_BIT,
   TokenKind,
-  Tokens,
   TokenView,
   Tree,
-  USFM_VERSIONS,
 } from "@wycliffeassociates/scripture-kitchen/reader";
-export type {
-  AttrList,
-  Dish,
-  FixEdit,
-  ParseOptions,
-  Span,
-} from "@wycliffeassociates/scripture-kitchen/reader";
+export type { Dish } from "@wycliffeassociates/scripture-kitchen/reader";
 
 /**
  * One parse, with everything needed to prove which text it describes.

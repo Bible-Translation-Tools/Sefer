@@ -86,9 +86,6 @@ export interface CompareResult {
   readonly rightOnly: number;
 }
 
-/** The id of the one decision a one-sided book carries. */
-export const wholeBookHunkId = (bookId: BookId): HunkId => `${bookId}:book`;
-
 const hunkId = (bookId: BookId, index: number): HunkId => `${bookId}:${index}`;
 
 /**

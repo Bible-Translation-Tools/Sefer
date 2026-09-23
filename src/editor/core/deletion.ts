@@ -96,7 +96,7 @@ function consumePress(
   return true;
 }
 
-export type Verdict =
+type Verdict =
   | { readonly act: "nothing"; readonly say: string }
   | { readonly act: "consume"; readonly say: string }
   | { readonly act: "default"; readonly say: string }
@@ -187,7 +187,7 @@ const cellSay = (t: ResolvedOwnedTarget): CellSay => cellRuleFor(t).name;
 
 const cellVerdict = (t: ResolvedOwnedTarget): Verdict | null => cellRuleFor(t).say(t);
 
-export function backspaceAt(ix: OwnedIndex, pos: number): Verdict {
+function backspaceAt(ix: OwnedIndex, pos: number): Verdict {
   const a = ix.addressedBackward(pos);
   const t = a.target;
   const onePaint = (say: string): Verdict =>

@@ -35,9 +35,8 @@ import { type PaintPort, modeFacet } from "./kernel";
 import { paintOver, type Paint } from "./paint";
 import { renderRangeAt, renderRangeField } from "./render";
 
-export { docText, editableClipAt, pickField, structureAt, structureField, type ClipRange };
+export { editableClipAt, pickField, structureAt, structureField, type ClipRange };
 
-export {};
 import { type DocPlan, resolvePlan } from "./plan";
 import { PROJECTIONS, assignment, assignmentAt } from "./registry";
 import { span } from "./timing";

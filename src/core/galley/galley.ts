@@ -74,14 +74,12 @@ import {
 // and the rule that nothing outside `src/core/galley` imports the engine holds
 // for the reader too.
 export { FindingsSnapshot };
-export type { Finding, Pattern, BookView } from "@wycliffeassociates/scripture-kitchen/sous-reader";
+export type { Finding, Pattern } from "@wycliffeassociates/scripture-kitchen/sous-reader";
 // The pattern table's own vocabulary. Re-exported (not re-declared) so that a
 // reader of the table — `src/core/findings/inventory.ts` — names the same
 // closed sets the wire does, and a channel added upstream is a type error here
 // rather than a silently unhandled row.
 export {
-  CHANNELS,
-  CONVENTION_REASONS,
   OUTER_CLASSES,
   PATTERN_DIGIT_GLYPH,
   POOLS,
@@ -97,16 +95,12 @@ export type {
 // sidebar reads chapter counts off them without learning a layout.
 //
 // RENAMED at the seam, deliberately. Upstream calls this buffer a "census" and
-// its rows `ChapterRow`/`VerseRow`; all three names are already spent in Sefer.
+// its rows `ChapterRow`/`VerseRow`; those names are already spent in Sefer.
 // "Census" is the glyph inventory (`/inventory`) and the book-list page, and
 // `ChapterRow` is the editor's own row in `src/editor/core/docStructure.ts`.
 // TOC is what `search.md` and `resources.md` have called this thing since
 // before the door existed, so that is what it is called here.
 export type { BookCensus as BookToc } from "@wycliffeassociates/scripture-kitchen/toc-reader";
-export type {
-  ChapterRow as TocChapter,
-  VerseRow as TocVerse,
-} from "@wycliffeassociates/scripture-kitchen/toc-reader";
 
 /** The wasm module could not be instantiated at all. */
 export class EngineLoadError extends Data.TaggedError("EngineLoadError")<{
