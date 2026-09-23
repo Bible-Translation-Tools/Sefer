@@ -1,9 +1,9 @@
 /**
- * Dialogs — asking the person something the application cannot decide (seams 1.6).
+ * Dialogs — asking the person something the application cannot decide.
  *
  * Every open, import and destructive flow needs one of these three questions,
  * and each host answers them with completely different machinery: a native
- * dialog on desktop, the File System Access API on Web, a script in a test.
+ * dialog on desktop, the File System Access API on Web.
  * Keeping them behind one small port is what lets those flows be written once.
  *
  * The returned strings are paths on a host with a real filesystem. On Web they

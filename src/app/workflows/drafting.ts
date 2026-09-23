@@ -1,6 +1,6 @@
 // fallow-ignore-file unused-file -- a deliberate stub; see the note below for why it is not wired.
 /**
- * Drafting (slice 22): the job level.
+ * Drafting: the job level.
  *
  * A drafting job is not a new module — it is a named composition of the ones
  * that already exist, which is why it lives in the shell rather than in core.
@@ -20,10 +20,9 @@
  *   counter says so. Nothing here is a second editor and nothing holds a
  *   second copy of the text.
  *
- * It is a stub because the missing piece is not code: it is the domain
- * vocabulary (the book code table, reference parsing) the seams list as
- * deliberately absent, plus the form's own design, which the owner has not
- * settled. Building it now would mean inventing both.
+ * It is a stub because the missing piece is not code: it is the form's own
+ * design, which the owner has not settled. Building it now would mean
+ * inventing it.
  */
 
 import { Effect } from "effect";

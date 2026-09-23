@@ -3,8 +3,9 @@
  *
  * Screens import from here (`import { Button, Card } from "../app/ui/primitives"`)
  * and never from a file inside. That is what lets the corvu wrappers — Tooltip,
- * Popover, Dialog, Resizable — be the only files in the repository that import
- * corvu at all: see documentation/architecture/ui.md.
+ * Popover, Dialog — be the only files in the repository that import corvu at
+ * all (Resizable is our own, shaped like corvu's): see
+ * documentation/architecture/ui.md.
  */
 
 export { Badge, severityTone, type BadgeTone } from "./Badge";

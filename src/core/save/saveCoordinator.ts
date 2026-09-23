@@ -1,9 +1,10 @@
 // saveCoordinator.ts
 //
-// SaveCoordinator (slice 10): the only module that writes a project file, and
-// the only owner of write ordering. It reads Books through the port and never
-// touches CodeMirror, so the same code serves Tauri and the Web — only the
-// `FileSystem` Layer differs.
+// SaveCoordinator: the only module that writes a project file, and the only
+// owner of write ordering. It reads Books through the port and never touches
+// CodeMirror, so the same code serves Tauri and the Web — only the
+// `FileSystem` Layer differs. The save model is
+// `documentation/architecture/review.md`, "Record a version".
 //
 // What it owns:
 //
@@ -19,22 +20,18 @@
 //     blocks saving that book until the user resolves it. Sefer surfaces
 //     external changes; it never auto-merges.
 //
-// Serialisation style (open question 2 of the editor-and-save seams, now
-// closed): Sefer writes back the DOMINANT form it read. `decode` records the
-// file's majority line ending and whether it carried a byte order mark on
-// `Source.form`, the text in memory stays canonical LF, and `encode` re-applies
-// the form on the way out. The form is never an identity: baselines, diffs,
-// stamps and external-change comparison all speak canonical text, so a book
-// saved as CRLF is the same text as the same book saved as LF.
+// Sefer writes back the DOMINANT form it read: `decode` records it on
+// `Source.form`, the text in memory stays canonical LF, and `encode`
+// re-applies it on the way out. The form is never an identity — baselines,
+// diffs, stamps and external-change comparison all speak canonical text.
 //
-// Nothing here writes on its own. The only automatic write in the product is
-// Recovery's journal, which is a backup and not the file; the project file is
-// written by an explicit `save`/`saveAll` — which today means Save & Review.
+// Nothing here writes on its own: the project file is written by an explicit
+// `save`/`saveAll`, which is the /review screen's Record a version.
 //
 // The engine hash is optional throughout: core computes no hash. Composition
-// passes `hasher` once `src/core/galley` exposes the engine's xxh3, and from
-// then on dirty comparison and external-change comparison use the hash across
-// sessions while the revision keeps deciding within one.
+// passes `hasher`, built from the Galley Layer, and with it dirty comparison
+// and external-change comparison use the hash across sessions while the
+// revision keeps deciding within one.
 
 import {
   Context,
@@ -87,9 +84,9 @@ class SaveError extends Data.TaggedError("SaveError")<{
 }> {}
 
 /**
- * A file changed under us. Kept structural on purpose: Project (slice 09) owns
- * the watcher and the real type; Save only needs these three fields, and
- * depending on Project would invert the seam.
+ * A file changed under us. Kept structural on purpose: Project owns the
+ * watcher and the real type; Save only needs these two members, and depending
+ * on Project would invert the seam.
  */
 /** The part of Project `externalChanges` needs, structurally. */
 export interface ExternalChangeSource {

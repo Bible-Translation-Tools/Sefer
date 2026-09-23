@@ -5,9 +5,8 @@
  * Find and Key terms are separate panes with separate URLs, and they agree on
  * everything below the hits: which books to analyse, how a card expands, what
  * Edit seats, where Open in editor goes, and what happens after an accepted
- * edit. That agreement used to be two copies of the same ninety lines in two
- * routes; it is this file instead, so a fix to the staleness rule or the
- * analysis cache lands on both panes at once.
+ * edit. That agreement is this one file rather than a copy per route, so a
+ * fix to the staleness rule or the analysis cache lands on both panes at once.
  *
  * What it deliberately does NOT own is the hits. Find's are search results and
  * Key terms' are a guide's references mapped onto the project — two very
@@ -73,8 +72,8 @@ export interface ExcerptFeedOptions {
  * what makes that memo depend on the books it reads.
  *
  * ProjectAnalysis already holds a parse per book, and it is used when it
- * still fits the text; otherwise `analyze` answers. Before this, Find, Key
- * terms and the feed each carried their own copy of the loop.
+ * still fits the text; otherwise `analyze` answers. Find, Key terms and the
+ * feed share this one loop.
  */
 export const readBooks = (
   shell: Shell,
@@ -217,8 +216,8 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
   /**
    * An accepted edit, and whatever the screen does about it.
    *
-   * The wait is not a fudge. `findProjected` searches the CORPUS, and a book's
-   * corpus registration is refreshed one scheduler pass after its text moved
+   * The wait is not a fudge. `findInReading` reads its mask map from the
+   * CORPUS, and a book's corpus registration is refreshed one scheduler pass after its text moved
    * (`ProjectAnalysis.supply`) — so searching the instant an edit lands would
    * answer from the text before it, and the result count would be a revision
    * behind. The next republish is the honest cue; the timeout is there because

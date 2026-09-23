@@ -41,12 +41,12 @@
  *
  * ## What counts as empty is deliberately the simplest thing
  *
- * Does this block hold any content — that is the whole test. An earlier
- * version also asked whether the block sat INSIDE a verse, so that `\m` alone
- * after a `\c` (twice in `fixtures/small-nt/19-PSA.usfm`) would be spared as
- * "punctuation". Will's call, 2026-09-18: an `\m` after a `\c` with no verse
- * content following it IS empty, and a rule that made exceptions for where the
- * emptiness sat was answering a harder question than anyone asked. Whether the
+ * Does this block hold any content — that is the whole test. It does not ask
+ * whether the block sits INSIDE a verse, which would spare `\m` alone after a
+ * `\c` (twice in `fixtures/small-nt/19-PSA.usfm`) as "punctuation": an `\m`
+ * after a `\c` with no verse content following it IS empty, and a rule that
+ * made exceptions for where the emptiness sat would answer a harder question
+ * than anyone asked. Whether the
  * engine should model this on the CST is a kitchen question, not a reason for
  * the editor to grow a second definition.
  */
@@ -208,7 +208,7 @@ export function emptyBlocks(state: EditorState): readonly { from: number; marker
 
 /**
  * The annotation, as one extension. Mounted by `BookEditor`; a state that
- * never turns `annotateEmpty` on pays one facet read per rebuild.
+ * never turns the annotation on pays one facet read per rebuild.
  */
 export const annotateEmptyBlocks = (initial = false): Extension => [
   initialAnnotate.of(initial),

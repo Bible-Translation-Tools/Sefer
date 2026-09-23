@@ -178,9 +178,7 @@ export function GlyphDetail(props: GlyphDetailProps) {
    * The same question, handed to the panel that reads across books.
    *
    * Through the router, never an `<a href>`: a full load rebuilds the shell
-   * and the open Project goes with it. `/findings` does not validate a `code`
-   * today — it ignores what it does not know — so this is a link that gets
-   * better when that route grows the parameter, and is harmless until then.
+   * and the open Project goes with it.
    */
   const openInFindings = (): void => {
     const channel = props.glyph.rows.find((row) => row.pattern === props.pattern)?.channel;

@@ -1,7 +1,7 @@
 /**
  * Find Project — the remote catalogue browser, built to the mockup in
- * planning/03-ui/design-direction.md: a filter card on the left, a large search
- * field and a sortable four-column table on the right.
+ * `documentation/architecture/design-direction.md`: a filter card on the
+ * left, a large search field and a sortable four-column table on the right.
  *
  * The rows come from `src/app/catalogue.ts`, which is either the Language API
  * or twelve sample rows depending on whether this build was given a URL. The
@@ -86,21 +86,21 @@ const ALL_REGIONS = "*";
  * One row, with every value the table draws already computed.
  *
  * The whole point of this shape: **a row must not read a signal.** The live
- * catalogue is thousands of rows, and `nameOf(entry)` inside the `<For>` body
- * made every one of them a subscriber of the name-style signal — thousands of
+ * catalogue is thousands of rows, and `nameOf(entry)` inside a row body would
+ * make every one of them a subscriber of the name-style signal — thousands of
  * scopes re-running to move one segmented control, which is what the
- * `HUGE_FAN_OUT` diagnostic was reporting. The derivation happens once, in the
+ * `HUGE_FAN_OUT` diagnostic reports. The derivation happens once, in the
  * `rows` memo; a row receives plain values, `busy` included.
  *
- * Two things were measured against a 1,333-row catalogue before this shape was
- * settled on, and both are worth writing down because both look right:
+ * Two alternatives measured worse against a 1,333-row catalogue, and both are
+ * worth writing down because both look right:
  *
  *   * a per-key store `createProjection` keyed by row id — the repair the
  *     diagnostic's own text suggests — measured WORSE (13,000 subscribers
  *     against 6,500), because a store read still registers a node per row;
- *   * a memo returning fresh row objects with an unkeyed `<For>` measured
- *     worse for the same reason: every flip tore down and rebuilt all 1,333
- *     rows. Hence `keyed={(row) => row.entry.id}` below.
+ *   * a memo returning fresh row objects with an unkeyed list measured worse
+ *     for the same reason: every flip tore down and rebuilt all 1,333 rows.
+ *     Hence the `VirtualList` below is keyed by `row.entry.id`.
  *
  * What is left is NOT ours and cannot be fixed here: at 1,333 rows the page
  * still reports ~6,500 subscribers on one unnamed signal, and the same number
@@ -217,9 +217,9 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
   };
 
   /**
-   * The rows the table draws. Every reactive read the rows used to make — the
-   * name style, the two filters, the sort — happens HERE, once, and each row
-   * receives plain strings.
+   * The rows the table draws. Every reactive read a row would otherwise make —
+   * the name style, the two filters, the sort — happens HERE, once, and each
+   * row receives plain strings.
    */
   const rows = createMemo(
     (): readonly CatalogueRow[] => {

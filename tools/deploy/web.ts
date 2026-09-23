@@ -33,8 +33,9 @@ import { channelEnv } from "./channels.ts";
  * desktop matrix.
  *
  * `preview` is a PROMOTION, not a consequence of pushing — `workflow_dispatch`
- * or an `-rc` tag. Building it on every commit would make it another `dev`,
- * and the point of the channel is that somebody can be told to test drive it.
+ * or a pre-release tag such as `v0.3.0-1`. Building it on every commit would
+ * make it another `dev`, and the point of the channel is that somebody can be
+ * told to test drive it.
  * Nobody ships a broken Preview, so it carries the full test suite and the
  * full desktop matrix; it is the last rehearsal before a tag.
  *

@@ -3,12 +3,10 @@
 // The reader's OWN PAST as compare sources: the bytes in the file, and the
 // text in the last recorded version.
 //
-// These exist because `/review` is one screen. Save & Review and Compare were
-// two screens asking the same question — "these two texts differ; which do I
-// keep" — and the only real difference between them was that one had the file
-// hard-coded on one side. Once both sides of the review are a `CompareSource`,
-// the file on disk and the blob at HEAD are simply two more of them, and the
-// screen has no idea which of the five a reader picked.
+// These exist because `/review` is one screen for "these two texts differ;
+// which do I keep", with neither side hard-coded. Both sides of the review are
+// a `CompareSource`, so the file on disk and the blob at HEAD are simply two
+// more of them, and the screen has no idea which of the five a reader picked.
 //
 // Two are here rather than one per file because they are the same shape said
 // twice: a read-only side whose text comes from somewhere the reader has

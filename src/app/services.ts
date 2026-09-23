@@ -82,7 +82,8 @@ import { env } from "./env";
  * Where the shell looks for projects on the Web host.
  *
  * `WebDialogsLive.pickFolder` returns a picked handle's NAME, not a path the
- * OPFS FileSystem layer can read (its own TODO(seam) says so), so the Web open
+ * OPFS FileSystem layer can read (the TODO(seam) in
+ * `src/platform/web/dialogs.ts` says so), so the Web open
  * flow cannot yet open an arbitrary folder on the user's disk. What it can do
  * honestly is list the projects Sefer itself owns, which all live in one OPFS
  * subtree — this one.
@@ -110,18 +111,17 @@ const loadTauriHost = async (): Promise<TauriHost> => {
  * The seeded fixture, reached the same way and for the same reason.
  *
  * `fixtures/small-nt` is four real ULB books inlined as `?raw` text — twenty
- * kilobytes that a release has no use for. It was a STATIC import here until
- * 2026-09-22, and a static import puts a module in the graph however
- * unreachable its only caller is: `grep -r "Unlocked Literal Bible" dist/`
- * found it in a production bundle, contradicting the invariant
- * `documentation/agents/verification.md` states.
+ * kilobytes that a release has no use for. A static import would put the
+ * module in the graph however unreachable its only caller is, contradicting
+ * the invariant `documentation/agents/verification.md` states
+ * (`grep -r "Unlocked Literal Bible" dist/` is the check).
  *
  * The gate at the import site below is `__SEFER_DESIGN__` and NOT the
- * `fixture` flag, and that distinction is the whole fix. `fixture` is a
- * runtime boolean, so `fixture ? await import(…) : undefined` still emits the
- * chunk — the same way an exported `DESIGN_ENABLED` constant folded at its use
- * site while rolldown shipped the design page anyway. Only the build-time
- * literal lets the branch fold and the module leave the graph.
+ * `fixture` flag. `fixture` is a runtime boolean, so
+ * `fixture ? await import(…) : undefined` still emits the chunk — the same
+ * way an exported constant folds at its use site while rolldown still ships
+ * the chunk. Only the build-time literal lets the branch fold and the module
+ * leave the graph.
  */
 type FixtureHost = typeof import("#core/fixture/smallNt");
 
@@ -211,9 +211,9 @@ export interface ServicesOptions {
 /**
  * `?fixture=1`, honoured in any build that carries the design surface.
  *
- * Widened from `import.meta.env.DEV` on 2026-09-22. The deployed prototype is
- * a production build (`--mode design`), so DEV alone switched this off exactly
- * where it is most useful: on a worker there is no filesystem and no OPFS
+ * Not `import.meta.env.DEV`: the deployed `dev` channel is a production build
+ * (`--mode dev`), so DEV alone would switch this off exactly where it is most
+ * useful: on a worker there is no filesystem and no OPFS
  * project to open, and without it every data-bearing screen — the editor,
  * review, the inventory — is an empty state. With it, a link like
  * `/projects?fixture=1` opens four real ULB books over the in-memory
@@ -232,12 +232,11 @@ export const fixtureRequested = (): boolean => {
  * The engine hash of a text, parsed at most once per distinct text.
  *
  * `sourceHash` is a byproduct of `parse` — the engine exposes no hash door —
- * so asking for it costs a whole analysis. This was documented as "a per-save
- * parse, never a per-keystroke one" and the trace said otherwise: `dirty` is
- * read reactively through `tick`, so it ran per badged book per keystroke,
- * around four full parses for every key pressed. One entry is enough here:
- * the dirty book is the book being typed in, and `dirty` now settles the
- * clean ones on the revision alone without asking.
+ * so asking for it costs a whole analysis. `dirty` is read reactively, per
+ * badged book per keystroke, so an uncached hasher would be several full
+ * parses for every key pressed. One entry is enough here: the dirty book is
+ * the book being typed in, and `dirty` settles the clean ones on the revision
+ * alone without asking.
  */
 const hashOf = (galley: GalleyService): ((text: string) => bigint) => {
   let last: { text: string; hash: bigint } | undefined;
@@ -352,22 +351,20 @@ const domainLayer = (
   /**
    * The engine. ONE handle, ONE Layer, in the webview, on both hosts.
    *
-   * Desktop used to run the whole-corpus half natively behind Tauri commands,
-   * so a publication did not run on the thread that paints the editor. That is
-   * gone, and so is the port that made room for it. The id doors are the
-   * reason: `parse(id)` and `lint(id)` answer off the text a handle RETAINS,
-   * so a corpus living in another process is a corpus the parse path cannot
-   * name, and keeping both meant every book's text crossing the wall twice.
+   * The whole-corpus half is not run natively behind Tauri commands on
+   * desktop, though that would keep a publication off the thread that paints
+   * the editor. The id doors are the reason: `parse(id)` and `lint(id)` answer
+   * off the text a handle RETAINS, so a corpus living in another process is a
+   * corpus the parse path cannot name, and keeping both would send every
+   * book's text across the wall twice.
    *
-   * What we gave up is real — rayon mapped a cold publication's chapters
-   * across ten threads and wasm maps them on one. What we got is one resident
-   * copy of the project, and a parse path that names a book rather than
-   * re-sending it.
+   * The cost is real — native code maps a cold publication's chapters across
+   * many threads and wasm maps them on one. The gain is one resident copy of
+   * the project, and a parse path that names a book rather than re-sending it.
    *
-   * The way back to an off-thread publication is a Worker, and it is worth
-   * being honest that the deleted port would NOT have made that a one-Layer
-   * change: a Worker needs the whole corpus on the other side, which is the
-   * same thing that made the native door untenable. Whoever builds it is
+   * The way to an off-thread publication is a Worker, and that is not a
+   * one-Layer change: a Worker needs the whole corpus on the other side, which
+   * is the same thing that makes a native door untenable. Whoever builds it is
    * moving the engine, not swapping an implementation.
    */
   const engine = WebGalleyLive;
@@ -401,7 +398,7 @@ const domainLayer = (
    * Everything else, over Settings.
    *
    * `provideMerge` and `Layer.unwrap` rather than one flat merge because the
-   * transfer Layer now takes an endpoint a PREFERENCE may have overridden, and
+   * transfer Layer takes an endpoint a PREFERENCE may have overridden, and
    * a preference can only be read from a built `Settings`. Settings is still
    * exposed to everything downstream; it is just built first.
    *

@@ -38,10 +38,10 @@ import {
   initSync,
   type SousSettings as SousSettingsHandle,
 } from "@wycliffeassociates/scripture-kitchen/web";
-// The whole namespace as well as the two names above: Onion's stateless doors
-// (diff, merge, format…) arrive as FREE FUNCTIONS on the module rather than as
-// methods on the handle, and `diff.ts` and `format.ts` bind them by name off
-// this namespace. v0.1.0 is the build that carries them.
+// The whole namespace as well as the two names above: the engine's stateless
+// doors (diff, merge, format…) arrive as FREE FUNCTIONS on the module rather
+// than as methods on the handle, and `diff.ts` and `format.ts` bind them by
+// name off this namespace.
 import * as wasmModule from "@wycliffeassociates/scripture-kitchen/web";
 import { Context, Data, Effect, Layer, Option, Result } from "effect";
 
@@ -69,10 +69,8 @@ import {
   type Skeleton,
 } from "./overlay";
 
-// The VALUE, not just the type: the corpus half's other implementation
-// (`src/platform/tauri/corpus.ts`) opens a buffer the native engine produced,
-// and the rule that nothing outside `src/core/galley` imports the engine holds
-// for the reader too.
+// The VALUE, not just the type: the rule that nothing outside
+// `src/core/galley` imports the engine holds for the reader too.
 export { FindingsSnapshot };
 export type { Finding, Pattern } from "@wycliffeassociates/scripture-kitchen/sous-reader";
 // The pattern table's own vocabulary. Re-exported (not re-declared) so that a
@@ -134,11 +132,11 @@ export class EngineInputError extends Data.TaggedError("EngineInputError")<{
 export interface EngineVersion {
   readonly engine: string;
   /**
-   * The dependency's tag — `v0.1.4`. Injected by Vite from `package.json`,
-   * which is where the engine is pinned and the only place it is written.
-   * There is no `revision` beside it: the commit a tag resolves to lives in
-   * `pnpm-lock.yaml`, and copying it here would be the second record this
-   * whole change exists to delete.
+   * The dependency's tag, such as `v0.1.4`. Injected by Vite from
+   * `package.json`, which is where the engine is pinned and the only place it
+   * is written. There is no `revision` beside it: the commit a tag resolves to
+   * lives in `pnpm-lock.yaml`, and copying it here would be a second record to
+   * drift.
    */
   readonly tag: string;
   readonly onionFormat: number;
@@ -150,17 +148,16 @@ export interface EngineVersion {
 /**
  * Sous's judging settings, as a plain object.
  *
- * The wasm `SousSettings` — `Knobs` before scripture-kitchen v0.1.0 — is a
- * handle that must be freed, and its field names are the Rust config's, kept
- * verbatim so this object and the engine's own documentation read the same.
- * Copies cross this boundary in both directions; no caller ever holds the
- * handle.
+ * The wasm `SousSettings` is a handle that must be freed, and its field names
+ * are the Rust config's, kept verbatim so this object and the engine's own
+ * documentation read the same. Copies cross this boundary in both directions;
+ * no caller ever holds the handle.
  *
- * `presence`, `source_copy` and `source_copy_min_run` are v0.1.0's three new
- * lanes: presence judges verse coverage against a paired reference and is ON,
- * source-copy counts consecutive words a target shares with its paired source
- * verse and is OFF, because a legitimately borrowed name would otherwise be a
- * finding in every verse that carries one.
+ * Of the lanes, `presence` judges verse coverage against a paired reference
+ * and is ON; `source_copy` counts consecutive words a target shares with its
+ * paired source verse (at least `source_copy_min_run`) and is OFF, because a
+ * legitimately borrowed name would otherwise be a finding in every verse that
+ * carries one.
  */
 export interface SousSettings {
   readonly casing: boolean;
@@ -255,35 +252,15 @@ export interface EngineHit {
 /**
  * `FIND` in ASCII, read out of the buffer's first four bytes in order.
  *
- * New at scripture-kitchen v0.1.0 (`galley/src/find.rs`, `wire::MAGIC`), and
- * the thing engine-asks item 5 asked for: the onion and sous buffers both lead
- * with a magic and a version, and the find buffer did not, so a reordered
- * record could only be caught by the nonsense it produced.
+ * `galley/src/find.rs`, `wire::MAGIC`. The onion and sous buffers lead with a
+ * magic and a version, and so does this one, so a reordered record is caught
+ * by its header rather than by the nonsense it would produce.
  */
 const FIND_MAGIC = 0x444e_4946;
 
 /** The layout `decodeHits` below knows. A buffer claiming another one stops. */
 const FIND_FORMAT_VERSION = 1;
 
-/**
- * Decodes the find buffer both engine doors emit — the wasm handle here and
- * the native `Expediter` behind `src/platform/tauri/corpus.ts`.
- *
- * The layout is stated once, in `galley/src/wasm.md` ("The find buffer"):
- * magic and version, then `hitCount` and `bookCount`, then little-endian `u32`
- * throughout, UTF-16 offsets, the two length arrays before the byte blob so
- * every word stays four-byte aligned.
- *
- * THROWS `VersionMismatch` on a header it does not know, and does not try to
- * read the rest: a find buffer decoded against the wrong layout yields hit
- * ranges that look like offsets into scripture and are not, and an editor that
- * acted on one would splice the wrong text. Thrown rather than returned
- * because this is the same synchronous path `analyze` is on; the corpus port
- * wraps it in `Effect.try` and reports `Engine`.
- *
- * Exported because the desktop door reads the same bytes off IPC; nothing
- * outside `src/core/galley` decodes an engine buffer.
- */
 /**
  * `FindOptions` as the v0.1.1 doors take it: one object, every key optional,
  * defaults applied on the Rust side.
@@ -301,6 +278,20 @@ const findOptions = (query: FindQuery, scope?: FindScope): Record<string, unknow
   ...(scope === undefined ? {} : { scope }),
 });
 
+/**
+ * Decodes the find buffer the engine's `find`/`findAll` doors emit.
+ *
+ * The layout is stated once, in `galley/src/wasm.md` ("The find buffer"):
+ * magic and version, then `hitCount` and `bookCount`, then little-endian `u32`
+ * throughout, UTF-16 offsets, the two length arrays before the byte blob so
+ * every word stays four-byte aligned.
+ *
+ * THROWS `VersionMismatch` on a header it does not know, and does not try to
+ * read the rest: a find buffer decoded against the wrong layout yields hit
+ * ranges that look like offsets into scripture and are not, and an editor that
+ * acted on one would splice the wrong text. Thrown rather than returned
+ * because this is the same synchronous path `analyze` is on.
+ */
 const decodeHits = (bytes: Uint8Array): readonly EngineHit[] => {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const word = (index: number): number => view.getUint32(index * 4, true);
@@ -406,7 +397,10 @@ export interface LintReport {
 }
 
 export interface GalleyService {
-  /** What artifact this is. Read from the manifest, not from the wasm. */
+  /**
+   * What artifact this is: the pinned tag from `package.json` and the format
+   * versions the installed readers speak (`engineVersion` below).
+   */
   readonly version: () => EngineVersion;
 
   /**
@@ -537,7 +531,7 @@ export interface GalleyService {
    *
    * Searches what the reader sees: a needle inside a footnote is not found,
    * and a needle that spans one comes back with one source range per
-   * contiguous piece. Since v0.1.0 ANY registered book that retains text may
+   * contiguous piece. ANY registered book that retains text may
    * be searched — a target, or a reference registered with `keepText` — and it
    * throws only when the book retains none, because a corpus that has not been
    * told about the book would otherwise report it clean.
@@ -561,7 +555,7 @@ export interface GalleyService {
   readonly residentBytes: () => number;
 
   /**
-   * Onion's decision-unit diff of two whole USFM documents.
+   * The engine's decision-unit diff of two whole USFM documents.
    *
    * `textMode` is the intra-unit grain a `modified` unit's word marks come
    * back at, and it defaults to `words` because that is what the review screen
@@ -570,7 +564,7 @@ export interface GalleyService {
    * It is still a `Result`: the door is a free function on the wasm module,
    * probed by name, so an artifact that lost it refuses by name
    * (`DIFF_DOOR`) instead of being quietly replaced by a second opinion about
-   * scripture structure. There is no interim diff any more — Will, 2026-09-15.
+   * scripture structure. There is no fallback diff.
    */
   readonly diff: (
     baseline: string,
@@ -594,7 +588,7 @@ export interface GalleyService {
   ) => Result.Result<string, EngineDoorMissing>;
 
   /**
-   * Onion's formatter, as EDITS rather than a rewritten document.
+   * The engine's formatter, as EDITS rather than a rewritten document.
    *
    * Edits, so the whole normalisation goes through `book.apply` as ONE
    * transaction and Undo takes it back in one step — a replaced document would
@@ -693,11 +687,9 @@ export class Galley extends Context.Service<Galley, GalleyService>()("Galley") {
  * What engine this is, asked of the artifact itself.
  *
  * Every format version is the READER's own constant, so this cannot report a
- * wire the installed package does not actually speak — which is what the old
- * `manifest.json` + `accepts()` pair existed to check, and why neither
- * survives the move to a tagged dependency: a hand-copied file could disagree
- * with the artifact beside it, and a constant compiled out of that artifact
- * cannot.
+ * wire the installed package does not actually speak. No hand-copied manifest
+ * sits beside it: a copied file could disagree with the artifact, and a
+ * constant compiled out of that artifact cannot.
  */
 const engineVersion = (): EngineVersion => ({
   engine: "usfm_galley",
@@ -960,7 +952,7 @@ const makeService = (
     remove: (id) => handle.remove(id),
     publish: () => FindingsSnapshot.open(handle.publish()),
     // Probed on the MODULE, where the stateless doors live: they are free
-    // functions, not handle methods, so an artifact that is not the vendored
+    // functions, not handle methods, so an artifact that is not the pinned
     // build refuses by name rather than throwing a `TypeError` about
     // `undefined`.
     diff: (baseline, current, textMode) => engineDiff(wasmModule, baseline, current, textMode),

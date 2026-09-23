@@ -4,13 +4,12 @@
 // out. Everything here is either an Effect ON the sources or a pure function
 // of what they returned; there is no Book, no FileSystem and no host.
 //
-// The unit of a comparison is a BOOK, and inside a book a HUNK from
-// `core/diff`'s line diff. That is the whole model. The proto's model was
-// Onion's chapter skeleton with moved units and interleave slots; ours is
-// deliberately coarser, because a line hunk is already what a translator
-// reads and because a line hunk composes — the equal spans between hunks are
-// identical on both sides, so a merged text is a walk with substitutions
-// (see `plan` in decisions.ts) rather than a second engine call.
+// What this module owns is the BOOK level: which books each side holds, which
+// of them differ, and the texts to decide over. The unit a reader decides on
+// inside a book is the engine's decision unit, merged by `mergeWithDecisions`
+// in `core/diff/skeleton.ts` and written by `applyPlan` in decisions.ts — see
+// `documentation/architecture/review.md`. The hunks here come from
+// `core/diff`'s line diff and only count differences.
 //
 // A book present on only one side is its own kind of difference, not a hunk:
 // there is nothing to line up. It carries ONE decision for the whole book.

@@ -53,7 +53,7 @@ export interface ApplyReport {
  *
  *  - `ReadOnly` — the target cannot be written. A folder is a snapshot, not a
  *    working copy; Sefer does not write into the zip somebody shared.
- *  - `Incomplete` — a hunk is still undecided. Half a decision map is not a
+ *  - `Incomplete` — a unit is still undecided. Half a decision map is not a
  *    text anybody asked for.
  *  - `Unsupported` — the plan would add or remove a whole book. A project's
  *    book set is fixed when it opens (`discoverBooks` is a snapshot), so

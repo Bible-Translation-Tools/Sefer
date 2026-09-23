@@ -1,12 +1,12 @@
 /**
- * STET — "let it stand", the proofreader's mark — as Sefer ships it: key
- * terms, the `/terms` screen.
+ * STET — "let it stand", the proofreader's mark — as Sefer ships it: the
+ * key-terms catalogue behind the `/terms` screen. See
+ * `documentation/architecture/stet.md`.
  *
- * Formatting transfer used to be planned as STET's other half and to live
- * here. It does not: it is the Overlay ("Match formatting from source"), a
- * command on the text you are reading (`overlay.*` in `src/app/commands.ts`),
- * because it is an operation on the text rather than a screen to go to. See
- * `documentation/glossary.md`, "Overlay".
+ * Formatting transfer is not here: it is the Overlay ("Match formatting from
+ * source"), a command on the text you are reading (`overlay.*` in
+ * `src/app/commands.ts`), because it is an operation on the text rather than a
+ * screen to go to. See `documentation/glossary.md`, "Overlay".
  */
 
 import { Effect, Option } from "effect";
@@ -26,11 +26,11 @@ import {
 // ---------------------------------------------------------------------------
 // Key terms
 //
-// The one the design calls a multibuffer: a list
-// of terms on the left, and on the right one pair of cards per occurrence —
-// the source verse with the term highlighted, and the target verse, which is
-// the editable one (design-direction.md, "Key terms / STET"). It has its own
-// route, `/terms`, because Will asked for two panes rather than a toggle.
+// The one the design calls a multibuffer: a list of terms on the left, and on
+// the right one pair of cards per occurrence — the source verse with the term
+// highlighted, and the target verse, which is the editable one
+// (`documentation/architecture/design-direction.md`, "Key terms / STET"). It
+// has its own route, `/terms`, because two panes read better than a toggle.
 //
 // This file is the join, and only the join. `src/core/stet` owns the
 // catalogue — the schema, the guides, the occurrences — and knows nothing

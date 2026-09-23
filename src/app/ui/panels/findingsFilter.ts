@@ -8,7 +8,7 @@
  * so the panel, the counts and the keyboard cursor cannot disagree about what
  * is being shown.
  *
- * What persists and what does not is the interesting part (vision §11.4):
+ * What persists and what does not is the interesting part:
  * severity, producer and "hide stale" are PREFERENCES and go through
  * `findings.filter` in settings; the free-text box, the book selection and the
  * view are SESSION state, because a remembered text filter presents as an

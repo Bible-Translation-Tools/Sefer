@@ -387,8 +387,8 @@ pub fn git_commit(
         }
     } else if tree.is_empty() {
         // No parent AND nothing in the tree: every named path was a deletion
-        // of something never recorded. A root commit here would be the empty
-        // first version the build-out review flagged.
+        // of something never recorded. A root commit here would be an empty
+        // first version, which records nothing and misleads the history.
         return Err(fail(
             REFUSED,
             "nothing to commit: none of the saved paths exist",

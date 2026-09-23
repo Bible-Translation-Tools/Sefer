@@ -1,8 +1,7 @@
 // project.ts
 //
-// Project: one folder of books, and the owner of their lifetimes (seams §3.3;
-// editor-and-save §1.1 "the four states", §1.5 "Coordinating across many
-// books"). Nothing above Project holds Books — it hands out references and
+// Project: one folder of books, and the owner of their lifetimes
+// (`documentation/architecture/project.md`). Nothing above Project holds Books — it hands out references and
 // closes them.
 //
 // What Project is NOT: it is not a service registry, not a DI container, and
@@ -64,7 +63,7 @@ export type ProjectId = string;
  * What the world outside Sefer did to a book file. `changed` covers creation
  * and modification alike: either way the bytes on disk are no longer the ones
  * we read. Project reports; it NEVER auto-merges — resolving a change is
- * Save's `resolve(change, choice)` (editor-and-save §4.1), which needs the
+ * Save's `resolve(change, choice)`, which needs the
  * baseline Project does not hold.
  */
 export interface ExternalChange {
@@ -93,9 +92,10 @@ class ProjectError extends Data.TaggedError("ProjectError")<{
  * Note on the fixture: `fixtures/small-nt/99-BAD.usfm` is deliberately
  * malformed *USFM*, not malformed *bytes* — valid UTF-8, LF newlines, no BOM —
  * so `Source.decode` accepts it and it opens as an ordinary Book with id
- * `BAD`. Only Galley will have anything to say about it. `failed` is therefore
- * empty for the fixture project; it exists for the real refusals `decode`
- * names (`InvalidUtf8`, `ByteOrderMark`, `MixedNewlines`) and for read errors.
+ * `BAD`. Only Galley has anything to say about it. `failed` is therefore
+ * empty for the fixture project; it exists for the refusal `decode` names
+ * (`InvalidUtf8` — a BOM or mixed newlines are recorded on `Source.form`, not
+ * refused) and for read errors.
  */
 export interface FailedBook {
   readonly path: string;
@@ -315,7 +315,7 @@ const makeProject = (parts: ProjectParts): Project => {
       Effect.sync(() => {
         if (closed) return;
         closed = true;
-        // The lifetime hook the seams reserve as `close(book)`: the plain Book
+        // The lifetime hook reserved as `close(book)`: the plain Book
         // holds no resources today, so only a seat has anything to release.
         for (const entry of entries.values()) entry.seated?.close?.();
         listeners.clear();
@@ -453,9 +453,9 @@ const openIn = (
     // Bounded rather than unbounded: sixty-six simultaneous file handles is a
     // burst the storage layer queues anyway, and an unbounded `forEach` over a
     // whole-Bible project would also hold every book's bytes in memory at once.
-    // Spanned, because this is half the open and it used to be invisible: a
-    // `project.open` that said 190ms with a 115ms parse inside it and no
-    // account of the rest. Reading the files IS the rest.
+    // Spanned, because this is half the open: without it a `project.open`
+    // says 190ms with a 115ms parse inside it and no account of the rest.
+    // Reading the files IS the rest.
     const reading = observability?.span("file.read", undefined, {
       "project.books": paths.length,
       "file.concurrency": OPEN_CONCURRENCY,

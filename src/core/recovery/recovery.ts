@@ -1,6 +1,6 @@
 // recovery.ts
 //
-// Recovery (slice 11): the crash-safety journal. Every accepted edit to a Book
+// Recovery: the crash-safety journal. Every accepted edit to a Book
 // is appended, debounced, to one JSONL file per project and book OUTSIDE the
 // project folder, so Git never sees it and a shared drive never carries it.
 // On the next boot, a journal whose last stamp is newer than Save's baseline
@@ -22,8 +22,8 @@
 //     `book.changes` and the listener only pushes an entry into memory and
 //     arms a timer; the write happens on a fiber tied to the layer's Scope.
 //
-// The journal root is a plain string option today. Composition should feed
-// `HostInfo.paths().appData` in when that service lands.
+// The journal root is a plain string option; the composition feeds it
+// `HostInfo.paths().appData`.
 
 import { Context, Data, Effect, FileSystem, Layer, Option, Result, Scope } from "effect";
 

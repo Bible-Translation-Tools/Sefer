@@ -22,11 +22,9 @@ import type { Guide, Term } from "#core/stet/stet";
 /**
  * `/terms` — Key terms (STET), its own pane.
  *
- * It was a `mode=stet` branch on `/find` and is not any more: Will's decision
- * on the gap list is that Find and Key terms are "SEPARATE panes/routes with
- * similar UI, not a mode toggle on one page" (design-direction.md, "Decisions
- * on the gap list", item 5). `/find?mode=stet` still resolves — it redirects
- * here — so a link somebody saved keeps working.
+ * Find and Key terms are separate panes with similar UI, not a mode toggle on
+ * one page (`documentation/architecture/stet.md`). `/find?mode=stet` still
+ * resolves — it redirects here — so a link somebody saved keeps working.
  *
  * ## The three steps this screen is
  *
@@ -34,7 +32,7 @@ import type { Guide, Term } from "#core/stet/stet";
  *     `src/core/stet`. It names references for the whole canon and has never
  *     heard of this project.
  *  2. **The mapping.** For each book the project has, `refOccurrences` asks
- *     Onion's table of contents where those references ARE in that book's own
+ *     Galley's table of contents where those references ARE in that book's own
  *     text, and drops the ones it does not have — the guide covers sixty-six
  *     books and a project covers four. What comes out is the same
  *     `Occurrence` shape a search produces, so the whole multibuffer below it
@@ -52,17 +50,6 @@ import type { Guide, Term } from "#core/stet/stet";
  * that survives a reload and nothing in Sefer keeps one yet, so every count is
  * `0/n` and the term list says so in a muted line rather than showing progress
  * that is not being recorded.
- */
-
-/**
- * The two things this route shows.
- *
- * `terms` is the multibuffer above. `format` is MATCH FORMATTING — the same
- * pair of texts, asked a different question: not "is this term rendered well
- * here" but "does this book have the source's shape". They share a route
- * because they share a premise (a source bound to this project) and a reader
- * moves between them in one sitting; they are a segmented control rather than
- * two routes because neither is a destination anybody links to directly.
  */
 
 interface TermsSearch {

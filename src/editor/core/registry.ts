@@ -1,10 +1,10 @@
 /**
  * Policy as data: for each `ClassKey`, how it paints and how mutable it is —
- * Table 3 of the design, as a record (seams §3.4).
+ * the class table, as a record.
  *
  * `PROJECTIONS` are deltas over the default registry, so a mode ("usfm",
  * "hide-notes", "lock-structure") is a small patch and not a code path. No rule
- * anywhere branches on a projection name; they read `cellAt(state, cls)`. The
+ * anywhere branches on a projection name; they read `rowAt(state, cls)`. The
  * struck combinations are listed rather than merely unused, so an assignment
  * that reaches an unlawful cell is a caught error and not a strange screen.
  */

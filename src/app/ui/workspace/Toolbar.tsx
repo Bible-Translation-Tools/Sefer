@@ -91,16 +91,16 @@ export function Toolbar() {
   /**
    * Is this command possible right now?
    *
-   * No `tick`, and no store either: the predicate IS the dependency
-   * declaration. Every `when()` these buttons ask now reads signals — the
+   * No change counter, and no store either: the predicate IS the dependency
+   * declaration. Every `when()` these buttons ask reads signals — the
    * focused book, the open project, and the undo/redo depth the `books` store
    * carries — so calling `available()` inside JSX subscribes to exactly what
    * that command depends on and nothing else.
    *
-   * It needed the counter only because its inputs were not reactive: Undo asks
-   * CodeMirror's history for its depth, and CodeMirror publishes to nobody. So
-   * the depth moved onto the book's row, written on the same receipt that
-   * already fans out, and the predicate became honest.
+   * Undo's input is the one that is not naturally reactive: CodeMirror's
+   * history knows its depth and publishes to nobody. So the depth lives on the
+   * book's row, written on the same receipt that already fans out, and the
+   * predicate stays honest.
    */
   const can = (id: string): boolean => findCommand(id)?.available() === true;
 
@@ -300,9 +300,9 @@ export function Toolbar() {
 
           <span aria-hidden="true" class="my-1 block h-px bg-surface-border" />
 
-          {/* Format, for a book or the whole project ("call it 'Format'" —
-              design-direction.md, gap list 4). Not match-formatting, which
-              needs an Onion overlay of two texts first. */}
+          {/* Format, for a book or the whole project: the engine's formatter.
+              Matching formatting from a source is the toolbar's Match
+              formatting button (the Overlay), not this. */}
           <button
             data-testid="kebab-format-book"
             type="button"
@@ -330,7 +330,7 @@ export function Toolbar() {
 
           {/* Project-wide, and here rather than on `/project/$id` because the
               editor is where someone is when they decide to hand the work on
-              or rename it (gap list 7: "Export as zip … and rename: yes"). */}
+              or rename it. */}
           <button
             data-testid="kebab-export-zip"
             type="button"

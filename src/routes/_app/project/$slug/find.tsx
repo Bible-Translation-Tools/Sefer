@@ -34,18 +34,18 @@ import * as Search from "#core/search/search";
  * Find, as a multibuffer.
  *
  * The screen is a find bar over a list of EXCERPTS, not a list of hits: hits
- * are grouped by the verse Onion's table of contents names, each excerpt is
+ * are grouped by the verse Galley's table of contents names, each excerpt is
  * read-only until the reader clicks Edit, and Edit opens a satellite over the
  * canonical Book rather than a copy of its text
- * (planning/03-ui/design-direction.md, "Find").
+ * (`documentation/architecture/design-direction.md`, "Find").
  *
- * **Find only.** Key terms used to be a `mode` on this screen and is now its
- * own pane at `/terms`, because the two are different jobs that happen to
- * share a list — Will's decision on the gap list, item 5. The only trace left
- * is the redirect below, so `/find?mode=stet` still lands somewhere sensible.
- * Everything the two panes DO share is `createExcerptFeed`.
+ * **Find only.** Key terms is its own pane at `/terms`, because the two are
+ * different jobs that happen to share a list
+ * (`documentation/architecture/stet.md`). The redirect below keeps
+ * `/find?mode=stet` landing somewhere sensible. Everything the two panes DO
+ * share is `createExcerptFeed`.
  *
- * What is still the core module's, unchanged:
+ * What is the core module's (`documentation/architecture/search.md`):
  *
  *  - `findInReading` searches the READING — the markup cut out, rebuilt here
  *    from the engine's mask map — and is the default, because a translator
@@ -53,18 +53,17 @@ import * as Search from "#core/search/search";
  *    `find` is the raw scan of the USFM, for a search aimed AT the markup.
  *    Either takes a literal or a regex, so the matcher and the haystack are
  *    two switches and all four combinations work.
- *  - `resolveHit` decides whether a hit can still be trusted, so a card that
- *    named a revision the book has moved past refuses instead of editing the
- *    wrong range.
- *  - Replace all is an optional advanced action. It previews the current
- *    search, then applies one validated edit per book through the same Book
- *    edit phases as a satellite edit.
+ *  - Every hit carries the stamp it was found at, and `planReplace` refuses a
+ *    hit whose book has moved past it instead of editing the wrong range.
+ *  - Replace all is an optional advanced action (`find.enableReplaceAll`). It
+ *    previews the current search, then applies one validated edit per book
+ *    through the same Book edit phases as a satellite edit.
  *
  * **The URL is the state**, not a seed for it: `q` and `scope` are read from
  * the search params on every render, and the controls that change them
  * navigate. The workspace toolbar's search box links here, and this screen is
- * already mounted when it does — a one-time read of the params would have left
- * the view unchanged. What stays local is what is not yet a search: the text
+ * often already mounted when it does — a one-time read of the params would
+ * leave the view unchanged. What stays local is what is not yet a search: the text
  * being typed, the three matching toggles, and the match cursor.
  */
 
@@ -122,12 +121,10 @@ function Find() {
   /**
    * Search the markup itself, rather than the reading.
    *
-   * Its own switch since the mask map landed. It used to be an undocumented
-   * side effect of the regex toggle — the raw scan was the only door that took
-   * a pattern, so turning regex on silently changed WHAT was being searched as
-   * well as how, and the button's label had to admit it. "Find every `\f`" and
-   * "find `Jesus (said|answered)` in the reading" are the two cells that were
-   * unreachable; both work now.
+   * Its own switch, not a side effect of the regex toggle: turning regex on
+   * changes how the search matches, never WHAT is searched. "Find every `\f`"
+   * and "find `Jesus (said|answered)` in the reading" are the two cells a
+   * single toggle could not reach.
    */
   const [markup, setMarkup] = createSignal(false, { name: "markup" });
 
@@ -357,8 +354,6 @@ function Find() {
 
     // TWO switches, not one. `markup` picks the haystack — the canonical USFM
     // or the reading with the markup cut out — and `regex` picks the matcher.
-    // They used to be the same button, because the only regex door was the raw
-    // scan; the mask map is what separated them.
     const stop = search.span("find.scan");
     const found = markup()
       ? Search.find(books, staticQuery, options)

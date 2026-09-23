@@ -6,19 +6,19 @@
  * one of them for editing. Find produces that list from search hits; STET
  * produces it from a term's occurrences. Both feeds arrive here as the same
  * three fields (`bookId`, `from`, `to`), so the component above is written
- * once (planning/03-ui/design-direction.md, "Key terms (STET) reuses the Find
- * excerpt pattern").
+ * once (`documentation/architecture/design-direction.md`, "Key terms (STET)
+ * reuses the Find excerpt pattern").
  *
  * Two decisions this module exists to hold:
  *
- *  - **Grouping is by verse, not by hit.** Onion's table of contents names
+ *  - **Grouping is by verse, not by hit.** Galley's table of contents names
  *    every verse anchor; a hit belongs to the last anchor at or before it, and
  *    every hit sharing an anchor shares one excerpt. Three matches in Philemon
  *    1:4 are one card with three highlights, never three cards.
  *  - **The read-only body is the PROJECTION, not the source.** A card shows
  *    what the reader sees: the text tokens of the span, with markers,
  *    designators and note bodies dropped — the same rule the engine's find
- *    runs over (`core/search/search.ts`, "TWO DOORS, ONE `Hit`"). `project`
+ *    runs over (`core/search/search.ts`, "TWO HAYSTACKS, ONE `Hit`"). `project`
  *    keeps a source offset per output character, so a hit found in source
  *    coordinates highlights exactly the right characters of the projection
  *    without either side guessing at the other's arithmetic.
@@ -27,7 +27,7 @@
  * computes is in SOURCE coordinates, which is what a satellite clips to, and
  * the marks it computes are in projected coordinates, which is what the
  * read-only body renders. Nothing here holds a Book, a stamp or a lifetime —
- * freshness is still `search.resolveHit`'s to judge.
+ * freshness is the search hit's stamp to judge (`search.planReplace`).
  */
 
 import type { BookId, Ref } from "../book/book";
@@ -87,7 +87,7 @@ export interface Mark {
  * Why: a feed builds one excerpt per hit, and `/findings` on a 66-book project
  * has twenty thousand of them — but the list is virtualised and shows about
  * twenty. Projecting every excerpt to render twenty cost ~1.15s of walking the
- * Onion reader on every arrival (measured; see the plan). Everything a feed
+ * engine's reader on every arrival. Everything a feed
  * needs in order to GROUP, COUNT, ORDER and ESTIMATE is arithmetic over the
  * verse table, so all of that stays eager and the reader's twenty cards pay
  * for themselves.
@@ -460,7 +460,7 @@ interface VerseSpan {
 /**
  * Every verse of the book, in order, each tiling forward to the next.
  *
- * Onion's toc gives anchors and chapter extents; the tiling is arithmetic over
+ * Galley's toc gives anchors and chapter extents; the tiling is arithmetic over
  * them, and it is here rather than in the engine because "how much text does
  * this verse own" is a display question — the anchor is the fact.
  */

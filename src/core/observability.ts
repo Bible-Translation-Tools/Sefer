@@ -48,7 +48,7 @@ export type AttrName = string;
  * A union, unlike the fields: there are a dozen, they are structural, and a
  * typo in one is invisible — it does not fail, it just never matches a filter
  * again. Adding a name here is the deliberate act of saying a new kind of work
- * exists. See planning/01-discussing/event-inventory-2026-09-16.md.
+ * exists. See `documentation/architecture/observability.md`, "Operations".
  */
 export type OperationName =
   | "boot"

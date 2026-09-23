@@ -1,21 +1,22 @@
 // search.ts
 //
-// Project-wide Find, and the one-match-at-a-time Replace behind it (seams
-// §3.10). Search is a pure, synchronous scan of canonical text: it takes the
-// Books it should look at rather than a Project, so the result browser, a
-// satellite window and a test can all call it with whatever set of Books they
-// hold, and nothing here needs a lifetime, a service or the engine.
+// Project-wide Find, and the Replace behind it. Search is a pure, synchronous
+// scan of canonical text: it takes the Books it should look at rather than a
+// Project, so the result browser, a satellite window and a test can all call
+// it with whatever set of Books they hold, and nothing here needs a lifetime,
+// a service or the engine. See `documentation/architecture/search.md`.
 //
 // Two rules shape the whole module:
 //
 //  - Every hit is version-bound. A `Hit` carries the stamp of the text it was
-//    found in, and `resolveHit` refuses to hand back coordinates once that
-//    stamp has moved. Offsets into text that has since been edited are the
-//    classic stale-range bug; the stamp is what makes it a refusal instead.
-//  - There is no global Replace All (vision §12.2). `replace` acts on one hit,
-//    `replaceInBook` on several hits of ONE book in one `apply`, and
-//    `planReplace` shapes those changes for MultiBook's `runAcrossBooks`,
-//    which asks per book. Nothing here walks the corpus and rewrites it.
+//    found in, and `planReplace` refuses to hand back changes once that stamp
+//    has moved. Offsets into text that has since been edited are the classic
+//    stale-range bug; the stamp is what makes it a refusal instead.
+//  - Replacing is per book. `replaceInBook` applies several hits of ONE book
+//    in one `apply`, and `planReplace` shapes those changes for MultiBook's
+//    `runAcrossBooks`, which asks per book. Nothing here walks the corpus and
+//    rewrites it; Find's Replace all (behind the `find.enableReplaceAll`
+//    setting) is a caller that previews first and then goes book by book.
 //
 // Replacements go through `book.apply(..., "replace", UNTRUSTED)`: the editing
 // phases judge them exactly like a keystroke, so a replacement that would
@@ -30,16 +31,15 @@
 // — what am I matching with, what am I matching against — are two switches
 // rather than one.
 //
-// The engine's own `find`/`findAll` are no longer used from here. They were the
-// only way to search the reading until the mask map arrived, and they cost
-// what they cost because the engine rebuilds and re-folds every projection on
-// every call. What replaced them supports strictly more: the same
-// `caseSensitive`, `wholeWord`, `limit` and book filter, plus a regex, plus the
-// markup as a haystack. `GalleyService.find`/`findAll` stay on the seam — the
-// door is fine, Sefer just has a better way to ask.
+// The engine's own `find`/`findAll` are not used from here: the engine
+// rebuilds and re-folds every projection on every call, and the scan here
+// supports strictly more — the same `caseSensitive`, `wholeWord`, `limit` and
+// book filter, plus a regex, plus the markup as a haystack.
+// `GalleyService.find`/`findAll` stay on the seam; the door is fine, Sefer
+// just has a better way to ask.
 //
-// Both produce the same `Hit`, so `resolveHit`, `replace` and `planReplace`
-// are written once.
+// Both produce the same `Hit`, so `spansMarkup` and `planReplace` are written
+// once.
 
 import { Data, Result } from "effect";
 
@@ -91,10 +91,9 @@ export interface Hit {
   /**
    * Where the hit sits in the reading — what a reader sees in visual mode.
    *
-   * Nothing sets this today. It went away with the engine's own find, and the
-   * field is kept because a card that wanted to highlight in the READING
-   * rather than in the source would need exactly it, and `findInReading` has
-   * the number in hand.
+   * Unset by the scans here. The field is kept because a card that wanted to
+   * highlight in the READING rather than in the source would need exactly it,
+   * and `findInReading` has the number in hand.
    */
   readonly projected?: { readonly from: number; readonly to: number };
   /**
@@ -113,19 +112,16 @@ export interface Hit {
  * A hit that does cannot be replaced by this module, and that is a rule rather
  * than a limitation: the markup between the pieces either survives the
  * replacement or does not, and only the person editing knows which. Find's job
- * was to say the gap is there (`galley/src/find.md`, "Replacement is the
+ * is to say the gap is there (`galley/src/find.md`, "Replacement is the
  * caller's").
  */
 const spansMarkup = (hit: Hit): boolean => (hit.pieces?.length ?? 1) > 1;
 
 class SearchError extends Data.TaggedError("SearchError")<{
   /**
-   * The pattern is not a regular expression. The ONLY way a search fails now:
+   * The pattern is not a regular expression. The ONLY way a search fails:
    * every scan here runs in this process over strings this module was handed,
    * so there is no call that can be refused and no host that can be absent.
-   *
-   * There was an `Engine` reason for as long as a search went through the
-   * corpus. It went when the engine's find did.
    */
   readonly reason: "InvalidRegex";
   readonly description: string;
@@ -151,8 +147,7 @@ const PREVIEW_WIDTH = 90;
  * finds — `Melchizedek` matches eleven times and still pays it — so a cap
  * buys nothing on a query anybody actually types. (The floor is the engine
  * rebuilding and case-folding every projection per call: ~3.7ms of cut and
- * ~10ms of fold. An earlier version of this comment blamed the cut alone,
- * which was wrong.) And the only row that hurts is the single character:
+ * ~10ms of fold.) And the only row that hurts is the single character:
  * 255,018 hits is a 27MB buffer and a quarter of a million objects, for a
  * result no one can read.
  *
@@ -179,10 +174,11 @@ const escapeLiteral = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]
  * effect at. Built once per text per `find` call so that N hits cost one scan
  * plus N binary searches instead of N scans.
  *
- * This is deliberately a marker scan and not a parse: Galley's TOC is the real
- * answer, and when ProjectAnalysis (slice 15) lands and hands search an
- * analysis for each book, `refAt` should read the TOC instead of this table.
- * Until then a book with no analysis still needs a reference for its cards.
+ * This is deliberately a marker scan and not a parse, because search takes
+ * plain Books and a book with no analysis still needs a reference for its
+ * cards. Galley's TOC is the real answer; the Location module is meant to
+ * replace this table
+ * (`planning/01-discussing/editor-primitives-consistency.md`).
  */
 interface RefTable {
   /** Ascending offsets at which the reference changes. */
@@ -303,7 +299,7 @@ const matcherFor = (query: Query): Result.Result<RegExp, SearchError> => {
  *
  * This is the RAW door: it matches markup as readily as text, which is what a
  * regex query and a deliberate markup search want and what a reader-facing
- * search does not — `findProjected` is the default for that reason.
+ * search does not — `findInReading` is the default for that reason.
  *
  * Returns `SearchError` only for a pattern `RegExp` will not accept. An empty
  * query, a book list that matches nothing, and a text with no match are all a
@@ -372,11 +368,9 @@ export const find = (
  *     literal         findInReading           find
  *     regex           findInReading           find
  *
- * Before the mask map only the two diagonal cells existed — `findAll` was
- * literal-over-the-reading and `find` was regex-over-the-markup — and one
- * toggle chose between them, which is why the regex button's label had to
- * admit it also changed what was being searched. They are two questions and
- * they are now two switches.
+ * They are two questions, so they are two switches: the matcher does not
+ * decide the haystack, and the regex button changes only what is matched
+ * with.
  *
  * The reading is REBUILT per call and dropped with it; only the mask survives,
  * in `readings`. `src/core/search/reading.ts` states that trade and its
@@ -384,7 +378,7 @@ export const find = (
  *
  * Offsets come back in the SOURCE, through the map: `from`/`to` are the first
  * piece and `pieces` carries the rest, exactly as the engine's find buffer
- * reports them, so `resolveHit`, `spansMarkup` and `replace` are unchanged.
+ * reports them, so `spansMarkup` and `planReplace` treat both scans alike.
  */
 export const findInReading = (
   readings: Readings,
@@ -516,10 +510,8 @@ export interface BoundReference {
  * The SAME scan as `findInReading`, over the same kind of reading, with the
  * same matcher. That is the point: a reference is somebody else's book, not a
  * different kind of thing, and a reader searching one should not silently get
- * literal-only matching and a different set of rules. It went through the
- * engine's `findAll(scope: "references")` until the mask map made the reading
- * available on this side — which is also why the regex toggle had to be refused
- * on this scope, and is not any more.
+ * literal-only matching and a different set of rules — so the regex toggle
+ * works on this scope too.
  *
  * `src/app/workflows/references.ts` is what registers them, through
  * `ProjectAnalysis.attachReferences`.

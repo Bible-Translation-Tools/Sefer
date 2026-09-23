@@ -4,9 +4,8 @@
 // the map back to the text they can edit.
 //
 // Galley cuts that reading to search it and drops it again, which is why
-// `findAll` rebuilds and re-folds the whole corpus on every call. Since v0.1.2
-// it will instead hand over the MASK MAP: the source spans the reading is made
-// of, in order. The reading is a pure concatenation of those spans, so a
+// `findAll` rebuilds and re-folds the whole corpus on every call. It also hands
+// over the MASK MAP: the source spans the reading is made of, in order. The reading is a pure concatenation of those spans, so a
 // caller holding the book's text can rebuild it, and — the part that matters —
 // can map an offset in the reading back to an offset in the text.
 //

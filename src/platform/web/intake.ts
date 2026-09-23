@@ -268,7 +268,7 @@ export interface Intaken {
  * Pick a zip or a folder and leave it somewhere the port can read, for a
  * caller that wants a PATH rather than an import.
  *
- * Compare is that caller (`src/app/ui/compare`): the other side of a
+ * Review is that caller (`src/app/ui/review/sources.ts`): the other side of a
  * comparison is a folder of books, and a zip becomes one by being unpacked
  * into a scratch directory. Nothing is classified and nothing is committed —
  * the bytes land under `scratchRoot` and the path comes back, so a comparison

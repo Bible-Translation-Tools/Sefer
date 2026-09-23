@@ -2,11 +2,11 @@
 //
 // THE OVERLAY DOORS: match formatting, as the engine sees it.
 //
-// The ask (engine-asks item 3): show the source text and highlight the
-// equivalent block in the target, so a translator can carry paragraphing and
-// poetry across without retyping the words. The old app did it in TypeScript by
-// verse anchors; Will's answer was that it belongs in the engine, and
-// scripture-kitchen v0.1.0 is where it landed (`galley/src/overlay.md`).
+// The job: show the source text and highlight the equivalent block in the
+// target, so a translator can carry paragraphing and poetry across without
+// retyping the words. It belongs in the engine rather than in TypeScript by
+// verse anchors, because the engine already knows the structure of both
+// documents (`galley/src/overlay.md`).
 //
 // Four ideas, and they are the whole model.
 //
@@ -81,7 +81,7 @@ export interface BlockAddress {
 export interface SkeletonRow extends BlockAddress {
   readonly from: number;
   readonly to: number;
-  /** Onion's empty paragraph. A source folds runs of these away. */
+  /** The engine's empty paragraph. A source folds runs of these away. */
   readonly empty: boolean;
 }
 
@@ -394,8 +394,7 @@ export const blockAtOffset = (
  *
  * `(sid, where, ordinal)` and NOT the marker: matching on the name too would
  * mean a `\q1` here and a `\q2` there never pair, which is exactly the
- * correspondence the reader opened this to see (`equivalentBlock` in
- * `app/workflows/stet.ts` says the same thing for the two-column view).
+ * correspondence the reader opened this to see.
  */
 export const equivalentExtent = (
   extents: readonly BlockExtent[],

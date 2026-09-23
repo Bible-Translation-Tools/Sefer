@@ -1,16 +1,15 @@
 /**
  * The cloud panel: the ATTACHMENT half of remote sync, beside the account.
  *
- * It used to be all four asks — who am I, which repository, and move the bytes
- * — because there was nowhere else to put them. There is now: `/cloud` is the
- * sync screen, and it owns the state, the two clocks, the incoming plan and
- * the one right button. What is left here is the part that belongs beside a
- * project rather than on a screen of its own: choosing WHICH shared project
- * this folder is, and creating one when there is none.
+ * `/cloud` is the sync screen, and it owns the state, the two clocks, the
+ * incoming plan and the one right button. What is here is the part that
+ * belongs beside a project rather than on a screen of its own: choosing WHICH
+ * shared project this folder is, and creating one when there is none.
  *
  * The account half is not duplicated. `createAccount` is the shared state and
- * `AccountCard` the shared component (`src/app/ui/cloud/account.ts`), so the
- * two surfaces cannot disagree about what "signed in" means.
+ * `AccountCard` the shared component (`src/app/ui/cloud/account.ts` and
+ * `src/app/ui/cloud/AccountCard.tsx`), so the two surfaces cannot disagree
+ * about what "signed in" means.
  *
  * The panel holds no domain state. The session lives in `Credentials` (through
  * `Gitea`), the attachment lives in the repository's own `origin`, and the

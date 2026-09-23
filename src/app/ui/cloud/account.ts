@@ -7,8 +7,8 @@
  * around asking for it: the form fields, whether the account wants its second
  * factor, and the one failure line.
  *
- * Extracted so the two surfaces cannot disagree about what "signed in" means,
- * and so `CloudPanel` stops carrying a copy of the login flow.
+ * One module so the two surfaces cannot disagree about what "signed in"
+ * means, and neither carries its own copy of the login flow.
  */
 
 import { Effect, Option } from "effect";

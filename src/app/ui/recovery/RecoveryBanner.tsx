@@ -1,53 +1,40 @@
 /**
  * "Unsaved work from your last session": the one thing a project open owes
- * someone who crashed.
+ * someone who crashed. `documentation/architecture/recovery.md`, "The banner",
+ * has the full account.
  *
- * The check runs ONCE per open project, on mount, and it is the only place in
- * the shell that asks Recovery anything at open time: `pendingOnOpen` lists
- * that project's journals, reads each book file once and discards — silently —
+ * The check runs ONCE per open project, on mount: `pendingOnOpen` lists that
+ * project's journals, reads each book file once and discards — silently —
  * every journal whose work the file already holds. What is left is work that
  * exists nowhere else, and that is what this banner offers.
  *
- * Explicit-only saving makes the offer the ordinary case rather than the rare
- * one: the file is written when a version is recorded, so a journal that
- * outlived its session almost always differs from disk. The rule does not
- * change — a journal the file already holds is still deleted without asking,
- * which is what keeps the banner worth reading when it does appear.
- *
  * ## One question, not one per book
  *
- * The banner used to list the books and ask about each of them, which made the
- * reader answer a question they had no way to answer: nobody knows, from a
- * book id and an edit count, whether last Tuesday's work in 3 John is worth
- * keeping. The question they CAN answer is "was my last session real work or
- * not", and that is a project-level question — so this is one card, with
- * **Restore all** and **Discard all**, and the book count in the sentence
- * rather than as a list to triage.
+ * Nobody knows, from a book id and an edit count, whether last Tuesday's work
+ * in 3 John is worth keeping. The question a reader CAN answer is "was my last
+ * session real work or not", and that is a project-level question — so this
+ * is one card, with **Restore all** and **Discard all**, and the book count in
+ * the sentence rather than as a list to triage.
  *
  * Restoring is deliberately the cheap, reversible answer: it puts the work
- * back in the editor, dirty, where the reader can look at every changed book
- * side by side against disk in Save & Review and revert whatever they do not
- * want. That is the screen built for inspecting changes; this banner is not.
+ * back in the editor, dirty, where the reader can compare every changed book
+ * against disk in Review and revert whatever they do not want.
  *
  * Three rules the surface must keep:
  *
  *   * **Restore goes through the Book.** `project.instantiate(bookId)` seats
  *     the book and `recovery.restore` replays the journal through
- *     `book.apply(…, 'recovery', trusted)`. That is the funnel: the text
- *     arrives as ordinary applied changes, so it is in the undo history, the
- *     editor sees it, Save sees it dirty, and a journal written under an older
- *     rule set is re-judged by today's rules rather than trusted.
+ *     `book.apply(…, 'recovery', trusted)`, so the text arrives as ordinary
+ *     applied changes and is re-judged by today's rules rather than trusted.
  *   * **The disk text becomes the baseline first.** `SaveCoordinator.adopt`
  *     is called on the freshly instantiated book, BEFORE the replay, while its
  *     revision is still 0 and its text really is the bytes on disk. Without
- *     that the restored book has no baseline at all, and Save & Review — which
- *     reviews against disk — cannot show what came back.
+ *     that the restored book has no baseline at all, and Review — which
+ *     compares against disk — cannot show what came back.
  *   * **Nothing is offered twice.** A journal for a book this session already
  *     has open is the live backup of what is on screen; restoring it would
  *     replay edits the editor is already showing. Those are filtered out, the
- *     same way `SavePanel` filters them.
- *
- * Either answer removes the card: an answered question stops being a question.
+ *     same way `ReviewPanel` filters them.
  *
  * Exported for the project route to mount as well; it is mounted here because
  * the landing screen is where someone lands after the crash.
@@ -86,9 +73,10 @@ export function RecoveryBanner() {
   const [offered, setOffered] = createSignal<readonly Restorable[]>([], { name: "recovered" });
   const [busy, setBusy] = createSignal(false, { name: "recoveryBusy" });
 
-  // One pass per open project. Keyed on the project's id rather than on `tick`
-  // so an edit does not re-run an IO check whose answer cannot have changed:
-  // journalling during this session is the SavePanel's subject, not this one's.
+  // One pass per open project. Keyed on the project's id rather than on any
+  // edit event, so an edit does not re-run an IO check whose answer cannot
+  // have changed: journalling during this session is the ReviewPanel's
+  // subject, not this one's.
   createEffect(
     () => shell.project()?.id,
     (id) => {
@@ -140,7 +128,7 @@ export function RecoveryBanner() {
                 const book = yield* project.instantiate(journal.bookId);
                 // Its text IS the bytes on disk at this moment, and its
                 // revision is still 0, so this is the one moment the disk
-                // baseline can be learned for free. Save & Review reviews
+                // baseline can be learned for free. Review compares
                 // against that baseline; without it the restored work would
                 // come back invisible to the screen built to inspect it.
                 yield* shell.services.save.adopt(book);

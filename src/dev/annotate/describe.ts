@@ -5,7 +5,7 @@
  *
  *   1. `data-loc` — the file, line and column the markup was written at, put
  *      there by the JSX-location Vite transform. This is the whole point. A
- *      comment carrying `src/app/ui/review/DecisionRow.tsx:42` is a place to
+ *      comment carrying `src/app/ui/review/UnitCard.tsx:42` is a place to
  *      go; one carrying `.flex.items-center.gap-2` is a grep.
  *   2. A short CSS-ish path, for a project without that transform — this
  *      module must still be useful when dropped somewhere that has not set one

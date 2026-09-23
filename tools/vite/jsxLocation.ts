@@ -5,7 +5,7 @@
  *
  * This is the piece that decides whether the design overlay is worth having.
  * A comment that says `.flex.items-center.gap-2` sends whoever reads it
- * grepping; a comment that says `src/app/ui/review/DecisionRow.tsx:42` is
+ * grepping; a comment that says `src/app/ui/review/UnitCard.tsx:42` is
  * something an agent can act on in one step.
  *
  * Nothing upstream provides it. Checked against what is installed:

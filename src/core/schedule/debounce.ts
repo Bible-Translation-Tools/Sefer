@@ -11,11 +11,10 @@
 // the middle of a burst. The fiber waits for quiet, but no longer than
 // `maxIntervalMs` after the first arming of the current burst.
 //
-// It lives under `schedule/` rather than under one caller because it now has
-// three: Save's autosave (slice 10), Recovery's journal (slice 11) and
-// ProjectAnalysis's re-analyze loop. The shape is the same in all three — a
-// synchronous arm from a change listener, the work on a scoped fiber — so
-// there is one implementation to reason about and one place to fix a timer bug.
+// It lives under `schedule/` rather than inside Recovery's journal, its one
+// caller, because the shape — a synchronous arm from a change listener, the
+// work on a scoped fiber — is not specific to the journal, and a timer bug
+// belongs in one place.
 
 import { Duration, Effect, Latch, Scope } from "effect";
 

@@ -76,16 +76,16 @@ export interface ChoiceSetting extends Described {
 }
 
 /**
- * The persistent half of the findings panel's filter (vision §11.4: "category
- * and severity filters should be persistent user preferences").
+ * The persistent half of the findings panel's filter: category and severity
+ * filters are persistent user preferences.
  *
  * Only the half that is a PREFERENCE is here. Which rungs and which producers
  * a reader wants to see, and whether stale rows are hidden, are lasting
  * choices about how they read; the free-text box and the book selection are
  * session state, because a text filter that survived a restart would present
  * as an empty project and a remembered book set would hide the book you just
- * opened. `src/routes/findings.tsx` holds those two in signals and persists
- * neither.
+ * opened. `src/app/ui/panels/findingsFilter.ts` holds those two in signals
+ * and persists neither.
  *
  * There is no `kind` for a struct, so this key is deliberately NOT in
  * `shellSettings`: the settings form draws one widget per `kind`, and a

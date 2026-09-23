@@ -1,6 +1,6 @@
 /**
  * The editor-backed Book: a `Book` (src/core/book/book.ts) whose canonical
- * text is a CodeMirror `EditorState` (editor-and-save §1.1–§1.4).
+ * text is a CodeMirror `EditorState` (`documentation/architecture/editor.md`).
  *
  * This is the Plain → Instantiated transition made real. A plain Book holds a
  * `Source` and applies changes with Source's own range checks; this one holds
@@ -80,7 +80,7 @@ export interface EditorBook extends Book {
   fromView(view: EditorView, trs: readonly Transaction[]): void;
   /** Views plus windows currently holding this book; blocks `project.release`. */
   attached(): number;
-  /** A non-view attachment (a `ClipWindow`, a satellite). Release to let go. */
+  /** A non-view attachment (a window, a satellite). Release to let go. */
   hold(): () => void;
   /**
    * Runs one named editor gesture — an insertion, focusing the front matter

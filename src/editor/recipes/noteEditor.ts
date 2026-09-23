@@ -3,9 +3,9 @@
  *
  * In regular mode a note is drawn twice: as a superscript CALLER where it is
  * anchored, and as a ROW in the apparatus block at the foot of its chapter
- * (`core/decorations.ts`). Both were inert — `toggleNote` was a stub nothing
- * ever installed, so a caller was a letter you could not follow and the rows at
- * the bottom were a picture of the notes rather than the notes.
+ * (`core/decorations.ts`). This module makes both live, so a caller is a
+ * letter you can follow and the rows at the bottom are the notes rather than a
+ * picture of them.
  *
  * Three gestures, and they are the ones a reader would guess:
  *
@@ -363,8 +363,8 @@ class NoteSurfaces {
  * Which Book this view is bound to.
  *
  * The satellite needs a `Funnel`, and a Funnel is made from the editor-backed
- * Book — not from the view. The binding is recorded by `bookOfView` below,
- * which `editorBook` fills in when it binds a view.
+ * Book — not from the view. The binding is recorded by `noteBookIs` below,
+ * which the editor surface calls when it binds a view.
  */
 const books = new WeakMap<EditorView, EditorBook>();
 

@@ -1,8 +1,8 @@
 // projectAnalysis.ts
 //
-// ProjectAnalysis — Sefer's whole-project consumer of Galley (seams §2.2;
-// editor-and-save §1.5 and §2 sinks 2–4; vision §11.1 "global truth, local
-// rendering").
+// ProjectAnalysis — Sefer's whole-project consumer of Galley ("global truth,
+// local rendering"). See `documentation/architecture/findings.md` and
+// `documentation/architecture/galley.md`.
 //
 // It exists to answer one question the editor cannot: does this PROJECT have
 // errors? A translator must not have to open sixty-six files to find out. So
@@ -12,9 +12,9 @@
 //
 // Three decisions shape the whole file.
 //
-//  1. ONE scheduling fiber, not one per book. The seams call for "a debounced
-//     fiber per book"; a single fiber over a pending set of book ids gives the
-//     same ~150 ms quiet window with less machinery, and coalesces a bulk
+//  1. ONE scheduling fiber, not one per book. A single fiber over a pending
+//     set of book ids gives the same ~150 ms quiet window as a debounced
+//     fiber per book with less machinery, and coalesces a bulk
 //     operation that touches forty books into one pass and ONE corpus
 //     publication — which is what "bulk operations coalesce" has to mean,
 //     because `publish()` is whole-corpus and a snapshot replaces the previous
@@ -28,17 +28,15 @@
 //
 //  3. Failure retains, never clears. `analyze` throws on text the engine
 //     refuses; the held analysis stays and the entry stays stale, so the panel
-//     shows known-stale findings rather than an apparently clean project
-//     (vision §11.4).
+//     shows known-stale findings rather than an apparently clean project.
 //
 // ONE engine. The per-book `analyze` and the whole-corpus `update`/`remove`/
 // `publish` are two halves of the same `Galley` handle in this process, and
 // every call here is SYNCHRONOUS. That is load-bearing, not incidental:
 // JavaScript cannot run a keystroke handler in the middle of a wasm call, so a
 // debounced publication needs its revision checked once on entry and never
-// again — nothing can move underneath it. There was a `CorpusEngine` port with
-// a native implementation over IPC; both are deleted, and the reason is in
-// documentation/architecture/galley.md.
+// again — nothing can move underneath it. Why the corpus half is not a port
+// with a native implementation is in documentation/architecture/galley.md.
 //
 // Telemetry carries counts and codes only. A diagnostic's message quotes the
 // document and lives in Findings.
@@ -108,8 +106,8 @@ export interface ProjectAnalysisService {
    * keep both in step as books change. Requires `Scope` because it forks the
    * scheduling fiber and holds subscriptions; closing the scope drops both.
    *
-   * Analyzing every book here is deliberate and is the point of the module
-   * (vision §11.1). It is a project-open cost, not an interaction cost.
+   * Analyzing every book here is deliberate and is the point of the module.
+   * It is a project-open cost, not an interaction cost.
    *
    * Attaching a second Project replaces the first: the module holds one
    * project's worth of analyses, and the Galley corpus is one corpus.
@@ -187,7 +185,7 @@ export interface ProjectAnalysisService {
   readonly invalidate: (bookId: BookId) => void;
 
   /**
-   * Every finding in the project, in one shape: per-book Onion diagnostics
+   * Every finding in the project, in one shape: per-book Galley diagnostics
    * from the held analyses, plus the Sous findings of the last publication.
    * Memoised until something changes, because a panel asks on every render.
    */
@@ -302,9 +300,10 @@ const make = (
      *
      * Held because the ENGINE's copy cannot be read back as text a consumer can
      * address: `verseText(id)` answers the projection, and a projection offset
-     * is not a source offset until something carries the mask across (the open
-     * `maskOf` ask). Find's reference scope needs the source, to turn a hit
-     * into a chapter and verse and to show the verse it landed in.
+     * is not a source offset until the mask map carries it across, and the map
+     * is only useful beside the text it indexes. Find's reference scope needs
+     * the source, to turn a hit into a chapter and verse and to show the verse
+     * it landed in.
      *
      * The cost is one more Bible in memory per bound reference, and the text
      * was already read off disk to register it — this keeps the string rather
@@ -356,13 +355,12 @@ const make = (
      * why, id)` registers the text and then parses off the retained copy; a
      * separate `corpus.update` beside it would send the same string across the
      * wall a second time, which is the habit the engine's maintainer measured
-     * as most of a project open's cost. With that gone there is nothing here
-     * that leaves this thread, and a generator that never yields was saying
-     * otherwise.
+     * as most of a project open's cost. Nothing here leaves this thread, so a
+     * generator that never yields would say otherwise.
      *
-     * That is also what killed the `CorpusEngine` port: a registration the
-     * parse path cannot SEE is not a registration the parse path can name, so
-     * an engine anywhere but here cannot answer `parse(id)` at all.
+     * It is also why the corpus is not behind a port: a registration the parse
+     * path cannot SEE is not a registration the parse path can name, so an
+     * engine anywhere but here cannot answer `parse(id)` at all.
      */
     const refresh = (
       bookId: BookId,
@@ -549,7 +547,7 @@ const make = (
         const subscribe = (book: Book): void => {
           unsubscribes.get(book.id)?.();
           // The Book publishes synchronously inside `apply`; arming is the
-          // only thing allowed to happen here (editor-and-save §1.3).
+          // only thing allowed to happen here.
           unsubscribes.set(
             book.id,
             book.changes(() => {
@@ -767,8 +765,8 @@ const make = (
 
 /**
  * The Layer. Needs `Galley`, and only `Galley`: the per-book parse and the
- * whole-corpus publication are two halves of ONE handle in this process, and
- * they were only ever two requirements because they used to be two processes.
+ * whole-corpus publication are two halves of ONE handle in this process, so
+ * they are one requirement.
  * Takes `Observability` optionally, so core policy runs with or without the
  * ring. It is NOT scoped: the module holds no host resource of its own, and
  * the fibers and subscriptions belong to the scope that called `attach`.
