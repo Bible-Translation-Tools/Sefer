@@ -1,17 +1,13 @@
 // skeleton.ts
 //
-// THE REVIEW DIFF: Onion's decision-unit diff, cached by the pair of texts it
-// came from. One producer, no fallback.
+// THE REVIEW DIFF: the engine's decision-unit diff, cached by the pair of texts
+// it came from. One producer, no fallback.
 //
-// There used to be a second one here. Until scripture-kitchen v0.1.0 the galley
-// artifact carried no diff door, so this module built the same `DiffSkeleton`
-// out of Sefer's own verse alignment and the screen wore an "interim diff"
-// badge to say so. The door landed; Will, 2026-09-15: "the engine is the only
-// diff". The verse aligner and its span extractor are deleted rather than kept
-// warm, because a second implementation that nothing runs is a second
+// "The engine is the only diff": Sefer keeps no aligner of its own, not even a
+// cold one, because a second implementation that nothing runs is a second
 // implementation that rots and then gets switched on by accident.
 //
-// What is left is a CACHE and two calls. The cache is not an optimisation
+// So this module is a CACHE and two calls. The cache is not an optimisation
 // detail: the review screen re-derives its units whenever the shell ticks, and
 // an engine diff of two whole books per tick is exactly the cold path a
 // translator feels. Keyed on the texts themselves, so there is nothing to
@@ -19,8 +15,9 @@
 //
 // Both doors answer `Result`, and the failure is `EngineDoorMissing`. That is
 // not hedging: the doors are free functions probed by name off the wasm module,
-// so a mis-vendored artifact is a real failure mode, and the screen must say
-// "this build's engine has no diff" rather than draw something it made up.
+// so an artifact that is not the pinned build is a real failure mode, and the
+// screen must say "this build's engine has no diff" rather than draw something
+// it made up.
 
 import { Result } from "effect";
 
@@ -51,9 +48,9 @@ const remember = (key: string, skeleton: SkeletonResult): SkeletonResult => {
 /**
  * THE ONE DOOR the screen calls.
  *
- * `book` is no longer needed to render the sids — the engine reads the `\id`
- * line itself — but it stays in the cache key, because two different books can
- * hold identical text (an empty file, a stub) and must not share a diff.
+ * `book` is not needed to render the sids — the engine reads the `\id` line
+ * itself — but it is in the cache key, because two different books can hold
+ * identical text (an empty file, a stub) and must not share a diff.
  */
 export const diffSkeleton = (
   galley: GalleyService,

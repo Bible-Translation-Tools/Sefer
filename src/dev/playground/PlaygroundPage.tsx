@@ -12,17 +12,12 @@
  *   * render whatever dials an experiment declared;
  *   * hold all of it in the URL.
  *
- * That last one used to be the opposite. This file argued for `sessionStorage`
- * on the grounds that the state was "where I had got to, not a place anyone
- * should link to", and that search params would grow a `validateSearch` schema
- * nobody wants to maintain.
- *
- * Both halves have stopped being true. A designer works here now, and the
+ * The URL rather than `sessionStorage`, because a designer works here, and the
  * whole of that job is sending somebody two links and asking which is better —
  * so which experiment, which book, which baseline and every dial have to
- * survive copy, paste and reload. And the schema worry is answered by not
- * having one: the route keeps whatever string keys it is given, dial keys are
- * namespaced by experiment id, and adding a knob still costs one line in the
+ * survive copy, paste and reload. There is no `validateSearch` schema to
+ * maintain for it: the route keeps whatever string keys it is given, dial keys
+ * are namespaced by experiment id, and adding a knob costs one line in the
  * experiment and nothing anywhere else.
  *
  * Nothing is left in storage, so two tabs still show two variants side by side
