@@ -143,7 +143,7 @@ Desktop self-update: `core/host/updater.ts` (port), `platform/tauri/updater.ts`,
 
 ### Overview
 
-A bounded ring of events, spans and verdicts, with JSONL export. The dev surface is `__sefer.observability` (`traces.recent/print`, `logs.recent`, `export`, `level`, `setLevel`, `stream`). There is a dev-only OTLP bridge, and a keystroke meter in the editor. `src/core/observability.ts`, `src/platform/observability.ts`, `src/editor/observability.ts`. → [observability](architecture/observability.md)
+A bounded ring of events, spans and verdicts, with JSONL export. The dev surface is `__sefer.observability` (`traces.recent/print`, `logs.recent`, `export`, `level`, `setLevel`, `stream`). There is a dev-only OTLP bridge, and a keystroke meter in the editor. Client failures (boundary-caught, uncaught, unhandled rejections) are `client.error` notes in every build, with owner names kept in production by Solid's observe runtime. `src/core/observability.ts`, `src/platform/observability.ts`, `src/editor/observability.ts`. → [observability](architecture/observability.md)
 
 ### Constraints and known bugs
 
