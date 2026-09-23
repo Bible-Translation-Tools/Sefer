@@ -29,8 +29,6 @@ import { armed, span } from "./timing";
 
 type OwnedSetId = number & { readonly __brand: "OwnedSetId" };
 
-type TargetForm = "spans" | "box" | "ambient" | "elided";
-
 export type Direction = "backward" | "forward";
 
 export type PaintKind = "glyph" | "break" | "box" | "none";
@@ -112,27 +110,6 @@ const SET_OF_CLASS: ReadonlyMap<ClassKey, OwnedSetName> = new Map(
 
 const byWholeSpan = (x: ResolvedOwnedTarget, y: ResolvedOwnedTarget): number =>
   x.wholeSpan.from - y.wholeSpan.from || x.wholeSpan.to - y.wholeSpan.to;
-
-function illegalTarget(t: ResolvedOwnedTarget): string | null {
-  const inside = (sp: PlanSpan) => sp.from >= t.wholeSpan.from && sp.to <= t.wholeSpan.to;
-  let shared = 0;
-  for (const sp of t.paintedSpans) {
-    if (inside(sp)) continue;
-    shared += 1;
-    if (!t.empty || shared > 1 || (sp.to !== t.wholeSpan.from && sp.from !== t.wholeSpan.to))
-      return `painted ${sp.from}-${sp.to} escapes own()`;
-  }
-  for (const sp of t.hiddenSpans)
-    if (!inside(sp)) return `hidden ${sp.from}-${sp.to} escapes own()`;
-  if (t.paint === "none" && t.mutability === "direct") return "none × direct is struck";
-  if (t.form === "spans" && !t.paintedSpans.length) return 'form "spans" paints nothing';
-  if (t.form !== "spans" && t.paintedSpans.length) return `form ${t.form} carries painted spans`;
-  if (t.form === "elided" && t.paint !== "none") return 'form "elided" over a painting class';
-  if (t.form === "ambient" && !t.scope) return 'form "ambient" without a scope';
-  if (t.delimiter && (t.delimiter.from < t.anchor.to || !inside(t.delimiter)))
-    return `delimiter ${t.delimiter.from}-${t.delimiter.to} is not a tail of own()`;
-  return null;
-}
 
 export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): OwnedIndex {
   const rows = a.rows;

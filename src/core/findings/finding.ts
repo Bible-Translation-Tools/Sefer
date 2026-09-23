@@ -26,7 +26,6 @@
 
 import type { BookId } from "../book/book";
 import {
-  CODES,
   diagnosticMessage,
   diagnosticName,
   diagnosticSeverity,

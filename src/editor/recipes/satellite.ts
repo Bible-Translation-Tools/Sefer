@@ -110,16 +110,12 @@ const markField = StateField.define<DecorationSet>({
  * satellite, and maps them through every edit like any other decoration. The
  * class is `src/editor/editor.css`'s, so the highlight is the one the
  * read-only card shows and the reader does not lose the match by clicking
- * Edit. `repaintMarks` replaces the set on a live view.
+ * Edit.
  */
 export const markedRanges = (ranges: readonly MarkedRange[]): Extension => [
   initialMarks.of(ranges),
   markField,
 ];
-
-const repaintMarks = (view: EditorView, ranges: readonly MarkedRange[]): void => {
-  view.dispatch({ effects: setMarks.of(ranges) });
-};
 
 export interface SatelliteOptions {
   /** Where the view mounts. */

@@ -24,7 +24,7 @@ import {
   TOKEN,
   describesExactly,
 } from "../../core/galley";
-import { type Analyze, analyzed, analyzer } from "./analyzer";
+import { analyzed, analyzer } from "./analyzer";
 import { type BlockColumns, Blocks, NO_BLOCKS } from "./blockTable";
 import { type NodeFacts, noteExtentEnd, scanCst } from "./cst";
 import { Verse } from "./designators";
@@ -358,21 +358,6 @@ export function lineIndexAt(s: DocStructure, pos: number): number {
   return lines.indexAt(pos < 0 ? 0 : pos > end ? end : pos);
 }
 
-/**
- * Structure for a bare string, outside any editor state — the door for a
- * caller that holds text and an analyzer but no `EditorState` (a satellite's
- * first paint, a probe, a fix preview).
- */
-function parseStructure(doc: string, analyze: Analyze): DocStructure {
-  // The spike took a `clip` here and handed it to the engine, which ignored
-  // it; it never reached `buildStructure`. Dropped rather than carried as a
-  // parameter that does nothing.
-  return buildStructure(doc, analyzed(analyze, doc));
-}
-
-let lastScanMs = 0;
-const structureMs = () => lastScanMs;
-
 const docCache = new WeakMap<EditorState, string>();
 
 export function docText(state: EditorState): string {
@@ -416,9 +401,7 @@ function analyzeState(state: EditorState): DocStructure {
   if (recent && fits(recent, doc)) return remember(text, recent);
   try {
     const analysis = analyzed(state.facet(analyzer), doc);
-    const t0 = performance.now();
     const s = buildStructure(doc, analysis, null);
-    lastScanMs = +(performance.now() - t0).toFixed(1);
     recent = s;
     return remember(text, s);
   } catch (err) {

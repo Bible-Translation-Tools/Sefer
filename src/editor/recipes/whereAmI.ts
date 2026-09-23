@@ -165,14 +165,6 @@ function chapterInView(view: EditorView): Where | null {
   };
 }
 
-/** Every chapter of this view's book, front matter row included. */
-function chapterList(view: EditorView): readonly ChapterName[] {
-  return structureAt(view.state).chapters.map((chapter) => ({
-    ordinal: chapter.ordinal,
-    label: chapter.label,
-  }));
-}
-
 /**
  * Calls `report` whenever the chapter in view may have changed: on scroll,
  * and on the layout changes that move the text under a still pointer.

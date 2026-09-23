@@ -21,25 +21,17 @@ import {
 import { Decoration, type DecorationSet, EditorView } from "@codemirror/view";
 
 import { canonicalCaret } from "./caret";
-import {
-  anchorFrom,
-  editableClipAt,
-  pickField,
-  setPick,
-  visibleClipAt,
-  type ClipRange,
-} from "./clip";
+import { editableClipAt, pickField, visibleClipAt, type ClipRange } from "./clip";
 import {
   type BuildOpts,
   DEFAULT_BUILD_OPTS,
   buildRegular,
   buildUsfm,
-  isInvisible,
   isIsolate,
   isUnit,
 } from "./decorations";
 import { docText, structureAt, structureField } from "./docStructure";
-import { type Mode, type PaintPort, modeFacet } from "./kernel";
+import { type PaintPort, modeFacet } from "./kernel";
 import { paintOver, type Paint } from "./paint";
 import { renderRangeAt, renderRangeField } from "./render";
 
@@ -157,20 +149,6 @@ export const decoField = StateField.define<Built>({
   },
   provide: (f) => EditorView.decorations.from(f, (b) => b.set),
 });
-
-function isHiddenSpan(state: EditorState, from: number, to: number): boolean {
-  if (state.facet(modeFacet) !== "regular") return false;
-  const built = state.field(decoField, false);
-  if (!built) return false;
-  let covered = false;
-  built.set.between(from, Math.max(to, from + 1), (f, t, deco) => {
-    if (t > f && f <= from && t >= to && isInvisible(deco)) {
-      covered = true;
-      return false;
-    }
-  });
-  return covered;
-}
 
 const renderingCache = new WeakMap<EditorState, Paint>();
 

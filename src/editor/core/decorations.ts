@@ -740,8 +740,3 @@ function clipTo(add: Pending[], doc: string, from: number, to: number): Pending[
     });
   return out;
 }
-
-const baseTheme = EditorView.theme({
-  "&": { height: "100%" },
-  ".cm-scroller": { overflow: "auto" },
-});

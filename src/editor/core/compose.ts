@@ -15,7 +15,6 @@ import { Decoration, EditorView, drawSelection, keymap, type KeyBinding } from "
 import { type Analysis, TOKEN_SPELLING_BIT } from "../../core/galley";
 import { type Analyze, analyzed, analyzer } from "./analyzer";
 import { caretLineBoundary, extendCaret, moveCaret, moveCaretByWord } from "./caret";
-import { type ClipRange } from "./clip";
 import { guardedBackspace, guardedDelete, mergeParagraphBackwards } from "./deletion";
 import { buildStructure } from "./docStructure";
 import {

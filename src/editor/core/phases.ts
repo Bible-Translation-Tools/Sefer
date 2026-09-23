@@ -100,5 +100,3 @@ export const PHASES = [
 ] as const satisfies readonly PhaseRule[];
 
 export type RuleName = (typeof PHASES)[number]["name"];
-
-const RULE_NAMES: readonly RuleName[] = PHASES.map((r) => r.name);

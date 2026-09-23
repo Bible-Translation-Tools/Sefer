@@ -71,9 +71,6 @@ export const CLASS_KEYS: readonly ClassKey[] = [
   "sidebar",
 ];
 
-const PAINTS: readonly Paint[] = ["point", "boundary", "ambient", "none"];
-const MUTABILITIES: readonly Mutability[] = ["direct", "via-anchor", "trusted-only", "immortal"];
-
 const cellKey = (c: Cell) => `${c.paint}×${c.mutability}`;
 
 const STRUCK: Record<string, string> = {
@@ -85,16 +82,7 @@ const STRUCK: Record<string, string> = {
   "ambient×trusted-only": "unused",
 };
 
-const RESERVED = new Set(["point×trusted-only"]);
-
 const isLawful = (c: Cell) => !(cellKey(c) in STRUCK);
-
-function allCells(): Cell[] {
-  const out: Cell[] = [];
-  for (const paint of PAINTS)
-    for (const mutability of MUTABILITIES) out.push({ paint, mutability });
-  return out;
-}
 
 export type WidgetKey = "versePip" | "join" | "joinSigil";
 
@@ -311,8 +299,6 @@ function resolve(base: Registry, deltas: readonly AssignmentDelta[]): Assignment
   return { rows, clamped };
 }
 
-const DEFAULT_ASSIGNMENT: Assignment = resolve(DEFAULT_REGISTRY, []);
-
 export const PROJECTIONS: Record<string, AssignmentDelta> = {
   default: {},
   // SAFETY: built from CLASS_KEYS with a `Partial<Cell>` value per key, which
@@ -357,31 +343,17 @@ export function assignmentAt(state: EditorState): Assignment {
   return a;
 }
 
-function cellAt(state: EditorState, cls: ClassKey): Cell {
-  return assignmentAt(state).rows[cls].cell;
-}
-
 export const rowAt = (state: EditorState, cls: ClassKey): RegistryRow =>
   assignmentAt(state).rows[cls];
 
-const isKeystrokeImmutable = (state: EditorState, cls: ClassKey) => {
-  const m = cellAt(state, cls).mutability;
-  return m === "immortal" || m === "trusted-only";
-};
-
 export const keyboardMutable = (row: RegistryRow) =>
   row.cell.mutability === "direct" || row.typable === true;
-
-const isElided = (state: EditorState, cls: ClassKey) => rowAt(state, cls).elided === true;
 
 export const pipActive = (state: EditorState, cls: ClassKey) =>
   assignmentAt(state).clamped.some((c) => c.cls === cls && c.to === "pip");
 
 export const ownershipOf = (row: RegistryRow): OwnershipBit | undefined =>
   row.ownership === "DISSOLVE" && row.cell.mutability === "immortal" ? undefined : row.ownership;
-
-const ownershipAt = (state: EditorState, cls: ClassKey): OwnershipBit | undefined =>
-  ownershipOf(rowAt(state, cls));
 
 export const paintsItsOwnLineAmbient = (cls: ClassKey): boolean =>
   cls === "block.heading" || cls === "block.front" || cls === "block.meta";

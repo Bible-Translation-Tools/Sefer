@@ -20,7 +20,7 @@ Everything downstream is a function of that facet rather than of a global: `engi
 
 A bound view MUST route its transactions through `book.fromView(view, trs)`; that is where a keystroke becomes a receipt. `apply` throws if a bound view accepted an edit without it, rather than report a receipt nobody heard.
 
-`seatFor(options)` is the factory `openProject({ seat })` wants. `attached()` counts bound views plus `hold()`s (satellites) and is what makes `project.release` refuse.
+`services.ts` builds the seat `openProject({ seat })` wants, one `editorBook` per book. `attached()` counts bound views plus `hold()`s (satellites) and is what makes `project.release` refuse.
 
 ## Satellites borrow
 

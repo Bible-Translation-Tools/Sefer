@@ -448,9 +448,6 @@ const TOKEN_ROWS_BY_KIND: readonly (readonly Row<TokenShape>[])[] = (() => {
   return out;
 })();
 
-const tokenRowsFor = (kind: number): readonly Row<TokenShape>[] =>
-  TOKEN_ROWS_BY_KIND[kind] ?? TOKEN_ROWS;
-
 export function kindsReaching(ids: readonly string[]): Uint8Array {
   const mask = new Uint8Array(KIND_SLOTS);
   for (let kind = 0; kind < KIND_SLOTS; kind++)
@@ -506,8 +503,6 @@ export function rowForNode(n: NodeShape): Row<NodeShape> {
 }
 
 const classify = (t: TokenShape): Verdict => rowForToken(t).verdict;
-
-const classifyNode = (n: NodeShape): Verdict => rowForNode(n).verdict;
 
 export function notePartOf(t: TokenShape): number {
   const v = classify(t);

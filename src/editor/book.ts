@@ -44,7 +44,6 @@ import {
   type Trust,
 } from "../core/book/book";
 import type { ObservabilityService } from "../core/observability";
-import type { Seat, Seated } from "../core/project/project";
 import type { Change, Source, SourceStamp } from "../core/source/source";
 import { actionCommand, type EditorAction } from "./core/actions";
 import type { Analyze } from "./core/analyzer";
@@ -60,7 +59,7 @@ import { observabilityTracer } from "./observability";
 /**
  * A Book whose text lives in a CodeMirror state, plus the four things only
  * such a Book can answer. It satisfies `Seated`, so `openProject`'s `seat`
- * option accepts it (see `seatFor`).
+ * option accepts it (`services.ts` builds that seat).
  */
 export interface EditorBook extends Book {
   /** The canonical state: the bound view's when one is bound, else the held one. */
@@ -400,13 +399,3 @@ export const funnelFor = (book: EditorBook): Funnel => ({
   redo: () => book.history()?.redo() ?? false,
   depth: () => book.history()?.depth() ?? { undo: 0, redo: 0 },
 });
-
-/**
- * The factory `openProject({ seat })` wants: Plain → Instantiated for any book
- * the user opens. Core cannot import CodeMirror, so this is how the editor
- * layer reaches Project — one function, passed in at composition.
- */
-const seatFor =
-  (options: EditorBookOptions): Seat =>
-  (plain: Book): Seated =>
-    editorBook(plain, options);
