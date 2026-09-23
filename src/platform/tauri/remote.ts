@@ -28,12 +28,8 @@ import { Effect, Layer, Option, PubSub, Stream } from "effect";
 
 import type { Repo } from "../../core/git/git";
 import { Credentials, type CredentialsService } from "../../core/host/credentials";
-import {
-  Gitea,
-  type GiteaError,
-  type GiteaFailureReason,
-  type GiteaService,
-} from "../../core/remote/gitea";
+import { Gitea, type GiteaService } from "../../core/remote/gitea";
+import { createOnGitea, hostOf } from "../../core/remote/onGitea";
 import {
   Remote,
   RemoteError,
@@ -93,43 +89,11 @@ const classify = (cause: unknown): RemoteError => {
 const call = <A>(command: string, args: Record<string, unknown>): Effect.Effect<A, RemoteError> =>
   Effect.tryPromise({ try: () => invoke<A>(command, args), catch: classify });
 
-/**
- * The origin of a remote URL — the `Credentials` key. The twin of
- * `hostOf` in `src/platform/web/remote.ts`; it is duplicated rather than
- * shared because importing that module would pull isomorphic-git into the
- * desktop bundle for six lines of URL parsing.
- */
-export const hostOf = (url: string): string => {
-  try {
-    return new URL(url).origin;
-  } catch {
-    return url;
-  }
-};
-
 const progressOf = (wire: WireProgress): Progress => ({
   phase: wire.phase,
   loaded: wire.loaded,
   ...(wire.total === null ? {} : { total: wire.total }),
 });
-
-/** A `Gitea` call seen as a `Remote` one, so `publish` has one error type. */
-const reasonOf = (reason: GiteaFailureReason): RemoteFailureReason => {
-  switch (reason) {
-    case "Unauthorized":
-    case "OtpRequired":
-      return "Unauthorized";
-    case "Network":
-      return "Network";
-    default:
-      return "Rejected";
-  }
-};
-
-const fromGitea = <A>(effect: Effect.Effect<A, GiteaError>): Effect.Effect<A, RemoteError> =>
-  Effect.mapError(effect, (error) =>
-    fail(reasonOf(error.reason), error.description ?? error.reason),
-  );
 
 const makeTauriRemote = (
   options: TauriRemoteOptions,
@@ -207,28 +171,6 @@ const makeTauriRemote = (
     const attach = (repo: Repo, url: string): Effect.Effect<void, RemoteError> =>
       call<void>("git_ensure_remote", { root: repo.root, name: ORIGIN, url });
 
-    /** `owner/name` or `name` on the configured host → the URL to attach. */
-    const createOnGitea = (target: string): Effect.Effect<string, RemoteError> =>
-      Effect.gen(function* () {
-        const host = options.endpoint;
-        if (host === null) {
-          return yield* Effect.fail(
-            fail("Unavailable", "this build has no WACS endpoint: set VITE_SEFER_WACS_DESKTOP_URL"),
-          );
-        }
-        const parts = target.split("/");
-        const name = parts[parts.length - 1] ?? target;
-        const owner = parts.length > 1 ? parts[0] : undefined;
-        // Only a fully qualified `owner/name` can be looked up; a bare name is
-        // a request to create one under the signed-in user.
-        if (owner !== undefined) {
-          const existing = yield* fromGitea(gitea.getRepo(host, owner, name));
-          if (Option.isSome(existing)) return existing.value.cloneUrl;
-        }
-        const created = yield* fromGitea(gitea.createRepo(host, { name }));
-        return created.cloneUrl;
-      });
-
     return {
       attach,
       // `git_remote_url` already answers `string | null`, so the read half of
@@ -243,7 +185,14 @@ const makeTauriRemote = (
       push: (repo) => transfer("git_push", repo, "required"),
       publish: (repo, target) =>
         Effect.gen(function* () {
-          const url = target.startsWith("http") ? target : yield* createOnGitea(target);
+          const url = target.startsWith("http")
+            ? target
+            : yield* createOnGitea(
+                gitea,
+                options.endpoint,
+                target,
+                "this build has no WACS endpoint: set VITE_SEFER_WACS_DESKTOP_URL",
+              );
           yield* attach(repo, url);
           yield* transfer("git_push", repo, "required");
         }),

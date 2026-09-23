@@ -17,5 +17,5 @@ export { TauriDialogsLive } from "./dialogs";
 export { TauriFileSystemLive, makeTauriFileSystem } from "./fileSystem";
 export { TauriGitLive } from "./git";
 export { TauriHostInfoLive, TAURI_CAPABILITIES, tauriPaths } from "./hostInfo";
-export { TauriRemoteLive, hostOf, type TauriRemoteOptions } from "./remote";
+export { TauriRemoteLive, type TauriRemoteOptions } from "./remote";
 export { TauriUpdaterLive, type TauriUpdaterOptions } from "./updater";

@@ -33,12 +33,8 @@ import http from "isomorphic-git/http/web";
 import { nodeFsView, type IsomorphicFs } from "../../core/fileSystem/nodeView";
 import type { Repo } from "../../core/git/git";
 import { Credentials, type CredentialsService } from "../../core/host/credentials";
-import {
-  Gitea,
-  type GiteaError,
-  type GiteaFailureReason,
-  type GiteaService,
-} from "../../core/remote/gitea";
+import { Gitea, type GiteaService } from "../../core/remote/gitea";
+import { createOnGitea, hostOf } from "../../core/remote/onGitea";
 import {
   Remote,
   RemoteError,
@@ -143,22 +139,6 @@ const classify = (error: unknown): RemoteError => {
 /** Every call into isomorphic-git funnels through here, so no throw escapes. */
 const attempt = <A>(call: () => Promise<A>): Effect.Effect<A, RemoteError> =>
   Effect.tryPromise({ try: call, catch: classify });
-
-/**
- * The origin of a remote URL — the `Credentials` key.
- *
- * A token belongs to a Gitea instance, not to one repository, so two projects
- * on the same instance share a credential. A URL that will not parse is its own
- * key: wrong, but no worse than refusing to look, and `Credentials.get`
- * answering `None` is already the "no credential" path.
- */
-export const hostOf = (url: string): string => {
-  try {
-    return new URL(url).origin;
-  } catch {
-    return url;
-  }
-};
 
 /**
  * The same repository, addressed through THIS build's endpoint.
@@ -370,7 +350,14 @@ const makeWebRemote = (
        */
       publish: (repo, target) =>
         Effect.gen(function* () {
-          const url = target.startsWith("http") ? target : yield* createOnGitea(target);
+          const url = target.startsWith("http")
+            ? target
+            : yield* createOnGitea(
+                gitea,
+                options.endpoint,
+                target,
+                "this build has no WACS endpoint: set VITE_SEFER_WACS_WEB_URL",
+              );
           yield* attach(repo, url);
           yield* transfer(repo, "required", (wire, branch) =>
             git.push({ ...wire, ref: branch, remoteRef: branch }),
@@ -414,53 +401,7 @@ const makeWebRemote = (
 
       progress: () => Stream.fromPubSub(events),
     } satisfies RemoteService;
-
-    /** `owner/name` or `name` on the configured host → the URL to attach. */
-    function createOnGitea(target: string): Effect.Effect<string, RemoteError> {
-      return Effect.gen(function* () {
-        const host = options.endpoint;
-        if (host === null) {
-          return yield* Effect.fail(
-            fail("Unavailable", "this build has no WACS endpoint: set VITE_SEFER_WACS_WEB_URL"),
-          );
-        }
-        const parts = target.split("/");
-        const name = parts[parts.length - 1] ?? target;
-        const owner = parts.length > 1 ? parts[0] : undefined;
-        // Only a fully qualified `owner/name` can be looked up; a bare name is
-        // a request to create one under the signed-in user.
-        if (owner !== undefined) {
-          const existing = yield* fromGitea(gitea.getRepo(host, owner, name));
-          if (Option.isSome(existing)) return existing.value.cloneUrl;
-        }
-        const created = yield* fromGitea(gitea.createRepo(host, { name }));
-        return created.cloneUrl;
-      });
-    }
   });
-
-/** A `Gitea` call seen as a `Remote` one, so `publish` has one error type. */
-const fromGitea = <A>(effect: Effect.Effect<A, GiteaError>): Effect.Effect<A, RemoteError> =>
-  Effect.mapError(effect, (error) =>
-    fail(reasonOf(error.reason), error.description ?? error.reason),
-  );
-
-/**
- * A `GiteaError` reason as a `RemoteError` reason. `OtpRequired` collapses into
- * `Unauthorized` here because a transfer has no OTP field to offer — the sign-in
- * surface is where that distinction is actionable.
- */
-const reasonOf = (reason: GiteaFailureReason): RemoteFailureReason => {
-  switch (reason) {
-    case "Unauthorized":
-    case "OtpRequired":
-      return "Unauthorized";
-    case "Network":
-      return "Network";
-    default:
-      return "Rejected";
-  }
-};
 
 export const WebRemoteLive = (
   options: WebRemoteOptions,
