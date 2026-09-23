@@ -37,10 +37,11 @@ import {
   type SyncActionId,
 } from "#core/sync";
 
+import { describe, reasonOf } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { Button, Card, Dialog, EmptyState, PanelHeader } from "../primitives";
-import { createAccount, describe } from "./account";
+import { createAccount } from "./account";
 import { AccountCard } from "./AccountCard";
 import { ActionCard } from "./ActionCard";
 import { bookFromPath, combineRefusal, combineTrouble, narrate } from "./copy";
@@ -74,20 +75,26 @@ const explainCombine = (cause: unknown): string | undefined => {
   return cause.refusal === undefined ? combineTrouble(cause.state) : combineRefusal(cause.refusal);
 };
 
+const REMOTE_REASONS: ReadonlySet<string> = new Set<RemoteFailureReason>([
+  "Unauthorized",
+  "Network",
+  "Unavailable",
+  "Rejected",
+]);
+
 /**
- * A `RemoteError`'s reason, read out of the line `describe` makes of it. The
- * promise's type does not carry the tagged error's shape, and the reason is
- * the first word of that line — which is enough to tell "the network did not
- * answer" from "the far side said no", and that distinction is the whole
- * difference between `offline` and a refusal worth reading.
+ * A `RemoteError`'s reason, which is the whole difference between "the network
+ * did not answer" (`offline`) and "the far side said no" (a refusal worth
+ * reading). Read off the error's own `reason` field, not out of the sentence
+ * `describe` makes of it.
  */
-const reasonOf = (cause: unknown): RemoteFailureReason | undefined => {
-  const message = describe(cause);
-  if (/Unauthorized/u.test(message)) return "Unauthorized";
-  if (/Network/u.test(message)) return "Network";
-  if (/Unavailable/u.test(message)) return "Unavailable";
-  if (/Rejected/u.test(message)) return "Rejected";
-  return undefined;
+const remoteReasonOf = (cause: unknown): RemoteFailureReason | undefined => {
+  const reason = reasonOf(cause);
+  // SAFETY: membership in REMOTE_REASONS, a set built from RemoteFailureReason
+  // values, is exactly the check this narrowing claims.
+  return reason !== undefined && REMOTE_REASONS.has(reason)
+    ? (reason as RemoteFailureReason)
+    : undefined;
 };
 
 export function CloudScreen() {
@@ -269,7 +276,7 @@ export function CloudScreen() {
         setFetchedAt(Date.now());
       })
       .catch((cause: unknown) => {
-        const reason = reasonOf(cause);
+        const reason = remoteReasonOf(cause);
         if (reason !== undefined) network.noteFailure(reason);
         finish("failed", {
           "sync.action": action,

@@ -167,10 +167,3 @@ export const sourceChoices = (context: ChoiceContext): readonly SourceChoice[] =
     },
   ];
 };
-
-/**
- * A rejection as one line.
- *
- * Re-exported rather than written a third time: `src/app/describe.ts` is the
- * one renderer of a tagged failure.
- */

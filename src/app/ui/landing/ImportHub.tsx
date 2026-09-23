@@ -38,6 +38,7 @@ import { cloneRepository } from "#core/remote/clone";
 import { Gitea, type RemoteRepo } from "#core/remote/gitea";
 import { classify, commit, stage } from "#core/resources/import";
 
+import { describe, reasonOf } from "../../describe";
 import { wacsUrlFor } from "../../endpoints";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
@@ -69,48 +70,6 @@ interface Progress {
   /** "12 of 66 files" while a step is running; the steps alone say too little. */
   readonly detail?: string;
 }
-
-/**
- * A rejection as one line.
- *
- * `services.run` rejects with whatever the fiber failed with, and that is not
- * always an `Error` carrying a message: a tagged failure has `reason` and
- * `description` instead, and a fiber failure's own message is sometimes empty.
- * An import that fails must say why — an empty red dialog is the worst
- * possible answer — so this reads what is actually there before falling back.
- */
-const describe = (cause: unknown): string => {
-  if (typeof cause === "string") return cause;
-  if (cause !== null && typeof cause === "object") {
-    // SAFETY: every field of the asserted shape is `unknown` and checked with
-    // `typeof` before it is used — the assertion names what might be there,
-    // and proves nothing.
-    const shape = cause as {
-      readonly message?: unknown;
-      readonly reason?: unknown;
-      readonly description?: unknown;
-      readonly cause?: unknown;
-    };
-    const reason = typeof shape.reason === "string" ? shape.reason : "";
-    const description = typeof shape.description === "string" ? shape.description : "";
-    if (reason !== "" || description !== "")
-      return [reason, description].filter((part) => part !== "").join(": ");
-    if (typeof shape.message === "string" && shape.message !== "") return shape.message;
-    if (shape.cause !== undefined && shape.cause !== cause) return describe(shape.cause);
-  }
-  const text = String(cause);
-  return text === "" || text === "[object Object]" ? "no detail" : text;
-};
-
-const failureReason = (cause: unknown): string => {
-  if (cause !== null && typeof cause === "object") {
-    // SAFETY: only the optional `reason` field is read, and its runtime type is
-    // checked before it becomes an observability attribute.
-    const reason = (cause as { readonly reason?: unknown }).reason;
-    if (typeof reason === "string" && reason !== "") return reason;
-  }
-  return "Unknown";
-};
 
 interface SourceCard {
   readonly id: string;
@@ -230,7 +189,10 @@ export function ImportHub(props: { readonly onImported: () => void }) {
       props.onImported();
     })().catch((cause: unknown) => {
       const message = describe(cause);
-      operation.end("failed", { "import.phase": phase, "import.reason": failureReason(cause) });
+      operation.end("failed", {
+        "import.phase": phase,
+        "import.reason": reasonOf(cause) ?? "Unknown",
+      });
       finished(t("Couldn't bring it in"), message, true);
       toasts.update(toast, { title: t("Import failed"), message, tone: "error", autoClose: false });
     });
@@ -330,7 +292,10 @@ export function ImportHub(props: { readonly onImported: () => void }) {
       props.onImported();
     })().catch((cause: unknown) => {
       const message = describe(cause);
-      operation.end("failed", { "import.phase": phase, "import.reason": failureReason(cause) });
+      operation.end("failed", {
+        "import.phase": phase,
+        "import.reason": reasonOf(cause) ?? "Unknown",
+      });
       finished(t("Couldn't bring it in"), message, true);
       toasts.update(toast, { title: t("Import failed"), message, tone: "error", autoClose: false });
     });
@@ -409,7 +374,7 @@ export function ImportHub(props: { readonly onImported: () => void }) {
       props.onImported();
     })().catch((cause: unknown) => {
       const message = describe(cause);
-      end("failed", { "import.phase": phase, "import.reason": failureReason(cause) });
+      end("failed", { "import.phase": phase, "import.reason": reasonOf(cause) ?? "Unknown" });
       finished(t("Couldn't bring it in"), message, true);
       toasts.update(toast, {
         title: t("Clone failed"),

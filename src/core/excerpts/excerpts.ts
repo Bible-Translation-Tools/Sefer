@@ -556,15 +556,6 @@ const walk = (spans: readonly VerseSpan[], index: number, steps: number, by: -1 
 };
 
 /**
- * One excerpt: the verse at `index`, `extent` verses either side, and every
- * occurrence it owns.
- *
- * `excerptsOf` and `extend` both come through here, so a card the reader has
- * expanded is built by exactly the same arithmetic as the card they started
- * with — only the extent differs.
- */
-
-/**
  * An excerpt whose lazy fields live on a PROTOTYPE, not on the object.
  *
  * A class and not an object literal, for one measured reason: six accessors in
@@ -675,6 +666,14 @@ class LazyExcerpt implements Excerpt {
   }
 }
 
+/**
+ * One excerpt: the verse at `index`, `extent` verses either side, and every
+ * occurrence it owns.
+ *
+ * `excerptsOf` and `extend` both come through here, so a card the reader has
+ * expanded is built by exactly the same arithmetic as the card they started
+ * with — only the extent differs.
+ */
 const buildExcerpt = (
   book: BookText,
   spans: readonly VerseSpan[],

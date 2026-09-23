@@ -82,7 +82,7 @@ import { Observability } from "#core/observability";
 import type { Restorable } from "#core/recovery/recovery";
 import type { SourceStamp } from "#core/source/source";
 
-import { describe } from "../../describe";
+import { describe, reasonOf } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { unsavedChanges } from "../panels/changes";
@@ -560,11 +560,7 @@ export function ReviewPanel() {
       .catch((cause: unknown) => {
         setBusy("");
         const described = describe(cause);
-        const reason =
-          typeof cause === "object" && cause !== null && "reason" in cause
-            ? String(cause.reason)
-            : "unknown";
-        finish("refused", { "review.reason": reason });
+        finish("refused", { "review.reason": reasonOf(cause) ?? "unknown" });
         setNote(described);
         toasts.update(toast, { title: t("Apply refused"), message: described, tone: "error" });
       });

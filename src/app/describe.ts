@@ -61,3 +61,18 @@ export const describe = (cause: unknown, depth = 0): string => {
   const text = String(cause).trim();
   return text === "" || text === "[object Object]" ? "no detail" : clip(text);
 };
+
+/**
+ * The failure's `reason` field — the tag's own vocabulary (`Unauthorized`,
+ * `Stale`, `Io`…) — or `undefined` when there is none.
+ *
+ * The machine-readable half of what `describe` renders for a person: an
+ * observability attribute or a branch on the kind of failure reads this,
+ * never a regex over the sentence, which would also match the word in a
+ * server's description.
+ */
+export const reasonOf = (cause: unknown): string | undefined => {
+  if (!isRecord(cause)) return undefined;
+  const reason = stringAt(cause, "reason");
+  return reason === "" ? undefined : reason;
+};
