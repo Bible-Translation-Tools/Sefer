@@ -15,6 +15,17 @@ The **numbers and inventory below the marker are generated** by `pnpm lint:resul
 | Unused files, exports, types, dependencies; import cycles | `pnpm deadcode` (fallow) | every deploy (`release.yml` `verify`); **advisory** on branches (`check.yml` reports, never fails) |
 | Duplication, health, similar code | `pnpm exec fallow dupes \| health \| similar-code` | nothing — run by hand before a cleanup |
 
+## Keeping this true
+
+The generated half looks after itself; the judgement half does not. When a gate runs:
+
+1. **A gate fails.** Fix the finding. If it genuinely should stand, suppress it *at the site* with the reason in the comment (`// fallow-ignore-next-line unused-export -- <why>`, `// oxlint-disable-next-line <rule> -- <why>`), never with a file- or config-wide switch when a line will do. The reason is what appears in the table below, so write it for a reader who was not there.
+2. **A new kind of exception appears** — a rule not listed under "Accepted exceptions", a new config ignore, a warning class nobody has looked at — add a paragraph there saying what it is and why it is accepted, or list it under "still to do".
+3. **An exception is resolved** — the warnings are fixed, a suppression is deleted, a stub is wired — delete its paragraph. A stale reason is worse than none.
+4. **Commit.** The pre-commit hook regenerates the inventory and stages this file. A commit made with `--no-verify` skips it; run `pnpm lint:results` before the next one, or the next ordinary commit will catch up.
+
+`pnpm lint:results --check` says whether the inventory is stale without writing.
+
 ## Accepted exceptions, and why
 
 **`solid(reactivity)` warnings (Oxlint, from `eslint-plugin-solid` 0.17).** Not yet fully triaged; a sample of about a quarter found no real bug. Three shapes appear:

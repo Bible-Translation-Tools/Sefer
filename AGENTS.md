@@ -13,6 +13,7 @@ Read only the guidance relevant to the task:
 - [Solid development and diagnostics](documentation/architecture/solid.md): read before Solid changes or reactive debugging; includes versioned skill locations and evidence capture.
 - [Testing](documentation/architecture/testing.md): coverage ownership, runner choice, cadence, and current commands.
 - [Agent verification](documentation/agents/verification.md): explore the running app, capture evidence, and decide what earns a regression test.
+- [Lint results](documentation/lint-results.md): read before adding a suppression comment, changing a gate or a linter's config, or when a gate reports something new; what is gated where, what is deliberately left, and the process for keeping that record true.
 - [Observability](documentation/architecture/observability.md): logs, spans, bounded editor evidence, and platform sinks.
 - [Boundaries](documentation/architecture/boundaries.md): what `src/core` may depend on, and the checks that enforce it.
 - [Storage](documentation/architecture/storage.md): the `effect/FileSystem` port, its Node and in-memory layers, atomic writes, root scoping, and the contract suite.
@@ -55,7 +56,7 @@ Check `package.json` and runner configuration for executable commands. Distingui
 - `pnpm verify:design` runs two real builds and proves the design surface is absent from production and present in the design build.
 - `pnpm design:scaffolding` lists real screens still borrowing the design panel through `globalThis.__sefer.design.register`. Informational; exits 0.
 - `pnpm deadcode` fails on an unused file, export, type or dependency, or an import cycle; `release.yml`'s `verify` runs it before every deploy (not `pnpm check`, so a branch may carry a half-wired file). `pnpm exec fallow dead-code | dupes | health` is the full, advisory report; `.fallowrc.jsonc` holds the entries and the dependencies it cannot see. [First pass](planning/01-discussing/fallow-2026-09-23.md), [follow-ups](planning/01-discussing/fallow-followups-2026-09-23.md).
-- `pnpm lint:results` regenerates the generated half of [`documentation/lint-results.md`](documentation/lint-results.md): every warning left, every suppression comment and fallow exception, and the dead-code and duplication numbers. The pre-commit hook runs it and stages the file, so each commit records what it leaves unfixed; the prose above the marker says why, and is updated by hand when a class of exception appears or goes.
+- `pnpm lint:results` regenerates the inventory half of `documentation/lint-results.md`; the pre-commit hook runs it for you.
 - `pnpm check` runs the ordinary local gate: typecheck, lint, formatting, boundaries, unit tests, and build. `.github/workflows/check.yml` runs the same commands, plus `pnpm test:browser` in a second job.
 
 ## Channels
