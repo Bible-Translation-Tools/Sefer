@@ -1,85 +1,67 @@
 # Search
 
-`src/core/search/search.ts` is project-wide Find and the Replace behind it (seams §3.10). It takes `readonly Book[]` rather than a Project so the result browser, a satellite window and a script can each call it with whatever books they hold.
+`src/core/search/search.ts` is project-wide Find and the Replace behind it. It takes `readonly Book[]` rather than a Project so the result browser, a satellite window and a script can each call it with whatever books they hold. Every door is pure and synchronous, returns a `Result`, and calls no engine search.
 
-## Three doors, two shapes
+## Two haystacks, two matchers
 
-- `findProjected(corpus, books, query, options?)` — **the default.** Searches the engine's verse-text projection, what the reader sees in visual mode, and places every hit back in the source. Asynchronous, because the corpus is (on desktop it is a different process).
-- `find(books, query, options?)` — the raw scan of canonical USFM text. Pure, synchronous, no engine. Kept for the two things the projection cannot answer: a **regex** query, and a search meant to reach the markup itself.
-- `findInReferences(corpus, query, options?)` — the project's **bound** source and reference resources, through the engine's `references` scope.
+- `findInReading(readings, books, query, options?)` — **the default.** Scans each book's READING — what the reader sees in visual mode, the markup cut out — and places every hit back in the source.
+- `find(books, query, options?)` — the raw scan of canonical USFM, for a search deliberately aimed at the markup.
+- `findInReferences(readings, references, query, options?)` — the same scan as `findInReading`, over the project's bound source and reference resources.
 
-The first two produce the same `Hit`, so `resolveHit`, `replace`, `replaceInBook` and `planReplace` are written once and neither door has a private replace path. The third produces a `ReferenceHit`, and the difference is the point — see below.
+What is matched against (reading or raw) and what is matched with (literal or regex) are two switches, so all four combinations work. Matching is a JS `RegExp` — a literal is escaped into one — with the `i` flag unless `caseSensitive`, and `wholeWord` is checked on the characters either side of the match (`\p{L}\p{N}_`), so it works for literals and regexes alike and for non-ASCII scripts, where `\b` would not.
 
-Which door: regex → raw, always (the engine's find is literal `memmem`; `findProjected` refuses a `regex` query as `InvalidRegex` rather than silently searching for the pattern's characters). Deliberate markup search → raw. Everything a translator means by "find" → projected.
+The engine's own `find`/`findAll` ([Galley](galley.md)) are not used: they rebuild and re-fold every projection on every call and cannot run a regex or search the markup.
 
-## Find, through the engine
+## The reading
 
-`findProjected(corpus, books, query, options?) → Effect<readonly Hit[], SearchError>`.
+`src/core/search/reading.ts` builds a `Readings` over the engine's mask map — the source spans the reading is made of, in order. The map is kept, keyed by the book's `SourceStamp`; the reading itself is rebuilt per call (about 9 ms for a Bible) rather than held as a second copy of the corpus. Nothing is case-folded ahead of time, because `toLowerCase` changes the length of some strings and every later hit would map back to the wrong place. `reading.ts` records the measurements.
 
-- Matching is the engine's: literal, case-insensitive by default under the simple lowercase fold, and `wholeWord` under the words rule the engine restates in `galley/src/find.md` — not this module's `\p{L}\p{N}_` edge test.
-- Markup can neither hide a match nor manufacture one. A needle inside a footnote is not found; a marker that happens to contain the needle's letters is not a hit.
-- Each hit carries `projected` (the reading's coordinates) as well as `from`/`to` (the source's). A hit that crosses markup the projection dropped carries `pieces`, one range per contiguous run — see below.
-- The books given are what binds the result: a hit for a book not in `books` is dropped, and each hit carries the stamp its book holds at the time of the call, exactly as a raw hit does.
-- The corpus must have been told about the books. `ProjectAnalysis.attach` registers every book of a project as it opens, so a find on an open project sees them all; a book the corpus never received simply has no hits.
-- `SearchError { reason: "Engine" }` carries a corpus failure's reason and description — one error type, because a caller shows both the same way.
+A book the engine holds no mask for contributes nothing: a project opening registers books one at a time, and a search that arrives mid-way reports what is ready rather than failing.
 
-## Find, in the project's references
+## Queries, options, failures
 
-`findInReferences(corpus, query, options?) → Effect<readonly ReferenceHit[], SearchError>`. Engine-asks item 3b, closed by scripture-kitchen v0.1.0: `findAll` takes a scope, and a reference registered with `keepText` retains the text, the mask and the projection a target does, so it can be searched at all.
-
-`ReferenceHit { source, projected, preview }` is a **separate shape from `Hit`, deliberately.** A `Hit` carries a `SourceStamp` and offsets into a Book's canonical text, so a card can refuse when the book has moved and an edit can land exactly where the match was. A reference has none of that available and needs none of it: there is no Book, no revision to compare against, and nothing to edit. So a `ReferenceHit` carries what a reader can use — which resource file it came from, where in the reading the match sits, and the projected text around it — and deliberately **no offset into any text Sefer could write to**. A reference hit that could be mistaken for an editable one is the bug this separation exists to prevent. `/find` renders them as readings rather than excerpts for the same reason: no Edit, no Open in editor, no staleness badge.
-
-**Registration is not automatic.** `ProjectAnalysis.attachReferences(refs)` registers the books, and `src/app/workflows/references.ts` is what resolves the Library's `source` and `reference` bindings into texts and calls it. It is separate from `attach` because a reference is a Library binding and the Library and the FileSystem are the shell's services; requiring them inside ProjectAnalysis would put two host-facing Layers behind every composition of it for a feature two screens use. The set is REPLACED on each call and cleared when a project is attached — a resource bound to the project we just left is not a reference for the one we just opened.
-
-A project with nothing bound has no Reference scope at all: the segment on `/find` is disabled with the reason as its tooltip, because a scope with nothing in it answers "no matches" to a question it never asked.
-
-## Find, raw
-
-`find(books, query, options?) → Result<readonly Hit[], SearchError>`.
-
-- `Query { text, caseSensitive?, wholeWord?, regex? }`. `text` is a literal unless `regex` is set, in which case it is a `RegExp` source. Matching is case-insensitive by default. `wholeWord` is checked on the characters either side of the match (`\p{L}\p{N}_`), so it works for literals and regexes alike and for non-ASCII scripts, where `\b` would not.
-- `Options { limit = 500, books? }`. `limit` is a total across all books, not per book; `books` narrows the scan to those `BookId`s.
-- `SearchError { reason: "InvalidRegex" }` is the only failure — a pattern `RegExp` will not accept. An empty query, a book filter that matches nothing, and a text with no match are all a successful empty result.
+- `Query { text, caseSensitive?, wholeWord?, regex? }`.
+- `Options { limit?, books? }`. `limit` is a total across all books and omitted means no bound; `books` narrows the scan to those `BookId`s. The bound is on the question instead: `MINIMUM_QUERY = 2`, measured on a whole Bible, below which the screen does not search — a single character is a quarter of a million hits nobody can read, and a capped count would answer "how many are there" wrongly.
+- `SearchError { reason: "InvalidRegex" }` is the only failure. An empty query, a book filter that matches nothing, and a text with no match are all a successful empty result.
 - Hits arrive in book order, then offset order.
-
-Each scan is a fresh `String`/`RegExp` walk of every canonical text. There is no index and no cache: a corpus-sized scan of plain strings is fast, and keeping an index correct against every keystroke would cost more than the scan does.
 
 ## Hits are version-bound
 
-`Hit { bookId, stamp, from, to, ref, preview, projected?, pieces? }`. `from`/`to` are UTF-16 offsets into the revision named by `stamp`, which is the book's stamp at scan time. `preview` is display text only — the containing line narrowed to about 90 characters around the match, with `…` on truncated edges — and must never be parsed back into coordinates.
+`Hit { bookId, stamp, from, to, ref, preview, pieces? }`. `from`/`to` are UTF-16 offsets into the revision named by `stamp`, the book's stamp at scan time. `preview` is display text only — the containing line (of the reading, for a reading hit) narrowed to about 90 characters — and must never be parsed back into coordinates. (`Hit` also declares an optional `projected`; no scan sets it.)
 
-`projected` and `pieces` are present only on hits from `findProjected`. `pieces` appears only when there is more than **one** source piece, which means the hit spans markup the projection dropped; `from`/`to` are then the FIRST piece, so anything that only wants somewhere to scroll to still works. `spansMarkup(hit)` is the question, and a hit that answers yes is **not replaceable** here: `replace` refuses it as `Refusal { rule: "search.replace", reason: "SpansMarkup" }` and `planReplace` returns `null`. That is a rule, not a limitation — the markup between the pieces either survives the replacement or does not, and only the person editing knows which. The engine's job was to say the gap is there.
+`pieces` appears only when a reading hit maps back to more than **one** source piece, which means it spans markup the reading dropped; `from`/`to` are then the first piece, so anything that only wants somewhere to scroll to still works. Such a hit is **not replaceable**: `planReplace` returns `null` and `replaceInBook` refuses it as `Stale`. That is a rule, not a limitation — the markup between the pieces either survives the replacement or does not, and only the person editing knows which.
 
-`resolveHit(hit, books)` returns `{ book, from, to }` or `null`. It is `null` when the book is no longer in `books` or its revision has moved since the scan. Every action on a result card goes through it first, which is how a stale card refuses instead of editing the wrong range (vision §12.2: "every result is version-bound").
+`ref` comes from a marker table built once per book per call over the source's `\c`/`\v` markers (`buildRefTable`, then `refFrom` by binary search). It is a marker scan, not a parse, and it is the current limitation: the Location work is meant to replace it with the engine's TOC.
 
 ## References
 
-`refAt(text, pos, book?) → Ref` scans the `\c`/`\v` markers before `pos`. `chapter` is `0` for front matter before the first `\c`; `verse` is absent until a `\v` opens in that chapter. `find` builds one marker table per book per call and binary-searches it, so many hits cost one scan rather than one scan each.
+`findInReferences(readings, references: BoundReference[], query, options?)` searches `BoundReference { id, text }` — the resources `ProjectAnalysis` registered with their text. `ReferenceHit { source, projected, preview, ref, from, to }` is a **separate shape from `Hit`, deliberately**: it carries no `SourceStamp`, and `from`/`to` are offsets into the reference's text, somewhere to highlight and never somewhere to write. A reference hit that could be mistaken for an editable one is the bug this separation exists to prevent.
 
-This is a marker scan, not a parse. Galley's TOC is the real answer: when ProjectAnalysis (slice 15) can hand search an analysis per book, `refAt` should read the TOC instead. Until then a book with no analysis still needs a reference for its card.
+`/find` draws a reference hit above the project's matching verse card — paired by book, chapter and verse, walking the card's verse range so a bridge on one side still pairs — read-only, with no Edit, no Open in editor and no staleness badge.
+
+**Registration is not automatic.** `ProjectAnalysis.attachReferences(refs)` registers the books, and `src/app/workflows/references.ts` resolves the Library's `source` and `reference` bindings into texts and calls it. The set is REPLACED on each call and cleared when a project is attached. A project with nothing bound has no Reference scope: the segment on `/find` is disabled with the reason as its tooltip.
 
 ## Replace
 
-Find offers an advanced, default-off Replace all action for the current book or project search. The user enters literal replacement text, previews the scope and count, then explicitly applies. The action rechecks the setting, query options, and every book's hit stamps before writing; it reports the actual number changed if a later book refuses. Reference searches are read-only. Ordinary result cards remain editable one at a time.
+Find offers Replace all behind the Advanced setting `find.enableReplaceAll`, off by default. The user enters literal replacement text, previews the scope and count, then explicitly applies. `src/routes/_app/project/$slug/find.tsx` preflights every book with `planReplace`, then loops the books itself, one `replaceInBook` each, and reports the actual count if a later book refuses. Reference searches are read-only.
 
-- `replace(hit, insert, books) → Result<Receipt, Refusal>` — one match. Refused as `Refusal { rule: "search.replace", reason: "Stale" }` when the hit no longer resolves, or `"SpansMarkup"` when it crosses dropped markup.
-- `replaceInBook(book, hits, insert)` — several hits of **one** book as a single edit, so the book publishes one receipt and the phases judge the change list together.
-- `planReplace(book, hits, insert) → readonly Change[] | null` — the change list `replaceInBook` uses, in before-text coordinates and ascending order, shaped for MultiBook's `runAcrossBooks(label, plan)`, which asks per book. `null` when the plan cannot be made: no hits, a hit from another book, a moved stamp, two overlapping hits, or a hit that spans markup. `runAcrossBooks` reads `null` as "this book is not part of the operation", which is the right answer in all of those cases.
+- `planReplace(book, hits, insert) → readonly Change[] | null` — the change list for several hits of **one** book, in before-text coordinates and ascending order. `null` when the plan cannot be made: no hits, a hit from another book, a moved stamp, two overlapping hits, or a hit that spans markup.
+- `replaceInBook(book, hits, insert) → Result<Receipt, Refusal>` — applies that plan as a single edit, or refuses `Refusal { rule: "search.replace", reason: "Stale" }`.
 
 Every replacement goes through `book.apply(changes, "replace", UNTRUSTED)` — the one write path. Search does not judge markup: an untrusted replacement is examined by the editing phases exactly like a keystroke, so one that would break markup comes back as their `Refusal`.
 
 ## Excerpts
 
-`src/core/excerpts/excerpts.ts` turns a flat list of `Hit`s into what the Find screen actually shows: one card per VERSE, in book order, with an outline beside them. It is pure core — text, an analysis, hits in, excerpts out — so the same model serves the find results, the key-terms feed and anything later that presents a passage out of context.
+`src/core/excerpts/excerpts.ts` turns a flat list of occurrences into what the Find screen shows: one card per VERSE, in book order, with an outline beside them. It is pure core, so the same model serves the find results, the key-terms feed and the findings feed.
 
-- `group(books, hits)` returns `{ groups, outline }`. A group is a book, in the caller's order; a book with no hits is neither a group nor an outline row. Grouping is by VERSE and not by hit: three matches in Philemon 1:4 are one card with three highlights.
-- **Two coordinate systems, and the module holds both.** `span` is the verse plus one either side, clamped to the chapter, in SOURCE offsets — that is what a satellite clips to. `text` is the `project`ion of exactly that span (markers, designators and note bodies dropped, the same reading `findProjected` searches) and `marks` index into `text`. `hits` stay in source coordinates, because that is what Replace and "open in editor" need. `focus` says where the excerpt's own verse sits in `text`, which is how a card dims the context around it.
-- An `Occurrence` is `bookId`/`from`/`to` and nothing else, so a `Hit` from either search door and a term's occurrence arrive the same way.
-- **Edit → satellite → funnel.** A card is read-only until Edit is clicked. Edit opens a CodeMirror satellite (`src/app/ui/excerpts/ExcerptEditor.tsx`) over the canonical Book — not over a copy of the text — so every keystroke goes through the book's one write path and the editing phases judge it exactly as they would in the editor. An accepted edit bumps the shell and the search is re-run against what the text now says.
-- **The STET feed** (`src/app/workflows/stet.ts`) is the same list under a term instead of a query: a key term selects a whole-word search, and the screen shows the term's glosses beside the excerpts. The terms are a stand-in until a key-terms resource can be bound, and the screen says so.
+- `group(books: BookText[], hits: Occurrence[])` returns `{ groups, outline }`, where `BookText` is `{ bookId, text, analysis }`. A book with no hits is neither a group nor an outline row. Grouping is by verse, not by hit: three matches in Philemon 1:4 are one card with three highlights.
+- An `Occurrence` is `bookId`/`from`/`to`, plus `pieces` when a match crossed markup, so a `Hit` and a term's occurrence arrive the same way.
+- **Two coordinate systems.** `span` is the verse plus one either side, clamped to the chapter, in SOURCE offsets — what a satellite clips to. `text` is the projection of exactly that span and `marks` index into it; `hits` stay in source coordinates. `more` says whether the chapter has a verse above and below what is shown.
+- **The projection is lazy.** `text`, `source`, `marks`, `verses` and `focus` are getters over a memoised `project()` call, because a virtualised feed of twenty thousand excerpts shows about twenty. Never object-spread an excerpt: that evaluates every getter.
+- **Edit → satellite → funnel.** A card is read-only until Edit is clicked. Edit opens a CodeMirror satellite (`src/app/ui/excerpts/ExcerptEditor.tsx`) over the canonical Book, so every keystroke goes through the book's one write path and the editing phases judge it as they would in the editor.
+
+Key terms reuse the excerpt feed under a term instead of a query; see [key terms (STET)](stet.md).
 
 ## Not yet
 
-There is no scope narrower than "these books", and no search-and-replace history. A reference hit cannot be opened anywhere — there is no reader for a resource that is not a project book, so a hit is a preview and a file name. Replacing a hit that spans markup is refused rather than offered as a choice between "keep the markup" and "drop it"; that choice belongs to the editor, not to a result card.
-
-`refAt` still reads `\c`/`\v` markers rather than the TOC, on both doors.
+There is no scope narrower than "these books", and no search-and-replace history. A reference hit cannot be opened anywhere — there is no reader for a resource that is not a project book. Replacing a hit that spans markup is refused rather than offered as a choice; that choice belongs to the editor, not to a result card.

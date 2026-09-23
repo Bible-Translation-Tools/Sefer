@@ -30,8 +30,9 @@ Layer build, written whole with `writeFileAtomic`, with unregistered keys carrie
 A stored value that no longer matches its schema is noted `settings/refused` and the default stands —
 a hand-edited file cannot stop the application from starting.
 
-**Credentials** is keyed by remote name. Web is session-only by design: a browser has nowhere
-trustworthy to persist a token, so it is never written to project files or settings.
+**Credentials** is keyed by the endpoint's origin (the normalised host of the remote URL), one
+credential per host. Web keeps it in `localStorage`, which survives a reload and is only as safe as the
+page itself; desktop uses the OS keychain. A token is never written to project files or settings.
 
 **Dialogs** is the four questions every open, import, save and destructive flow needs. Web uses
 `confirm` and the File System Access pickers when present, and answers `None`/`[]`/`false` with a note
@@ -57,7 +58,7 @@ The `src/platform/tauri/` Layers are implemented over the Tauri plugins and the 
 ## How composition merges them
 
 `src/app/composition.ts` still owns only boot and Observability ([composition](composition.md)). The
-host Layers are merged one ring out, in `src/app/services.ts`, and all six are provided today —
+host Layers are merged one ring out, in `src/app/services.ts`, and the six besides Observability are all provided —
 `composeServices()` cannot return without them, because `HostInfo` and `FileSystem` are what every
 rooted module reads its root from.
 

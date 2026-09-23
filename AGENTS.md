@@ -70,22 +70,6 @@ Commands, tag format and what is not armed yet: [release channels](agents/skills
 
 ## The design build switch
 
-`__SEFER_DESIGN__` is a Vite `define` set in `vite.config.ts` to
-`mode === "development" || mode === "dev"`. It is the ONE answer to
-"does this build carry the design surface": `/design`, the floating
-annotator mounted from `src/routes/__root.tsx`, and the `data-loc` JSX
-stamps from `tools/vite/jsxLocation.ts`.
-
-**It is never on in production, and there is no variable that turns it on.**
-There is deliberately no `INCLUDE_DESIGNER` or other `.env` switch: an env
-file is state on a machine that can drift into a release, whereas
-`--mode dev` is a flag on a deploy job. Comment mode swallows every event
-in the capture phase, so shipping it to somebody editing scripture would be a
-foot-gun.
-
-Gate with `__SEFER_DESIGN__` directly, never through an imported constant — an
-exported constant folds at its use site but still left rolldown emitting the
-design page as an orphaned, shipped chunk. `documentation/architecture/design.md`
-has the full account; `src/vite-env.d.ts` declares it.
+`__SEFER_DESIGN__` is a Vite `define` (`vite.config.ts`: `mode === "development" || mode === "dev"`) and the ONE answer to "does this build carry the design surface" — `/design`, the floating annotator, and the `data-loc` JSX stamps. **It is never on in production, and there is no variable that turns it on**: no `.env` switch, because an env file can drift into a release and `--mode dev` is a flag on a deploy job. Gate with `__SEFER_DESIGN__` directly, never through an imported constant. [The design surface](documentation/architecture/design.md) has the full account.
 
 Core modules stay independent of Solid, the router, Tauri, CodeMirror, DOM globals, and native filesystem implementations; `pnpm boundaries` is the authoritative check. TanStack Router owns navigation; it is not automatically the DI container. Effect supplies the boot program's typed failures and the observability and filesystem Layers; the filesystem port is `effect/FileSystem`, provided by OPFS on the Web and by the Tauri filesystem on desktop (`src/app/services.ts`). The Git port runs on isomorphic-git on the Web (`src/platform/web/git.ts`) and on git2 on desktop.

@@ -53,6 +53,9 @@ Nothing in the screen or in `primitives/Table.tsx` moves it — the only lever i
 rendering fewer components per row (or virtualising the list, which this table
 will want anyway at six thousand rows).
 
+Since then `FindProject` renders through `VirtualList`, keyed by `row.entry.id`,
+so only the visible rows are components at all.
+
 The lesson for the next long list: **name your signals**. The diagnostic prints
 the name, and "signal" with no name was the whole of the evidence that the
 remaining fan-out belonged to the framework rather than to us.

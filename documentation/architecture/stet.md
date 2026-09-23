@@ -2,15 +2,15 @@
 
 Status: this document describes code that exists, and says plainly which parts of it are a stand-in.
 
-STET — "let it stand", the proofreader's mark — names two jobs in Sefer. This document is about the one that shipped: **key terms**, the screen at `/terms` where a reviewer walks a guide's list of spiritual terms and, for each verse the guide records, compares a frozen source reading against the project's own. Transferring FORMATTING from a source book to a target that has the same words was once planned as STET's other half; it shipped instead as the Overlay ("Match formatting from source"), a command on the text rather than a view here. See [findings](findings.md#overlay).
+STET — "let it stand", the proofreader's mark — names two jobs in Sefer. This document is about the one that shipped: **key terms**, the screen at `/project/$slug/terms` where a reviewer walks a guide's list of spiritual terms and, for each verse the guide records, compares a frozen source reading against the project's own. Transferring FORMATTING from a source book to a target that has the same words was once planned as STET's other half; it shipped instead as the Overlay ("Match formatting from source"), a command on the text rather than a view here. See [findings](findings.md#overlay).
 
 ## Two panes, not a toggle
 
-Key terms was a `mode=stet` branch on `/find` and is not any more. Will's decision on the gap list (`planning/03-ui/design-direction.md`, "Decisions on the gap list", item 5) is that Find and Key terms are separate panes with similar UI. So:
+Will's decision on the gap list ([design direction](design-direction.md), "Decisions on the gap list", item 5) is that Find and Key terms are separate panes with similar UI. So:
 
-- `/find` is Find. No segmented header, no term list, no `mode` search param.
-- `/terms` is Key terms, gated on `ShellGate` like every screen that needs services.
-- `/find?mode=stet` is answered rather than dropped: `beforeLoad` on `/find` reads the raw search string and throws `redirect({ to: "/terms" })`, so a saved link still lands somewhere sensible.
+- `find` is Find. No segmented header, no term list, no `mode` search param.
+- `terms` is Key terms, gated on `ShellGate` like every screen that needs services. Its search params are `term`, `q` and `locale`.
+- `find?mode=stet` is answered rather than dropped: `beforeLoad` on `find` reads the raw search string and throws `redirect({ to: "/project/$slug/terms", params, search: {} })`, so a saved link still lands somewhere sensible.
 
 What the two panes share is everything below the hits: `createExcerptFeed` (`src/app/ui/excerpts/feed.ts`) owns which books to analyse, how a card expands, what Edit seats, where Open in editor goes, and what happens after an accepted edit. Each route supplies only its own `Occurrence[]` — Find's from a search, Key terms' from a guide mapped onto the project.
 
@@ -38,7 +38,7 @@ Term          { id, term, englishTerm, glosses[], definition, strongs?, occurren
 TermOccurrence{ book, chapter, verse, sid, sourceText?, spans?, curated }
 ```
 
-- **`id`** is the English label slugged, with a counter on collision. The upstream data has no stable identifier; the previous application keyed on the display label and warned when two collided. A slug survives a URL, which is what `/terms?term=grace` needs.
+- **`id`** is the English label slugged, with a counter on collision. The upstream data has no stable identifier; the previous application keyed on the display label and warned when two collided. A slug survives a URL, which is what `terms?term=grace` needs.
 - **`occurrences`** is the curated evaluation set unioned with the exhaustive recorded set, deduped, in the guide's own order. `curated` marks which is which — the old application's "exhaustive" toggle, as a property rather than a mode.
 - **`spans`** index into `sourceText`, never into the project's text. They are the guide's precomputed gloss offsets, bounds-checked on the way through.
 - **`done`** is 0. See "What is stubbed".
@@ -71,7 +71,7 @@ The layer is provided in `src/app/workflows/stet.ts` (`withCatalog`), not in `sr
 
 This is the only genuinely new arithmetic, and it lives in `src/core/excerpts/excerpts.ts` because it is a fact about the project's text, not about the guide.
 
-- **`refOccurrences(book, refs)`** is the whole mapping, and the feed: it walks the verse spans Onion's table of contents gives (`verseSpans`), once per book, and answers with one **zero-width** occurrence at each verse of `refs` that this book actually has, in document order. A bridge answers for every verse it spans, so a reference to `JUD 1:2` is found inside a `\v 1-2` the project happens to have — dropping it would be the one case where the reader most wants to see how the target differs.
+- **`refOccurrences(book, refs)`** is the whole mapping, and the feed: it walks the verse spans Onion's table of contents gives (through the module's internal `verseSpans`), once per book, and answers with one **zero-width** occurrence at each verse of `refs` that this book actually has, in document order. A bridge answers for every verse it spans, so a reference to `JUD 1:2` is found inside a `\v 1-2` the project happens to have — dropping it would be the one case where the reader most wants to see how the target differs.
 
 Zero width is the honest span. A search hit knows which characters matched; a reference does not — the guide's offsets index into the guide's own reading, and this project may put the term elsewhere in the verse, or render it with another word entirely, which is the very thing the reviewer is here to judge. So the **target card carries no highlight** and the **source card carries the guide's**. The excerpt's `focus` still dims the verses either side, so the reference is still visually located.
 
@@ -106,15 +106,14 @@ describes it.
 
 | Path | What |
 | --- | --- |
-| `src/routes/terms.tsx` | The screen: guide → references → occurrences → feed, all off the URL. |
-| `src/routes/find.tsx` | Find only, plus the `?mode=stet` redirect. |
+| `src/routes/_app/project/$slug/terms.tsx` | The screen: guide → references → occurrences → feed, all off the URL. |
+| `src/routes/_app/project/$slug/find.tsx` | Find only, plus the `?mode=stet` redirect. |
 | `src/core/stet/stet.ts` | Envelope schema, `Term`/`TermOccurrence`, the `StetCatalog` port. |
 | `src/core/stet/fixture.ts` | The committed guides as a layer, one dynamic chunk per locale. |
-| `src/core/excerpts/excerpts.ts` | `verseSpans`, `refOccurrences` — the reference → project mapping. |
+| `src/core/excerpts/excerpts.ts` | `refOccurrences` — the reference → project mapping. |
 | `src/app/ui/excerpts/feed.ts` | `createExcerptFeed`, shared by Find and Key terms. |
 | `src/app/ui/excerpts/StetView.tsx` | The two-column view and the source/target pair. |
-| `src/app/ui/excerpts/MatchFormattingView.tsx` | The two block columns, the report badges, the confirm dialog. |
-| `src/app/workflows/stet.ts` | `keyTerms`, `keyTermGuides`, `sourceReadings`. |
+| `src/app/workflows/stet.ts` | `keyTermGuides`, `keyTerms`, `occurrenceRef`, `sourceReadings`. |
 | `src/app/workflows/references.ts` | Library bindings → texts → `ProjectAnalysis.attachReferences`. |
 | `src/core/galley/overlay.ts` | The overlay wire: addresses, skeletons, the report. |
 | `fixtures/stet/` | The four committed guide files and their provenance. |

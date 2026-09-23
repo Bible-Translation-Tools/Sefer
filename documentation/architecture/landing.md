@@ -22,7 +22,7 @@ Above the list sits the [recovery](recovery.md) banner, rendered only when a pro
 
 ### The index
 
-The table is drawn from `<projectsRoot>/.sefer/projects.json` — one row per project, `{ root, name, language, books, lastOpened }`, decoded through the Effect Schema in `src/core/project/projectIndex.ts`. One file read draws the whole screen.
+The table is drawn from `<projectsRoot>/.sefer/projects.json` — one row per project, `{ root, name, language, languageTag?, books, lastOpened? }`, decoded through the Effect Schema in `src/core/project/projectIndex.ts`. One file read draws the whole screen.
 
 The index is written at the moments a project's identity changes and at no other time: `recordProject` after an import or a clone, `touchProject` on open (beside the `shell.recentProjects` write the sidebar reads), `recordProject` again after a rename, `forgetProject` after a delete. It is then **assumed correct** — it is not a cache with an invalidation story, and nothing re-derives a row behind the reader's back.
 
@@ -38,7 +38,7 @@ A project whose metadata declares no language shows its folder id, muted, rather
 
 ### The kebab: rename, export, delete
 
-Every row carries a kebab, and the three items are the `ProjectAdmin` calls that had no caller. The fixture has none: there is nothing on disk to act on, and a menu of things that would fail is worse than no menu.
+Every row carries a kebab of three `ProjectAdmin` calls. (The port also has `metadata`, `updateMetadata`, `recordedName`, `refreshChecksums` and `export`, which other screens call.) The fixture has none: there is nothing on disk to act on, and a menu of things that would fail is worse than no menu.
 
 - **Rename…** is `ProjectAdmin.rename`, which rewrites the burrito's `identification.name` in place (or `.sefer/project.json` when there is no burrito). It does NOT move the folder — that is a separate job with different consequences for open books and git remotes — so the root does not change, `shell.recentProjects` is keyed by root and has nothing to correct, and the dialog says as much. The index is re-read rather than patched, because a burrito rename may land in a different locale than the one the table displayed.
 - **Export as zip** is `ProjectAdmin.archive`, handed to a download. Every entry sits under the project's own folder name, so the archive unzips to a folder and imports straight back through the zip card. Sefer's private files (`.sefer/`, a `.sefer-tmp` sibling, `.git`) are left out. The download itself is `src/app/ui/landing/download.ts`: one anchor with `download`, over an object URL. It is a download on the Web because OPFS is Sefer's own storage that nothing outside the page can see and a browser has no path to name; on a host with real disk the same command opens `Dialogs.pickSaveFile` and writes through `ProjectAdmin.export(root, "usfm-zip", picked)` instead. `HostInfo.capabilities().nativeDisk` is what chooses, and the bytes are identical either way.
@@ -56,14 +56,14 @@ The rule the import hub is built around: a source this host cannot serve is rend
 | Open folder | yes | yes | web copies the folder's files into its own storage; Tauri reads the real path |
 | Clone from cloud | yes | yes | `VITE_SEFER_WACS_WEB_URL` / `VITE_SEFER_WACS_DESKTOP_URL` — one endpoint per host, normally a proxy on the web because its fetches are cross-origin. Overridable in Settings |
 
-Every source ends in the same pipeline — `stage → classify → commit` from `src/core/resources/import.ts`, run one step at a time so the dialog can name the step it is on. Nothing touches the project root until `commit`, so cancelling or failing leaves a staging directory and nothing else.
+Every source ends in the same pipeline — `stage → classify → commit` from `src/core/resources/import.ts` ([resources](resources.md) owns the steps), run one step at a time so the dialog can name the step it is on. Nothing touches the project root until `commit`, so cancelling or failing leaves a staging directory and nothing else.
 
 The two paths differ in the FIRST step only:
 
 - **A native disk** hands back a real path, and `stage` copies it into staging.
 - **A browser** has no path to hand back. `src/platform/web/intake.ts` is the bridge: it picks (`showDirectoryPicker` where it exists, a `webkitdirectory` input where it does not, a `.zip` input for an archive), reads the bytes, writes them into a fresh staging directory through the `FileSystem` port, and returns the same `Staged` value `stage` returns. `classify` and `commit` then run unchanged. It builds that value itself rather than calling `stage`, because `stage` copies with `FileSystem.copy` and the bytes are already in hand.
 
-Intake also does the two things a picker leaves to its caller: it strips the one folder every entry shares (so a zipped `small-nt/…` classifies exactly as the folder `small-nt` does, with `metadata.json` at the root where the classifier looks), and it drops `__MACOSX`, `.DS_Store` and friends. It is reached through a **dynamic import**, so the zip decoder is fetched by the people who import something and never sits in the first load — and the desktop bundle never carries it at all.
+Intake also does the two things a picker leaves to its caller: it strips the one folder every entry shares (so a zipped `small-nt/…` classifies exactly as the folder `small-nt` does, with `metadata.json` at the root where the classifier looks), and it drops `__MACOSX`, `.DS_Store` and friends. It is reached through a **dynamic import** — from the import hub, and from Review's zip and folder sources (`src/app/ui/review/sources.ts`) — so the zip decoder is fetched by the people who import something and never sits in the first load — and the desktop bundle never carries it at all.
 
 The progress dialog counts files while the write runs, because an import of sixty-six books is long enough that a spinner is not an answer.
 
@@ -73,7 +73,7 @@ The progress dialog counts files while the write runs, because an import of sixt
 
 `catalogueFor()` is the one place that decides the source. With `VITE_SEFER_LANGUAGE_API_URL` set it reads the Language API's consolidated-repos view; without it, it serves `SAMPLE_CATALOGUE` so the screen is real in development instead of empty. Either way the service says which one it gave you in `source`, and the screen shows that rather than implying live data.
 
-The payload carries a code and a language name; it carries neither a region nor a date, so those columns print an em dash for a row that has none. Inventing a region would be worse than a blank column, and the day the API grows the fields the decoder reads them. `type` (translation or gateway) is derived from the owner — `wa-catalog` is the curated gateway set — and that mapping is stated in the port so the filter's meaning is readable rather than buried in a comparison inside a component.
+The decoder reads `region` and `updated_at` when a row has them; the live payload carries neither today, only a code and a language name, so those columns print an em dash for a row that has none. Inventing a region would be worse than a blank column. `type` (translation or gateway) is derived from the owner — `wa-catalog` is the curated gateway set — and that mapping is stated in the port so the filter's meaning is readable rather than buried in a comparison inside a component.
 
 Download reuses the clone flow: the catalogue row hands its `cloneUrl` to the same `cloneRepository` the import hub calls.
 

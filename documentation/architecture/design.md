@@ -11,7 +11,7 @@ Read this before touching `src/dev/design`, `src/dev/annotate`,
 | Command | Mode | `/design` | Annotator | `data-loc` |
 | --- | --- | --- | --- | --- |
 | `pnpm dev` | `development` | yes | yes | yes |
-| `pnpm build:dev` | `design` | yes | yes | yes |
+| `pnpm build:dev` | `dev` | yes | yes | yes |
 | `pnpm build` | `production` | **no** | **no** | **no** |
 
 The middle row is the one that needs explaining. The deployed prototype — the
@@ -47,7 +47,7 @@ constant.**
 
 `pnpm verify:design` checks the claim against two real builds rather than
 trusting this document. It looks for a sentinel rendered into the design page
-and expects it absent from `production` and present in `design`. Run it after
+and expects it absent from `production` and present in `dev`. Run it after
 touching the gate.
 
 ## What is where
@@ -160,10 +160,11 @@ annotator never learns what a signal is.
 either way — it is a reminder you can run any time.
 
 `pnpm lint:release` turns `anti-slop/no-design-scaffolding` into an error.
-That rule is OFF in `oxlint.config.ts` on purpose: a squiggle under code
+That rule is not enabled in `oxlint.config.ts` on purpose —
+`oxlint.release.config.ts` is what sets it — a squiggle under code
 somebody is actively iterating with is how a rule teaches people to disable
-it. `tools/deploy/web.ts` runs it before a **production** build and before
-nothing else — `preview` and `production` run it, `dev` does not, because
+it. `tools/deploy/web.ts` runs it before every production-mode build — `preview`
+and `production` — and `dev` does not, because
 scaffolding is exactly what `dev` is for. The scaffolding is
 inert in any build without the design surface, so this is hygiene rather than
 correctness; a release is simply the moment by which the question it was

@@ -22,7 +22,7 @@ This is the shared vocabulary for planning and implementation. Terms marked **ag
 | Galley | agreed | The engine that reads Source. ONE call returns both the structure and every problem it can see; parsing and proofreading are one pass, not two steps. |
 | TOC | agreed | One Book's chapters and verses, from the engine — which chapter, which verse, and the offset each starts at. Available for any REGISTERED book without parsing it, so a sidebar or a chapter picker costs no CST. Not the editor's Structure. |
 | Structure | agreed | The editor's view of the open document (`DocStructure`), backed by CodeMirror and refreshed per gesture. Only a seated Book has one; every registered Book has a TOC. |
-| Book census | agreed | One row per Book — chapters, verses, error and warning counts — as the book-list page shows them. `ProjectAnalysis.bookCensus(project)`. Qualified because "census" alone is ambiguous: the engine calls the TOC buffer a census, and a full glyph enumeration is also called a Sous census upstream. Neither is this. |
+| Book census | agreed | One row per Book — chapters, verses, error and warning counts — as the book-list page shows them. `ProjectAnalysis.census(project)`. Qualified because "census" alone is ambiguous: the engine calls the TOC buffer a census, and a full glyph enumeration is also called a Sous census upstream. Neither is this. |
 | Analysis | agreed | What Galley returns for one Book, from that Book's Source alone: the reading AND its diagnostics. Not a list of errors, and not cross-book. |
 | Corpus | agreed | Galley's registry of many Books' Source at once, so it can answer questions only true across Books. It is the SAME handle the per-book parse uses, in this process, on both hosts — not a port and not a second engine. One over IPC was tried and removed: the id doors answer off the text a handle retains, so a Corpus in another process is one the parse path cannot name. Not the Project, which is files on disk. |
 | Publication | agreed | The Corpus packed into a buffer JS can decode — the engine's internal cross-book state, made readable, whole. Cross-book truth only holds all at once, so a Publication replaces the previous one entirely rather than updating it. |
@@ -58,7 +58,7 @@ the failure it invites — promoting to the wrong place — is expensive and qui
 
 Every event the application records is named **`<thing>.<what happened to it>`**, where the thing is a term from the table above.
 
-Not `<subsystem>.<function>`: `analyze.publish` named the module that happened to hold the code, where `corpus.publish` names what exists afterwards. When the code moves, the second name is still true. This matters most where the implementation can change underneath — the Corpus is reached over wasm in-process or over IPC depending on the host and the work, and `corpus.publish` is true of both where a name for either door would not be.
+Not `<subsystem>.<function>`: `analyze.publish` named the module that happened to hold the code, where `corpus.publish` names what exists afterwards. When the code moves, the second name is still true. This matters most where the implementation can change underneath — the Corpus is one in-process engine today, and `corpus.publish` stays true however it is reached, where a name for the door would not.
 
 | Verb | Means |
 | --- | --- |

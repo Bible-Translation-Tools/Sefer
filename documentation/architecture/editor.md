@@ -20,7 +20,7 @@ Everything downstream is a function of that facet rather than of a global: `engi
 
 A bound view MUST route its transactions through `book.fromView(view, trs)`; that is where a keystroke becomes a receipt. `apply` throws if a bound view accepted an edit without it, rather than report a receipt nobody heard.
 
-`services.ts` builds the seat `openProject({ seat })` wants, one `editorBook` per book. `attached()` counts bound views plus `hold()`s (satellites) and is what makes `project.release` refuse.
+`services.ts` builds the seat `openProject(root, { seat })` wants, one `editorBook` per book. `attached()` counts bound views plus `hold()`s (satellites) and is what makes `project.release` refuse.
 
 ## Satellites borrow
 
@@ -175,14 +175,14 @@ Every event carries the correlation `<bookId>#<trace seq>`, so one keystroke's s
 
 **The derivation pipeline.** `core/timing.ts` holds the spans the keystroke meter attributes time with — `scan`, `index`, `decorate`, `paint`, `diagnostics-render`. They are inert (two `performance.now()` calls) unless the meter has opened a gesture. A span cannot see an `EditorState`, so `onDerived` calls back into the instrument and each closed span lands on whichever trace is open as a `derive` entry. Those entries do **not** cross into Sefer's ring: they run several times per keystroke, and the meter already reports their exclusive totals in one bounded note. `phase:*` and `keystroke` spans are skipped, because the stage frame and the meter already measured them.
 
-**Reading a keystroke.** Set the level to `spans` (`__sefer.observability.setLevel("spans")` in a dev build) and read `__sefer.observability.recent()`: each frame is an `editor.phase.<name>` or `editor.command.<name>` span plus its verdict note, in pipeline order, all under one `<bookId>#<seq>` correlation, followed by the meter's one note with the derivation totals. There is no separate editor surface on `globalThis`.
+**Reading a keystroke.** Set the level to `spans` (`__sefer.observability.setLevel("spans")` under the dev server) and read `__sefer.observability.traces.recent()` (or `logs.recent()` for loose events): each frame is an `editor.phase.<name>` or `editor.command.<name>` span plus its verdict note, in pipeline order, all under one `<bookId>#<seq>` correlation, followed by the meter's one note with the derivation totals. There is no separate editor surface on `globalThis`.
 
 `core/meter.ts` (wall time from the DOM event to the last update of a gesture) rounds out the surface. None of it is Effect: it runs inside change and transaction filters thousands of times per typed paragraph, where a service lookup per rule is not free and there is no fiber to carry a context.
 
 ## What was not ported
 
 - **`attrs`/`attrResolve`** — the aligned-word popover needs two engine free functions the pinned wasm handle does not export. The half-ported popover threw a `TODO(seam)` and nothing installed it, so it is parked: [parked code](../../planning/04-parked/parked.md).
-- **`formatEdits` / `format` / `locate`** — the engine's normalisation, likewise not on the handle. Nothing in `src/editor` references them; formatting is [Fixes](findings.md)' seam.
+- **`formatEdits`** — the engine's normalisation is a [Galley](galley.md) door now, but it is not the editor's: nothing in `src/editor` references it. `Fixes.formatBook` (`src/core/fixes/fixes.ts`) calls it and applies the edits as one `book.apply`; see [findings](findings.md).
 - **`startEngine` / `runAnalyze`** — replaced by the `Galley` Layer and the analyzer facet.
 
 ## The file map, by responsibility
@@ -192,11 +192,11 @@ Every event carries the correlation `<bookId>#<trace seq>`, so one keystroke's s
 | the engine seam | `core/analyzer.ts` |
 | the fold (structure) | `core/docStructure.ts`, `cst.ts`, `fold.ts`, `lineTable.ts`, `blockTable.ts`, `notes.ts`, `designators.ts` |
 | classification, then policy | `core/mapping.ts` → `core/registry.ts` |
-| the plan, owned targets, paint, stops | `core/plan.ts`, `owned.ts`, `paint.ts`, `stops.ts`, `exceptions.ts` |
+| the plan, owned targets, paint, stops | `core/plan.ts`, `owned.ts`, `paint.ts`, `stops.ts`, `exceptions.ts`, `scroll.ts` |
 | rules and commands | `core/phases.ts`, `compose.ts`, `sealed.ts`, `clip.ts`, `input.ts`, `deletion.ts`, `caret.ts`, `kernel.ts` |
 | structured entry | `core/insert.ts`, `actions.ts`, `frontmatter.ts` |
 | rendering | `core/decorations.ts`, `render.ts`, `editorState.ts`, `editor.css` |
 | instruments | `core/instrument.ts`, `meter.ts`, `timing.ts`, `trace.ts`, `../observability.ts` |
 | the Book, the funnel, views | `book.ts`, `funnel.ts`, `views.ts` |
-| recipes over the editor | `recipes/lint.ts`, `satellite.ts` |
+| recipes over the editor | `recipes/lint.ts`, `lintHover.ts`, `satellite.ts`, `noteEditor.ts`, `emptyBlocks.ts`, `flash.ts`, `pairing.ts`, `reference.ts`, `whereAmI.ts` |
 | test tools (not tests) | `testing/harness.ts`, `testing/mount.ts` |

@@ -51,7 +51,7 @@ Its limits, plainly:
 
 ## The page
 
-`src/routes/inventory.tsx` is a `createFileRoute` and a `<ShellGate>`, like every other route. The screen is three parts:
+`src/routes/_app/project/$slug/inventory.tsx` is a `createFileRoute` and a `<ShellGate>`, like every other route. The screen is three parts:
 
 - a filter row — a text box that accepts a character, a name or a `U+` code; an `All | Flagged | Quiet` lens; and a pool select over the engine's own eight names, classified from the code point (a glyph's own `PooledNeighbor` rows classify its *neighbours*, so the filter needs a classifier rather than a lookup);
 - the glyph table, most sites first, the character set in the scripture family in a tinted tile because a comma and a maqaf are three pixels apart in a UI sans;
@@ -73,6 +73,6 @@ The offsets themselves are never touched. "Go" still navigates by the engine's o
 
 ## What the engine would need to publish for a full census
 
-The page is shaped for more than the current Sous branch emits. To become a character-by-character inventory rather than a conviction list it needs, per glyph in the corpus (not only convicted ones): total sites and per-book spread; the full neighbour table on both sides; placement against Letter / Space / Digit / Nonletter / Edge; cluster (run) shapes; and an API that enumerates every site of a glyph or of a pattern, not only the convicted ones. Until then `sitesOfGlyph(inventory, codePoint)` returns the underlined sites the snapshot does carry, which is what "show the other places this character is flagged" means today.
+The page is shaped for more than the current Sous branch emits. To become a character-by-character inventory rather than a conviction list it needs, per glyph in the corpus (not only convicted ones): total sites and per-book spread; the full neighbour table on both sides; placement against Letter / Space / Digit / Nonletter / Edge; cluster (run) shapes; and an API that enumerates every site of a glyph or of a pattern, not only the convicted ones. `sitesOfGlyph(inventory, codePoint)` — the underlined sites the snapshot does carry, "show the other places this character is flagged" — is parked until then ([parked code](../../planning/04-parked/parked.md)).
 
 **Still open at scripture-kitchen v0.1.0.** That tag closed most of Sefer's engine asks and deliberately not this one — Will did not build the census (`planning/01-discussing/engine-asks-2026-09-14.md`, item 2). What v0.1.0 did add here is two more convicting channels, `LetterRun` and `SentenceStart`, both on by default and both already in the lists above; they add rows to the table without changing what the table is.

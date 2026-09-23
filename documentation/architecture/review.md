@@ -9,7 +9,7 @@ against `left`/`right`), two ideas of what a difference is (a verse row against
 a line hunk), two inline diffs, and one of them had the file hard-coded on one
 side. Will, 2026-09-15: *"yes on one screen"*.
 
-`/compare` and `/history?review=1` redirect here. `/history` keeps the commit
+`/history?review=1` redirects here. `/history` keeps the commit
 timeline, which is the screen about what HAS happened rather than what is about
 to.
 
@@ -31,7 +31,7 @@ current project**. Both sides implement one port, `CompareSource`
 interface CompareSource {
   readonly id: string;             // stable within a session
   readonly label: string;          // "In the editor", "On disk", "shared-nt"
-  readonly kind: CompareSourceKind;// "project" | "disk" | "recorded" | "folder" | …
+  readonly kind: CompareSourceKind;// "project" | "folder" | an open string ("disk", "recorded")
   readonly canApply: boolean;      // may this side be written?
   books(): Effect<readonly BookId[], CompareError>;
   read(bookId): Effect<{ text: string; stamp?: SourceStamp }, CompareError>;
@@ -43,15 +43,15 @@ Every Effect carries `R = never`: a source captures what it needs — a Project,
 or a `FileSystem` and a root — when it is CONSTRUCTED, so a comparison can be
 run from a component, a command or a test with one `run` and no context.
 
-Five exist today, and the LEFT and RIGHT pickers offer all five:
+Core has four kinds, and the LEFT and RIGHT pickers (`src/app/ui/review/sources.ts`) offer five choices over them:
 
-| id | what | writable |
-| --- | --- | --- |
-| `project` | the books as the editor holds them, unsaved keystrokes included | **yes** |
-| `disk` | the bytes in the project's files (`SaveCoordinator.baseline`) | no |
-| `recorded` | the blobs at HEAD, read once per commit by `recorded.ts` | no |
-| `zip` | a `.zip` the web host unpacked into a scratch folder | no |
-| `folder` | any directory the `FileSystem` port can read | no |
+| picker choice | core source | what | writable |
+| --- | --- | --- | --- |
+| In the editor | `currentProjectSource` (`project`) | the books as the editor holds them, unsaved keystrokes included | **yes** |
+| On disk | `savedSource` (`disk`, `src/core/compare/pastSources.ts`) | the bytes in the project's files (`SaveCoordinator.baseline`) | no |
+| Last recorded | `recordedSource` (`recorded`, same file) | the blobs at HEAD, read once per commit (`src/app/ui/panels/recorded.ts`) | no |
+| A zip | `folderSource` (`folder`) | a `.zip` unpacked into a scratch folder first — a zip is not a kind in core | no |
+| A folder | `folderSource` (`folder`) | any directory the `FileSystem` port can read | no |
 
 Left defaults to the editor and right to the file on disk, because that is the
 comparison a reader wants nine times in ten — **not** because the screen knows
@@ -83,8 +83,8 @@ A git checkpoint, another local project or a remote is a NEW FILE in
 4. add one entry to `src/app/ui/review/sources.ts`, which is where a picker and
    a label live — core never opens a dialog.
 
-**Freshness.** `compare.md` used to ask a source to be a frozen SNAPSHOT so a
-side could not move under a decision already made. Three of the five are;
+**Freshness.** A source is ideally a frozen SNAPSHOT, so a side cannot move
+under a decision already made. `recorded` and `folder` are;
 `project` and `disk` deliberately are not, because a review of the editor that
 did not follow the editor is a review of nothing. They read live, and the
 screen re-takes the whole comparison on every shell tick while either of them
@@ -133,14 +133,13 @@ nothing else. The review re-derives its units on every shell tick, and an
 engine diff of two whole books per tick is exactly the cold path this screen
 must not be; the key is the pair of texts, so there is nothing to invalidate.
 
-### There is no second diff
+### There is no second diff on this screen
 
-Until v0.1.0 the galley artifact carried no diff door, so this module built the
-same `DiffSkeleton` out of Sefer's own verse alignment and the screen wore an
-"interim diff" badge to say so. The door landed and the stand-in is **deleted**
-— Will, 2026-09-15: "the engine is the only diff". `src/core/diff/verses.ts`
-and `spans.ts` are gone. A second implementation that nothing runs is a second
-implementation that rots and is then switched on by accident.
+Review's alignment is the engine's and nothing else — Will, 2026-09-15: "the
+engine is the only diff". The line diff in `src/core/diff/diff.ts` still serves
+History, `compareBooks` and `projectSource` and is being retired toward the
+same decision units ([diff and multibook](diff-and-multibook.md)); it has no
+part in `/review`.
 
 The badge still says **engine diff**, because a reviewer deciding what to keep
 is entitled to know what aligned it. What it no longer does is choose between
@@ -202,8 +201,10 @@ else**. No text moves, nothing is written, and a reader may change their mind
 up to the moment they press Apply. `aria-pressed` rather than a radio group,
 because there are three states and two buttons: undecided is neither pressed.
 
-Apply projects the map once, names the books it is about to write in a
-confirmation, and writes through `applyPlan` → `book.apply` — one apply per
+Apply projects the map once — `ReviewPanel` builds the plan per book with
+`mergeWithDecisions` (`src/core/diff/skeleton.ts`), which prefers the engine's
+own merge — names the books it is about to write in a confirmation, and writes
+through `applyPlan` → `book.apply` — one apply per
 book, so one revision and one Undo step each.
 
 **Revert is that, exactly.** Taking the file's version of a unit and applying it
@@ -343,36 +344,16 @@ text IS the bytes on disk.
 `dirty(book)` answers from the baseline alone. No baseline means dirty. Within
 a session the stamp's revision decides; when the baseline and the current text
 both carry an engine hash, the hash decides. A same-length replacement can
-therefore never pass as saved. Core computes no hash: `SaveCoordinatorLive({
-hasher })` takes the engine's xxh3 from composition once `src/core/galley`
-exposes it, and `hash` is absent until then.
+therefore never pass as saved. `SaveCoordinatorLive({ hasher })` takes the
+engine's xxh3 from composition (`src/app/services.ts`).
 
 ### Serialisation style: the dominant form, written back
 
-Sefer **writes back the form it read**. `decode` records two facts about the
-bytes on `Source.form` (`{ eol: "lf" | "crlf"; bom: boolean }`) and then throws
-the encoding away: the text in memory is canonical LF with no mark, and `apply`
-still refuses a carriage return. `encode` re-applies the form — CRLF back out,
-and the byte order mark back at the front — so a Windows project stays a
-Windows project and a marked file keeps its mark.
-
-`eol` is the file's **dominant** line ending, not a claim that it was uniform:
-CRLF and bare LF each get a vote, the majority wins, and a tie (a file with no
-line ending at all included) is LF. A bare CR is normalised on the way in and
-does not vote. **A mixed file therefore becomes uniform in its majority form
-the first time it is saved** — one deliberate, visible change, rather than a
-file that stays half one thing forever.
-
-The form is never an identity. Baselines, diffs, stamps, `dirty`, and
-external-change comparison all speak canonical text, so the same content saved
-as LF and as CRLF is the same text everywhere; only `encode` and the receipt's
-`bytes` count know the difference. `SourceStamp.length` counts canonical
-characters, which is why a CRLF file's byte count is larger than its stamped
-length.
-
-`decode`'s only refusal is `InvalidUtf8`. A byte order mark and a
-mixed-newline file were both refusals before this; they are read and remembered
-instead, because the alternative was a project Sefer could see and not open.
+Sefer **writes back the form it read** — the dominant line ending and the byte
+order mark, recorded on `Source.form` by `decode` and re-applied by `encode`.
+A mixed file therefore becomes uniform in its majority form the first time it
+is saved. The form is never an identity: baselines, diffs, stamps and `dirty`
+all speak canonical text. The rules are in [source and book](source.md).
 
 ### Conflicts
 
@@ -397,44 +378,14 @@ everything unrecognised is `Io`.
 
 ---
 
-## 5. Recovery, and why the journal lives outside the project
+## 5. Recovery
 
-`Recovery` appends one JSON line per accepted apply — `{ before, after,
-changes, origin, at }` — to `<journalRoot>/<projectId>/<bookId>.jsonl`, after a
-header line naming the version, project, book and path so a file found on disk
-is self-describing. `attach(book, projectId)` subscribes to `book.changes` and
-journals until the Scope closes, debounced ~500 ms and coalesced into one write
-per burst. `setPolicy` re-times it from the reader's "Back up work after"
-preference: the debounce fiber re-reads its two bounds on every pass, so the
-stepper on `/settings` lands on the next burst without restarting anything.
-
-The journal root is **outside every project folder**: Git never sees it, a
-shared drive never carries it, and no project scan mistakes it for content.
-`RecoveryLive({ journalRoot })` takes it as a plain string today; composition
-should pass `HostInfo.paths().appData`.
-
-Writes use `writeFileAtomic` on the whole file. Append-by-rewrite is the
-simplest correct thing at this scale — one book's unsaved edits — no partial
-line can ever be read, and the `FileSystem` port has no append primitive to be
-atomic with.
-
-On boot, `pending(baselineOf)` reports the journals that hold work Save never
-wrote: no baseline, or a last entry past the baseline's revision. It never
-fails — a missing root is no pending work and a corrupt journal is skipped with
-a note, because boot must not stop over crash recovery. `restore(id,
-resolveBook)` replays the entries in order through `book.apply(changes,
-'recovery', trustedBy('recovery'))`, so a journal written under an older rule
-set is **re-judged** by today's rules; the first refusal stops the replay with a
-`RecoveryError`. `discard(id)` throws a journal away, and `compact(bookId,
-stamp)` drops the entries at or before a saved revision and removes an emptied
-file.
-
-The review screen shows the **recovered-work banner** for a journal whose book
-nobody reopened: a journal for a book this session already has open is the live
-backup of what is on screen, and restoring it would replay edits the editor is
-already showing. Restore instantiates the book, `adopt`s its disk baseline
-(that is the one moment it can be learned for free — without it the restored
-work comes back invisible to this very screen), and replays.
+The working-state backup is Recovery's journal: one per book, outside every
+project folder, replayed through `book.apply` so today's rules re-judge it. Its
+format, timing and replay are in [recovery](recovery.md). Review has its own
+per-book restore list for a journal whose book nobody reopened; Restore
+instantiates the book, `adopt`s its disk baseline — without it the restored
+work comes back invisible to this very screen — and replays.
 
 Recovery never writes the project file, and Save never writes the journal.
 

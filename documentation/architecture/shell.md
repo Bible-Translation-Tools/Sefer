@@ -4,18 +4,18 @@ The shell is the Solid layer above every module: it composes their Layers once, 
 
 ## Services: one composition, one file
 
-`src/app/composition.ts` owns boot and Observability and stops there (see [composition](composition.md)). `src/app/services.ts` is the next ring out: `composeServices(composition)` merges the Web host's capabilities and every core module over the built composition and returns plain service values plus `run(effect)`.
+`src/app/composition.ts` owns boot and Observability and stops there (see [composition](composition.md)). `src/app/services.ts` is the next ring out: `composeServices(composition)` merges the host's capabilities — the Web Layers, or on desktop the Tauri Layers loaded by dynamic import so a Web bundle never fetches `@tauri-apps/*` — and every core module over the built composition and returns plain service values plus `run(effect)`.
 
 Wiring facts that carry meaning, not taste:
 
 - `run` provides the **application** scope (`runtime.scope`). `openProject` and `ProjectAnalysis.attach` require `Scope`; a per-call `Effect.scoped` would close the project the instant the call returned.
 - `RecoveryLive` is provided **to** `SaveCoordinatorLive` (`Layer.provideMerge`). Save reads Recovery through `serviceOption`, so it only journals when Recovery is in its own context.
-- The Save hasher is built with `Layer.unwrap` over `Galley`: core computes no content hash, and the hasher is a function that needs the built engine.
+- The Save hasher is built with `Layer.unwrap` over `Galley`: the book hash is the engine's, and the hasher is a function that needs the built engine.
 - `Observability` is merged back over the modules (`provideMerge`, not `provide`) because `run` may ask for the ring itself.
-- The `seat` (`src/app/services.ts`) is how a plain Book becomes an `EditorBook`. It records each one it makes, which is how the shell reaches an `EditorBook` from a `Book` port with no type assertion. It gives each book a fresh `galley.memoize()`, and adds the **mountable** half of the editor (`commandsLayer`, `viewLayer()`) so a view can be constructed straight over `book.state`.
+- The `seat` (`src/app/services.ts`) is how a plain Book becomes an `EditorBook`. It records each one it makes, which is how the shell reaches an `EditorBook` from a `Book` port with no type assertion. It gives each book a fresh `galley.memoize()`, and adds the **mountable** half of the editor (`commandsLayer`, `viewLayer()`, `usfmLinter()`, `lintHoverGrace()`, `lintGutter()`, `noteEditing()`) so a view can be constructed straight over `book.state`.
 - Composition **rejects** if the engine will not load. There is no useful Sefer without Galley, and `ShellGate` renders that failure instead of an editor that refuses every parse.
 
-`?fixture=1` in a dev build composes over the seeded `fixtures/small-nt` memory FileSystem instead of OPFS — the shortest route to a real project on screen.
+`?fixture=1` composes over the seeded `fixtures/small-nt` memory FileSystem instead of OPFS — the shortest route to a real project on screen. It is honoured in any build that carries the design surface (`__SEFER_DESIGN__`), so the deployed `dev` channel has it too.
 
 ## State: `src/app/ProjectContext.tsx`
 
@@ -32,7 +32,7 @@ The context carries a stable handle — `useShellState()` (always available) and
 
 **One subscription per book, in `src/app/ui/BookEditor.tsx`, and nowhere else.** That component creates the `EditorView` over `book.state`, routes every transaction through `book.fromView`, and in its `book.changes` callback does three things: writes a stamp signal, hands the editor's own `Analysis` to `ProjectAnalysis.supply` (so a keystroke costs no second wasm call), and calls `shell.changed({ kind: "book.apply", books: [book.id] })`.
 
-`changed` is the one door into the shell's stores (`src/app/shellStores.ts`). Each `ShellEvent` (`src/app/shellEvent.ts`, a closed union) names the books it moved; the coordinator recomputes those books' rows — save state, stamp, undo depth — and a Publication replaces the findings, the census and the inventory. Every derived screen reads a store row, so an edit in one book leaves every other book's readers asleep. No other component subscribes to a Book, and nothing outside that file holds text. (This replaced a single `bump()`/`tick()` counter that woke every reader on every event; see `planning/01-discussing/ui-state-stores-2026-09-16.md`.)
+`changed` is the one door into the shell's stores (`src/app/shellStores.ts`). Each `ShellEvent` (`src/app/shellEvent.ts`, a closed union) names the books it moved; the coordinator recomputes those books' rows — save state, stamp, undo depth — and a Publication replaces the findings, the census and the inventory. Every derived screen reads a store row, so an edit in one book leaves every other book's readers asleep. No other component subscribes to a Book, and nothing outside that file holds text.
 
 Mode and chapter are dispatched into the canonical state through a compartment. Neither is a document change, so `fromView` ignores them: a projection is presentation and a clip is a view choice.
 
@@ -61,9 +61,7 @@ What each state means:
 is what the sidebar's chapter grid, the location bar's outline and its two arrows all call. With the
 preference ON it clips; with it OFF it drops any clip and scrolls that chapter's `\c` anchor to the
 TOP of the page. That is what `reveal.at` distinguishes: a finding or a search hit is a point in the
-middle of a page and is centred, and a chapter is the first line you read. Before this the grid always
-clipped, so a reader who had never asked for chapter view lost the rest of the book by clicking a
-number.
+middle of a page and is centred, and a chapter is the first line you read.
 
 The front matter is row 0 of the engine's chapter table and has no `\c` number. It is a real place —
 the identification, the table of contents, the main title — so the grid and the outline both offer it
@@ -79,16 +77,13 @@ Opening a project lands on the WORK, not on a census. `workspace.lastLocation` i
 project root holding `{ bookId, chapter, at }`; `focus` and every chapter change write it (debounced, like
 the sidebar width — a record rewrite per click is a file write per click), and two places read it:
 
-- **`/project/$id`** forwards to `shell.landingPath(root)` as soon as the project is open, unless the
-  URL carries `?books=1`. The book is checked against the project first, so a book that has since been
-  removed falls back to the census rather than to a not-found.
-- **The rail's panel tile** uses it as the way back. On a project route the tile is the panel toggle it
-  always was; on a full-page screen (settings, findings, history, compare) there is no panel to toggle,
-  so it opens the panel and returns to the remembered book. Pressing it on `/settings` used to appear
-  to do nothing.
-
-The census is reachable from the location bar's book crumb, which navigates with `?books=1` — a door
-that bounced you straight back out would not be one.
+- **`/project/$slug`** forwards to the remembered book as soon as the project is open. The book is
+  checked against the project first, so a book that has since been removed falls back to the census
+  rather than to a not-found. `shell.landingTarget(root)` answers the same question for an Open, before
+  the project is open.
+- **The rail's panel tile** uses it as the way back. On a project route the tile is the panel toggle;
+  on a full-page screen (settings, findings, history, review) there is no panel to toggle, so it opens
+  the panel and returns to the remembered book.
 
 `chapter` is the CLIP and `at` is the chapter that was at the top of the viewport. Both are needed,
 because a book opens WHOLE by default: a reader who had scrolled down to Psalm 3 had a clip of `null`
@@ -99,13 +94,12 @@ fact about a view and two views over one book may honestly disagree. On open, `f
 chapter's `\c` anchor to the top, or clips to it when `editor.preferChapterView` is on.
 
 An AIM still wins over a remembered place, because a finding or a search hit is a request and a
-remembered scroll position is only the absence of one — but an aim is answered ONCE. Re-opening the
-book an aim had named used to replay that scroll forever, which is what kept the remembered place out
-of reach even after it was written down.
+remembered scroll position is only the absence of one — but an aim is answered ONCE, so re-opening the
+book an aim had named lands on the remembered place.
 
 ## The way back: `editor.back`
 
-Every full-page route — findings, history, review, compare, find, terms, inventory, cloud, settings,
+Every full-page route — findings, history, review, find, terms, inventory, cloud, settings,
 the projects list — replaces the editor entirely. The rail's panel tile is one way back and reads as a
 panel toggle, so there is an explicit one as well: `src/app/ui/workspace/BackToEditor.tsx`, one
 `data-testid="back-to-editor"` button pinned to the top-right of the routed content, naming the book it
@@ -116,17 +110,17 @@ each page: a screen added later gets the door without knowing it exists, no page
 it differently, and it does not scroll away with the content. The same component registers the
 `editor.back` command, so the palette lists it and Escape performs it — registered there and not in the
 shell's core set, because "is this a full-page screen" is the ROUTE's question and `ShellBridge`
-deliberately carries no pathname. All three doors go to `shell.landingPath(root)`, so they cannot
-disagree.
+deliberately carries no pathname. All three doors navigate to `/project/$slug`, which forwards to the
+remembered book, so they cannot disagree.
 
-Escape works because `installCommandKeys` now skips a binding with no modifier while the reader is
+Escape works because `installCommandKeys` skips a binding with no modifier while the reader is
 typing into an input, a text area or a contenteditable — which is what `.cm-content` is, so the editor
 and the palette's own search box are covered by one rule. Every other binding holds Mod, so the rule
 costs them nothing.
 
 The recovery banner is mounted on the book route as well as the project route, for the same reason:
-unsaved work found on open is the first thing to answer, and after this change the project page is not
-where an open lands.
+unsaved work found on open is the first thing to answer, and the project page is not where an open
+lands.
 
 
 ## The workspace chrome
@@ -142,12 +136,9 @@ when it sits under that layout — which is every route file under
 `/projects` is still `/projects`; a comparison against `routeId()` has to say
 `/_app/projects`, which is the one thing that changes for a caller.
 
-Until 2026-09-22 the chrome was in `__root.tsx`, so EVERY route rendered inside
-the rail — `/design` included. That is right for a workspace screen and wrong
-for a prototype: a designer judging a screen could only ever see it wearing
-this frame. The alternative considered was a runtime dial (`?chrome=0`) and was
-rejected, because "is this screen inside the application frame" is a structural
-fact and a query parameter answers it from a URL somebody can mistype.
+`/design` is outside it on purpose: a designer judging a prototype must be able
+to see it without this frame, and "is this screen inside the application frame"
+is a structural fact rather than a query parameter somebody can mistype.
 
 What `__root` keeps is what every screen needs whatever its frame: the head,
 the one `<ProjectProvider>`, the theme side effect, and the design annotator.
@@ -160,21 +151,17 @@ the application's Mod-K for an application it is not part of.
   `pathname`, not from a signal, and every tile but three is a plain
   navigation.
 
-  The mode tiles (Refine, Key terms, USFM) and the project screens (Character
-  inventory, Compare) appear only while a project is open: each is something
-  you apply to a project, and offering one with nothing open is an affordance
-  that answers nothing. Key terms goes to **`/terms`** — its own pane, not
-  `/find?mode=stet`, because Find and Key terms are separate routes with
-  similar UI rather than a mode toggle on one screen
-  (`planning/03-ui/design-direction.md`, gap list 5). Projects, Findings,
+  The mode tiles (Refine, Key terms) and the project screens (Character
+  inventory, Compare — which goes to `/project/$slug/review` — and Cloud)
+  appear only while a project is open: each is something you apply to a
+  project, and offering one with nothing open is an affordance that answers
+  nothing. The USFM mode is the Toolbar's Mode control, not a tile. Key terms
+  goes to **`/project/$slug/terms`** — its own pane, because Find and Key terms
+  are separate routes with similar UI rather than a mode toggle on one screen
+  ([design direction](design-direction.md), gap list 5). Projects, Findings,
   History and Settings are always offered; Projects is lit on `/start/*` as
   well as `/projects`, because bringing a project in is the chooser's second
   half and `ProjectSidebar` reads the same two prefixes.
-
-  `/terms` and `/compare` are navigated to with the usual typed-route cast:
-  the generated tree does not hold them yet, so until those routes land the
-  tiles answer through the root's not-found boundary, which is a 404 page and
-  not a crash.
 - **`ProjectSidebar`** is the book list, the review pills from
   `ProjectAnalysis.census`, and the chapter grid of the FOCUSED book — the one
   place a chapter is chosen. There is no chapter `<select>` on the editor page.
@@ -203,7 +190,7 @@ renumber the split and rebuild the editor's `EditorView` beside it.
 
 ### The book screen is a second split
 
-`src/routes/_app/project/$id/book/$book.tsx` is its own `Resizable.Root`: the
+`src/routes/_app/project/$slug/book/$book.tsx` is its own `Resizable.Root`: the
 reference pane, a visible handle, then the editor. The pane is
 `ReferenceColumn`, and each bound resource inside it is a read-only
 `EditorView` over the same book (see [resources](resources.md), "A reference
@@ -254,11 +241,11 @@ network request per render.
 
 ## The findings panel's filter
 
-`/findings` renders the whole project's findings through a filter the reader owns. The policy is pure and lives in core (`src/core/findings/filter.ts` — `applyFilter`; see [findings](findings.md), "Filters and views"); the shell holds only the state and the chips. `src/app/ui/FindingsFilters.tsx` carries both halves of that state deliberately: `createFindingsFilter(services)` owns the value — seeded from `Settings.get`, written back through `Settings.set` on every click, kept live by a fiber over `settings.changes` like `editor.preferChapterView` — and `<FindingsFilters>` is the chip row that edits it, so the list, the counts and the keyboard cursor cannot disagree about what is being shown. Severity, producer and "hide stale" persist as `findings.filter`; the text box, the book selection and the view (by book, by code, by severity, flat) are session signals. The key is a `Schema.Struct`, and `/settings` draws one widget per `kind`, so it is registered in `shellKeys` but left out of `shellSettings` — the panel is its only editor. The route's `j`/`k`/arrows/Enter cursor is **local to the route** and honours the filter, while the shell's own findings cursor (`shell.finding`, `editor.findings.next` in the palette) still walks the unfiltered project: sharing one cursor would make a palette command jump according to a filter it never mentioned, and keeping them apart needs no change to `ProjectContext`.
+`/findings` renders the whole project's findings through a filter the reader owns. The policy is pure and lives in core (`src/core/findings/filter.ts` — `applyFilter`; see [findings](findings.md), "Filters and views"); the shell holds only the state and the chips. `src/app/ui/panels/FindingsFilters.tsx` (with `panels/findingsFilter.ts`) carries both halves of that state deliberately: `createFindingsFilter(services)` owns the value — seeded from `Settings.get`, written back through `Settings.set` on every click, kept live by a fiber over `settings.changes` like `editor.preferChapterView` — and `<FindingsFilters>` is the chip row that edits it, so the list, the counts and the keyboard cursor cannot disagree about what is being shown. Severity, producer and "hide stale" persist as `findings.filter`; the text box, the book selection and the view (by book, by code, by severity, flat) are session signals. The key is a `Schema.Struct`, and `/settings` draws one widget per `kind`, so it is registered in `shellKeys` but left out of `shellSettings` — the panel is its only editor. The route's `j`/`k`/arrows/Enter cursor is **local to the route** and honours the filter, while the shell's own findings cursor (`shell.finding`, `findings.next`/`findings.previous` in the palette) still walks the unfiltered project: sharing one cursor would make a palette command jump according to a filter it never mentioned, and keeping them apart needs no change to `ProjectContext`.
 
 ## Commands
 
-`src/app/commands.ts` holds the registry (`registerCommand`, `runCommand`, `commands()`), a `Mod-`-chord matcher on the document, and the core set. Each command has at least three callers — a button, a keystroke, and the palette — and `when()` is the "is this possible now?" question asked once. Commands reach the application only through `ShellBridge`, which is the honest list of what a command needs; a command that wants something not on it is telling us the shell owns state it has not admitted to owning.
+`src/app/commands.ts` holds the registry (`registerCommand`, `runCommand`, `availableCommands()`, `findCommand(id)`), a `Mod-`-chord matcher on the document, and the core set. Each command has at least three callers — a button, a keystroke, and the palette — and `when()` is the "is this possible now?" question asked once. Commands reach the application only through `ShellBridge`, which is the honest list of what a command needs; a command that wants something not on it is telling us the shell owns state it has not admitted to owning.
 
 An Effect-returning command is run on the app runtime by the runner `registerShellCommands` installs.
 
@@ -266,11 +253,11 @@ An Effect-returning command is run on the app runtime by the runner `registerShe
 
 **The editor's chords are bound twice.** `editor.insert.verse` / `.paragraph` / `.poetry` / `.footnote` are registered here with `Mod-Shift-v/p/l/n` *and* inside CodeMirror's own keymap (`usfmKeys`), because an insertion needs the caret. The document listener skips an event the editor already consumed (`event.defaultPrevented`), so a chord fires once. The footnote is `Mod-Shift-n` — for **n**ote — and not `Mod-Shift-f`, which is `search.open`: one chord meaning "footnote" inside the editor and "find in project" outside it is two commands wearing one press. `editor.frontmatter.edit` has no chord and focuses the front matter card's first field. See [the editor](editor.md), "Structured entry".
 
-`format.book` and `format.project` apply Onion's own whole-book transaction through `Fixes.formatBook`/`applyFormat` — see [findings](findings.md), "Format". `format.project` is the shell's only `MultiBook`: one instance over a thunk of the project's books, so the cross-book Undo offer has somewhere to live.
+`format.book` and `format.project` apply Onion's own whole-book transaction through `Fixes.formatBook`/`applyFormat` — see [findings](findings.md), "Format". `format.project` and the every-book overlay run through the shell's one `MultiBook`: one instance over a thunk of the project's books, so the cross-book Undo offer has somewhere to live.
 
 ## Routes and tokens
 
-`/projects`, `/start/create`, `/start/find`, `/project/$id`, `/project/$id/book/$book`, `/find`, `/findings`, `/history`, `/inventory`, `/settings`, plus `/` and the dev-only `/dev/fixture`. `/find` owns its search params (`q`, `mode`, `scope`) and derives its whole state from them, so a link into it from the rail or the toolbar changes the screen that is already mounted. The rail and the toolbar also point at `/terms` and `/compare`, which are being built alongside the chrome; until they land the router answers them through the root's not-found boundary. File routes under `src/routes`; `src/routeTree.gen.ts` is generated — never edit it.
+Top level: `/`, `/projects`, `/settings`, `/start/create`, `/start/find`, the dev-only `/dev/fixture`, and `/design` (outside the `_app` chrome). Under `/project/$slug`: the census (index), `book/$book`, `find`, `findings`, `history` (`?review=1` redirects to `review`), `inventory`, `terms`, `review`, `cloud` and `playground`. `find` owns its search params and derives its whole state from them, so a link into it from the rail or the toolbar changes the screen that is already mounted. File routes under `src/routes`; `src/routeTree.gen.ts` is generated — never edit it.
 
 `src/app/ui/tokens.css` is the design system as plain custom properties, ported from the v1 editor's vanilla-extract contract so the two read as one product, and it is also the Tailwind v4 configuration: an `@theme` block mints a utility from every semantic name. Components use the semantic names (`bg-surface-primary`), never the ramps. Dark is a token swap under `[data-theme="dark"]` and `prefers-color-scheme`, never Tailwind's `dark:` variant. The reusable components live in `src/app/ui/primitives/`, which is the only place corvu is imported. `src/app/ui/app.css` is the one global stylesheet and holds only the `<body>` ground and the CodeMirror frame. See [the UI layer](ui.md).
 
@@ -279,11 +266,5 @@ Every user-visible string goes through `t()` (`src/app/i18n.ts`) — an identity
 ## What is stubbed
 
 - **Opening an arbitrary folder on the Web host.** `WebDialogsLive.pickFolder` returns a picked handle's *name*, not a path the OPFS layer can read. `/projects` lists the OPFS subtree Sefer owns and says so.
-- **Drafting** (`src/app/workflows/drafting.ts`) and **STET** (`src/app/workflows/stet.ts`) are typed stubs that `Effect.die`. Each file's header says what it composes and why the missing piece is domain vocabulary rather than code.
-- **Restoring a previous version.** `/history` shows a commit's bytes read-only; loading one into a Book is an edit and needs a diff and a confirmation.
-- **The inline linter and its gutter**, for a reason outside the shell: the installed `@codemirror/lint` resolves its own copy of `@codemirror/state` (6.5.2) while the app uses 6.7.4, so `usfmLinter()`'s facets come from a different module instance and CodeMirror answers "Unrecognized extension value in extension set". Adding `resolve: { dedupe: ["@codemirror/state", "@codemirror/view"] }` to `vite.config.ts` fixes it (verified), after which `usfmLinter(), lintGutter()` can be appended to `mountable` in `src/app/services.ts`. The duplication affects `src/editor/recipes/lint.ts` for anyone who mounts it, so the fix belongs in the build config.
-- **Scrolling to a target in an un-clipped book.** `shell.aim` and `shell.reveal()` carry the offset a
-  finding or a search hit named, and `focus` already uses it to choose the opening chapter when chapter
-  view is on. With chapter view off nothing scrolls to it yet: the scroll belongs in
-  `src/app/ui/BookEditor.tsx`, the one component that holds the `EditorView`.
+- **Drafting** (`src/app/workflows/drafting.ts`) is a typed stub that `Effect.die`s. Its header says what it composes and why the missing piece is domain vocabulary rather than code.
 - **Settings enumeration.** `SettingsService` has no "list every registered key" — a key belongs to the module that declared it. `src/app/settings.ts` is the shell's own set, and `/settings` renders exactly those.

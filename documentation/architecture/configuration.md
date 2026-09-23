@@ -15,8 +15,8 @@ host, and a self-hoster at their own, without either waiting for a release — s
 both are also preferences, on the Network card of `/settings`.
 
 The one-reader rule survives the change rather than being bent by it.
-`env.ts` is still the only reader of `import.meta.env`; `src/app/endpoints.ts`
-is the only reader of the override, and resolves `preference ?? build ?? null`.
+`env.ts` is the one reader of every endpoint in `import.meta.env`;
+`src/app/endpoints.ts` is the only reader of the override, and resolves `preference ?? build ?? null`.
 Nothing else reads either, and there is still no fallback literal anywhere: an
 endpoint nobody configured is `null` and says so.
 
@@ -89,5 +89,9 @@ URL, and does not need a special build to do it. See the proxy's own README in
 `wacs-isomorphic-git-proxy`.
 
 `.env*` files are never committed (this table is the reference; there is no `.env.example`). Do not add a second reader of
-`import.meta.env`; add a field to `env.ts`. Do not read a network preference
+`import.meta.env`; add a field to `env.ts`. The current exceptions are the
+dev-only observability switches: `src/app/composition.ts` reads
+`VITE_SEFER_OTLP_URL` and `VITE_SEFER_OTLP_METRICS`, and
+`src/platform/observability.ts` reads `VITE_SEFER_LOG` and
+`VITE_SEFER_STREAM`. Do not read a network preference
 anywhere but `endpoints.ts`.

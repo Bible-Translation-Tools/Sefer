@@ -4,7 +4,7 @@ How a screen in Sefer gets its look: Tailwind v4 compiled from the semantic
 tokens, one reusable primitive layer, and almost no hand-written CSS.
 
 Read this before adding a screen, a component, or a colour. The design target
-is `planning/03-ui/design-direction.md` (the designer's mockups in words); this
+is [design direction](design-direction.md) (the designer's mockups in words); this
 document is the mechanism.
 
 ## Tokens are the theme
@@ -107,8 +107,7 @@ import from the directory, never from a file inside it.
 
 | Export | Shape |
 | --- | --- |
-| `cx(...parts)` | Flattens Solid's own `JSX.ClassValue` into one string. |
-| `variants({ base, variants, defaults })` | Lookup table → class function; `(choices, extra)`. |
+| `cx(...parts)` | Flattens Solid's own `JSX.ClassValue` into one string. (`cx.ts` also holds `variants`, the lookup-table-to-class helper the primitives use internally.) |
 | `Button` | `variant` primary/secondary/tertiary/danger, `size` sm/md, `icon`, `loading`, plus every `<button>` prop. `aria-pressed` styles itself. |
 | `IconButton` | `label` (REQUIRED — the `aria-label` and the tooltip), `icon`, `variant` subtle/filled/outlined, `size`. |
 | `Input` | Every `<input>` prop except `size`; `size` sm/md, `icon` (leading slot), `wrapperClass`. |
@@ -125,8 +124,9 @@ import from the directory, never from a file inside it.
 | `Resizable` | `.Root` (`orientation`, `onSizesChange`), `.Panel` (`initialSize`, `minSize`, `maxSize`), `.Handle` (`label`). |
 | `Kbd` | A keycap. Show the chord exactly as `src/app/commands.ts` spells it. |
 | `EmptyState` | `icon`, `title`, `description`, one `action`. |
+| `FilterList` | `items`, `match(item, query)`, `key`, `children(item)`, `onPick`, `current`, `placeholder`, `label`. A list you can type at: a filter box that takes focus, arrows, Enter. The book and chapter pickers and the palette are its shape. |
 | `VirtualList` | `sections` (each a key plus keyed rows with a height estimate), `header(section, ref)`, `row(item, key)` — `section` and `item` are ACCESSORS, because a row outlives the model it was built from — `pinned`, `focus`, `onActive`, `empty`, `ref(goTo)`. Sticky section headers over a windowed list. |
-| `toasts` + `Toaster` | `info`/`success`/`error`/`progress`/`update`/`dismiss` over a module-level list; `<Toaster />` is the viewport, mounted once in `src/routes/__root.tsx`. |
+| `toasts` + `Toaster` | `info`/`success`/`error`/`progress`/`update`/`dismiss` over a module-level list; `<Toaster />` is the viewport, mounted once in `src/routes/_app.tsx`. |
 
 Icons are `lucide-solid`, imported one at a time
 (`import Search from "lucide-solid/icons/search"`), never from the barrel.
@@ -150,7 +150,8 @@ different tree (an icon rail), not a zero-width panel.
 ### The multibuffer: `virtual-core`, and why not `solid-virtual`
 
 `VirtualList` is the one windowed list in the product. Find, Key terms
-(`ExcerptList`) and `/findings` all render through it, which is what keeps two
+(`ExcerptList`), `/findings` and the catalogue on `/start/find` (`FindProject`)
+all render through it, which is what keeps two
 long lists in the same project from scrolling differently.
 
 **The geometry is TanStack's; the forty lines of Solid binding are ours.** Will
@@ -247,7 +248,7 @@ by a test suite, and both need a handle that survives a reworded label and a
 retranslated one. `data-testid` is that handle.
 
 **The rule.** Kebab-case, `<area>-<thing>`, and the area is the piece of chrome
-a reader would name: `rail-findings`, `sidebar-book-PHM`, `toolbar-undo`,
+a reader would name — e.g. `rail-refine`, `sidebar-book-PHM`, `toolbar-undo`,
 `kebab-export-zip`, `chapter-tile-3`, `location-next`, `palette-input`,
 `status-commands`, `editor-host`. A book id or a chapter label keeps its own
 spelling (`sidebar-book-3JN`, `chapter-tile-intro`) — it is an identifier, not
@@ -266,7 +267,7 @@ kebab's items; the location bar with its two crumbs and its two arrows; the
 command palette and its input; the status line and its Commands button; and
 the editor card and the CodeMirror host inside it.
 
-There are still no UI tests (see below). These ids exist so that a verification
+There are still no behavioural UI tests (see below). These ids exist so that a verification
 run can be written the same way twice.
 
 ## Building a screen
@@ -285,7 +286,7 @@ The ground is `surface-secondary`, cards are `surface-primary` with
 `rounded-lg`, `border-surface-border` and `shadow-small`. Every user-visible
 string still goes through `t()` (`src/app/i18n.ts`).
 
-There are no UI tests yet — behaviour is not locked. Verify a screen by running
+There are no behavioural UI tests yet — behaviour is not locked; the three Playwright smoke checks in `e2e/` only prove the built app mounts and routes. Verify a screen by running
 it: `pnpm verify:launch`, then drive `<url>/projects?fixture=1` with Playwright
 and look at the screenshots in both colour schemes
 (`documentation/agents/verification.md`).

@@ -18,8 +18,8 @@ Two consequences run through everything below:
 
 - The screen always says what a press will do BEFORE it does it, with the real counts in the
   sentence. "Sends your 2 versions to the shared project. Nothing on this device changes."
-- When both sides changed the same book, no automatic move is offered. That book goes to Compare,
-  where a person decides.
+- When both sides changed the same book, no automatic move is offered. That book goes to Compare —
+  the Review screen, `/project/$slug/review` — where a person decides.
 
 ## The vocabulary
 
@@ -64,7 +64,7 @@ policy fits in one ladder.
 | `offline` | No network, or the last transfer failed on the way out. | Check for changes |
 | `unauthorized` | No session for the shared project's host, or it was rejected. | Sign in |
 
-`syncStateOf` is a ladder, and **the order is the policy**:
+The public door is `sync(reading, contested)` (`src/core/sync/state.ts`), which answers the state, the two clocks and the one primary action as one value. Inside it, the private `syncStateOf` is a ladder, and **the order is the policy**:
 
 1. `conflicted` — a half-finished merge makes every other answer a lie, and it is the one state a
    person can settle with no network.
@@ -81,7 +81,7 @@ no common ancestor therefore come out fully ahead AND fully behind, which is `di
 v1's rule, learned the hard way: an optimistic answer there offers a fast-forward that silently
 discards one side.
 
-`primaryActionOf(state, contested)` picks the one right move. There is exactly one primary button on
+The private `primaryActionOf(state, contested)` picks the one right move. There is exactly one primary button on
 the screen, never a row of Push / Pull / Fetch / Publish with three disabled — that row is a git UI
 wearing a hat, and it asks the person to work out which verb applies, which is the job the state
 machine just did. `contested` is the only input beyond the state, and it changes exactly one answer:
@@ -123,6 +123,8 @@ already brought down, so it costs no second transfer and can be shown before the
 ```ts
 interface IncomingBook {
   bookId: string;
+  path: string;
+  kind: ChangeKind;                // added, modified or deleted
   chapters: readonly number[];   // what the shared project changed; 0 is the front matter
   alsoHere: readonly number[];   // of those, what this device also changed
   contested: boolean;            // both sides touched this book
@@ -142,9 +144,10 @@ produce one file whose two versions someone must reconcile, and pretending chapt
 that safe is how a verse goes missing.
 
 The plan renders as sentences — "2 chapters of Mark changed in the shared project; 1 of them also
-changed here" — with one row per book. A contested row shows a link to
-`/compare?book=MRK`. The link is a PATH STRING, not an import: Compare is another screen with its
-own lifetime, and this card must not depend on it having been built.
+changed here" — with one row per book. A contested row links to the Review
+screen, `/project/$slug/review`. The link is a PATH STRING (`reviewHref` in
+`src/app/ui/cloud/IncomingPlanCard.tsx`), not an import: Review is another screen with its own
+lifetime, and this card must not depend on it.
 
 Receiving takes two presses. The plan card is the first; the confirmation is the second. Nothing is
 applied before the plan has been on screen. Combining takes two as well, for a stronger reason: it
@@ -160,7 +163,7 @@ ONE version on top. It rewrites no shared history, produces no merge commit, and
 person can read — "the shared project's three versions, then mine". `combinePlan` marks it `safe`
 only when nothing is contested.
 
-When a book IS contested, the primary action becomes Compare instead. Replaying over a file that
+When a book IS contested, the primary action becomes Compare — a link to Review — instead. Replaying over a file that
 moved on both sides would either conflict or silently pick a winner, and both are worse than a
 screen where a person looks at the two texts.
 
@@ -178,9 +181,9 @@ FileSystem ports and nothing else. Seven steps:
 6. `git.commit(repo, receipts, "Combine: <n> books on top of the cloud", author)` — ONE version.
 7. `remote.push`.
 
-The file is in two halves and the split is the point. `planCombine` is PURE — one survey of facts
-in, one decision out — so every refusal is a unit test with no repository (`combine.test.ts`), and
-the ladder's ORDER is policy the same way `syncStateOf`'s is:
+The file is in two halves and the split is the point. The private `planCombine` is PURE — one
+survey of facts in, one decision out — so every refusal can be decided with no repository, and the
+ladder's ORDER is policy the same way `syncStateOf`'s is:
 
 | Refusal | What it means |
 | --- | --- |
@@ -211,13 +214,6 @@ would keep this device's version into a confirmation dialog. The second runs `co
 fetches and decides again, so a shared project that moved while the dialog was open is caught by the
 program rather than trusted from the screen.
 
-**Proved end to end.** `src/platform/web/combine.test.ts` runs the seven steps over real git
-objects: two repositories in one in-memory file system, and a transport that copies loose objects
-between them, because isomorphic-git speaks smart HTTP and nothing else — there is no local or
-`file://` transport to point a second repository at. It asserts the three outcomes that matter: one
-version on top of theirs with both books right, a contested book refused with the repository
-untouched, and a failed send rolled back to the version and the work tree it started from.
-
 **One survey, two callers.** `src/core/sync/survey.ts` reads the three revisions of every file the
 cloud touched and hands them to `incomingPlan`. It lives in core because both the screen's reading
 and the combine ask the same question, and if they computed "contested" separately the screen could
@@ -246,7 +242,7 @@ is waiting, the button says "Check for changes", and nothing suggests anything w
 
 ## The screen
 
-`/cloud` (`src/routes/cloud.tsx` → `src/app/ui/cloud/CloudScreen.tsx`), inside a `ShellGate`, four
+`/project/$slug/cloud` (`src/routes/_app/project/$slug/cloud.tsx` → `src/app/ui/cloud/CloudScreen.tsx`), inside a `ShellGate`, four
 cards in the order someone asks the questions:
 
 1. **Account** — sign in and out. An ACCOUNT action, not a project one: the same session serves every
@@ -267,28 +263,26 @@ so a reload or a second window shows the same truth rather than a copy of it.
 Two facts about a Gitea session had to change together, because each made the other unrecoverable.
 
 **The token name is granular to the second.** `login` mints `sefer-<platform>-<yyyymmddThhmmss>`.
-It used to be granular to the day, and Gitea refuses a token whose NAME already exists with
-`400 access token name has been used already` — so a second sign-in from one device on one day
-could not sign in at all. The recovery is in `login` too: on that specific 400 it deletes the token
+Gitea refuses a token whose NAME already exists with
+`400 access token name has been used already`, so a name granular only to the day would stop a
+second sign-in from one device on one day. The recovery is in `login` too: on that specific 400 it deletes the token
 wearing our own name (the only moment the password is in hand, and Gitea's token endpoints refuse
 token auth) and mints again under the same name; if the instance will not allow the delete, it mints
-under `…-<suffix>` instead. `src/core/remote/gitea.test.ts` drives both branches against a mocked
-instance — there is no real host in the test suite.
+under `…-<suffix>` instead.
 
-**The Web host persists the token.** `src/platform/web/credentials.ts` was a re-export of the
-session-only store, on the reasoning that a browser has nowhere trustworthy to keep a secret. True,
-and it made every reload a sign-out. It is now `localStorage`, with the trade written out in the
-file: origin-scoped, readable by any script on the origin, therefore as safe as the page itself —
+**The Web host persists the token.** A session-only store would make every reload a sign-out, so
+`src/platform/web/credentials.ts` uses `localStorage`, keyed by host, with the trade written out in
+the file: origin-scoped, readable by any script on the origin, therefore as safe as the page itself —
 which is the bargain every browser application that stays signed in makes, and is survivable only
 because the token is scoped (no `write:admin`), named after the device and the minute, and revocable
 from Gitea's own settings page. Every call is wrapped: a private window or blocked site data falls
-back to memory, which is exactly the old behaviour. Desktop still uses the OS keychain.
+back to memory. Desktop still uses the OS keychain.
 
 A token revoked on the server still reads as a session here until the next call fails
 `Unauthorized`; the account card surfaces that, and a boot-time validation request is deliberately
 not made.
 
-`createAccount` and `AccountCard` (`src/app/ui/cloud/account.ts`) are shared with the project page's
+`createAccount` (`src/app/ui/cloud/account.ts`) and `AccountCard` (`src/app/ui/cloud/AccountCard.tsx`) are shared with the project page's
 `CloudPanel`, which keeps the attach-and-publish half. The two surfaces cannot disagree about what
 "signed in" means because there is one implementation of it.
 
@@ -304,16 +298,14 @@ Additive, and named for jobs rather than for library calls:
   transfer.
 - `Remote.origin(repo)` — the read half of `attach`.
 
-Web answers all five over isomorphic-git. Desktop answers `origin` through the `git_remote_url`
-command it already has and **refuses the other four by name**, with a `TODO(seam)` in
-`src/platform/tauri/git.ts` listing the four git2 commands `src-tauri/src/git.rs` would need
-(`Revwalk::push_ref`, `revparse_single`, `Repository::head`, `diff_tree_to_tree`). Refusing by name
-is the honest stub: better than reporting a project up to date with a remote it never compared
-against. Until those land, `/cloud` on desktop reads `detached` and says so.
+Web answers all five over isomorphic-git. Desktop answers them over git2 in `src-tauri/src/git.rs`:
+`git_remote_url`, `git_log_from`, `git_resolve_ref`, `git_current_branch` and
+`git_changed_paths_between`, with `git_move_branch` and `git_abort_merge` behind Combine and Finish
+the transfer. See [desktop host](desktop.md).
 
 ## Seeing every state
 
-`?syncState=<name>` on `/cloud`, in a dev build, renders a fixture's facts instead of the
+`?syncState=<name>` on the cloud screen, under the dev server only (`import.meta.env.DEV` — unlike `?fixture=1`, which any `__SEFER_DESIGN__` build honours), renders a fixture's facts instead of the
 repository's — through the same pure derivation and the same cards, with no branch in the rendering
 that asks where the data came from. A row of buttons above the cards switches between them and
 writes the choice into the URL.
@@ -326,7 +318,3 @@ The fixture lives in `src/app/ui/cloud/fixture.ts`, is reached only inside an `i
 branch, and changes nothing about the application's composition — `src/app/services.ts` does not
 know it exists. `diverged-apart` also carries a `CombineReplay`, so the confirmation dialog is
 reachable with no repository the way every other card is; the real one comes from `previewCombine`.
-
-Combine runs on the Web today. On desktop it stops at the same place `/cloud` does — the four `Git`
-methods `src/platform/tauri/git.ts` refuses by name — so there is no cloud head to move onto until
-those land.

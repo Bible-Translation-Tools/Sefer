@@ -1,13 +1,12 @@
 # Recovery
 
-The crash journal, and the one question it is allowed to ask. The mechanism —
-what a journal file is, when it is written, how `restore` replays it — is in
-[save and recovery](review.md); this document is the part that faces a person:
-what happens when a project is opened, and what the reader is asked.
+The crash journal: what a journal file is, when it is written, how it is
+replayed, and the one question it is allowed to ask a person when a project
+opens. The save model it backs up is in [review](review.md).
 
 ## What the journal is for, now that nothing else writes
 
-Sefer writes the project file only when a version is recorded ([save](review.md)),
+Sefer writes the project file only on Save ([review](review.md)),
 which makes this journal the **only** automatic write in the product and the
 only thing standing between a crash and a lost session. It is the
 working-state backup: it holds what the editor holds, it is not the file, and
@@ -37,6 +36,32 @@ however long the burst runs.
 Changing the policy is a decision about how much unsaved work a crash may cost.
 It belongs here and on the settings screen — never in a call site.
 
+## The journal file
+
+`Recovery` appends one JSON line per accepted apply — `{ before, after,
+changes, origin, at }` — to `<journalRoot>/<projectId>/<bookId>.jsonl`, after a
+header line naming the version, project, book and path so a file found on disk
+is self-describing. `attach(book, projectId)` subscribes to `book.changes` and
+journals until the Scope closes, coalesced into one write per burst.
+
+The journal root is `HostInfo.paths().appData`, **outside every project
+folder** (`RecoveryLive({ journalRoot })`, composed in `src/app/services.ts`):
+Git never sees it, a shared drive never carries it, and no project scan
+mistakes it for content. Writes use `writeFileAtomic` on the whole file —
+append-by-rewrite is the simplest correct thing at one book's unsaved edits,
+no partial line can ever be read, and the `FileSystem` port has no append
+primitive to be atomic with.
+
+`pending(baselineOf)` reports the journals that hold work Save never wrote: no
+baseline, or a last entry past the baseline's revision. It never fails — a
+missing root is no pending work and a corrupt journal is skipped with a note.
+`restore(id, resolveBook)` replays the entries in order through
+`book.apply(changes, 'recovery', trustedBy('recovery'))`; the first refusal
+stops the replay with a `RecoveryError`. `discard(id)` throws a journal away,
+and `compact(bookId, stamp)` drops the entries at or before a saved revision
+and removes an emptied file. Recovery never writes the project file, and Save
+never writes the journal.
+
 ## Recovery on open: one IO check, against disk
 
 `pending(baselineOf)` — the in-session question — asks Save what it last wrote.
@@ -59,10 +84,9 @@ So the open-time question is asked against **disk**, by
 
 That is one directory listing plus one read per journal, once per project open.
 
-Explicit-only saving inverts how often each branch is taken. The file used to
-catch up on its own, so a journal that outlived its session usually matched
-disk and was dropped; now the file holds the last recorded version, so a
-journal that outlived its session usually differs and the banner appears. The
+Explicit-only saving decides how often each branch is taken: the file holds the
+last saved version, so a journal that outlived its session usually differs and
+the banner appears. The
 rule does not change, and the silent half is what keeps the noisy half worth
 reading — a banner that also offered work already in the file would teach
 people to dismiss it.
@@ -83,31 +107,37 @@ keep the only other copy of the work.
 
 ## The banner
 
-`src/app/ui/recovery/RecoveryBanner.tsx` is the surface, mounted at the top of
-the projects landing when a project is open, and exported so the project route
-can mount it too. It runs the check once per open project — keyed on the
-project's id, not on any edit event, because an edit cannot change the answer.
+`src/app/ui/recovery/RecoveryBanner.tsx` is the surface. It is mounted on the
+projects landing when a project is open, on the project page
+(`src/routes/_app/project/$slug/index.tsx`) and on the book route
+(`src/routes/_app/project/$slug/book/$book.tsx`), because an open lands on the
+book and unsaved work is the first thing to answer. It runs the check once per
+open project — keyed on the project's id, not on any edit event, because an
+edit cannot change the answer.
 
-- **Keep** is `project.instantiate(bookId)` and then `recovery.restore`. The
-  replay goes through `book.apply(changes, 'recovery', trustedBy('recovery'))`
-  — the funnel — so the text arrives as ordinary applied changes: it is in the
-  undo history, the editor sees it, Save sees the book as dirty, and a journal
-  written under an older rule set is **re-judged by today's rules** rather than
-  trusted. Restoring does not save, and nothing will save it later on its own:
-  the book comes back **dirty** and stays that way until somebody records a
-  version. That is the correct outcome — recovered text is a proposal, and
-  writing it into the file unasked would be Sefer making the decision. Until it
-  is recorded the journal stays, which is the conservative order: the work
-  exists in two places rather than none.
-- **Discard** removes the journal.
+It is **one card for the project**, with the book count and when the work was
+last backed up, and two answers:
 
-Both answers remove the row, and the card disappears with the last one: an
-answered question stops being a question.
+- **Restore all** instantiates each book, calls `SaveCoordinator.adopt` on it
+  so the disk text becomes its baseline BEFORE the replay, and then
+  `recovery.restore`. The replay goes through
+  `book.apply(changes, 'recovery', trustedBy('recovery'))` — the funnel — so the
+  text arrives as ordinary applied changes: it is in the undo history, the
+  editor sees it, Save sees the book as dirty, and a journal written under an
+  older rule set is **re-judged by today's rules** rather than trusted.
+  Restoring does not save: the book comes back **dirty** and stays that way
+  until somebody saves. Recovered text is a proposal, and writing it into the
+  file unasked would be Sefer making the decision. Until it is saved the
+  journal stays, so the work exists in two places rather than none.
+- **Discard all** removes the journals.
 
 A journal for a book this session already has open is the live backup of what
 is on screen — replaying it would re-apply edits the editor is already
-showing — so it is filtered out. The Save panel's own Restore/Discard list
-(the in-session view of the same journals) is unchanged and still there.
+showing — so it is filtered out. Review has its own per-book restore list for
+the in-session view of the same journals (`src/app/ui/review/ReviewPanel.tsx`).
+
+Known gaps — no base check before a replay, and a corrupt journal is skipped
+silently — are listed in [services](../services.md#recovery).
 
 ## Journal ids are paths
 

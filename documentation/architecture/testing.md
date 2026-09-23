@@ -2,17 +2,19 @@
 
 Status: agreed direction; adopt incrementally as capabilities arrive. This document defines ownership, not a claim that every suite exists today. For exploratory checks, read [agent verification](../agents/verification.md). The test-double policy is [test doubles](test-doubles.md).
 
-## Current scaffold commands
+## Commands
 
-The current manifest and Vite/Vitest configuration define these commands:
+The manifest and Vite/Vitest configuration define these commands:
 
 - `pnpm test`: starts Vitest with its normal interactive/watch behavior.
 - `pnpm test:unit`: runs the Node `core` project — every `src/**/*.test.ts` except `*.browser.test.*`, and `tools/**/*.test.ts`.
-- `pnpm test:browser`: runs Chromium Browser Mode tests through the Playwright provider, headless. `headless: true` is stated in `vite.config.ts` rather than left to the default, which is headless in CI and HEADED on a laptop — so the suite used to raise a window over whatever the person at the machine was doing, and on macOS take the keyboard with it.
+- `pnpm test:browser`: runs Chromium Browser Mode tests through the Playwright provider, headless. `headless: true` is stated in `vite.config.ts` rather than left to the default, which is headless in CI and HEADED on a laptop — which would raise a window over whatever the person at the machine was doing, and on macOS take the keyboard with it.
 - `pnpm test:e2e`: builds the app, serves `dist/client` through `vite preview`, and drives it with Playwright (`e2e/`). Three smoke assertions and deliberately nothing about how a screen looks.
-- `pnpm check`: runs typecheck, lint, format check, `pnpm boundaries`, Node tests, and the Web build. Lefthook runs the same commands on `pre-commit`, and `.github/workflows/check.yml` runs them in CI with `pnpm test:browser` in a second job.
+- `pnpm check`: runs typecheck, lint, format check, `pnpm boundaries`, Node tests, and the Web build. Lefthook's `pre-commit` runs all of it except the build (plus `pnpm lint:results`).
 
-The scaffold separates a Node core project from a Chromium Browser Mode project using Vitest's Playwright provider. Both projects set `extends: true` so they inherit the root plugins; without it the Solid JSX transform never reaches browser tests. There is no jsdom project and no shared-isolation override. Check isolation requirements when introducing stateful tests.
+CI: `.github/workflows/check.yml` runs `pnpm check` on every branch except master, with `pnpm test:browser` in a second job. Master's gate is `release.yml`'s `verify` job — `pnpm check`, `pnpm deadcode` and `pnpm test:browser` — and preview and production add `pnpm test:e2e` and `pnpm verify:design`.
+
+Vitest separates a Node core project from a Chromium Browser Mode project using Vitest's Playwright provider. Both projects set `extends: true` so they inherit the root plugins; without it the Solid JSX transform never reaches browser tests. There is no jsdom project and no shared-isolation override. Check isolation requirements when introducing stateful tests.
 
 Browser Mode holds four files: the OPFS `fileSystemContract` suite, web git, the fixture page, and the composition's dev observability surface. A Playwright smoke suite exists (`e2e/`); a desktop WebDriver harness does not.
 
@@ -44,41 +46,16 @@ The other two were kept because they assert something real that nothing else can
 
 Browser Mode is fast because it is small. Keeping it small is the maintenance.
 
-### Playwright journeys
+### Direction: journeys, desktop, cadence
 
-Own complete Web flows through the actual application: open/edit/save/reload, diagnostic navigation and fixes, one-match replacement, and recovery. Assert visible outcomes and relevant durable side effects.
+What follows is the agreed direction, not a description of suites that exist.
 
-Keep permutations at their owning lower seam. Retain a small real vertical slice through each production Web persistence adapter; an in-memory replacement proves orchestration but not actual persistence.
+- **Playwright journeys** own complete Web flows through the built application — open/edit/save/reload, diagnostic navigation and fixes, recovery — asserting visible outcomes and durable side effects, with one real vertical slice through each production Web persistence adapter. Today `e2e/` holds only the three smoke checks.
+- **Desktop journeys** own Tauri integration: real IPC and permissions, filesystem bytes, restart/recovery, host lifecycle, editing in the system webview. The intended route is WebdriverIO with `@wdio/tauri-service`; there is no desktop suite yet. Web and desktop save journeys overlap deliberately, because their host boundaries differ; editor permutations stay at their lower seam.
+- **Empirical checks** — real IME composition, RTL selection, platform interaction — need hands-on verification on supported systems; synthetic events do not close the real-IME gate. Performance sweeps stay separate from correctness checks.
+- **Cadence.** Node tests are the default feedback (aim below ten seconds); focused Browser Mode cases for editor work; the full fast suite plus a small Web smoke before merge; desktop smoke for changes to shared save contracts, permissions, packaging and dependencies. If a budget fails, look for unnecessary setup, duplication or misplaced coverage before moving a necessary check to a rarer cadence.
 
-### WebdriverIO desktop journeys
-
-Own Tauri integration: actual IPC and permissions, filesystem bytes, restart/recovery, host lifecycle, and representative editing in the system webview. Begin with one open/edit/save/restart/file-inspection slice. Use real commands for integration proof rather than mocking the boundary being tested.
-
-The intended starting route is `@wdio/tauri-service` with its embedded driver. Confine automation plugins to verification builds. Prove platform capabilities before documenting native-dialog or IME automation as supported.
-
-Web and desktop save journeys deliberately overlap because their host boundaries differ. Do not copy every editor permutation into both suites. Share fixtures and expected outcomes before introducing cross-runner abstractions.
-
-### Empirical checks
-
-Real IME composition, RTL selection, and platform interaction need hands-on verification on supported systems. Synthetic events are useful but do not close the real-IME gate. Keep performance/corpus sweeps separate from routine correctness checks, with reproducible inputs, build mode, host, and dependency revisions.
-
-## Cadence and speed
-
-These are intended command meanings and initial warm-run budgets, not existing script names or measured performance:
-
-- Default feedback: Node application tests, aiming below 10 seconds.
-- Editor work: selected Browser Mode cases, aiming for a few seconds per selected case.
-- Merge checks: full fast suite, relevant browser coverage, and small Web smoke; aim initially for roughly one minute excluding cold builds.
-- Desktop integration changes: require desktop smoke, including changes to shared save contracts, permissions, packaging, and dependencies. Also run a small desktop smoke regularly in CI to catch shared frontend drift.
-- Release checks: supported browser/OS matrix, broader desktop coverage, real IME checks, and performance measurements.
-
-Measure compilation, setup, and execution separately. If a budget fails, identify unnecessary setup, duplication, or misplaced coverage before moving necessary checks to a less frequent cadence. Select application crates explicitly when sibling crates share a workspace; do not rerun their full corpus suites on every app edit.
-
-## Organization and adoption
-
-For new application work, colocate Node and focused browser tests with their owner. Put full journeys under `tests/e2e/web/` and `tests/e2e/desktop/`, with a small shared fixture collection. These are intended locations: do not reorganize existing tests merely to match them.
-
-Establish one meaningful application test, one focused editing test, and one real save/reopen journey per host before expanding the infrastructure. Read current runner configuration before assuming the default command isolates Node tests.
+Colocate Node and focused browser tests with their owner; Web journeys live in `e2e/`.
 
 ## Tool references
 

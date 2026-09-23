@@ -35,7 +35,7 @@ bundle. `pnpm build` currently emits them as their own chunk that a browser neve
 FileSystem layer calls (and `dialog:allow-save`, which the export flow needs and which
 `dialog:default` already carried — it is named anyway so a reader can see what a command needs
 without opening the plugin) and grants their paths ONCE through `fs:scope`, over `$APPDATA`,
-`$APPLOCALDATA`, `$DOCUMENT` and `$HOME`. Each base is listed four times — bare, `/**`, `/**/.*` and
+`$APPLOCALDATA`, `$DOCUMENT`, `$HOME` and `$TEMP`. Each base is listed four times — bare, `/**`, `/**/.*` and
 `/**/.*/**` — because a glob does not match a leading dot and every project contains a `.git`.
 Projects live in the user's own folders on desktop, so the scope is broad; it is still explicit, and a
 path outside it comes back as `PermissionDenied` rather than as a silent empty read.
@@ -43,7 +43,7 @@ path outside it comes back as `PermissionDenied` rather than as a silent empty r
 ## Rust commands
 
 `credentials_get/set/clear` answer `Credentials`; `install_update_from_endpoint` serves the manual
-version switch; `corpus_*` are the native engine ([galley.md](galley.md)). The git2 half is one
+version switch. The git2 half is one
 command per port member, and the whole `Git` port is answered — no member refuses by name any more:
 
 | Rust command                 | TS member                             | Port     |
@@ -103,7 +103,8 @@ file, one commit, then `log`/`show`/`previousVersions` agreeing — plus one cas
 rule is about locking UI behaviour while the surfaces move, and nothing there renders anything.
 
 The commit identity goes through one function, `author_signature`. Sefer has no author setting yet —
-`src/app/commands.ts` passes a fixed "Sefer <sefer@localhost>" on both hosts — so that function is
+the fixed "Sefer <sefer@localhost>" is written three times, in `src/app/ui/review/ReviewPanel.tsx`,
+`src/app/ui/cloud/CloudScreen.tsx` and `src/platform/web/remote.ts` — so on desktop that function is
 the single place a real identity has to land.
 
 ## The updater
@@ -121,11 +122,11 @@ Host unset means no endpoints and a check that reports "not configured" — ther
 The TS side reads the same host from `VITE_SEFER_UPDATER_HOST` for the two routes the plugin does not
 cover. See [configuration](configuration.md).
 
-**Before the first release, generate a keypair**: `pnpm tauri signer generate -w ~/.sefer-updater.key`.
-Put the public half in `tauri.conf.json`'s `plugins.updater.pubkey`, which today holds the placeholder
-`REPLACE_WITH_MINISIGN_PUBLIC_KEY`; put the private half and its password in the
-`TAURI_SIGNING_PRIVATE_KEY` / `_PASSWORD` secrets. The v1 app's key is deliberately not reused: it
-signs the v1 update channel.
+The public half of the signing keypair is `tauri.conf.json`'s `plugins.updater.pubkey`; the private
+half and its password are the `TAURI_SIGNING_PRIVATE_KEY` / `_PASSWORD` secrets. The v1 app's key is deliberately not reused: it
+signs the v1 update channel. The updater worker that turns GitHub releases into Tauri manifests is
+`workers/sefer-updater`, deployed with `pnpm deploy:updater <preview|production>`
+([workers/README.md](../../workers/README.md)).
 
 ### If DMG bundling fails locally
 
@@ -166,8 +167,8 @@ CI runs on a fresh macOS VM each time, so it cannot accumulate this state.
 
 ## Release
 
-`.github/workflows/release.yml` — a `v*` tag builds Stable; a `-rc` tag or a `workflow_dispatch`
-builds Preview (prerelease, product name "Sefer Preview", identifier
+`.github/workflows/release.yml` — a `v*` tag builds Stable; a candidate tag such as `v0.3.0-1` (a
+single numeric pre-release — `-rc.1` fails the MSI bundler) or a `workflow_dispatch` builds Preview (prerelease, product name "Sefer Preview", identifier
 `org.wycliffe.sefer.preview`, which is also how the app knows its own channel).
 
 Preview was called Nightly until 2026-09-22. It has never built on a schedule — it builds when
@@ -184,9 +185,6 @@ matrix: Preview is the last rehearsal before a tag, not a place to put something
 - **Icons are the v1 app's**, copied verbatim (`src-tauri/icons/`) — same logo by intent.
 - **No code signing or notarisation.** v1 pulled Apple certificates from 1Password; Sefer has no
   signing identity yet, so macOS builds are unsigned and Gatekeeper warns.
-- **No updater worker.** The Cloudflare worker that turns GitHub releases into Tauri manifests lives
-  in the v1 repository (`workers/zephyr-updater`); Sefer needs its own instance before
-  `SEFER_UPDATER_HOST` can point anywhere.
 - **Remote progress is a final tally, not a live trickle.** git2 reports progress through callbacks
   inside one blocking command; a live readout needs the Rust side to emit Tauri events.
 - **No mobile.** The Rust is `cfg`-gated for it and the icon set omits `ios/` and `android/`.

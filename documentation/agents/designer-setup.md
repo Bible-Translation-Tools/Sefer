@@ -111,7 +111,7 @@ this way rather than describing the element in prose:
 [3] src/app/ui/primitives/Button.tsx:77:5  "secondary"
     these two should swap.
 
-## http://localhost:3000/terms
+## http://localhost:3000/project/small-nt/terms
 
 [4] src/app/ui/excerpts/StetView.tsx:31:7  "Key terms"
     this heading should match the rail.
