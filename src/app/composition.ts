@@ -19,6 +19,7 @@ import {
   installObservabilityDevSurface,
 } from "#platform/observability";
 
+import { reportClientErrors } from "./clientErrors";
 import { env } from "./env";
 
 const buildIdentity = (): string | undefined =>
@@ -355,12 +356,14 @@ export const composeApplication = async (
     ),
   );
   const context = await runtime.context();
+  const stopErrors = reportClientErrors(composed.observability);
 
   return {
     ...composed,
     layer: Layer.succeedContext(context),
     runtime,
     dispose: async () => {
+      stopErrors();
       await runtime.dispose();
       // Last, and awaited: the exporters flush what they are holding when
       // their scope closes, and a browser that has already torn the runtime

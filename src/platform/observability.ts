@@ -42,6 +42,8 @@ interface ObservabilityDevSurface {
    * example for long enough to mislead two tests.
    */
   readonly logs: { readonly recent: (limit?: number) => readonly ObservabilityEvent[] };
+  /** The `client.error` notes: boundary-caught, uncaught and unhandled-rejection failures. */
+  readonly errors: (limit?: number) => readonly ObservabilityEvent[];
   /** The lossless format: one JSON object per line, every event in the ring. */
   readonly export: ObservabilityService["export"];
   readonly level: ObservabilityService["level"];
@@ -294,6 +296,10 @@ export const installObservabilityDevSurface = (
           .join("\n\n"),
     },
     logs: { recent: rings.logs },
+    errors: (limit?: number) => {
+      const all = service.recent().filter((event) => event.name === "client.error");
+      return limit === undefined ? all : all.slice(-limit);
+    },
     export: service.export,
     level: service.level,
     setLevel: service.setLevel,
