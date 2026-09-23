@@ -27,16 +27,6 @@ export interface BoundaryOptions {
   readonly forbiddenPackages?: readonly string[];
   readonly forbiddenPrefixes?: readonly string[];
   readonly rawAssetDirs?: readonly string[];
-  /**
-   * Directories of vendored, host-neutral code core may import by relative
-   * path. Empty since 2026-09-18: the Galley engine was the only one, and it
-   * is a tagged git dependency now, so core reaches it by PACKAGE NAME like
-   * any other — which the bare-specifier rule below already allows. Kept
-   * because the next vendored thing will want it and the rule is three lines.
-   * Vendored code is checked
-   * by the hash in its manifest, not by this walker.
-   */
-  readonly vendorDirs?: readonly string[];
 }
 
 export const DEFAULT_FORBIDDEN_PACKAGES: readonly string[] = [
@@ -128,7 +118,6 @@ export const checkCoreBoundary = (options: BoundaryOptions): BoundaryViolation[]
   const forbidden = options.forbiddenPackages ?? DEFAULT_FORBIDDEN_PACKAGES;
   const forbiddenPrefixes = options.forbiddenPrefixes ?? DEFAULT_FORBIDDEN_PREFIXES;
   const rawAssetDirs = (options.rawAssetDirs ?? []).map((directory) => path.resolve(directory));
-  const vendorDirs = (options.vendorDirs ?? []).map((directory) => path.resolve(directory));
   const label = options.label ?? "core";
   const violations: BoundaryViolation[] = [];
 
@@ -156,7 +145,6 @@ export const checkCoreBoundary = (options: BoundaryOptions): BoundaryViolation[]
           rawAssetDirs.some((directory) => isInside(directory, resolved))
         )
           continue;
-        if (vendorDirs.some((directory) => isInside(directory, resolved))) continue;
         // A core test is Node's own program: it may reach outside core for the
         // Node platform layers (filesystem, engine bytes) it builds fixtures with.
         if (isTest) continue;
@@ -277,8 +265,8 @@ export const checkReach = (options: ReachOptions): BoundaryViolation[] => {
 };
 
 /**
- * A tsconfig is JSON with comments, and `ts.readConfigFile` used to absorb
- * that. TypeScript 7 does not export it, so this strips what a tsconfig is
+ * A tsconfig is JSON with comments, and TypeScript 7 exports no reader for
+ * it, so this strips what a tsconfig is
  * allowed to carry beyond JSON — line and block comments, and trailing commas
  * — while leaving anything inside a string alone. A path that happens to
  * contain `//` is the case a naive strip gets wrong, and this repository's own
@@ -316,7 +304,7 @@ const stripJsonc = (text: string): string => {
     }
     out += character;
   }
-  // Trailing commas, now that no comma inside a string can be mistaken for one.
+  // Trailing commas, once no comma inside a string can be mistaken for one.
   return out.replace(/,(\s*[}\]])/g, "$1");
 };
 

@@ -1,9 +1,9 @@
 /**
  * Every module specifier a source file names, with the offset it sits at.
  *
- * Split out of `check.ts` because it is now the answer to two questions rather
- * than one: the core boundary asks what a file under `src/core` reaches for,
- * and the design boundary asks the same of files elsewhere. The rules differ;
+ * Its own module because it answers two questions rather than one: the core
+ * boundary asks what a file under `src/core` reaches for, and the design
+ * boundary asks the same of files elsewhere. The rules differ;
  * the reading does not.
  *
  * Parsed with **oxc-parser** rather than the TypeScript compiler. TypeScript 7
