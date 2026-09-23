@@ -54,7 +54,7 @@ Check `package.json` and runner configuration for executable commands. Distingui
 - `pnpm lint:release` adds the rules that only have to hold at release — today, no leftover `globalThis.__sefer.design` scaffolding. Run before `preview` and `production`, never before `dev`.
 - `pnpm verify:design` runs two real builds and proves the design surface is absent from production and present in the design build.
 - `pnpm design:scaffolding` lists real screens still borrowing the design panel through `globalThis.__sefer.design.register`. Informational; exits 0.
-- `npx fallow dead-code | dupes | health` is advisory, not part of `pnpm check`; `.fallowrc.jsonc` holds the entries and the dependencies it cannot see. Unused files, unused deps and cycles are at zero. [First pass and the boundaries opinion](planning/01-discussing/fallow-2026-09-23.md).
+- `pnpm deadcode` fails on an unused file, an unused dependency or an import cycle; `release.yml`'s `verify` runs it before every deploy (not `pnpm check`, so a branch may carry a half-wired file). `pnpm exec fallow dead-code | dupes | health` is the full, advisory report; `.fallowrc.jsonc` holds the entries and the dependencies it cannot see. [First pass](planning/01-discussing/fallow-2026-09-23.md), [follow-ups](planning/01-discussing/fallow-followups-2026-09-23.md).
 - `pnpm check` runs the ordinary local gate: typecheck, lint, formatting, boundaries, unit tests, and build. `.github/workflows/check.yml` runs the same commands, plus `pnpm test:browser` in a second job.
 
 ## Channels
