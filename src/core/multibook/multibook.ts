@@ -18,7 +18,7 @@ import { trustedBy, type Book, type BookId, type Receipt } from "../book/book";
 import type { Change } from "../source/source";
 
 /** What one cross-book operation did. `books` lists only the books it changed. */
-export interface Operation {
+export interface CrossBookEdit {
   readonly label: string;
   readonly books: readonly BookId[];
   readonly at: number;
@@ -35,7 +35,7 @@ export interface Operation {
  * plain Book undoable.
  */
 interface Pending {
-  readonly op: Operation;
+  readonly op: CrossBookEdit;
   readonly seen: ReadonlyMap<BookId, number>;
   readonly before: ReadonlyMap<BookId, string>;
 }
@@ -43,13 +43,16 @@ interface Pending {
 export interface MultiBook {
   /**
    * Offers every book to `plan`; a non-null change list is applied as one
-   * trusted `project.<label>` edit. Returns the Operation, or `null` when no
+   * trusted `project.<label>` edit. Returns the CrossBookEdit, or `null` when no
    * book was changed (an operation that touched nothing leaves any previous
    * Undo offer alone).
    */
-  runAcrossBooks(label: string, plan: (book: Book) => readonly Change[] | null): Operation | null;
+  runAcrossBooks(
+    label: string,
+    plan: (book: Book) => readonly Change[] | null,
+  ): CrossBookEdit | null;
   /** The still-undoable operation, re-checked and cleared if it has expired. */
-  pendingUndo(): Operation | null;
+  pendingUndo(): CrossBookEdit | null;
   /** Undoes the pending operation in every affected book. False if expired. */
   undoPending(): boolean;
   /** Drops the Undo offer (the user moved on, or the UI banner was closed). */
@@ -77,7 +80,7 @@ export const makeMultiBook = (books: () => readonly Book[]): MultiBook => {
   const runAcrossBooks = (
     label: string,
     plan: (book: Book) => readonly Change[] | null,
-  ): Operation | null => {
+  ): CrossBookEdit | null => {
     const touched: BookId[] = [];
     const receipts: Receipt[] = [];
     const before = new Map<BookId, string>();
@@ -100,13 +103,13 @@ export const makeMultiBook = (books: () => readonly Book[]): MultiBook => {
     }
 
     if (touched.length === 0) return null;
-    const op: Operation = { label, books: touched, at: Date.now(), receipts };
+    const op: CrossBookEdit = { label, books: touched, at: Date.now(), receipts };
     pending = { op, seen, before };
     announce();
     return op;
   };
 
-  const pendingUndo = (): Operation | null => {
+  const pendingUndo = (): CrossBookEdit | null => {
     const held = pending;
     if (!held) return null;
     for (const [id, revision] of held.seen) {
