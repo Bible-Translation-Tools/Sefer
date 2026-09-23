@@ -88,9 +88,6 @@ import { env } from "./env";
  */
 export const PROJECTS_ROOT = `${OPFS_ROOT}/projects`;
 
-/** Where the resource library's index and imported resources live, on Web. */
-export const LIBRARY_ROOT = `${WEB_PATHS.appData}/library`;
-
 /**
  * The desktop host's whole Layer set, as a TYPE only.
  *

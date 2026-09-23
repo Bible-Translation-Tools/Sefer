@@ -1,3 +1,4 @@
+// fallow-ignore-file unused-file -- a deliberate stub; see the note below for why it is not wired.
 /**
  * Drafting (slice 22): the job level.
  *

@@ -9,7 +9,9 @@
 import { Facet, type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
-import { docText, modeFacet, structureAt, type DocStructure } from "../index";
+import type { DocStructure } from "../core/docStructure";
+import { docText, structureAt } from "../core/editorState";
+import { modeFacet } from "../core/kernel";
 
 export type EmitRule = "omit" | "verbatim" | "newline" | "space";
 

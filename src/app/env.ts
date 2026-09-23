@@ -73,7 +73,3 @@ export const env: SeferEnv = {
   otlpUrl: read(import.meta.env.VITE_SEFER_OTLP_URL),
   otlpMetrics: import.meta.env.VITE_SEFER_OTLP_METRICS === "1",
 };
-
-/** The WACS endpoint for the host we are running on. */
-export const wacsUrlFor = (host: "web" | "tauri"): string | null =>
-  host === "tauri" ? env.wacsDesktopUrl : env.wacsWebUrl;

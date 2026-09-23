@@ -1,3 +1,4 @@
+// fallow-ignore-file unused-file -- registered nowhere on purpose; see the note below.
 /**
  * The acceptance suite for any `Git` implementation, in the shape of
  * `fileSystem/contract.ts`: one repository, one saved file, one commit, and

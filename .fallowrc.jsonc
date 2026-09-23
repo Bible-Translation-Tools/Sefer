@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  // The Solid vite plugin's turnkey client mode generates the real entries
+  // around these two by file-name convention; nothing imports them.
+  "entry": ["src/App.tsx", "src/Document.tsx"],
+  "ignorePatterns": ["src/routeTree.gen.ts"],
+  "ignoreDependencies": [
+    // Spawned as a binary by tools/tauri/run.ts (`pnpm exec tauri`).
+    "@tauri-apps/cli",
+    // Loaded by @solidjs/vite-plugin when `diagnostics: true`.
+    "@solidjs/diagnostics",
+    // The Rust side registers the plugin for "reveal in Finder"; the JS
+    // binding is installed ahead of the first screen that calls it.
+    "@tauri-apps/plugin-opener",
+  ],
+}

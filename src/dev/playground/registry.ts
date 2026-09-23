@@ -42,6 +42,3 @@ export const experiments: readonly Experiment[] = [
   ...collect(import.meta.glob("./experiments/*.tsx", { eager: true })),
   ...collect(import.meta.glob("./local/*.tsx", { eager: true })),
 ];
-
-export const experimentById = (id: string): Experiment | undefined =>
-  experiments.find((experiment) => experiment.id === id);

@@ -440,16 +440,3 @@ export const verseAtOffset = (skeleton: Skeleton, offset: number): SkeletonVerse
 /** The verse of THIS skeleton with the same sid. The sid is the whole address. */
 export const equivalentVerse = (skeleton: Skeleton, sid: string): SkeletonVerse | undefined =>
   skeleton.verses.find((row) => row.sid === sid);
-
-export const chaptersTouched = (report: OverlayReport): readonly number[] => {
-  const seen = new Set<number>();
-  const take = (sid: string): void => {
-    const colon = sid.indexOf(":");
-    const space = sid.lastIndexOf(" ", colon === -1 ? sid.length : colon);
-    const chapter = Number(sid.slice(space + 1, colon === -1 ? sid.length : colon));
-    if (Number.isFinite(chapter) && chapter > 0) seen.add(chapter);
-  };
-  for (const one of report.inserted) take(one.address.sid);
-  for (const one of report.removed) take(one.address.sid);
-  return [...seen].sort((left, right) => left - right);
-};

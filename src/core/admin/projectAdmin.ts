@@ -23,7 +23,7 @@ import { zipSync } from "fflate";
 
 import { writeFileAtomic, writeFileStringAtomic } from "../fileSystem/atomic";
 import { joinPath, parentPath } from "../fileSystem/path";
-import { MANIFEST_FILE } from "../project/discovery";
+import { MANIFEST_FILE, METADATA_FILE } from "../project/discovery";
 import { type BurritoMetadata, decodeBurritoMetadata } from "../resources/burrito";
 import { refreshIngredientChecksums } from "../resources/checksum";
 import {
@@ -31,9 +31,6 @@ import {
   readResourceContainer,
   type ProjectMetadata,
 } from "../resources/projectMetadata";
-
-/** Scripture Burrito's own name for the file; not ours to choose. */
-export const METADATA_FILE = "metadata.json";
 
 /**
  * Where a project's name lives when it is not a burrito. `.sefer/` is Sefer's

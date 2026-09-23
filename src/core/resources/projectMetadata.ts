@@ -30,7 +30,7 @@
 import { Data, Result } from "effect";
 import { parse as parseYaml } from "yaml";
 
-import { decodeBurritoMetadata, type BurritoMetadata } from "./burrito";
+import type { BurritoMetadata } from "./burrito";
 import {
   decodeResourceContainerManifest,
   type ResourceContainerManifest,
@@ -160,20 +160,6 @@ export class MetadataError extends Data.TaggedError("MetadataError")<{
   readonly reason: "Syntax" | "Shape";
   readonly description: string;
 }> {}
-
-/** `metadata.json`'s bytes, decoded and narrowed. */
-export const readBurrito = (text: string): Result.Result<ProjectMetadata, MetadataError> => {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch (cause) {
-    return Result.fail(new MetadataError({ reason: "Syntax", description: String(cause) }));
-  }
-  const decoded = decodeBurritoMetadata(parsed);
-  return Result.isFailure(decoded)
-    ? Result.fail(new MetadataError({ reason: "Shape", description: decoded.failure.message }))
-    : Result.succeed(fromBurrito(decoded.success));
-};
 
 /**
  * `manifest.yaml`'s bytes, decoded and narrowed.
