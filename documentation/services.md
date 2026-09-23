@@ -10,7 +10,6 @@ One section per service: what it is in plain words, what is wrong or constrained
 2. **Git, top to bottom** — history time travel is next, and the pull/push/lifecycle flow needs one careful pass before anything else is added to it. See [Git](#git).
 3. **One diff** — adopt the engine's located runs and reader-text recipe, then retire the line diff. See [Diff](#diff) and `planning/01-discussing/engine-asks-2026-09-14.md`.
 4. **Data safety in Recovery** — a journal must know what text it started from. See [Recovery](#recovery).
-5. Known small bugs: the preview updater channel ([Updater](#updater)), the incoming-plan compare link ([Sync](#sync)), and the History copy that says books are written as you work ([Save](#save-and-baseline)).
 
 ## The graph
 
@@ -117,7 +116,6 @@ Open, save and folder pickers behind one port, with Web and Tauri implementation
 Desktop self-update: `core/host/updater.ts` (port), `platform/tauri/updater.ts`, the Cloudflare worker in `workers/sefer-updater`, and `UpdatePanel.tsx`. → [desktop](architecture/desktop.md), `workers/README.md`
 
 ### Constraints and known bugs
-- **Bug:** preview builds report channel `stable`. The code checks for an identifier ending in `.nightly`, but the preview identifier is `org.wycliffe.sefer.preview`; `UpdateChannel` still says `"nightly"`.
 - The updater worker's custom-domain routes are still commented out (`workers/sefer-updater/wrangler.toml`). No tagged release has produced `.sig` assets yet.
 
 ### Ideas / future
@@ -343,7 +341,7 @@ There are two diffs today. The engine skeleton (decision units addressed by sid,
 ## Review
 
 ### Overview
-The one compare screen, `/review`. Both sides are pickers over a `CompareSource` (the working project, a folder, a zip, a recorded version, or the saved file). You decide per unit, then Apply, and Record a version (save + commit). The old `/compare` route only redirects here. `src/core/compare`, `src/app/ui/review`. → [review](architecture/review.md)
+The one compare screen, `/review`. Both sides are pickers over a `CompareSource` (the working project, a folder, a zip, a recorded version, or the saved file). You decide per unit, then Apply, and Record a version (save + commit). The icon rail's Compare tile opens it. `src/core/compare`, `src/app/ui/review`. → [review](architecture/review.md)
 
 ### Constraints and known bugs
 - The flow itself needs design work.
@@ -362,7 +360,6 @@ The one compare screen, `/review`. Both sides are pickers over a `CompareSource`
 **Only Save writes a book to disk.** Everything else is a journal of the dirty buffer, so the app is not constantly writing files the way Zed or VS Code do, which would fight with Git. The SaveCoordinator does snapshot-bound writes with a per-path lock, a receipt and a Baseline, and `dirty` is decided by revision and hash. `src/core/save`. → [review §4](architecture/review.md)
 
 ### Constraints and known bugs
-- **Copy bug:** `HistoryPanel.tsx:321` says "Your books are still written to disk as you work."
 - `externalChanges`/`resolve` exist but nothing calls them, and Web has no `watch`. Something changing a file under OPFS or the sandbox mid-session is unlikely, but not impossible.
 - There is no disk-identity check at save time.
 - Partial `saveAll` failures have no user-facing report.
@@ -424,7 +421,7 @@ Clone, fetch, pull, push and branch moves against a Gitea (WACS) server, plus th
 The `/cloud` screen. It reads the two clocks and sorts the project into one of nine states, plans what a Receive would change, and Combines. Scripture text is never merged automatically. `src/core/sync`, `app/ui/cloud`. → [sync](architecture/sync.md)
 
 ### Constraints and known bugs
-- **Bug:** the incoming-plan compare link goes to the old top-level `/compare?book=…`. It should open `/project/$slug/review` (`IncomingPlanCard.tsx:32`).
+- A contested book's link opens Review for the project, not that book: Review takes no book in its URL.
 
 ### Ideas / future
 - None.
