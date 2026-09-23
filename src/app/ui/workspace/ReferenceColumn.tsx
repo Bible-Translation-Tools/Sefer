@@ -109,6 +109,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
             return found;
           }),
         )
+        // oxlint-disable-next-line solid/reactivity -- a promise continuation: runs once, when the bindings resolve
         .then((found: readonly Entry[]) => {
           setEntries(found);
           setLoading(false);

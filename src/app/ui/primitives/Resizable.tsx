@@ -26,7 +26,7 @@
  */
 
 import type { JSX } from "@solidjs/web";
-import { createContext, createEffect, createSignal, useContext } from "solid-js";
+import { createContext, createEffect, createSignal, untrack, useContext } from "solid-js";
 
 import { cx, type ClassValue } from "./cx";
 
@@ -83,7 +83,7 @@ interface ResizableRootProps {
 function Root(props: ResizableRootProps) {
   // Read once: a split does not change axis, and making it reactive would mean
   // re-registering every panel against a value that never moves.
-  const staticOrientation = props.orientation ?? "horizontal";
+  const staticOrientation = untrack(() => props.orientation ?? "horizontal");
 
   const specs: PanelSpec[] = [];
   const [sizes, setSizes] = createSignal<readonly number[]>([], { name: "splitSizes" });
@@ -171,11 +171,15 @@ interface ResizablePanelProps {
 
 function Panel(props: ResizablePanelProps) {
   const split = useSplit();
-  const index = split.addPanel({
-    initialSize: props.initialSize,
-    minSize: props.minSize ?? 0,
-    maxSize: props.maxSize ?? 1,
-  });
+  // Read once, like the orientation: a panel registers its bounds when it
+  // mounts, and the split does not re-register a panel whose bounds move.
+  const index = untrack(() =>
+    split.addPanel({
+      initialSize: props.initialSize,
+      minSize: props.minSize ?? 0,
+      maxSize: props.maxSize ?? 1,
+    }),
+  );
 
   return (
     <div

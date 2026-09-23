@@ -164,7 +164,7 @@ const render = (): string => {
   lines.push("### Numbers", "");
   lines.push("| check | result | gate |", "| --- | --- | --- |");
   lines.push(`| oxlint errors | ${errors} | \`pnpm lint\`, every commit |`);
-  lines.push(`| oxlint warnings | ${warnings.length} | none — listed below |`);
+  lines.push(`| oxlint warnings | ${warnings.length} | \`pnpm lint\` fails on any, every commit |`);
   lines.push(
     `| fallow dead code (\`pnpm deadcode\`) | ${dead} issue(s) | every deploy; advisory on branches |`,
   );

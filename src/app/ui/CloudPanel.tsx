@@ -119,6 +119,7 @@ export function CloudPanel(props: { readonly root?: string | undefined }) {
   const publish = (): void => {
     const root = props.root;
     if (root === undefined) return;
+    // oxlint-disable-next-line solid/reactivity -- the account's work: runs once per press, reading the field at the moment of the ask
     account.attempt(async () => {
       // Read inside the work, not at setup: the field may have changed between
       // the render that made this handler and the submit that ran it. The

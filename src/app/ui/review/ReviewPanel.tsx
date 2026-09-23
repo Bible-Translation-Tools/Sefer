@@ -554,6 +554,7 @@ export function ReviewPanel() {
           operation,
         ),
       )
+      // oxlint-disable-next-line solid/reactivity -- a promise continuation: runs once, when Apply settles
       .then((report) => {
         finish("passed", {
           "review.written": report.written.length,

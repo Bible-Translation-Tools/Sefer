@@ -80,6 +80,22 @@ type NameStyle = "natural" | "anglicized";
 
 type Column = "code" | "language" | "region" | "date";
 
+/** What a row sorts by in `key`, with the language column read through `name`. */
+const sortValue =
+  (key: Column, name: (entry: CatalogueEntry) => string) =>
+  (entry: CatalogueEntry): string => {
+    switch (key) {
+      case "code":
+        return entry.code;
+      case "language":
+        return name(entry);
+      case "region":
+        return entry.region ?? "";
+      case "date":
+        return entry.updated ?? "";
+    }
+  };
+
 const ALL_REGIONS = "*";
 
 /**
@@ -190,20 +206,8 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
 
   const sorted = createMemo(
     () => {
-      const key = column();
+      const value = sortValue(column(), nameOf);
       const sign = direction() === "desc" ? -1 : 1;
-      const value = (entry: CatalogueEntry): string => {
-        switch (key) {
-          case "code":
-            return entry.code;
-          case "language":
-            return nameOf(entry);
-          case "region":
-            return entry.region ?? "";
-          case "date":
-            return entry.updated ?? "";
-        }
-      };
       return [...filtered()].sort((left, right) => sign * value(left).localeCompare(value(right)));
     },
     { name: "catalogueSorted" },
@@ -212,7 +216,9 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
   const downloadReason = (entry: CatalogueEntry): string => {
     if (entry.cloneUrl === "") return t("Sample data — this row names no repository to download.");
     if (!transfersConfigured)
-      return t("Transfers are not configured for this build: set VITE_SEFER_GIT_CORS_PROXY_URL.");
+      return t(
+        "Transfers have no server for this build. Set the WACS endpoint on the Network card in Settings.",
+      );
     return "";
   };
 
@@ -270,6 +276,7 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
     const toast = toasts.progress({ title: t("Downloading {name}", { name: entry.repo }) });
     void services
       .run(cloneRepository(entry.cloneUrl, into))
+      // oxlint-disable-next-line solid/reactivity -- a promise continuation: runs once, when the download settles
       .then(() => {
         toasts.update(toast, {
           title: t("Downloaded {name}", { name: entry.repo }),

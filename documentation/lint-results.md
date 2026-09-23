@@ -28,13 +28,7 @@ The generated half looks after itself; the judgement half does not. When a gate 
 
 ## Accepted exceptions, and why
 
-**`solid(reactivity)` warnings (Oxlint, from `eslint-plugin-solid` 0.17).** Not yet fully triaged; a sample of about a quarter found no real bug. Three shapes appear:
-
-- *"captures the value of the reactive variable … at setup"* — fires when a signal is read inside a memo or an event handler and the value is then used by a nested callback (`FilterList`'s `needle` inside its `createMemo`; `RecoveryBanner`'s `restoreAll`, which is a click handler). That is correct Solid 2; the plugin predates it.
-- *"should be passed to a tracked scope"* — a `.then` continuation after a press, reading signals once when the work lands. Several say so in a comment at the site (`CloudScreen`, `ReferenceColumn`).
-- *"reactive variable `props.…` should be used within JSX"* — `Resizable` reads `orientation`, `minSize` and `maxSize` once, on purpose, with a comment saying why.
-
-**Still to do:** triage every one. Any real stale read gets fixed; the rest get a one-line `oxlint-disable-next-line solid/reactivity -- <reason>` so this list shrinks to the ones nobody has looked at.
+**`solid/reactivity` suppressions.** `eslint-plugin-solid` 0.18 cleared the false positives 0.17 raised, and the real reads were rewritten (`FindProject`'s sort, `Resizable`'s one-time bounds, now under `untrack`). What is left is one gap in the rule: it treats a timer's callback as a place that may read a signal's current value once, and does not treat a promise continuation (`.then`, `.finally`, an `async` callback) the same way. Each such site carries `oxlint-disable-next-line solid/reactivity -- <reason>`. If the plugin learns continuations, delete them. `pnpm lint` fails on any warning, so a new one cannot pile up unseen.
 
 **fallow `ignore` comments.** Each says why in the comment itself (listed below): a deliberate stub, a test contract registered nowhere on purpose, and the editor test harness kept for the tests that return once behaviour locks.
 
@@ -51,32 +45,25 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | check | result | gate |
 | --- | --- | --- |
 | oxlint errors | 0 | `pnpm lint`, every commit |
-| oxlint warnings | 24 | none — listed below |
+| oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
 | fallow dead code (`pnpm deadcode`) | 0 issue(s) | every deploy; advisory on branches |
 | fallow duplication | 1.9% in 45 clone group(s) | none — advisory |
-| suppression comments | 4 | each listed below with its reason |
+| suppression comments | 10 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file
 
-**`solid(reactivity)`** — 24
-
-- `src/app/ProjectContext.tsx` × 1
-- `src/app/ui/CloudPanel.tsx` × 1
-- `src/app/ui/cloud/CloudScreen.tsx` × 1
-- `src/app/ui/excerpts/feed.ts` × 1
-- `src/app/ui/landing/FindProject.tsx` × 6
-- `src/app/ui/primitives/FilterList.tsx` × 2
-- `src/app/ui/primitives/Resizable.tsx` × 3
-- `src/app/ui/recovery/RecoveryBanner.tsx` × 2
-- `src/app/ui/review/ReviewPanel.tsx` × 1
-- `src/app/ui/workspace/ReferenceColumn.tsx` × 1
-- `src/routes/_app/project/$slug/find.tsx` × 4
-- `src/routes/_app/project/$slug/terms.tsx` × 1
+None.
 
 ### Suppression comments
 
 | file | suppresses | says |
 | --- | --- | --- |
+| `src/app/ProjectContext.tsx` | `oxlint-disable-next-line` | solid/reactivity -- runs once, when composition settles, under the component's owner |
+| `src/app/ui/cloud/CloudScreen.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: reads the query once, when the transfer settles |
+| `src/app/ui/CloudPanel.tsx` | `oxlint-disable-next-line` | solid/reactivity -- the account's work: runs once per press, reading the field at the moment of the ask |
+| `src/app/ui/landing/FindProject.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: runs once, when the download settles |
+| `src/app/ui/review/ReviewPanel.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: runs once, when Apply settles |
+| `src/app/ui/workspace/ReferenceColumn.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: runs once, when the bindings resolve |
 | `src/app/workflows/drafting.ts` | `fallow-ignore-file` | unused-file -- a deliberate stub; see the note below for why it is not wired. |
 | `src/core/git/contract.ts` | `fallow-ignore-file` | unused-file -- registered nowhere on purpose; see the note below. |
 | `src/editor/testing/harness.ts` | `fallow-ignore-file` | unused-export unused-type -- the editor tests that use these come back once behaviour locks. |

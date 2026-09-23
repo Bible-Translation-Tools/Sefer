@@ -1331,6 +1331,7 @@ export function ProjectProvider(props: ParentProps<{ readonly navigate: Navigate
         void services.dispose();
         return;
       }
+      // oxlint-disable-next-line solid/reactivity -- runs once, when composition settles, under the component's owner
       const shell = runWithOwner(owner, () => {
         onCleanup(() => {
           void services.dispose();

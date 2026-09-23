@@ -284,10 +284,9 @@ export function CloudScreen() {
         });
         setProblem(explain?.(cause) ?? describe(cause));
       })
-      // A press's continuation, not a tracked scope: `refresh` reads signals
-      // deliberately, once, when the transfer has finished. The reactivity
-      // rule's warning here is the intended shape — re-running this on a
+      // A press's continuation, not a tracked scope: re-running this on a
       // signal change would re-read the repository on every keystroke.
+      // oxlint-disable-next-line solid/reactivity -- a promise continuation: reads the query once, when the transfer settles
       .finally(() => {
         setBusy(false);
         setPhase("");
