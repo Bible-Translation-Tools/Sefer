@@ -155,12 +155,16 @@ whole plan, because a partial plan is a write nobody asked for.
 
 `diff` takes a TEXT MODE as its third argument (`"none" | "words" | "chars"`)
 and Sefer asks for `"words"`. Each unit then carries runs
-`{from, to, kind, what}` that TILE the unit's span on each side, markup
-included: `what` is `"markup" | "text" | "whitespace"`. `decodeSkeleton` slices
+`{from, to, kind, what, note}` that TILE the unit's span on each side, markup
+included: `what` is `"markup" | "text" | "whitespace"`, and `note` is true
+inside a footnote or cross-reference. `decodeSkeleton` slices
 each run's `text` from its own side, so a `TextRun` is located and readable.
 
 Both views are marked from those runs and nothing else. The markup view uses
-every run; the reading uses `readingRuns` (the non-markup ones). There is no
+every run; the reading uses `readingRuns` (the non-markup ones). A note is its
+own reading: the engine never lets a word span its edge, so a note added
+after `grace` leaves `grace` unmarked, and the card sets note runs apart
+(italic, a gap before) instead of joining them to the word before. There is no
 Sefer-side word LCS any more. It decides nothing the engine had not already
 decided, and a second opinion about which words changed is the thing the
 sid-aligned rule exists to prevent.

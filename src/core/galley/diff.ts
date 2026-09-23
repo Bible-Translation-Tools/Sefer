@@ -130,6 +130,12 @@ export interface TextRun {
   readonly to: number;
   readonly kind: RunKind;
   readonly what: RunWhat;
+  /**
+   * Inside a footnote or cross-reference. A note is its own reading: the
+   * engine never lets a word span its edge, and a renderer keeps these runs
+   * apart from the verse's rather than joining `servant` to `1:1`.
+   */
+  readonly note: boolean;
   /** `document.slice(from, to)`, filled in at decode; the wire carries no text. */
   readonly text: string;
 }
@@ -427,6 +433,7 @@ const readRuns = (value: unknown, source: string): readonly TextRun[] => {
       to,
       kind: oneOf<RunKind>(["unchanged", "added", "removed"], entry.kind, "unchanged"),
       what: oneOf<RunWhat>(["markup", "text", "whitespace"], entry.what, "text"),
+      note: flag(entry.note),
       text: source.slice(from, to),
     });
   }
@@ -445,7 +452,8 @@ const readText = (
 };
 
 /**
- * The runs a reader sees: every run but markup, in order.
+ * The runs a reader sees: every run but markup, in order. Note runs stay in,
+ * flagged `note`, for the renderer to set apart.
  *
  * The engine's rule, not Sefer's — each run says what it is — and the same cut
  * `review/reading.ts` asks the engine for on a row that has no runs, so a

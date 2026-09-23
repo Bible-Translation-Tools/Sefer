@@ -61,6 +61,13 @@ const MARK: Record<MergeSide, string> = {
   baseline: "bg-on-surface-tertiary/30 text-on-surface-primary",
 };
 
+/**
+ * Note prose, set apart from the verse it annotates. Styled rather than
+ * separated by an inserted space, so the column's characters stay exactly the
+ * engine's reading.
+ */
+const NOTE = "text-on-surface-secondary italic";
+
 const STATUS_TONE = {
   modified: "warning",
   added: "neutral",
@@ -77,9 +84,15 @@ const STATUS_LABEL = {
   unchanged: "unchanged",
 } as const;
 
-/** A piece of one line: marked when the engine said this side changed it. */
+/**
+ * A piece of one line: marked when the engine said this side changed it, and
+ * set apart when it is footnote or cross-reference prose.
+ */
 interface Segment {
   readonly changed: boolean;
+  readonly note?: boolean;
+  /** The first piece of a note: where the gap before it goes. */
+  readonly opens?: boolean;
   readonly text: string;
 }
 
@@ -96,7 +109,8 @@ const segmentLines = (segments: readonly Segment[]): readonly (readonly Segment[
     const parts = segment.text.split("\n");
     parts.forEach((part, index) => {
       if (index > 0) out.push([]);
-      if (part !== "") out.at(-1)?.push({ changed: segment.changed, text: part });
+      if (part !== "")
+        out.at(-1)?.push({ ...segment, opens: index === 0 && segment.opens, text: part });
     });
   }
   // A unit's span runs to the next unit's marker, so it ends in the blank
@@ -106,7 +120,14 @@ const segmentLines = (segments: readonly Segment[]): readonly (readonly Segment[
 };
 
 const runLines = (runs: readonly TextRun[]): readonly (readonly Segment[])[] =>
-  segmentLines(runs.map((run) => ({ changed: run.kind !== "unchanged", text: run.text })));
+  segmentLines(
+    runs.map((run, at) => ({
+      changed: run.kind !== "unchanged",
+      note: run.note,
+      opens: run.note && runs[at - 1]?.note !== true,
+      text: run.text,
+    })),
+  );
 
 function Side(props: {
   readonly text: string | undefined;
@@ -141,11 +162,19 @@ function Side(props: {
                   <Show when={line.length > 0} fallback={<span> </span>}>
                     <For each={line}>
                       {(segment) => (
-                        <Show when={segment.changed} fallback={<span>{segment.text}</span>}>
-                          <mark class={cx("rounded-xs px-px font-semibold", MARK[props.side])}>
-                            {segment.text}
-                          </mark>
-                        </Show>
+                        <span
+                          class={cx(
+                            segment.note === true && NOTE,
+                            segment.opens === true && "ms-1",
+                          )}
+                          data-note={segment.note === true ? "" : undefined}
+                        >
+                          <Show when={segment.changed} fallback={segment.text}>
+                            <mark class={cx("rounded-xs px-px font-semibold", MARK[props.side])}>
+                              {segment.text}
+                            </mark>
+                          </Show>
+                        </span>
                       )}
                     </For>
                   </Show>

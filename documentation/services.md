@@ -146,16 +146,16 @@ A bounded ring of events, spans and verdicts, with JSONL export. The dev surface
 ## Galley
 
 ### Overview
-The pinned Scripture Kitchen WASM build (tagged git dependency, v0.1.4). Onion parses, Sous proofreads, and Galley composes both. It is one in-process synchronous handle: `analyze`, the corpus (`update`, `updateReference`, `publish`), `find`, `lint`, `toc`, `mask`, `diff`/`merge`, `formatEdits`, `skeleton`/`overlay`. `src/core/galley`; loading happens in `src/platform/{web,node}/galley.ts`. → [galley](architecture/galley.md)
+The pinned Scripture Kitchen WASM build (tagged git dependency, v0.1.5). Onion parses, Sous proofreads, and Galley composes both. It is one in-process synchronous handle: `analyze`, the corpus (`update`, `updateReference`, `publish`), `find`, `lint`, `toc`, `mask`, `diff`/`merge`, `formatEdits`, `skeleton`/`overlay`, `hash`. `src/core/galley`; loading happens in `src/platform/{web,node}/galley.ts`. → [galley](architecture/galley.md)
 
 ### Constraints and known bugs
 - `Tree.spansIn`/`Tree.enclosing` (engine-ask 9) are available and unused: nothing yet needs a markup extent.
-- Upstream diff quirk (reported): a footnote inserted straight after a word marks that word changed on both sides, and note prose joins the word with no space ("servant1:1").
+- Legacy `\s5` is not registered. v0.1.5 can treat it as a bare standalone marker (`setExtensions(…, { relaxZPrefix: true })`, once at composition; on en_ulb it takes lint from 19,849 findings to 812). Open: register for every project, or only ULB-derived ones? Stripping `\s5` from text is a separate choice.
+- An unchanged Review row (no runs) still reads note prose joined to the word before it; only changed rows set notes apart.
 - Still open upstream: the Sous character census (engine-asks 2) and chapter labels (engine-asks 4).
 
 ### Ideas / future
-- Block extents (the skeleton-row RFC, `planning/01-discussing/rfc-skeleton-row-spans-2026-09-18.md`) and an engine mechanism for legacy non-standard markers such as `\s5`, both coming upstream.
-- An xxh3 hash as a free function on the module. It would serve Recovery's base check, and Git's per-chapter cache.
+- `hash` (xxh3) is ready for Recovery's base check and Git's per-chapter cache. A chapter hash means hashing the chapter's slice; it cannot be derived from the book's.
 - A Worker for whole-project analysis, only if a measurement asks for it.
 
 ## ProjectAnalysis
@@ -377,7 +377,7 @@ A JSONL journal of edits to the dirty buffer, debounced and compacted. On open, 
 - No retention cap, no quota response, and no flush on `pagehide` (up to 500 ms of edits lost on a tab close).
 
 ### Ideas / future
-- Record the starting text's hash (xxh3 from Galley, in the backlog) at the head of each journal. On load, replay the `[from, to)` changes forward only when the base matches. Recover the valid prefix of a damaged journal and say so.
+- Record the starting text's hash (`GalleyService.hash`) at the head of each journal. On load, replay the `[from, to)` changes forward only when the base matches. Recover the valid prefix of a damaged journal and say so.
 
 ## Git
 

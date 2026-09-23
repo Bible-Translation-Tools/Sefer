@@ -505,6 +505,13 @@ export interface GalleyService {
   readonly readerMask: (text: string) => MaskMap | undefined;
 
   /**
+   * The engine's content hash of `text` (XXH3-64, seed 0): the same value
+   * `analyze(text).sourceHash` carries, without the parse. Not cryptographic,
+   * and only equal for the exact same (LF-normalised, BOM-less) text.
+   */
+  readonly hash: (text: string) => bigint;
+
+  /**
    * A memo for one Book: the same text returns the same `Analysis` instance.
    *
    * One per Book, held by whatever owns that Book's editor state. A gesture
@@ -967,6 +974,7 @@ const makeService = (
     toc,
     mask,
     readerMask,
+    hash: (text) => wasmModule.xxh3Text(text),
     tocAll: () => ProjectToc.open(handle.tocAll(undefined, undefined)),
     find: (id, query) => decodeHits(handle.find(id, query.text, findOptions(query))),
     findAll: (query, scope) =>

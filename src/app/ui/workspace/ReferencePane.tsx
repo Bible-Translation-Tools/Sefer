@@ -65,11 +65,9 @@ import {
 
 import {
   blockAtOffset,
-  blockExtents,
-  equivalentExtent,
+  equivalentBlock,
   equivalentVerse,
   verseAtOffset,
-  type BlockExtent,
   type Skeleton,
 } from "#core/galley";
 import type { Resource, Role } from "#core/resources/library";
@@ -252,17 +250,6 @@ export function ReferencePane(props: ReferencePaneProps) {
     { name: "referenceSkeleton" },
   );
 
-  const sourceBlocks = createMemo(
-    (): readonly BlockExtent[] | undefined => {
-      const skeleton = sourceSkeleton();
-      const text = held();
-      return skeleton === undefined || text.kind !== "text"
-        ? undefined
-        : blockExtents(skeleton, text.text.length);
-    },
-    { name: "referenceBlocks" },
-  );
-
   onCleanup(() => {
     services.galley.remove(paneId);
   });
@@ -276,30 +263,15 @@ export function ReferencePane(props: ReferencePaneProps) {
    * `overlay.md` sets for exactly this.
    */
   const targetSkeleton = createMemo(
-    (): { readonly skeleton: Skeleton; readonly length: number } | undefined => {
-      const book = shell.focused();
-      if (book === undefined || shell.stampOf(bookId) === undefined) return undefined;
+    (): Skeleton | undefined => {
+      if (shell.focused() === undefined || shell.stampOf(bookId) === undefined) return undefined;
       try {
-        // The book's own text for the length, so the last block reaches the
-        // end of the document the caret is moving in rather than a number read
-        // off something else.
-        return {
-          skeleton: services.galley.skeleton(bookId),
-          length: book.source().text.length,
-        };
+        return services.galley.skeleton(bookId);
       } catch {
         return undefined;
       }
     },
     { name: "targetSkeleton" },
-  );
-
-  const targetBlocks = createMemo(
-    (): readonly BlockExtent[] | undefined => {
-      const held = targetSkeleton();
-      return held === undefined ? undefined : blockExtents(held.skeleton, held.length);
-    },
-    { name: "targetBlocks" },
   );
 
   /**
@@ -327,26 +299,24 @@ export function ReferencePane(props: ReferencePaneProps) {
     (): PairedRange | undefined => {
       const at = shell.caret();
       const target = targetSkeleton();
-      const blocks = targetBlocks();
       const source = sourceSkeleton();
-      const sourceRows = sourceBlocks();
       if (at === undefined || target === undefined || source === undefined) return undefined;
 
-      const here = blocks === undefined ? undefined : blockAtOffset(blocks, at);
-      if (here?.empty === true && sourceRows !== undefined) {
-        const row = equivalentExtent(sourceRows, here);
-        return row === undefined ? undefined : { from: row.from, to: row.reaches };
+      const here = blockAtOffset(target.blocks, at);
+      if (here?.empty === true) {
+        const row = equivalentBlock(source.blocks, here);
+        return row === undefined ? undefined : { from: row.from, to: row.end };
       }
 
-      const verse = verseAtOffset(target.skeleton, at);
+      const verse = verseAtOffset(target, at);
       if (verse !== undefined) {
         const twin = equivalentVerse(source, verse.sid);
         return twin === undefined ? undefined : { from: twin.textFrom, to: twin.textTo };
       }
 
-      if (here === undefined || sourceRows === undefined) return undefined;
-      const row = equivalentExtent(sourceRows, here);
-      return row === undefined ? undefined : { from: row.from, to: row.reaches };
+      if (here === undefined) return undefined;
+      const row = equivalentBlock(source.blocks, here);
+      return row === undefined ? undefined : { from: row.from, to: row.end };
     },
     { name: "pairedRange" },
   );
@@ -379,7 +349,7 @@ export function ReferencePane(props: ReferencePaneProps) {
     if (target === undefined) return "no-target";
     if (sourceSkeleton() === undefined) return "no-source";
     const at = shell.caret();
-    const verse = at === undefined ? undefined : verseAtOffset(target.skeleton, at);
+    const verse = at === undefined ? undefined : verseAtOffset(target, at);
     const row = paired();
     if (row === undefined) return verse === undefined ? "no-verse-here" : `unpaired:${verse.sid}`;
     return verse === undefined ? "block" : verse.sid;

@@ -2,7 +2,7 @@
 
 **Galley** is the adapter over the Scripture Kitchen wasm artifact: Onion (the USFM parser) and Sous (whole-corpus proofreading) composed upstream into one handle. The engine is a TAGGED GIT DEPENDENCY — `@wycliffeassociates/scripture-kitchen`, pinned in `package.json` and resolved in `pnpm-lock.yaml` — and nothing is vendored. `src/core/galley/` is its only code importer (the host loaders `src/platform/{web,node}/galley.ts` only locate the `.wasm` asset); every other module imports `src/core/galley` and reads values, never the readers.
 
-`GalleyService` is one synchronous handle. Besides the parse and the corpus below, its doors are `lint`, `toc`/`tocAll`, `mask`, `readerMask` (the engine's `"text"` recipe, UTF-16: reader text with note prose kept, which Review's reading is cut from), `diff`/`merge` (word runs located and tagged `markup`/`text`/`whitespace`; see [review](review.md#word-marks)), `formatEdits`, `skeleton`/`overlay`, `targetNodeFor`/`sourceNodeFor`, `changedSinceUpdate`, and `dispose`. The dish reader's `Tree.enclosing` and `Tree.spansIn` (what markup a range is made of) are available and unused: nothing in Sefer assembles markup extents by hand yet. `version()` reports the `EngineVersion`: the engine, the resolved tag, and the format version of every wire this build's readers speak.
+`GalleyService` is one synchronous handle. Besides the parse and the corpus below, its doors are `lint`, `toc`/`tocAll`, `mask`, `readerMask` (the engine's `"text"` recipe, UTF-16: reader text with note prose kept, which Review's reading is cut from), `diff`/`merge` (word runs located, tagged `markup`/`text`/`whitespace`, and flagged `note` inside a footnote or cross-reference; see [review](review.md#word-marks)), `formatEdits`, `skeleton`/`overlay` (a block row's `from..to` is its marker and `from..end` the whole block), `hash` (the engine's `xxh3Text`), `targetNodeFor`/`sourceNodeFor`, `changedSinceUpdate`, and `dispose`. The dish reader's `Tree.enclosing` and `Tree.spansIn` (what markup a range is made of) are available and unused: nothing in Sefer assembles markup extents by hand yet. `version()` reports the `EngineVersion`: the engine, the resolved tag, and the format version of every wire this build's readers speak.
 
 ## The one call
 
@@ -14,7 +14,7 @@
 
 ## Freshness
 
-`sourceHash` is the engine's xxh3-64 of the source bytes — the content identity core itself never computes (see [Source and Book](source.md)). Two doors read it:
+`sourceHash` is the engine's xxh3-64 of the source bytes — the content identity core itself never computes (see [Source and Book](source.md)). `GalleyService.hash(text)` computes the same value without a parse, which is what Save's dirty and external-change comparison use. Two doors read it from an analysis:
 
 - `sameSource(a, b)` — hash plus length. Parse-to-parse identity without holding either string.
 - `describesExactly(analysis, text)` — length, then the full comparison. The strict door for anything about to index into `text` by offset.

@@ -229,20 +229,17 @@ export const fixtureRequested = (): boolean => {
 };
 
 /**
- * The engine hash of a text, parsed at most once per distinct text.
+ * The engine hash of a text, remembered for the last text asked.
  *
- * `sourceHash` is a byproduct of `parse` — the engine exposes no hash door —
- * so asking for it costs a whole analysis. `dirty` is read reactively, per
- * badged book per keystroke, so an uncached hasher would be several full
- * parses for every key pressed. One entry is enough here: the dirty book is
- * the book being typed in, and `dirty` settles the clean ones on the revision
- * alone without asking.
+ * `dirty` is read reactively, per badged book per keystroke, and the dirty
+ * book is the one being typed in, so one entry spares re-hashing the same text
+ * on every read; `dirty` settles clean books on the revision alone.
  */
 const hashOf = (galley: GalleyService): ((text: string) => bigint) => {
   let last: { text: string; hash: bigint } | undefined;
   return (text) => {
     if (last !== undefined && last.text === text) return last.hash;
-    const hash = galley.analyze(text, "save.hash").sourceHash;
+    const hash = galley.hash(text);
     last = { text, hash };
     return hash;
   };
