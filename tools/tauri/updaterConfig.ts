@@ -23,7 +23,7 @@ import process from "node:process";
  * The two channels the release workflow publishes.
  *
  * `preview` was `nightly` until 2026-09-22. It builds on a promotion — a
- * dispatch or an `-rc` tag — not on a schedule, so "nightly" described
+ * dispatch or a `v0.3.0-1` tag — not on a schedule, so "nightly" described
  * something this repository never did, which is why nobody used the word.
  */
 export type Channel = "stable" | "preview";

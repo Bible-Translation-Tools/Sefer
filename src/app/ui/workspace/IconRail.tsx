@@ -110,10 +110,12 @@ export function IconRail() {
   const attention = () => findings().errors + findings().warnings;
 
   // Where in Sefer the reader is, so the rail can say so. A prefix test and
-  // not an equality: `/findings` has no children yet, but `/start/*` is the
-  // projects screen's second half and must not read as somewhere else.
+  // not an equality: `/start/*` is the projects screen's second half and must
+  // not read as somewhere else. Project screens are tested on the part after
+  // `/project/$slug`, so `at("/terms")` means "this project's terms".
   const path = useRouterState({ select: (state) => state.location.pathname });
-  const at = (prefix: string): "true" | "false" => (path().startsWith(prefix) ? "true" : "false");
+  const within = (): string => path().replace(/^\/project\/[^/]+/, "");
+  const at = (prefix: string): "true" | "false" => (within().startsWith(prefix) ? "true" : "false");
   /** Is the reader on the projects side — the list, or bringing one in? */
   const choosing = (): "true" | "false" =>
     path() === "/" || path().startsWith("/start") ? "true" : "false";
@@ -243,11 +245,11 @@ export function IconRail() {
           <Tile
             label={t("Compare")}
             testId="rail-compare"
-            pressed={at("/compare")}
+            pressed={at("/review")}
             icon={<GitCompare size={18} />}
             onClick={() =>
               void navigate({
-                to: "/project/$slug/compare",
+                to: "/project/$slug/review",
                 params: { slug: shell.slug() },
                 search: {},
               })

@@ -24,7 +24,7 @@
 import { Context, Data, Effect, Layer } from "effect";
 
 /** Which release stream this build follows. Derived from the app identifier. */
-export type UpdateChannel = "stable" | "nightly";
+export type UpdateChannel = "stable" | "preview";
 
 export interface AvailableUpdate {
   readonly version: string;

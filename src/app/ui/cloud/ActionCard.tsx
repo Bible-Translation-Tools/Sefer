@@ -21,9 +21,10 @@ import { Show } from "solid-js";
 import type { IncomingPlan, Sync } from "#core/sync";
 
 import { t } from "../../i18n";
+import { useShell } from "../../ProjectContext";
 import { Button, Card, PanelHeader } from "../primitives";
 import { actionLabel, narrate } from "./copy";
-import { compareHref } from "./IncomingPlanCard";
+import { reviewHref } from "./IncomingPlanCard";
 
 export interface ActionCardProps {
   readonly sync: Sync;
@@ -54,6 +55,7 @@ const PRIMARY_LINK = [
 ].join(" ");
 
 export function ActionCard(props: ActionCardProps) {
+  const shell = useShell();
   const counts = () => ({
     ahead: props.sync.clocks.local.unshared,
     behind: props.sync.clocks.shared.unshared,
@@ -82,11 +84,9 @@ export function ActionCard(props: ActionCardProps) {
             </Button>
           }
         >
-          {(book) => (
-            <a class={PRIMARY_LINK} href={compareHref(book())} data-cloud-primary="compare">
-              {actionLabel("compare")}
-            </a>
-          )}
+          <a class={PRIMARY_LINK} href={reviewHref(shell.slug())} data-cloud-primary="compare">
+            {actionLabel("compare")}
+          </a>
         </Show>
 
         <Show when={props.phase !== ""}>

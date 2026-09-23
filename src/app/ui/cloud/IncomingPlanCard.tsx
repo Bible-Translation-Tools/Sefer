@@ -8,10 +8,9 @@
  * answer.
  *
  * A contested book — one both sides changed — is never merged and never
- * offered as part of a pull. Its row links to Compare instead, by path string
- * (`/compare?book=MRK`) rather than by import, because Compare is another
- * screen with its own lifetime and this card must not depend on it having
- * been built.
+ * offered as part of a pull. Its row links to the project's Review screen
+ * instead, by path string rather than by import, so this card does not depend
+ * on that screen's module.
  */
 
 import { For, Show } from "solid-js";
@@ -19,21 +18,20 @@ import { For, Show } from "solid-js";
 import type { IncomingBook, IncomingPlan } from "#core/sync";
 
 import { t } from "../../i18n";
+import { useShell } from "../../ProjectContext";
 import { Badge, Card, PanelHeader } from "../primitives";
 import { bookName } from "../workspace/books";
 import { chapterList, planSummary, plural } from "./copy";
 
 /**
- * The link to the Compare screen, as a path string.
- *
- * Another agent owns `/compare`; naming it by URL is the whole coupling. If
- * the route is not there yet the link 404s honestly, which is better than this
- * card importing a module that may not exist.
+ * The link to this project's Review screen, as a path string. Review takes no
+ * book in its URL (a picked source has no address), so the link opens the
+ * screen and the reader picks the book there.
  */
-export const compareHref = (bookId: string): string =>
-  `/compare?book=${encodeURIComponent(bookId)}`;
+export const reviewHref = (slug: string): string => `/project/${encodeURIComponent(slug)}/review`;
 
 function BookRow(props: { readonly book: IncomingBook }) {
+  const shell = useShell();
   const name = () => bookName(props.book.bookId);
   return (
     <li
@@ -64,7 +62,7 @@ function BookRow(props: { readonly book: IncomingBook }) {
       >
         <a
           class="ms-auto text-small font-medium text-brand underline underline-offset-2"
-          href={compareHref(props.book.bookId)}
+          href={reviewHref(shell.slug())}
           data-compare-link={props.book.bookId}
         >
           {t("Compare {book}", { book: name() })}

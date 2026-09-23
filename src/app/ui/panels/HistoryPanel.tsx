@@ -319,7 +319,7 @@ export function HistoryPanel() {
                   </p>
                   <p class="text-smallest text-on-surface-tertiary">
                     {t(
-                      "Your books are still written to disk as you work. Save & Review is what records a version you can come back to — the first one creates the repository.",
+                      "Your unsaved work is kept safe as you type, but your books are only written to disk when you Save & Review. That records a version you can come back to — the first one creates the repository.",
                     )}
                   </p>
                   <Button variant="primary" size="sm" onClick={review}>

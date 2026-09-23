@@ -83,10 +83,10 @@ export const TauriUpdaterLive = (options: TauriUpdaterOptions): Layer.Layer<Upda
       const [version, identifier] = yield* Effect.promise(() =>
         Promise.all([getVersion(), getIdentifier()]),
       );
-      // The Nightly bundle installs under `….nightly` (see
-      // src-tauri/tauri.conf.nightly.json), so the identifier IS the channel —
+      // The Preview bundle installs under `….preview` (see
+      // src-tauri/tauri.conf.preview.json), so the identifier IS the channel —
       // no separate build flag to keep in step with it.
-      const channel: UpdateChannel = identifier.endsWith(".nightly") ? "nightly" : "stable";
+      const channel: UpdateChannel = identifier.endsWith(".preview") ? "preview" : "stable";
 
       const host = options.updaterHost;
 

@@ -20,7 +20,6 @@ import { Route as AppStartCreateRouteImport } from './routes/_app/start/create'
 import { Route as AppStartFindRouteImport } from './routes/_app/start/find'
 import { Route as AppProjectSlugIndexRouteImport } from './routes/_app/project/$slug/index'
 import { Route as AppProjectSlugCloudRouteImport } from './routes/_app/project/$slug/cloud'
-import { Route as AppProjectSlugCompareRouteImport } from './routes/_app/project/$slug/compare'
 import { Route as AppProjectSlugFindRouteImport } from './routes/_app/project/$slug/find'
 import { Route as AppProjectSlugFindingsRouteImport } from './routes/_app/project/$slug/findings'
 import { Route as AppProjectSlugHistoryRouteImport } from './routes/_app/project/$slug/history'
@@ -84,11 +83,6 @@ const AppProjectSlugCloudRoute = AppProjectSlugCloudRouteImport.update({
   path: '/cloud',
   getParentRoute: () => AppProjectSlugRoute,
 } as any)
-const AppProjectSlugCompareRoute = AppProjectSlugCompareRouteImport.update({
-  id: '/compare',
-  path: '/compare',
-  getParentRoute: () => AppProjectSlugRoute,
-} as any)
 const AppProjectSlugFindRoute = AppProjectSlugFindRouteImport.update({
   id: '/find',
   path: '/find',
@@ -141,7 +135,6 @@ export interface FileRoutesByFullPath {
   '/start/create': typeof AppStartCreateRoute
   '/start/find': typeof AppStartFindRoute
   '/project/$slug/cloud': typeof AppProjectSlugCloudRoute
-  '/project/$slug/compare': typeof AppProjectSlugCompareRoute
   '/project/$slug/find': typeof AppProjectSlugFindRoute
   '/project/$slug/findings': typeof AppProjectSlugFindingsRoute
   '/project/$slug/history': typeof AppProjectSlugHistoryRoute
@@ -161,7 +154,6 @@ export interface FileRoutesByTo {
   '/start/create': typeof AppStartCreateRoute
   '/start/find': typeof AppStartFindRoute
   '/project/$slug/cloud': typeof AppProjectSlugCloudRoute
-  '/project/$slug/compare': typeof AppProjectSlugCompareRoute
   '/project/$slug/find': typeof AppProjectSlugFindRoute
   '/project/$slug/findings': typeof AppProjectSlugFindingsRoute
   '/project/$slug/history': typeof AppProjectSlugHistoryRoute
@@ -184,7 +176,6 @@ export interface FileRoutesById {
   '/_app/start/create': typeof AppStartCreateRoute
   '/_app/start/find': typeof AppStartFindRoute
   '/_app/project/$slug/cloud': typeof AppProjectSlugCloudRoute
-  '/_app/project/$slug/compare': typeof AppProjectSlugCompareRoute
   '/_app/project/$slug/find': typeof AppProjectSlugFindRoute
   '/_app/project/$slug/findings': typeof AppProjectSlugFindingsRoute
   '/_app/project/$slug/history': typeof AppProjectSlugHistoryRoute
@@ -207,7 +198,6 @@ export interface FileRouteTypes {
     | '/start/create'
     | '/start/find'
     | '/project/$slug/cloud'
-    | '/project/$slug/compare'
     | '/project/$slug/find'
     | '/project/$slug/findings'
     | '/project/$slug/history'
@@ -227,7 +217,6 @@ export interface FileRouteTypes {
     | '/start/create'
     | '/start/find'
     | '/project/$slug/cloud'
-    | '/project/$slug/compare'
     | '/project/$slug/find'
     | '/project/$slug/findings'
     | '/project/$slug/history'
@@ -249,7 +238,6 @@ export interface FileRouteTypes {
     | '/_app/start/create'
     | '/_app/start/find'
     | '/_app/project/$slug/cloud'
-    | '/_app/project/$slug/compare'
     | '/_app/project/$slug/find'
     | '/_app/project/$slug/findings'
     | '/_app/project/$slug/history'
@@ -345,13 +333,6 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof AppProjectSlugCloudRouteImport
       parentRoute: typeof AppProjectSlugRoute
     }
-    '/_app/project/$slug/compare': {
-      id: '/_app/project/$slug/compare'
-      path: '/compare'
-      fullPath: '/project/$slug/compare'
-      preLoaderRoute: typeof AppProjectSlugCompareRouteImport
-      parentRoute: typeof AppProjectSlugRoute
-    }
     '/_app/project/$slug/find': {
       id: '/_app/project/$slug/find'
       path: '/find'
@@ -413,7 +394,6 @@ declare module '@tanstack/solid-router' {
 
 interface AppProjectSlugRouteChildren {
   AppProjectSlugCloudRoute: typeof AppProjectSlugCloudRoute
-  AppProjectSlugCompareRoute: typeof AppProjectSlugCompareRoute
   AppProjectSlugFindRoute: typeof AppProjectSlugFindRoute
   AppProjectSlugFindingsRoute: typeof AppProjectSlugFindingsRoute
   AppProjectSlugHistoryRoute: typeof AppProjectSlugHistoryRoute
@@ -427,7 +407,6 @@ interface AppProjectSlugRouteChildren {
 
 const AppProjectSlugRouteChildren: AppProjectSlugRouteChildren = {
   AppProjectSlugCloudRoute: AppProjectSlugCloudRoute,
-  AppProjectSlugCompareRoute: AppProjectSlugCompareRoute,
   AppProjectSlugFindRoute: AppProjectSlugFindRoute,
   AppProjectSlugFindingsRoute: AppProjectSlugFindingsRoute,
   AppProjectSlugHistoryRoute: AppProjectSlugHistoryRoute,

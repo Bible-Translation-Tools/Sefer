@@ -2,7 +2,7 @@
 //
 // Every build-time URL Sefer talks to, read in exactly one place. Vite inlines
 // `import.meta.env.VITE_*` at build, so the release workflow sets these per
-// channel (stable / nightly) and the code never carries a hostname. An unset
+// channel (dev / preview / production) and the code never carries a hostname. An unset
 // value is `null`, and each consumer degrades visibly (a disabled panel, a
 // "not configured for this build" message) instead of guessing a host.
 //
