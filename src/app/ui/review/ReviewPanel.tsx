@@ -76,7 +76,7 @@ import {
   type CompareSource,
   type Plan,
 } from "#core/compare";
-import { diffSkeleton, mergeWithDecisions } from "#core/diff/skeleton";
+import { diffSkeleton, mergeWithDecisions, type SkeletonResult } from "#core/diff/skeleton";
 import type { DecisionUnit, DiffSkeleton, MergeSide } from "#core/galley";
 import { Observability } from "#core/observability";
 import type { Restorable } from "#core/recovery/recovery";
@@ -327,38 +327,68 @@ export function ReviewPanel() {
   };
 
   /**
-   * The selected book's decision units.
+   * Every changed book's decision units, computed once per comparison.
+   *
+   * A decision changes no skeleton, so nothing the reader clicks should
+   * re-diff anything. This is the one place that asks the engine for them;
+   * the selected book's skeleton and the plan both read from it.
+   * (`diffSkeleton`'s own cache holds four entries, so reading every changed
+   * book through it on each render re-diffed all of them once a comparison
+   * had more than four.)
+   */
+  const skeletons = createMemo(
+    (): ReadonlyMap<BookId, SkeletonResult> => {
+      const held = new Map<BookId, SkeletonResult>();
+      for (const book of result()?.books ?? []) {
+        if (book.identical || book.leftText === undefined || book.rightText === undefined) continue;
+        held.set(
+          book.bookId,
+          diffSkeleton(services.galley, book.bookId, book.rightText, book.leftText),
+        );
+      }
+      return held;
+    },
+    { name: "reviewSkeletons" },
+  );
+
+  /**
+   * The selected book's diff, or the reason there is none.
+   *
+   * An identical book is not in `skeletons` — it has nothing to plan — but the
+   * screen still shows its (empty) diff, so it is asked for directly.
    *
    * `baseline` is the RIGHT side and `current` the LEFT, which is the engine's
    * own vocabulary and the reason the buttons read "Keep the editor's" / "Take
    * the file's" rather than naming a side of the wire.
    */
-  const skeleton = createMemo(
-    (): DiffSkeleton | undefined => {
+  const selectedSkeleton = createMemo(
+    (): SkeletonResult | undefined => {
       const book = current();
       if (book === undefined || book.leftText === undefined || book.rightText === undefined)
         return undefined;
-      const found = diffSkeleton(services.galley, book.bookId, book.rightText, book.leftText);
-      return Result.isSuccess(found) ? found.success : undefined;
+      return (
+        skeletons().get(book.bookId) ??
+        diffSkeleton(services.galley, book.bookId, book.rightText, book.leftText)
+      );
     },
     { name: "reviewSkeleton" },
   );
+
+  /** The selected book's decision units. */
+  const skeleton = (): DiffSkeleton | undefined => {
+    const found = selectedSkeleton();
+    return found !== undefined && Result.isSuccess(found) ? found.success : undefined;
+  };
 
   /**
    * The engine has no diff door — which since v0.1.0 means the artifact in
    * this build is not the vendored one. Said in as many words, because the
    * alternative is a screen that looks like it found no differences.
    */
-  const diffRefusal = createMemo(
-    (): string | undefined => {
-      const book = current();
-      if (book === undefined || book.leftText === undefined || book.rightText === undefined)
-        return undefined;
-      const found = diffSkeleton(services.galley, book.bookId, book.rightText, book.leftText);
-      return Result.isFailure(found) ? found.failure.description : undefined;
-    },
-    { name: "reviewDiffRefusal" },
-  );
+  const diffRefusal = (): string | undefined => {
+    const found = selectedSkeleton();
+    return found !== undefined && Result.isFailure(found) ? found.failure.description : undefined;
+  };
 
   const units = (): readonly DecisionUnit[] =>
     skeleton()?.units.filter((unit) => unit.status !== "unchanged") ?? [];
@@ -424,88 +454,92 @@ export function ReviewPanel() {
   /**
    * The decision map as what would be written.
    *
-   * Built here rather than by `core/compare`'s `plan` because the unit is
-   * Onion's, not a line hunk: the merged text comes from `mergeWithDecisions`,
-   * which prefers the engine's own merge. `applyPlan` still does the writing
+   * A memo: the Apply button, its confirmation and Apply itself all read it,
+   * and it changes only when the comparison, the target or a decision does.
+   * The unit is Onion's, not a line hunk: the merged text comes from
+   * `mergeWithDecisions`, which prefers the engine's own merge. `applyPlan` still does the writing
    * and still owns every refusal — `ReadOnly`, `Incomplete`, `Unsupported` and
    * `Stale` — so the screen cannot disagree with what the write will do.
    */
-  const currentPlan = (): Plan | undefined => {
-    const found = result();
-    const side = target();
-    if (found === undefined || side === undefined) return undefined;
-    const fallback: MergeSide = side === "left" ? "current" : "baseline";
-    const touched = new Set(decidedBooks());
-    const books: BookPlan[] = [];
-    let undecided = 0;
+  const currentPlan = createMemo(
+    (): Plan | undefined => {
+      const found = result();
+      const side = target();
+      if (found === undefined || side === undefined) return undefined;
+      const fallback: MergeSide = side === "left" ? "current" : "baseline";
+      const touched = new Set(decidedBooks());
+      const books: BookPlan[] = [];
+      let undecided = 0;
 
-    for (const book of found.books) {
-      const targetText = side === "left" ? book.leftText : book.rightText;
-      if (book.identical || book.leftText === undefined || book.rightText === undefined) {
-        books.push({
-          bookId: book.bookId,
-          operation: targetText === undefined ? "keep" : "keep",
-          text: targetText,
-          targetText,
-          undecided: 0,
-        });
-        continue;
-      }
-      // A book whose diff the engine will not produce is a book this screen
-      // cannot plan a write for. The whole plan goes, rather than that book
-      // quietly becoming a "keep": a partial plan is a write nobody asked for.
-      const found = diffSkeleton(services.galley, book.bookId, book.rightText, book.leftText);
-      if (Result.isFailure(found)) return undefined;
-      const skeletonOf = found.success;
-      if (!touched.has(book.bookId)) {
-        // Nothing was said about this book, so nothing happens to it. Its
-        // units still count as undecided for the completeness rule.
-        const open = skeletonOf.units.filter((unit) => unit.status !== "unchanged").length;
+      for (const book of found.books) {
+        const targetText = side === "left" ? book.leftText : book.rightText;
+        if (book.identical || book.leftText === undefined || book.rightText === undefined) {
+          books.push({
+            bookId: book.bookId,
+            operation: targetText === undefined ? "keep" : "keep",
+            text: targetText,
+            targetText,
+            undecided: 0,
+          });
+          continue;
+        }
+        // A book whose diff the engine will not produce is a book this screen
+        // cannot plan a write for. The whole plan goes, rather than that book
+        // quietly becoming a "keep": a partial plan is a write nobody asked for.
+        const found = skeletons().get(book.bookId);
+        if (found === undefined || Result.isFailure(found)) return undefined;
+        const skeletonOf = found.success;
+        if (!touched.has(book.bookId)) {
+          // Nothing was said about this book, so nothing happens to it. Its
+          // units still count as undecided for the completeness rule.
+          const open = skeletonOf.units.filter((unit) => unit.status !== "unchanged").length;
+          undecided += open;
+          books.push({
+            bookId: book.bookId,
+            operation: "keep",
+            text: targetText,
+            targetText,
+            undecided: open,
+          });
+          continue;
+        }
+        const map = new Map<string, MergeSide>();
+        for (const unit of skeletonOf.units) {
+          const held = decisionFor(book.bookId, unit.id);
+          if (held !== undefined) map.set(unit.id, held);
+        }
+        const open = skeletonOf.units.filter(
+          (unit) => unit.status !== "unchanged" && !map.has(unit.id),
+        ).length;
         undecided += open;
+        const merged = mergeWithDecisions(
+          services.galley,
+          book.rightText,
+          book.leftText,
+          map,
+          fallback,
+        );
+        if (Result.isFailure(merged)) return undefined;
         books.push({
           bookId: book.bookId,
-          operation: "keep",
-          text: targetText,
+          operation: merged.success === targetText ? "keep" : "write",
+          text: merged.success,
           targetText,
           undecided: open,
         });
-        continue;
       }
-      const map = new Map<string, MergeSide>();
-      for (const unit of skeletonOf.units) {
-        const held = decisionFor(book.bookId, unit.id);
-        if (held !== undefined) map.set(unit.id, held);
-      }
-      const open = skeletonOf.units.filter(
-        (unit) => unit.status !== "unchanged" && !map.has(unit.id),
-      ).length;
-      undecided += open;
-      const merged = mergeWithDecisions(
-        services.galley,
-        book.rightText,
-        book.leftText,
-        map,
-        fallback,
-      );
-      if (Result.isFailure(merged)) return undefined;
-      books.push({
-        bookId: book.bookId,
-        operation: merged.success === targetText ? "keep" : "write",
-        text: merged.success,
-        targetText,
-        undecided: open,
-      });
-    }
 
-    const targetSource = side === "left" ? left() : right();
-    return {
-      target: targetSource === undefined ? found.left : sourceRef(targetSource),
-      books,
-      writes: books.filter((book) => book.operation !== "keep"),
-      undecided,
-      complete: undecided === 0,
-    };
-  };
+      const targetSource = side === "left" ? left() : right();
+      return {
+        target: targetSource === undefined ? found.left : sourceRef(targetSource),
+        books,
+        writes: books.filter((book) => book.operation !== "keep"),
+        undecided,
+        complete: undecided === 0,
+      };
+    },
+    { name: "reviewPlan" },
+  );
 
   const apply = (): void => {
     const side = target();
