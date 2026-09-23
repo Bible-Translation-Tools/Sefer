@@ -26,14 +26,9 @@ import type { BookId } from "../book/book";
 import { trustedBy } from "../book/book";
 import { diffTexts } from "../diff/diff";
 import type { Project } from "../project/project";
+import { nameOfRoot } from "../project/slug";
 import type { Change } from "../source/source";
 import { failCompare, type CompareSource } from "./source";
-
-/** The last path segment, which is what a reader calls a project. */
-const folderName = (root: string): string => {
-  const trimmed = root.endsWith("/") ? root.slice(0, -1) : root;
-  return trimmed.slice(trimmed.lastIndexOf("/") + 1);
-};
 
 /**
  * The currently open project as one side of a comparison.
@@ -43,7 +38,7 @@ const folderName = (root: string): string => {
  */
 export const currentProjectSource = (project: Project, label?: string): CompareSource => ({
   id: `project:${project.id}`,
-  label: label ?? `This project (${folderName(project.root)})`,
+  label: label ?? `This project (${nameOfRoot(project.root)})`,
   kind: "project",
   canApply: true,
 

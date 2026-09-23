@@ -10,7 +10,7 @@
  * `src/platform/tauri/git.ts` are the Layers; `contract.ts` is the one suite
  * both must pass.
  */
-import { Context, Data, type Effect, Option } from "effect";
+import { Context, Data, Effect, Option } from "effect";
 
 import { escapesRoot, normalisePath } from "../fileSystem/path";
 import type { SourceStamp } from "../source/source";
@@ -166,3 +166,16 @@ export const repositoryPath = (root: string, path: string): Option.Option<string
   }
   return Option.some(normalisedPath.slice(normalisedRoot === "/" ? 1 : normalisedRoot.length + 1));
 };
+
+/** `repositoryPath`, with `None` turned into the `Refused` it always means. */
+export const relativeOrRefuse = (repo: Repo, path: string): Effect.Effect<string, GitError> =>
+  Option.match(repositoryPath(repo.root, path), {
+    onNone: () =>
+      Effect.fail(
+        new GitError({
+          reason: "Refused",
+          description: `path is outside the repository root: ${path}`,
+        }),
+      ),
+    onSome: Effect.succeed,
+  });

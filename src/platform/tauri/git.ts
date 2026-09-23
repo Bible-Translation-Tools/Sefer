@@ -23,7 +23,7 @@ import { Effect, Layer, Option } from "effect";
 import {
   Git,
   GitError,
-  repositoryPath,
+  relativeOrRefuse,
   type ChangedPath,
   type Commit,
   type CommitId,
@@ -79,16 +79,6 @@ const failureOf = (cause: unknown): GitError => {
 
 const call = <A>(command: string, args: Record<string, unknown>): Effect.Effect<A, GitError> =>
   Effect.tryPromise({ try: () => invoke<A>(command, args), catch: failureOf });
-
-const refuse = (description: string): Effect.Effect<never, GitError> =>
-  Effect.fail(new GitError({ reason: "Refused", description }));
-
-/** Repository-relative or nothing — the receipts rule, in one place. */
-const relativeOrRefuse = (repo: Repo, path: string): Effect.Effect<string, GitError> =>
-  Option.match(repositoryPath(repo.root, path), {
-    onNone: () => refuse(`path is outside the repository root: ${path}`),
-    onSome: Effect.succeed,
-  });
 
 const commitOf = (wire: WireCommit): Commit => ({
   id: wire.id,

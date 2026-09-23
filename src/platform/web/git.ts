@@ -20,7 +20,7 @@ import {
   type GitFailureReason,
   type GitService,
   type Repo,
-  repositoryPath,
+  relativeOrRefuse,
   type SaveReceiptLike,
   type Status,
   type Version,
@@ -43,17 +43,6 @@ const attempt = <A>(reason: GitFailureReason, call: () => Promise<A>): Effect.Ef
 
 const refuse = (description: string): Effect.Effect<never, GitError> =>
   Effect.fail(new GitError({ reason: "Refused", description }));
-
-/**
- * Repository-relative or nothing. Callers pass paths in whichever form they
- * hold — a `SaveReceipt` path is absolute, a history request may already be
- * relative — and anything outside the work tree is refused before Git runs.
- */
-const relativeOrRefuse = (repo: Repo, path: string): Effect.Effect<string, GitError> =>
-  Option.match(repositoryPath(repo.root, path), {
-    onNone: () => refuse(`path is outside the repository root: ${path}`),
-    onSome: Effect.succeed,
-  });
 
 const commitOf = (entry: {
   readonly oid: string;

@@ -21,7 +21,7 @@
 // answer rather than a way to break the application.
 
 import type { SettingsService } from "../core/host/settings";
-import { env } from "./env";
+import { cleanUrl, env } from "./env";
 import { shellKeys } from "./settings";
 
 /** Which host we are running on; `HostInfo.kind()` answers it. */
@@ -33,12 +33,6 @@ export interface ResolvedEndpoints {
   /** Language names, directions, and the catalogue the landing screen lists. */
   readonly languageApiUrl: string | null;
 }
-
-/** Trailing slashes off and blank treated as absent, exactly as `env` does. */
-const clean = (value: string): string | null => {
-  const trimmed = value.trim();
-  return trimmed ? trimmed.replace(/\/+$/u, "") : null;
-};
 
 const buildDefault = (host: HostKind): string | null =>
   host === "tauri" ? env.wacsDesktopUrl : env.wacsWebUrl;
@@ -52,10 +46,10 @@ const buildDefault = (host: HostKind): string | null =>
  * other half of the story — see `rememberBootEndpoints`.
  */
 export const wacsUrlFor = (settings: SettingsService, host: HostKind): string | null =>
-  clean(settings.get(shellKeys(settings).wacsUrl)) ?? buildDefault(host);
+  cleanUrl(settings.get(shellKeys(settings).wacsUrl)) ?? buildDefault(host);
 
 export const languageApiUrlFrom = (settings: SettingsService): string | null =>
-  clean(settings.get(shellKeys(settings).languageApiUrl)) ?? env.languageApiUrl;
+  cleanUrl(settings.get(shellKeys(settings).languageApiUrl)) ?? env.languageApiUrl;
 
 export const resolveEndpoints = (settings: SettingsService, host: HostKind): ResolvedEndpoints => ({
   wacsUrl: wacsUrlFor(settings, host),

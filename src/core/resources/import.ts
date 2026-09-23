@@ -132,7 +132,7 @@ export const stage = (
 const parseJson = (text: string): unknown => JSON.parse(text);
 
 /** Reads and JSON-parses a file, or `undefined` when it is absent or not JSON. */
-const readJson = (
+export const readJson = (
   fileSystem: FileSystem.FileSystem,
   path: string,
 ): Effect.Effect<unknown | undefined> =>

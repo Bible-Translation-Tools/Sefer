@@ -19,14 +19,9 @@ import { Effect, FileSystem, Result } from "effect";
 
 import { identifyBook, type BookId } from "../book/book";
 import { discoverBooks } from "../project/discovery";
+import { nameOfRoot } from "../project/slug";
 import { decode } from "../source/source";
 import { failCompare, type CompareSource } from "./source";
-
-/** The last path segment — what a reader calls the folder they picked. */
-const folderName = (root: string): string => {
-  const trimmed = root.endsWith("/") ? root.slice(0, -1) : root;
-  return trimmed.slice(trimmed.lastIndexOf("/") + 1);
-};
 
 interface Scan {
   readonly order: readonly BookId[];
@@ -88,7 +83,7 @@ export const folderSource = (
 
   return {
     id: `folder:${root}`,
-    label: label ?? folderName(root),
+    label: label ?? nameOfRoot(root),
     kind: "folder",
     canApply: false,
 

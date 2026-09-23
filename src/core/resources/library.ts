@@ -33,7 +33,7 @@ import { joinPath, lastSegment, parentPath } from "../fileSystem/path";
 import { Observability, type ObservabilityService } from "../observability";
 import { decode } from "../source/source";
 import { decodeBurritoMetadata } from "./burrito";
-import { classify, type Classification } from "./import";
+import { classify, readJson, type Classification } from "./import";
 import { decodeResourceContainerManifest } from "./resourceContainer";
 
 /** What a resource is. The `unknown` classification is never registered. */
@@ -191,17 +191,6 @@ const localized = (
   if (values.en !== undefined) return values.en;
   return Object.values(values)[0];
 };
-
-/** JSON.parse narrowed to `unknown`: what comes off disk is untyped until decoded. */
-const parseJson = (text: string): unknown => JSON.parse(text);
-
-const readJson = (
-  fileSystem: FileSystem.FileSystem,
-  path: string,
-): Effect.Effect<unknown | undefined> =>
-  Effect.map(Effect.result(Effect.map(fileSystem.readFileString(path), parseJson)), (result) =>
-    Result.isSuccess(result) ? result.success : undefined,
-  );
 
 /**
  * Title and language for a classified root. The metadata files were already

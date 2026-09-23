@@ -10,7 +10,8 @@
 // when both are built on one machine. documentation/architecture/configuration.md
 // lists them with notes.
 
-const read = (value: string | undefined): string | null => {
+/** Trailing slashes off, and blank treated as absent. */
+export const cleanUrl = (value: string | undefined): string | null => {
   const trimmed = value?.trim();
   return trimmed ? trimmed.replace(/\/+$/u, "") : null;
 };
@@ -65,11 +66,11 @@ export interface SeferEnv {
 }
 
 export const env: SeferEnv = {
-  updaterHost: read(import.meta.env.VITE_SEFER_UPDATER_HOST),
-  wacsWebUrl: read(import.meta.env.VITE_SEFER_WACS_WEB_URL),
-  wacsDesktopUrl: read(import.meta.env.VITE_SEFER_WACS_DESKTOP_URL),
-  wacsAppId: read(import.meta.env.VITE_SEFER_WACS_APP_ID),
-  languageApiUrl: read(import.meta.env.VITE_SEFER_LANGUAGE_API_URL),
-  otlpUrl: read(import.meta.env.VITE_SEFER_OTLP_URL),
+  updaterHost: cleanUrl(import.meta.env.VITE_SEFER_UPDATER_HOST),
+  wacsWebUrl: cleanUrl(import.meta.env.VITE_SEFER_WACS_WEB_URL),
+  wacsDesktopUrl: cleanUrl(import.meta.env.VITE_SEFER_WACS_DESKTOP_URL),
+  wacsAppId: cleanUrl(import.meta.env.VITE_SEFER_WACS_APP_ID),
+  languageApiUrl: cleanUrl(import.meta.env.VITE_SEFER_LANGUAGE_API_URL),
+  otlpUrl: cleanUrl(import.meta.env.VITE_SEFER_OTLP_URL),
   otlpMetrics: import.meta.env.VITE_SEFER_OTLP_METRICS === "1",
 };
