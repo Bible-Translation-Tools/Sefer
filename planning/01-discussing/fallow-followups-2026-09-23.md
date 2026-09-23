@@ -140,3 +140,27 @@ Two outright copies to fold while doing this:
 4. `projectAnalysis`, then `ImportHub`'s dialogs. `annotate` only if it keeps growing.
 
 Rulings needed: Replace all in Find; `format.match.book` versus `overlay.book`.
+
+## Rulings so far (2026-09-23, later)
+
+- **Gate:** `pnpm deadcode` (unused files, unused deps, cycles) runs in `release.yml`'s `verify` before every deploy. Done.
+- **Layer-direction rule:** not now; there are no violations. Revisit when a new layer lands or the first violation shows up.
+- **`bootEndpoints`:** deleted. The doc now names `endpointsChangedSinceBoot`, which is what the Network card actually uses. Done.
+- **Replace all:** stays. Power features belong behind Advanced.
+- **Format vs overlay:** "format" means the engine's formatting only. Source-matching becomes one action with a scope (chapter at cursor, book, project) and no preview. Needs its own focused pass.
+- **Copy profiles and similar "maybe later" code:** park it outside the graph (see below) rather than keep it compiled.
+- **Stale docs** (`shell.md` bump/tick, `inventory.md`, `recovery.md`, `stet.md`, orphaned comments): fixed.
+
+### Parking code outside the graph
+
+Don't keep a parked `.ts` file anywhere `tsconfig`/fallow/oxlint can see it. It would keep being typechecked against a codebase that has moved on, and it would rot while looking alive. Instead, `planning/00-ideas/parked-code.md` gets one entry per removed thing:
+
+```md
+## Copy profiles (copy as plain text / as USFM)
+- was: src/editor/recipes/copy.ts
+- removed in: <commit>, recover with `git show <commit>^:src/editor/recipes/copy.ts`
+- why parked: nothing installed it; no screen asked for it yet
+- would need: a command + a clipboard filter installed in compose.ts
+```
+
+Git keeps the exact code. The entry keeps the idea and the path back to it.
