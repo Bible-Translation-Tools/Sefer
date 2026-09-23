@@ -45,8 +45,8 @@ import "../app/ui/theme";
 const useDesignSurface = (): void => {
   if (!__SEFER_DESIGN__) return;
   let stop: (() => void) | undefined;
-  void import("../dev/designSurface").then((surface) => {
-    stop = surface.startDesignSurface();
+  void import("../dev/designSurface").then(({ startDesignSurface }) => {
+    stop = startDesignSurface();
   });
   onCleanup(() => {
     stop?.();

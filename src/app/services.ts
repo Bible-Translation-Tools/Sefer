@@ -97,7 +97,13 @@ export const PROJECTS_ROOT = `${OPFS_ROOT}/projects`;
  * — every file behind that barrel imports `@tauri-apps/*`, which must not be
  * evaluated in a browser.
  */
-type TauriHost = typeof import("../platform/tauri/index");
+type TauriHost = (typeof import("../platform/tauri/index"))["tauriHost"];
+
+/** Destructured at the import so the host's surface is visible to static analysis. */
+const loadTauriHost = async (): Promise<TauriHost> => {
+  const { tauriHost } = await import("../platform/tauri/index");
+  return tauriHost;
+};
 
 /**
  * The seeded fixture, reached the same way and for the same reason.
@@ -469,8 +475,7 @@ export const composeServices = async (
    * code-splits this, which is exactly the point: `pnpm build` must not carry
    * the plugins.
    */
-  const tauri: TauriHost | undefined =
-    detectHost() === "tauri" ? await import("../platform/tauri/index") : undefined;
+  const tauri: TauriHost | undefined = detectHost() === "tauri" ? await loadTauriHost() : undefined;
   /**
    * The roots everything writable hangs off, resolved BEFORE the Layers are
    * built because Recovery and Library take theirs as options. On desktop they
