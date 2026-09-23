@@ -20,8 +20,10 @@ Two relative-import exceptions exist, both listed in `tools/boundaries/check.ts`
 Host-neutral generated code, reached by PACKAGE NAME like any other dependency
 and pinned by tag in `package.json`; nothing is vendored and there is no
 second record of its identity.
-Only `src/core/galley` should import it; every other module reads the engine
-through that adapter.
+Only `src/core/galley` should import its code; every other module reads the
+engine through that adapter. The one other import is the Web host's
+`src/platform/web/galley.ts`, which takes the engine's `.wasm` as an asset URL
+(`…/web/wasm?url`) to hand the adapter — bytes to load, not code to call.
 
 The filesystem is the shape of that rule, not an exception to it: the port is
 Effect's own `FileSystem` service, which core may use because it comes from
