@@ -190,11 +190,9 @@ export const TauriGitLive: Layer.Layer<Git> = Layer.succeed(Git, {
       });
       // Bytes stay deferred: a per-book history is long and only the version
       // someone opens is worth reading out of the object database.
-      return entries.map(
-        (wire): Version => ({
-          commit: commitOf(wire),
-          bytes: () => show(repo, wire.id, relative),
-        }),
-      );
+      return entries.map((wire): Version => ({
+        commit: commitOf(wire),
+        bytes: () => show(repo, wire.id, relative),
+      }));
     }),
 } satisfies GitService);

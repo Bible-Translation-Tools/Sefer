@@ -153,14 +153,12 @@ export const TauriUpdaterLive = (options: TauriUpdaterOptions): Layer.Layer<Upda
               if (!response.ok) return [];
               const raw = yield* Effect.promise((): Promise<unknown> => response.json());
               if (!Array.isArray(raw)) return [];
-              return raw.filter(isWireRelease).map(
-                (row): ReleaseListing => ({
-                  version: row.version,
-                  tag: row.tag,
-                  publishedAt: row.published_at ?? null,
-                  prerelease: row.prerelease === true,
-                }),
-              );
+              return raw.filter(isWireRelease).map((row): ReleaseListing => ({
+                version: row.version,
+                tag: row.tag,
+                publishedAt: row.published_at ?? null,
+                prerelease: row.prerelease === true,
+              }));
             }),
             (): readonly ReleaseListing[] => [],
           ),

@@ -79,7 +79,7 @@
     "lefthook": "2.1.14",
     "magic-string": "^1.4.1",
     "oxc-parser": "^0.151.0",
-    "oxfmt": "0.53.0",
+    "oxfmt": "0.70.0",
     "oxlint": "1.85.0",
     "playwright": "1.63.0",
     "tailwindcss": "4.3.3",
