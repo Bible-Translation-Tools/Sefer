@@ -1,28 +1,11 @@
 /**
  * The sync state machine: one reading of a repository in, one state out.
  *
- * Everything here is pure. No Effect, no Git, no fetch — the shell does the IO
- * (`src/app/ui/cloud/reading.ts`), hands the facts in, and renders what comes
- * back. That is what makes every state reachable in a test or a dev fixture
- * without a Gitea instance, and it is why the derivation can be read in one
- * sitting: the whole policy is the `switch`-free ladder in `syncStateOf`.
- *
- * The model is v1's, which was about right. Two ideas carry it:
- *
- * 1. **Two clocks.** A translator does not think in refs; they think "how much
- *    of my work has left this machine, and how much of everyone else's has
- *    arrived". So a reading always yields both: the LOCAL clock (when I last
- *    recorded a version, and how many the cloud has not got) and the SHARED
- *    clock (when the cloud last moved, and how many versions I have not got).
- *    Both are computed in every state, including the broken ones, because
- *    "you are offline" is only half an answer — the other half is "and you
- *    have two versions waiting here".
- *
- * 2. **Scripture text is never merged automatically.** `diverged` is a state,
- *    not a failure to be resolved behind someone's back. The only combine
- *    Sefer offers is "keep my work as one version on top of the cloud's", and
- *    it is offered only when the two sides touched different books; anything
- *    both sides touched goes to Compare, where a person decides.
+ * Pure: the shell does the IO (`src/app/ui/cloud/reading.ts`), hands the facts
+ * in, and renders what comes back, so every state is reachable from a dev
+ * fixture without a Gitea instance. The two clocks and the rule that scripture
+ * text is never merged automatically are in
+ * `documentation/architecture/sync.md`.
  */
 
 import type { Commit, CommitId } from "../git/git";
