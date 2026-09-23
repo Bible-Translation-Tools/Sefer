@@ -355,6 +355,7 @@ Project find over the reading text, in JavaScript over the engine's mask map (`f
 ### Constraints and known bugs
 
 - A hit that spans markup cannot be replaced (`Stale`).
+- `Hit.reading` is declared and never set; delete it next time search is touched.
 
 ### Ideas / future
 
