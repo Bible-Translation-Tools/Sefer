@@ -29,17 +29,20 @@
  * — they just do it with two URLs, which is the version you can send.
  */
 
-import { useNavigate } from "@tanstack/solid-router";
+import { getRouteApi, useNavigate } from "@tanstack/solid-router";
 import { For, Show, createMemo } from "solid-js";
 
 import { useShell } from "../../app/ProjectContext";
 import { Badge, Card, SegmentedControl, Select, Switch } from "../../app/ui/primitives";
 import { ShellGate } from "../../app/ui/ShellGate";
-import { Route } from "../../routes/_app/project/$slug/playground";
 import { dialValues, withDial, type Dials } from "../dials";
 import { benchFor } from "./bench";
 import type { DialValues, Experiment } from "./experiment";
 import { experiments } from "./registry";
+
+// By id, not by importing the route module: that module lazy-loads this
+// page, so importing it back would make a cycle.
+const Route = getRouteApi("/_app/project/$slug/playground");
 
 function Playground() {
   const shell = useShell();

@@ -22,15 +22,18 @@
  * worker where there is no filesystem and no project to open.
  */
 
-import { useNavigate } from "@tanstack/solid-router";
+import { getRouteApi, useNavigate } from "@tanstack/solid-router";
 import { Show, createEffect, createMemo, onCleanup } from "solid-js";
 
-import { Route } from "../../routes/design";
 import { type StateAdapter } from "../annotate";
 import { currentVariant, isOn, readTweak } from "../annotate/state";
 import { configureDesignSurface, releaseDesignSurface, syncDesignSurface } from "../designSurface";
 import { screenById, screens } from "./registry";
 import type { Screen } from "./screen";
+
+// By id, not by importing the route module: that module lazy-loads this
+// page, so importing it back would make a cycle.
+const Route = getRouteApi("/design");
 
 const SCREEN_KEY = "screen";
 
