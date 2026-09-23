@@ -22,7 +22,7 @@ import {
 import { zipSync } from "fflate";
 
 import { writeFileAtomic, writeFileStringAtomic } from "../fileSystem/atomic";
-import { joinPath, parentPath } from "../fileSystem/path";
+import { joinPath, lastSegment, parentPath } from "../fileSystem/path";
 import { MANIFEST_FILE, METADATA_FILE } from "../project/discovery";
 import { type BurritoMetadata, decodeBurritoMetadata } from "../resources/burrito";
 import { refreshIngredientChecksums } from "../resources/checksum";
@@ -159,8 +159,6 @@ const isPrivatePath = (name: string): boolean =>
   name === ".git" ||
   name.startsWith(".git/") ||
   name.includes("/.git/");
-
-const lastSegment = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
 
 /**
  * The burrito root a file belongs to: the nearest ancestor holding

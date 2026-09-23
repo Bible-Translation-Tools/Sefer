@@ -22,6 +22,7 @@
 import { Effect, FileSystem, Option, Result } from "effect";
 
 import { ProjectAdmin } from "../../../core/admin/projectAdmin";
+import { lastSegment } from "../../../core/fileSystem/path";
 import { HostInfo } from "../../../core/host/hostInfo";
 import {
   recordProject,
@@ -50,8 +51,6 @@ export interface ProjectSummary {
   /** Dev only: the seeded in-memory fixture, which has no metadata at all. */
   readonly fixture: boolean;
 }
-
-const lastSegment = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
 
 const isUsfm = (path: string): boolean => path.toLowerCase().endsWith(".usfm");
 

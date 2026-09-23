@@ -22,6 +22,7 @@
 import { Effect, Option, Result } from "effect";
 
 import type { AdminError } from "../core/admin/projectAdmin";
+import { lastSegment } from "../core/fileSystem/path";
 import { registerCommand } from "./commands";
 import { describe } from "./describe";
 import { t } from "./i18n";
@@ -30,8 +31,6 @@ import type { Services } from "./services";
 import { downloadBytes } from "./ui/landing/download";
 import { rememberProject } from "./ui/landing/summaries";
 import { toasts } from "./ui/primitives";
-
-const lastSegment = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
 
 /** The one filter list both hosts show for a project archive. */
 const ZIP_FILTERS = [{ name: "Zip archive", extensions: ["zip"] }] as const;

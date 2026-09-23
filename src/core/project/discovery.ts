@@ -12,7 +12,7 @@
 
 import { Effect, FileSystem, Option, PlatformError, Result } from "effect";
 
-import { joinPath, normalisePath } from "../fileSystem/path";
+import { joinPath, lastSegment, normalisePath } from "../fileSystem/path";
 import { decodeBurritoMetadata, type BurritoMetadata } from "../resources/burrito";
 import {
   fromBurrito,
@@ -43,8 +43,6 @@ const USFM_MIME_TYPES: ReadonlySet<string> = new Set(["text/x-usfm", "text/usfm"
 
 const LEADING_NUMBER = /^(\d+)/;
 
-const baseName = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
-
 const isBookFileName = (name: string): boolean => {
   const lower = name.toLowerCase();
   return BOOK_EXTENSIONS.some((extension) => lower.endsWith(extension));
@@ -64,8 +62,8 @@ const isUsfmIngredient = (name: string, mimeType: string): boolean =>
  */
 export const canonicalOrder = (paths: readonly string[]): readonly string[] =>
   [...paths].sort((left, right) => {
-    const leftName = baseName(left);
-    const rightName = baseName(right);
+    const leftName = lastSegment(left);
+    const rightName = lastSegment(right);
     const leftNumber = LEADING_NUMBER.exec(leftName)?.[1];
     const rightNumber = LEADING_NUMBER.exec(rightName)?.[1];
     if (leftNumber !== undefined && rightNumber !== undefined) {

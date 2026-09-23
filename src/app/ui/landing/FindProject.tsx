@@ -31,6 +31,7 @@ import Plus from "lucide-solid/icons/plus";
 import SearchIcon from "lucide-solid/icons/search";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
+import { lastSegment } from "../../../core/fileSystem/path";
 import { cloneRepository } from "../../../core/remote/clone";
 import { catalogueFor, type CatalogueEntry, type ProjectType } from "../../catalogue";
 import { describe } from "../../describe";
@@ -79,8 +80,6 @@ type NameStyle = "natural" | "anglicized";
 type Column = "code" | "language" | "region" | "date";
 
 const ALL_REGIONS = "*";
-
-const lastSegment = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
 
 /**
  * One row, with every value the table draws already computed.

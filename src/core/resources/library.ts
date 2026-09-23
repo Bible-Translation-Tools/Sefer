@@ -29,7 +29,7 @@ import {
 
 import type { Ref } from "../book/book";
 import { writeFileStringAtomic } from "../fileSystem/atomic";
-import { joinPath, parentPath } from "../fileSystem/path";
+import { joinPath, lastSegment, parentPath } from "../fileSystem/path";
 import { Observability, type ObservabilityService } from "../observability";
 import { decode } from "../source/source";
 import { decodeBurritoMetadata } from "./burrito";
@@ -179,8 +179,6 @@ const refuse = (reason: LibraryRefusal, description: string): LibraryError =>
   new LibraryError({ reason, description });
 
 const failure = (error: PlatformError.PlatformError): LibraryError => refuse("Io", error.message);
-
-const lastSegment = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
 
 const isUsfm = (path: string): boolean => path.toLowerCase().endsWith(".usfm");
 

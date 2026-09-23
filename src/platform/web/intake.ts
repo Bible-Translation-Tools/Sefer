@@ -28,6 +28,7 @@
 import { Effect, FileSystem } from "effect";
 import { unzipSync } from "fflate";
 
+import { lastSegment } from "../../core/fileSystem/path";
 import type { ObservabilityService } from "../../core/observability";
 import type { Staged } from "../../core/resources/import";
 
@@ -49,8 +50,6 @@ export interface Picked {
 const IGNORED = /(^|\/)(__MACOSX\/|\.DS_Store$|Thumbs\.db$|\._)/;
 
 const usable = (path: string): boolean => path !== "" && !path.endsWith("/") && !IGNORED.test(path);
-
-const lastSegment = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
 
 /**
  * Drops the one folder every entry sits in, if there is one.

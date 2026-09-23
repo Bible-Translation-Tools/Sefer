@@ -16,7 +16,7 @@
 import { Data, Effect, FileSystem, Result, type PlatformError } from "effect";
 
 import { writeFileStringAtomic } from "../fileSystem/atomic";
-import { joinPath, parentPath } from "../fileSystem/path";
+import { joinPath, lastSegment, parentPath } from "../fileSystem/path";
 import { decode } from "../source/source";
 import { decodeBurritoMetadata } from "./burrito";
 import { decodeResourceContainerManifest } from "./resourceContainer";
@@ -64,8 +64,6 @@ const unreadable =
   (path: string) =>
   (error: PlatformError.PlatformError): ImportError =>
     refuse("Unreadable", `${path}: ${error.message}`);
-
-const lastSegment = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
 
 const isUsfm = (path: string): boolean => path.toLowerCase().endsWith(".usfm");
 

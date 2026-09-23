@@ -32,6 +32,7 @@ import FileArchive from "lucide-solid/icons/file-archive";
 import FolderOpen from "lucide-solid/icons/folder-open";
 import { For, Show, createSignal } from "solid-js";
 
+import { lastSegment } from "../../../core/fileSystem/path";
 import { Observability } from "../../../core/observability";
 import { cloneRepository } from "../../../core/remote/clone";
 import { Gitea, type RemoteRepo } from "../../../core/remote/gitea";
@@ -67,8 +68,6 @@ interface Progress {
   /** "12 of 66 files" while a step is running; the steps alone say too little. */
   readonly detail?: string;
 }
-
-const lastSegment = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
 
 /**
  * A rejection as one line.
