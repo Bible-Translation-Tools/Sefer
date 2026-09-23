@@ -50,7 +50,7 @@ Delete the provisional `\c`/`\v` scanners in `src/core/search/search.ts` and `sr
 
 ### 3. Projection/mode extension bundle — `src/editor`
 
-`BookEditor.tsx`, `recipes/reference.ts`, and `ExcerptEditor.tsx` each assemble `assignment`, `modeFacet`, and `EditorView.editorAttributes`. Give that three-part rule one small editor utility, with an optional surface class. `ResultCard.tsx` currently adds `cm-mode-regular` directly to `view.dom.classList`; CodeMirror can rewrite that class on update, so route it through the extension too.
+`BookEditor.tsx`, `recipes/reference.ts`, and `ExcerptEditor.tsx` each assemble `assignment`, `modeFacet`, and `EditorView.editorAttributes`. Give that three-part rule one small editor utility, with an optional surface class. `ResultCard.tsx`, which added `cm-mode-regular` directly to `view.dom.classList`, was deleted on 2026-09-23 as dead code; nothing else mutates the editor's classes that way.
 
 Keep `readingLayer` and `viewLayer` distinct. A note-body satellite intentionally does not install the regular reading projection because it would hide the note being edited. One universal `readingSurface()` bundle would make that case harder to express.
 
@@ -175,7 +175,7 @@ The immediate cleanup candidate is shared documentation and narrowly shared retu
 
 1. Define the semantic reference and resolved-location contracts with hard examples, including ranges, disjoint lists, bridges, misses, and duplicate anchors. Include both directions: reference → current source span and source offset/selection → typed reference list, with explicit freshness and mapping outcomes.
 2. Route one consumer through them; delete its old resolver, then migrate Search, Excerpts/STET, and Library without keeping fallback scanners indefinitely.
-3. Consolidate mode extensions and remove ResultCard's direct DOM class mutation.
+3. Consolidate mode extensions. (ResultCard's direct DOM class mutation went with ResultCard, 2026-09-23.)
 4. Test window/satellite refusal and lifecycle behavior before extracting any shared mirror internals.
 5. Build a reference preview or comment anchor as the next composition test. Only then judge whether an N-column layout needs a reusable container.
 
