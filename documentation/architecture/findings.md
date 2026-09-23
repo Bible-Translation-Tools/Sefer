@@ -1,6 +1,6 @@
 # Findings, project analysis, and fixes
 
-Galley produces diagnostics in the same call that produces structure. This is where they go, and what may be done with them. Slices 13–15; the sinks table is [the editor and save seams](../../planning/00-ideas/v2-editor-and-save-seams.md) §2.
+Galley produces diagnostics in the same call that produces structure. This is where they go, and what may be done with them.
 
 ## The sinks, as they now exist
 
@@ -148,6 +148,23 @@ The module also exports `format(text, opts)`, which answers the whole rewritten 
 Unchanged, and worth keeping written down. `onion::format` merges **two** edit sets — the lint rows flagged `formatter` in the catalogue, and the FORM channel (`Severity::Form`) that `lint` never reaches — colliding them by row order, first writer wins. Sefer can see the first half and cannot see the second at all, so a TypeScript pass would reproduce half of format and silently diverge on the rest. Two formatters that disagree about scripture is the worst bug available here.
 
 The options are not offered either. `FormatOpts` has a dozen switches (`verse_breaks`, `collapse_blank_lines`, `block_marker_own_line`, `remove_markers`, `repairs`…) and Sefer passes none of them: the engine's own defaults are what "Format" means, and choosing among them is a settings surface nobody has designed. `src/core/galley/format.ts` types all of them, so the day someone designs it the plumbing is one object.
+
+## Overlay
+
+"Match formatting from source" in the UI; **Overlay** in the [glossary](../glossary.md). Where Format consults no other text, an overlay carries a source Resource's paragraphing onto this project's book: `Fixes.overlayBook(galley, book, sourceText, opts?)` answers a `FormatPreview` from the engine's overlay doors (Sefer decides nothing about where a paragraph goes), and `Fixes.applyOverlay` writes it with origin `overlay` — never `format`, so history, the save status and the trace say what changed the paragraphing.
+
+Three commands, one implementation (`src/app/commands.ts`):
+
+| command | scope | writes |
+| --- | --- | --- |
+| `overlay.chapter` | the chapter at the cursor (`{ scope: { chapter } }`) | one `apply`, one Undo step |
+| `overlay.book` | the focused book (also the toolbar button) | one `apply`, one Undo step |
+| `overlay.project` | every book the source also has | `MultiBook.runAcrossBooks('overlay', …)`: one `apply` per book, origin `project.overlay` |
+
+- **The source is the first resource bound under the `source` role**, read through `Library.readBook`. Never a `reference`: a reference is read beside the text, not a shape to take. A project with two sources bound needs a picker these commands do not have yet.
+- **No preview, no confirm.** Undo is the preview: the thing to judge is the result in the reader's own editor.
+- **The page does not move.** The write runs inside `withoutScrolling`, the same guard that keeps Undo from throwing the reader out of a footnote.
+- **What it leaves is shown.** An overlay inserts inside-verse blocks empty on purpose — where a verse's text splits is unknowable across languages. After the write the reader is taken to the first such block at or after the cursor (within the chapter, for `overlay.chapter`), `editor.annotateEmptyParagraphs` is turned on if it was off, and the report says both.
 
 ## Sous's new lanes
 

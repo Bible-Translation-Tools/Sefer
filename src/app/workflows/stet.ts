@@ -1,25 +1,12 @@
 /**
- * STET (slice 27): formatting transfer, and comparison against a reference.
+ * STET — "let it stand", the proofreader's mark — as Sefer ships it: key
+ * terms, the `/terms` screen.
  *
- * "STET" is the proofreader's mark meaning "let it stand". The job it names
- * here is the reverse of drafting: the text is already right, and what must be
- * carried across is the FORMATTING — paragraph breaks, poetry indentation,
- * section headings — from a source book to a target that has the same words
- * arranged as one undifferentiated run.
- *
- * ## It is the ENGINE's, and that is the whole point
- *
- * This was a stub, and the note on it said the alignment rules were the domain
- * owner's and this file must not invent them. It still must not, and it no
- * longer has to: scripture-kitchen v0.1.0 carries the overlay doors
- * (`galley/src/overlay.md`, engine-asks item 3), so "which markers transfer,
- * what happens at a verse the target has split or merged, and how a mismatch is
- * reported" are answered by the same engine that parses the text.
- *
- * What is left for a workflow is the join: register both sides with the handle,
- * ask for both skeletons and the transaction, and hand them back. The rules
- * live upstream; the decisions — whether to apply, and to which chapters —
- * belong to the person reading the two columns.
+ * Formatting transfer used to be planned as STET's other half and to live
+ * here. It does not: it is the Overlay ("Match formatting from source"), a
+ * command on the text you are reading (`overlay.*` in `src/app/commands.ts`),
+ * because it is an operation on the text rather than a screen to go to. See
+ * `documentation/glossary.md`, "Overlay".
  */
 
 import { Effect, Option } from "effect";
@@ -39,7 +26,7 @@ import {
 // ---------------------------------------------------------------------------
 // Key terms
 //
-// The other half of STET, and the one the design calls a multibuffer: a list
+// The one the design calls a multibuffer: a list
 // of terms on the left, and on the right one pair of cards per occurrence —
 // the source verse with the term highlighted, and the target verse, which is
 // the editable one (design-direction.md, "Key terms / STET"). It has its own

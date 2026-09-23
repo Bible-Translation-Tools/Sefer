@@ -79,56 +79,6 @@ const booksOf = (
   });
 
 /**
- * One registered reference's text, read back off disk.
- *
- * The id IS the path — that is what `booksOf` registered it as — so this is a
- * read and not a lookup. `undefined` when the file is gone or will not decode,
- * which a caller shows as "no source for this book" rather than as an error:
- * the binding is still valid, this one file is not readable right now.
- *
- * Read rather than kept: the corpus holds the text for its own purposes, and a
- * second copy in a Solid signal per screen is a copy that can go stale against
- * the file without anything noticing.
- */
-/**
- * The source text to match one book's formatting against, or `undefined`.
- *
- * `projectId` is `Project.id`, not the root — see `bindReferences`.
- *
- * The pairing is by BOOK CODE against the reference's file name — the same
- * loose rule `Library.lookup` uses, loose on purpose because resource layouts
- * vary and the manifest that would answer authoritatively is YAML. Factored
- * out of `/terms` so the command palette and that screen cannot disagree about
- * which file is "the source for this book".
- */
-export const sourceTextForBook = (
-  projectId: string,
-  bookId: string,
-): Effect.Effect<string | undefined, never, Library | ProjectAnalysis | FileSystem.FileSystem> =>
-  Effect.gen(function* () {
-    const bound = yield* bindReferences(projectId);
-    const wanted = bookId.toLowerCase();
-    const match = bound.ids.find((id) =>
-      id
-        .slice(id.lastIndexOf("/") + 1)
-        .toLowerCase()
-        .includes(wanted),
-    );
-    return match === undefined ? undefined : yield* textOfReference(match);
-  });
-
-const textOfReference = (
-  id: string,
-): Effect.Effect<string | undefined, never, FileSystem.FileSystem> =>
-  Effect.gen(function* () {
-    const fileSystem = yield* FileSystem.FileSystem;
-    const read = yield* Effect.result(fileSystem.readFile(id));
-    if (Result.isFailure(read)) return undefined;
-    const source = decode(read.success);
-    return Result.isFailure(source) ? undefined : source.success.text;
-  });
-
-/**
  * Resolve the project's `source` and `reference` bindings and register every
  * book of them with the corpus, keeping their text.
  *
@@ -141,8 +91,8 @@ const textOfReference = (
  * `${root}#${declared}` (`core/project/project.ts`), and every screen that
  * binds a resource does so through `project.id`. Passing the root here
  * resolved nothing for exactly the projects that declare themselves properly,
- * and it failed SILENTLY: no bindings, no references registered, and a Match
- * Formatting screen that said "bind a source first" to somebody who had.
+ * and it failed SILENTLY: no bindings, no references registered, and a screen
+ * that said "bind a source first" to somebody who had.
  */
 export const bindReferences = (
   projectId: string,

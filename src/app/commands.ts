@@ -35,7 +35,6 @@ import { t } from "./i18n";
 import type { Domain, Services } from "./services";
 import { shellKeys } from "./settings";
 import type { ShellEvent } from "./shellEvent";
-import * as References from "./workflows/references";
 
 /** What a command's `run` may return; an Effect is run on the app runtime. */
 export type CommandResult =
@@ -732,109 +731,6 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
     }),
 
     // ---------------------------------------------------------------------
-    // Match formatting, from wherever the reader is.
-    //
-    // It lived only on `/terms?view=format`, which is a screen you go to — and
-    // the operation is one you want ON the text you are reading, at the size
-    // you are willing to walk back through. An overlay inserts inside-verse
-    // blocks EMPTY on purpose (the engine cannot know where a verse's text
-    // splits across languages), so "this chapter" is a sitting and "this book"
-    // is an afternoon.
-    //
-    // The palette rather than the kebab because it is where every other
-    // whole-book operation already lives, and because `when` can hide it
-    // without a menu having to render a disabled row and explain itself. Not
-    // necessarily the permanent home.
-    //
-    // ASYNC, unlike its neighbours: the source text is a Library resource read
-    // off disk, not something the shell is holding. So the command reports
-    // what it is doing and reports again when it lands, rather than looking
-    // like it did nothing for a beat.
-    // ---------------------------------------------------------------------
-
-    ...(() => {
-      /** The `\c` number the caret is inside, or `undefined` in front matter. */
-      const chapterAtCaret = (book: EditorBook): number | undefined => {
-        const at = book.state.selection.main.head;
-        const row = structureAt(book.state).chapters.find(
-          (chapter: { readonly from: number; readonly to: number }) =>
-            at >= chapter.from && at < chapter.to,
-        );
-        const number = row === undefined ? Number.NaN : Number.parseInt(row.label, 10);
-        return Number.isFinite(number) ? number : undefined;
-      };
-
-      const match = (scope: "chapter" | "book"): void => {
-        const book = bridge.focused();
-        // `project.id` and not `root` — the key `Library.bind` writes under.
-        const projectId = bridge.project()?.id;
-        if (book === undefined || projectId === undefined) return;
-        const chapter = scope === "chapter" ? chapterAtCaret(book) : undefined;
-        if (scope === "chapter" && chapter === undefined) {
-          bridge.report(t("put the cursor in a chapter first"));
-          return;
-        }
-        bridge.report(t("reading the source…"));
-        void bridge.services
-          .run(References.sourceTextForBook(projectId, book.id))
-          .then((sourceText) => {
-            if (sourceText === undefined || sourceText === null || sourceText === "") {
-              bridge.report(t("no source bound for {book}", { book: book.id }));
-              return;
-            }
-            const previewed = overlayBook(
-              bridge.services.galley,
-              book,
-              sourceText,
-              chapter === undefined ? undefined : { scope: { chapter } },
-            );
-            if (Result.isFailure(previewed)) {
-              bridge.report(previewed.failure.description);
-              return;
-            }
-            if (previewed.success.empty) {
-              bridge.report(
-                chapter === undefined
-                  ? t("{book} already matches the source", { book: book.id })
-                  : t("chapter {chapter} already matches the source", { chapter }),
-              );
-              return;
-            }
-            const applied = applyOverlay(previewed.success, book);
-            bridge.report(
-              Result.isFailure(applied)
-                ? t("match formatting refused: {reason}", {
-                    reason: applied.failure.description,
-                  })
-                : chapter === undefined
-                  ? t("matched formatting across {book}", { book: book.id })
-                  : t("matched formatting in chapter {chapter}", { chapter }),
-            );
-            bridge.changed({ kind: "book.apply", books: [book.id] });
-          });
-      };
-
-      return [
-        registerCommand({
-          id: "format.match.chapter",
-          title: t("Match formatting: this chapter"),
-          when: hasBook,
-          run: () => {
-            match("chapter");
-          },
-        }),
-        registerCommand({
-          id: "format.match.book",
-          title: t("Match formatting: this book"),
-          when: hasBook,
-          run: () => {
-            match("book");
-          },
-        }),
-      ];
-    })(),
-
-    // ---------------------------------------------------------------------
     // Format. One `book.apply(…, 'format')` per book, so a formatted book is
     // one Undo step and a formatted project is one per book. The edits are
     // Onion's own (`Fixes.formatBook`); Sefer has no formatter.
@@ -866,125 +762,6 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       },
     }),
 
-    // ---------------------------------------------------------------------
-    // Match formatting. The bound SOURCE's paragraphing, carried onto the open
-    // book in one `book.apply(…, 'overlay')` — so it is one Undo step, and
-    // Undo is the preview. There is no confirm dialog on purpose: the thing a
-    // translator needs to judge is the result in their own editor, and a list
-    // of block addresses in a modal is not that.
-    // ---------------------------------------------------------------------
-
-    registerCommand({
-      id: "overlay.book",
-      title: t("Match formatting from source"),
-      when: hasBook,
-      run: () =>
-        Effect.gen(function* () {
-          const book = bridge.focused();
-          const project = bridge.project();
-          if (book === undefined || project === undefined) return;
-          // The FIRST source, because the role holds many and "match
-          // formatting" has to mean one text. A project with two sources
-          // bound is a picker this command does not have yet, and taking the
-          // first is the same order the reference column shows them in.
-          const bound = yield* bridge.services.library.resolve(project.id, "source");
-          const source = bound[0];
-          if (source === undefined) {
-            bridge.report(t("no source text is bound to this project"));
-            return;
-          }
-          const text = yield* bridge.services.library.readBook(source.id, book.id);
-          if (Option.isNone(text)) {
-            bridge.report(t("the source has no {book}", { book: book.id }));
-            return;
-          }
-          const previewed = overlayBook(bridge.services.galley, book, text.value);
-          if (Result.isFailure(previewed)) {
-            bridge.report(previewed.failure.description);
-            return;
-          }
-          if (previewed.success.empty) {
-            bridge.report(t("{book} already matches the source's formatting", { book: book.id }));
-            return;
-          }
-          /**
-           * The write must not move the page.
-           *
-           * Match formatting rewrites markers the length of the book, so every
-           * offset after the first edit shifts and CodeMirror's pixel scroll
-           * no longer points at the words the reader was looking at. `core/
-           * scroll.ts` is the tool for exactly this — it is what keeps Undo
-           * from throwing you out of a footnote — and a whole-book operation
-           * has the same claim: you asked to reformat, not to go somewhere.
-           */
-          const applied = withoutScrolling(() => applyOverlay(previewed.success, book));
-          if (Result.isFailure(applied)) {
-            bridge.report(
-              t("match formatting refused: {reason}", { reason: applied.failure.description }),
-            );
-            return;
-          }
-          bridge.changed({ kind: "book.apply", books: [book.id] });
-
-          /**
-           * What the overlay LEFT for a human.
-           *
-           * An overlay inserts a block that belongs inside a verse with no
-           * words in it, on purpose — where a verse's text splits is
-           * unknowable across languages. Those are the whole visible result of
-           * the operation, and they are counted off the book's OWN state after
-           * the write rather than from the preview's offsets: the write moved
-           * every offset after the first edit, and a number read from before
-           * it would point at the wrong line.
-           */
-          const holes = emptyBlocks(book.state);
-          if (holes.length === 0) {
-            bridge.report(t("matched {book} to {source}", { book: book.id, source: source.title }));
-            return;
-          }
-          /**
-           * And go to one — the first at or after WHERE THE READER IS, not the
-           * first in the book.
-           *
-           * Match formatting runs over the whole book, so the first hole in it
-           * is very often in chapter 2 while the reader is working in chapter
-           * 40. Jumping there answers a question nobody asked and loses their
-           * place, which is the same complaint as the scroll above. The
-           * canonical state's own selection is where they are.
-           */
-          const caret = book.state.selection.main.head;
-          const next = holes.find((hole) => hole.from >= caret) ?? holes[0];
-          bridge.aim(book.id, next.from);
-
-          /**
-           * And make sure they can be SEEN.
-           *
-           * The blocks the overlay left are invisible without
-           * `editor.annotateEmptyParagraphs`, so a reader who had it off would
-           * be sent to a blank line and told twelve of them need text. Turning
-           * a persisted preference on behind somebody's back is rude, so it is
-           * done only when it is off AND there is something to see, and the
-           * report says it happened — the setting is theirs to put back.
-           */
-          const ghostKey = shellKeys(bridge.services.settings).annotateEmptyParagraphs;
-          const wasOff = !bridge.services.settings.get(ghostKey);
-          if (wasOff) yield* bridge.services.settings.set(ghostKey, true);
-
-          bridge.report(
-            wasOff
-              ? t(
-                  "matched {book} to {source} — {count} block(s) need text; showing empty paragraphs",
-                  { book: book.id, source: source.title, count: holes.length },
-                )
-              : t("matched {book} to {source} — {count} block(s) need text", {
-                  book: book.id,
-                  source: source.title,
-                  count: holes.length,
-                }),
-          );
-        }),
-    }),
-
     registerCommand({
       id: "format.project",
       title: t("Format every book"),
@@ -1008,6 +785,231 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
         bridge.changed({ kind: "book.apply", books: operation.books });
       },
     }),
+
+    // ---------------------------------------------------------------------
+    // Overlay — "Match formatting from source" in the UI. The bound SOURCE's
+    // paragraphing carried onto this project's text (glossary, "Overlay"; not
+    // Format, which consults no other text). One `book.apply(…, 'overlay')`
+    // per book, so each book is one Undo step and Undo is the preview: there is
+    // no confirm dialog, because what a translator needs to judge is the result
+    // in their own editor, not a list of block addresses in a modal.
+    //
+    // Scoped, because an overlay inserts inside-verse blocks EMPTY on purpose
+    // (the engine cannot know where a verse's text splits across languages):
+    // the chapter at the cursor is a sitting, the book an afternoon, the
+    // project a decision. ASYNC, unlike its neighbours: the source is a Library
+    // resource read off disk, so the command says what it is doing.
+    // ---------------------------------------------------------------------
+
+    ...(() => {
+      /** The `\c` number the caret is inside, or `undefined` in front matter. */
+      const chapterAtCaret = (book: EditorBook): number | undefined => {
+        const at = book.state.selection.main.head;
+        const row = structureAt(book.state).chapters.find(
+          (chapter: { readonly from: number; readonly to: number }) =>
+            at >= chapter.from && at < chapter.to,
+        );
+        const number = row === undefined ? Number.NaN : Number.parseInt(row.label, 10);
+        return Number.isFinite(number) ? number : undefined;
+      };
+
+      /**
+       * The project's source: the FIRST resource bound under the `source` role.
+       * The role holds many and an overlay has to mean one text; a project
+       * with two sources is a picker this command does not have yet, and the
+       * first is the order the reference column shows them in. Deliberately
+       * the source role only — a `reference` is something read beside the
+       * text, never something its shape is taken from.
+       */
+      const boundSource = (projectId: string) =>
+        Effect.map(bridge.services.library.resolve(projectId, "source"), (bound) => bound[0]);
+
+      /**
+       * What an overlay LEFT for a human, and taking the reader to it.
+       *
+       * The empty blocks are the whole visible result, so they are counted off
+       * the book's OWN state after the write (the write moved every offset
+       * after the first edit). The reader is sent to the first one at or after
+       * where they are, not the first in the book — an overlay of the whole
+       * book very often has its first hole in chapter 2 while they work in
+       * chapter 40. The blocks are invisible without
+       * `editor.annotateEmptyParagraphs`, so that is turned on when it is off
+       * AND there is something to see, and the report says so: the setting is
+       * theirs to put back.
+       */
+      const showWhatNeedsText = (
+        book: EditorBook,
+        done: string,
+        within?: { readonly from: number; readonly to: number },
+      ) =>
+        Effect.gen(function* () {
+          const holes = emptyBlocks(book.state).filter(
+            (hole) => within === undefined || (hole.from >= within.from && hole.from < within.to),
+          );
+          if (holes.length === 0) {
+            bridge.report(done);
+            return;
+          }
+          const caret = book.state.selection.main.head;
+          const next = holes.find((hole) => hole.from >= caret) ?? holes[0];
+          bridge.aim(book.id, next.from);
+          const ghostKey = shellKeys(bridge.services.settings).annotateEmptyParagraphs;
+          const wasOff = !bridge.services.settings.get(ghostKey);
+          if (wasOff) yield* bridge.services.settings.set(ghostKey, true);
+          bridge.report(
+            wasOff
+              ? t("{done} — {count} block(s) need text; showing empty paragraphs", {
+                  done,
+                  count: holes.length,
+                })
+              : t("{done} — {count} block(s) need text", { done, count: holes.length }),
+          );
+        });
+
+      /** The chapter at the cursor, or the whole focused book. */
+      const overlayFocused = (scope: "chapter" | "book") =>
+        Effect.gen(function* () {
+          const book = bridge.focused();
+          const project = bridge.project();
+          if (book === undefined || project === undefined) return;
+          const chapter = scope === "chapter" ? chapterAtCaret(book) : undefined;
+          if (scope === "chapter" && chapter === undefined) {
+            bridge.report(t("put the cursor in a chapter first"));
+            return;
+          }
+          const source = yield* boundSource(project.id);
+          if (source === undefined) {
+            bridge.report(t("no source text is bound to this project"));
+            return;
+          }
+          const text = yield* bridge.services.library.readBook(source.id, book.id);
+          if (Option.isNone(text)) {
+            bridge.report(t("the source has no {book}", { book: book.id }));
+            return;
+          }
+          const previewed = overlayBook(
+            bridge.services.galley,
+            book,
+            text.value,
+            chapter === undefined ? undefined : { scope: { chapter } },
+          );
+          if (Result.isFailure(previewed)) {
+            bridge.report(previewed.failure.description);
+            return;
+          }
+          if (previewed.success.empty) {
+            bridge.report(
+              chapter === undefined
+                ? t("{book} already matches the source's formatting", { book: book.id })
+                : t("chapter {chapter} already matches the source's formatting", { chapter }),
+            );
+            return;
+          }
+          // The write must not move the page: an overlay rewrites markers, so
+          // every offset after the first edit shifts and CodeMirror's pixel
+          // scroll would no longer point at the words the reader was on.
+          // `core/scroll.ts` is what keeps Undo from throwing you out of a
+          // footnote, and this has the same claim.
+          const applied = withoutScrolling(() => applyOverlay(previewed.success, book));
+          if (Result.isFailure(applied)) {
+            bridge.report(
+              t("match formatting refused: {reason}", { reason: applied.failure.description }),
+            );
+            return;
+          }
+          bridge.changed({ kind: "book.apply", books: [book.id] });
+          const extent =
+            chapter === undefined
+              ? undefined
+              : structureAt(book.state).chapters.find(
+                  (row: { readonly label: string }) => Number.parseInt(row.label, 10) === chapter,
+                );
+          yield* showWhatNeedsText(
+            book,
+            chapter === undefined
+              ? t("matched {book} to {source}", { book: book.id, source: source.title })
+              : t("matched chapter {chapter} to {source}", { chapter, source: source.title }),
+            extent,
+          );
+        });
+
+      /**
+       * Every book the source also has, one `apply` per book through
+       * `runAcrossBooks('overlay', …)` — origin `project.overlay`, one Undo
+       * step per book, exactly as `format.project` does for Format.
+       */
+      const overlayProject = () =>
+        Effect.gen(function* () {
+          const project = bridge.project();
+          if (project === undefined) return;
+          const source = yield* boundSource(project.id);
+          if (source === undefined) {
+            bridge.report(t("no source text is bound to this project"));
+            return;
+          }
+          bridge.report(t("reading {source}…", { source: source.title }));
+          const texts = new Map<string, string>();
+          for (const book of project.books) {
+            const text = yield* bridge.services.library.readBook(source.id, book.id);
+            if (Option.isSome(text)) texts.set(book.id, text.value);
+          }
+          if (texts.size === 0) {
+            bridge.report(t("{source} has none of this project's books", { source: source.title }));
+            return;
+          }
+          let refusal = "";
+          const operation = withoutScrolling(() =>
+            multibook.runAcrossBooks("overlay", (book) => {
+              const text = texts.get(book.id);
+              if (text === undefined) return null;
+              const previewed = overlayBook(bridge.services.galley, book, text);
+              if (Result.isFailure(previewed)) {
+                refusal = previewed.failure.description;
+                return null;
+              }
+              return previewed.success.empty ? null : previewed.success.changes;
+            }),
+          );
+          if (operation === null) {
+            bridge.report(
+              refusal === ""
+                ? t("every book already matches {source}", { source: source.title })
+                : refusal,
+            );
+            return;
+          }
+          bridge.changed({ kind: "book.apply", books: operation.books });
+          const done = t("matched {count} book(s) to {source}", {
+            count: operation.books.length,
+            source: source.title,
+          });
+          const focused = bridge.focused();
+          if (focused !== undefined && operation.books.includes(focused.id))
+            yield* showWhatNeedsText(focused, done);
+          else bridge.report(done);
+        });
+
+      return [
+        registerCommand({
+          id: "overlay.chapter",
+          title: t("Match formatting from source: this chapter"),
+          when: hasBook,
+          run: () => overlayFocused("chapter"),
+        }),
+        registerCommand({
+          id: "overlay.book",
+          title: t("Match formatting from source: this book"),
+          when: hasBook,
+          run: () => overlayFocused("book"),
+        }),
+        registerCommand({
+          id: "overlay.project",
+          title: t("Match formatting from source: every book"),
+          when: hasProject,
+          run: () => overlayProject(),
+        }),
+      ];
+    })(),
   ];
 
   return () => {

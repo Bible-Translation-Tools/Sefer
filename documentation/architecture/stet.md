@@ -2,7 +2,7 @@
 
 Status: this document describes code that exists, and says plainly which parts of it are a stand-in.
 
-STET — "let it stand", the proofreader's mark — names two jobs in Sefer. This document is about the one that shipped: **key terms**, the screen at `/terms` where a reviewer walks a guide's list of spiritual terms and, for each verse the guide records, compares a frozen source reading against the project's own. The other half, transferring FORMATTING from a source book to a target that has the same words (`matchFormatting`, `stetCompare` in `src/app/workflows/stet.ts`), is still a stub that dies rather than returning an empty answer.
+STET — "let it stand", the proofreader's mark — names two jobs in Sefer. This document is about the one that shipped: **key terms**, the screen at `/terms` where a reviewer walks a guide's list of spiritual terms and, for each verse the guide records, compares a frozen source reading against the project's own. Transferring FORMATTING from a source book to a target that has the same words was once planned as STET's other half; it shipped instead as the Overlay ("Match formatting from source"), a command on the text rather than a view here. See [findings](findings.md#overlay).
 
 ## Two panes, not a toggle
 
@@ -93,82 +93,14 @@ The Library pass runs only over what the guide did not answer, and short-circuit
 - **The guide is a fixture.** A key-terms guide is properly a Library resource under the `glossary` role, or a remote guides API. The port exists so that swapping the layer is the only change.
 - **No replace, no in-editor highlight.** The same non-goals the previous application had. An edit happens through a card's Edit button, in the satellite, where the editing phases judge it like any other keystroke.
 
-## Match formatting
+## Match formatting moved
 
-`/terms?view=format` is the second view on this route. It shares the premise (a
-source bound to this project) and a reader moves between the two in one
-sitting; it is a segmented control rather than a route because neither half is
-somewhere anybody links to directly.
-
-The job is the reverse of drafting. The words are already right; what has to
-cross is the SHAPE — where the paragraphs break, which lines are poetry, how far
-each is indented — from the source the translator worked from to a target that
-came back as one undifferentiated run.
-
-**It is the engine's, and that is the point.** `matchFormatting` was an
-`Effect.die` stub whose note said the alignment rules were the domain owner's
-and this file must not invent them. It still must not, and since
-scripture-kitchen v0.1.0 it does not have to: the overlay doors answer which
-markers transfer, what happens at a verse the target split or merged, and how a
-mismatch is reported (engine-asks item 3, closed). What is left for the
-workflow is the join — register both sides, ask for both skeletons and the
-transaction. See [galley.md](galley.md), "Match formatting".
-
-### Two columns, one address
-
-The two texts have different words and different lengths, so nothing about them
-can be matched by offset. What they share is a **block address** —
-`(sid, where, ordinal)`: which verse, whether the block leads the verse or sits
-inside it, and which one of those it is. Selecting a block on either side
-highlights the block at the same address on the other.
-
-The **marker is deliberately not part of the match.** A `\q1` here against a
-`\q2` there is precisely the difference a translator opened this view to see,
-and matching on the name would hide it by never pairing them. A block with no
-counterpart is marked instead.
-
-Both skeletons are fetched once per edit (~0.4 ms each) and matched in
-TypeScript, so the highlight costs nothing per cursor move.
-`targetNodeFor`/`sourceNodeFor` are for one-off questions and are an order of
-magnitude dearer.
-
-### What Apply says before it writes
-
-`overlayReport` is not decoration. Three of its four lists change what a reader
-should expect, and the summary row says all three:
-
-- **inserted, empty.** A block the source has INSIDE a verse arrives with no
-  words, because where a verse's text splits is unknowable across languages.
-  The file gets an empty block and the translator moves the line into it.
-  Nothing is invented — and a reader who was not told would read that as a
-  failed transfer.
-- **removed.** A block the target has and the source does not is taken out, and
-  its text joins the block above it. No words are lost; the shape is.
-- **unpaired.** A verse with no counterpart — absent, bridged, ambiguous — is
-  left alone entirely.
-
-The confirm dialog names the **chapters** rather than counting the edits: "this
-will change 14 places" is not a sentence anyone can act on. Apply is one
-`book.apply(edits, 'format', trustedBy('format'))` — one revision, one receipt,
-one Undo step. An overlay a reader regrets is one keystroke from gone, which is
-the only reason it is safe to offer.
-
-### What it needs, and what it does not have
-
-A bound `source` or `reference` resource whose file name carries the open
-book's code. `src/app/workflows/references.ts` resolves the binding;
-`fixtures/small-nt` has none, so the dev fixture shows the empty state until a
-resource is imported and bound.
-
-The source is paired to the target **by book code in the file name**, the same
-loose rule `Library.lookup` uses. Resource layouts vary and the manifest that
-would answer authoritatively is YAML.
-
-Registration goes to the wasm **handle**, which since the `CorpusEngine` port was deleted is the only door there is.
-On Web those are the same object; on desktop the corpus is a separate process
-and the handle has never been told about either book, so without this the view
-would work on Web and quietly not on desktop. It costs the source's text being
-resident twice on desktop, for a view a translator opens deliberately.
+This route used to carry a second view, `/terms?view=format`, with a two-column
+source/target comparison and a confirm dialog before an overlay was applied.
+It is gone. Overlay is now a command on the text being read — toolbar and
+palette, scoped to the chapter at the cursor, the book, or every book, with no
+preview because Undo is the preview. [Findings › Overlay](findings.md#overlay)
+describes it.
 
 ## Where things are
 
@@ -182,7 +114,7 @@ resident twice on desktop, for a view a translator opens deliberately.
 | `src/app/ui/excerpts/feed.ts` | `createExcerptFeed`, shared by Find and Key terms. |
 | `src/app/ui/excerpts/StetView.tsx` | The two-column view and the source/target pair. |
 | `src/app/ui/excerpts/MatchFormattingView.tsx` | The two block columns, the report badges, the confirm dialog. |
-| `src/app/workflows/stet.ts` | `keyTerms`, `keyTermGuides`, `sourceReadings`, `matchFormatting`. |
+| `src/app/workflows/stet.ts` | `keyTerms`, `keyTermGuides`, `sourceReadings`. |
 | `src/app/workflows/references.ts` | Library bindings → texts → `ProjectAnalysis.attachReferences`. |
 | `src/core/galley/overlay.ts` | The overlay wire: addresses, skeletons, the report. |
 | `fixtures/stet/` | The four committed guide files and their provenance. |
