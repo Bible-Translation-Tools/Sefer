@@ -34,4 +34,5 @@ src/dev/design/local/
 # they appear beside the source rather than in a build directory — so without
 # these two lines a red suite leaves untracked debris scattered through src/.
 .vitest-attachments/
+.vitest/
 **/__screenshots__/
