@@ -1,5 +1,5 @@
 /**
- * "What have I changed?", as the history and save panels both need to ask it.
+ * "What have I changed?", as History and Review both need to ask it.
  *
  * There are TWO baselines and they answer different questions, so both live
  * here rather than one being mistaken for the other:
@@ -11,12 +11,10 @@
  *     from it are the books they are about to record.
  *   * `recordedChanges` is against the last recorded VERSION (the blob at
  *     HEAD, read by `recorded.ts`). That is HISTORY's question — "what has
- *     happened since the last commit" — and it is the wrong one for Save &
- *     Review. It was the right one when the file was written on a timer,
- *     because then the file was not a decision; it is not any more, and using
- *     it cost an untouched 66-book project a review reading "66 books to
- *     record, diff of 92208" the first time it was opened without a
- *     repository.
+ *     happened since the last commit" — and it is the wrong one for Review.
+ *     Under explicit-only saving the file IS a decision, and reviewing against
+ *     HEAD would show an untouched 66-book project opened without a
+ *     repository as "66 books to record".
  *
  * Nothing here subscribes to a Book — each walk reads `shell.stampOf` to
  * make the answer reactive, which is the single-subscription rule the shell

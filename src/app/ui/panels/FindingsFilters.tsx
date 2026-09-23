@@ -1,13 +1,12 @@
 /**
  * The findings panel's filter toolbar — one row above the list.
  *
- * It used to be a column of chip groups down the left of the page: every
- * severity, every producer, every book in the project and the top eight codes,
- * all open at once. That is a lot of screen for four questions a reader asks
- * rarely, and on a project with sixty-six books the book chips alone pushed the
- * findings themselves below the fold. So each group folds into a Popover whose
- * trigger says what it is filtering to, and the row is four buttons and a
- * search box.
+ * Every severity, every producer, every book in the project and the top codes,
+ * all open at once, is a lot of screen for four questions a reader asks
+ * rarely, and on a project with sixty-six books the book chips alone would
+ * push the findings themselves below the fold. So each group folds into a
+ * Popover whose trigger says what it is filtering to, and the row is four
+ * buttons and a search box.
  *
  * Every control is still subtractive: a chip hides rows, it never deletes a
  * finding, and the header beside it always says "N of TOTAL shown" so a

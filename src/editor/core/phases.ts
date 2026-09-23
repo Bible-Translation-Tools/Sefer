@@ -1,6 +1,6 @@
 /**
- * The rule order, as data: admission → normalization → protection → settlement
- * (seams §3.4).
+ * The rule order, as data: admission → normalization → protection →
+ * settlement.
  *
  * Two of CodeMirror's hooks are involved, and they run in opposite directions;
  * `compose.install` is the only place that knows it. Naming every rule and

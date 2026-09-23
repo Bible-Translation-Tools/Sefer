@@ -1,7 +1,7 @@
 /**
  * The one place a Solid component touches CodeMirror and a Book.
  *
- * This is the Solid/Book boundary the seams name (editor-and-save §1.5): the
+ * This is the Solid/Book boundary (`documentation/architecture/shell.md`): the
  * canonical text lives in the `EditorBook`'s `EditorState`, and the shell must
  * not hold a second copy of it. So:
  *
@@ -209,9 +209,9 @@ export function BookEditor(props: BookEditorProps) {
       // Once, because `appendConfig` goes through the view and the view is
       // bound to the Book — so the extension lands in the Book's CANONICAL
       // state and outlives this component. Mounting a second view over the
-      // same book (leave the route, come back) used to append the whole set
-      // again: two `editorAttributes` writing `cm-mode-regular`, two keystroke
-      // meters, two notes per keypress, two front matter cards. The compartment
+      // same book (leave the route, come back) would otherwise append the
+      // whole set again: two `editorAttributes` writing `cm-mode-regular`, two
+      // keystroke meters, two notes per keypress, two front matter cards. The compartment
       // is remembered with it, because a compartment that is not in the config
       // is a reconfigure that does nothing.
       //
@@ -354,7 +354,7 @@ export function BookEditor(props: BookEditorProps) {
           if (finding.bookId === book.id && !stale(finding, book)) list.push(finding);
         showCorpusFindings(created, list);
         // Counts and ids only — a finding's message quotes the document and
-        // never reaches the ring (editor-and-save §2, sink 4).
+        // never reaches the ring.
         //
         // On the REPAINT this provokes, not a record of its own. A Publication
         // fans out to every open book, and what showing findings costs is the

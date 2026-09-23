@@ -2,17 +2,16 @@
  * The desktop answer to the `Git` port: a thin adapter over the git2 commands
  * in `src-tauri/src/git.rs`.
  *
- * The decision (2026-09-06) is native git on desktop rather than
- * isomorphic-git: real performance on a project with a full New Testament of
- * history, and one implementation of merge and packfile behaviour instead of
- * two. The Web host keeps isomorphic-git because a browser has no alternative.
+ * Native git on desktop rather than isomorphic-git: real performance on a
+ * project with a full New Testament of history, and one implementation of
+ * merge and packfile behaviour instead of two. The Web host keeps isomorphic-git because a browser has no alternative.
  *
  * Everything here is translation, not policy. The one rule this file enforces
  * is the receipts rule — a receipt path becomes repository-relative through
  * core's `repositoryPath` or it is `Refused` — and Rust re-checks it, because
  * this process can write anywhere the user can.
  *
- * Every member of the port is answered; nothing here refuses by name any more.
+ * Every member of the port is answered; nothing here refuses by name.
  * `src/core/git/contract.ts` is the spec, and it cannot be run against this
  * Layer from Node — `invoke` needs a Tauri runtime — so the same case, plus one
  * per command, lives as `#[cfg(test)] mod tests` in `src-tauri/src/git.rs`.
@@ -146,8 +145,8 @@ export const TauriGitLive: Layer.Layer<Git> = Layer.succeed(Git, {
    * comparison — how far ahead, how far behind, which books would change — is
    * worked out before a byte of the work tree moves.
    *
-   * `Refused` is gone from all four; `git.rs` exports the matching commands
-   * and `cargo test` holds them to the same answers the Web layer gives.
+   * None of the four is `Refused`; `git.rs` exports the matching commands and
+   * `cargo test` holds them to the same answers the Web layer gives.
    */
   logFrom: (repo, ref) =>
     Effect.map(

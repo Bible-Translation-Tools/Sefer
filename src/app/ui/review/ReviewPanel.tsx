@@ -1,57 +1,36 @@
 /**
- * `/review` — ONE screen for "these two texts differ; which do I keep".
+ * `/review` — ONE screen for "these two texts differ; which do I keep". The
+ * model is `documentation/architecture/review.md`; what follows is what this
+ * file has to keep true.
  *
- * Save & Review and Compare were two screens asking that question. They had
- * different words for the same things (baseline/working against left/right),
- * two ideas of what a difference is (a line hunk against a verse row), two
- * inline diffs, and one of them had the file hard-coded on one side. Will,
- * 2026-09-15: "yes on one screen". This is it.
+ * **Both sides are sources, and neither is special.** The left picker and the
+ * right picker are the SAME list (`sources.ts`). Left defaults to the editor
+ * and right to the file because that is the comparison a reader wants nine
+ * times in ten — not because the screen knows anything about them. The same
+ * source on both sides is refused, because a text is never a review of itself.
  *
- * ## Both sides are sources, and neither is special
+ * **The TARGET is whichever side can be written** (`CompareSource.canApply`).
+ * When neither side can be, the screen says so in one line and offers no
+ * Apply: offering a write with nowhere to put it would be pretending.
  *
- * The left picker and the right picker are the SAME list (`sources.ts`): the
- * editor, the file on disk, the last recorded version, a zip, a folder. Left
- * defaults to the editor and right to the file because that is the comparison a
- * reader wants nine times in ten — not because the screen knows anything about
- * them. Any pairing is legal, a zip against a folder included; the same source
- * on both sides is not, because a text is never a review of itself.
+ * **Decide, then apply.** A click on "Keep the editor's" or "Take the file's"
+ * edits a `Map` and nothing else. Apply projects that map once, names the
+ * books it is about to write, and writes them through `book.apply` — one apply
+ * per book, so Undo takes back a book at a time. Revert is that, exactly; the
+ * only concession the past sources get is that an undecided unit is not a
+ * refusal (`applyPlan`'s `allowUndecided`), because reverting one verse must
+ * not mean ruling on every other verse in the book first.
  *
- * **The TARGET is whichever side can be written**, which today means whichever
- * side is the open project (`CompareSource.canApply`). When neither side can
- * be, the screen says so in one line and offers no Apply: a review between two
- * copies neither of which is this project is a reading, and pretending
- * otherwise would be offering a write with nowhere to put it.
+ * **The unit is the engine's decision unit**, addressed by reference.
+ * `diffSkeleton` is the engine's own diff and there is no second one. The
+ * header says "engine diff", because a reviewer deciding what to keep is
+ * entitled to know what aligned it, and a build whose artifact has no diff
+ * door says so instead of showing an empty comparison.
  *
- * ## One mental model: decide, then apply
- *
- * A click on "Keep the editor's" or "Take the file's" edits a `Map` and
- * nothing else. Apply projects that map once, names the books it is about to
- * write, and writes them through `book.apply` — one apply per book, so Undo
- * takes back a book at a time.
- *
- * REVERT IS THAT, exactly. Taking the file's version of a unit and applying it
- * is what "revert this verse" has always meant, and the screen says so rather
- * than offering a second button that does the same thing under a different
- * name. The only concession the past sources get is that an undecided unit is
- * not a refusal (`applyPlan`'s `allowUndecided`): reverting one verse must not
- * mean ruling on every other verse in the book first. For a foreign copy the
- * old rule stands — half a decision map is not a text anybody asked for.
- *
- * ## The unit
- *
- * A DECISION UNIT, addressed by reference: a verse, a bridge, a chapter's
- * opening matter, the front matter. `diffSkeleton` is Onion's own decision-unit
- * diff and there is no second one: the verse-alignment stand-in that carried
- * this screen before scripture-kitchen v0.1.0 is deleted. The header still says
- * "engine diff", because a reviewer deciding what to keep is entitled to know
- * what aligned it, and because a build whose artifact has no diff door says so
- * instead of showing an empty comparison.
- *
- * "Record a version" is unchanged from Save & Review and still the only thing
- * in Sefer that writes a project file: `saveAll` then `Git.commit`, in that
- * order, as one action. It is offered whenever the project is one of the two
- * sides, because what it records is the project's own unsaved work and not the
- * comparison.
+ * "Record a version" is the only thing in Sefer that writes a project file:
+ * `saveAll` then `Git.commit`, in that order, as one action. It is offered
+ * whenever the project is one of the two sides, because what it records is the
+ * project's own unsaved work and not the comparison.
  */
 
 import { useNavigate } from "@tanstack/solid-router";
@@ -189,8 +168,8 @@ export function ReviewPanel() {
 
   /**
    * The side being written: the one that says it can be. Only the open project
-   * says so today, and the same source cannot sit on both sides, so this is
-   * never ambiguous.
+   * says so, and the same source cannot sit on both sides, so this is never
+   * ambiguous.
    */
   const target = (): "left" | "right" | undefined =>
     left()?.canApply === true ? "left" : right()?.canApply === true ? "right" : undefined;
@@ -381,8 +360,8 @@ export function ReviewPanel() {
   };
 
   /**
-   * The engine has no diff door — which since v0.1.0 means the artifact in
-   * this build is not the vendored one. Said in as many words, because the
+   * The engine has no diff door — which means the artifact in this build is
+   * not the pinned build. Said in as many words, because the
    * alternative is a screen that looks like it found no differences.
    */
   const diffRefusal = (): string | undefined => {
@@ -456,9 +435,9 @@ export function ReviewPanel() {
    *
    * A memo: the Apply button, its confirmation and Apply itself all read it,
    * and it changes only when the comparison, the target or a decision does.
-   * The unit is Onion's, not a line hunk: the merged text comes from
-   * `mergeWithDecisions`, which prefers the engine's own merge. `applyPlan` still does the writing
-   * and still owns every refusal — `ReadOnly`, `Incomplete`, `Unsupported` and
+   * The unit is the engine's, not a line hunk: the merged text comes from
+   * `mergeWithDecisions`, which prefers the engine's own merge. `applyPlan`
+   * does the writing and owns every refusal — `ReadOnly`, `Incomplete`, `Unsupported` and
    * `Stale` — so the screen cannot disagree with what the write will do.
    */
   const currentPlan = createMemo(

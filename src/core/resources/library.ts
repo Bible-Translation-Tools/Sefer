@@ -1,13 +1,13 @@
 // library.ts
 //
 // The Library: the registry of resources this installation knows about, and the
-// bindings that give a resource a *role* in a project. The vision separates two
-// independent facts (see the rewrite vision §15.2): a resource's semantic kind
-// (Burrito, Resource Container, loose USFM — what it *is*) and its contextual
-// role in a project (`source`, `notes`, `reference`, `glossary` — what it is
-// *for*). `add` records the kind once; `bind` records the role per project, so
-// the same resource can be a source in one project and a reference in another,
-// and nothing about the resource itself changes.
+// bindings that give a resource a *role* in a project. Two independent facts
+// are kept apart: a resource's semantic kind (Burrito, Resource Container,
+// loose USFM — what it *is*) and its contextual role in a project (`source`,
+// `notes`, `reference`, `glossary` — what it is *for*). `add` records the kind
+// once; `bind` records the role per project, so the same resource can be a
+// source in one project and a reference in another, and nothing about the
+// resource itself changes.
 //
 // The registry is small, read on nearly every screen and written rarely, so it
 // is held in memory for the life of the Layer and persisted to

@@ -1,6 +1,6 @@
 /**
- * The fold: one `Analysis` and its text become typed-array tables plus lazy rows
- * (seams §3.4, editor-and-save §3.2).
+ * The fold: one `Analysis` and its text become typed-array tables plus lazy
+ * rows.
  *
  * `buildStructure` is the only builder, and it REFUSES a parse that does not
  * describe exactly this text — `describesExactly`, not a length — because every

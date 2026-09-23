@@ -143,11 +143,10 @@ export function LocationBar(props: LocationBarProps) {
    * The books this project holds, in canonical order, named as the project
    * names them.
    *
-   * This crumb used to navigate to a whole SCREEN — `/project/$slug?books=1`,
-   * a page that existed only because the crumb had nowhere else to go, and
-   * which needed a search param to stop the project route forwarding it
-   * straight back out again. A picker is what the crumb always meant, and the
-   * page and the param are gone with it.
+   * A picker rather than a link to a book-list SCREEN: that screen would exist
+   * only because the crumb had nowhere else to go, and would need a search
+   * param to stop the project route forwarding it straight back out again. A
+   * picker is what the crumb means.
    */
   const books = createMemo(() => {
     const project = shell.project();

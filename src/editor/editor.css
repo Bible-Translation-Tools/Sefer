@@ -2,8 +2,9 @@
  * The regular projection's palette.
  *
  * It is the PRODUCT's palette, not a palette of its own. The page the reader
- * edits is a white card among white cards (design-direction.md, "Overall
- * layout": "the editor card, white, generous padding"), so paper is
+ * edits is a white card among white cards
+ * (documentation/architecture/design-direction.md, "Overall layout": "the
+ * editor card, white, generous padding"), so paper is
  * `--surface-primary`, ink is `--on-surface-primary`, and the numbers are the
  * brand — which is also why almost nothing here needs a dark value: the
  * tokens already swap, and one name that follows them cannot disagree with

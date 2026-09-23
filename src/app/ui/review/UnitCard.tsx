@@ -1,9 +1,9 @@
 /**
  * One decision unit, with a side to choose.
  *
- * The unit is Onion's — a verse, a bridge, a chapter's opening matter, the
- * front matter — addressed by a reference rather than by a line range, which is
- * the whole point of moving the review onto the decision-unit shape
+ * The unit is the engine's — a verse, a bridge, a chapter's opening matter,
+ * the front matter — addressed by a reference rather than by a line range,
+ * which is the whole point of the decision-unit shape
  * (`src/core/galley/diff.ts`). A reviewer reads "1:4", not "lines 12–14".
  *
  * The pair of buttons IS the decision map's editor and nothing else: clicking

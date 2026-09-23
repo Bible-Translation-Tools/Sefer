@@ -2,7 +2,7 @@
  * The one test this module gets: does the real wasm artifact load, parse a real
  * book, and publish a real corpus snapshot?
  *
- * This is the riskiest seam in the app — a vendored binary, two generated
+ * This is the riskiest seam in the app — a pinned wasm binary, two generated
  * readers, and a wire handshake — and every one of those failures is silent or
  * catastrophic rather than gradual. Everything else about Galley is a pure
  * function over the value this proves we can get.

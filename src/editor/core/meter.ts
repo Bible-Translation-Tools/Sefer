@@ -32,9 +32,9 @@
  *
  * exactly, and a reader who wants to know where a slow keystroke went reads
  * one line instead of subtracting spans by hand. The meter deliberately opens
- * NO span of its own: a wrapper span around the whole gesture is what used to
- * make the numbers fail to add up, because its exclusive time ran on past the
- * last update to the macrotask that closed it.
+ * NO span of its own: a wrapper span around the whole gesture makes the
+ * numbers fail to add up, because its exclusive time runs on past the last
+ * update to the macrotask that closes it.
  */
 
 import { Prec, type Extension } from "@codemirror/state";

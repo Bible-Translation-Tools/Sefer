@@ -1,15 +1,15 @@
 /**
- * Sink 1 of the diagnostics fan-out (editor-and-save §2): the engine's
+ * Sink 1 of the diagnostics fan-out: the engine's
  * diagnostics as inline marks and gutter actions.
  *
- * TWO sources, one linter. Onion's per-book diagnostics are rebuilt from the
+ * TWO sources, one linter. Galley's per-book diagnostics are rebuilt from the
  * CURRENT state's analysis every keystroke, so an inline mark cannot be stale —
  * the freshness discipline the other sinks need is bought here by not caching.
  * Sous's corpus findings cannot be rebuilt here at all: they are whole-corpus
  * products that arrive from `ProjectAnalysis` long after the keystroke that
  * provoked them, so they are PUSHED into `sousField` and are dropped, never
  * shifted, the moment the document moves. That keeps the corpus half entirely
- * off the keystroke hot path: a keystroke costs one synchronous Onion parse and
+ * off the keystroke hot path: a keystroke costs one synchronous engine parse and
  * one field reset, and no corpus work at all.
  *
  * A finding whose span is entirely inside hidden markup is dropped by default,
@@ -201,7 +201,7 @@ export const showCorpusFindings = (view: EditorView, list: readonly CorpusFindin
 };
 
 /**
- * The inline linter: Onion's diagnostics from the current state, plus whatever
+ * The inline linter: Galley's diagnostics from the current state, plus whatever
  * corpus findings were last pushed in. ONE `linter`, so one gutter, one
  * tooltip and one keyboard order over both producers.
  *

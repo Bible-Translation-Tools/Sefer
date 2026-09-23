@@ -1,12 +1,13 @@
 // finding.ts
 //
-// The ONE shape (seams §3.7; editor-and-save §2 "One shape"; vision §11.2).
-// Two producers speak completely different dialects — Onion emits catalogued
-// USFM diagnostics with a severity ladder and offered repairs, Sous emits
-// statistical corpus findings with digests and no severity at all — and every
-// consumer above them (the panel, navigation, the counts in the census, the
-// fix previews) wants one record. This file is the only place either dialect
-// is translated, so a producer's vocabulary never leaks into a reader.
+// The ONE shape (`documentation/architecture/findings.md`). Two producers speak
+// completely different dialects — Galley's per-book lint (producer `onion`)
+// emits catalogued USFM diagnostics with a severity ladder and offered repairs,
+// Sous emits statistical corpus findings with digests and no severity at all —
+// and every consumer above them (the panel, navigation, the counts in the
+// census, the fix previews) wants one record. This file is the only place
+// either dialect is translated, so a producer's vocabulary never leaks into a
+// reader.
 //
 // Three rules the whole file exists to hold:
 //
@@ -39,8 +40,9 @@ import {
 import type { SourceStamp } from "../source/source";
 
 /**
- * The three rungs a reader is shown. Onion's `hint` folds into `info` and its
- * `form`/absent severities are dropped entirely — see `fromAnalysis`.
+ * The three rungs a reader is shown. The per-book lint's `hint` folds into
+ * `info` and its `form`/absent severities are dropped entirely — see
+ * `fromAnalysis`.
  */
 export type Severity = "error" | "warning" | "info";
 
@@ -109,7 +111,7 @@ const rung = (severity: "error" | "warning" | "info" | "hint"): Severity =>
   severity === "hint" ? "info" : severity;
 
 /**
- * Onion diagnostics → findings, for one book at one revision.
+ * Per-book (`onion`) diagnostics → findings, for one book at one revision.
  *
  * `stamp` is the Book's stamp for the text `analysis` describes — the caller
  * holds both, and pairing them here is cheaper than making this function

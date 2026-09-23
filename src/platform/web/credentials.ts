@@ -2,13 +2,11 @@
  * The Web host's credential store: `localStorage`, with an honest note about
  * what that does and does not buy.
  *
- * It used to be the session-only implementation, and the comment said the Web
- * has nowhere trustworthy to persist a token so we do not persist it at all.
- * That is a defensible position and it had a cost nobody had weighed: signing
- * in to Gitea and then RELOADING THE PAGE signed you out, every time — and
- * because the old token name was granular to the day, signing in again failed
- * with `400 access token name has been used already`. Two bugs, one root: the
- * session was thrown away and could not be recreated.
+ * Why persist at all, when the Web has nowhere trustworthy to put a token: a
+ * session-only store signs you out of Gitea on every RELOAD, and a session
+ * that does not survive a reload is not a session. (Token names are minted
+ * per device and minute, so signing in again after a reload does not collide
+ * with `400 access token name has been used already`.)
  *
  * ## What this is, precisely
  *
@@ -27,8 +25,7 @@
  *
  * Failure is never fatal. A private window, a browser with site data blocked
  * and a full quota all make the calls below throw, and every one of them is
- * caught: the store falls back to memory, which is exactly the behaviour this
- * module used to have unconditionally.
+ * caught: the store falls back to memory, for that session only.
  */
 
 import { Effect, Layer, Option } from "effect";

@@ -1,12 +1,12 @@
 // discovery.ts
 //
 // Which files in a folder are books, and in what order. This is the whole of
-// "Unloaded" in the four-state model (seams §3.3; editor-and-save §1.1): paths
-// known, nothing read. Discovery is deliberately shallow — one `readDirectory`
-// of the root — because a Sefer project is a folder of books, not a tree. The
-// only way a nested path becomes a book is a Scripture Burrito's own
-// `ingredients` table saying so, which is the burrito's declaration, not our
-// guess.
+// "Unloaded" in the four-state model (`documentation/architecture/project.md`):
+// paths known, nothing read. Discovery is deliberately shallow — one
+// `readDirectory` of the root — because a Sefer project is a folder of books,
+// not a tree. The only way a nested path becomes a book is a Scripture
+// Burrito's own `ingredients` table saying so, which is the burrito's
+// declaration, not our guess.
 //
 // Nothing here reads book text or builds a `Book`; `openProject` does that.
 

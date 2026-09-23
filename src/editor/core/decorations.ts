@@ -177,10 +177,10 @@ const EMPTY_NOTE_BODY = "Add note text";
  * Paints one apparatus row's body span.
  *
  * A note with no text yet — which is every note the moment `Insert footnote`
- * makes one — used to render as an EMPTY span. An empty inline span is zero
- * pixels wide, so the one target in the row that means "let me write this" was
- * unclickable exactly when a reader most wanted it: the note existed, the
- * caller was in the text, and the body could not be reached by pointer at all.
+ * makes one — would render as an EMPTY span. An empty inline span is zero
+ * pixels wide, so the one target in the row that means "let me write this"
+ * would be unclickable exactly when a reader most wants it: the note exists,
+ * the caller is in the text, and the body cannot be reached by pointer at all.
  * So an empty body wears a placeholder, and the placeholder is the click
  * target. It is a class and not a `::after`, because the click handler asks
  * `closest(".usfm-note-body")` and pseudo-elements have no node to close over.

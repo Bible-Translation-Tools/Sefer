@@ -20,8 +20,8 @@
  *
  * Every function here takes `ProjectMetadata`, which is the same shape whether
  * the project declared itself in a Scripture Burrito or a Resource Container
- * (`core/resources/projectMetadata.ts`). It used to take a burrito, which is
- * why `en_ulb` — a Resource Container — showed an em dash.
+ * (`core/resources/projectMetadata.ts`), so a Resource Container such as
+ * `en_ulb` answers the same as a burrito.
  */
 
 import type { ProjectMetadata } from "#core/resources/projectMetadata";

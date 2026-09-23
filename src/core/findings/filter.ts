@@ -1,7 +1,7 @@
 // filter.ts
 //
 // Reading policy for a panel of findings: which rows a reader has chosen to
-// see, and how they are grouped (vision §11.4).
+// see, and how they are grouped.
 //
 // This is presentation policy, so it is deliberately PURE and deliberately
 // subtractive-only. Two rules the whole file exists to hold:

@@ -25,10 +25,10 @@
  * different one: this decides WHAT the UI knows, and ProjectContext decides
  * what a route can reach and what happens when the reader opens a book.
  *
- * The counter is gone. There is no longer any way for one part of the
- * application to tell another that something, somewhere, happened — every
- * write goes through `changed()` and names its books, and every read is of a
- * row those books own.
+ * There is deliberately no way for one part of the application to tell
+ * another that something, somewhere, happened — every write goes through
+ * `changed()` and names its books, and every read is of a row those books
+ * own. See `documentation/architecture/shell.md`.
  */
 
 import { Effect, Fiber, Option, Stream } from "effect";
@@ -84,7 +84,7 @@ export interface ShellStores {
    * other book's readers asleep.
    */
   readonly changed: (event: ShellEvent) => void;
-  /** Save & Review's report after it wrote files. See `ShellEvent`'s `book.write`. */
+  /** Review's report after it wrote files. See `ShellEvent`'s `book.write`. */
   readonly noteWritten: (bookIds: readonly BookId[], recorded: boolean) => void;
   /** Every store emptied, for a project closing. */
   readonly clear: () => void;
@@ -132,14 +132,13 @@ export const makeShellStores = (options: {
    * blank the bell and the badges while the next pass runs, it leaves the last
    * published answer standing. Known-stale beats an apparently clean project.
    *
-   * This is the replacement for the loudest `tick` reader of all. Both
-   * `ProjectAnalysis.findings()` and `census()` rebuild every finding in every
-   * book, and `attach` invalidates their caches on every accepted edit — so
-   * behind `tick` the bell, the rail and the sixty-six sidebar rows each paid
-   * a whole-project rebuild per keystroke.
+   * Both `ProjectAnalysis.findings()` and `census()` rebuild every finding in
+   * every book, and `attach` invalidates their caches on every accepted edit —
+   * so read per keystroke, the bell, the rail and the sixty-six sidebar rows
+   * would each pay a whole-project rebuild.
    */
   // Signals for the three WHOLESALE products and a store for the one PARTIAL
-  // one, which is the plan's own rule and not a stylistic choice. A
+  // one, which is a rule and not a stylistic choice. A
   // Publication replaces the findings list, the totals and the inventory
   // entirely — there is no such thing as half a snapshot — and putting a
   // thousand-element frozen array behind a store proxy would charge every
@@ -172,8 +171,8 @@ export const makeShellStores = (options: {
       });
       return;
     }
-    // One rebuild, here, for every reader — the cost `tick` made each of them
-    // pay separately. All three doors are memoised behind the same
+    // One rebuild, here, for every reader — rather than each of them paying
+    // it separately. All three doors are memoised behind the same
     // publication, so asking for all of them costs what asking for one did.
     const list = services.projectAnalysis.findings();
     let errors = 0;
@@ -248,13 +247,11 @@ export const makeShellStores = (options: {
    * screen can differ from disk, so it is not "unsaved" — `dirty` alone would
    * badge every untouched book on the project page.
    *
-   * NOT reactive, and that is the whole point of the rewrite. This is the
-   * computation a `ShellEvent` provokes: it runs once per event, for the books
-   * that event named, and its answer is written into `books`. `dirty` can cost
-   * an engine hash, so no render may reach it — behind `tick()` it cost ~4.5
-   * whole parses per keystroke, per badged book, because every reader of the
-   * counter re-asked it for every book
-   * (planning/01-discussing/ui-state-stores-2026-09-16.md).
+   * NOT reactive, and that is the whole point. This is the computation a
+   * `ShellEvent` provokes: it runs once per event, for the books that event
+   * named, and its answer is written into `books`. `dirty` can cost an engine
+   * hash, so no render may reach it — read reactively it would cost several
+   * whole parses per keystroke, per badged book.
    */
   const saveStateOf = (book: Book): SaveState => {
     if (Option.isSome(services.save.baseline(book)) && services.save.dirty(book)) return "unsaved";
@@ -267,7 +264,7 @@ export const makeShellStores = (options: {
    * A store and not a signal because the state is per book and moves per book:
    * a store write that does not change a row wakes nobody, so an event naming
    * RUT costs one comparison and leaves PSA's row — and PSA's reader —
-   * untouched. That is the granularity `tick` could not express.
+   * untouched. A single change counter could not express that granularity.
    *
    * Every book of the open project has a row, written at `project.open`. A
    * missing row therefore means the book is not in the open project, and

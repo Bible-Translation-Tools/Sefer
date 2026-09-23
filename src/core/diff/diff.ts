@@ -1,6 +1,6 @@
 // diff.ts
 //
-// Baseline and Diff (seams §3.12): what changed in a Book since the text Save
+// Baseline and Diff: what changed in a Book since the text Save
 // last wrote to disk, and how to put a piece of it back.
 //
 // Pure and synchronous by design. Diff sits below Save in the DAG: it consumes

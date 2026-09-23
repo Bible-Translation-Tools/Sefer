@@ -4,9 +4,9 @@
  *
  * CodeMirror's hover tooltip closes the INSTANT the pointer leaves the range it
  * was opened for. A diagnostic's range is often one character — eight pixels —
- * so the popover vanished under any hand that was not perfectly still, and
- * reading it, never mind pressing its Fix button, was a matter of luck. The
- * same handler also hid it on a re-lint, and this editor re-lints whenever the
+ * so the popover would vanish under any hand that was not perfectly still, and
+ * reading it, never mind pressing its Fix button, would be a matter of luck.
+ * The same handler also hides it on a re-lint, and this editor re-lints whenever the
  * corpus publishes, which is every second or so while typing has just stopped.
  *
  * The rule here is the one a reader would state: the popover stays while the

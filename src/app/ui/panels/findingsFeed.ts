@@ -5,7 +5,7 @@
  * verse numbers, the context either side with its chevrons, Edit as a
  * satellite, sticky headers and an outline column — because a reader scanning
  * a place wants to see everything that might be wrong there in one gesture,
- * with the workflow they already have from searching (Will, 2026-09-15). So
+ * with the workflow they already have from searching. So
  * nothing here draws anything: it turns findings into `Occurrence`s, hands
  * them to `createExcerptFeed` exactly as Find hands it search hits, and then
  * says how the excerpts that come back are SECTIONED and which findings each
@@ -35,9 +35,8 @@
  * ### What belongs in core later
  *
  * `markupSlice` and `foldRuns` are pure functions over values core already
- * owns, and both would sit comfortably beside `quote`. They are
- * here because this pass may not edit `src/core`; nothing in either reaches
- * for Solid, the router or a host.
+ * owns, and both would sit comfortably beside `quote`; nothing in either
+ * reaches for Solid, the router or a host, so moving them is a cut and paste.
  */
 
 import { createMemo, type Accessor } from "solid-js";
@@ -55,10 +54,10 @@ import type { FindingsView } from "./findingsFilter";
  *
  * It already carries `bookId`, `from` and `to`, and `Occurrence`'s only other
  * field is optional — so the feed can hand findings straight to the excerpts
- * machinery and read them back off `Excerpt.hits`. There used to be a wrapper
- * type and a `map` that built one object per finding to carry the finding it
- * was built from, which on a 66-book project is twenty thousand objects to
- * say something the finding already said.
+ * machinery and read them back off `Excerpt.hits`. A wrapper type would build
+ * one object per finding to carry the finding it was built from, which on a
+ * 66-book project is twenty thousand objects to say something the finding
+ * already said.
  */
 
 /** One card on the page: an excerpt, in a section, answering for findings. */

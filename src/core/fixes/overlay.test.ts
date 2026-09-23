@@ -3,7 +3,7 @@
  *
  * The riskiest thing about `overlayBook` is not its arithmetic — it barely has
  * any — but whether the door is THERE. The overlay functions are probed off the
- * wasm module by name, so a vendored artifact that predates them fails at the
+ * wasm module by name, so an artifact that is not the pinned tag fails at the
  * call and nowhere earlier; that is exactly the failure this proves is not the
  * one we have. The rest of the file is the two claims a translator relies on:
  * the target ends up with the source's paragraphing, and its WORDS are

@@ -6,11 +6,10 @@ import { ShellGate } from "#app/ui/ShellGate";
 /**
  * `/history` — the commit timeline.
  *
- * `?review=1` used to render Save & Review here, because the two were views of
- * one question. They still are — which is why Save & Review and Compare became
- * the single `/review` screen — so the search param survives as a REDIRECT
- * rather than as a second panel: Mod-S, the toolbar and the command palette all
- * still send `/history?review=1`, and they all land on the review.
+ * `?review=1` is a REDIRECT to `/review` rather than a second panel, because
+ * the timeline and the review are views of one question: Mod-S, the toolbar
+ * and the command palette all send `/history?review=1`, and they all land on
+ * the review.
  *
  * `review` is validated to `true` or absent rather than to a boolean, so the
  * history view's URL is the bare `/history` and never `?review=false`.

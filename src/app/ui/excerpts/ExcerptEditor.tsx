@@ -3,12 +3,12 @@
  * clipped to the excerpt's span.
  *
  * This is the "Edit is a click" half of the multibuffer
- * (planning/03-ui/design-direction.md, "Find"). It is NOT a copy of the text
- * and it holds no text of its own — `mountSatellite`'s whole discipline is
- * that a local edit becomes changes, goes through the `Funnel` (which is
- * `book.apply`, phases and all), and comes back as the canonical text. So an
- * edit made here is the same edit the main editor would have made: one write
- * path, one history, one undo.
+ * (`documentation/architecture/design-direction.md`, "Find"). It is NOT a
+ * copy of the text and it holds no text of its own — `mountSatellite`'s whole
+ * discipline is that a local edit becomes changes, goes through the `Funnel`
+ * (which is `book.apply`, phases and all), and comes back as the canonical
+ * text. So an edit made here is the same edit the main editor would have
+ * made: one write path, one history, one undo.
  *
  * Two things this component adds over `mountSatellite`:
  *

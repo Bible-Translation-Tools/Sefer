@@ -138,10 +138,10 @@
   --surface-success: var(--success-95);
   --on-surface-success: var(--success-40);
 
-  /* The sidebar is a white panel, not a dark rail (design-direction.md). The
-     names survive the change so nothing downstream re-decides the theme; they
-     now point at the ordinary surface contract, which is why dark needs no
-     sidebar block of its own. */
+  /* The sidebar is a white panel, not a dark rail
+     (documentation/architecture/design-direction.md). The sidebar names stay
+     so nothing downstream re-decides the theme; they point at the ordinary
+     surface contract, which is why dark needs no sidebar block of its own. */
   --sidebar-surface: var(--surface-primary);
   --sidebar-surface-hover: var(--surface-secondary);
   --sidebar-surface-active: var(--brand-light);

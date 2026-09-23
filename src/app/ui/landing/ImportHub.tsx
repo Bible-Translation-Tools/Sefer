@@ -86,9 +86,9 @@ export function ImportHub(props: { readonly onImported: () => void }) {
   const shell = useShell();
   const { services } = shell;
   const capabilities = services.hostInfo.capabilities();
-  // One endpoint, one condition. This used to be two — a Gitea host AND, on
-  // the Web, a CORS proxy — which could disagree with each other; now the
-  // endpoint IS whichever of the two this build talks to.
+  // One endpoint, one condition. Not a Gitea host AND, on the Web, a CORS
+  // proxy, which could disagree with each other: the endpoint IS whichever of
+  // the two this build talks to.
   const endpoint = wacsUrlFor(services.settings, services.hostInfo.kind());
 
   const [progress, setProgress] = createSignal<Progress | undefined>(undefined, {

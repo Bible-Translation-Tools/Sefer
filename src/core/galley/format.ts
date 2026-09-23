@@ -1,6 +1,6 @@
 // format.ts
 //
-// THE FORMAT DOOR: Onion's formatter, as a transaction Sefer can apply.
+// THE FORMAT DOOR: the engine's formatter, as a transaction Sefer can apply.
 //
 // `onion::format` merges two edit sets — the lint rows flagged `formatter`,
 // and the FORM channel that lint never reaches — with a first-writer-wins
@@ -9,8 +9,8 @@
 // diverge on the second, and "the two formatters disagree about scripture" is
 // the worst bug available here.
 //
-// Since scripture-kitchen v0.1.0 the galley build re-exports it, so this module
-// is a binding and a decoder and nothing else (engine-asks item 1, closed).
+// The galley build re-exports it, so this module is a binding and a decoder
+// and nothing else.
 //
 // ## Edits, not a formatted string
 //
@@ -166,7 +166,7 @@ export const readEdits = (held: EditsHandle): readonly FormatEdit[] => {
 };
 
 /**
- * Onion's format transaction for one document, or a refusal naming the door.
+ * The engine's format transaction for one document, or a refusal naming the door.
  *
  * Takes the wasm MODULE NAMESPACE, like `engineDiff`: these doors are
  * stateless free functions, and `galley.ts` stays the one place the module is

@@ -74,8 +74,8 @@ export interface StateAdapter {
  *
  * Split out of `Comment` because a comment can be about MORE than one place.
  * "These two should swap" and "move 1 to where 2 is" are the most natural
- * things to say about a layout, and saying them used to cost two comments that
- * each described half a thought.
+ * things to say about a layout, and saying them should not cost two comments
+ * that each describe half a thought.
  */
 export interface Target {
   readonly id: string;

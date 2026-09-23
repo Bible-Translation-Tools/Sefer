@@ -456,7 +456,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       keys: "Mod-Shift-s",
       when: hasProject,
       // One door to disk: the file is written when a version is recorded, so
-      // this opens Save & Review like Mod-S rather than writing on its own.
+      // this opens the review like Mod-S rather than writing on its own.
       run: () => {
         void bridge.navigate({
           to: "/project/$slug/history",
@@ -733,7 +733,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
     // ---------------------------------------------------------------------
     // Format. One `book.apply(…, 'format')` per book, so a formatted book is
     // one Undo step and a formatted project is one per book. The edits are
-    // Onion's own (`Fixes.formatBook`); Sefer has no formatter.
+    // the engine's own (`Fixes.formatBook`); Sefer has no formatter.
     // ---------------------------------------------------------------------
 
     registerCommand({

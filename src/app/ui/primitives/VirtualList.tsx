@@ -2,12 +2,11 @@
  * The multibuffer's engine: sticky section headers over a windowed list of
  * rows, measured as they appear.
  *
- * Find and Key terms had this inside `ExcerptList`, hand-rolled; it moved here
- * when `/findings` needed the same thing, and took TanStack Virtual with it on
- * the way (Will, 2026-09-15). The measured numbers are the argument for
- * windowing at all: on a synthetic 7,296 findings the un-windowed list built
- * 4,992 rows and took ~647 ms to re-render, and this builds 18 and takes
- * ~63 ms.
+ * Find, Key terms and `/findings` share it. The measured numbers are the
+ * argument for windowing at all: on a synthetic 7,296 findings an un-windowed
+ * list built 4,992 rows and took ~647 ms to re-render, and this builds 18 and
+ * takes ~63 ms. `documentation/architecture/ui.md`, "The multibuffer", has the
+ * full account.
  *
  * ## One flat item list, headers included
  *
@@ -24,22 +23,10 @@
  * ## Why `@tanstack/virtual-core` and not `@tanstack/solid-virtual`
  *
  * The geometry is TanStack's; the forty lines of Solid binding are ours,
- * because the published Solid binding does not run on Solid 2 and cannot be
- * shimmed into running.
- *
- * `@tanstack/solid-virtual@3.13.40` is a Solid 1 package (`peerDependencies:
- * solid-js ^1.3.0`). Three of its imports are gone in Solid 2 — `mergeProps`
- * (now `merge`), `onMount` and `createComputed` — and `solid-js/store` moved
- * onto `solid-js`. All four are shimmable, the way `lucide-solid` is
- * (`tools/vite/lucideSolid.ts`). The one that is not is the SHAPE of its one
- * `createComputed`: it reads its options and WRITES its item store in the same
- * function, which is exactly what Solid 2 forbids
- * (`REACTIVE_WRITE_IN_OWNED_SCOPE`) — and it is not a diagnostic to wave
- * through, because Solid 2 split tracking from effects on purpose. The
- * `ownedWrite` escape hatch the diagnostic names is a per-SIGNAL option, and
- * the store being written is created inside the package. Splitting the
- * function is not available from outside it either: only the package knows
- * which of its reads are dependencies.
+ * because the published Solid binding is a Solid 1 package whose one
+ * `createComputed` reads its options and WRITES its item store in the same
+ * function — exactly what Solid 2 forbids (`REACTIVE_WRITE_IN_OWNED_SCOPE`),
+ * and not shimmable from outside the package.
  *
  * So this file binds `@tanstack/virtual-core` — the framework-agnostic engine
  * both wrappers sit on, with no framework imports of its own — the way the
@@ -51,29 +38,28 @@
  *
  * `getVirtualItems()` hands back fresh objects for every index at or below the
  * lowest one whose size moved — the library rebuilds its measurements from
- * there — so a `<For>` over those items, which reconciles by REFERENCE,
- * re-created rows on every measurement. That is not a performance note: an
+ * there — so a `<For>` over those items, which reconciles by REFERENCE, would
+ * re-create rows on every measurement. That is not a performance note: an
  * open excerpt editor is a CodeMirror view mounted inside a row, and
- * re-creating the row destroyed it. Edit opened a satellite, the card grew,
- * the growth re-created the card, and the card sat on "Opening…" for ever.
+ * re-creating the row destroys it — Edit opens a satellite, the card grows,
+ * the growth re-creates the card, and the card sits on "Opening…" for ever.
  *
  * So the `<For>` walks the WINDOW'S KEYS — the caller's own stable strings, a
  * verse sid or a finding id — and each row reads its own geometry back out of
  * the item list by key. Strings reconcile by value, so a measurement MOVES a
  * row rather than replacing it, and an open editor survives the correction it
- * caused. It is also why `row` and `header` are handed ACCESSORS: a row now
+ * caused. It is also why `row` and `header` are handed ACCESSORS: a row
  * outlives the model it was built from and has to read the current one.
  *
  * ## Measure in the effect phase, never in the `ref`
  *
  * A `ref` callback runs while the element is still detached, and an element
  * that is not in the document measures 0 × 0. Handing that 0 to the library as
- * a first measurement was the whole of the "the list opens half way down" bug:
- * the real height then arrived as a RE-measurement of a 0-high row sitting
- * exactly at the fold, which is the one case TanStack compensates the scroll
- * position for — so each row in turn pushed the viewport down by its own
- * height, 8,154px of accumulated correction on `/findings` before the list had
- * been touched. The element goes into a signal instead and is measured from an
+ * a first measurement makes "the list opens half way down": the real height
+ * then arrives as a RE-measurement of a 0-high row sitting exactly at the
+ * fold, which is the one case TanStack compensates the scroll position for —
+ * so each row in turn pushes the viewport down by its own height (8,154px of
+ * accumulated correction on `/findings` before the list is touched). The element goes into a signal instead and is measured from an
  * effect, which runs once it is in the document.
  */
 

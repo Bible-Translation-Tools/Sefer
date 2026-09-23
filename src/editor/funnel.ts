@@ -1,6 +1,5 @@
 /**
- * Funnel — the port a satellite or a window submits an edit through (seams
- * §3.5; editor-and-save §1.3).
+ * Funnel — the port a satellite or a window submits an edit through.
  *
  * Every surface that is NOT the canonical seat — an editable satellite over a
  * note, a result card, a source mirror — needs three things and no more: the
@@ -41,7 +40,7 @@ export interface Funnel {
   doc(): Text;
   /**
    * The canonical parse, for a surface that wants to borrow rather than
-   * re-analyze. See `borrowedStructure` and editor-and-save §1.4.
+   * re-analyze. See `borrowedStructure`.
    */
   structure(): DocStructure;
   /**

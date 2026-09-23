@@ -3,16 +3,13 @@
  * ALONGSIDE, at the passage the editor is showing — and the one place a
  * reader binds one.
  *
- * It used to be a stack of cards holding a regex-sliced passage. It is now a
- * stack of READ-ONLY EDITORS (`ReferencePane`), one per bound resource, over
- * the same book the reader has open, painted by the same projection as the
- * editor beside them. That is the whole of Will's ask — "find reference text
- * should basically be a readonly editor in same facet/mode with a splitter
- * between it" — and it is a better answer than a card for a concrete reason: a
- * card showed a passage with the markers stripped by a regex, so it could not
- * show markup, could not be scrolled, and disagreed with the editor about what
- * a verse looks like. A pane is the same `decoField` over the same
- * `DocStructure`, so the two sides cannot drift.
+ * It is a stack of READ-ONLY EDITORS (`ReferencePane`), one per bound
+ * resource, over the same book the reader has open, painted by the same
+ * projection as the editor beside them — a read-only editor in the same mode,
+ * with a splitter between. Not a card holding a regex-sliced passage: that
+ * could not show markup, could not be scrolled, and would disagree with the
+ * editor about what a verse looks like. A pane is the same `decoField` over
+ * the same `DocStructure`, so the two sides cannot drift.
  *
  * What stays from the card round: `source` and `reference` are two SLOTS and
  * not one list, because the distinction is the project's — a source is the
@@ -88,11 +85,10 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   /**
    * The BINDINGS, and nothing about the passage.
    *
-   * This effect used to re-run on every scroll, because the cards it fed held
-   * one passage each and the passage followed the reader. A pane holds the
-   * whole book, so the only things that can change what is on screen here are
-   * the project, the open book and a bind or unbind — and each of those is a
-   * reason to rebuild the panes rather than to update them.
+   * It does not re-run on scroll: a pane holds the whole book, so the only
+   * things that can change what is on screen here are the project, the open
+   * book and a bind or unbind — and each of those is a reason to rebuild the
+   * panes rather than to update them.
    */
   createEffect(
     () => ({ project: shell.project()?.id, book: shell.focused()?.id, tick: bound() }),

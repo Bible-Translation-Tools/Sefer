@@ -1,6 +1,6 @@
 /**
  * Credentials — the tokens a remote needs, kept where the host can keep them
- * safely (seams 1.5).
+ * safely.
  *
  * The port exists so Git and Remote can ask for a credential without knowing
  * whether the answer came from an OS keychain or from a map that dies with the

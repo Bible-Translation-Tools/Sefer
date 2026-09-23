@@ -10,17 +10,15 @@
  * looked at the findings list. So the Project lives above the router and the
  * routes read it.
  *
- * The Solid/Book boundary rule (editor-and-save §1.5) applies to this file
- * too: NOTHING here subscribes to `book.changes`. Only the editor surface
- * does. That keeps exactly one subscription per book, at the one place that
- * already has to have one, and it is unchanged.
+ * The Solid/Book boundary rule (`documentation/architecture/shell.md`)
+ * applies to this file too: NOTHING here subscribes to `book.changes`. Only
+ * the editor surface does. That keeps exactly one subscription per book, at
+ * the one place that already has to have one.
  *
- * What the subscriber DOES with the receipt is what changed. It used to bump
- * one counter meaning "something, somewhere", which every derived read in
- * nine screens re-ran on. It now calls `changed()` with a `ShellEvent` naming
- * the books that moved (`shellEvent.ts`), and the stores below update only
- * the rows that event touched. The counter is gone
- * (planning/01-discussing/ui-state-stores-2026-09-16.md).
+ * The subscriber calls `changed()` with a `ShellEvent` naming the books that
+ * moved (`shellEvent.ts`), and the stores below update only the rows that
+ * event touched — not one "something, somewhere" counter that every derived
+ * read would re-run on.
  */
 
 import type { UseNavigateResult } from "@tanstack/solid-router";
@@ -108,7 +106,7 @@ export interface Shell {
    * Has this book changed since it was opened or last written?
    *
    * Exactly `SaveCoordinator.dirty` — the coordinator adopts a baseline when
-   * the shell opens a book, so "no baseline" no longer means "just opened".
+   * the shell opens a book, so "no baseline" never means "just opened".
    *
    * A read of the `books` store, so it is reactive AND free: the coordinator
    * is asked when a `ShellEvent` says this book moved, never on a render.
@@ -116,21 +114,18 @@ export interface Shell {
   readonly unsaved: (book: Book) => boolean;
 
   /**
-   * The three states a book can be in, now that the file is written only when
-   * a version is recorded. See `SaveState`.
+   * The three states a book can be in, given that the file is written only
+   * when a version is recorded. See `SaveState`.
    *
    * `recorded` is inferred rather than read from git, and that is the point of
    * the save model: writing the file and recording the version are one action,
    * so a book that matches the file matches the last version too. The one
-   * exception is the failed commit, and `noteWritten` is how Save & Review
-   * reports it.
-   *
-   * NOTE: nothing calls `noteWritten` today, so `onDisk` is currently
-   * unreachable. Pre-existing; see the note in the plan.
+   * exception is the failed commit, and `noteWritten` is how Review reports
+   * it.
    */
   readonly saveState: (book: Book) => SaveState;
   /**
-   * Save & Review's report after it wrote files: which books reached the disk,
+   * Review's report after it wrote files: which books reached the disk,
    * and whether a version was recorded for them. Nothing else may call it —
    * the disk is the only other writer of this fact, and it has no opinion
    * about versions.
@@ -197,7 +192,7 @@ export interface Shell {
    * and moving the caret changes no document.
    *
    * An offset and not a block: what a block IS depends on who is asking (the
-   * editor's `DocStructure`, the overlay's skeleton, Onion's CST all cut
+   * editor's `DocStructure`, the overlay's skeleton, Galley's CST all cut
    * differently), and the shell should not pick one of those for everybody.
    * The offset is the fact; the cut is the reader's.
    */
@@ -275,9 +270,9 @@ export interface Shell {
   /**
    * How many findings one book is being asked about — the sidebar's badge.
    *
-   * A read of the census store, written when a Publication lands. It replaces
-   * `ProjectAnalysis.bookCensus()` per keystroke per reader: it rebuilds
-   * every finding in every book, and the sidebar was calling it on every tick.
+   * A read of the census store, written when a Publication lands, rather than
+   * `ProjectAnalysis.census()` per keystroke per reader, which rebuilds every
+   * finding in every book.
    */
   readonly attentionOf: (bookId: BookId) => number;
 
@@ -304,9 +299,10 @@ export interface Shell {
    * The focused book's undo and redo depth, and its chapter count.
    *
    * Reactive, which is the whole point: they are the last inputs to a
-   * command's `when()` that CodeMirror owns and never publishes, so behind
-   * `tick` the toolbar's buttons only re-evaluated when something else on it
-   * happened to re-render. Written from the `books` row on every accepted edit.
+   * command's `when()` that CodeMirror owns and never publishes, so without
+   * these the toolbar's buttons would re-evaluate only when something else on
+   * it happened to re-render. Written from the `books` row on every accepted
+   * edit.
    */
   readonly historyDepth: Accessor<{ readonly undo: number; readonly redo: number }>;
   readonly chapterCount: Accessor<number>;
@@ -393,9 +389,9 @@ export type Navigate = UseNavigateResult<string>;
  * Where an Open of a project should land, as the ROUTER's own shape rather
  * than a path string.
  *
- * It used to be a string, and both callers cast it past the typed route union
- * to use it. A discriminated pair of typed targets cannot be wrong about a
- * route that moved, which a string silently can.
+ * Not a string: a discriminated pair of typed targets cannot be wrong about a
+ * route that moved, which a string silently can, and needs no cast past the
+ * typed route union.
  */
 export type LandingTarget =
   | { readonly to: "/project/$slug"; readonly params: { readonly slug: string } }
@@ -517,8 +513,8 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     Effect.runFork(Fiber.interrupt(watching));
   });
 
-  // The working-state backup's timing — the ONE automatic write left in the
-  // product, now that the file is written only when a version is recorded.
+  // The working-state backup's timing — the ONE automatic write in the
+  // product, because the file is written only when a version is recorded.
   // Pushed into Recovery rather than read by it: the journal's debounce fiber
   // is built with the layer, below the settings service, and its two bounds
   // are re-read on every pass, so moving the stepper re-times the next burst.
@@ -680,7 +676,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   } = stores;
 
   /**
-   * The focused book's chapter table, and the last thing `tick` was for.
+   * The focused book's chapter table.
    *
    * The engine has a TOC per book, but this is not it: `structure()` is
    * CodeMirror's own table over the text in the editor, so it is right about
@@ -689,10 +685,10 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
    * the bug, so the editor's table is the one on screen.
    *
    * The stamp is the dependency. Nothing subscribes to a Book, and a Book
-   * publishes no structure — so behind `tick` this rebuilt on every event in
-   * the application, including a save in another book, and each of the two
-   * readers built its own rows: 150 chapters meant 300 objects per keystroke
-   * on the gesture's critical path. Read this way it wakes when the focused
+   * publishes no structure — so a change counter would rebuild this on every
+   * event in the application, including a save in another book, with each of
+   * the two readers building its own rows: 150 chapters would be 300 objects
+   * per keystroke on the gesture's critical path. Read this way it wakes when the focused
    * book's text moves and at no other time, and hands back the ARRAY the
    * editor already holds rather than building anything.
    *
@@ -779,7 +775,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     }
     const ready = opened.success;
     // The census, the corpus and every finding come from here; `attach` is what
-    // analyses the project once at open (vision §11.1) and keeps it in step.
+    // analyses the project once at open and keeps it in step.
     await services.run(
       Effect.provideService(
         Effect.gen(function* () {
@@ -880,9 +876,9 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
      * place.
      *
      * The aim wins when there is a live one; a remembered place is only the
-     * absence of a request. Reopening a project used to land on the top of the
-     * right book however far down it the reader had been, because the only
-     * thing written down was the CLIP — and a book opens whole.
+     * absence of a request. The CLIP alone is not enough to remember, because
+     * a book opens whole: reopening would land at the top of the right book
+     * however far down it the reader had been.
      */
     const held = lastLocation(staticProject.root);
     const resume = at === undefined && held?.bookId === bookId ? held.at : undefined;
@@ -895,17 +891,14 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       return;
     }
     setChapter(opening);
-    // Whole-book view does NOT scroll from here, and used to.
+    // Whole-book view does NOT scroll from here.
     //
-    // It manufactured a `Reveal` at the remembered chapter's `\c` anchor,
-    // which was the best this could do when a chapter was all that was written
-    // down. `BookEditor` now resumes the exact place — the offset when the
-    // document still hashes the same, else the verse, else the chapter — and
-    // two resumes fought: the aim made here made the editor's own restore
-    // stand down (an aim is an explicit request and outranks a remembered
-    // place), and the fresh view then recorded its position at the top of the
-    // book, overwriting what had been remembered. So the reader landed at the
-    // top and the memory of where they had been was gone.
+    // `BookEditor` resumes the exact place — the offset when the document
+    // still hashes the same, else the verse, else the chapter. A `Reveal` made
+    // here would fight it: an aim is an explicit request and outranks a
+    // remembered place, so the editor's own restore would stand down, and the
+    // fresh view would then record its position at the top of the book,
+    // overwriting what had been remembered.
     //
     // One resume, at the surface that knows the viewport.
     remember(bookId, opening, resume);
@@ -1089,9 +1082,9 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
    * opening chapter itself from `editor.preferChapterView`. So the chapter is
    * REMEMBERED and applied when the book it names becomes the focused one.
    *
-   * `ProjectSidebar` grew a local signal and an effect to do exactly this. It
-   * lives here now because the palette wanted the same thing, and two copies
-   * of "wait for the book, then scroll" would drift.
+   * It lives here rather than in `ProjectSidebar` because the palette wants
+   * the same thing, and two copies of "wait for the book, then scroll" would
+   * drift.
    */
   const showReference = (reference: Reference): void => {
     if (project() === undefined) return;

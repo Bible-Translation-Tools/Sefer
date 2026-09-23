@@ -2,11 +2,10 @@
 //
 // The Baseline: what Save last wrote to disk for one book, kept so that later
 // questions can be answered without touching the filesystem — is this book
-// dirty, did the file change under us, what did the user's last saved text
-// look like. It is the data contract between Save (slice 10), which produces
-// exactly one Baseline per successful write, and Diff (slice 23), which
-// compares a Book against it. A value with no operations: whoever holds one
-// reads its fields.
+// dirty, did the file change under us, what did the user's last saved text look
+// like. It is the data contract between Save, which produces exactly one
+// Baseline per successful write, and Diff, which compares a Book against it. A
+// value with no operations: whoever holds one reads its fields.
 //
 // `hash` is optional because core computes no content hash. When the text went
 // through Galley the engine's xxh3 hash is attached here and it decides

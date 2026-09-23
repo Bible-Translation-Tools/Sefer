@@ -27,8 +27,8 @@ export interface Toast {
   /**
    * Whether the × is offered. It always is, unless a caller deliberately says
    * otherwise: an error toast never auto-closes, so the close button is the
-   * only way out of one, and a download that failed behind a progress toast
-   * used to leave a permanent undismissable card on the screen.
+   * only way out of one — without it a download that failed behind a progress
+   * toast would leave a permanent undismissable card on the screen.
    */
   readonly dismissible: boolean;
 }

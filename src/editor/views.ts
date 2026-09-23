@@ -1,5 +1,5 @@
 /**
- * Views (seams §3.6): the two things a mode or a chapter choice actually is.
+ * Views: the two things a mode or a chapter choice actually is.
  *
  * A "view" in Sefer is not a component and not a second editor — it is a
  * projection (which classes paint, and how) plus a clip (which chapter is

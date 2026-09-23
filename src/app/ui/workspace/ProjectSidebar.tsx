@@ -43,12 +43,11 @@ export function ProjectSidebar() {
   // A MEMO, not a plain function: `section()` below asks for it once per
   // testament, so without one every pass would build sixty-six rows twice.
   //
-  // It tracks the findings store and NOT `tick`. The census it used to call
-  // rebuilds every finding in every book to count two of them, and `tick`
-  // fired on every keystroke — so typing one letter in one book rebuilt the
-  // whole project's findings to redraw badges that had not moved. The store
-  // is written when a Publication lands, which is the only time an answer
-  // here can actually differ.
+  // It tracks the findings store and nothing that fires per keystroke: a
+  // census rebuilds every finding in every book to count two of them, so
+  // typing one letter would rebuild the whole project's findings to redraw
+  // badges that had not moved. The store is written when a Publication lands,
+  // which is the only time an answer here can actually differ.
   const rows = createMemo(
     (): readonly Row[] => {
       const project = shell.project();

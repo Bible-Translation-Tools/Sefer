@@ -6,7 +6,7 @@
  * editor imports Galley's `Analysis` and core's `Book`/`Source` vocabulary and
  * nothing else from the app.
  *
- * Grouped the way the seams group it: the engine seam, the assembled editor,
+ * Grouped by seam: the engine seam, the assembled editor,
  * the editor-backed Book and its funnel, satellites and windows, views,
  * diagnostics, instruments, and the test harness.
  */
@@ -30,11 +30,10 @@ export { structureAt } from "./core/editorState";
 export { anchorFrom } from "./core/clip";
 export { type ChapterRow } from "./core/docStructure";
 
-// The editor-backed Book (editor-and-save §1.2) and the port other surfaces
-// submit through (§3.5).
+// The editor-backed Book and the port other surfaces submit through.
 export { editorBook, type EditorBook } from "./book";
 
-// Satellites and windows (§3.9).
+// Satellites and windows.
 export {
   clippedToScope,
   markedRanges,
@@ -54,7 +53,7 @@ export {
   showEmptyBlocks,
 } from "./recipes/emptyBlocks";
 
-// Views (§3.6).
+// Views.
 export { pickChapter, projectionFor, type ProjectionName } from "./views";
 
 // The read-only reference pane: another resource's book, same projection.
@@ -64,7 +63,7 @@ export { pairingHere, showBlockPairs, type PairedRange } from "./recipes/pairing
 // Arriving somewhere: the brief mark that says the jump landed.
 export { flash, flashing } from "./recipes/flash";
 
-// Diagnostics, sink 1 (editor-and-save §2).
+// Diagnostics, sink 1.
 export { showCorpusFindings, usfmLinter, type CorpusFinding } from "./recipes/lint";
 export { lintHoverGrace } from "./recipes/lintHover";
 export { watchLocation } from "./recipes/whereAmI";

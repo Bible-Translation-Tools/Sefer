@@ -1,5 +1,5 @@
 /**
- * Gitea — the account half of remote sync (slice 26), separated from transfer.
+ * Gitea — the account half of remote sync, separated from transfer.
  *
  * `Remote` moves objects; this service is everything that happens over Gitea's
  * REST API *before* a transfer is possible: signing in, and answering "which

@@ -1,10 +1,10 @@
 // fixes.ts
 //
-// Slice 15: applying the engine's OWN repairs, and nothing else.
+// Applying the engine's OWN repairs, and nothing else.
 //
-// Sefer writes no USFM transformations. Onion attaches the edits to the
-// diagnostic that found the problem, and since scripture-kitchen v0.1.0 it
-// also hands over a whole-book format transaction; this module's job is to
+// Sefer writes no USFM transformations. The engine attaches the edits to the
+// diagnostic that found the problem, and it also hands over a whole-book
+// format transaction; this module's job is to
 // carry both from the engine to `book.apply` without letting a stale one
 // through. There is deliberately no second JS formatter here and no generic
 // command language.
@@ -70,8 +70,8 @@ class NoFix extends Data.TaggedError("NoFix")<{
  * The artifact in hand does not expose the operation. Loud on purpose: a silent
  * no-op would read to the user as "the document was already formatted", which
  * is a different sentence and one this module CAN say honestly (`FormatPreview.
- * empty`). Since scripture-kitchen v0.1.0 this is only reachable from an
- * artifact that is not the vendored build.
+ * empty`). It is only reachable from an artifact that is not the pinned
+ * build.
  */
 class Unsupported extends Data.TaggedError("Unsupported")<{
   readonly operation: string;
@@ -204,7 +204,7 @@ export interface FormatPreview {
  *
  * `opts` is not offered to callers here: the engine's own defaults are what
  * "Format" means, and a dozen switches is a settings surface nobody has
- * designed. The refusal is kept for an artifact that is not the vendored build
+ * designed. The refusal is kept for an artifact that is not the pinned build
  * — see `DIFF_DOOR`.
  */
 export const formatBook = (

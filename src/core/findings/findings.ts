@@ -1,13 +1,13 @@
 // findings.ts
 //
-// The panel's half of slice 14: how findings are ordered, and what "navigate
+// The panel's half of Findings: how findings are ordered, and what "navigate
 // to this finding" means in a module that cannot navigate.
 //
 // `finding.ts` holds the shape and the two adapters. This file holds the
 // reading policy, and it is deliberately tiny — if it grows a filter model, a
 // grouping DSL or a selection state, those belong to the shell, because
 // filtering is presentation policy and hiding a category does not alter
-// analysis truth (vision §11.4).
+// analysis truth.
 
 import type { BookId, Ref } from "../book/book";
 import type { Analysis } from "../galley";
@@ -64,7 +64,7 @@ export const list = (projectAnalysis: {
  * scrolls the span into place.
  *
  * `from`/`to` are the SEMANTIC span, exactly as the engine reported it, even
- * when visual mode hides the markup it covers (vision §11.3). A presentation
+ * when visual mode hides the markup it covers. A presentation
  * anchor near a visible point is the view's own decision; it must never be
  * substituted here, because the same span is what a fix would edit.
  *

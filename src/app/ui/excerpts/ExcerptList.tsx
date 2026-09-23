@@ -5,11 +5,11 @@
  * One component, two feeds. Find supplies groups built from search hits and
  * STET supplies groups built from a term's occurrences plus a `renderPair`
  * for the source verse; everything below this line is the same
- * (design-direction.md, "Key terms (STET) reuses the Find excerpt pattern").
+ * (`documentation/architecture/design-direction.md`, "Key terms (STET) reuses
+ * the Find excerpt pattern").
  *
- * The windowing itself lives in `primitives/VirtualList` now — it was here
- * first, and it moved when `/findings` needed the same thing. What stayed is
- * what is about EXCERPTS: the outline column, the height estimate for a card
+ * The windowing itself lives in `primitives/VirtualList`, because `/findings`
+ * needs the same thing. What is here is what is about EXCERPTS: the outline column, the height estimate for a card
  * of scripture, and the one-card-at-a-time edit session.
  */
 

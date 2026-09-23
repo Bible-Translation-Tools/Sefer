@@ -1,6 +1,6 @@
 /**
  * Settings — every module's preferences in one file, each one owned by the
- * module that declared it (seams 1.4).
+ * module that declared it.
  *
  * The shape is register-then-read: a module declares the key it owns with a
  * schema and a default, and gets back a typed token. Nobody reads a setting

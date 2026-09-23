@@ -1,5 +1,5 @@
 /**
- * The Remote port (slice 26): the four online jobs a translator approves
+ * The Remote port: the four online jobs a translator approves
  * explicitly — attach a repository to a URL, fetch, pull, push — plus
  * publishing a project somewhere it did not exist. Sefer is local-first, so
  * nothing here ever runs as a side effect of editing; every method is a job

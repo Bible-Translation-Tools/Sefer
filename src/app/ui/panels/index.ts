@@ -7,9 +7,9 @@
  * itself is a plain component with no router in it and the route file stays
  * the two lines it should be.
  *
- * Save & Review used to be one of these. It and Compare are now the single
- * `/review` screen (`src/app/ui/review/`); what stayed behind is what History
- * still needs — `changes.ts`, `recorded.ts` and the unified `DiffView`.
+ * `/review` is not one of these; it lives in `src/app/ui/review/`. What is
+ * here beside the panels is what History needs — `changes.ts`, `recorded.ts`
+ * and the unified `DiffView`.
  */
 
 export { FindingsPanel } from "./FindingsPanel";

@@ -37,12 +37,10 @@ export function BackToEditor() {
    * The route that actually matched — an ID from the generated tree, not a
    * string we parse.
    *
-   * This used to ask `location.pathname.startsWith("/project/")`, which was
-   * true of exactly two screens when it was written and is now true of ALL of
-   * them: every project screen moved under `/project/$slug/`. So the predicate
-   * silently became "never", the door disappeared, and Escape stopped working
-   * with it. A route id cannot rot that way — move a screen and this is a
-   * compile error.
+   * Not a pathname prefix test: every project screen lives under
+   * `/project/$slug/`, so a prefix cannot tell them apart, and a predicate
+   * like that silently rots when screens move. A route id cannot rot that way
+   * — move a screen and this is a compile error.
    */
   const routeId = useRouterState({ select: (state) => state.matches.at(-1)?.routeId });
 
@@ -73,9 +71,9 @@ export function BackToEditor() {
     // The PARENT route, and nothing cleverer. `/project/$slug` already knows
     // where the work is — it forwards to the remembered book, and falls back
     // to the book list when that book is gone — so asking it is one door
-    // instead of two answers that can disagree. This used to resolve
-    // `shell.landingTarget(root)` here, which was the same decision made a
-    // second time from the same inputs.
+    // instead of two answers that can disagree. Resolving
+    // `shell.landingTarget(root)` here would make the same decision a second
+    // time from the same inputs.
     void navigate({ to: "/project/$slug", params: { slug: shell.slug() } });
   };
 

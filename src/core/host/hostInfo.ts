@@ -2,10 +2,10 @@
  * HostInfo — the facts about the machine we are running on, as one service.
  *
  * `boot()` already answers "which host" and "which build"; this widens that
- * boot half into the whole seam (seams 1.1): where this host lets us write,
- * which language the reader asked for, and which capabilities exist at all.
- * Modules ask HostInfo instead of sniffing globals, which is what keeps the
- * host names inside `src/platform` and out of core policy.
+ * boot half into the whole seam: where this host lets us write, which language
+ * the reader asked for, and which capabilities exist at all. Modules ask
+ * HostInfo instead of sniffing globals, which is what keeps the host names
+ * inside `src/platform` and out of core policy.
  *
  * The values are supplied by the host at composition time; core only shapes
  * and reads them. Nothing here does IO, so the service is synchronous.

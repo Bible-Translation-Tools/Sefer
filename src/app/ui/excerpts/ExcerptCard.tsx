@@ -1,9 +1,10 @@
 /**
  * One excerpt in the multibuffer: a reference, the reading, and a way in.
  *
- * Read-only is the DEFAULT and the whole point (design-direction.md, "Find"):
- * a results list is a place to look, not a place to edit by accident, and
- * plain text is what makes a list of two hundred of them cheap to scroll.
+ * Read-only is the DEFAULT and the whole point
+ * (`documentation/architecture/design-direction.md`, "Find"): a results list
+ * is a place to look, not a place to edit by accident, and plain text is what
+ * makes a list of two hundred of them cheap to scroll.
  * Edit is a click, and it swaps this one body for a satellite over the
  * canonical Book.
  *

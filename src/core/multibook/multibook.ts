@@ -1,6 +1,6 @@
 // multibook.ts
 //
-// MultiBook (seams §3.11, vision §14.4): running one labelled operation across
+// MultiBook: running one labelled operation across
 // many Books, and offering ONE bounded Undo for it.
 //
 // Cross-book operations are coordinated, not merged. There is no patch

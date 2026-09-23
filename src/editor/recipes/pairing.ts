@@ -155,9 +155,8 @@ const verseRange = (s: DocStructure, pos: number): PairedRange | undefined => {
  *     and the reason the feature exists: the block has no words, so there is
  *     no verse text to point at, and the empty block IS the answer.
  *  2. The VERSE otherwise. A `\p` can run fifteen verses, and washing all of
- *     them is a page of highlight for a question about one line (Will,
- *     2026-09-18: "a full \p of like 15 verses is kinda a ton of busy
- *     highlighting"). A verse is the unit two texts agree about.
+ *     them is a page of highlight for a question about one line. A verse is
+ *     the unit two texts agree about.
  *  3. The block, when there is no verse — front matter, a heading before
  *     `\v 1`. Something true beats nothing.
  */

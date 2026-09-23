@@ -1,5 +1,5 @@
 /**
- * ProjectAdmin (slice 31): the jobs that act on a project as a whole rather
+ * ProjectAdmin: the jobs that act on a project as a whole rather
  * than on its text — rename, delete, read and edit its metadata, export a
  * copy. It sits over `FileSystem` and the Scripture Burrito schema, and it
  * owns two rules that must not be softened:

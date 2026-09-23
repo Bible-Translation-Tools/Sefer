@@ -26,15 +26,13 @@ function ProjectPage(props: { readonly root: string }) {
   /**
    * Opening a project lands on the WORK, not on a census.
    *
-   * A translator who opens a project every morning was being shown a list of
-   * books and asked to find their own place in it. `shell.lastLocation` is
+   * A translator who opens a project every morning should not be shown a list
+   * of books and asked to find their own place in it. `shell.lastLocation` is
    * where they were, and this route forwards to it.
    *
-   * It forwards UNCONDITIONALLY now. There used to be a `?books=1` escape so
-   * the location bar's book crumb had somewhere to land that would not bounce
-   * it straight back out — a whole screen, and a search param to protect it,
-   * because a crumb had nowhere to go. The crumb is a picker now, so the only
-   * arrivals left here are the ones that mean "take me to my work".
+   * It forwards UNCONDITIONALLY. The location bar's book crumb is a picker,
+   * not a link here, so the only arrivals are the ones that mean "take me to
+   * my work", and no search param is needed to hold a book list open.
    *
    * The remembered book is checked against the project HERE, because this is
    * the first moment it is open: a book that has since been removed falls back

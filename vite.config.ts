@@ -47,10 +47,9 @@ const buildIdentity = (mode: string): string => `${shortGitSha() ?? "dev"}+${mod
 /**
  * Which engine tag this build resolved, read from the ONE place it is pinned.
  *
- * The engine used to be a copy under `vendor/galley` with a `manifest.json`
- * beside it naming the tag it was copied from — two records of one fact, which
- * is exactly how they drift. It is a tagged git dependency now, so the
- * dependency spec IS the pin and this reads it rather than restating it. A
+ * The engine is a tagged git dependency, so the dependency spec IS the pin and
+ * this reads it rather than restating it — a second record of the tag is
+ * exactly how two records drift. A
  * spec without a `#tag` (a branch, a local link) reports itself as written,
  * which is the honest answer for a build that is not on a release.
  */

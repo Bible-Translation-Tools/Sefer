@@ -2,10 +2,9 @@
  * The findings panel: every finding in the project, in one shape, through the
  * reader's filter — as the SAME multibuffer Find shows.
  *
- * Will, 2026-09-15, looking at the old list of rows: it must be the component
- * the reader already knows from searching. Identical cards, identical chrome,
- * the same expand-up/expand-down context arrows, the same outline column, the
- * same sticky headers, the same Edit-as-satellite. The purpose is that someone
+ * It is the component the reader already knows from searching. Identical
+ * cards, identical chrome, the same expand-up/expand-down context arrows, the
+ * same outline column, the same sticky headers, the same Edit-as-satellite. The purpose is that someone
  * scanning a place — a Sous finding about a comma, say — sees everything that
  * might be wrong there, in the verse it is wrong in, with the workflow they
  * already have. So this file draws no list of its own: `findingsFeed.ts` turns
@@ -18,7 +17,7 @@
  * `findings.list` does the ordering, `findings/filter` does the subtraction,
  * and the filter is subtractive and never authoritative: the header always
  * says "N of TOTAL shown", so a filtered panel can never read as a clean
- * project (vision §11.4), and the census, the inline marks and the corpus
+ * project, and the census, the inline marks and the corpus
  * counts are untouched by anything on this screen.
  *
  * A card's reference is still DERIVED or not shown — an excerpt exists only
@@ -209,11 +208,11 @@ export function FindingsPanel() {
   /**
    * Everything the HEADER needs, in one walk and no sort.
    *
-   * The counts and the filter chips used to cost `list` (a sort), then
-   * `facets`, then `applyFilter` — three more walks of twenty thousand
-   * findings, all of it before the panel could paint, because the header says
-   * "N of TOTAL shown". Measured on a 66-book project that was about a third
-   * of the first task, and none of it needs the findings in order.
+   * The counts and the filter chips as `list` (a sort), then `facets`, then
+   * `applyFilter` would be three more walks of twenty thousand findings, all
+   * of it before the panel could paint, because the header says "N of TOTAL
+   * shown". Measured on a 66-book project that was about a third of the first
+   * task, and none of it needs the findings in order.
    *
    * Facets are counted over the UNFILTERED pool: a chip's own count must not
    * move as you click it.

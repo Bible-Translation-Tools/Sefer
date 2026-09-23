@@ -2,17 +2,16 @@
  * What can change the UI, enumerated.
  *
  * The shell bridges a core that owns no signals (`pnpm boundaries`) to a Solid
- * tree that needs them, and until now it did so with one counter: `bump()`
- * said *something changed somewhere* and every derived read in the
- * application recomputed. The information to do better was always present —
- * an accepted edit knows its Book, a save knows which files it wrote — and
- * `bump()` was the thing throwing it away.
+ * tree that needs them. One counter meaning *something changed somewhere*
+ * would make every derived read in the application recompute, and throw away
+ * information that is always present — an accepted edit knows its Book, a
+ * save knows which files it wrote.
  *
  * So this is that information, kept: a closed union of the events that can
  * move the project's derived state, each naming the Books it moved. Being
- * closed is the point. `bump()` made "what can change the UI" unanswerable;
- * a union makes it a list you can read, and a store can subscribe to the
- * variants it actually cares about instead of to all change everywhere.
+ * closed is the point: "what can change the UI" is a list you can read, and a
+ * store can subscribe to the variants it actually cares about instead of to
+ * all change everywhere.
  *
  * Named by the glossary's rule — `<thing>.<what happened to it>`, with the
  * thing a term from the table and the verb from the verb list

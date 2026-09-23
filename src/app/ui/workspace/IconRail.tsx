@@ -13,24 +13,19 @@
  * a project, and offering one with nothing open is an affordance that answers
  * nothing. **Form is not built and has no icon here** — an offered mode that
  * cannot be entered is worse than an absent one
- * (planning/03-ui/design-direction.md).
+ * (`documentation/architecture/design-direction.md`).
  *
- * The project-wide screens the rail reaches — `/terms`, `/compare`,
- * `/inventory` — are ROUTES, lit from the pathname, not signals. Key terms
- * used to be `/find?mode=stet`, a mode on the search screen; it is its own
- * pane now ("Find and Key terms are SEPARATE panes/routes with similar UI,
- * not a mode toggle on one page" — design-direction.md, gap list 5), so the
- * tile is a plain navigation and the URL is the whole of its state.
+ * The project-wide screens the rail reaches — `/terms`, `/review`,
+ * `/inventory` and the rest — are ROUTES, lit from the pathname, not signals.
+ * Key terms is its own pane rather than a mode on the search screen
+ * (`documentation/architecture/stet.md`), so its tile is a plain navigation
+ * and the URL is the whole of its state.
  *
- * EVERY TILE IS A PLACE. That is the rule this rail did not keep: `Refine` and
- * `USFM` were `shell.setMode` calls sitting among navigations, so two of five
- * tiles changed a setting and went nowhere, and `Refine` — the way back to the
- * text — did not take you to the text. A projection is a preference about how
- * the editor draws, not a screen; it belongs where preferences live, and for
- * now that is the toolbar's own control and the `view.mode` commands in the
- * palette.
- *
- * So `Refine` navigates to the book and `USFM` is gone from here.
+ * EVERY TILE IS A PLACE. A tile that changed a setting and went nowhere would
+ * sit among navigations and mean something else; a projection is a preference
+ * about how the editor draws, not a screen, so it belongs where preferences
+ * live — the toolbar's own control and the `view.mode` commands in the
+ * palette. So `Refine` navigates to the book, and there is no `USFM` tile.
  */
 
 import type { JSX } from "@solidjs/web";
@@ -126,8 +121,8 @@ export function IconRail() {
   /**
    * The top tile does two jobs, and which one depends on where you are.
    *
-   * On a project route it is the panel toggle it has always been. On a
-   * full-page screen -- settings, findings, history, compare -- there is no
+   * On a project route it is the panel toggle. On a
+   * full-page screen -- settings, findings, history, review -- there is no
    * panel to toggle, and what a reader wants from the one tile at the top of
    * the rail is the way BACK: it opens the panel and returns to the book they
    * were in (the remembered location). Left as a plain toggle, pressing it on
@@ -184,10 +179,10 @@ export function IconRail() {
       <Show when={shell.project() !== undefined}>
         <span aria-hidden="true" class="my-2 h-px w-6 bg-surface-border" />
 
-        {/* The text itself — the place every other tile is a detour from. It
-            used to call `setMode("default")` and go nowhere, so pressing the
-            one tile that means "back to my work" left you on whatever screen
-            you were already on. */}
+        {/* The text itself — the place every other tile is a detour from, so
+            it navigates to the book rather than changing the mode: the one
+            tile that means "back to my work" has to leave the screen you are
+            on. */}
         <Tile
           label={t("Refine")}
           testId="rail-refine"

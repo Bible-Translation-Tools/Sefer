@@ -1,5 +1,5 @@
 /**
- * Satellites (seams §3.9): a second surface over ONE range of a book — a note
+ * Satellites: a second surface over ONE range of a book — a note
  * apparatus, a source mirror, a card that is editable in place.
  *
  * A satellite is a reader that may write, and the whole of its discipline is

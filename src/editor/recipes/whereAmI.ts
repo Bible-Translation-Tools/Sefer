@@ -64,12 +64,11 @@ export interface Where extends ChapterName {
 /**
  * Which chapter the reader is in.
  *
- * It used to be the chapter under the scroller's TOP EDGE, and that reading is
+ * Not simply the chapter under the scroller's TOP EDGE: that reading is
  * twitchy in exactly the place it is read most. Scroll a chapter heading two
  * lines past the top and a few lines of the previous chapter are still
  * showing: the top edge is in chapter 3, the reader is plainly in chapter 4,
- * and every reference pane snaps back a chapter (Will, 2026-09-18 — "the left
- * editor snaps to three cause a tiny piece of verse 3 is showing").
+ * and every reference pane would snap back a chapter.
  *
  * Two rules, and the first is the one a reader would state:
  *

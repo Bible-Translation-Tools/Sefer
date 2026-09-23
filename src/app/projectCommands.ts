@@ -109,7 +109,7 @@ export const exportProjectZip = async (services: Services, root: string): Promis
  * from, and it is re-read rather than patched because a burrito rename may
  * land in a different locale than the one we displayed.
  *
- * `noteRenamed` is the third reader, and the reason a rename used to show a
+ * `noteRenamed` is the third reader, and without it a rename would show a
  * green toast and change nothing on screen: the OPEN project holds the
  * metadata it decoded when it was opened, and nothing re-reads a burrito
  * mid-session. The overlay makes the sidebar header move with the table.

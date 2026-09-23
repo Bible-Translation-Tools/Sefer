@@ -17,13 +17,11 @@
  *
  * Manifest lookups are edge-cached for 60s to absorb update-check stampedes.
  *
- * ## Channels, and how this differs from the worker it was ported from
+ * ## Channels
  *
- * Zephyr separated stable from nightly by TAG PREFIX — `v*` against
- * `nightly-*` — so each environment filtered on a different string. Sefer's
- * channels both tag `v*` and differ by SEMVER PRE-RELEASE instead
- * (`v0.3.0` against `v0.3.0-1`), so filtering by prefix cannot tell them
- * apart and `CHANNEL` does the work:
+ * Both channels tag `v*` and differ by SEMVER PRE-RELEASE (`v0.3.0` against
+ * `v0.3.0-1`), so a tag-prefix filter cannot tell them apart and `CHANNEL`
+ * does the work:
  *
  *   stable   only final releases. A stable user is never offered a candidate.
  *   preview  candidates AND finals. This is deliberate: when 0.3.0 ships,

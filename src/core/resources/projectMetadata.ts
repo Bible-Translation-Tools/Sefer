@@ -1,22 +1,19 @@
 /**
  * What Sefer knows about a project, whichever container it came in.
  *
- * A project on disk declares itself in one of two formats, and until now Sefer
- * could only read one of them:
+ * A project on disk declares itself in one of two formats:
  *
  *   metadata.json    Scripture Burrito       `burrito.ts`
  *   manifest.yaml    Resource Container      `resourceContainer.ts`
  *
  * `en_ulb` — the project most of this is tested against — is a Resource
- * Container, so its Language column was an em dash and its name was its folder.
- * Both decoders already existed and were already Effect schemas; what was
- * missing was the shape they decode INTO, so that nothing downstream has to ask
- * which kind it got.
+ * Container. Both decoders are Effect schemas; this module is the shape they
+ * decode INTO, so that nothing downstream has to ask which kind it got.
  *
- * That is this module: one shape, two adapters, and the rule that the raw
- * container types never leave `src/core/resources`. A screen asking "what
- * language is this project in" should not have to know that one format spells
- * it `languages[0].name[locale]` and the other `dublin_core.language.title`.
+ * One shape, two adapters, and the rule that the raw container types never
+ * leave `src/core/resources`. A screen asking "what language is this project
+ * in" should not have to know that one format spells it
+ * `languages[0].name[locale]` and the other `dublin_core.language.title`.
  *
  * DELIBERATELY SMALL. This is what the APPLICATION needs, not the union of two
  * specifications. Burrito's ingredients and checksums stay in `checksum.ts`
@@ -66,8 +63,8 @@ export interface ProjectMetadata {
    * Burrito states it as `identification.primary[authority][id]` and a
    * Resource Container as `dublin_core.identifier`; both mean "this is the
    * same project wherever you found it", which is what `ProjectId` needs so
-   * that two checkouts of one project are one project. An RC project used to
-   * have no identity at all here and fell back to its path.
+   * that two checkouts of one project are one project, rather than falling
+   * back to its path.
    */
   readonly id: string | undefined;
   /** The project's own name, by locale. Empty when it declares none. */

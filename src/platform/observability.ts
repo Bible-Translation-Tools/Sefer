@@ -20,9 +20,9 @@ interface NodeRuntime {
  * What a person or an agent reads out of a running build.
  *
  * Deliberately small. Every surface here answers a question none of the others
- * does: the raw event stream was a second way to ask what `traces` and `logs`
- * already answer, and the editor's own instruments were a third — they remain
- * the hot-path SOURCE, feeding the ring, but not a parallel thing to read.
+ * does. A raw event stream would be a second way to ask what `traces` and
+ * `logs` already answer; the editor's own instruments are the hot-path SOURCE,
+ * feeding the ring, but not a parallel thing to read.
  */
 interface ObservabilityDevSurface {
   /**
@@ -127,7 +127,7 @@ export interface ConsoleStream extends AssemblerSinks {
  * turning it off never loses any.
  *
  * Drained on idle, never on the keystroke path. A `console.debug` per note
- * used to be about a third of the JS work of a keystroke — measured, and worse
+ * measured at about a third of the JS work of a keystroke — and worse
  * with DevTools open, which is exactly when someone is reading the number. So
  * an operation appears a frame late rather than inside the frame, and a
  * console that cannot keep up drops rather than queues.

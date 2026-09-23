@@ -47,9 +47,9 @@ const isComment = (value: unknown): value is Comment => {
 /**
  * Bring a stored comment up to the current shape.
  *
- * A comment used to carry one place, flat: `source`, `selector`, `nearby`,
- * `data`. It now carries a list of `targets`, because one sentence is often
- * about two elements. A reload mid-review would otherwise throw away the
+ * The older stored shape carries one place, flat: `source`, `selector`,
+ * `nearby`, `data`. The current one carries a list of `targets`, because one
+ * sentence is often about two elements. A reload mid-review would otherwise throw away the
  * morning's notes — or worse, render them with `undefined` where the location
  * should be — so the old shape is lifted into a single target.
  */

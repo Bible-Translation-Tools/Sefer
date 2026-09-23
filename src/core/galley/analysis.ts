@@ -6,8 +6,8 @@
  * wasm handle and the single `analyze` call; everything downstream (the
  * editor's fold, findings, fixes, project analysis) imports FROM HERE and
  * never from the engine package. That is why its types are re-exported below:
- * the vendored artifact is regenerated upstream, and one import site to
- * re-point is the whole cost of a regeneration.
+ * the pinned build is regenerated upstream, and one import site to re-point
+ * is the whole cost of moving to a new tag.
  *
  * Nothing here allocates a fiber or touches the wasm wall. These are the
  * functions the keystroke path calls, so they are plain and synchronous.
