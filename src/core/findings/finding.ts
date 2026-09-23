@@ -353,27 +353,3 @@ export const fromSnapshot = (
  */
 export const stale = (finding: Finding, book: { source: () => { stamp: SourceStamp } }): boolean =>
   book.source().stamp.revision !== finding.stamp.revision;
-
-/**
- * The severity an Onion code carries with NO declared `\usfm` version — the
- * catalogue's base rung, for a filter list or a legend. It is deliberately not
- * what a finding reports: several codes escalate once a document declares a
- * version, so the per-finding severity from `fromAnalysis` is authoritative.
- *
- * `null` for a code that says nothing (its severity is absent, or it is a
- * `form` observation), and for a name that is not in the catalogue at all.
- */
-const severityOf = (code: string): Severity | null => {
-  const row = CODES.find((entry) => entry.name === code);
-  if (row === undefined) return null;
-  switch (row.severity) {
-    case "error":
-    case "warning":
-    case "info":
-      return row.severity;
-    case "hint":
-      return "info";
-    default:
-      return null;
-  }
-};

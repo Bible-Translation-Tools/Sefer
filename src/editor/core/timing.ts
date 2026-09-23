@@ -1,10 +1,10 @@
 /**
- * A local span ring: `span(name, note)` returns the closer, and the whole thing
- * is inert until someone is listening.
+ * Local spans: `span(name, note)` returns the closer, and the whole thing is
+ * inert until the keystroke meter opens a gesture.
  *
  * Deliberately not Effect and deliberately not Observability: these spans wrap
  * work inside `changeFilter` and `transactionFilter`, thousands of times per
- * paragraph typed. `armed()` is false in the ordinary case, and then a span is
+ * paragraph typed. `armed()` is false outside a metered gesture, and then a span is
  * two `performance.now()` calls and no allocation. `src/editor/observability.ts`
  * is the one bridge to Sefer's ring, and it forwards verdicts, not spans.
  *
@@ -15,14 +15,6 @@
  * trace is open the callback returns immediately.
  */
 
-interface TimingSpan {
-  name: string;
-  ms: number;
-  note: string;
-  at: number;
-  seq: number;
-}
-
 export interface SpanTotal {
   ms: number;
   n: number;
@@ -30,14 +22,9 @@ export interface SpanTotal {
 
 export type Gesture = ReadonlyMap<string, SpanTotal>;
 
-const RING = 60;
-const ring: TimingSpan[] = [];
 let seq = 0;
-const listeners = new Set<() => void>();
 let bucket: Map<string, SpanTotal> | null = null;
 let stack: number[] | null = null;
-
-const recent = (): readonly TimingSpan[] => ring;
 
 /**
  * A closed span, for whoever is assembling the wider picture. ONE listener —
@@ -53,12 +40,7 @@ export const onDerived = (fn: Derived): void => {
   derived = fn;
 };
 
-export const armed = (): boolean => listeners.size > 0 || bucket !== null;
-
-function onSpan(fn: () => void): () => void {
-  listeners.add(fn);
-  return () => listeners.delete(fn);
-}
+export const armed = (): boolean => bucket !== null;
 
 export function openGesture(): void {
   bucket = new Map();
@@ -72,27 +54,9 @@ export function closeGesture(): Gesture | null {
   return held;
 }
 
-function summary(): { name: string; n: number; last: number; avg: number; max: number }[] {
-  const by = new Map<string, { n: number; last: number; sum: number; max: number }>();
-  for (const s of ring) {
-    const e = by.get(s.name) ?? { n: 0, last: s.ms, sum: 0, max: 0 };
-    e.n++;
-    e.sum += s.ms;
-    e.max = Math.max(e.max, s.ms);
-    by.set(s.name, e);
-  }
-  return [...by].map(([name, e]) => ({
-    name,
-    n: e.n,
-    last: e.last,
-    avg: +(e.sum / e.n).toFixed(2),
-    max: +e.max.toFixed(2),
-  }));
-}
-
 export function span(name: string, note: string | (() => string) = ""): () => number {
   const t0 = performance.now();
-  if (listeners.size === 0 && bucket === null)
+  if (bucket === null)
     return () => {
       const ms = +(performance.now() - t0).toFixed(3);
       derived?.(name, typeof note === "function" ? note() : note, ms);
@@ -116,17 +80,8 @@ export function span(name: string, note: string | (() => string) = ""): () => nu
       held.n++;
       bucket.set(name, held);
     }
-    const entry: TimingSpan = {
-      name,
-      ms,
-      note: typeof note === "function" ? note() : note,
-      at: Math.round(t0),
-      seq: seq++,
-    };
-    ring.unshift(entry);
-    if (ring.length > RING) ring.length = RING;
-    derived?.(name, entry.note, ms);
-    for (const fn of listeners) fn();
+    seq++;
+    derived?.(name, typeof note === "function" ? note() : note, ms);
     return ms;
   };
 }

@@ -2,9 +2,9 @@
  * The front matter card: `\id`, `\ide`, `\h`, `\toc1-3` and `\mt*` shown in
  * regular mode as labelled fields instead of as lines of markup.
  *
- * Same shape as the aligned-word popover (`recipes/attrs.ts`): the marker name
- * is a LOCKED label and only the value is editable, because a marker is spec
- * vocabulary and renaming one silently changes what the line means. Changing
+ * The marker name is a LOCKED label and only the value is editable, because
+ * a marker is spec vocabulary and renaming one silently changes what the line
+ * means. Changing
  * `\h` to `\toc2` is a USFM-mode edit, on purpose.
  *
  * Three decisions worth stating:

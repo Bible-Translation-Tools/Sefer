@@ -145,8 +145,7 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
   // a caller who wants the trace for itself keeps it; when they do, this book
   // still reads refusals, because the refusal slot belongs to the instrument
   // rather than to any one tracer. With no Observability the trace is still
-  // assembled — `__sefer.editor.traces()` and `Refusal.rule` need it — it just
-  // does not leave the process.
+  // assembled — `Refusal.rule` needs it — it just does not leave the process.
   let own = EditorState.create({
     doc: plain.source().text,
     extensions: [

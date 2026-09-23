@@ -13,8 +13,8 @@
  * The shape:
  *
  *   - `tracer` is a Facet, not a module global, because two states (a book and
- *     a window over it) trace separately, and because a test wants the ring
- *     while the app wants the Observability bridge.
+ *     a window over it) trace separately, and because the test harness wants a
+ *     flat sink while the app wants the Observability bridge.
  *   - `Tracer.begin(state, origin)` opens one `Trace` per transaction. The
  *     trace is keyed on the *start* state's identity: a command reads that
  *     state, then the filters run against it, so a whole gesture — command,
@@ -25,8 +25,8 @@
  *     that frame's verdict — so the rules keep the words they already had and
  *     nothing is recorded twice.
  *   - `makeTracer(emit)` is the single implementation. The pluggable half is
- *     emission: `null` fills only the local ring, `sinkTracer` feeds the
- *     legacy `TraceSink` (harness, `ringSink`), `observabilityTracer`
+ *     emission: `null` records only the refusal slot, `sinkTracer` feeds the
+ *     legacy `TraceSink` (the harness), `observabilityTracer`
  *     (src/editor/observability.ts) writes Sefer's ring.
  *
  * The cost when nobody is watching: `tracing(state)` is one facet read and
@@ -158,9 +158,6 @@ export const tracer = Facet.define<Tracer, Tracer | null>({ combine: (v) => v[0]
 /** The one guard every call site uses. One facet read, no allocation. */
 export const tracing = (state: EditorState): boolean => state.facet(tracer) !== null;
 
-const RING = 64;
-const ring: TraceSummary[] = [];
-
 let seq = 0;
 let steps = 0;
 
@@ -209,8 +206,8 @@ const NO_EMIT: TraceEmit = {
 };
 
 /**
- * The single `Trace` implementation. Everything about ordering, timing, the
- * ring and the refusal slot is here exactly once; `emit` is the only variable.
+ * The single `Trace` implementation. Everything about ordering, timing and
+ * the refusal slot is here exactly once; `emit` is the only variable.
  */
 export const makeTracer = (emit: Emitter | null): Tracer => ({
   begin: (state, origin, changed = false) => {
@@ -309,14 +306,12 @@ export const makeTracer = (emit: Emitter | null): Tracer => ({
         closed = true;
         live.ms = Math.round((performance.now() - opened) * 1000) / 1000;
         out.end();
-        ring.push(live);
-        if (ring.length > RING) ring.shift();
       },
     };
   },
 });
 
-/** Ring only: what `editorBook` installs when it has no Observability. */
+/** Refusals only: what `editorBook` installs when it has no Observability. */
 export const localTracer: Tracer = makeTracer(null);
 
 // The open trace, keyed on the state it began from. Transaction filtering is
@@ -364,24 +359,6 @@ export const traceFor = (state: EditorState, origin: string, changed = false): T
  */
 export const traceOf = (state: EditorState): Trace | null =>
   key === state && current !== null ? current : null;
-
-/** The last traces, newest last. Flushes the open one so the view is current. */
-const traces = (limit = RING): readonly TraceSummary[] => {
-  flushTrace();
-  return limit >= ring.length ? ring : ring.slice(ring.length - limit);
-};
-
-/** One trace as a person reads it: the stages in order, with their verdicts. */
-const dumpTrace = (t: TraceSummary): string =>
-  [
-    `trace #${t.seq} ${t.origin} doc=${t.docLength} head=${t.head} ${t.ms}ms` +
-      (t.refusedBy === null ? "" : ` REFUSED by ${t.refusedBy}`),
-    ...t.entries.map(
-      (e) =>
-        `  ${e.kind.padEnd(7)} ${(e.phase === "" ? e.name : `${e.phase}/${e.name}`).padEnd(46)} ` +
-        `${e.verdict.padEnd(8)} ${String(e.ms).padStart(7)}  ${e.detail ?? ""}`,
-    ),
-  ].join("\n");
 
 /**
  * A rule's own verdict, on whichever trace is open.

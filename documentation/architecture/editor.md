@@ -20,11 +20,11 @@ Everything downstream is a function of that facet rather than of a global: `engi
 
 A bound view MUST route its transactions through `book.fromView(view, trs)`; that is where a keystroke becomes a receipt. `apply` throws if a bound view accepted an edit without it, rather than report a receipt nobody heard.
 
-`seatFor(options)` is the factory `openProject({ seat })` wants. `attached()` counts bound views plus `hold()`s (windows, satellites) and is what makes `project.release` refuse.
+`seatFor(options)` is the factory `openProject({ seat })` wants. `attached()` counts bound views plus `hold()`s (satellites) and is what makes `project.release` refuse.
 
-## Windows and satellites borrow
+## Satellites borrow
 
-`openWindow(book, at, options)` gives a headless state over the whole book, clipped to the chapter containing `at`. `mountSatellite({ host: Funnel, range, … })` gives a view over one range. Both are readers that may write, and both keep the same discipline: a local edit is turned into changes, submitted through the `Funnel` (`funnel.ts` — `doc`, `structure`, `submit`, `attach`, `undo`/`redo`/`depth`), and applied locally only when the canonical Book publishes it back. They keep their own caret across the round trip; they never keep their own text. `fromCanonical` marks the text coming home, so nothing resubmits it.
+`mountSatellite({ host: Funnel, range, … })` gives a view over one range — Find's and Key terms' editable excerpts are satellites, and a virtualised one simply mounts over the latest canonical text when it scrolls into view. A satellite is a reader that may write, and it keeps the discipline: a local edit is turned into changes, submitted through the `Funnel` (`funnel.ts` — `doc`, `structure`, `submit`, `attach`, `undo`/`redo`/`depth`), and applied locally only when the canonical Book publishes it back. It keeps its own caret across the round trip; it never keeps its own text. `fromCanonical` marks the text coming home, so nothing resubmits it.
 
 Structure is **borrowed**, not recomputed: a window's `structureField` asks the `borrowedStructure` facet first and takes the canonical `Analysis` when `describesExactly` holds, so ten result cards over one book cost zero extra parses. The one turn a window pays for a parse of its own is between its submit and the answer.
 
@@ -142,7 +142,7 @@ clip's own window rather than outside it.
 `core/frontmatter.ts` replaces the header lines — `\id \ide \usfm \h \toc1-3 \toca1-3 \mt*`, stopping at the first line that is neither blank nor one of those — with **one block widget** of labelled fields, in regular mode only. It is the aligned-word popover's idea at book scale, and it keeps that popover's discipline: the marker name is a locked label, because a marker is spec vocabulary and turning `\h` into `\toc2` is a USFM-mode edit.
 
 - A field writes exactly its own line's value span, `[contentFrom, to)`, as one change through the view — so it reaches `book.fromView`, publishes one receipt, and is one Undo step.
-- The write is **`trusted`**. Front matter sits before the first `\c`, so while the reader is clipped to a chapter `refuseEditsOutsideTheClip` would refuse every card edit. Same argument as the attrs popover: a structured surface with hard-edged targets says so rather than being silently inert.
+- The write is **`trusted`**. Front matter sits before the first `\c`, so while the reader is clipped to a chapter `refuseEditsOutsideTheClip` would refuse every card edit. Same argument as the front matter card's own design: a structured surface with hard-edged targets says so rather than being silently inert.
 - The span is re-resolved from the current state at write time (by position in the row list), not taken from the offsets the widget was built with — between building the card and blurring a field, an edit elsewhere may have moved everything.
 - The widget updates its inputs **in place** (`updateDOM`, skipping whichever field has focus) instead of being rebuilt, because a rebuild between "type" and "blur" would drop the caret out of the field in use. Writing happens on `change` (blur or Enter), not per keystroke; Escape restores the value and returns focus to the document.
 - It is a block decoration computed from a facet, not a view plugin — CodeMirror does not allow block decorations from plugins — and it is mounted by `BookEditor`, not baked into the seat, so a headless state never pays for it.
@@ -160,7 +160,7 @@ clip's own window rather than outside it.
 - `tracer` is a **Facet** (`Facet<Tracer, Tracer | null>`), not a module global, because a book and a window over it trace separately, and because a test wants a ring while the app wants Sefer's Observability. `tracing(state)` is the guard every call site uses: one facet read, and **nothing is allocated when the facet is null**.
 - `Trace.stage(phase, name)` and `Trace.command(name)` open a **frame** and hand back its closer. `compose.install` opens a stage around each phase rule and closes it with the verdict; `compose.usfmKeys` opens a command frame around each keymap binding. A command's frame stays open across the dispatch it makes, so its stages nest inside it and the command's own line closes the group.
 - **A rule's own `note`/`noteTr` becomes its frame's verdict.** That is why adopting the tracer changed no rule: `guardedBackspace` still says `delete one character`, `moveCaret` still says `→ 76 → 83 (stepped to 77, forward)`, and nothing is recorded twice. When a rule says nothing, the verdict comes from what it returned — `true`/`tr` is `passed`, `false` or an empty spec list is `refused`, anything else is `rewrote`, and a protected range list is `passed` with the count as detail.
-- `makeTracer(emit)` is the **single** implementation; ordering, timing, the ring and the refusal slot live there once. Only emission is pluggable: `localTracer` fills the local ring alone, `sinkTracer` (in `core/trace.ts`) feeds the flat `TraceSink` a harness or a demo wants, `observabilityTracer` writes Sefer's ring.
+- `makeTracer(emit)` is the **single** implementation; ordering, timing and the refusal slot live there once. Only emission is pluggable: `localTracer` keeps the refusal slot and emits nothing, `sinkTracer` (in `core/trace.ts`) feeds the flat `TraceSink` the test harness wants, `observabilityTracer` writes Sefer's ring.
 - **Refusals.** The instrument keeps the FIRST stage that refused since `clearRefusal()`, and `editorBook.apply` reads it for `Refusal.rule`/`reason`. First, not last: a change filter that vetoes a range runs before the transaction rules that would have rewritten it, so the first door to close is the one that decided.
 
 **Levels.** `observabilityTracer` reads `observability.level()` **once**, when the trace begins — a keystroke must not change policy halfway through.
@@ -173,26 +173,15 @@ clip's own window rather than outside it.
 
 Every event carries the correlation `<bookId>#<trace seq>`, so one keystroke's stages group together and pair with the `book.apply` note the same gesture produced. Detail is counts and positions, never document text.
 
-**The derivation pipeline.** `core/timing.ts` is the local span ring the keystroke meter attributes time with — `scan`, `index`, `decorate`, `paint`, `diagnostics-render`. It cannot see an `EditorState`, so `onDerived` calls back into the instrument and each closed span lands on whichever trace is open as a `derive` entry. Those entries stay **local**: they run several times per keystroke and the meter already reports their exclusive totals in one bounded note, so they appear in `__sefer.editor.traces()` and not in Sefer's ring. `phase:*` and `keystroke` spans are skipped, because the stage frame and the meter already measured them.
+**The derivation pipeline.** `core/timing.ts` holds the spans the keystroke meter attributes time with — `scan`, `index`, `decorate`, `paint`, `diagnostics-render`. They are inert (two `performance.now()` calls) unless the meter has opened a gesture. A span cannot see an `EditorState`, so `onDerived` calls back into the instrument and each closed span lands on whichever trace is open as a `derive` entry. Those entries do **not** cross into Sefer's ring: they run several times per keystroke, and the meter already reports their exclusive totals in one bounded note. `phase:*` and `keystroke` spans are skipped, because the stage frame and the meter already measured them.
 
-**Reading a keystroke.** In a dev build, `__sefer.editor.trace()` prints the newest trace and `__sefer.editor.traces()` returns the last 64:
+**Reading a keystroke.** Set the level to `spans` (`__sefer.observability.setLevel("spans")` in a dev build) and read `__sefer.observability.recent()`: each frame is an `editor.phase.<name>` or `editor.command.<name>` span plus its verdict note, in pipeline order, all under one `<bookId>#<seq>` correlation, followed by the meter's one note with the derivation totals. There is no separate editor surface on `globalThis`.
 
-```
-trace #7 key doc=3042 head=76 508.8ms
-  stage   admission/refuseEditsOutsideTheClip            passed         0
-  stage   admission/refuseKeystrokesInsideHiddenMarkup   passed         0
-  …
-  derive  paint                                          passed       0.1
-  stage   settlement/settleTheCaretOnALegalPosition      passed       0.2
-  stage   settlement/pullSelectionsIntoTheClip           passed         0
-  command moveCaret                                      moved        1.9  → 76 → 83 (stepped to 77, forward)
-```
-
-`core/meter.ts` (wall time from the DOM event to the last update of a gesture) and `core/inspect.ts` (everything the editor knows about the caret's position, as one flat record) round out the surface. None of it is Effect: it runs inside change and transaction filters thousands of times per typed paragraph, where a service lookup per rule is not free and there is no fiber to carry a context.
+`core/meter.ts` (wall time from the DOM event to the last update of a gesture) rounds out the surface. None of it is Effect: it runs inside change and transaction filters thousands of times per typed paragraph, where a service lookup per rule is not free and there is no fiber to carry a context.
 
 ## What was not ported
 
-- **`attrs`/`attrResolve`** — the aligned-word popover (`recipes/attrs.ts`) needs two engine free functions the pinned wasm handle does not export. Both call sites throw with a `TODO(seam)`, deliberately: a popover that silently shows no attributes reads as "this word has none", and a wrong answer about alignment is worse than a visible defect.
+- **`attrs`/`attrResolve`** — the aligned-word popover needs two engine free functions the pinned wasm handle does not export. The half-ported popover threw a `TODO(seam)` and nothing installed it, so it is parked: [parked code](../../planning/04-parked/parked.md).
 - **`formatEdits` / `format` / `locate`** — the engine's normalisation, likewise not on the handle. Nothing in `src/editor` references them; formatting is [Fixes](../../planning/00-ideas/v2-module-seams.md)' seam when the handle grows them.
 - **`startEngine` / `runAnalyze`** — replaced by the `Galley` Layer and the analyzer facet.
 
@@ -207,7 +196,7 @@ trace #7 key doc=3042 head=76 508.8ms
 | rules and commands | `core/phases.ts`, `compose.ts`, `sealed.ts`, `clip.ts`, `input.ts`, `deletion.ts`, `caret.ts`, `kernel.ts` |
 | structured entry | `core/insert.ts`, `actions.ts`, `frontmatter.ts` |
 | rendering | `core/decorations.ts`, `render.ts`, `editorState.ts`, `editor.css` |
-| instruments | `core/instrument.ts`, `meter.ts`, `timing.ts`, `trace.ts`, `inspect.ts`, `../observability.ts` |
-| the Book, the funnel, windows, views | `book.ts`, `funnel.ts`, `window.ts`, `views.ts` |
-| recipes over the editor | `recipes/lint.ts`, `copy.ts`, `satellite.ts`, `attrs.ts` |
+| instruments | `core/instrument.ts`, `meter.ts`, `timing.ts`, `trace.ts`, `../observability.ts` |
+| the Book, the funnel, views | `book.ts`, `funnel.ts`, `views.ts` |
+| recipes over the editor | `recipes/lint.ts`, `satellite.ts` |
 | test tools (not tests) | `testing/harness.ts`, `testing/mount.ts` |

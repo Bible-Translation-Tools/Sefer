@@ -36,7 +36,7 @@
  * What does NOT cross: `derive` entries (scan, index, paint, decorate). Those
  * are the DERIVATION pipeline, they run several times per keystroke, and the
  * keystroke meter already reports their exclusive totals in one bounded note.
- * They are in `__sefer.editor.traces()` where a full picture belongs.
+ * They stay on the local trace.
  */
 
 import type {
@@ -150,7 +150,7 @@ export const annotateRepaint = (
 
 onOrphanDerived(repaint);
 
-/** Level `off`: the trace still runs for `__sefer.editor.traces()`, silently. */
+/** Level `off`: the trace still runs (the refusal slot needs it), silently. */
 const SILENT: TraceEmit = {
   frame: () => () => {},
   step: () => {},
