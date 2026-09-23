@@ -36,8 +36,9 @@
 
 import { For, Show, createMemo, createSignal } from "solid-js";
 
-import { Badge, Card, cx } from "../../../app/ui/primitives";
-import { unitReference, type DecisionUnit, type MergeSide } from "../../../core/galley";
+import { Badge, Card, cx } from "#app/ui/primitives";
+import { unitReference, type DecisionUnit, type MergeSide } from "#core/galley";
+
 import type { Bench, Experiment, ExperimentProps } from "../experiment";
 import { Gutter, UnitBody, inOrder, type DiffTone } from "../units";
 

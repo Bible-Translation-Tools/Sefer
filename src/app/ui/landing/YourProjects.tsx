@@ -28,7 +28,8 @@ import PencilLine from "lucide-solid/icons/pencil-line";
 import Trash2 from "lucide-solid/icons/trash-2";
 import { For, Show, createEffect, createSignal } from "solid-js";
 
-import { forgetProject, touchProject } from "../../../core/project/projectIndex";
+import { forgetProject, touchProject } from "#core/project/projectIndex";
+
 import { t } from "../../i18n";
 import { exportProjectZip, renameProject } from "../../projectCommands";
 import { useShell } from "../../ProjectContext";

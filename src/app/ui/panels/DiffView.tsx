@@ -16,7 +16,8 @@
 import Undo2 from "lucide-solid/icons/undo-2";
 import { For, Show } from "solid-js";
 
-import type { Hunk } from "../../../core/diff/diff";
+import type { Hunk } from "#core/diff/diff";
+
 import { t } from "../../i18n";
 import { Badge, Button, Card, EmptyState } from "../primitives";
 import { lines } from "./format";

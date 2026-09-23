@@ -32,9 +32,10 @@
 import { getRouteApi, useNavigate } from "@tanstack/solid-router";
 import { For, Show, createMemo } from "solid-js";
 
-import { useShell } from "../../app/ProjectContext";
-import { Badge, Card, SegmentedControl, Select, Switch } from "../../app/ui/primitives";
-import { ShellGate } from "../../app/ui/ShellGate";
+import { useShell } from "#app/ProjectContext";
+import { Badge, Card, SegmentedControl, Select, Switch } from "#app/ui/primitives";
+import { ShellGate } from "#app/ui/ShellGate";
+
 import { dialValues, withDial, type Dials } from "../dials";
 import { benchFor } from "./bench";
 import type { DialValues, Experiment } from "./experiment";

@@ -22,9 +22,9 @@ import { Effect, Fiber, type FileSystem, Stream } from "effect";
 import CloudIcon from "lucide-solid/icons/cloud";
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 
-import { Git } from "../../../core/git/git";
-import { Observability } from "../../../core/observability";
-import { Remote, type RemoteFailureReason } from "../../../core/remote/remote";
+import { Git } from "#core/git/git";
+import { Observability } from "#core/observability";
+import { Remote, type RemoteFailureReason } from "#core/remote/remote";
 import {
   combine,
   CombineError,
@@ -35,7 +35,8 @@ import {
   type CombineReplay,
   type IncomingPlan,
   type SyncActionId,
-} from "../../../core/sync";
+} from "#core/sync";
+
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { Button, Card, Dialog, EmptyState, PanelHeader } from "../primitives";

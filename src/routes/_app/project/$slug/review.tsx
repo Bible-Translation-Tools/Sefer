@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/solid-router";
 
-import { ReviewPanel } from "../../../../app/ui/review";
-import { ShellGate } from "../../../../app/ui/ShellGate";
+import { ReviewPanel } from "#app/ui/review";
+import { ShellGate } from "#app/ui/ShellGate";
 
 /**
  * `/review` — the one review screen, gated on the shell.

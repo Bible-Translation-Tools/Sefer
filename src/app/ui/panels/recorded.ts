@@ -22,10 +22,11 @@
 import { Effect, Option, Result } from "effect";
 import { createEffect, createSignal, type Accessor } from "solid-js";
 
-import type { BookId } from "../../../core/book/book";
-import { Git, repositoryPath } from "../../../core/git/git";
-import type { Project } from "../../../core/project/project";
-import { decode, type Source } from "../../../core/source/source";
+import type { BookId } from "#core/book/book";
+import { Git, repositoryPath } from "#core/git/git";
+import type { Project } from "#core/project/project";
+import { decode, type Source } from "#core/source/source";
+
 import type { Shell } from "../../ProjectContext";
 
 export interface Recorded {

@@ -26,8 +26,8 @@ import { Compartment, Prec } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { createEffect, createSignal, onCleanup, untrack } from "solid-js";
 
-import type { Excerpt } from "../../../core/excerpts/excerpts";
-import type { Analysis } from "../../../core/galley";
+import type { Excerpt } from "#core/excerpts/excerpts";
+import type { Analysis } from "#core/galley";
 import {
   analyzer,
   assignment,
@@ -40,9 +40,9 @@ import {
   reclip,
   type EditorBook,
   type Satellite,
-} from "../../../editor";
+} from "#editor/index";
 
-import "../../../editor/editor.css";
+import "#editor/editor.css";
 
 export interface ExcerptEditorProps {
   readonly book: EditorBook;

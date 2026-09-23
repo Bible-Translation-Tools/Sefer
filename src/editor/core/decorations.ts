@@ -18,7 +18,8 @@ import {
   WidgetType,
 } from "@codemirror/view";
 
-import { FLAG, NOTE_PART, TOKEN, TOKEN_SPELLING_BIT, classWordOf } from "../../core/galley";
+import { FLAG, NOTE_PART, TOKEN, TOKEN_SPELLING_BIT, classWordOf } from "#core/galley";
+
 import { lineIndexAt, type DocStructure, type NoteRange } from "./docStructure";
 import type { DocPlan, PlanSpan, ResolvedSlot } from "./plan";
 import type { WidgetKey } from "./registry";

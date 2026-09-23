@@ -15,8 +15,9 @@
 
 import type { JSX } from "@solidjs/web";
 
-import type { GalleyService } from "../../core/galley";
-import type { DiffSkeleton } from "../../core/galley/diff";
+import type { GalleyService } from "#core/galley";
+import type { DiffSkeleton } from "#core/galley/diff";
+
 import type { DialValues, Dials } from "../dials";
 
 /**

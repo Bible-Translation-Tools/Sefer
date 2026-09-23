@@ -31,8 +31,9 @@ import Plus from "lucide-solid/icons/plus";
 import SearchIcon from "lucide-solid/icons/search";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
-import { lastSegment } from "../../../core/fileSystem/path";
-import { cloneRepository } from "../../../core/remote/clone";
+import { lastSegment } from "#core/fileSystem/path";
+import { cloneRepository } from "#core/remote/clone";
+
 import { catalogueFor, type CatalogueEntry, type ProjectType } from "../../catalogue";
 import { describe } from "../../describe";
 import { wacsUrlFor } from "../../endpoints";

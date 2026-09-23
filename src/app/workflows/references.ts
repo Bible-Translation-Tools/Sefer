@@ -32,10 +32,10 @@
 
 import { Effect, FileSystem, Result } from "effect";
 
-import { ProjectAnalysis, type ReferenceText } from "../../core/analysis/projectAnalysis";
-import { joinPath } from "../../core/fileSystem/path";
-import { Library, ROLES, type Resource } from "../../core/resources/library";
-import { decode } from "../../core/source/source";
+import { ProjectAnalysis, type ReferenceText } from "#core/analysis/projectAnalysis";
+import { joinPath } from "#core/fileSystem/path";
+import { Library, ROLES, type Resource } from "#core/resources/library";
+import { decode } from "#core/source/source";
 
 /** What a screen needs to know: which resources answer, and how many books. */
 export interface BoundReferences {

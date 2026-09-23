@@ -26,7 +26,8 @@ import {
   TokenKind,
   TokenView,
   isMarkerKind,
-} from "../../core/galley";
+} from "#core/galley";
+
 import {
   type NodeShape,
   type Row,

@@ -26,8 +26,9 @@ import Type from "lucide-solid/icons/case-sensitive";
 import Search from "lucide-solid/icons/search";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
-import { codePointLabel, type Glyph } from "../../../core/findings/inventory";
-import { POOLS, type Pool } from "../../../core/galley";
+import { codePointLabel, type Glyph } from "#core/findings/inventory";
+import { POOLS, type Pool } from "#core/galley";
+
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import {

@@ -57,8 +57,9 @@ import { Effect, Result } from "effect";
 import History from "lucide-solid/icons/history";
 import { Show, createEffect, createSignal } from "solid-js";
 
-import type { Restorable } from "../../../core/recovery/recovery";
-import { pendingOnOpen } from "../../../core/recovery/reopen";
+import type { Restorable } from "#core/recovery/recovery";
+import { pendingOnOpen } from "#core/recovery/reopen";
+
 import { describe } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";

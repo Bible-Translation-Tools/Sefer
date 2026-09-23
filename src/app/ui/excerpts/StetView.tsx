@@ -27,11 +27,12 @@ import BookmarkIcon from "lucide-solid/icons/bookmark";
 import SearchIcon from "lucide-solid/icons/search";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
-import type { BookId } from "../../../core/book/book";
-import type { BookExcerpts, Excerpt, OutlineRow } from "../../../core/excerpts/excerpts";
-import type { Analysis } from "../../../core/galley";
-import type { Guide, Term } from "../../../core/stet/stet";
-import type { EditorBook } from "../../../editor";
+import type { BookId } from "#core/book/book";
+import type { BookExcerpts, Excerpt, OutlineRow } from "#core/excerpts/excerpts";
+import type { Analysis } from "#core/galley";
+import type { Guide, Term } from "#core/stet/stet";
+import type { EditorBook } from "#editor/index";
+
 import { t } from "../../i18n";
 import type { SourceReading } from "../../workflows/stet";
 import { Badge, Card, Input, Select, Switch, cx } from "../primitives";

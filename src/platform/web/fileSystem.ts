@@ -1,6 +1,6 @@
 import { Effect, FileSystem, Layer, Option, PlatformError, Stream } from "effect";
 
-import { joinPath, normalisePath } from "../../core/fileSystem/path";
+import { joinPath, normalisePath } from "#core/fileSystem/path";
 
 const MODULE = "OpfsFileSystem";
 

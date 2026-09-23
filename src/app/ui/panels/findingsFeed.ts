@@ -42,14 +42,10 @@
 
 import { createMemo, type Accessor } from "solid-js";
 
-import type { BookId } from "../../../core/book/book";
-import type {
-  BookExcerpts,
-  Excerpt,
-  Occurrence,
-  OutlineRow,
-} from "../../../core/excerpts/excerpts";
-import type { Finding, Severity } from "../../../core/findings/finding";
+import type { BookId } from "#core/book/book";
+import type { BookExcerpts, Excerpt, Occurrence, OutlineRow } from "#core/excerpts/excerpts";
+import type { Finding, Severity } from "#core/findings/finding";
+
 import { t } from "../../i18n";
 import { createExcerptFeed, type ExcerptFeed, type MarkTone } from "../excerpts";
 import type { FindingsView } from "./findingsFilter";

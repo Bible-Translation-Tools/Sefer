@@ -13,8 +13,9 @@
 
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
-import type { Reference } from "../../core/reference/reference";
-import { parseReference } from "../../core/reference/reference";
+import type { Reference } from "#core/reference/reference";
+import { parseReference } from "#core/reference/reference";
+
 import { availableCommands, runCommand } from "../commands";
 import { t } from "../i18n";
 import { useShell } from "../ProjectContext";

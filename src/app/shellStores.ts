@@ -34,12 +34,13 @@
 import { Effect, Fiber, Option, Stream } from "effect";
 import { createSignal, createStore, onCleanup, type Accessor } from "solid-js";
 
-import type { BookSummary } from "../core/analysis/projectAnalysis";
-import type { Book, BookId } from "../core/book/book";
-import type { Finding } from "../core/findings/finding";
-import { EMPTY as EMPTY_INVENTORY, type Inventory } from "../core/findings/inventory";
-import type { Project } from "../core/project/project";
-import type { SourceStamp } from "../core/source/source";
+import type { BookSummary } from "#core/analysis/projectAnalysis";
+import type { Book, BookId } from "#core/book/book";
+import type { Finding } from "#core/findings/finding";
+import { EMPTY as EMPTY_INVENTORY, type Inventory } from "#core/findings/inventory";
+import type { Project } from "#core/project/project";
+import type { SourceStamp } from "#core/source/source";
+
 import type { Services } from "./services";
 import { booksOf, type ShellEvent } from "./shellEvent";
 

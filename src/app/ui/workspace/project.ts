@@ -11,8 +11,9 @@
 
 import { Option } from "effect";
 
-import type { Project } from "../../../core/project/project";
-import type { ProjectMetadata } from "../../../core/resources/projectMetadata";
+import type { Project } from "#core/project/project";
+import type { ProjectMetadata } from "#core/resources/projectMetadata";
+
 import { languageLabel, projectDisplayName } from "../../language";
 import { renamedName } from "../../projectNames";
 

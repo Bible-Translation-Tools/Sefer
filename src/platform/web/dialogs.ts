@@ -14,8 +14,8 @@
  */
 import { Effect, Layer, Option } from "effect";
 
-import { Dialogs, type FileFilter } from "../../core/host/dialogs";
-import { Observability } from "../../core/observability";
+import { Dialogs, type FileFilter } from "#core/host/dialogs";
+import { Observability } from "#core/observability";
 
 const RULE = "dialogs";
 

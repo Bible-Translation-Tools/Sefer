@@ -21,8 +21,9 @@
 
 import { Effect, Option, Result } from "effect";
 
-import type { AdminError } from "../core/admin/projectAdmin";
-import { lastSegment } from "../core/fileSystem/path";
+import type { AdminError } from "#core/admin/projectAdmin";
+import { lastSegment } from "#core/fileSystem/path";
+
 import { registerCommand } from "./commands";
 import { describe } from "./describe";
 import { t } from "./i18n";

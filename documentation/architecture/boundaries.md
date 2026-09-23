@@ -41,6 +41,21 @@ layer exists. It is not a core dependency at any depth.
 and supplies host capabilities. Both may depend inward on core contracts. Core
 never depends outward.
 
+## Imports across a layer
+
+Each top-level layer has one alias, declared once as `tsconfig.json` `paths`:
+`#core/*`, `#app/*`, `#editor/*`, `#platform/*`, `#dev/*`. An import that
+crosses from one layer into another uses it (`import { … } from
+"#core/book/book"`); an import within a layer stays relative. Vite reads the
+same `paths` (`resolve.tsconfigPaths` in `vite.config.ts`), so there is no
+second copy to drift. Raw fixture imports (`fixtures/…?raw`) stay relative,
+because the checker's raw-asset exception is written for them.
+
+An alias is not a way around the rules: `pnpm boundaries` resolves it to the
+file it names and applies the same checks as to a relative path, and the Oxlint
+override lists `#app/**`, `#editor/**`, `#dev/**` and `#platform/**` for core
+(a core test may still reach `#platform/node/…`, as it may by relative path).
+
 Two checks enforce this:
 
 - Oxlint's `src/core` override (`no-restricted-imports`, `no-restricted-globals`)

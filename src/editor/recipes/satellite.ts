@@ -13,7 +13,8 @@ import { defaultKeymap } from "@codemirror/commands";
 import { EditorState, Facet, type Extension, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, keymap } from "@codemirror/view";
 
-import type { Trust } from "../../core/book/book";
+import type { Trust } from "#core/book/book";
+
 import { viewLayer } from "../core/compose";
 import { borrowedStructure } from "../core/docStructure";
 import { trusted } from "../core/kernel";

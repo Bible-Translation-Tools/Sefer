@@ -10,7 +10,8 @@
  * decorations).
  */
 
-import { NOTE_PART } from "../../core/galley";
+import { NOTE_PART } from "#core/galley";
+
 import {
   isBlankLine,
   lineIndexAt,

@@ -71,9 +71,10 @@ import {
   verseAtOffset,
   type BlockExtent,
   type Skeleton,
-} from "../../../core/galley";
-import type { Resource, Role } from "../../../core/resources/library";
-import { mountReference, type PairedRange, type ReferenceMount } from "../../../editor";
+} from "#core/galley";
+import type { Resource, Role } from "#core/resources/library";
+import { mountReference, type PairedRange, type ReferenceMount } from "#editor/index";
+
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
@@ -84,7 +85,7 @@ import { metadataOf } from "./project";
 // The editor's own stylesheet, for the same reason `BookEditor` imports it:
 // the pane paints with `usfm-*` classes and a route that never opens a book
 // never loads them.
-import "../../../editor/editor.css";
+import "#editor/editor.css";
 
 export interface ReferencePaneProps {
   readonly resource: Resource;

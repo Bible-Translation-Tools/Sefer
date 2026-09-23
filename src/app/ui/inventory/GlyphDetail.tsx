@@ -21,14 +21,15 @@ import { Option } from "effect";
 import ExternalLink from "lucide-solid/icons/external-link";
 import { For, Show, createMemo } from "solid-js";
 
-import { quote, type Quotation } from "../../../core/excerpts/excerpts";
+import { quote, type Quotation } from "#core/excerpts/excerpts";
 import {
   codePointLabel,
   siteRef,
   type FlaggedSite,
   type Glyph,
   type PatternRow,
-} from "../../../core/findings/inventory";
+} from "#core/findings/inventory";
+
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import {

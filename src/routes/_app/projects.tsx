@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/solid-router";
 
-import { ProjectsLanding } from "../../app/ui/landing/ProjectsLanding";
-import { ShellGate } from "../../app/ui/ShellGate";
-import "../../app/ui/theme";
+import { ProjectsLanding } from "#app/ui/landing/ProjectsLanding";
+import { ShellGate } from "#app/ui/ShellGate";
+import "#app/ui/theme";
 
 /**
  * `/projects` — every project on this device, always.

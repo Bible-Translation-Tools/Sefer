@@ -9,7 +9,7 @@ import { Buffer } from "buffer";
 import { Effect, FileSystem, Layer, Option } from "effect";
 import git from "isomorphic-git";
 
-import { nodeFsView } from "../../core/fileSystem/nodeView";
+import { nodeFsView } from "#core/fileSystem/nodeView";
 import {
   type Author,
   type ChangedPath,
@@ -24,7 +24,7 @@ import {
   type SaveReceiptLike,
   type Status,
   type Version,
-} from "../../core/git/git";
+} from "#core/git/git";
 
 // isomorphic-git 1.38.4 reads a global `Buffer` (`Buffer.from`, `Buffer.alloc`,
 // `Buffer.concat`, `Buffer.isBuffer`) and no bundler supplies one to a browser

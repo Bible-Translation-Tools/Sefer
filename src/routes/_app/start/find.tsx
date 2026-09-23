@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/solid-router";
 
-import { t } from "../../../app/i18n";
-import { FindProject } from "../../../app/ui/landing/FindProject";
-import { LandingHeader } from "../../../app/ui/landing/LandingHeader";
-import { ShellGate } from "../../../app/ui/ShellGate";
-import "../../../app/ui/theme";
+import { t } from "#app/i18n";
+import { FindProject } from "#app/ui/landing/FindProject";
+import { LandingHeader } from "#app/ui/landing/LandingHeader";
+import { ShellGate } from "#app/ui/ShellGate";
+import "#app/ui/theme";
 
 /**
  * The landing screen's second half: the remote catalogue, built to the

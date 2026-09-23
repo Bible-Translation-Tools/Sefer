@@ -16,7 +16,8 @@ import {
   SpecContext,
   StructuralWhitespaceRequirement,
   TokenKind,
-} from "../../core/galley";
+} from "#core/galley";
+
 import { type ClassKey, type OwnedSetName, OWNED_SETS } from "./registry";
 
 export interface TokenShape {

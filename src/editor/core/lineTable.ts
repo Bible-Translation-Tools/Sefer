@@ -8,7 +8,8 @@
  * paragraph, does it paint its own line.
  */
 
-import { TOKEN } from "../../core/galley";
+import { TOKEN } from "#core/galley";
+
 import { spellingAt } from "./cst";
 import {
   type DocLine,

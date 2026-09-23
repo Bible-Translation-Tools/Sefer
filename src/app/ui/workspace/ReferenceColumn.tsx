@@ -36,7 +36,8 @@ import BookMarked from "lucide-solid/icons/book-marked";
 import Plus from "lucide-solid/icons/plus";
 import { For, Show, createEffect, createSignal } from "solid-js";
 
-import type { Resource, Role } from "../../../core/resources/library";
+import type { Resource, Role } from "#core/resources/library";
+
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";

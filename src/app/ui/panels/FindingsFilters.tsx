@@ -29,9 +29,10 @@ import ChevronDown from "lucide-solid/icons/chevron-down";
 import Search from "lucide-solid/icons/search";
 import { For, Show, createSignal } from "solid-js";
 
-import type { BookId } from "../../../core/book/book";
-import type { Facet, Facets, FindingsFilter } from "../../../core/findings/filter";
-import type { Producer, Severity } from "../../../core/findings/finding";
+import type { BookId } from "#core/book/book";
+import type { Facet, Facets, FindingsFilter } from "#core/findings/filter";
+import type { Producer, Severity } from "#core/findings/finding";
+
 import { t } from "../../i18n";
 import { Badge, Button, Input, Popover, Switch, cx, severityTone } from "../primitives";
 import { chosen, narrowed, toggled, type FindingsFilterState } from "./findingsFilter";

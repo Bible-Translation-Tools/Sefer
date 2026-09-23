@@ -25,7 +25,8 @@ import { Result } from "effect";
 import ArrowLeft from "lucide-solid/icons/arrow-left";
 import { For, Show, createSignal } from "solid-js";
 
-import { decodeBurritoMetadata, type BurritoMetadata } from "../../../core/resources/burrito";
+import { decodeBurritoMetadata, type BurritoMetadata } from "#core/resources/burrito";
+
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { Badge, Button, Card, Input, PanelHeader, SegmentedControl, Select } from "../primitives";

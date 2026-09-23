@@ -14,7 +14,8 @@
 import { Effect, Option } from "effect";
 import { createEffect, createSignal, type Accessor } from "solid-js";
 
-import { Gitea, type Session } from "../../../core/remote/gitea";
+import { Gitea, type Session } from "#core/remote/gitea";
+
 import { wacsUrlFor } from "../../endpoints";
 import { t } from "../../i18n";
 import type { Shell } from "../../ProjectContext";

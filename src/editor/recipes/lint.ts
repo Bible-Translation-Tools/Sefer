@@ -33,8 +33,9 @@ import {
   stampMatches,
   stampOf,
   versionOf,
-} from "../../core/galley";
-import type { SourceStamp } from "../../core/source/source";
+} from "#core/galley";
+import type { SourceStamp } from "#core/source/source";
+
 import { analyzed, analyzer } from "../core/analyzer";
 import { structureAt } from "../core/docStructure";
 import { PAINT_PORT } from "../core/editorState";

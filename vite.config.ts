@@ -138,6 +138,9 @@ export default defineConfig(({ mode }) => {
       // @codemirror/lint pins its own @codemirror/state; a second copy means a
       // second Facet identity and "Unrecognized extension value in extension set".
       dedupe: ["@codemirror/state", "@codemirror/view"],
+      // tsconfig.json's `paths` (`#core/*` and the other layer aliases) are the
+      // one record of the aliases; Vite reads them rather than a copy here.
+      tsconfigPaths: true,
     },
     optimizeDeps: {
       include: [

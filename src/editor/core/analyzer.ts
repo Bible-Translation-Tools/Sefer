@@ -16,7 +16,8 @@
 
 import { Facet } from "@codemirror/state";
 
-import type { Analysis } from "../../core/galley";
+import type { Analysis } from "#core/galley";
+
 import { span } from "./timing";
 
 /** One parse of one text. Canonical LF; the engine refuses a `\r`. */

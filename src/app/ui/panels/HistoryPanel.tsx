@@ -31,11 +31,12 @@ import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Undo2 from "lucide-solid/icons/undo-2";
 import { For, Show, createEffect, createSignal, untrack } from "solid-js";
 
-import type { BookId } from "../../../core/book/book";
-import * as Diff from "../../../core/diff/diff";
-import type { Commit, Version } from "../../../core/git/git";
-import { Git, repositoryPath } from "../../../core/git/git";
-import { decode } from "../../../core/source/source";
+import type { BookId } from "#core/book/book";
+import * as Diff from "#core/diff/diff";
+import type { Commit, Version } from "#core/git/git";
+import { Git, repositoryPath } from "#core/git/git";
+import { decode } from "#core/source/source";
+
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { Badge, Button, Card, Dialog, EmptyState, PanelHeader, toasts } from "../primitives";

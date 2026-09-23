@@ -1,9 +1,10 @@
 import { render } from "@solidjs/web";
 import { expect, test, vi } from "vitest";
 
-import { composeApplication } from "../app/composition";
-import { CompositionProvider } from "../app/CompositionContext";
-import { smallNtFileNames } from "../core/fixture/smallNt";
+import { composeApplication } from "#app/composition";
+import { CompositionProvider } from "#app/CompositionContext";
+import { smallNtFileNames } from "#core/fixture/smallNt";
+
 import { FixturePage } from "./FixturePage";
 
 test("the fixture route renders every seeded file and publishes dev state", async () => {

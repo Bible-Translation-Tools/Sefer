@@ -32,7 +32,7 @@ import {
   type Repo,
   type Status,
   type Version,
-} from "../../core/git/git";
+} from "#core/git/git";
 
 /** The wire shape of `git.rs`'s `GitCommit`. */
 interface WireCommit {

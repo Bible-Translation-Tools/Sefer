@@ -26,36 +26,36 @@ import {
   ProjectAdmin,
   ProjectAdminLive,
   type ProjectAdminService,
-} from "../core/admin/projectAdmin";
+} from "#core/admin/projectAdmin";
 import {
   ProjectAnalysis,
   ProjectAnalysisLive,
   type ProjectAnalysisService,
-} from "../core/analysis/projectAnalysis";
-import type { BookId } from "../core/book/book";
+} from "#core/analysis/projectAnalysis";
+import type { BookId } from "#core/book/book";
 import {
   Galley,
   type EngineLoadError,
   type GalleyService,
   type VersionMismatch,
-} from "../core/galley";
-import { Git, type GitService } from "../core/git/git";
-import { Credentials, type CredentialsService } from "../core/host/credentials";
-import { Dialogs, type DialogsService } from "../core/host/dialogs";
-import { HostInfo, type HostInfoService, type HostPaths } from "../core/host/hostInfo";
-import { Settings, SettingsLive, type SettingsService } from "../core/host/settings";
-import { NoUpdaterLive, Updater, type UpdaterService } from "../core/host/updater";
-import { Observability } from "../core/observability";
-import type { Seat } from "../core/project/project";
-import { Recovery, RecoveryLive, type RecoveryService } from "../core/recovery/recovery";
-import { Gitea, GiteaLive, type GiteaService, type HttpFetch } from "../core/remote/gitea";
-import { Remote, type RemoteService } from "../core/remote/remote";
-import { Library, LibraryLive, type LibraryService } from "../core/resources/library";
+} from "#core/galley";
+import { Git, type GitService } from "#core/git/git";
+import { Credentials, type CredentialsService } from "#core/host/credentials";
+import { Dialogs, type DialogsService } from "#core/host/dialogs";
+import { HostInfo, type HostInfoService, type HostPaths } from "#core/host/hostInfo";
+import { Settings, SettingsLive, type SettingsService } from "#core/host/settings";
+import { NoUpdaterLive, Updater, type UpdaterService } from "#core/host/updater";
+import { Observability } from "#core/observability";
+import type { Seat } from "#core/project/project";
+import { Recovery, RecoveryLive, type RecoveryService } from "#core/recovery/recovery";
+import { Gitea, GiteaLive, type GiteaService, type HttpFetch } from "#core/remote/gitea";
+import { Remote, type RemoteService } from "#core/remote/remote";
+import { Library, LibraryLive, type LibraryService } from "#core/resources/library";
 import {
   SaveCoordinator,
   SaveCoordinatorLive,
   type SaveCoordinatorService,
-} from "../core/save/saveCoordinator";
+} from "#core/save/saveCoordinator";
 import {
   commandsLayer,
   editorBook,
@@ -64,15 +64,16 @@ import {
   usfmLinter,
   viewLayer,
   type EditorBook,
-} from "../editor";
-import { detectHost } from "../platform/host";
-import { WebCredentialsLive } from "../platform/web/credentials";
-import { WebDialogsLive } from "../platform/web/dialogs";
-import { OpfsFileSystemLive } from "../platform/web/fileSystem";
-import { WebGalleyLive } from "../platform/web/galley";
-import { WebGitLive } from "../platform/web/git";
-import { OPFS_ROOT, WEB_PATHS, WebHostInfoLive } from "../platform/web/hostInfo";
-import { WebRemoteLive } from "../platform/web/remote";
+} from "#editor/index";
+import { detectHost } from "#platform/host";
+import { WebCredentialsLive } from "#platform/web/credentials";
+import { WebDialogsLive } from "#platform/web/dialogs";
+import { OpfsFileSystemLive } from "#platform/web/fileSystem";
+import { WebGalleyLive } from "#platform/web/galley";
+import { WebGitLive } from "#platform/web/git";
+import { OPFS_ROOT, WEB_PATHS, WebHostInfoLive } from "#platform/web/hostInfo";
+import { WebRemoteLive } from "#platform/web/remote";
+
 import type { Composition } from "./composition";
 import { rememberBootEndpoints, resolveEndpoints } from "./endpoints";
 import { env } from "./env";
@@ -97,11 +98,11 @@ const PROJECTS_ROOT = `${OPFS_ROOT}/projects`;
  * — every file behind that barrel imports `@tauri-apps/*`, which must not be
  * evaluated in a browser.
  */
-type TauriHost = (typeof import("../platform/tauri/index"))["tauriHost"];
+type TauriHost = (typeof import("#platform/tauri/index"))["tauriHost"];
 
 /** Destructured at the import so the host's surface is visible to static analysis. */
 const loadTauriHost = async (): Promise<TauriHost> => {
-  const { tauriHost } = await import("../platform/tauri/index");
+  const { tauriHost } = await import("#platform/tauri/index");
   return tauriHost;
 };
 
@@ -122,7 +123,7 @@ const loadTauriHost = async (): Promise<TauriHost> => {
  * site while rolldown shipped the design page anyway. Only the build-time
  * literal lets the branch fold and the module leave the graph.
  */
-type FixtureHost = typeof import("../core/fixture/smallNt");
+type FixtureHost = typeof import("#core/fixture/smallNt");
 
 /** The engine is the one Layer that can refuse to build. */
 export type EngineFailure = EngineLoadError | VersionMismatch;
@@ -467,7 +468,7 @@ export const composeServices = async (
    */
   const fixture: FixtureHost | undefined =
     __SEFER_DESIGN__ && (options.fixture ?? false)
-      ? await import("../core/fixture/smallNt")
+      ? await import("#core/fixture/smallNt")
       : undefined;
   /**
    * The desktop Layers arrive through a dynamic import so a Web bundle never

@@ -23,7 +23,8 @@ import {
   NodeView,
   TOKEN,
   describesExactly,
-} from "../../core/galley";
+} from "#core/galley";
+
 import { analyzed, analyzer } from "./analyzer";
 import { type BlockColumns, Blocks, NO_BLOCKS } from "./blockTable";
 import { type NodeFacts, noteExtentEnd, scanCst } from "./cst";

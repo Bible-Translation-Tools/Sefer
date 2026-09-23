@@ -25,10 +25,11 @@
 
 import { Option, Result } from "effect";
 
-import { diffSkeleton } from "../../core/diff/skeleton";
-import type { GalleyService } from "../../core/galley";
-import type { Project } from "../../core/project/project";
-import type { SaveCoordinatorService } from "../../core/save/saveCoordinator";
+import { diffSkeleton } from "#core/diff/skeleton";
+import type { GalleyService } from "#core/galley";
+import type { Project } from "#core/project/project";
+import type { SaveCoordinatorService } from "#core/save/saveCoordinator";
+
 import type { Bench } from "./experiment";
 
 export type BaselineKind = "draft" | "disk";

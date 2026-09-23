@@ -24,14 +24,9 @@
 
 import { Effect, Option } from "effect";
 
-import type { Ref } from "../../core/book/book";
-import {
-  ROLES,
-  type LibraryService,
-  type Passage,
-  type Resource,
-} from "../../core/resources/library";
-import { StetCatalogFixtureLive } from "../../core/stet/fixture";
+import type { Ref } from "#core/book/book";
+import { ROLES, type LibraryService, type Passage, type Resource } from "#core/resources/library";
+import { StetCatalogFixtureLive } from "#core/stet/fixture";
 import {
   StetCatalog,
   type Guide,
@@ -39,7 +34,7 @@ import {
   type StetError,
   type Term,
   type TermOccurrence,
-} from "../../core/stet/stet";
+} from "#core/stet/stet";
 
 // ---------------------------------------------------------------------------
 // Key terms

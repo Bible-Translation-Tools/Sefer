@@ -23,7 +23,7 @@ import { createFileRoute, lazyRouteComponent, notFound } from "@tanstack/solid-r
  */
 const loadDesignHome = async () => {
   if (__SEFER_DESIGN__) {
-    const page = await import("../dev/design/DesignHome");
+    const page = await import("#dev/design/DesignHome");
     return { default: page.DesignHome };
   }
   throw notFound();

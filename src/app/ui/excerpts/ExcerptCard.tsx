@@ -30,9 +30,10 @@ import PencilIcon from "lucide-solid/icons/pencil";
 import SquareArrowOutUpRightIcon from "lucide-solid/icons/square-arrow-out-up-right";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
-import type { Excerpt } from "../../../core/excerpts/excerpts";
-import type { Analysis } from "../../../core/galley";
-import type { EditorBook } from "../../../editor";
+import type { Excerpt } from "#core/excerpts/excerpts";
+import type { Analysis } from "#core/galley";
+import type { EditorBook } from "#editor/index";
+
 import { t } from "../../i18n";
 import { Button, Card, cx, IconButton } from "../primitives";
 import { ExcerptEditor } from "./ExcerptEditor";

@@ -1,12 +1,12 @@
 import { HeadContent, Outlet, createRootRoute, useNavigate } from "@tanstack/solid-router";
 import { onCleanup } from "solid-js";
 
-import { t } from "../app/i18n";
-import { ProjectProvider } from "../app/ProjectContext";
+import { t } from "#app/i18n";
+import { ProjectProvider } from "#app/ProjectContext";
 // The appearance applier, imported for its side effect and imported HERE: it
 // writes the cached theme, interface size and scripture size onto <html> at
 // module load, and the root route is the one module every screen goes through.
-import "../app/ui/theme";
+import "#app/ui/theme";
 
 /**
  * What every screen needs whatever frame it is in: the head, the one
@@ -45,7 +45,7 @@ import "../app/ui/theme";
 const useDesignSurface = (): void => {
   if (!__SEFER_DESIGN__) return;
   let stop: (() => void) | undefined;
-  void import("../dev/designSurface").then(({ startDesignSurface }) => {
+  void import("#dev/designSurface").then(({ startDesignSurface }) => {
     stop = startDesignSurface();
   });
   onCleanup(() => {

@@ -32,11 +32,12 @@ import FileArchive from "lucide-solid/icons/file-archive";
 import FolderOpen from "lucide-solid/icons/folder-open";
 import { For, Show, createSignal } from "solid-js";
 
-import { lastSegment } from "../../../core/fileSystem/path";
-import { Observability } from "../../../core/observability";
-import { cloneRepository } from "../../../core/remote/clone";
-import { Gitea, type RemoteRepo } from "../../../core/remote/gitea";
-import { classify, commit, stage } from "../../../core/resources/import";
+import { lastSegment } from "#core/fileSystem/path";
+import { Observability } from "#core/observability";
+import { cloneRepository } from "#core/remote/clone";
+import { Gitea, type RemoteRepo } from "#core/remote/gitea";
+import { classify, commit, stage } from "#core/resources/import";
+
 import { wacsUrlFor } from "../../endpoints";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
@@ -261,7 +262,7 @@ export function ImportHub(props: { readonly onImported: () => void }) {
     };
 
     void (async () => {
-      const intake = await import("../../../platform/web/intake");
+      const intake = await import("#platform/web/intake");
       const picked =
         source === "zip" ? await intake.pickZip(operation) : await intake.pickFolder(operation);
       if (picked === undefined) {

@@ -11,12 +11,7 @@
 import wasmUrl from "@wycliffeassociates/scripture-kitchen/web/wasm?url";
 import { Effect, Layer } from "effect";
 
-import {
-  EngineLoadError,
-  Galley,
-  GalleyLive,
-  type VersionMismatch,
-} from "../../core/galley/galley";
+import { EngineLoadError, Galley, GalleyLive, type VersionMismatch } from "#core/galley/galley";
 
 /** The bundled asset's URL. Exported for evidence in a boot failure report. */
 const WASM_URL: string = wasmUrl;

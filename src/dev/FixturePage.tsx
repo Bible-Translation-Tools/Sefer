@@ -1,11 +1,11 @@
 import { Effect, FileSystem, Layer, Result } from "effect";
 import { For, Show, createSignal } from "solid-js";
 
-import type { Composition } from "../app/composition";
-import { useComposition } from "../app/CompositionContext";
-import { Button } from "../app/ui/primitives";
-import { FixtureFileSystemLive, SMALL_NT, SMALL_NT_ROOT } from "../core/fixture/smallNt";
-import { installDevState } from "../platform/observability";
+import type { Composition } from "#app/composition";
+import { useComposition } from "#app/CompositionContext";
+import { Button } from "#app/ui/primitives";
+import { FixtureFileSystemLive, SMALL_NT, SMALL_NT_ROOT } from "#core/fixture/smallNt";
+import { installDevState } from "#platform/observability";
 
 interface DevFixtureFile {
   readonly path: string;

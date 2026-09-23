@@ -28,7 +28,7 @@
 
 import { Effect } from "effect";
 
-import type { Project } from "../../core/project/project";
+import type { Project } from "#core/project/project";
 
 /** What a drafter chose: which books, which chapters, in which projection. */
 export interface DraftingForm {

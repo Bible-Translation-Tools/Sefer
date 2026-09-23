@@ -9,7 +9,8 @@
  * data, these are the shapes a reader sees.
  */
 
-import type { NotePart } from "../../core/galley";
+import type { NotePart } from "#core/galley";
+
 import type { CstScan } from "./cst";
 import type { ClassKey } from "./registry";
 

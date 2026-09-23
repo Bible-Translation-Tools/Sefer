@@ -4,7 +4,8 @@ import { Effect, FileSystem } from "effect";
 import git from "isomorphic-git";
 import { expect, it } from "vitest";
 
-import { nodeFsView } from "../../core/fileSystem/nodeView";
+import { nodeFsView } from "#core/fileSystem/nodeView";
+
 import { OpfsFileSystemLive } from "./fileSystem";
 
 Object.assign(globalThis, { Buffer });

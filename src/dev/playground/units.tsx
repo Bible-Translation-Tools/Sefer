@@ -12,9 +12,10 @@
 
 import { For, Show, createMemo } from "solid-js";
 
-import { cx } from "../../app/ui/primitives";
-import { textOf } from "../../app/ui/review/reading";
-import type { DecisionUnit, MergeSide, TextRun } from "../../core/galley/diff";
+import { cx } from "#app/ui/primitives";
+import { textOf } from "#app/ui/review/reading";
+import type { DecisionUnit, MergeSide, TextRun } from "#core/galley/diff";
+
 import type { Bench } from "./experiment";
 
 /**

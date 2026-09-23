@@ -28,9 +28,9 @@
 import { Effect, FileSystem } from "effect";
 import { unzipSync } from "fflate";
 
-import { lastSegment } from "../../core/fileSystem/path";
-import type { ObservabilityService } from "../../core/observability";
-import type { Staged } from "../../core/resources/import";
+import { lastSegment } from "#core/fileSystem/path";
+import type { ObservabilityService } from "#core/observability";
+import type { Staged } from "#core/resources/import";
 
 /** One picked file, with the path it should have INSIDE the project root. */
 export interface IntakeFile {

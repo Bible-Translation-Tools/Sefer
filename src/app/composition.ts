@@ -1,6 +1,6 @@
 import { Effect, Exit, FileSystem, Layer, ManagedRuntime, Option, Result, Tracer } from "effect";
 
-import { boot, type BootError, type BootInfo } from "../core/boot";
+import { boot, type BootError, type BootInfo } from "#core/boot";
 import {
   makeAssembler,
   Observability,
@@ -10,14 +10,14 @@ import {
   type ObservabilityEvent,
   type ObservabilityService,
   type ObservabilitySink,
-} from "../core/observability";
-import { detectHost } from "../platform/host";
+} from "#core/observability";
+import { detectHost } from "#platform/host";
 import {
   consoleStream,
   devRings,
   hostSink,
   installObservabilityDevSurface,
-} from "../platform/observability";
+} from "#platform/observability";
 
 const buildIdentity = (): string | undefined =>
   typeof __SEFER_BUILD__ === "string" ? __SEFER_BUILD__ : undefined;

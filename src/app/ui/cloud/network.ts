@@ -14,7 +14,7 @@
 
 import { createSignal, onCleanup, type Accessor } from "solid-js";
 
-import type { RemoteFailureReason } from "../../../core/remote/remote";
+import type { RemoteFailureReason } from "#core/remote/remote";
 
 export interface NetworkStatus {
   /** `navigator.onLine`, kept live by the window's own events. */

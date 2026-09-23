@@ -26,17 +26,17 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Effect, Layer, Option, PubSub, Stream } from "effect";
 
-import type { Repo } from "../../core/git/git";
-import { Credentials, type CredentialsService } from "../../core/host/credentials";
-import { Gitea, type GiteaService } from "../../core/remote/gitea";
-import { createOnGitea, hostOf } from "../../core/remote/onGitea";
+import type { Repo } from "#core/git/git";
+import { Credentials, type CredentialsService } from "#core/host/credentials";
+import { Gitea, type GiteaService } from "#core/remote/gitea";
+import { createOnGitea, hostOf } from "#core/remote/onGitea";
 import {
   Remote,
   RemoteError,
   type Progress,
   type RemoteFailureReason,
   type RemoteService,
-} from "../../core/remote/remote";
+} from "#core/remote/remote";
 
 /** The remote Sefer attaches and transfers; one per project, always. */
 const ORIGIN = "origin";

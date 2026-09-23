@@ -1,15 +1,15 @@
 import { Outlet, createFileRoute } from "@tanstack/solid-router";
 import { Show, onCleanup, untrack } from "solid-js";
 
-import { installCommandKeys, runCommand } from "../app/commands";
-import { t } from "../app/i18n";
-import { readyShell, useShell, useShellState } from "../app/ProjectContext";
-import { SIDEBAR_WIDTH } from "../app/settings";
-import { CommandPalette } from "../app/ui/CommandPalette";
-import { Kbd, Resizable, Toaster } from "../app/ui/primitives";
-import { BackToEditor } from "../app/ui/workspace/BackToEditor";
-import { IconRail } from "../app/ui/workspace/IconRail";
-import { ProjectSidebar } from "../app/ui/workspace/ProjectSidebar";
+import { installCommandKeys, runCommand } from "#app/commands";
+import { t } from "#app/i18n";
+import { readyShell, useShell, useShellState } from "#app/ProjectContext";
+import { SIDEBAR_WIDTH } from "#app/settings";
+import { CommandPalette } from "#app/ui/CommandPalette";
+import { Kbd, Resizable, Toaster } from "#app/ui/primitives";
+import { BackToEditor } from "#app/ui/workspace/BackToEditor";
+import { IconRail } from "#app/ui/workspace/IconRail";
+import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
 
 /**
  * The application shell, as a PATHLESS layout: the icon rail, the project

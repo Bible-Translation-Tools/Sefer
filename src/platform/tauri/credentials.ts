@@ -18,7 +18,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Effect, Layer, Option } from "effect";
 
-import { Credentials, type Credential } from "../../core/host/credentials";
+import { Credentials, type Credential } from "#core/host/credentials";
 
 /**
  * The keychain service name; the account within it is the remote's key.

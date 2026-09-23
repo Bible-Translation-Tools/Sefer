@@ -9,7 +9,8 @@
  * book has thousands.
  */
 
-import { NOTE_PART } from "../../core/galley";
+import { NOTE_PART } from "#core/galley";
+
 import { lineIndexAt, type DocStructure } from "./docStructure";
 import { paintOver, type Paint as PaintIndex } from "./paint";
 import type { DocPlan, PlanSpan, ResolvedNote, ResolvedSlot, ResolvedWord } from "./plan";

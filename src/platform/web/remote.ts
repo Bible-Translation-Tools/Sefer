@@ -30,18 +30,19 @@ import { Effect, FileSystem, Layer, Option, PubSub, Stream } from "effect";
 import git from "isomorphic-git";
 import http from "isomorphic-git/http/web";
 
-import { nodeFsView, type IsomorphicFs } from "../../core/fileSystem/nodeView";
-import type { Repo } from "../../core/git/git";
-import { Credentials, type CredentialsService } from "../../core/host/credentials";
-import { Gitea, type GiteaService } from "../../core/remote/gitea";
-import { createOnGitea, hostOf } from "../../core/remote/onGitea";
+import { nodeFsView, type IsomorphicFs } from "#core/fileSystem/nodeView";
+import type { Repo } from "#core/git/git";
+import { Credentials, type CredentialsService } from "#core/host/credentials";
+import { Gitea, type GiteaService } from "#core/remote/gitea";
+import { createOnGitea, hostOf } from "#core/remote/onGitea";
 import {
   Remote,
   RemoteError,
   type Progress,
   type RemoteFailureReason,
   type RemoteService,
-} from "../../core/remote/remote";
+} from "#core/remote/remote";
+
 // isomorphic-git reads a global `Buffer` that no bundler supplies to a browser
 // build. `./git` installs one at module load for exactly that reason; importing
 // it for the side effect shares that one install rather than assigning a second.

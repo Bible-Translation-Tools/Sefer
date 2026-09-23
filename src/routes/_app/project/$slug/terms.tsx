@@ -2,22 +2,22 @@ import { createFileRoute, useNavigate } from "@tanstack/solid-router";
 import { Effect, Result } from "effect";
 import { createEffect, createMemo, createSignal, Show, untrack } from "solid-js";
 
-import { t } from "../../../../app/i18n";
-import { useShell } from "../../../../app/ProjectContext";
-import { createExcerptFeed, readBooks, StetView } from "../../../../app/ui/excerpts";
-import { PanelHeader } from "../../../../app/ui/primitives";
-import { ShellGate } from "../../../../app/ui/ShellGate";
+import { t } from "#app/i18n";
+import { useShell } from "#app/ProjectContext";
+import { createExcerptFeed, readBooks, StetView } from "#app/ui/excerpts";
+import { PanelHeader } from "#app/ui/primitives";
+import { ShellGate } from "#app/ui/ShellGate";
 import {
   keyTermGuides,
   keyTerms,
   occurrenceRef,
   sourceReadings,
   type SourceReading,
-} from "../../../../app/workflows/stet";
-import type { Ref } from "../../../../core/book/book";
-import { refOccurrences, type Occurrence } from "../../../../core/excerpts/excerpts";
-import { DEFAULT_LOCALE } from "../../../../core/stet/fixture";
-import type { Guide, Term } from "../../../../core/stet/stet";
+} from "#app/workflows/stet";
+import type { Ref } from "#core/book/book";
+import { refOccurrences, type Occurrence } from "#core/excerpts/excerpts";
+import { DEFAULT_LOCALE } from "#core/stet/fixture";
+import type { Guide, Term } from "#core/stet/stet";
 
 /**
  * `/terms` — Key terms (STET), its own pane.

@@ -16,9 +16,9 @@
 
 import { Effect, FileSystem, Option, Result } from "effect";
 
-import { Git, type Commit } from "../../../core/git/git";
-import { Gitea } from "../../../core/remote/gitea";
-import { Remote } from "../../../core/remote/remote";
+import { Git, type Commit } from "#core/git/git";
+import { Gitea } from "#core/remote/gitea";
+import { Remote } from "#core/remote/remote";
 import {
   emptyPlan,
   emptyReading,
@@ -28,7 +28,7 @@ import {
   trackingRef,
   type IncomingPlan,
   type SyncReading,
-} from "../../../core/sync";
+} from "#core/sync";
 
 /** What one pass over the repository answers. */
 export interface SyncFacts {

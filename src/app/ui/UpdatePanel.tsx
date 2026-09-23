@@ -17,7 +17,8 @@
 
 import { Show, createSignal } from "solid-js";
 
-import type { AvailableUpdate } from "../../core/host/updater";
+import type { AvailableUpdate } from "#core/host/updater";
+
 import { t } from "../i18n";
 import { useServices } from "../ProjectContext";
 import { Button, Card, PanelHeader } from "./primitives";

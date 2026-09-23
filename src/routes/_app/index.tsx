@@ -1,10 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/solid-router";
 import { untrack } from "solid-js";
 
-import { useShell } from "../../app/ProjectContext";
-import { ProjectsLanding } from "../../app/ui/landing/ProjectsLanding";
-import { ShellGate } from "../../app/ui/ShellGate";
-import "../../app/ui/theme";
+import { useShell } from "#app/ProjectContext";
+import { ProjectsLanding } from "#app/ui/landing/ProjectsLanding";
+import { ShellGate } from "#app/ui/ShellGate";
+import "#app/ui/theme";
 
 /**
  * `/` is THE WORK: the project you were last in, or the projects list when

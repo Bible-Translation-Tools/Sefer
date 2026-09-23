@@ -39,22 +39,23 @@ import {
   type ParentProps,
 } from "solid-js";
 
-import { ProjectAnalysis, type BookSummary } from "../core/analysis/projectAnalysis";
-import type { Book, BookId } from "../core/book/book";
-import type { Finding } from "../core/findings/finding";
-import { navigateTarget } from "../core/findings/findings";
-import type { Inventory } from "../core/findings/inventory";
-import * as Fixes from "../core/fixes/fixes";
-import type { SettingKey } from "../core/host/settings";
-import { Observability } from "../core/observability";
-import { openProject as openProjectEffect, type Project } from "../core/project/project";
-import { mintSlug } from "../core/project/slug";
-import { DEFAULT_JOURNAL_POLICY, Recovery } from "../core/recovery/recovery";
-import type { Reference } from "../core/reference/reference";
-import { SaveCoordinator } from "../core/save/saveCoordinator";
-import type { SourceStamp } from "../core/source/source";
-import { anchorFrom, type ChapterRow, type EditorBook, type ProjectionName } from "../editor";
-import { detectHost } from "../platform/host";
+import { ProjectAnalysis, type BookSummary } from "#core/analysis/projectAnalysis";
+import type { Book, BookId } from "#core/book/book";
+import type { Finding } from "#core/findings/finding";
+import { navigateTarget } from "#core/findings/findings";
+import type { Inventory } from "#core/findings/inventory";
+import * as Fixes from "#core/fixes/fixes";
+import type { SettingKey } from "#core/host/settings";
+import { Observability } from "#core/observability";
+import { openProject as openProjectEffect, type Project } from "#core/project/project";
+import { mintSlug } from "#core/project/slug";
+import { DEFAULT_JOURNAL_POLICY, Recovery } from "#core/recovery/recovery";
+import type { Reference } from "#core/reference/reference";
+import { SaveCoordinator } from "#core/save/saveCoordinator";
+import type { SourceStamp } from "#core/source/source";
+import { anchorFrom, type ChapterRow, type EditorBook, type ProjectionName } from "#editor/index";
+import { detectHost } from "#platform/host";
+
 import { registerShellCommands, type ShellBridge } from "./commands";
 import { useComposition } from "./CompositionContext";
 import { t } from "./i18n";

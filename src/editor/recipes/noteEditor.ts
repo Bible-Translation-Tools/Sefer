@@ -36,8 +36,9 @@ import {
 } from "@codemirror/state";
 import { EditorView, ViewPlugin, keymap } from "@codemirror/view";
 
-import { trustedBy } from "../../core/book/book";
-import { NOTE_PART } from "../../core/galley";
+import { trustedBy } from "#core/book/book";
+import { NOTE_PART } from "#core/galley";
+
 import { funnelFor, type EditorBook } from "../book";
 import { analyzer } from "../core/analyzer";
 import {

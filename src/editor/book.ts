@@ -42,9 +42,10 @@ import {
   type Origin,
   type Receipt,
   type Trust,
-} from "../core/book/book";
-import type { ObservabilityService } from "../core/observability";
-import type { Change, Source, SourceStamp } from "../core/source/source";
+} from "#core/book/book";
+import type { ObservabilityService } from "#core/observability";
+import type { Change, Source, SourceStamp } from "#core/source/source";
+
 import { actionCommand, type EditorAction } from "./core/actions";
 import type { Analyze } from "./core/analyzer";
 import { historyLayer, usfmEditorHeadless } from "./core/compose";

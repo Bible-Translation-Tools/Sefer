@@ -24,7 +24,8 @@ import {
   PanelHeader,
   Select,
   Switch,
-} from "../../../app/ui/primitives";
+} from "#app/ui/primitives";
+
 import type { Screen } from "../screen";
 
 const VARIANTS = ["primary", "secondary", "tertiary", "danger"] as const;

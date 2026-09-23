@@ -27,8 +27,9 @@ import type {
   IncomingPlan,
   SyncActionId,
   SyncState,
-} from "../../../core/sync";
-import { FRONT_MATTER } from "../../../core/sync";
+} from "#core/sync";
+import { FRONT_MATTER } from "#core/sync";
+
 import { t, type Params } from "../../i18n";
 import type { BadgeTone } from "../primitives";
 import { bookName } from "../workspace/books";

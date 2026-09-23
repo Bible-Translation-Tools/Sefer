@@ -20,7 +20,8 @@
 // default", which is what makes clearing the box in the settings screen an
 // answer rather than a way to break the application.
 
-import type { SettingsService } from "../core/host/settings";
+import type { SettingsService } from "#core/host/settings";
+
 import { cleanUrl, env } from "./env";
 import { shellKeys } from "./settings";
 

@@ -21,14 +21,11 @@
 
 import { Effect, FileSystem, Option, Result } from "effect";
 
-import { ProjectAdmin } from "../../../core/admin/projectAdmin";
-import { lastSegment } from "../../../core/fileSystem/path";
-import { HostInfo } from "../../../core/host/hostInfo";
-import {
-  recordProject,
-  repairProjectIndex,
-  type ProjectRow,
-} from "../../../core/project/projectIndex";
+import { ProjectAdmin } from "#core/admin/projectAdmin";
+import { lastSegment } from "#core/fileSystem/path";
+import { HostInfo } from "#core/host/hostInfo";
+import { recordProject, repairProjectIndex, type ProjectRow } from "#core/project/projectIndex";
+
 import { languageName, languageTag, projectDisplayName } from "../../language";
 import type { Domain } from "../../services";
 

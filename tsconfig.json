@@ -14,7 +14,19 @@
 
     "strict": true,
     "skipLibCheck": true,
-    "types": ["vite/client", "node"]
+    "types": ["vite/client", "node"],
+
+    // One alias per layer, for imports that CROSS a layer; imports within a
+    // layer stay relative. Vite reads these (`resolve.tsconfigPaths` in
+    // vite.config.ts) and `pnpm boundaries` resolves them, so a `#app/…`
+    // import from core is caught exactly like `../app/…`.
+    "paths": {
+      "#app/*": ["./src/app/*"],
+      "#core/*": ["./src/core/*"],
+      "#dev/*": ["./src/dev/*"],
+      "#editor/*": ["./src/editor/*"],
+      "#platform/*": ["./src/platform/*"]
+    }
   },
   "include": ["src", "tools", "*.ts"],
   "exclude": ["node_modules", "dist", "src-tauri"]

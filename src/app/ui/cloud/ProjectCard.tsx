@@ -14,7 +14,8 @@
 
 import { Show } from "solid-js";
 
-import type { Clock, Sync } from "../../../core/sync";
+import type { Clock, Sync } from "#core/sync";
+
 import { t } from "../../i18n";
 import { ago, exact } from "../panels/format";
 import { Badge, Card, PanelHeader } from "../primitives";

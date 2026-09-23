@@ -52,12 +52,13 @@ import CircleCheck from "lucide-solid/icons/circle-check";
 import Wrench from "lucide-solid/icons/wrench";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
-import type { BookId } from "../../../core/book/book";
-import type { Excerpt } from "../../../core/excerpts/excerpts";
-import * as Filter from "../../../core/findings/filter";
-import type { Finding } from "../../../core/findings/finding";
-import * as Findings from "../../../core/findings/findings";
-import * as Fixes from "../../../core/fixes/fixes";
+import type { BookId } from "#core/book/book";
+import type { Excerpt } from "#core/excerpts/excerpts";
+import * as Filter from "#core/findings/filter";
+import type { Finding } from "#core/findings/finding";
+import * as Findings from "#core/findings/findings";
+import * as Fixes from "#core/fixes/fixes";
+
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { ExcerptList, type ExcerptDecor } from "../excerpts";

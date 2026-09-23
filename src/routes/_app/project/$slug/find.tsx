@@ -10,10 +10,10 @@ import SearchIcon from "lucide-solid/icons/search";
 import WholeWordIcon from "lucide-solid/icons/whole-word";
 import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
-import { t } from "../../../../app/i18n";
-import { useShell } from "../../../../app/ProjectContext";
-import { shellKeys } from "../../../../app/settings";
-import { createExcerptFeed, ExcerptList, readBooks } from "../../../../app/ui/excerpts";
+import { t } from "#app/i18n";
+import { useShell } from "#app/ProjectContext";
+import { shellKeys } from "#app/settings";
+import { createExcerptFeed, ExcerptList, readBooks } from "#app/ui/excerpts";
 import {
   Button,
   Card,
@@ -22,13 +22,13 @@ import {
   Input,
   PanelHeader,
   SegmentedControl,
-} from "../../../../app/ui/primitives";
-import { ShellGate } from "../../../../app/ui/ShellGate";
-import * as Workflows from "../../../../app/workflows/references";
-import type { BookId } from "../../../../core/book/book";
-import { refOccurrences, type Excerpt, type Occurrence } from "../../../../core/excerpts/excerpts";
-import { createReadings } from "../../../../core/search/reading";
-import * as Search from "../../../../core/search/search";
+} from "#app/ui/primitives";
+import { ShellGate } from "#app/ui/ShellGate";
+import * as Workflows from "#app/workflows/references";
+import type { BookId } from "#core/book/book";
+import { refOccurrences, type Excerpt, type Occurrence } from "#core/excerpts/excerpts";
+import { createReadings } from "#core/search/reading";
+import * as Search from "#core/search/search";
 
 /**
  * Find, as a multibuffer.

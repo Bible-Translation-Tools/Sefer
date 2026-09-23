@@ -173,6 +173,9 @@ export const checkCoreBoundary = (options: BoundaryOptions): BoundaryViolation[]
 
       const aliased = resolveAlias(specifier.value, paths, pathsBase);
       if (aliased !== null) {
+        // The same exemption as the relative branch: a core test may reach the
+        // Node platform layers however the path is spelled.
+        if (isTest) continue;
         if (!isInside(coreDir, aliased))
           report(`alias resolves to ${path.relative(pathsBase, aliased)}, outside ${label}`);
         continue;

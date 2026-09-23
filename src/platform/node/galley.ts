@@ -12,12 +12,7 @@ import { fileURLToPath } from "node:url";
 
 import { Effect, Layer } from "effect";
 
-import {
-  EngineLoadError,
-  Galley,
-  GalleyLive,
-  type VersionMismatch,
-} from "../../core/galley/galley";
+import { EngineLoadError, Galley, GalleyLive, type VersionMismatch } from "#core/galley/galley";
 
 /**
  * Resolved through the PACKAGE rather than by walking up from this file.

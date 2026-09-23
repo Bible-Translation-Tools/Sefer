@@ -18,7 +18,7 @@
 
 import { Option } from "effect";
 
-import type { Book } from "../../../core/book/book";
+import type { Book } from "#core/book/book";
 import {
   currentProjectSource,
   folderSource,
@@ -26,9 +26,10 @@ import {
   savedSource,
   type CompareSource,
   type RecordedTexts,
-} from "../../../core/compare";
-import type { Project } from "../../../core/project/project";
-import type { Baseline } from "../../../core/save/baseline";
+} from "#core/compare";
+import type { Project } from "#core/project/project";
+import type { Baseline } from "#core/save/baseline";
+
 import { t } from "../../i18n";
 import type { Services } from "../../services";
 
@@ -130,7 +131,7 @@ export const sourceChoices = (context: ChoiceContext): readonly SourceChoice[] =
         : t("This host opens folders directly; unzip it first."),
       available: web,
       pick: async () => {
-        const intake = await import("../../../platform/web/intake");
+        const intake = await import("#platform/web/intake");
         const taken = await services.run(
           intake.pickInto(services.fileSystem, scratchRoot(services), "zip"),
         );
@@ -155,7 +156,7 @@ export const sourceChoices = (context: ChoiceContext): readonly SourceChoice[] =
           const root = Option.getOrUndefined(picked);
           return root === undefined ? undefined : folderSource(services.fileSystem, root);
         }
-        const intake = await import("../../../platform/web/intake");
+        const intake = await import("#platform/web/intake");
         const taken = await services.run(
           intake.pickInto(services.fileSystem, scratchRoot(services), "folder"),
         );

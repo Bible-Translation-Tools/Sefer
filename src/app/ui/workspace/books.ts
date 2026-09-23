@@ -9,10 +9,10 @@
  * the UI and the parser each need.
  */
 
-import type { Project } from "../../../core/project/project";
-import { CANON, testamentOf, type Testament } from "../../../core/reference/canon";
-import { parseReference, type ReferenceLookup } from "../../../core/reference/reference";
-import { localized, type ProjectMetadata } from "../../../core/resources/projectMetadata";
+import type { Project } from "#core/project/project";
+import { CANON, testamentOf, type Testament } from "#core/reference/canon";
+import { parseReference, type ReferenceLookup } from "#core/reference/reference";
+import { localized, type ProjectMetadata } from "#core/resources/projectMetadata";
 
 export { CANON, testamentOf, parseReference };
 export type { Testament, ReferenceLookup };

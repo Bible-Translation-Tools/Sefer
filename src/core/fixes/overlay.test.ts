@@ -13,7 +13,8 @@
 import { Effect, Result } from "effect";
 import { describe, expect, it } from "vitest";
 
-import { NodeGalleyLive } from "../../platform/node/galley";
+import { NodeGalleyLive } from "#platform/node/galley";
+
 import { makeBook, type Book } from "../book/book";
 import { Galley, type GalleyService } from "../galley";
 import { decode } from "../source/source";

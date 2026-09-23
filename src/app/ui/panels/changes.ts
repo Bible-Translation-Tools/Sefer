@@ -29,9 +29,10 @@
 
 import { Option } from "effect";
 
-import type { Book, BookId } from "../../../core/book/book";
-import { compare, type Hunk } from "../../../core/diff/diff";
-import type { Baseline } from "../../../core/save/baseline";
+import type { Book, BookId } from "#core/book/book";
+import { compare, type Hunk } from "#core/diff/diff";
+import type { Baseline } from "#core/save/baseline";
+
 import type { Shell } from "../../ProjectContext";
 import { lines } from "./format";
 import type { Recorded } from "./recorded";

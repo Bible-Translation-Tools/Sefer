@@ -13,7 +13,7 @@ import {
   type HostCapabilities,
   type HostInfo,
   type HostPaths,
-} from "../../core/host/hostInfo";
+} from "#core/host/hostInfo";
 
 /** Everything Sefer owns in OPFS lives under this one directory. */
 export const OPFS_ROOT = "/sefer";

@@ -30,7 +30,7 @@ import {
   type ReleaseListing,
   type UpdateChannel,
   type UpdaterService,
-} from "../../core/host/updater";
+} from "#core/host/updater";
 
 export interface TauriUpdaterOptions {
   /** `VITE_SEFER_UPDATER_HOST`; `null` disables the manual version picker. */

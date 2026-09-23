@@ -21,14 +21,15 @@ import type { UseNavigateResult } from "@tanstack/solid-router";
 import { Effect, Option, Result, type Scope } from "effect";
 import { createSignal } from "solid-js";
 
-import { applyFormat, applyOverlay, formatBook, overlayBook } from "../core/fixes/fixes";
-import { Git } from "../core/git/git";
-import { makeMultiBook } from "../core/multibook/multibook";
-import { Observability, type ObservabilityService } from "../core/observability";
-import type { Project } from "../core/project/project";
-import { Remote } from "../core/remote/remote";
-import { emptyBlocks, structureAt, withoutScrolling } from "../editor";
-import type { EditorAction, EditorBook, ProjectionName } from "../editor";
+import { applyFormat, applyOverlay, formatBook, overlayBook } from "#core/fixes/fixes";
+import { Git } from "#core/git/git";
+import { makeMultiBook } from "#core/multibook/multibook";
+import { Observability, type ObservabilityService } from "#core/observability";
+import type { Project } from "#core/project/project";
+import { Remote } from "#core/remote/remote";
+import { emptyBlocks, structureAt, withoutScrolling } from "#editor/index";
+import type { EditorAction, EditorBook, ProjectionName } from "#editor/index";
+
 import { wacsUrlFor } from "./endpoints";
 import { t } from "./i18n";
 import type { Domain, Services } from "./services";

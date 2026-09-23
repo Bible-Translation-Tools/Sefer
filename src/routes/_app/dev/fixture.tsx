@@ -7,7 +7,7 @@ import { createFileRoute, lazyRouteComponent, notFound } from "@tanstack/solid-r
 // Production answers /dev/fixture through the root not-found boundary.
 const loadFixturePage = async () => {
   if (import.meta.env.DEV) {
-    const page = await import("../../../dev/FixturePage");
+    const page = await import("#dev/FixturePage");
     return { default: page.FixturePage };
   }
   throw notFound();

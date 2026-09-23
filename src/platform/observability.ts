@@ -1,7 +1,7 @@
 import type { Result } from "effect";
 
-import type { BootError, BootInfo } from "../core/boot";
-import { matchesQuery, printSpan } from "../core/observability";
+import type { BootError, BootInfo } from "#core/boot";
+import { matchesQuery, printSpan } from "#core/observability";
 import type {
   AssembledSpan,
   AssemblerSinks,
@@ -9,7 +9,7 @@ import type {
   ObservabilityService,
   ObservabilitySink,
   TraceQuery,
-} from "../core/observability";
+} from "#core/observability";
 
 interface NodeRuntime {
   readonly env?: Record<string, string | undefined>;

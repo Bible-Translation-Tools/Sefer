@@ -19,7 +19,7 @@ import { useNavigate } from "@tanstack/solid-router";
 import { Effect, Option, Result, Stream } from "effect";
 import { createMemo, createSignal, type Accessor } from "solid-js";
 
-import type { BookId } from "../../../core/book/book";
+import type { BookId } from "#core/book/book";
 import {
   extend,
   group,
@@ -28,9 +28,10 @@ import {
   type Extent,
   type Occurrence,
   type OutlineRow,
-} from "../../../core/excerpts/excerpts";
-import { describesExactly, type Analysis } from "../../../core/galley";
-import type { EditorBook } from "../../../editor";
+} from "#core/excerpts/excerpts";
+import { describesExactly, type Analysis } from "#core/galley";
+import type { EditorBook } from "#editor/index";
+
 import { t } from "../../i18n";
 import { useShell, type Shell } from "../../ProjectContext";
 

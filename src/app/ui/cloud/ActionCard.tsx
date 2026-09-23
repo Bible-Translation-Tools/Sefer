@@ -18,7 +18,8 @@
 
 import { Show } from "solid-js";
 
-import type { IncomingPlan, Sync } from "../../../core/sync";
+import type { IncomingPlan, Sync } from "#core/sync";
+
 import { t } from "../../i18n";
 import { Button, Card, PanelHeader } from "../primitives";
 import { actionLabel, narrate } from "./copy";

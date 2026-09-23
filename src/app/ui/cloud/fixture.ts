@@ -14,7 +14,7 @@
  * `/dev/fixture` uses (documentation/architecture/shell.md).
  */
 
-import type { Commit } from "../../../core/git/git";
+import type { Commit } from "#core/git/git";
 import {
   combineMessage,
   emptyPlan,
@@ -22,7 +22,8 @@ import {
   type CombineReplay,
   type SyncReading,
   type SyncState,
-} from "../../../core/sync";
+} from "#core/sync";
+
 import type { SyncFacts } from "./reading";
 
 /**

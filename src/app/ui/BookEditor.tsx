@@ -35,8 +35,8 @@ import { EditorView } from "@codemirror/view";
 import { Effect, Fiber, Stream } from "effect";
 import { createEffect, createRenderEffect, createSignal, untrack } from "solid-js";
 
-import { stale } from "../../core/findings/finding";
-import type { SourceStamp } from "../../core/source/source";
+import { stale } from "#core/findings/finding";
+import type { SourceStamp } from "#core/source/source";
 import {
   annotateOpen,
   annotateRepaint,
@@ -61,7 +61,8 @@ import {
   showBlockPairs,
   showEmptyBlocks,
   watchLocation,
-} from "../../editor";
+} from "#editor/index";
+
 import { textDirection } from "../language";
 import { useShell } from "../ProjectContext";
 import { shellKeys } from "../settings";
@@ -83,7 +84,7 @@ const mountedConfig = new WeakMap<EditorBook, Compartment>();
 
 // The editor's own stylesheet. It ships with the editor module and is imported
 // where the view mounts, so a route that never opens a book never loads it.
-import "../../editor/editor.css";
+import "#editor/editor.css";
 
 export interface BookEditorProps {
   readonly book: EditorBook;

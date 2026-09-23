@@ -64,7 +64,7 @@ import Save from "lucide-solid/icons/save";
 import Scale from "lucide-solid/icons/scale";
 import { For, Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
-import type { BookId } from "../../../core/book/book";
+import type { BookId } from "#core/book/book";
 import {
   applyPlan,
   bookComparison,
@@ -75,12 +75,13 @@ import {
   type CompareResult,
   type CompareSource,
   type Plan,
-} from "../../../core/compare";
-import { diffSkeleton, mergeWithDecisions } from "../../../core/diff/skeleton";
-import type { DecisionUnit, DiffSkeleton, MergeSide } from "../../../core/galley";
-import { Observability } from "../../../core/observability";
-import type { Restorable } from "../../../core/recovery/recovery";
-import type { SourceStamp } from "../../../core/source/source";
+} from "#core/compare";
+import { diffSkeleton, mergeWithDecisions } from "#core/diff/skeleton";
+import type { DecisionUnit, DiffSkeleton, MergeSide } from "#core/galley";
+import { Observability } from "#core/observability";
+import type { Restorable } from "#core/recovery/recovery";
+import type { SourceStamp } from "#core/source/source";
+
 import { describe } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";

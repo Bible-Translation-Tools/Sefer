@@ -7,7 +7,8 @@
  * they get a row class of their own rather than a span pair.
  */
 
-import type { NodeView, NotePart } from "../../core/galley";
+import type { NodeView, NotePart } from "#core/galley";
+
 import { notePartsOf } from "./cst";
 import type { NoteRange } from "./fold";
 import type { TokenShape } from "./mapping";

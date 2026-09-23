@@ -16,12 +16,7 @@ import { appCacheDir, appDataDir, appLogDir, tempDir } from "@tauri-apps/api/pat
 import { locale } from "@tauri-apps/plugin-os";
 import { Effect, Layer } from "effect";
 
-import {
-  HostInfo,
-  makeHostInfo,
-  type HostCapabilities,
-  type HostPaths,
-} from "../../core/host/hostInfo";
+import { HostInfo, makeHostInfo, type HostCapabilities, type HostPaths } from "#core/host/hostInfo";
 
 /** Everything the desktop host can do. `none` is not a capability. */
 const TAURI_CAPABILITIES: HostCapabilities = {

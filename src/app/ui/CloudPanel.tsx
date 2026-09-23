@@ -21,9 +21,10 @@
 import { Effect, Fiber, Stream } from "effect";
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 
-import { Git } from "../../core/git/git";
-import { Gitea, type RemoteRepo } from "../../core/remote/gitea";
-import { Remote } from "../../core/remote/remote";
+import { Git } from "#core/git/git";
+import { Gitea, type RemoteRepo } from "#core/remote/gitea";
+import { Remote } from "#core/remote/remote";
+
 import { t } from "../i18n";
 import { useShell } from "../ProjectContext";
 import { AccountCard, createAccount } from "./cloud";

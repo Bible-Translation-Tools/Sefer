@@ -26,7 +26,7 @@
  * yet. Widen it when a store needs the field, not in anticipation.
  */
 
-import type { BookId } from "../core/book/book";
+import type { BookId } from "#core/book/book";
 
 export type ShellEvent =
   /** An edit was accepted into these Books: a keystroke, a fix, a format, a revert. */

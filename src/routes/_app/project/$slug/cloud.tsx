@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/solid-router";
 
-import { CloudScreen } from "../../../../app/ui/cloud";
-import { ShellGate } from "../../../../app/ui/ShellGate";
+import { CloudScreen } from "#app/ui/cloud";
+import { ShellGate } from "#app/ui/ShellGate";
 
 /**
  * `/cloud` — the sync screen, gated on the shell.

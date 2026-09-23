@@ -33,7 +33,8 @@
 
 import { Result, Schema } from "effect";
 
-import type { SettingsService } from "../core/host/settings";
+import type { SettingsService } from "#core/host/settings";
+
 import { languageApiUrlFrom } from "./endpoints";
 
 export type ProjectType = "translation" | "gateway";

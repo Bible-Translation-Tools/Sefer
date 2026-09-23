@@ -24,8 +24,8 @@
  * book parse per side per render.
  */
 
-import { project } from "../../../core/excerpts/excerpts";
-import type { Analysis, EngineRange, GalleyService } from "../../../core/galley";
+import { project } from "#core/excerpts/excerpts";
+import type { Analysis, EngineRange, GalleyService } from "#core/galley";
 
 /** Two sides of one book, plus room to switch books without re-parsing. */
 const LIMIT = 4;

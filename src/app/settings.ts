@@ -14,9 +14,10 @@
 
 import { Schema } from "effect";
 
-import { PRODUCERS, SEVERITIES } from "../core/findings/filter";
-import type { SettingKey, SettingsService } from "../core/host/settings";
-import { DEFAULT_JOURNAL_POLICY } from "../core/recovery/recovery";
+import { PRODUCERS, SEVERITIES } from "#core/findings/filter";
+import type { SettingKey, SettingsService } from "#core/host/settings";
+import { DEFAULT_JOURNAL_POLICY } from "#core/recovery/recovery";
+
 import { DEFAULT_EDITOR_FONT_SIZE, EDITOR_FONT_SIZE_RANGE } from "./ui/theme";
 
 /**

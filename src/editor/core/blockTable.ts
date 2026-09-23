@@ -6,7 +6,8 @@
  * the line table and for the same reason: typed-array columns, lazy rows.
  */
 
-import { MARKERS } from "../../core/galley";
+import { MARKERS } from "#core/galley";
+
 import { spellingAt } from "./cst";
 import { type Block, type BlockTable, type DocLine, type Fold, noRow } from "./fold";
 import type { ClassKey } from "./registry";

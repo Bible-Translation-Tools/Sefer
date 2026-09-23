@@ -33,8 +33,8 @@
 
 import { Effect, Layer, Option } from "effect";
 
-import type { Credential, CredentialsService } from "../../core/host/credentials";
-import { Credentials } from "../../core/host/credentials";
+import type { Credential, CredentialsService } from "#core/host/credentials";
+import { Credentials } from "#core/host/credentials";
 
 /** One key per remote, under a prefix nothing else in the page may use. */
 const PREFIX = "sefer.credentials.";

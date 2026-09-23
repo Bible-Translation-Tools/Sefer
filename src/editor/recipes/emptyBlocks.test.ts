@@ -15,11 +15,12 @@ import { EditorView } from "@codemirror/view";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
-import { makeBook } from "../../core/book/book";
-import { applyOverlay, overlayBook } from "../../core/fixes/fixes";
-import { Galley, toLf, type GalleyService } from "../../core/galley";
-import { decode } from "../../core/source/source";
-import { NodeGalleyLive } from "../../platform/node/galley";
+import { makeBook } from "#core/book/book";
+import { applyOverlay, overlayBook } from "#core/fixes/fixes";
+import { Galley, toLf, type GalleyService } from "#core/galley";
+import { decode } from "#core/source/source";
+import { NodeGalleyLive } from "#platform/node/galley";
+
 import { surface } from "../testing/harness";
 import { annotateEmptyBlocks, blockNamer, emptyBlocks } from "./emptyBlocks";
 

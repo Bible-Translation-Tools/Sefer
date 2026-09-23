@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/solid-router";
 
-import { HistoryPanel } from "../../../../app/ui/panels";
-import { ShellGate } from "../../../../app/ui/ShellGate";
+import { HistoryPanel } from "#app/ui/panels";
+import { ShellGate } from "#app/ui/ShellGate";
 
 /**
  * `/history` — the commit timeline.

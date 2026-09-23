@@ -1,11 +1,11 @@
 import { Outlet, createFileRoute, useNavigate } from "@tanstack/solid-router";
 import { Match, Switch, createEffect, createSignal, untrack } from "solid-js";
 
-import { t } from "../../../app/i18n";
-import { useShell } from "../../../app/ProjectContext";
-import { Button, EmptyState } from "../../../app/ui/primitives";
-import { ShellGate } from "../../../app/ui/ShellGate";
-import "../../../app/ui/theme";
+import { t } from "#app/i18n";
+import { useShell } from "#app/ProjectContext";
+import { Button, EmptyState } from "#app/ui/primitives";
+import { ShellGate } from "#app/ui/ShellGate";
+import "#app/ui/theme";
 
 /**
  * `/project/$slug` — the layout every project screen lives inside, and the ONE

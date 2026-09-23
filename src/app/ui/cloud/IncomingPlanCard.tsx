@@ -16,7 +16,8 @@
 
 import { For, Show } from "solid-js";
 
-import type { IncomingBook, IncomingPlan } from "../../../core/sync";
+import type { IncomingBook, IncomingPlan } from "#core/sync";
+
 import { t } from "../../i18n";
 import { Badge, Card, PanelHeader } from "../primitives";
 import { bookName } from "../workspace/books";

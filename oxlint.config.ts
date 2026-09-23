@@ -1,6 +1,24 @@
 import solidV2 from "eslint-plugin-solid/configs/v2";
 import { defineConfig } from "oxlint";
 
+// What `src/core` may not import. The layer aliases are tsconfig `paths`
+// (`#app/*` …); `pnpm boundaries` resolves them and is the authoritative check.
+const CORE_FORBIDDEN = [
+  "solid-js",
+  "solid-js/*",
+  "@solidjs/*",
+  "@tanstack/*",
+  "@tauri-apps/*",
+  "@codemirror/*",
+  "isomorphic-git",
+  "isomorphic-git/*",
+  "#app/**",
+  "#dev/**",
+  "#editor/**",
+];
+const CORE_MESSAGE =
+  "Core stays framework and host independent; depend on a core contract instead. `pnpm boundaries` is the authoritative check.";
+
 export default defineConfig({
   jsPlugins: ["eslint-plugin-solid", "./tools/oxlint/anti-slop/index.ts"],
   ignorePatterns: [
@@ -52,20 +70,8 @@ export default defineConfig({
           {
             patterns: [
               {
-                group: [
-                  "solid-js",
-                  "solid-js/*",
-                  "@solidjs/*",
-                  "@tanstack/*",
-                  "@tauri-apps/*",
-                  "@codemirror/*",
-                  "isomorphic-git",
-                  "isomorphic-git/*",
-                  "@/app/**",
-                  "@/platform/**",
-                ],
-                message:
-                  "Core stays framework and host independent; depend on a core contract instead. `pnpm boundaries` is the authoritative check.",
+                group: [...CORE_FORBIDDEN, "#platform/**"],
+                message: CORE_MESSAGE,
               },
             ],
           },
@@ -96,6 +102,18 @@ export default defineConfig({
             name: "fetch",
             message: "Core must run in Node; take a core port instead of a host global.",
           },
+        ],
+      },
+    },
+    {
+      // A core test is Node's own program and may build its fixtures with the
+      // Node platform layers (`#platform/node/…`) — the same exemption
+      // `pnpm boundaries` gives it. Everything else stays forbidden.
+      files: ["src/core/**/*.test.ts"],
+      rules: {
+        "no-restricted-imports": [
+          "error",
+          { patterns: [{ group: CORE_FORBIDDEN, message: CORE_MESSAGE }] },
         ],
       },
     },

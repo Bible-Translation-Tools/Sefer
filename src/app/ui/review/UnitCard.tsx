@@ -30,8 +30,9 @@
 
 import { For, Show, createMemo } from "solid-js";
 
-import { hasInlineChange, inlineDiff, sideOf, type InlineSegment } from "../../../core/diff/inline";
-import { unitReference, type DecisionUnit, type MergeSide } from "../../../core/galley";
+import { hasInlineChange, inlineDiff, sideOf, type InlineSegment } from "#core/diff/inline";
+import { unitReference, type DecisionUnit, type MergeSide } from "#core/galley";
+
 import { t } from "../../i18n";
 import { Badge, Button, Card, cx } from "../primitives";
 

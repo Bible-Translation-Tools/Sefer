@@ -13,7 +13,7 @@
 import { confirm as tauriConfirm, open, save } from "@tauri-apps/plugin-dialog";
 import { Effect, Layer, Option } from "effect";
 
-import { Dialogs } from "../../core/host/dialogs";
+import { Dialogs } from "#core/host/dialogs";
 
 const asFilters = (
   filters: readonly { readonly name: string; readonly extensions: readonly string[] }[],

@@ -21,7 +21,7 @@ import { createFileRoute, lazyRouteComponent, notFound } from "@tanstack/solid-r
  */
 const loadPlayground = async () => {
   if (import.meta.env.DEV) {
-    const page = await import("../../../../dev/playground/PlaygroundPage");
+    const page = await import("#dev/playground/PlaygroundPage");
     return { default: page.PlaygroundPage };
   }
   throw notFound();

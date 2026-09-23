@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/solid-router";
 
-import { t } from "../../../app/i18n";
-import { Breadcrumb } from "../../../app/ui/landing/Breadcrumb";
-import { CreateProject } from "../../../app/ui/landing/CreateProject";
-import { ShellGate } from "../../../app/ui/ShellGate";
-import "../../../app/ui/theme";
+import { t } from "#app/i18n";
+import { Breadcrumb } from "#app/ui/landing/Breadcrumb";
+import { CreateProject } from "#app/ui/landing/CreateProject";
+import { ShellGate } from "#app/ui/ShellGate";
+import "#app/ui/theme";
 
 /**
  * Create project. Not a landing tab — it is where the filter card's

@@ -1,16 +1,16 @@
 import { createFileRoute } from "@tanstack/solid-router";
 import { Show, createEffect, createSignal, untrack } from "solid-js";
 
-import { t } from "../../../../../app/i18n";
-import { useShell } from "../../../../../app/ProjectContext";
-import { REFERENCE_WIDTH } from "../../../../../app/settings";
-import { BookEditor } from "../../../../../app/ui/BookEditor";
-import { Resizable, cx } from "../../../../../app/ui/primitives";
-import { RecoveryBanner } from "../../../../../app/ui/recovery/RecoveryBanner";
-import { bookName } from "../../../../../app/ui/workspace/books";
-import { metadataOf } from "../../../../../app/ui/workspace/project";
-import { ReferenceColumn } from "../../../../../app/ui/workspace/ReferenceColumn";
-import { Toolbar } from "../../../../../app/ui/workspace/Toolbar";
+import { t } from "#app/i18n";
+import { useShell } from "#app/ProjectContext";
+import { REFERENCE_WIDTH } from "#app/settings";
+import { BookEditor } from "#app/ui/BookEditor";
+import { Resizable, cx } from "#app/ui/primitives";
+import { RecoveryBanner } from "#app/ui/recovery/RecoveryBanner";
+import { bookName } from "#app/ui/workspace/books";
+import { metadataOf } from "#app/ui/workspace/project";
+import { ReferenceColumn } from "#app/ui/workspace/ReferenceColumn";
+import { Toolbar } from "#app/ui/workspace/Toolbar";
 
 /**
  * The editor screen: the workspace toolbar, the reference column, and the book

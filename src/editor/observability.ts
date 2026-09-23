@@ -44,7 +44,8 @@ import type {
   ObservabilityService,
   Operation,
   Verdict as RingVerdict,
-} from "../core/observability";
+} from "#core/observability";
+
 import {
   makeTracer,
   onOrphanDerived,

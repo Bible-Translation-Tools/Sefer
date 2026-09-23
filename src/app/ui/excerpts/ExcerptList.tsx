@@ -16,10 +16,11 @@
 import type { JSX } from "@solidjs/web";
 import { For, createMemo, createSignal } from "solid-js";
 
-import type { BookId } from "../../../core/book/book";
-import type { BookExcerpts, Excerpt, OutlineRow } from "../../../core/excerpts/excerpts";
-import type { Analysis } from "../../../core/galley";
-import type { EditorBook } from "../../../editor";
+import type { BookId } from "#core/book/book";
+import type { BookExcerpts, Excerpt, OutlineRow } from "#core/excerpts/excerpts";
+import type { Analysis } from "#core/galley";
+import type { EditorBook } from "#editor/index";
+
 import { t } from "../../i18n";
 import { cx, VirtualList, type VirtualSection } from "../primitives";
 import { ExcerptCard, type MarkTone } from "./ExcerptCard";

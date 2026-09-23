@@ -21,7 +21,8 @@
 import { Effect, Fiber, Stream } from "effect";
 import { createSignal, onCleanup, type Accessor } from "solid-js";
 
-import { DEFAULT_FILTER, type FindingsFilter, type GroupKind } from "../../../core/findings/filter";
+import { DEFAULT_FILTER, type FindingsFilter, type GroupKind } from "#core/findings/filter";
+
 import type { Services } from "../../services";
 import { shellKeys, type FindingsFilterPreference } from "../../settings";
 
