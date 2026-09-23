@@ -99,6 +99,8 @@ export type {
 // TOC is what `search.md` and `resources.md` have called this thing since
 // before the door existed, so that is what it is called here.
 export type { BookCensus as BookToc } from "@wycliffeassociates/scripture-kitchen/toc-reader";
+// The mask reader, same rule: `mask`/`readerMask` answer it.
+export type { MaskMap };
 
 /** The wasm module could not be instantiated at all. */
 export class EngineLoadError extends Data.TaggedError("EngineLoadError")<{
@@ -488,6 +490,19 @@ export interface GalleyService {
    * without `keepText` — which the engine reports by throwing.
    */
   readonly mask: (id: string) => MaskMap | undefined;
+
+  /**
+   * The READER-TEXT mask of loose text, in UTF-16: the engine's `"text"`
+   * recipe, every text character anywhere with nothing removed — note prose
+   * included, markers not.
+   *
+   * It is the cut a diff run's non-markup characters are in, which is why the
+   * review reads a row through it: a row with runs and a row without read the
+   * same way. Loose text rather than an id because a review side is often not
+   * a registered book (a file on disk, an imported zip). `undefined` when the
+   * engine refuses the text.
+   */
+  readonly readerMask: (text: string) => MaskMap | undefined;
 
   /**
    * A memo for one Book: the same text returns the same `Analysis` instance.
@@ -887,6 +902,14 @@ const makeService = (
     }
   };
 
+  const readerMask = (text: string): MaskMap | undefined => {
+    try {
+      return MaskMap.open(handle.maskOf(text, { recipe: "text", utf16: true }));
+    } catch {
+      return undefined;
+    }
+  };
+
   const memoize = (id?: string): ((text: string) => Analysis) => {
     let last: Analysis | undefined;
     return (text: string): Analysis => {
@@ -943,6 +966,7 @@ const makeService = (
     lint,
     toc,
     mask,
+    readerMask,
     tocAll: () => ProjectToc.open(handle.tocAll(undefined, undefined)),
     find: (id, query) => decodeHits(handle.find(id, query.text, findOptions(query))),
     findAll: (query, scope) =>

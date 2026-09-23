@@ -30,8 +30,13 @@
 
 import { For, Show, createMemo } from "solid-js";
 
-import { hasInlineChange, inlineDiff, sideOf, type InlineSegment } from "#core/diff/inline";
-import { unitReference, type DecisionUnit, type MergeSide } from "#core/galley";
+import {
+  readingRuns,
+  unitReference,
+  type DecisionUnit,
+  type MergeSide,
+  type TextRun,
+} from "#core/galley";
 
 import { t } from "../../i18n";
 import { Badge, Button, Card, cx } from "../primitives";
@@ -72,36 +77,45 @@ const STATUS_LABEL = {
   unchanged: "unchanged",
 } as const;
 
+/** A piece of one line: marked when the engine said this side changed it. */
+interface Segment {
+  readonly changed: boolean;
+  readonly text: string;
+}
+
 /**
  * One side's lines, with the words that differ marked.
  *
- * The segments arrive already computed for the whole unit, so they are split
- * back onto lines here rather than diffed a second time per line — one word
- * diff per unit, however many lines it spans.
+ * The runs arrive already computed for the whole unit, so they are split back
+ * onto lines here rather than diffed a second time per line — one word diff
+ * per unit, however many lines it spans.
  */
-const segmentLines = (
-  segments: readonly InlineSegment[],
-): readonly (readonly InlineSegment[])[] => {
-  const out: InlineSegment[][] = [[]];
+const segmentLines = (segments: readonly Segment[]): readonly (readonly Segment[])[] => {
+  const out: Segment[][] = [[]];
   for (const segment of segments) {
     const parts = segment.text.split("\n");
     parts.forEach((part, index) => {
       if (index > 0) out.push([]);
-      if (part !== "") out.at(-1)?.push({ kind: segment.kind, text: part });
+      if (part !== "") out.at(-1)?.push({ changed: segment.changed, text: part });
     });
   }
-  if (out.length > 1 && (out.at(-1)?.length ?? 0) === 0) out.pop();
+  // A unit's span runs to the next unit's marker, so it ends in the blank
+  // lines before a `\s5` or a `\p` whose markers the reading has dropped.
+  while (out.length > 1 && (out.at(-1)?.length ?? 0) === 0) out.pop();
   return out;
 };
 
+const runLines = (runs: readonly TextRun[]): readonly (readonly Segment[])[] =>
+  segmentLines(runs.map((run) => ({ changed: run.kind !== "unchanged", text: run.text })));
+
 function Side(props: {
   readonly text: string | undefined;
-  readonly marked: readonly (readonly InlineSegment[])[] | undefined;
+  readonly marked: readonly (readonly Segment[])[] | undefined;
   readonly side: MergeSide;
   readonly label: string;
   readonly dimmed: boolean;
 }) {
-  const all = () => props.marked ?? segmentLines([{ kind: "same", text: props.text ?? "" }]);
+  const all = () => props.marked ?? segmentLines([{ changed: false, text: props.text ?? "" }]);
   const shown = () => all().slice(0, MAX_LINES);
   return (
     <div class="max-h-96 min-w-0 overflow-auto" data-side={props.side}>
@@ -127,7 +141,7 @@ function Side(props: {
                   <Show when={line.length > 0} fallback={<span> </span>}>
                     <For each={line}>
                       {(segment) => (
-                        <Show when={segment.kind !== "same"} fallback={<span>{segment.text}</span>}>
+                        <Show when={segment.changed} fallback={<span>{segment.text}</span>}>
                           <mark class={cx("rounded-xs px-px font-semibold", MARK[props.side])}>
                             {segment.text}
                           </mark>
@@ -177,51 +191,30 @@ export function UnitCard(props: UnitCardProps) {
    * The word marks inside this unit, once. A memo because it is the expensive
    * part of drawing the list and a decision click must not recompute it.
    *
-   * WHICH SIDE OF THE TOGGLE DECIDES WHERE THEY COME FROM, and this is the one
-   * place the engine is not the only answer:
+   * Both sides of the toggle are marked by the engine's runs
+   * (`onion::diff::unit_text_diff`, UAX-29 words), and nothing here re-diffs.
+   * The runs TILE the unit's span, markup included, so:
    *
-   *  - **The reading** is what `DecisionUnit.text` marks. The engine's runs
-   *    (`onion::diff::unit_text_diff`, UAX-29 words over its own reader-text
-   *    mask) are over the same string the columns are showing, so they are used
-   *    verbatim and nothing here re-diffs.
-   *  - **The markup view** shows raw USFM, which the engine's runs do not
-   *    describe — they never mention a marker. There is no engine answer for
-   *    "which characters of this `\q1 …` line changed", so the columns are
-   *    marked by the word LCS in `core/diff/inline.ts`. It is not a second
-   *    opinion about the DIFF: the alignment, the units and the decisions are
-   *    all the engine's, and this only tints characters inside one unit the
-   *    engine already paired.
+   *  - **The markup view** uses every run: their concatenation is the raw
+   *    USFM the column shows, and a changed marker is marked like a word.
+   *  - **The reading** drops the markup runs (`readingRuns`), which leaves
+   *    exactly the engine's reader text of the span — the string `textOf`
+   *    put in the column.
    */
   const marked = createMemo(
     () => {
-      const left = props.currentText;
-      const right = props.baselineText;
-      if (left === undefined || right === undefined) return undefined;
-      const engine = props.markup ? undefined : props.unit.text;
-      if (engine !== undefined)
-        return {
-          current: segmentLines(
-            engine.current.map((run) => ({
-              kind: run.kind === "added" ? ("add" as const) : ("same" as const),
-              text: run.text,
-            })),
-          ),
-          baseline: segmentLines(
-            engine.baseline.map((run) => ({
-              kind: run.kind === "removed" ? ("remove" as const) : ("same" as const),
-              text: run.text,
-            })),
-          ),
-        };
-      const segments = inlineDiff(right, left);
-      // Nothing shared means nothing worth marking — a whole-unit swap. The
+      const engine = props.unit.text;
+      if (engine === undefined) return undefined;
+      if (props.currentText === undefined || props.baselineText === undefined) return undefined;
+      const pick = props.markup ? (runs: readonly TextRun[]) => runs : readingRuns;
+      const current = pick(engine.current);
+      const baseline = pick(engine.baseline);
+      // No word shared means nothing worth marking — a whole-unit swap. The
       // plain tinted text says that better than marking every word does.
-      if (!hasInlineChange(segments) || !segments.some((part) => part.kind === "same"))
-        return undefined;
-      return {
-        baseline: segmentLines(sideOf(segments, "before")),
-        current: segmentLines(sideOf(segments, "after")),
-      };
+      const shares = (runs: readonly TextRun[]) =>
+        runs.some((run) => run.kind === "unchanged" && run.what === "text");
+      if (!shares(current) && !shares(baseline)) return undefined;
+      return { current: runLines(current), baseline: runLines(baseline) };
     },
     { name: "reviewUnitMarks" },
   );

@@ -14,7 +14,7 @@ import { For, Show, createMemo } from "solid-js";
 
 import { cx } from "#app/ui/primitives";
 import { textOf } from "#app/ui/review/reading";
-import type { DecisionUnit, MergeSide, TextRun } from "#core/galley/diff";
+import { readingRuns, type DecisionUnit, type MergeSide, type TextRun } from "#core/galley/diff";
 
 import type { Bench } from "./experiment";
 
@@ -42,45 +42,29 @@ export const inOrder = (bench: Bench): readonly DecisionUnit[] => {
 };
 
 /**
- * The reader-visible text of one side of a unit, markers projected away.
+ * The reader-visible text of one side of a unit, markers masked away.
  *
- * ## TWO MASKERS ON ONE PAGE, and they disagree about notes
+ * ## ONE MASKER, and it is the engine's
  *
- * Nothing here eats markup. There are two separate things that do, and which
- * one a row gets depends on whether the row CHANGED:
+ * Nothing here eats markup. A changed row and an unchanged one both read
+ * through the engine's reader text, so a page of mixed rows says the same
+ * thing about every footnote:
  *
- *   * a changed unit's words come from the ENGINE — `unit_text_diff` runs over
- *     `ReaderText`/`Filter::reader_text` (`core/galley/diff.ts`), so the runs
- *     arrive already masked and Sefer never sees the markers;
- *   * an unchanged unit, and the whole-side fallback below, go through OUR
- *     projection — `core/excerpts`' `project`, over one cached `Analysis` per
- *     side per book (`review/reading.ts`).
+ *   * a changed unit's words are its runs minus the markup runs
+ *     (`readingRuns`, `core/galley/diff.ts`) — the runs tile the span and say
+ *     which of them are markup;
+ *   * an unchanged unit, and the whole-side fallback below, are the engine's
+ *     `"text"` mask cut to the unit's span (`review/reading.ts`).
  *
- * Measured against the four committed fixtures, the two agree on every
- * reader-visible character of 59 units, differing only in trailing whitespace,
- * which the projection collapses and the engine keeps.
+ * Those are the same cut by construction: the non-markup runs of a span
+ * concatenate to its `"text"` mask. Note prose is IN that reading —
  *
- * They do NOT agree about footnotes. Probed with `\f + \fr 1:1 \ft Some
- * manuscripts read slave.\f*` inside a changed verse:
+ *   "Paul, a servant1:1 Some manuscripts read slave. of Christ Jesus…"
  *
- *   engine: "Paul, a servant of God1:1 Some manuscripts read slave. and an…"
- *   ours:   "Paul, a servant of God and an…"
- *
- * The engine's reader text carries the caller and the note body; `project`
- * drops both, by the rule the excerpt cards and Find already run under. So on
- * a page of mixed rows the same footnote appears inline in a changed verse and
- * vanishes from the verse above it — and the word diff will happily mark
- * changes inside a note that the surrounding text does not show at all.
- *
- * Not papered over here, because the fix is not local. Masking the runs after
- * the fact is impossible (they arrive concatenated, with no note extents), and
- * re-diffing our own projection would throw away the engine's alignment, which
- * is the whole reason to use it. It is the same question as the mask toggle:
- * ONE reader-text rule, with the caller saying whether notes are in it. Worth
- * asking Galley for alongside the mask map.
- *
- * Nothing in `/review` hits this today — its cards read one unit at a time and
- * are never mixed with unchanged ones.
+ * — because the diff has to be over a reading that removes nothing, or a
+ * change inside a note would be a change nobody could see to decide about.
+ * Whether a note should be shown folded is a rendering question for the row,
+ * and the runs' spans are what would let a row answer it.
  */
 const sideText = (bench: Bench, unit: DecisionUnit, side: MergeSide): string | undefined =>
   side === "baseline"
@@ -147,18 +131,21 @@ const Runs = (props: { readonly runs: readonly TextRun[]; readonly tone: DiffTon
  * The zip works because the two run lists share their `unchanged` runs in
  * order — `baseline` is unchanged + removed, `current` is unchanged + added —
  * so walking both and emitting the shared runs once reconstructs the sentence
- * with both edits inside it.
+ * with both edits inside it. Markup runs are dropped from both first, which
+ * keeps that pairing: an unchanged run is the same characters on both sides.
  */
 const Merged = (props: { readonly unit: DecisionUnit; readonly tone: DiffTone }) => {
   const runs = createMemo((): readonly TextRun[] => {
     const text = props.unit.text;
     if (text === undefined) return [];
+    const baseline = readingRuns(text.baseline);
+    const current = readingRuns(text.current);
     const out: TextRun[] = [];
     let left = 0;
     let right = 0;
-    while (left < text.baseline.length || right < text.current.length) {
-      const removed = text.baseline[left];
-      const added = text.current[right];
+    while (left < baseline.length || right < current.length) {
+      const removed = baseline[left];
+      const added = current[right];
       if (removed !== undefined && removed.kind === "removed") {
         out.push(removed);
         left += 1;
@@ -192,9 +179,10 @@ const Merged = (props: { readonly unit: DecisionUnit; readonly tone: DiffTone })
  *
  * What it does NOT include is the enclosing markup. A unit is a block, so its
  * span carries its own `\v`/`\p`; but flip a FIND hit the same way and the
- * `\add ` in front of the matched word sits outside the span. That is the one
- * thing JS cannot compute from what crosses today — see the note above
- * `sideText`.
+ * `\add ` in front of the matched word sits outside the span. A hit's flip
+ * would ask the parse for that, not assemble it: the dish's `Tree.enclosing(
+ * from, to)` answers the smallest node wrapping a range (the `\add` node, with
+ * its extent), and `Tree.spansIn(from, to)` what the range is made of.
  */
 const sourceOf = (bench: Bench, unit: DecisionUnit, side: MergeSide): string | undefined => {
   const range = side === "baseline" ? unit.baseline : unit.current;
@@ -304,7 +292,7 @@ export const UnitBody = (props: {
   const runsFor = (which: MergeSide): readonly TextRun[] | undefined => {
     const text = props.unit.text;
     if (text === undefined) return undefined;
-    const runs = which === "baseline" ? text.baseline : text.current;
+    const runs = readingRuns(which === "baseline" ? text.baseline : text.current);
     return runs.length === 0 ? undefined : runs;
   };
 

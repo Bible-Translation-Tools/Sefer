@@ -208,7 +208,7 @@ const sidOf = (bookId: BookId, chapter: number, first: number, last: number): st
  * hit cover — becomes a scan instead of a binary search plus an interval
  * intersection.
  */
-export interface Projection {
+interface Projection {
   readonly text: string;
   readonly src: Int32Array;
   /**
@@ -244,7 +244,7 @@ const isSpace = (code: number): boolean => code === 32 || code === 9 || code ===
  * USFM lines. Both are reversible for the caller's purposes because `src`
  * survives them.
  */
-export const project = (analysis: Analysis, from: number, to: number): Projection => {
+const project = (analysis: Analysis, from: number, to: number): Projection => {
   const out: number[] = [];
   const map: number[] = [];
   // The verse anchors inside the span, in order, consumed as the output passes
