@@ -6,5 +6,5 @@
 export { ExcerptCard, type ExcerptCardProps, type MarkTone } from "./ExcerptCard";
 export { ExcerptEditor, type ExcerptEditorProps } from "./ExcerptEditor";
 export { ExcerptList, type ExcerptDecor, type ExcerptListProps } from "./ExcerptList";
-export { createExcerptFeed, type ExcerptFeed, type ExcerptFeedOptions } from "./feed";
+export { createExcerptFeed, readBooks, type ExcerptFeed, type ExcerptFeedOptions } from "./feed";
 export { StetView, type StetViewProps } from "./StetView";

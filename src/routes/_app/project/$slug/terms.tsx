@@ -1,10 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/solid-router";
-import { Effect, Option, Result } from "effect";
+import { Effect, Result } from "effect";
 import { createEffect, createMemo, createSignal, Show, untrack } from "solid-js";
 
 import { t } from "../../../../app/i18n";
 import { useShell } from "../../../../app/ProjectContext";
-import { createExcerptFeed, StetView } from "../../../../app/ui/excerpts";
+import { createExcerptFeed, readBooks, StetView } from "../../../../app/ui/excerpts";
 import { PanelHeader } from "../../../../app/ui/primitives";
 import { ShellGate } from "../../../../app/ui/ShellGate";
 import {
@@ -15,8 +15,7 @@ import {
   type SourceReading,
 } from "../../../../app/workflows/stet";
 import type { Ref } from "../../../../core/book/book";
-import { refOccurrences, type BookText, type Occurrence } from "../../../../core/excerpts/excerpts";
-import { describesExactly } from "../../../../core/galley";
+import { refOccurrences, type Occurrence } from "../../../../core/excerpts/excerpts";
 import { DEFAULT_LOCALE } from "../../../../core/stet/fixture";
 import type { Guide, Term } from "../../../../core/stet/stet";
 
@@ -154,30 +153,10 @@ function Terms() {
 
   const hits = createMemo(
     (): readonly Occurrence[] => {
-      const project = shell.project();
       const wanted = refs();
-      if (project === undefined || wanted.length === 0) return [];
-      const books = new Set(wanted.map((ref) => ref.book));
-      const out: Occurrence[] = [];
-      for (const book of project.books) {
-        if (!books.has(book.id)) continue;
-        // The stamp of the book whose text is about to be read, so this depends
-        // on the books it USES and not on every edit anywhere. The stamp is the
-        // signal and the Book is still the source: a revision moves on every
-        // accepted edit, which can only over-fire (an undo back to identical
-        // text is a new revision) and never under-fire. A content hash would be
-        // the other trade — exact, and a whole engine parse to compute.
-        shell.stampOf(book.id);
-        const source = book.source();
-        const held = Option.getOrUndefined(shell.services.projectAnalysis.analysis(book.id));
-        const analysis =
-          held !== undefined && describesExactly(held.analysis, source.text)
-            ? held.analysis
-            : analyze(source.text);
-        const text: BookText = { bookId: book.id, text: source.text, analysis };
-        out.push(...refOccurrences(text, wanted));
-      }
-      return out;
+      if (wanted.length === 0) return [];
+      const books = readBooks(shell, new Set(wanted.map((ref) => ref.book)), analyze);
+      return books.flatMap((book) => refOccurrences(book, wanted));
     },
     { name: "termOccurrences" },
   );

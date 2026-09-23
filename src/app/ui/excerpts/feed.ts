@@ -32,7 +32,7 @@ import {
 import { describesExactly, type Analysis } from "../../../core/galley";
 import type { EditorBook } from "../../../editor";
 import { t } from "../../i18n";
-import { useShell } from "../../ProjectContext";
+import { useShell, type Shell } from "../../ProjectContext";
 
 export interface ExcerptFeed {
   readonly groups: Accessor<readonly BookExcerpts[]>;
@@ -65,6 +65,43 @@ export interface ExcerptFeedOptions {
    */
   readonly analyze?: (text: string) => Analysis;
 }
+
+/**
+ * The named books as the excerpt model reads them: canonical text plus the
+ * parse that describes it, in project order. Call it inside a memo — it is
+ * what makes that memo depend on the books it reads.
+ *
+ * ProjectAnalysis already holds a parse per book, and it is used when it
+ * still fits the text; otherwise `analyze` answers. Before this, Find, Key
+ * terms and the feed each carried their own copy of the loop.
+ */
+export const readBooks = (
+  shell: Shell,
+  wanted: ReadonlySet<BookId>,
+  analyze: (text: string) => Analysis,
+): BookText[] => {
+  const project = shell.project();
+  if (project === undefined) return [];
+  const books: BookText[] = [];
+  for (const book of project.books) {
+    if (!wanted.has(book.id)) continue;
+    // The stamp of the book whose text is about to be read, so this depends
+    // on the books it USES and not on every edit anywhere. The stamp is the
+    // signal and the Book is still the source: a revision moves on every
+    // accepted edit, which can only over-fire (an undo back to identical
+    // text is a new revision) and never under-fire. A content hash would be
+    // the other trade — exact, and a whole engine parse to compute.
+    shell.stampOf(book.id);
+    const source = book.source();
+    const held = Option.getOrUndefined(shell.services.projectAnalysis.analysis(book.id));
+    const analysis =
+      held !== undefined && describesExactly(held.analysis, source.text)
+        ? held.analysis
+        : analyze(source.text);
+    books.push({ bookId: book.id, text: source.text, analysis });
+  }
+  return books;
+};
 
 export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
   const shell = useShell();
@@ -99,36 +136,13 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
   // the project on every keystroke.
   const analyze = options.analyze ?? shell.services.galley.memoize();
 
-  /**
-   * The books the excerpt model needs: canonical text plus the parse that
-   * describes it. ProjectAnalysis already holds one per book — the project was
-   * analysed as it opened — and it is used when it still fits the text;
-   * otherwise the screen's own memo answers.
-   */
+  /** The hits grouped over the books that hold them, as `readBooks` reads them. */
   const model = createMemo(
     () => {
       const project = shell.project();
       if (project === undefined) return { groups: [], outline: [] };
       const hits = options.hits();
-      const wanted = new Set(hits.map((hit) => hit.bookId));
-      const books: BookText[] = [];
-      for (const book of project.books) {
-        if (!wanted.has(book.id)) continue;
-        // The stamp of the book whose text is about to be read, so this depends
-        // on the books it USES and not on every edit anywhere. The stamp is the
-        // signal and the Book is still the source: a revision moves on every
-        // accepted edit, which can only over-fire (an undo back to identical
-        // text is a new revision) and never under-fire. A content hash would be
-        // the other trade — exact, and a whole engine parse to compute.
-        shell.stampOf(book.id);
-        const source = book.source();
-        const held = Option.getOrUndefined(shell.services.projectAnalysis.analysis(book.id));
-        const analysis =
-          held !== undefined && describesExactly(held.analysis, source.text)
-            ? held.analysis
-            : analyze(source.text);
-        books.push({ bookId: book.id, text: source.text, analysis });
-      }
+      const books = readBooks(shell, new Set(hits.map((hit) => hit.bookId)), analyze);
       const built = group(books, hits);
       if (extents().size === 0) return built;
       // Only the cards the reader actually expanded are rebuilt; the rest are

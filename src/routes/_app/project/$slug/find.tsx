@@ -1,6 +1,6 @@
 import type { JSX } from "@solidjs/web";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/solid-router";
-import { Option, Result } from "effect";
+import { Result } from "effect";
 import CaseSensitiveIcon from "lucide-solid/icons/case-sensitive";
 import ChevronDownIcon from "lucide-solid/icons/chevron-down";
 import ChevronUpIcon from "lucide-solid/icons/chevron-up";
@@ -13,7 +13,7 @@ import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js"
 import { t } from "../../../../app/i18n";
 import { useShell } from "../../../../app/ProjectContext";
 import { shellKeys } from "../../../../app/settings";
-import { createExcerptFeed, ExcerptList } from "../../../../app/ui/excerpts";
+import { createExcerptFeed, ExcerptList, readBooks } from "../../../../app/ui/excerpts";
 import {
   Button,
   Card,
@@ -27,7 +27,6 @@ import { ShellGate } from "../../../../app/ui/ShellGate";
 import * as Workflows from "../../../../app/workflows/references";
 import type { BookId } from "../../../../core/book/book";
 import { refOccurrences, type Excerpt, type Occurrence } from "../../../../core/excerpts/excerpts";
-import { describesExactly } from "../../../../core/galley";
 import { createReadings } from "../../../../core/search/reading";
 import * as Search from "../../../../core/search/search";
 
@@ -188,29 +187,13 @@ function Find() {
    */
   const referenceMatches = createMemo(
     (): readonly Occurrence[] => {
-      const project = shell.project();
       const wanted = referenceHits();
-      if (project === undefined || wanted.length === 0) return [];
+      if (wanted.length === 0) return [];
       const refs = wanted.flatMap((hit) => (hit.ref === undefined ? [] : [hit.ref]));
       if (refs.length === 0) return [];
 
-      const books = new Set(refs.map((ref) => ref.book));
-      const out: Occurrence[] = [];
-      for (const book of project.books) {
-        if (!books.has(book.id)) continue;
-        // Depend on the stamp of the book whose text is read, so this re-runs
-        // on an edit to a book it USES and not on every edit anywhere — the
-        // reasoning `/terms` spells out at the same call.
-        shell.stampOf(book.id);
-        const source = book.source();
-        const held = Option.getOrUndefined(shell.services.projectAnalysis.analysis(book.id));
-        const analysis =
-          held !== undefined && describesExactly(held.analysis, source.text)
-            ? held.analysis
-            : analyze(source.text);
-        out.push(...refOccurrences({ bookId: book.id, text: source.text, analysis }, refs));
-      }
-      return out;
+      const books = readBooks(shell, new Set(refs.map((ref) => ref.book)), analyze);
+      return books.flatMap((book) => refOccurrences(book, refs));
     },
     { name: "referenceMatches" },
   );
