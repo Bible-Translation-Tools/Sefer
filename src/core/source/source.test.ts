@@ -1,7 +1,7 @@
 import { Result } from "effect";
 import { describe, expect, test } from "vitest";
 
-import { apply, decode, dominantEol, encode, type Change, type Source } from "./source";
+import { applyChange, decode, dominantEol, encode, type Change, type Source } from "./source";
 
 const bytes = (text: string): Uint8Array => new TextEncoder().encode(text);
 
@@ -12,13 +12,13 @@ const decoded = (input: Uint8Array): Source => {
 };
 
 const applied = (source: Source, change: Change): Source => {
-  const result = apply(source, change);
+  const result = applyChange(source, change);
   if (Result.isFailure(result)) throw new Error(`apply refused: ${result.failure.reason}`);
   return result.success;
 };
 
 const changeRefusal = (source: Source, change: Change): string => {
-  const result = apply(source, change);
+  const result = applyChange(source, change);
   if (Result.isSuccess(result)) throw new Error("apply accepted a change it should have refused");
   return result.failure.reason;
 };

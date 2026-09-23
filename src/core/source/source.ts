@@ -132,7 +132,10 @@ const splitsSurrogatePair = (text: string, index: number): boolean => {
   return before >= 0xd800 && before <= 0xdbff && at >= 0xdc00 && at <= 0xdfff;
 };
 
-export const apply = (source: Source, change: Change): Result.Result<Source, SourceChangeError> => {
+export const applyChange = (
+  source: Source,
+  change: Change,
+): Result.Result<Source, SourceChangeError> => {
   const { from, to, insert } = change;
 
   if (

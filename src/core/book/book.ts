@@ -20,7 +20,7 @@ import { Data, Effect, FileSystem, Option, Result, type PlatformError } from "ef
 
 import { Observability, type ObservabilityService } from "../observability";
 import {
-  apply as applyToSource,
+  applyChange,
   decode,
   type Change,
   type Source,
@@ -141,7 +141,7 @@ const applyAll = (source: Source, changes: readonly Change[]): Result.Result<Sou
   const ordered = [...changes].sort((a, b) => b.from - a.from);
   let current = source;
   for (const change of ordered) {
-    const next = applyToSource(current, change);
+    const next = applyChange(current, change);
     if (Result.isFailure(next)) return Result.fail(refuse(next.failure));
     // Each splice counts one revision in Source; a Book edit is one revision,
     // so the loop keeps the text and lets the caller stamp it once below.
