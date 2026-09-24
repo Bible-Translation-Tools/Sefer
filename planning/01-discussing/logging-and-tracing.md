@@ -43,7 +43,7 @@ A verdict is an outcome, not a severity. `refused` and `declined` are usually th
 The gap is visibility (goal 5), which a ladder would not fix:
 
 - **In dev, the console stream prints `failed` by default** and nothing else unless asked. This is one line per failure, not a stream of everything, so it respects goal 6.
-- **A second, small ring holds the last 200 events that are not `passed`,** so typing cannot overwrite a failure. `errors()` reads it, and export leads with it.
+- **A second, small ring holds the last 200 events that are not `passed`,** kept at recording time (decided 2026-09-24), so typing cannot overwrite a failure. `errors()` reads it, and export leads with it.
 - **The stream can also filter by verdict:** `stream({ verdicts: ["failed", "refused"] })` and a matching `VITE_SEFER_STREAM` form, beside the name prefixes.
 
 ### 2. One front door for writing
@@ -54,25 +54,20 @@ The gap is visibility (goal 5), which a ladder would not fix:
 - A new `console.*` in `src/` is a lint error, except in the renderers (`platform/observability.ts`) and composition's one boot warning. This is an oxlint `no-console` override.
 - `Effect.withSpan` is fine inside Effect programs, but a user-visible piece of work opens an `operation`, so its name is in the closed `OperationName` list.
 
-### 3. Named queries: the agent's filters (goal 3)
+### 3. Named filters: the agent's view (goal 3)
 
-This serves goal 3 directly, and neither earlier draft had it.
+**Decided 2026-09-24: dump and `jq`.** There is no query API and no `pnpm trace` tool for now. An agent gets the lines one of two ways: `export()` from a Playwright script into `.verify/<runId>/`, or, once persistence lands (6), the log file on disk. It then filters with `jq`.
 
-Define about six queries as plain functions over an array of events, once, in core:
+"A known set of filters" is a short list of `jq` recipes in [observability](../../documentation/architecture/observability.md):
 
-- `failures`: the non-`passed` ring, newest first
-- `slow`: operations over their budget
-- `operation(name)`: one operation with its spans, as a tree
-- `before(seq, seconds)`: what happened in the N seconds before an event
-- `keystrokes`: the p50/p95/p99 tail from the meter
-- `compare(a, b)`: per-operation timing between two captures
+- failures
+- operations over their budget
+- one operation and its spans
+- the N seconds before an event
+- the keystroke tail
+- per-operation timing between two captures
 
-Two doors reach the same functions, so the answers cannot drift:
-
-- **In the app:** `__sefer.observability.query.<name>()`. An agent's Playwright script calls it directly.
-- **Over a file:** `pnpm trace <file.jsonl> <query>` loads an export or a `.verify/<runId>/` capture and runs the same function. `jq` still works on the raw lines; this is the named layer above it.
-
-**Guard:** the list stays short. A query is added when an agent or Will has asked the same question of traces twice.
+A recipe is added when the same question has been asked of traces twice. A query layer in code waits until the recipes get unwieldy.
 
 ### 4. The export contract (goal 4)
 
@@ -86,9 +81,9 @@ Two doors reach the same functions, so the answers cannot drift:
 - the configured endpoints: the `VITE_SEFER_*` URLs ship in the public bundle, so they are not secret. A user-edited endpoint is included too, flagged as not the default.
 - **the project snapshot, taken at export time and not on every event:**
   - whether a remote is configured
-  - HEAD
+  - HEAD (decided 2026-09-24: included, since translation repos are public)
   - ahead, behind or diverged
-  - which of the nine sync states it is in, and when that was observed
+  - which of the nine sync states it is in, and when that was observed. It is the last state the app saw, never a live check at export time, which would make export wait on a slow network (decided 2026-09-24).
   - how many books are unsaved
   - whether a journal is pending
 
@@ -110,21 +105,45 @@ With a lot of generated code adding attributes, an allowlist fails safe and a de
 - **The measurement is a script, not a one-off,** so it can be rerun as coverage grows: something like `pnpm verify:perf`, built on `verify:launch`.
 - **What it measures:**
   - the keystroke tail and heap at `off` versus `all`
-  - event rate, and how many minutes the ring covers during ordinary editing
-  - whether the queue drops events, once there is a sink
+  - event rate and bytes per minute of ordinary editing, which set the disk caps in (6)
+  - whether the pending list ever drops events, and the idle-flush cost
 - **Workload:** typing in a large book (en_ulb Genesis or Psalms), plus one project open and one comparison.
 - **Rule:** if `all` costs under a few percent on the tail, it stays the default. If not, production drops to `spans` and the doc says why.
 - **Where it runs:** first on a laptop against the Web build, then desktop.
 - **Write rules for any sink:** batch, flush when the browser is idle, never write per event.
 
-### 6. Persistence (goals 6 and 7): only if the ring's coverage says so
+### 6. Persistence (goals 3, 6 and 7): write everything, bounded by age and size
 
-- **Desktop:** if the measured ring covers too little time to catch a real incident, or support needs evidence after a restart, write JSONL under HostInfo's `logs` root.
-  - The queue is bounded and flushed when idle.
-  - The total is capped (about five 1 MB files), and anything older than about seven days is deleted.
-  - Export then includes the previous session.
-- **Web:** writes nothing until a need is shown.
-- **The console stream** stays dev-only in releases.
+**Lean (Will, 2026-09-24): flush every recorded event to disk.** The ring's 2,000 events is then only a memory bound: enough for the dev surface and the failure ring's neighbours, small enough not to pressure the Web heap or the GC. It stops being the retention promise.
+
+**Why this beats "only if coverage says so":**
+
+- **Nothing is lost** when the ring wraps or the app restarts.
+- **Export can include earlier sessions.**
+- **Agents read the file directly** (goal 3): on desktop, an agent can `jq` the log without driving the app.
+
+**How it stays cheap (goal 6):**
+
+- `push` stays as it is: one object into the ring, and no serialising on the hot path.
+- A pending list is drained when the browser is idle (`requestIdleCallback`, with a timeout), and on `pagehide` / close. Serialising and writing happen there, in one append per batch.
+- The pending list is bounded. When full, the oldest pending events are dropped and counted, and the count goes in the next header and in `session()`. Recording never blocks on disk.
+- At level `off` nothing is written.
+
+**How it stays small (goal 7):**
+
+- One JSONL file per session, starting with the same header export writes.
+- A total cap of about 5 MB, with the oldest session deleted first, and anything older than about seven days deleted at boot.
+- These numbers get checked against the perf script's event rate before they're fixed.
+
+**Hosts:**
+
+- **Desktop:** under HostInfo's `logs` root.
+- **Web:** the same sink over OPFS, in its own directory beside projects. It follows the same caps, and 5 MB is negligible against project storage.
+- **Dev and Node:** the existing `hostSink` stderr path.
+
+**The files hold full paths:** they are local, like the projects themselves. The allowlist (4) applies when anything is handed over, not when it is written.
+
+**The console stream** stays dev-only in releases.
 
 ### 7. Coverage: as work touches it
 
@@ -150,16 +169,17 @@ This is by design. The editor's interaction path is synchronous and never a fibe
    - the two `console` holes and the lint rule
    - `failed` shown in the dev console
    - the failure ring
-   - the named queries, including the `pnpm trace` door
+   - the `jq` recipes in the observability doc
    - instrumenting what the primitives refactor touches
    - the perf script, run once for a baseline
 2. **The primitives consolidation,** checked against traces.
-3. **The export contract** (4): the header, the snapshot, the allowlist and the button.
-4. **Desktop persistence** (6), if the coverage number calls for it.
+3. **Persistence** (6), on both hosts. The header is shared with export, so it is built here.
+4. **The export contract** (4): the snapshot, the allowlist and the button, reading the files from (6).
 
 ## Not in scope
 
 - A replay recorder, capture sessions, or any phone-home telemetry (ruled out in INVARIANTS).
 - A severity ladder.
 - OTLP as the export format.
+- A query API or `pnpm trace` tool, for now (3).
 - Changing the event shape or the assembler.
