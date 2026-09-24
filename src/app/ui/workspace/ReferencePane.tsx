@@ -69,7 +69,9 @@ import {
   equivalentVerse,
   verseAtOffset,
   type Skeleton,
+  type SkeletonRow,
 } from "#core/galley";
+import type { Attrs } from "#core/observability";
 import type { Resource, Role } from "#core/resources/library";
 import { mountReference, type PairedRange, type ReferenceMount } from "#editor/index";
 
@@ -103,6 +105,49 @@ type Held =
   | { readonly kind: "missing" }
   | { readonly kind: "failed"; readonly reason: string }
   | { readonly kind: "text"; readonly text: string };
+
+/** A block's address, as one comparable key: `(sid, where, ordinal)`, never the marker. */
+const addressOf = (row: {
+  readonly sid: string;
+  readonly where: string;
+  readonly ordinal: number;
+}) => `${row.sid}\u0000${row.where}\u0000${row.ordinal}`;
+
+/**
+ * What pairing will be able to answer, counted once at load.
+ *
+ * The open book's blocks and verses that have NO twin here, by the same rules
+ * `paired` matches with — block by address, verse by sid. `unpaired_empty` is
+ * the strict-block path on its own: an empty block is matched by address or
+ * not at all, so each one counted there is a caret position that will mark
+ * nothing. Omitted when the open book has no skeleton yet.
+ */
+const pairingFacts = (source: Skeleton | undefined, target: Skeleton | undefined): Attrs => {
+  if (source === undefined) return { "reference.skeleton": false };
+  const facts = {
+    "reference.skeleton": true,
+    "reference.blocks": source.blocks.length,
+    "reference.verses": source.verses.length,
+  };
+  if (target === undefined) return facts;
+  const blocks = new Set(source.blocks.map(addressOf));
+  const verses = new Set(source.verses.map((verse) => verse.sid));
+  let unpairedBlocks = 0;
+  let unpairedEmpty = 0;
+  for (const row of target.blocks) {
+    if (blocks.has(addressOf(row))) continue;
+    unpairedBlocks += 1;
+    if (row.empty) unpairedEmpty += 1;
+  }
+  return {
+    ...facts,
+    "reference.target_blocks": target.blocks.length,
+    "reference.target_verses": target.verses.length,
+    "reference.unpaired_blocks": unpairedBlocks,
+    "reference.unpaired_empty": unpairedEmpty,
+    "reference.unpaired_verses": target.verses.filter((verse) => !verses.has(verse.sid)).length,
+  };
+};
 
 export function ReferencePane(props: ReferencePaneProps) {
   const shell = useShell();
@@ -148,16 +193,48 @@ export function ReferencePane(props: ReferencePaneProps) {
   onCleanup(() => {
     gone = true;
   });
+  //
+  // The read and the measuring of it are one `reference.load`: the outcome,
+  // and — for a text — how many blocks and verses it has and how many of the
+  // open book's would find no twin here, which is what pairing will be able
+  // to answer before anybody moves the caret. Counts only; the resource's
+  // title and its words stay out.
+  const loading = services.composition.observability.operation("reference.load", {
+    "book.id": bookId,
+    "reference.role": untrack(() => props.role),
+  });
   void services
     .run(Effect.result(services.library.readBook(resourceId, bookId)))
     .then((outcome) => {
-      if (gone) return;
+      if (gone) {
+        loading.end("declined", { "reference.outcome": "unbound" });
+        return;
+      }
       if (Result.isFailure(outcome)) {
+        loading.end("failed", {
+          "reference.outcome": "failed",
+          "reference.reason": outcome.failure.reason,
+        });
         setHeld({ kind: "failed", reason: outcome.failure.description });
         return;
       }
       const text = Option.getOrUndefined(outcome.success);
-      setHeld(text === undefined ? { kind: "missing" } : { kind: "text", text });
+      if (text === undefined) {
+        // The ordinary case, not a fault: this resource has no file for the book.
+        loading.end("passed", { "reference.outcome": "missing" });
+        setHeld({ kind: "missing" });
+        return;
+      }
+      const cut = loading.span("reference.skeleton");
+      const skeleton = skeletonOf(text);
+      cut();
+      setSourceSkeleton(skeleton);
+      loading.end("passed", {
+        "reference.outcome": "text",
+        "reference.chars": text.length,
+        ...pairingFacts(skeleton, untrack(targetSkeleton)),
+      });
+      setHeld({ kind: "text", text });
     });
 
   // An effect and not a render effect: CodeMirror measures itself, so the view
@@ -234,21 +311,25 @@ export function ReferencePane(props: ReferencePaneProps) {
    */
   const paneId = `sefer.pane.${resourceId}\u0000${bookId}`;
 
-  const sourceSkeleton = createMemo(
-    (): Skeleton | undefined => {
-      const text = held();
-      if (text.kind !== "text") return undefined;
-      try {
-        services.galley.updateReference(paneId, text.text, true);
-        return services.galley.skeleton(paneId);
-      } catch {
-        // A text the engine will not parse still renders — it is just a
-        // reference with no pairing, which is a smaller loss than a blank pane.
-        return undefined;
-      }
-    },
-    { name: "referenceSkeleton" },
-  );
+  //
+  // Cut once, when the read lands, inside `reference.load` — so the record
+  // carries the cost and the counts — and held here for the pairing below.
+  // The text never changes under a mounted pane, so this is the memo it was,
+  // taken eagerly.
+  const skeletonOf = (text: string): Skeleton | undefined => {
+    try {
+      services.galley.updateReference(paneId, text, true);
+      return services.galley.skeleton(paneId);
+    } catch {
+      // A text the engine will not parse still renders — it is just a
+      // reference with no pairing, which is a smaller loss than a blank pane.
+      return undefined;
+    }
+  };
+
+  const [sourceSkeleton, setSourceSkeleton] = createSignal<Skeleton | undefined>(undefined, {
+    name: "referenceSkeleton",
+  });
 
   onCleanup(() => {
     services.galley.remove(paneId);
@@ -295,6 +376,27 @@ export function ReferencePane(props: ReferencePaneProps) {
    *  3. The block, when the caret is in one but in no verse — a heading,
    *     front matter.
    */
+  /**
+   * The strict-block path saying it found nothing: an empty block is matched
+   * by address or not at all, so there is no verse to fall back to and the
+   * pane marks nothing. One note per block rather than per caret move — the
+   * memo re-runs on every arrow key inside the block. `refused` because the
+   * rule held; the verse reference is an address, not the text.
+   */
+  let unpairedLast = "";
+  const unpairedAt = (block: SkeletonRow): void => {
+    const key = addressOf(block);
+    if (key === unpairedLast) return;
+    unpairedLast = key;
+    services.composition.observability.note("reference.pair", "refused", undefined, {
+      "book.id": bookId,
+      "reference.role": untrack(() => props.role),
+      "reference.sid": block.sid,
+      "reference.where": block.where,
+      "reference.ordinal": block.ordinal,
+    });
+  };
+
   const paired = createMemo(
     (): PairedRange | undefined => {
       const at = shell.caret();
@@ -305,6 +407,7 @@ export function ReferencePane(props: ReferencePaneProps) {
       const here = blockAtOffset(target.blocks, at);
       if (here?.empty === true) {
         const row = equivalentBlock(source.blocks, here);
+        if (row === undefined) unpairedAt(here);
         return row === undefined ? undefined : { from: row.from, to: row.end };
       }
 
