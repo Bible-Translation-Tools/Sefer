@@ -60,6 +60,7 @@ import {
 import {
   commandsLayer,
   editorBook,
+  gestureTrace,
   lintHoverGrace,
   noteEditing,
   usfmLinter,
@@ -395,7 +396,12 @@ const domainLayer = (
   // Both come back out of the merge, so ProjectAdmin is still one instance.
   const saveAndRecovery = Layer.provideMerge(
     saveLayer,
-    Layer.merge(RecoveryLive({ journalRoot: paths.appData }), ProjectAdminLive),
+    // `cause` is the editor's open gesture, so a journal flush names the
+    // keystroke that armed it; core cannot ask the editor itself.
+    Layer.merge(
+      RecoveryLive({ journalRoot: paths.appData, cause: gestureTrace }),
+      ProjectAdminLive,
+    ),
   );
 
   /**

@@ -147,6 +147,13 @@ export interface RecoveryOptions {
   readonly journalRoot: string;
   /** Defaults to 500 ms of quiet, 5 s maximum: off the keystroke path. */
   readonly policy?: DebouncePolicy;
+  /**
+   * The trace of the gesture open right now, if any — read when an edit is
+   * recorded, so the flush it arms can say which gesture it followed from
+   * (`op.cause`). Injected because the answer lives in the editor, which core
+   * may not name; omitted, a flush is simply background work with no cause.
+   */
+  readonly cause?: () => string | undefined;
 }
 
 export const DEFAULT_JOURNAL_POLICY: DebouncePolicy = { idleMs: 500, maxIntervalMs: 5000 };
@@ -269,9 +276,25 @@ const make = (
     // journal scale (one book's unsaved edits) is the simplest correct thing —
     // no partial line can ever be read, and there is no append primitive on
     // the `FileSystem` port to be atomic with.
+    //
+    // One flush is one `journal.write` operation: background work that
+    // FOLLOWED the edits that armed it, so it is caused by the last of them
+    // rather than parented to any. The per-journal notes are inside it.
+    let causedBy: string | undefined;
     const flush = Effect.gen(function* () {
       const ids = Array.from(unwritten);
       unwritten.clear();
+      if (ids.length === 0) return;
+      const cause = causedBy;
+      causedBy = undefined;
+      const writing = observability?.operation(
+        "journal.write",
+        { "journal.books": ids.length },
+        cause === undefined ? undefined : { cause },
+      );
+      const into = writing ?? observability;
+      let failed = 0;
+      let entries = 0;
       for (const id of ids) {
         const journal = journals.get(id);
         if (journal === undefined) continue;
@@ -279,18 +302,25 @@ const make = (
           journal.entries.length === 0 ? remove(id) : write(id, journal),
         );
         if (Result.isFailure(written)) {
-          observability?.note("journal.write", "failed", written.failure.reason, {
+          failed += 1;
+          into?.note("journal.write", "failed", written.failure.reason, {
             "journal.write": id,
           });
           // Keep it dirty so the next burst tries again; a lost journal is
           // worse than a repeated write.
           unwritten.add(id);
-        } else
-          observability?.note("journal.write", "rewrote", undefined, {
+        } else {
+          entries += journal.entries.length;
+          into?.note("journal.write", "rewrote", undefined, {
             "journal.write": id,
             "journal.entries": journal.entries.length,
           });
+        }
       }
+      writing?.end(failed > 0 ? "failed" : "passed", {
+        "journal.failed": failed,
+        "journal.entries": entries,
+      });
     });
 
     // The live bounds. `debounced` re-reads them each pass, so `setPolicy`
@@ -330,6 +360,7 @@ const make = (
         at: Date.now(),
       });
       unwritten.add(id);
+      causedBy = options.cause?.() ?? causedBy;
       arm();
     };
 
