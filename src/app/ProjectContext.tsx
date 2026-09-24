@@ -559,10 +559,20 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
    * a slug that failed to persist is re-minted identically next time, since
    * `mintSlug` is deterministic given the same index.
    */
+  //
+  // `justMinted` is what makes a fresh slug resolvable in the same tick. The
+  // setting only answers a new value once the settings file has been written,
+  // and a click mints then navigates at once, so without it the route would
+  // read the old map and say "no project here" for any project on its first
+  // open. The setting still covers bookmarks and every later visit.
+  const justMinted = new Map<string, string>();
   const slugFor = (root: string): string => {
-    const held = services.settings.get(keys.projectSlugs);
+    const held = { ...services.settings.get(keys.projectSlugs), ...Object.fromEntries(justMinted) };
     const minted = mintSlug(root, held);
     if (held[minted] !== root) {
+      justMinted.set(minted, root);
+      // `held` already carries every slug minted this session, so two mints
+      // before the first save lands cannot drop one another.
       void services.run(
         Effect.ignore(services.settings.set(keys.projectSlugs, { ...held, [minted]: root })),
       );
@@ -576,7 +586,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   };
 
   const rootForSlug = (slug: string): string | undefined =>
-    services.settings.get(keys.projectSlugs)[slug];
+    justMinted.get(slug) ?? services.settings.get(keys.projectSlugs)[slug];
 
   const asRows = (held: RecentProjects): readonly RecentProject[] =>
     Object.entries(held)
