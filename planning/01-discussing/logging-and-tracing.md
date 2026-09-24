@@ -44,6 +44,10 @@ The gap is visibility (goal 5), which a ladder would not fix:
 
 - **In dev, the console stream prints `failed` by default** and nothing else unless asked. This is one line per failure, not a stream of everything, so it respects goal 6.
 - **A second, small ring holds the last 200 events that are not `passed`,** kept at recording time (decided 2026-09-24), so typing cannot overwrite a failure. `errors()` reads it, and export leads with it.
+- **An expected failure does not trip the alarm (decided 2026-09-24).** Examples: being offline, a server that is down or slow, a timeout, a host without a capability. These get their own verdict, `unavailable`, meaning the world said no, and not `failed`, meaning our code or an invariant broke. It is a sibling outcome beside `refused` and `declined`, not a severity level.
+  - It is set only at the known outside boundaries: the Remote port, the catalogue, the language API, the updater, and `fetch`.
+  - Everywhere else, anything uncaught stays `failed`. A bug cannot hide as `unavailable` by default.
+  - It still lands in the failure ring and in export, because support wants to know someone was offline. It just doesn't print in dev.
 - **The stream can also filter by verdict:** `stream({ verdicts: ["failed", "refused"] })` and a matching `VITE_SEFER_STREAM` form, beside the name prefixes.
 
 ### 2. One front door for writing
