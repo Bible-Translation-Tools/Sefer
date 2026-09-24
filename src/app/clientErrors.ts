@@ -46,7 +46,13 @@ export const reportClientErrors = (observability: ObservabilityService): (() => 
   configureClientErrors({ onError: (error, context) => note("boundary", error, context) });
   if (typeof window !== "object") return () => configureClientErrors({});
 
-  const onUncaught = (event: ErrorEvent): void => note("uncaught", event.error ?? event.message);
+  const onUncaught = (event: ErrorEvent): void => {
+    // The browser's notice that a ResizeObserver callback resized something
+    // and delivery slipped a frame (the virtualizer and floating-ui both do
+    // it). Nothing threw — there is no `error`, only a message.
+    if (event.error == null && event.message.startsWith("ResizeObserver loop")) return;
+    note("uncaught", event.error ?? event.message);
+  };
   const onRejection = (event: PromiseRejectionEvent): void => note("rejection", event.reason);
   window.addEventListener("error", onUncaught);
   window.addEventListener("unhandledrejection", onRejection);
