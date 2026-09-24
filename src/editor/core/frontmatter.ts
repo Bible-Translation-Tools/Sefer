@@ -46,6 +46,7 @@ import { isVisual, modeFacet, trusted } from "./kernel";
  * marker is not on this list ends the front matter, and so does `\c`: the card
  * is the book's header, not everything before chapter one.
  */
+// TODO: USER TODO: NEED TO THINK ABOUT IF WE REALLY ARE WANTING TO HARD CODE THIS.
 const FRONT_MARKERS = [
   "id",
   "ide",
@@ -66,6 +67,7 @@ const FRONT_MARKERS = [
 const FRONT = new Set<string>(FRONT_MARKERS);
 
 /** What each marker is called, for the label. Unknown markers show the marker. */
+// TODO: WOULD HAVE LOCALIZE AT SOME POINT, SO WHILE THIS IS POC, CAN'T BE FOR SURE FINAL PATTERN
 const LABELS: Record<string, string> = {
   id: "Book",
   ide: "Encoding",
