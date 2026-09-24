@@ -2,6 +2,20 @@
 
 Sefer records what it did into one bounded, in-process ring, writes every event to a bounded log directory on the device, and hands it over only when a person exports it — no hosted telemetry service, nothing sent anywhere unasked, and no manuscript content. The event vocabulary is in the [glossary](../glossary.md), "Observability names".
 
+## What it is for
+
+The goals it was built to (2026-09-24), and the guard that goes with them: each piece serves one of these directly, or waits.
+
+1. **Insight into LLM-written code.** A test can be written badly; runtime behaviour lies only where it is not instrumented, so tracing is extensive and cut back only where a measurement shows it costs.
+2. **No SaaS-style telemetry.** Field users are on low bandwidth; nothing leaves the device unless a person exports it.
+3. **Agents see how their code actually runs,** performance included, through a known set of `jq` filters over the same lines everywhere.
+4. **A release can hand evidence over:** one exported file with the facts support needs and no personal data.
+5. **Failures are immediately visible,** without a severity ladder.
+6. **The main thread comes first:** no console thrashing, no flushing per event.
+7. **Disk is respected:** what is written expires.
+
+**Size a guard to its risk.** A rare race gets a fix as small as its window; a leak that needs a person to edit a URL, export it and send their own data is not worth code. Data safety and real bugs get the full treatment.
+
 ## Principles
 
 - **The hot path never waits on telemetry.** A write into the ring is synchronous, constant-time and non-throwing. No Promise, fiber, filesystem write, IPC call or exporter action is created per editor decision.
@@ -79,25 +93,27 @@ Not present yet: cross-process correlation with the Tauri host — a Rust `invok
 **Every recorded event is written to disk.** The ring's 2,000 events are the MEMORY bound — enough for the dev surface, small enough not to pressure a Web heap — and the log directory is what is kept, so nothing is lost when the ring wraps or the app restarts. `src/core/diagnostics/logFiles.ts` is the mechanism and `src/app/diagnostics.ts` wires it:
 
 - **From boot, a queue.** `composeApplication` puts `makeLogQueue().sink` beside the other sinks: one array push per event, nothing serialised. It holds up to 5,000 events; when full the OLDEST are dropped and counted, and the count is written as `{"kind":"dropped","t","count"}`. Recording never waits on disk.
-- **Once the services exist, a writer.** `composeServices` calls `startLogFiles`, because that is when there is a FileSystem. It drains the queue when the browser is idle, at most every 2 s, and at once on `visibilitychange` to hidden and on `pagehide`: one serialise-and-append per batch, chained, never concurrent. The first write that fails stops the writer for the session and says so once, as `diagnostics.persist` `unavailable`.
+- **Once the services exist, a writer.** `composeServices` calls `startLogFiles`, because that is when there is a FileSystem. It drains the queue when the browser is idle, at most every 2 s, and at once on `visibilitychange` to hidden and on `pagehide`: one serialise-and-append per batch. One write is in flight at a time and a batch is taken from the queue only when a write starts, so a slow disk leaves events under the queue's bound rather than piling taken batches up; a write that settles with events still queued wakes the writer again, because the queue itself wakes it only on empty → not empty. The first write that fails stops the writer for the session and says so once, as `diagnostics.persist` `unavailable`.
 - **Where:** `HostInfo.paths().logs` — `/sefer/logs` in OPFS on the Web, the OS app log directory on desktop (`$APPLOG` is in the Tauri fs scope). The seeded fixture writes nothing: its FileSystem is memory.
 - **Shape:** one session is a run of parts, `<UTC stamp>-<session id>-<part>.jsonl`, each at most 256 KB (appending to OPFS rewrites the file, so parts stay small) and each opening with the session header, so any one file read alone says what wrote it.
-- **Retention:** at start, parts older than seven days are deleted, then whole sessions oldest-first until the directory is under 5 MB. The session being written is never deleted. `LOG_LIMITS` holds the numbers.
+- **Retention:** a rolling window of everything, not a sample. At start, parts older than seven days are deleted; at start and whenever a new part opens, whole sessions go oldest-first until the directory is under 5 MB, and if the current session alone is still over, its own oldest parts go — never the part being written. So the bound is approximate by up to one part. `LOG_LIMITS` holds the numbers. 5 MB was chosen knowing the volume (below): continuous typing at `all` writes about 750 KB a minute, so the directory holds roughly half an hour of real editing, which is enough to capture the state around a bug; the failure ring is the longer memory within a session.
 
-**The session header** (`src/core/diagnostics/header.ts`, `schema: 1`, `kind: "sefer.session"`): session id and start, `build` (`<sha>+<mode>`), `channel`, the engine tag, `host`, `os`, `osVersion`, `arch`, `webview`, `userAgent`, `locale`, the desktop app `version`, and the endpoints with whether a preference moved them — the `VITE_SEFER_*` URLs ship in the public bundle and are not secret. A fact the host cannot answer is `"unknown"`, never a guess; a browser freezes the OS version in its user agent, so the Web reports none.
+**The session header** (`src/core/diagnostics/header.ts`, `schema: 1`, `kind: "sefer.session"`): session id and start, `build` (`<sha>+<mode>`), `channel`, the engine tag, `host`, `os`, `osVersion`, `arch`, `webview`, `userAgent`, `locale`, the desktop app `version`, and the endpoints with whether a preference moved them — the `VITE_SEFER_*` URLs ship in the public bundle and are not secret, and an export cuts every endpoint, in this header and in every header read back from disk, to scheme, host and path. A fact the host cannot answer is `"unknown"`, never a guess; a browser freezes the OS version in its user agent, so the Web reports none.
 
 **Export** is Settings → Advanced → Export diagnostics (`exportDiagnostics`): a named file on desktop, a download on the Web, and one `diagnostics.export` operation recording its size. The file (`src/core/diagnostics/export.ts`) is JSONL:
 
-1. the header, with `kind: "sefer.export"`, when it was exported, both rings' sizes and oldest times, `dropped`, and a **project snapshot** from local reads only — folder name, HEAD, branch, whether an origin exists, unsaved books, whether a journal is pending, and the last sync state the app OBSERVED (the newest `sync.survey` operation, with its time; never a fetch — an export must not wait on the network)
+1. the header, with `kind: "sefer.export"`, when it was exported, both rings' sizes and oldest times, `dropped`, `persist` (whether the writer is still running, and why it stopped if not), `disk` (whether every part was read, and how many), and a **project snapshot** from local reads only — folder name, HEAD (translation repositories are public), branch, whether an origin exists, unsaved books, whether a journal is pending, and the last sync state the app OBSERVED for this project, with when: the cloud screen hands each finished survey to `rememberSync`, keyed by project root. Never a fetch — an export must not wait on a slow network. An export missing disk evidence ends `unavailable` and its toast says what is missing.
 2. `{"kind":"section","name":"failures"}` and the failure ring
 3. `{"kind":"section","name":"recent"}` and the main ring
 4. `{"kind":"section","name":"disk"}` and every part on disk, this session's included, flushed first
+
+JSONL rather than OTLP, on purpose: the field names follow OTel's where they overlap (trace and span ids already do), so converting a file is a script, not a format change.
 
 Recording keeps everything; **export decides disclosure, once, by allowlist.** A string attribute passes only under a key in `STRING_KEYS`, and is scrubbed even then; under any other key it is written as `"redacted"` — present, so the gap is visible and someone lists the key. Numbers and booleans pass. `*.root` and `*.path` keep their last segment. Free text — `detail`, and a log's message — loses home directories, URL credentials and query strings, and e-mail addresses, and is cut to 200 characters. Adding a key to `STRING_KEYS` is the review question: can this string ever carry a person's data?
 
 ## Reading it with `jq`
 
-The ring, a log part and an export are the same lines, so one set of filters reads all three. Get lines from a running dev build with `__sefer.observability.export()` (a Playwright script can write it into `.verify/<runId>/`), from desktop's log directory directly, or from an exported file. Add a recipe when the same question has been asked of traces twice.
+The ring, a log part and an export are the same lines, so one set of filters reads all three. Get lines from a running dev build with `__sefer.observability.export()` (a Playwright script can write it into `.verify/<runId>/`), from desktop's log directory directly, or from an exported file. Add a recipe when the same question has been asked of traces twice. There is deliberately no query API and no `pnpm trace` tool: a query layer in code waits until the recipes get unwieldy.
 
 ```sh
 # failures, newest last
@@ -116,7 +132,7 @@ jq -s 'map(select(.kind=="operation")) | group_by(.name) | map({name: .[0].name,
 
 ## Operations
 
-An operation is one end-to-end piece of work — one thing a person did, or one piece of background work no gesture caused — written once, when it finishes, carrying everything known by then. Inside it a **span** is a hop that crosses a boundary and can vary or fail on its own; a **note** is a decision or a refusal; everything else is a field. Work that merely followed — anything debounced — is its own operation, never a child. `OperationName` in `src/core/observability.ts` is the closed list.
+An operation is one end-to-end piece of work — one thing a person did, or one piece of background work no gesture caused — written once, when it finishes, carrying everything known by then. Inside it a **span** is a hop that crosses a boundary and can vary or fail on its own; a **note** is a decision or a refusal; everything else is a field. Work that merely followed — anything debounced — is its own operation, never a child. `OperationName` in `src/core/observability.ts` is the closed list. Coverage grows as work touches an area, not in blanket passes: a piece of user-visible work gets one operation carrying counts and timing, never content (no query text, no scripture, no URL beyond a host kind, no account name).
 
 | Operation                                                | Opened by                                                                                    | Carries                                                                                                                                                                                                                                                         |
 | -------------------------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -151,7 +167,9 @@ Inside those, as spans: `galley.parse` (with `galley.why` naming its caller), `f
 
 There are two separate axes, and they must not be confused.
 
-**What the ring records** — and therefore what reaches disk — is `level()` / `setLevel(level)`, one of `off | verdicts | spans | all`: `off` records nothing; `verdicts` records notes and Effect `Logger` output; `spans` adds the synchronous `span` events and the editor's per-frame spans; `all` adds spans created by `Effect.withSpan`. The default is `all` in every build. Whether production should default lower is an open question.
+**What the ring records** — and therefore what reaches disk — is `level()` / `setLevel(level)`, one of `off | verdicts | spans | all`: `off` records nothing; `verdicts` records notes and Effect `Logger` output; `spans` adds the synchronous `span` events and the editor's per-frame spans; `all` adds spans created by `Effect.withSpan`. The default is `all` in every build, because the baseline below found it costs nothing measurable on the keystroke tail. The rule for revisiting it: if `all` ever costs more than a few percent of the tail in `pnpm verify:perf`, production drops to `spans` and this says why.
+
+**Baseline, 2026-09-24.** `pnpm verify:perf --runs 5` (200 characters at 150 ms, after a warm-up), Apple M1 Max, headless Chromium, the dev server over the fixture's Psalms (3 KB, USFM mode). At `off` versus `all`: key-handler time (the browser's Event Timing) p50/p95/p99 4.2/6.7/8.2 ms versus 4.4/6.7/7.9 ms; heap after GC 37.5 versus 39.1 MB; project open and Compare within 3 ms of each other. The cost is volume, not time: about 2,400 events and 750 KB of JSONL a minute of continuous typing (974 KB before a keystroke stopped recording phases that read zero), so the 2,000-event ring covers under a minute and the disk window about seven minutes of non-stop typing. Event Timing's input-to-paint rounds to 8 ms and flips between 16 and 24 at both levels, so it is no signal here. Not yet measured: a production build, a large book, desktop, and the disk sink's own cost (the fixture writes nothing).
 
 **What reaches a console or a log stream** is decided separately, by the sinks: the stderr JSONL sink under Node (`SEFER_LOG` / `VITE_SEFER_LOG`) and the console stream's name-prefix filters (`VITE_SEFER_STREAM`, or `stream()` at runtime). Printing less never changes what the ring keeps, so turning a stream off never loses evidence. There is no severity ladder (`error`/`info`/`debug`/`trace`), by decision: the verdict is the outcome, `failed` is the alarm, and the operation and span hierarchy is the depth.
 
@@ -170,7 +188,7 @@ Read it left to right:
 - **`analyzes`** — parses the gesture actually caused, counted by `Analysis.revision` moving, so a memo hit is not counted.
 - **`browser`** — the DOM event to the first transaction (`editor.browser_input_ms`): the browser's own handling of the key — for typing, the native insertion into the content-editable — and CodeMirror reading the change back. Sefer owns none of it and it cannot be split further from inside the page, so it is one honest bucket rather than part of a remainder. Marked by a highest-precedence change filter, the first thing CodeMirror runs as a transaction is created.
 - **the per-span totals** — exclusive milliseconds per span inside the gesture, biggest first: `dispatch` (CodeMirror's `view.update` and DOM sync, wrapped at `dispatchTransactions` in `BookEditor.tsx`), `analyze` (the engine parse, timed in `core/analyzer.ts`), the derivation spans `scan`, `index`, `decorate`, `paint`, and one `phase:<name>` per editing phase that cost anything. Buckets under 0.05 ms are dropped from the line.
-- **`other`** — gesture milliseconds no bucket and no span accounted for (`editor.unaccounted_ms`). On Psalms in `pnpm verify:perf` it averages 0.05 ms of a 2.2 ms gesture; a large one means a span is missing, not that the clock is noisy.
+- **`other`** — gesture milliseconds no bucket and no span accounted for (`editor.unaccounted_ms`). The aim is as little of it as possible: time too small to measure well belongs in a named aggregate (as `browser` is), not in the remainder. On Psalms in `pnpm verify:perf` it averages 0.05 ms of a 2.2 ms gesture; a large one means a span is missing, not that the clock is noisy.
 
 **The arithmetic closes:** `browser` plus every printed span plus `other` sums to `gesture`. That is why the meter opens no span of its own — the old note printed a `keystroke=` wrapper span whose exclusive time ran past the last update to the macrotask that closed it, so the numbers added up to nothing in particular and the one wall number was ambiguous between JS work and time to paint.
 
