@@ -1,6 +1,14 @@
 # Logging and tracing: evidence agents can read
 
-**Status:** 2026-09-24. Discussion with leans, revised after a second review. The current design is in [observability](../../documentation/architecture/observability.md); this doc is only about what is unsettled.
+**Status:** 2026-09-24. **Implemented, except where "Open after the pass" says otherwise.** The design now lives in [observability](../../documentation/architecture/observability.md) (the alarm, the failure ring, disk and export, the `jq` recipes, the Operations table); this doc keeps the reasoning, the baseline and what is still open. Delete it once the open items are settled.
+
+## Open after the pass
+
+1. **Disk cap vs volume.** At `all`, continuous typing writes about 745 KB a minute (after a keystroke stopped recording phases the clock could not see; it was 974). 5 MB therefore holds roughly seven minutes of non-stop typing, or perhaps half an hour of real editing. Choose: raise the cap (20 MB is still small), write a slimmer record to disk than the ring keeps (drop the `derive.*` notes, which exist only at `all`), or accept that the disk is the last half hour and the failure ring is the long memory.
+2. **The meter's `editor.js_ms` overstates a keystroke's JS work** about twofold once a line wraps: nearly all of it is `editor.unaccounted_ms`, probably CodeMirror's measure pass counted into the gesture. Not confirmed.
+3. **`terms.load` runs twice** when /terms is revisited. Seen in traces; not changed.
+4. **Not yet seen at runtime**, because the fixture has no repository or remote: `sync.plan`, the `unavailable` endings of `sync.transfer` and `import.remote`, `update.install` (desktop), `reference.pair`, and the desktop log directory.
+5. `analysis.warm` is in `OperationName` and nothing opens it.
 
 ## Goals (Will's)
 
