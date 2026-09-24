@@ -30,7 +30,17 @@ Across a reload or incoming version, lazily resolve against an exact, stamped an
 
 The UI should distinguish `attached`, `changed`, and `needs reattachment` from a thread's separate `open`/`resolved` state. It should show the original quote and the version it described when the current highlight is uncertain.
 
-The [primitive consistency discussion](./editor-primitives-consistency.md) owns the proposed reference-to-location resolver that this feature would consume; commenting should not invent a second resolver.
+### Mapping an anchor through edits
+
+Outlined 2026-09-24 with Will; agreed in principle, not designed in detail. Today's ranges (findings, Find hits) are recomputed from a fresh parse every time and never mapped. An anchor cannot be recomputed from the text, so it has to map. Three tiers, cheapest first:
+
+1. **While the Book is open:** map the live range through each accepted `ChangeSet` as the Book publishes it, the way `src/editor/recipes/flash.ts` maps its decoration (`held.map(tr.changes)`). Exclusive affinity: `from` maps with `assoc = 1`, `to` with `assoc = -1`, so an insertion right beside the selection does not join it and one inside it does. If the mapped range collapses (`from >= to`) the text was deleted: the live highlight detaches, and the original location, quote and address remain. Edits inside only change the current quote.
+2. **Later, the Fingerprint matches:** the stored offsets are exact. Done.
+3. **Later, the Fingerprint differs:** if the text the anchor described can be recovered (it was a recorded version), map through the sid-aligned diff between that text and the current one. Otherwise resolve the anchor's address in the current text and search that passage for the quote, using the context to break ties. Exactly one convincing candidate reattaches; none, or more than one, is `needs reattachment`. Never guess.
+
+Record which tier produced the current location (`mapped`, `re-resolved`, `needs reattachment`), and keep the original immutable. U23003, the USFM committee's reference proposal, reaches the same conclusion about word-indexed references: they break under edits, and falling back to the verse is the best available case. The vocabulary (Address, Location, Anchor, Fingerprint) is in the primitives plan.
+
+The [primitive consistency discussion](../01-discussing/editor-primitives-consistency.md) owns the proposed reference-to-location resolver that this feature would consume; commenting should not invent a second resolver.
 
 ## Identity, visibility, and sharing
 
