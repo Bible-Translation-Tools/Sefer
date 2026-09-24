@@ -33,10 +33,18 @@ import SearchIcon from "lucide-solid/icons/search";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
 import { lastSegment } from "#core/fileSystem/path";
+import { Observability } from "#core/observability";
 import { cloneRepository } from "#core/remote/clone";
+import { remoteVerdict } from "#core/remote/remote";
 
-import { catalogueFor, type CatalogueEntry, type ProjectType } from "../../catalogue";
-import { describe } from "../../describe";
+import {
+  catalogueFailureAttrs,
+  catalogueFor,
+  catalogueVerdict,
+  type CatalogueEntry,
+  type ProjectType,
+} from "../../catalogue";
+import { describe, reasonOf, remoteReasonOf } from "../../describe";
 import { wacsUrlFor } from "../../endpoints";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
@@ -162,10 +170,23 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
   });
   const [busy, setBusy] = createSignal("", { name: "catalogueBusy" });
 
+  // One read of the catalogue, as one operation: which source answered, how
+  // many rows, how long. Never the endpoint — `catalogue.source` says whether
+  // it was the live API, and the URL is the build's business.
+  const browsing = services.composition.observability.operation("catalogue.browse", {
+    "catalogue.source": catalogue.source,
+  });
   void catalogue
     .entries()
-    .then(setEntries)
+    .then((found) => {
+      browsing.end("passed", {
+        "catalogue.entries": found.length,
+        "catalogue.gateways": found.filter((entry) => entry.type === "gateway").length,
+      });
+      setEntries(found);
+    })
     .catch((cause: unknown) => {
+      browsing.end(catalogueVerdict(cause), catalogueFailureAttrs(cause));
       setEntries([]);
       setProblem(describe(cause));
     });
@@ -275,17 +296,30 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
     const into = `${services.projectsRoot}/${lastSegment(entry.cloneUrl.replace(/\.git$/u, ""))}`;
     setBusy(entry.id);
     const toast = toasts.progress({ title: t("Downloading {name}", { name: entry.repo }) });
+    // The same operation the import hub's clone opens, told apart by where it
+    // came from. No URL and no repository name: the catalogue row's type is
+    // the one fact about it worth filtering on.
+    const operation = services.composition.observability.operation("import.remote", {
+      "import.source": "catalogue",
+      "import.host": services.hostInfo.kind(),
+      "catalogue.type": entry.type,
+    });
     void services
       .run(
-        // The index learns about the project in the same pipeline, the moment
-        // its files and history are on disk, so the list and its links are
-        // right before the toast says it is done.
-        cloneRepository(entry.cloneUrl, into, entry.id).pipe(
-          Effect.andThen(rememberProject(services.projectsRoot, into, undefined)),
+        Effect.provideService(
+          // The index learns about the project in the same pipeline, the moment
+          // its files and history are on disk, so the list and its links are
+          // right before the toast says it is done.
+          cloneRepository(entry.cloneUrl, into, entry.id).pipe(
+            Effect.andThen(rememberProject(services.projectsRoot, into, undefined)),
+          ),
+          Observability,
+          operation,
         ),
       )
       // oxlint-disable-next-line solid/reactivity -- a promise continuation: runs once, when the download settles
       .then(() => {
+        operation.end("passed", { "import.phase": "complete" });
         toasts.update(toast, {
           title: t("Downloaded {name}", { name: entry.repo }),
           message: into,
@@ -293,14 +327,17 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
         });
         props.onDownloaded();
       })
-      .catch((cause: unknown) =>
+      .catch((cause: unknown) => {
+        operation.end(remoteVerdict(remoteReasonOf(cause)), {
+          "import.reason": reasonOf(cause) ?? "Unknown",
+        });
         toasts.update(toast, {
           title: t("Could not download {name}", { name: entry.repo }),
           message: describe(cause),
           tone: "error",
           autoClose: false,
-        }),
-      )
+        });
+      })
       .finally(() => setBusy(""));
   };
 

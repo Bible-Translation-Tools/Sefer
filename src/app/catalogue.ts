@@ -34,6 +34,7 @@
 import { Result, Schema } from "effect";
 
 import type { SettingsService } from "#core/host/settings";
+import type { Attrs, Verdict } from "#core/observability";
 
 import { languageApiUrlFrom } from "./endpoints";
 
@@ -60,9 +61,48 @@ export interface CatalogueEntry {
   readonly cloneUrl: string;
 }
 
+/**
+ * `http` — the Language API answered, but not with a 2xx.
+ * `payload` — it answered 200 with something the decoder does not understand.
+ *
+ * Deliberately not called `reason` or `status`: `describe` renders those two
+ * fields in place of the message, and the sentence on screen must not change
+ * because telemetry learned to tell the failures apart.
+ */
+type CatalogueFailure = "http" | "payload";
+
 class CatalogueError extends Error {
   override readonly name = "CatalogueError";
+  constructor(
+    message: string,
+    readonly failure: CatalogueFailure,
+    readonly httpStatus?: number,
+  ) {
+    super(message);
+  }
 }
+
+/**
+ * How a failed browse is recorded. The Language API is an outside boundary:
+ * a server that answered badly, or did not answer at all (`fetch` rejects
+ * with a `TypeError` when offline or refused by CORS), is `unavailable`. A
+ * payload the decoder cannot read, or anything else, stays `failed` — that is
+ * a contract broken, and worth the alarm.
+ */
+export const catalogueVerdict = (cause: unknown): Verdict => {
+  if (cause instanceof CatalogueError) return cause.failure === "http" ? "unavailable" : "failed";
+  return cause instanceof TypeError ? "unavailable" : "failed";
+};
+
+/** The fields a failed browse carries: which failure, and the HTTP status when there was one. */
+export const catalogueFailureAttrs = (cause: unknown): Attrs => {
+  if (!(cause instanceof CatalogueError))
+    return { "catalogue.failure": cause instanceof TypeError ? "network" : "unknown" };
+  return {
+    "catalogue.failure": cause.failure,
+    ...(cause.httpStatus === undefined ? {} : { "http.status": cause.httpStatus }),
+  };
+};
 
 export interface CatalogueService {
   /** Which rows these are, so a screen can say "sample data" rather than lie. */
@@ -127,10 +167,14 @@ const languageApiCatalogue = (origin: string): CatalogueService => ({
   origin,
   entries: async () => {
     const response = await fetch(origin, { headers: { accept: "application/json" } });
-    if (!response.ok) throw new CatalogueError(`Language API error: ${response.status}`);
+    if (!response.ok)
+      throw new CatalogueError(`Language API error: ${response.status}`, "http", response.status);
     const decoded = decodeRepos(await response.json());
     if (Result.isFailure(decoded))
-      throw new CatalogueError(`Language API payload not understood: ${decoded.failure.message}`);
+      throw new CatalogueError(
+        `Language API payload not understood: ${decoded.failure.message}`,
+        "payload",
+      );
     return decoded.success.vw_consolidated_repos.map(toEntry);
   },
 });
