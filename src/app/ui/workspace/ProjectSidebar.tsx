@@ -26,7 +26,7 @@ import { For, Show, createMemo, createSignal } from "solid-js";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { Badge, Input } from "../primitives";
-import { bookName, lookupFor, parseReference, testamentOf, type Testament } from "./books";
+import { bookName, testamentOf, type Testament } from "./books";
 import { metadataOf, projectLanguage, projectName } from "./project";
 
 interface Row {
@@ -119,7 +119,8 @@ export function ProjectSidebar() {
   const jump = (): void => {
     const project = shell.project();
     if (project === undefined) return;
-    const found = parseReference(query(), lookupFor(project, metadataOf(project)));
+    const citation = shell.location.read(query());
+    const found = citation.ok ? citation.addresses[0] : undefined;
     if (found === undefined) {
       shell.report(t("no book matches {query}", { query: query() }));
       return;

@@ -24,7 +24,6 @@ import { For, Show, createMemo } from "solid-js";
 import { quote, type Quotation } from "#core/excerpts/excerpts";
 import {
   codePointLabel,
-  siteRef,
   type FlaggedSite,
   type Glyph,
   type PatternRow,
@@ -139,15 +138,20 @@ export function GlyphDetail(props: GlyphDetailProps) {
 
   /**
    * Book and reference, from the analysis the site was measured against.
-   * `siteRef` fills the chapter and verse in only when the engine stamps
-   * agree, so a book that has moved on since the publication reads as an
-   * offset rather than as a verse it may no longer be.
+   * The location service names the place only when the engine stamps agree,
+   * so a book that has moved on since the publication reads as an offset
+   * rather than as a verse it may no longer be.
    */
   const where = (site: FlaggedSite): string => {
-    const ref = siteRef(site, analysisOf(site.bookId)?.analysis);
-    if (ref === undefined)
+    const address = shell.location.addressAt(
+      site.bookId,
+      site.from,
+      site.engine,
+      analysisOf(site.bookId)?.analysis,
+    );
+    if (address === undefined)
       return t("{book} · offset {from}", { book: site.bookId, from: site.from });
-    return `${ref.book} ${ref.chapter}${ref.verse === undefined ? "" : `:${ref.verse}`}`;
+    return shell.location.label(address);
   };
 
   /** Has the book moved on since the publication measured this site? */

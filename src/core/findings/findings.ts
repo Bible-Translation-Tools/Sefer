@@ -9,8 +9,7 @@
 // filtering is presentation policy and hiding a category does not alter
 // analysis truth.
 
-import type { BookId, Ref } from "../book/book";
-import type { Analysis } from "../galley";
+import type { BookId } from "../book/book";
 import type { Finding } from "./finding";
 
 export type { Finding } from "./finding";
@@ -68,37 +67,16 @@ export const list = (projectAnalysis: {
  * anchor near a visible point is the view's own decision; it must never be
  * substituted here, because the same span is what a fix would edit.
  *
- * `ref` is filled in only when the caller hands over an analysis that
- * describes the very text the finding was computed from — the table of
- * contents is the only route from an offset to a chapter and verse, and one
- * from a different revision would name the wrong verse with total confidence.
- * The finding's own shape carries no `Ref` for the same reason: a stored
- * reference would outlive the text it was derived from.
+ * No chapter and verse here. A label for the place is the location
+ * service's (`app/location.ts`), which proves the analysis describes the text
+ * the finding was measured against before it names a verse; the finding's
+ * own shape carries no reference for the same reason, since a stored one
+ * would outlive the text it was derived from.
  */
 export const navigateTarget = (
   finding: Finding,
-  analysis?: Analysis,
-): {
-  readonly bookId: BookId;
-  readonly from: number;
-  readonly to: number;
-  readonly ref?: Ref;
-} => {
-  const target = { bookId: finding.bookId, from: finding.from, to: finding.to };
-  if (analysis === undefined) return target;
-  if (
-    analysis.docLen !== finding.engine.docLen ||
-    analysis.sourceHash !== finding.engine.sourceHash
-  )
-    return target;
-  const at = analysis.dish.toc.at(finding.from);
-  if (at === null) return target;
-  return {
-    ...target,
-    ref: {
-      book: finding.bookId,
-      chapter: at.chapter,
-      ...(at.verse > 0 ? { verse: at.verse } : {}),
-    },
-  };
-};
+): { readonly bookId: BookId; readonly from: number; readonly to: number } => ({
+  bookId: finding.bookId,
+  from: finding.from,
+  to: finding.to,
+});

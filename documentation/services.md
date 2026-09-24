@@ -6,7 +6,7 @@ One section per service: what it is in plain words, what is wrong or constrained
 
 ## Where to focus (as of 2026-09-23)
 
-1. **Location / references** — the next feature foundation. See [Location](#location-and-reference) and `planning/01-discussing/editor-primitives-consistency.md`.
+1. **Location / references** — first pass landed (navigation and inventory); Search, Excerpts/STET and Library next. See [Location](#location-and-reference) and `planning/01-discussing/editor-primitives-consistency.md`.
 2. **Git, top to bottom** — history time travel is next, and the pull/push/lifecycle flow needs one careful pass before anything else is added to it. See [Git](#git).
 3. **One diff and sync model** — after the primitives settle: retire the line diff, stop reading and diffing every book, one change classification for History, Review and Cloud. See [Diff](#diff) and `planning/01-discussing/diff-and-sync-model-2026-09-23.md`.
 4. **Data safety in Recovery** — a journal must know what text it started from. See [Recovery](#recovery).
@@ -234,22 +234,20 @@ A folder of books, with discovery (including RC `manifest.yaml` and Burrito meta
 
 ### Overview
 
-Book codes, the canon table and a forgiving reference parser (`src/core/reference/{reference,canon}.ts`). It has no architecture chapter yet.
+What a typed place means and where a place is in one text. `src/core/location`: `address.ts` (the Address union: book, intro, chapters, verses; U23003 spelling), `names.ts` (the name catalogue: canon, project names, abbreviations, intro words), `citation.ts` (the Citation parser, navigation and prose grammars; the one Sefer file with a test), `locate.ts` (`resolve` and `addressAt` over a `TocView`), `canon.ts`. `src/core/galley/location.ts` adapts the engine's dish TOC into a `TocView`. `src/app/location.ts` is the per-project piece the shell exposes as `shell.location`: the catalogue memo, the held books, and the display rule (the project's own book name, English otherwise). It has no architecture chapter yet; the plan is `planning/01-discussing/editor-primitives-consistency.md`.
+
+On it today: the palette and sidebar jump, `showReference` (found / missing with its chapter / ambiguous, each reported), and the inventory's site labels.
 
 ### Constraints and known bugs
 
-- Two address types (`Reference` in reference.ts, `Ref` in book.ts).
-- The rule: Sefer never scans for `\c`/`\v` with a regex or keeps its own diff; the engine's TOC and decision units answer. Four places still turn an offset into a verse on their own: search's `buildRefTable`/`refFrom`, Library's `CHAPTER` regex, the `showReference` scan in ProjectContext, and the findings/inventory exact-stamp + `toc.at`.
+- Two address types still: `Address`, and `Ref` in book.ts, which Search, Excerpts/STET and Library use until the second pass moves them.
+- The rule: Sefer never scans for `\c`/`\v` with a regex; the engine's TOC answers. Two places still do on their own: search's `buildRefTable`/`refFrom`, and Library's `CHAPTER` regex. Both are the second pass.
+- On Kitchen v0.1.6 the TOC carries no segments and no verse-list holes: `3a` resolves as all of verse 3 (`coarser`), and `\v 1,3,5` as 1–5. Kitchen v0.1.7 carries both once it is tagged; Sefer adopts it then.
 
 ### Ideas / future
 
-- **Next up:** a `src/core/location` module:
-  - one address type
-  - `parseNavigation` and a strict `matchProse`
-  - `at`/`covering`/`resolve` over the TOC
-  - an acceptance table: LUK 3:1, chapter-only, `\v 1-2`, a duplicate `\v`, front matter, stale analysis
-
-  Every caller above moves onto it. Plan: `planning/01-discussing/editor-primitives-consistency.md`.
+- The second pass: Search (one-off `parseText` TOCs for resources, the last published TOC while typing), Excerpts/STET, Library; then `Ref` goes.
+- A prose scanner for comments, when comments exist. The grammar is already in `citation.ts`.
 
 ---
 

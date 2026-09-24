@@ -24,7 +24,7 @@ import ChevronUp from "lucide-solid/icons/chevron-up";
 import ListTree from "lucide-solid/icons/list-tree";
 import { Show, createMemo, createSignal } from "solid-js";
 
-import { fold } from "#core/reference/reference";
+import { fold } from "#core/location/names";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
