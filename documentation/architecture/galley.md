@@ -43,7 +43,7 @@ Both halves read the same warm chunk cache inside the handle, which is why they 
 
 Whether the markup between two pieces survives a replacement is the caller's decision and the engine refuses to make it (`galley/src/find.md`, "Replacement is the caller's"). Search's answer is to refuse the replacement, not to guess.
 
-A private `decodeHits(bytes)` reads the buffer both doors emit — magic, version, then little-endian `u32` throughout, offsets in UTF-16, layout stated once in `galley/src/wasm.md` ("The find buffer"). Nothing outside this module decodes an engine buffer. It **throws `VersionMismatch`** on a wrong magic or version without reading the rest: a find buffer decoded against the wrong layout yields ranges that look like offsets into scripture and are not, and an editor acting on one would splice the wrong text.
+A private `decodeHits(bytes)` turns the buffer both doors emit into `EngineHit`s through scripture-kitchen's generated `Hits` reader (`find-reader`), so Sefer knows no offsets or strides and the layout cannot drift from the writer. Nothing outside this module reads an engine buffer. `Hits.open` **throws** on a wrong magic or version without reading the rest: a find buffer decoded against the wrong layout yields ranges that look like offsets into scripture and are not, and an editor acting on one would splice the wrong text.
 
 ## One engine, in the webview
 

@@ -18,6 +18,10 @@
  * failure are for.
  */
 
+import {
+  Hits,
+  FORMAT_VERSION as FIND_FORMAT_VERSION,
+} from "@wycliffeassociates/scripture-kitchen/find-reader";
 import { MaskMap } from "@wycliffeassociates/scripture-kitchen/mask-reader";
 import {
   deserialize,
@@ -252,18 +256,6 @@ export interface EngineHit {
 }
 
 /**
- * `FIND` in ASCII, read out of the buffer's first four bytes in order.
- *
- * `galley/src/find.rs`, `wire::MAGIC`. The onion and sous buffers lead with a
- * magic and a version, and so does this one, so a reordered record is caught
- * by its header rather than by the nonsense it would produce.
- */
-const FIND_MAGIC = 0x444e_4946;
-
-/** The layout `decodeHits` below knows. A buffer claiming another one stops. */
-const FIND_FORMAT_VERSION = 1;
-
-/**
  * `FindOptions` as the v0.1.1 doors take it: one object, every key optional,
  * defaults applied on the Rust side.
  *
@@ -281,78 +273,31 @@ const findOptions = (query: FindQuery, scope?: FindScope): Record<string, unknow
 });
 
 /**
- * Decodes the find buffer the engine's `find`/`findAll` doors emit.
+ * The find buffer the engine's `find`/`findAll` doors emit, as Sefer's hits.
  *
- * The layout is stated once, in `galley/src/wasm.md` ("The find buffer"):
- * magic and version, then `hitCount` and `bookCount`, then little-endian `u32`
- * throughout, UTF-16 offsets, the two length arrays before the byte blob so
- * every word stays four-byte aligned.
- *
- * THROWS `VersionMismatch` on a header it does not know, and does not try to
- * read the rest: a find buffer decoded against the wrong layout yields hit
- * ranges that look like offsets into scripture and are not, and an editor that
- * acted on one would splice the wrong text. Thrown rather than returned
- * because this is the same synchronous path `analyze` is on.
+ * The layout is scripture-kitchen's: `Hits` is generated from the same schema
+ * as the writer, so Sefer holds no offsets or strides. `Hits.open` throws on a
+ * magic or version it does not know rather than reading on, because a find
+ * buffer decoded against the wrong layout yields ranges that look like
+ * offsets into scripture and are not. Thrown rather than returned because
+ * this is the same synchronous path `analyze` is on.
  */
 const decodeHits = (bytes: Uint8Array): readonly EngineHit[] => {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const word = (index: number): number => view.getUint32(index * 4, true);
-
-  const magic = word(0);
-  if (magic !== FIND_MAGIC)
-    throw new VersionMismatch({ wire: "find", found: magic, expected: FIND_MAGIC });
-  const version = word(1);
-  if (version !== FIND_FORMAT_VERSION)
-    throw new VersionMismatch({ wire: "find", found: version, expected: FIND_FORMAT_VERSION });
-
-  const hitCount = word(2);
-  const bookCount = word(3);
-  let at = 4;
-
-  // Pass one: the fixed-width hit records, whose width varies with the piece
-  // count, so the id and preview tables cannot be found without walking them.
-  const records: {
-    readonly book: number;
-    readonly projected: EngineRange;
-    readonly source: EngineRange[];
-  }[] = [];
-  for (let hit = 0; hit < hitCount; hit += 1) {
-    const book = word(at);
-    const projected = { from: word(at + 1), to: word(at + 2) };
-    const pieces = word(at + 3);
-    at += 4;
+  const hits = Hits.open(bytes);
+  const out: EngineHit[] = [];
+  for (let n = 0; n < hits.hitCount; n += 1) {
+    const hit = hits.hit(n);
+    const projected = { from: hit.projectedFrom, to: hit.projectedTo };
+    const bookId = hits.id(hit.bookIndex);
+    const rows = hit.pieces();
     const source: EngineRange[] = [];
-    for (let piece = 0; piece < pieces; piece += 1)
-      source.push({ from: word(at + piece * 2), to: word(at + piece * 2 + 1) });
-    at += pieces * 2;
-    records.push({ book, projected, source });
+    for (let p = 0; p < rows.length; p += 1) {
+      const piece = rows.seek(p);
+      source.push({ from: piece.sourceFrom, to: piece.sourceTo });
+    }
+    out.push({ bookId, projected, source, preview: hits.preview(n) });
   }
-
-  const idLengths: number[] = [];
-  for (let book = 0; book < bookCount; book += 1) idLengths.push(word(at + book));
-  at += bookCount;
-  const previewLengths: number[] = [];
-  for (let hit = 0; hit < hitCount; hit += 1) previewLengths.push(word(at + hit));
-  at += hitCount;
-
-  const decoder = new TextDecoder("utf-8", { fatal: true });
-  let cursor = at * 4;
-  const take = (length: number): string => {
-    const text = decoder.decode(bytes.subarray(cursor, cursor + length));
-    cursor += length;
-    return text;
-  };
-  const ids = idLengths.map(take);
-  const previews = previewLengths.map(take);
-
-  return records.map((record, index) => ({
-    bookId: ids[record.book],
-    projected: record.projected,
-    source: record.source,
-    // SAFETY: `previews` was built from `previewLengths`, which has one entry
-    // per hit record, so every record index is inside it.
-    preview: previews[index]!,
-  }));
+  return out;
 };
 
 type SettingKey = keyof SousSettings;
