@@ -148,7 +148,11 @@ export const listParts = (
 
 /**
  * Deletes what is too old, then whole sessions oldest-first until the rest
- * fits. The session being written is never deleted.
+ * fits, and if the session being written is still over on its own, its own
+ * oldest parts. `current` — the part being appended to — is never deleted,
+ * so a session that runs for hours keeps the most recent `totalBytes` of
+ * itself rather than growing without bound: a rolling window, not a quota
+ * that only applies at the next start.
  */
 export const pruneLogs = (
   fileSystem: FileSystem.FileSystem,
@@ -156,6 +160,7 @@ export const pruneLogs = (
   now: number,
   writing: SessionHeader,
   limits: LogLimits = LOG_LIMITS,
+  current?: string,
 ): Effect.Effect<
   { readonly removed: number; readonly bytes: number },
   PlatformError.PlatformError
@@ -179,6 +184,14 @@ export const pruneLogs = (
           doomed.add(sibling.path);
           bytes -= sibling.bytes;
         }
+    }
+    // Only this session is left over the line: its oldest parts go, each one
+    // self-describing, so what survives still opens with the header.
+    for (const part of parts) {
+      if (bytes <= limits.totalBytes) break;
+      if (doomed.has(part.path) || !part.name.startsWith(keep) || part.name === current) continue;
+      doomed.add(part.path);
+      bytes -= part.bytes;
     }
     for (const path of doomed) yield* fileSystem.remove(path, { force: true });
     return { removed: doomed.size, bytes };
@@ -215,6 +228,10 @@ export const makeLogWriter = (
     part += 1;
     yield* fileSystem.writeFileString(`${directory}/${partName(header, part)}`, headerLine);
     written = headerLine.length;
+    // Each new part is where the window rolls: the directory is held to
+    // `totalBytes` while the session runs, not only at the next start.
+    if (part > 1)
+      yield* pruneLogs(fileSystem, directory, Date.now(), header, limits, partName(header, part));
   });
 
   return {

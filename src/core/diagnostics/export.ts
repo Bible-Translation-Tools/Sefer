@@ -182,32 +182,6 @@ export interface ProjectSnapshot {
     | typeof UNKNOWN;
 }
 
-/**
- * The last sync state the app observed: the newest `sync.survey` operation's
- * fields. The evidence is the source — no second place remembers it.
- */
-export const lastSyncObserved = (
-  events: readonly ObservabilityEvent[],
-): ProjectSnapshot["sync"] => {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    if (event?.kind !== "operation" || event.name !== "sync.survey") continue;
-    const state = event.attrs?.["sync.state"];
-    if (typeof state !== "string") continue;
-    const count = (key: string): number | typeof UNKNOWN => {
-      const value = event.attrs?.[key];
-      return typeof value === "number" ? value : UNKNOWN;
-    };
-    return {
-      state,
-      ahead: count("sync.ahead"),
-      behind: count("sync.behind"),
-      observedAt: event.t,
-    };
-  }
-  return UNKNOWN;
-};
-
 interface RingStats {
   readonly events: number;
   /** Epoch ms of the oldest event still held, when there is one. */
@@ -228,11 +202,52 @@ export interface ExportInput {
   /** Events a sink refused by throwing. The disk queue's own drops are lines in its parts. */
   readonly dropped: number;
   /**
+   * Whether the log writer is running, and if it stopped, why. An export
+   * from a session whose disk stopped says so rather than looking whole.
+   */
+  readonly persist: { readonly state: "writing" | "stopped" | "off"; readonly reason?: string };
+  /**
+   * Whether `disk` is every part there is: `complete`, `unavailable` when the
+   * directory could not be listed or a part could not be read (with why), or
+   * `none` on a host that writes no log.
+   */
+  readonly diskStatus: {
+    readonly state: "complete" | "unavailable" | "none";
+    readonly reason?: string;
+  };
+  /**
    * Every part file on disk, oldest first, as raw text: earlier sessions, and
    * this one's, which hold what the ring has already let go of.
    */
   readonly disk: readonly string[];
 }
+
+/** A URL as the header keeps it: scheme, host and path, never credentials or a query. */
+const safeUrl = (url: string): string =>
+  url.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/@]*@/iu, "$1").replace(/[?#].*$/u, "");
+
+/**
+ * The header's own strings, made safe. The build's endpoints ship in the
+ * public bundle, but an edited one is whatever someone typed, and a URL can
+ * carry a password or a token in its query — so every endpoint is cut to
+ * scheme, host and path, the current header and every header read back from
+ * disk alike.
+ */
+const safeHeader = <H extends { readonly endpoints?: unknown }>(header: H): H => {
+  const endpoints = header.endpoints;
+  if (typeof endpoints !== "object" || endpoints === null) return header;
+  const out: Record<string, { readonly url: string; readonly edited: boolean }> = {};
+  for (const [name, value] of Object.entries(endpoints)) {
+    if (typeof value !== "object" || value === null) continue;
+    const url = "url" in value && typeof value.url === "string" ? safeUrl(value.url) : "";
+    const edited = "edited" in value && value.edited === true;
+    out[name] = { url, edited };
+  }
+  return { ...header, endpoints: out };
+};
+
+const scrubbedReason = <S extends { readonly reason?: string }>(status: S): S =>
+  status.reason === undefined ? status : { ...status, reason: scrub(status.reason) };
 
 const section = (name: string): string => JSON.stringify({ kind: "section", name });
 
@@ -251,7 +266,9 @@ const safeLine = (line: string): string | undefined => {
   }
   if (typeof parsed !== "object" || parsed === null) return undefined;
   const kind = "kind" in parsed ? parsed.kind : undefined;
-  if (kind === "sefer.session" || kind === "dropped") return line;
+  if (kind === "dropped") return line;
+  // A header from disk: `safeHeader` reads only `endpoints`, shape-checked.
+  if (kind === "sefer.session") return JSON.stringify(safeHeader(parsed));
   // SAFETY: a line the log writer wrote from an `ObservabilityEvent`; the
   // fields `safeEvent` reads are each checked for type before use there.
   return eventLine(safeEvent(parsed as ObservabilityEvent));
@@ -266,9 +283,10 @@ export const renderExport = (input: ExportInput): string => {
     snapshot: input.snapshot,
     rings: { failures: statsOf(input.failures), recent: statsOf(input.recent) },
     dropped: input.dropped,
-    diskParts: input.disk.length,
+    persist: scrubbedReason(input.persist),
+    disk: { ...scrubbedReason(input.diskStatus), parts: input.disk.length },
   };
-  const lines: string[] = [JSON.stringify(head), section("failures")];
+  const lines: string[] = [JSON.stringify(safeHeader(head)), section("failures")];
   for (const event of input.failures) lines.push(eventLine(safeEvent(event)));
   lines.push(section("recent"));
   for (const event of input.recent) lines.push(eventLine(safeEvent(event)));

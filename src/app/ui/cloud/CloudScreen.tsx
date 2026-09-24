@@ -38,6 +38,7 @@ import {
 } from "#core/sync";
 
 import { describe, remoteReasonOf } from "../../describe";
+import { rememberSync } from "../../diagnostics";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { Button, Card, Dialog, EmptyState, PanelHeader } from "../primitives";
@@ -177,9 +178,8 @@ export function CloudScreen() {
   /**
    * One pass over the repository, as two operations.
    *
-   * `sync.survey` is the reading and ends with the state it derived — the
-   * last state this session observed, which is what a diagnostics export
-   * reports — and `sync.plan` is the incoming plan, opened only when the
+   * `sync.survey` is the reading and ends with the state it derived, which
+   * is also handed to `rememberSync` for a diagnostics export — and `sync.plan` is the incoming plan, opened only when the
    * device is behind. The plan FOLLOWS the survey rather than running inside
    * it: the survey has already decided the state and ended by the time the
    * plan starts, so it is a cause and not a parent.
@@ -199,6 +199,14 @@ export function CloudScreen() {
       .then(async (survey): Promise<SyncFacts> => {
         const { reading } = survey;
         const state = sync(reading).state;
+        // What a diagnostics export reports as "last observed", kept with the
+        // project it was about.
+        rememberSync(options.root, {
+          state,
+          ahead: reading.ahead.length,
+          behind: reading.behind.length,
+          observedAt: Date.now(),
+        });
         // `offline` is the device, or the last transfer, saying the network
         // did not answer: kept and exported, but not the alarm.
         surveying.end(state === "offline" ? "unavailable" : "passed", {

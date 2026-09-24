@@ -12,7 +12,7 @@
 
 import { Effect, Option } from "effect";
 
-import { lastSyncObserved, renderExport, type ProjectSnapshot } from "#core/diagnostics/export";
+import { renderExport, type ProjectSnapshot } from "#core/diagnostics/export";
 import { channelOf, UNKNOWN, type SessionHeader } from "#core/diagnostics/header";
 import { listParts, makeLogWriter, pruneLogs } from "#core/diagnostics/logFiles";
 import type { Project } from "#core/project/project";
@@ -77,14 +77,26 @@ export interface LogFiles {
   /** Writes whatever is pending now, and resolves when it is on disk. */
   readonly flush: () => Promise<void>;
   readonly stop: () => void;
+  /** Whether the writer is running, and why it stopped if it did — for the export's header. */
+  readonly status: () => {
+    readonly state: "writing" | "stopped" | "off";
+    readonly reason?: string;
+  };
 }
 
-const NO_FILES: LogFiles = { flush: () => Promise.resolve(), stop: () => {} };
+const NO_FILES: LogFiles = {
+  flush: () => Promise.resolve(),
+  stop: () => {},
+  status: () => ({ state: "off" }),
+};
 
 /**
  * Starts writing the queue to `HostInfo.paths().logs`: prune first, then
  * drain on idle at most every `FLUSH_INTERVAL_MS`, and at once when the page
- * is hidden or closed. Writes are chained, never concurrent. The first write
+ * is hidden or closed. One write is in flight at a time, and a batch is taken
+ * from the queue only when a write STARTS — so a disk that falls behind leaves
+ * events in the queue, where its 5,000-event bound and its dropped count
+ * apply, instead of piling taken batches up behind a promise. The first write
  * that fails stops the writer for the session and says so once, as
  * `unavailable` — a full disk or a revoked permission is the world saying no,
  * and the ring still holds the recent past.
@@ -97,33 +109,54 @@ export const startLogFiles = (services: Grounds): LogFiles => {
   const header = sessionHeader(services);
   const writer = makeLogWriter(services.fileSystem, directory, header);
   const schedule = idle();
-  let chain: Promise<void> = services
+  let stopped = false;
+  let reason: string | undefined;
+  let armed = false;
+  let last = 0;
+  // The write in flight, if any; `again` is a flush asked for meanwhile.
+  let writing: Promise<void> = services
     .run(pruneLogs(services.fileSystem, directory, Date.now(), header))
     .then(
       () => {},
       () => {},
     );
-  let stopped = false;
-  let armed = false;
-  let last = 0;
+  let busy = true;
+  let again = false;
+  void writing.then(() => {
+    busy = false;
+    if (again) void flush();
+  });
 
-  const flush = (): Promise<void> => {
-    armed = false;
-    last = Date.now();
-    const { events, dropped } = queue.take();
-    if (stopped || (events.length === 0 && dropped === 0)) return chain;
-    chain = chain.then(async () => {
-      if (stopped) return;
+  const write = async (): Promise<void> => {
+    do {
+      again = false;
+      const { events, dropped } = queue.take();
+      if (stopped || (events.length === 0 && dropped === 0)) return;
       try {
         await services.run(writer.append(events, dropped));
       } catch (cause) {
         stopped = true;
-        observability.note("diagnostics.persist", "unavailable", describe(cause), {
+        reason = describe(cause);
+        observability.note("diagnostics.persist", "unavailable", reason, {
           "diagnostics.events": events.length,
         });
       }
+    } while (again && !stopped);
+  };
+
+  const flush = (): Promise<void> => {
+    armed = false;
+    last = Date.now();
+    if (busy) {
+      again = true;
+      // Resolves once the write in flight, and the one this asked for, land.
+      return writing.then(() => (busy ? writing : undefined));
+    }
+    busy = true;
+    writing = write().finally(() => {
+      busy = false;
     });
-    return chain;
+    return writing;
   };
 
   const wake = (): void => {
@@ -147,6 +180,8 @@ export const startLogFiles = (services: Grounds): LogFiles => {
 
   return {
     flush,
+    status: () =>
+      stopped && reason !== undefined ? { state: "stopped", reason } : { state: "writing" },
     stop: () => {
       stopped = true;
       if (typeof window === "object") {
@@ -155,6 +190,20 @@ export const startLogFiles = (services: Grounds): LogFiles => {
       }
     },
   };
+};
+
+type ObservedSync = Exclude<ProjectSnapshot["sync"], typeof UNKNOWN>;
+
+/**
+ * The last sync state observed for each project, by root, with when. Kept
+ * here rather than read back out of the ring: the ring forgets a survey
+ * within a minute of typing, and does not say which project it was about.
+ */
+const observed = new Map<string, ObservedSync>();
+
+/** The cloud screen reports every survey it finishes. */
+export const rememberSync = (root: string, sync: ObservedSync): void => {
+  observed.set(root, sync);
 };
 
 /**
@@ -166,7 +215,7 @@ const snapshotOf = async (
   services: Services,
   project: Project | undefined,
 ): Promise<ProjectSnapshot> => {
-  const sync = lastSyncObserved(services.composition.observability.recent());
+  const sync = project === undefined ? UNKNOWN : (observed.get(project.root) ?? UNKNOWN);
   if (project === undefined)
     return {
       open: false,
@@ -232,13 +281,13 @@ const snapshotOf = async (
 const diagnosticsText = async (
   services: Services,
   project: Project | undefined,
-): Promise<string> => {
+): Promise<{ readonly text: string; readonly missing: string | undefined }> => {
   await services.logFiles.flush();
   const observability = services.composition.observability;
   const directory = services.hostInfo.paths().logs;
-  const disk =
+  const read =
     services.storage === "fixture"
-      ? []
+      ? { disk: [], status: { state: "none" as const } }
       : await services
           .run(
             Effect.gen(function* () {
@@ -248,16 +297,34 @@ const diagnosticsText = async (
               );
             }),
           )
-          .catch(() => []);
-  return renderExport({
+          .then(
+            (disk) => ({ disk, status: { state: "complete" as const } }),
+            (cause: unknown) => ({
+              disk: [],
+              status: { state: "unavailable" as const, reason: describe(cause) },
+            }),
+          );
+  const persist = services.logFiles.status();
+  // What the file lacks, in a sentence, so success does not look whole when
+  // the disk half is absent.
+  const missing =
+    read.status.state === "unavailable"
+      ? t("The log files could not be read: {reason}", { reason: read.status.reason })
+      : persist.state === "stopped"
+        ? t("Writing the log stopped this session: {reason}", { reason: persist.reason ?? "" })
+        : undefined;
+  const text = renderExport({
     header: sessionHeader(services),
     exported: Date.now(),
     snapshot: await snapshotOf(services, project),
     failures: observability.failures(),
     recent: observability.recent(),
     dropped: observability.dropped(),
-    disk,
+    persist,
+    diskStatus: read.status,
+    disk: read.disk,
   });
+  return { text, missing };
 };
 
 /** `sefer-diagnostics-20260924T111500Z.jsonl`. */
@@ -299,16 +366,22 @@ export const exportDiagnostics = async (
   }
   const notice = toasts.progress({ title: t("Preparing diagnostics") });
   try {
-    const text = await diagnosticsText(services, project);
+    const { text, missing } = await diagnosticsText(services, project);
     const lines = text.split("\n").length - 1;
     if (Option.isSome(destination))
       await services.run(services.fileSystem.writeFileString(destination.value, text));
     else downloadBytes(fileName, new TextEncoder().encode(text), "application/x-ndjson");
-    operation.end("passed", { "diagnostics.lines": lines, "diagnostics.chars": text.length });
+    operation.end(missing === undefined ? "passed" : "unavailable", {
+      "diagnostics.lines": lines,
+      "diagnostics.chars": text.length,
+      "diagnostics.complete": missing === undefined,
+    });
+    const where = Option.isSome(destination) ? destination.value : fileName;
     toasts.update(notice, {
-      title: t("Diagnostics exported"),
-      message: Option.isSome(destination) ? destination.value : fileName,
-      tone: "success",
+      title: missing === undefined ? t("Diagnostics exported") : t("Diagnostics exported, in part"),
+      message: missing === undefined ? where : `${where} — ${missing}`,
+      tone: missing === undefined ? "success" : "info",
+      ...(missing === undefined ? {} : { autoClose: false }),
     });
   } catch (cause) {
     operation.end("failed", { "error.type": cause instanceof Error ? cause.name : "unknown" });
