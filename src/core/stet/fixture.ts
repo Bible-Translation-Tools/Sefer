@@ -58,14 +58,23 @@ const parse = (locale: string, text: string): Effect.Effect<unknown, StetError> 
   });
 
 /**
+ * Decoded guides, by locale, for the life of the page.
+ *
+ * Module scope, not the layer's: the caller provides this layer per call
+ * (`src/app/workflows/stet.ts`), which builds it afresh each time, and a map
+ * made inside the build was a new empty map per call — every visit to /terms
+ * decoded the whole guide again. The bytes are module-scoped already (they
+ * are imports), so their decoding may as well be.
+ */
+const held = new Map<string, readonly Term[]>();
+
+/**
  * The fixture-backed catalogue.
  *
  * `Layer.sync` rather than `Layer.effect`: nothing is read until a caller asks
- * for a guide, so building the layer costs a closure and an empty map.
+ * for a guide, so building the layer costs a closure.
  */
 export const StetCatalogFixtureLive: Layer.Layer<StetCatalog> = Layer.sync(StetCatalog, () => {
-  const held = new Map<string, readonly Term[]>();
-
   const load = (locale: string): Effect.Effect<readonly Term[], StetError> =>
     Effect.gen(function* () {
       const cached = held.get(locale);
