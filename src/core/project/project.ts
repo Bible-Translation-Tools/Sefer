@@ -312,15 +312,29 @@ const makeProject = (parts: ProjectParts): Project => {
       ),
 
     close: () =>
-      Effect.sync(() => {
-        if (closed) return;
-        closed = true;
-        // The lifetime hook reserved as `close(book)`: the plain Book
-        // holds no resources today, so only a seat has anything to release.
-        for (const entry of entries.values()) entry.seated?.close?.();
-        listeners.clear();
-        observability?.note("project.close", "consumed", `${order.length} books`);
-      }),
+      // The narrator the CLOSE was handed, when it was handed one — the
+      // shell's `project.close` operation — and the one the open captured
+      // otherwise. The captured one is the open's own operation, long ended,
+      // so a note written there would land in a trace that already finished.
+      Effect.flatMap(Effect.serviceOption(Observability), (provided) =>
+        Effect.sync(() => {
+          if (closed) return;
+          closed = true;
+          const into = Option.getOrUndefined(provided) ?? observability;
+          // The lifetime hook reserved as `close(book)`: the plain Book
+          // holds no resources today, so only a seat has anything to release.
+          let seats = 0;
+          for (const entry of entries.values()) {
+            if (entry.seated !== undefined) seats += 1;
+            entry.seated?.close?.();
+          }
+          listeners.clear();
+          into?.note("project.close", "consumed", `${order.length} books`, {
+            "project.books": order.length,
+            "project.seats": seats,
+          });
+        }),
+      ),
   };
 };
 

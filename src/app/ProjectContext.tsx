@@ -732,7 +732,15 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     setProject(undefined);
     // The stores describe a project. With none open they describe nothing.
     stores.clear();
-    if (staticOpen !== undefined) await services.run(staticOpen.close());
+    if (staticOpen === undefined) return;
+    // One record for closing, rather than a note written into the trace of
+    // the open that has long since ended. Books and seats come from core's
+    // note inside it; the root is not recorded, because it is a path.
+    const closing = services.composition.observability.operation("project.close", {
+      "project.books": staticOpen.books.length,
+    });
+    await services.run(Effect.provideService(staticOpen.close(), Observability, closing));
+    closing.end("passed");
   };
 
   /**
