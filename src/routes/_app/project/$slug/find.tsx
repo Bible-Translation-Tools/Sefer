@@ -322,7 +322,11 @@ function Find() {
       "find.scope": want,
       "find.books": only === undefined ? books.length : 1,
       "find.regex": staticQuery.regex === true,
+      "find.case": staticQuery.caseSensitive === true,
+      "find.whole_word": staticQuery.wholeWord === true,
       "find.markup": markup(),
+      // The query's LENGTH is a fact about the search; its text is not ours.
+      "find.chars": staticQuery.text.length,
     });
 
     // The reference scope is the same scan over somebody else's book, and a
@@ -348,7 +352,10 @@ function Find() {
       }
       setProblem("");
       setReferenceHits(found.success);
-      search.end("ready", { "find.hits": found.success.length });
+      search.end("ready", {
+        "find.hits": found.success.length,
+        "find.references": references.length,
+      });
       return;
     }
 
@@ -370,7 +377,10 @@ function Find() {
     setCursor(0);
     setHits(found.success);
     setSearched(signature(staticQuery, want));
-    search.end("ready", { "find.hits": found.success.length });
+    search.end("ready", {
+      "find.hits": found.success.length,
+      "find.hit_books": new Set(found.success.map((hit) => hit.bookId)).size,
+    });
   };
 
   const previewReplace = (): void => {
