@@ -204,6 +204,23 @@ A third change rides along because it touches the same doors: every engine door 
 
 **Sequence.** Kitchen and Sefer's first pass run in parallel. Sefer's first pass builds on v0.1.6, where a segment resolves as its whole verse (marked coarser than asked) and a verse list as its endpoints. After v0.1.7 is tagged, Sefer bumps the pin, moves every door call to the options objects, and reads labels and members from the TOC. The same items are [Kitchen ask 5](../00-ideas/scripture-kitchen-asks.md).
 
+### Next: a satellite's range is an edit guard (found 2026-09-24)
+
+**The bug, driven in the fixture:** Find "love" → Edit on Philemon 1:5 → select all → Backspace deleted the whole book's text (2,679 → 158 characters; only the markers the Book's rules protect survived). A satellite's scope HIDES the rest of the book (`clippedToScope`) but guards nothing: its document is the whole book, and nothing refuses a change or clamps a selection outside its range. One undo restores it and nothing reaches disk until a version is recorded, but the backup journal records it. On master, not introduced by this work.
+
+**The note editor is the same hole, worse,** and is wrong by design (Will, 2026-09-24): it mounts TRUSTED, so its edits skip the Book's rules entirely. It should not be trusted. It should work exactly like the main editor — the same phases, a clip, edits outside refused as untrusted, accepted edits propagating back to the canonical Book — with only the clip differing, because its purpose differs: the clip is the note. Trust was a workaround: the Book judges a change in the CANONICAL view's projection, where a note body in regular mode is hidden markup, so `refuseKeystrokesInsideHiddenMarkup` refuses every key typed into the note (`noteEditor.ts`'s comment). The design question to settle first is how that rule learns that THIS surface shows the note, instead of trust switching all rules off.
+
+**Scope:**
+
+1. Every satellite's range is an edit guard, installed by `mountSatellite` so no surface can forget it: changes outside refused, the selection clamped, select-all selecting the range. `clip.ts`'s `refuseEditsOutsideTheClip(getRange)` and `pullSelectionsIntoTheClip(getRange)` are already parameterised by the range, so the chapter clip and the satellite range share the two rules rather than growing a second pair. Trust never waives a surface's own range.
+2. The note editor untrusted, its clip the note, judged by the same phases as the main editor with the note visible to them.
+3. Verified by hand (no tests): select-all delete, a selection extended outside, paste over, typing in a note in regular mode, undo from inside a satellite reaching Book history, and closing an excerpt releasing its hold.
+4. `funnel.ts` and `fromCanonical` stop describing windows and result cards (deleted 2026-09-23); the ClipWindow-versus-Satellite table below is history, since there is one borrow protocol now.
+
+After this the range rules are three, each named: the chapter clip (visible and editable differ), the satellite range (visible and guarded alike), and an excerpt's snap to whole lines (its own presentation choice). Then the diff UI on the playground builds on both halves of this plan.
+
+**Real-text sweep, same day:** Location over 227 books (Kitchen's test tier and en_ult), 3,843 chapters, 101,907 verses: every verse's Address at its marker resolves back to it, every spelling round-trips, no chapter mismatches. The corpora hold 3 bridges, no verse lists and no segments, 2 malformed designators (`ZEC 12:7"`, a bare `\v` in ACT 8) and one genuine duplicate (bdf_reg ROM 3:10, two drafts left in), which Location reports as ambiguous. About 70 µs a query.
+
 ### Not blocking the first pass
 
 The first pass (order of work 1–2: the contracts, then one consumer) needs none of these: the Fingerprint (nothing persists yet), Anchor mapping, the non-verse `part` qualifier, configurable separators, U23003 interop, the Hit rename, and the content extent.
