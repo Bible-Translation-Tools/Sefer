@@ -16,13 +16,16 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use git2::{
-    build::CheckoutBuilder, Cred, Delta, ErrorCode, FetchOptions, ObjectType, Oid, PushOptions,
-    RemoteCallbacks, Repository, RepositoryInitOptions, RepositoryState, ResetType, Signature,
-    Sort, Status, StatusOptions,
+    build::{CheckoutBuilder, RepoBuilder},
+    Cred, Delta, ErrorCode, FetchOptions, ObjectType, Oid, PushOptions, RemoteCallbacks,
+    Repository, RepositoryInitOptions, RepositoryState, ResetType, Signature, Sort, Status,
+    StatusOptions,
 };
 use serde::Serialize;
 
-use crate::errors::{fail, AUTH_FAILED, CONFLICT, IO, NOT_A_REPOSITORY, OFFLINE, REFUSED, REJECTED};
+use crate::errors::{
+    fail, AUTH_FAILED, CONFLICT, IO, NOT_A_REPOSITORY, OFFLINE, REFUSED, REJECTED,
+};
 
 // ---------------------------------------------------------------------------
 // Wire types
@@ -161,7 +164,12 @@ fn relative_path(path: &str) -> Result<&Path, String> {
     for component in candidate.components() {
         match component {
             Component::Normal(_) | Component::CurDir => {}
-            _ => return Err(fail(REFUSED, format!("path escapes the repository: {path}"))),
+            _ => {
+                return Err(fail(
+                    REFUSED,
+                    format!("path escapes the repository: {path}"),
+                ))
+            }
         }
     }
     Ok(candidate)
@@ -704,6 +712,45 @@ fn fetch_branch(
         phase: "fetch".to_string(),
         loaded: stats.received_objects(),
         total: Some(stats.total_objects()),
+    })
+}
+
+/// A fresh clone of `url` into `root`, on the branch the server's HEAD names.
+///
+/// `RepoBuilder` rather than init-then-fetch because the default branch is the
+/// SERVER's answer: a repository on `master` must arrive on `master`, and an
+/// init has already guessed `main`. The remote is named `origin`, which is the
+/// name every other command here transfers through. Anonymous unless both
+/// halves of a credential are given, as `git_fetch` is.
+#[tauri::command]
+pub fn git_clone(
+    url: String,
+    root: String,
+    username: Option<String>,
+    token: Option<String>,
+) -> Result<GitProgress, String> {
+    let received = Arc::new(AtomicUsize::new(0));
+    let total = Arc::new(AtomicUsize::new(0));
+    let mut callbacks = remote_callbacks(credential_pair(&username, &token));
+    {
+        let received = Arc::clone(&received);
+        let total = Arc::clone(&total);
+        callbacks.transfer_progress(move |stats| {
+            received.store(stats.received_objects(), Ordering::Relaxed);
+            total.store(stats.total_objects(), Ordering::Relaxed);
+            true
+        });
+    }
+    let mut options = FetchOptions::new();
+    options.remote_callbacks(callbacks);
+    RepoBuilder::new()
+        .fetch_options(options)
+        .clone(&url, Path::new(&root))
+        .map_err(transport_failure)?;
+    Ok(GitProgress {
+        phase: "clone".to_string(),
+        loaded: received.load(Ordering::Relaxed),
+        total: Some(total.load(Ordering::Relaxed)),
     })
 }
 

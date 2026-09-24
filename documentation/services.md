@@ -484,6 +484,7 @@ Clone, fetch, pull, push and branch moves against a Gitea (WACS) server, plus th
 ### Constraints and known bugs
 
 - Desktop transfer progress is a `TODO(seam)` (`platform/tauri/remote.ts:141`).
+- Desktop `git_clone` (git2 `RepoBuilder`) compiles but has not been run against a server; the web clone was checked on `main` and `master` repositories through the prod proxy.
 - The dev channel has no WACS Language API URL yet (`tools/deploy/channels.ts:67`). Onboarding and project loading on dev can't reach it.
 
 ### Ideas / future

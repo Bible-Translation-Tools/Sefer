@@ -172,6 +172,23 @@ const makeTauriRemote = (
       call<void>("git_ensure_remote", { root: repo.root, name: ORIGIN, url });
 
     return {
+      // git2's clone builder: it checks out the branch the server's HEAD
+      // names and records `origin` itself. Desktop reaches any host, so the
+      // URL goes through as given, exactly as `attach` takes it.
+      clone: (url, into) =>
+        Effect.gen(function* () {
+          const credential = Option.getOrNull(yield* credentialFor(url));
+          const wire = yield* call<WireProgress>("git_clone", {
+            url,
+            root: into,
+            username: credential?.username ?? null,
+            token: credential?.token ?? null,
+          });
+          const progress = progressOf(wire);
+          yield* PubSub.publish(events, progress);
+          return { repo: { root: into } satisfies Repo, progress };
+        }),
+
       attach,
       // `git_remote_url` already answers `string | null`, so the read half of
       // attach costs desktop no new Rust.

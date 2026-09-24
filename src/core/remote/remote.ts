@@ -1,7 +1,7 @@
 /**
- * The Remote port: the four online jobs a translator approves
- * explicitly — attach a repository to a URL, fetch, pull, push — plus
- * publishing a project somewhere it did not exist. Sefer is local-first, so
+ * The Remote port: the online jobs a translator approves explicitly — clone
+ * a repository into a new folder, attach one to a URL, fetch, pull, push —
+ * plus publishing a project somewhere it did not exist. Sefer is local-first, so
  * nothing here ever runs as a side effect of editing; every method is a job
  * someone asked for, and `progress()` exists so a long transfer can be shown
  * and cancelled rather than appearing to hang.
@@ -40,6 +40,19 @@ export class RemoteError extends Data.TaggedError("RemoteError")<{
 }> {}
 
 export interface RemoteService {
+  /**
+   * A fresh clone of `url` into `into`, with `origin` recorded as `attach`
+   * would record it. The branch checked out is the one the SERVER names as
+   * its HEAD, so a repository on `master` arrives on `master`; nothing here
+   * assumes `main`. Anonymous unless a credential is held for the host.
+   *
+   * Not atomic: a failed clone may leave a partial folder behind, and whether
+   * to delete it is the caller's decision about the user's disk.
+   */
+  readonly clone: (
+    url: string,
+    into: string,
+  ) => Effect.Effect<{ readonly repo: Repo; readonly progress: Progress }, RemoteError>;
   /** Records `url` as the repository's origin. Does not transfer anything. */
   readonly attach: (repo: Repo, url: string) => Effect.Effect<void, RemoteError>;
   /**

@@ -53,6 +53,7 @@ pub fn run() {
             git::git_abort_merge,
             git::git_ensure_remote,
             git::git_remote_url,
+            git::git_clone,
             git::git_fetch,
             git::git_pull,
             git::git_push,

@@ -246,6 +246,17 @@ const makeWebRemote = (
         // on this build's endpoint. What the endpoint gates is starting
         // something new — cloning, publishing — and those check it themselves.
         const url = yield* originUrl(repo);
+        return yield* wireAt(url, repo.root, last, auth);
+      });
+
+    /** `wireFor` for a URL rather than a project: what a clone starts from. */
+    const wireAt = (
+      url: string,
+      dir: string,
+      last: { current: Progress },
+      auth: "required" | "optional",
+    ): Effect.Effect<Wire, RemoteError> =>
+      Effect.gen(function* () {
         const held = yield* credentials.get(hostOf(url));
         // Push is the only transfer nobody can do anonymously. Refusing it
         // here rather than letting the server answer 401 is what turns "sign
@@ -261,7 +272,7 @@ const makeWebRemote = (
         return {
           fs,
           http,
-          dir: repo.root,
+          dir,
           remote: ORIGIN,
           // No `corsProxy`: the remote URL IS the endpoint, so isomorphic-git
           // talks to it as if it were the git host. The proxy answers on
@@ -305,6 +316,19 @@ const makeWebRemote = (
       });
 
     return {
+      // isomorphic-git's own clone, not init-then-pull: it reads the server's
+      // HEAD symref and checks that branch out, and it writes `origin` itself.
+      // The URL is re-based onto the endpoint first, exactly as `attach` does,
+      // so what lands in `.git/config` is the same either way.
+      clone: (requested, into) =>
+        Effect.gen(function* () {
+          const url = onEndpoint(options.endpoint, requested);
+          const last = { current: { phase: "done", loaded: 0 } satisfies Progress };
+          const wire = yield* wireAt(url, into, last, "optional");
+          yield* attempt(() => git.clone({ ...wire, url, singleBranch: true }));
+          return { repo: { root: into } satisfies Repo, progress: last.current };
+        }),
+
       attach,
 
       // The read half of `attach`. `None` is "nothing attached", which is the
