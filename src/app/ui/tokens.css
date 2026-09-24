@@ -149,6 +149,14 @@
   --sidebar-on-surface: var(--on-surface-primary);
   --sidebar-on-surface-muted: var(--on-surface-tertiary);
 
+  /* The inverted surface: a dark column whatever the theme, with white on it.
+     The icon rail is the first user. Active is the brand blue, held at the
+     light-theme shade in both themes so white text keeps its contrast. */
+  --surface-invert: #0f2f4c;
+  --surface-invert-hover: color-mix(in srgb, #0f2f4c, white 12%);
+  --surface-invert-active: var(--brand-40);
+  --on-surface-invert: var(--neutral-100);
+
   --button-primary-surface: var(--brand-40);
   --button-primary-surface-hover: var(--brand-30);
   --button-primary-on-surface: var(--neutral-100);
@@ -298,6 +306,10 @@
   --color-on-surface-warning: var(--on-surface-warning);
   --color-on-surface-highlight: var(--on-surface-highlight);
   --color-on-surface-success: var(--on-surface-success);
+  --color-surface-invert: var(--surface-invert);
+  --color-surface-invert-hover: var(--surface-invert-hover);
+  --color-surface-invert-active: var(--surface-invert-active);
+  --color-on-surface-invert: var(--on-surface-invert);
 
   --color-sidebar-surface: var(--sidebar-surface);
   --color-sidebar-surface-hover: var(--sidebar-surface-hover);

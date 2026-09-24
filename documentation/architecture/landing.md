@@ -4,15 +4,15 @@ Where a project comes from, and what each host can actually do about it. Everyth
 
 ## The routes
 
-| route               | file                                                        | what it is                                                                               |
-| ------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `/` and `/projects` | `src/routes/_app/index.tsx`, `src/routes/_app/projects.tsx` | both render `ProjectsLanding` — what is on this device, plus the three ways to add to it |
-| `/start/find`       | `src/routes/_app/start/find.tsx`                            | the remote catalogue                                                                     |
-| `/start/create`     | `src/routes/_app/start/create.tsx`                          | the create form, which stops one step short of writing (below)                           |
+| route               | file                                                        | what it is                                                                                                                                                                                  |
+| ------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/` and `/projects` | `src/routes/_app/index.tsx`, `src/routes/_app/projects.tsx` | both render `ProjectsLanding` — "Projects Loaded into Sefer", then "Projects Available on WACS" (`WacsProjects`). `/` shows the empty first-run workspace instead when nothing is installed |
+| `/start/find`       | `src/routes/_app/start/find.tsx`                            | retired: redirects to `/projects`, keeping the search                                                                                                                                       |
+| `/start/create`     | `src/routes/_app/start/create.tsx`                          | the create form, which stops one step short of writing (below)                                                                                                                              |
 
 `/` renders the landing rather than redirecting to `/projects`, because the composition reads `?fixture=1` off `location` before the router exists and a redirect that dropped the search would compose over OPFS instead of the seeded fixture. For the same reason every crumb and every tab switch passes `search: true`.
 
-`ProjectsLanding` and `/start/find` share `LandingHeader`: the muted breadcrumb, then the two-way segmented control. The two halves are two ROUTES, not two signals — one lists this device and the other browses a service on the internet, and a reader who bookmarks the catalogue or presses Back should land where they expect. The trail ends in the tab, so it reads "Sefer / Projects / Find project" and the crumbs a screen passes are the ones ABOVE it.
+The projects page has no breadcrumb or tabs any more, and the add-a-project cards (`ImportHub`) are off the page for now; the component is kept for when that functionality lands elsewhere. `LandingHeader` survives only on `/start/create`.
 
 The only state on the landing page is `reload`: a counter the import hub raises and `YourProjects` reads. That is the whole subscription between them — an import that finished shows up in the list without either component knowing what the other is. `YourProjects` keeps a second counter of its own for the writes it makes itself (a rename, a delete), read in the same effect.
 
@@ -67,7 +67,9 @@ Intake also does the two things a picker leaves to its caller: it strips the one
 
 The progress dialog counts files while the write runs, because an import of sixty-six books is long enough that a spinner is not an answer.
 
-## Find project: the Catalogue port
+## Projects Available on WACS: the Catalogue port
+
+**Current behaviour (supersedes the older notes below where they differ):** the table leaves out gateway languages entirely, and search matches the code, both names and every alternate name. The live catalogue joins the consolidated-repos view with the public langnames export (`LANGNAMES_URL` in `src/app/catalogue.ts`), which supplies the region (`lr`), the alternate names (`alt`) and the gateway flag (`gw`; the `wa-catalog` owner rule is only the fallback). A row's date is the newest across its language's repos, and it stays blank because the view carries no `updated_at`. Asking the content server for each repo's date was tried and dropped because it rate-limits (HTTP 429).
 
 `src/app/catalogue.ts` is a port in `src/app`, not a module in `src/core`, because it is not policy: it is one HTTP GET against a service Sefer does not own, and core may not name `fetch`.
 

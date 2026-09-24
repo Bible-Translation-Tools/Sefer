@@ -8,6 +8,11 @@
     // tools/vite/lucideSolid.ts redirects lucide-solid's `solid-js` imports
     // here, so its exports are consumed through a Vite alias no static tool sees.
     "tools/vite/lucideSolidShim.ts",
+    // TODO(import): off the projects page for now while the designer moves
+    // import elsewhere. An entry so the working component and the pipeline
+    // it drives (stage, commit, web intake) are kept, not reported dead.
+    // Remove this line when a screen imports ImportHub again.
+    "src/app/ui/landing/ImportHub.tsx",
   ],
   "ignorePatterns": ["src/routeTree.gen.ts"],
   "ignoreDependencies": [

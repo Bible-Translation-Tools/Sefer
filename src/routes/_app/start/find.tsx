@@ -1,33 +1,10 @@
-import { createFileRoute } from "@tanstack/solid-router";
-
-import { t } from "#app/i18n";
-import { FindProject } from "#app/ui/landing/FindProject";
-import { LandingHeader } from "#app/ui/landing/LandingHeader";
-import { ShellGate } from "#app/ui/ShellGate";
-import "#app/ui/theme";
+import { Navigate, createFileRoute } from "@tanstack/solid-router";
 
 /**
- * The landing screen's second half: the remote catalogue, built to the
- * "Sefer / Find Project / Start" mockup. It shares `LandingHeader` with
- * `/projects`, so the segmented control moves between the two.
+ * There is no separate find screen any more: the WACS catalogue is the second
+ * section of the projects page. The route stays so old links and bookmarks
+ * land somewhere; `search` is carried so `?fixture=1` survives.
  */
-
-function FindProjectRoute() {
-  return (
-    <main class="min-w-0 space-y-6 p-6">
-      <LandingHeader
-        tab="find"
-        crumbs={[
-          { label: t("Sefer"), to: "/" },
-          { label: t("Projects"), to: "/projects" },
-        ]}
-      />
-      <FindProject onDownloaded={() => undefined} />
-    </main>
-  );
-}
-
 export const Route = createFileRoute("/_app/start/find")({
-  head: () => ({ meta: [{ title: "Sefer — find a project" }] }),
-  component: () => <ShellGate>{() => <FindProjectRoute />}</ShellGate>,
+  component: () => <Navigate to="/projects" search={true} replace />,
 });

@@ -19,10 +19,9 @@
  * the import does — a write to the index and a re-read of this list.
  */
 
-import { useNavigate, useSearch } from "@tanstack/solid-router";
+import { useSearch } from "@tanstack/solid-router";
 import { Effect, FileSystem, Result } from "effect";
 import Download from "lucide-solid/icons/download";
-import FolderOpen from "lucide-solid/icons/folder-open";
 import MoreVertical from "lucide-solid/icons/more-vertical";
 import PencilLine from "lucide-solid/icons/pencil-line";
 import Trash2 from "lucide-solid/icons/trash-2";
@@ -39,7 +38,6 @@ import {
   Button,
   Card,
   Dialog,
-  EmptyState,
   IconButton,
   Input,
   Popover,
@@ -58,7 +56,6 @@ const item =
   "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start text-small text-on-surface-primary hover:bg-surface-secondary disabled:cursor-not-allowed disabled:text-on-surface-tertiary";
 
 export function YourProjects(props: { readonly reload: number }) {
-  const navigate = useNavigate();
   const shell = useShell();
   const { services } = shell;
   const keys = shellKeys(services.settings);
@@ -137,10 +134,9 @@ export function YourProjects(props: { readonly reload: number }) {
         yield* Effect.ignore(touchProject(fileSystem, services.projectsRoot, row.root, stamp));
       }),
     );
-    // Navigate and let the route open it. `project/$slug` is the one place a
-    // project is opened, and a landing row that opened it first was the third
-    // caller racing the other two.
-    void navigate({ to: "/project/$slug", params: { slug: shell.slugFor(row.root) } });
+    // The route still does the opening (`project/$slug` is the one place a
+    // project is opened); the shell then lands the reader in Matthew 1.
+    shell.openProjectAtStart(row.root);
   };
 
   /** Saves a copy: the project as a zip, handed to the browser's downloads. */
@@ -209,11 +205,11 @@ export function YourProjects(props: { readonly reload: number }) {
       <Show
         when={sorted().length > 0}
         fallback={
-          <EmptyState
-            icon={<FolderOpen size={22} />}
-            title={t("No projects yet")}
-            description={t("Import one below, or find one to download.")}
-          />
+          <p data-testid="projects-empty" class="text-small text-on-surface-tertiary">
+            {t(
+              "To load a project into Sefer, download your translated work from WACS below. Then it will appear here, and you can open it.",
+            )}
+          </p>
         }
       >
         <Card padded={false} class="overflow-hidden">

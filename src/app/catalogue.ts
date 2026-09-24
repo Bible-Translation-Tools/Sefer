@@ -24,11 +24,20 @@
  * The sample rows carry all four, which is what makes the dev screen look like
  * the mockup.
  *
- * `type` is derived, not declared: the Language API has no translation/gateway
- * flag, and the one signal in the payload is the owner — `wa-catalog` is the
- * curated gateway set, everyone else is a translation team. That mapping is
- * stated here so the filter's meaning is readable rather than inferred from a
- * comparison buried in a component.
+ * So the live catalogue joins two more public sources, both of which answer a
+ * browser (`access-control-allow-origin: *`):
+ *
+ *  - **langnames** (`LANGNAMES_URL`), the translationDatabase export: per
+ *    language code, its region (`lr`, a continent), its alternate names
+ *    (`alt`) and whether it is a gateway language (`gw`). Fetched beside the
+ *    repos; if it fails the table still draws, without regions or alternates,
+ *    and gateway falls back to the owner (`wa-catalog`).
+ *
+ * Dates are still absent. Asking the content server for each repo's
+ * `updated_at` was tried and dropped: ~280 requests per page view, and the
+ * server rate-limits (HTTP 429) long before the table is filled. The right
+ * source is an `updated_at` on the consolidated-repos view itself, which the
+ * decoder already reads.
  */
 
 import { Result, Schema } from "effect";
@@ -49,7 +58,9 @@ export interface CatalogueEntry {
   readonly naturalName: string;
   /** The language's name in English. */
   readonly anglicizedName: string;
-  /** Absent in the live payload today — see the file header. */
+  /** Every other name the language is known by; searched, never drawn. */
+  readonly alternateNames: readonly string[];
+  /** The language's continent, from langnames — see the file header. */
   readonly region: string | undefined;
   /** ISO-8601 date, absent in the live payload today. */
   readonly updated: string | undefined;
@@ -97,22 +108,58 @@ const ConsolidatedRepos = Schema.Struct({
 
 const decodeRepos = Schema.decodeUnknownResult(ConsolidatedRepos);
 
-/** The one place the owner→type mapping lives. See the file header. */
+/** The fallback owner→type mapping, used when langnames did not answer. */
 const typeOf = (owner: string): ProjectType =>
   owner.toLowerCase() === "wa-catalog" ? "gateway" : "translation";
+
+/** The translationDatabase language export. Public, and CORS-open. */
+const LANGNAMES_URL = "https://td.unfoldingword.org/exports/langnames.json";
+
+const LangName = Schema.Struct({
+  lc: Schema.String,
+  lr: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  gw: Schema.optionalKey(Schema.NullOr(Schema.Boolean)),
+  alt: Schema.optionalKey(Schema.NullOr(Schema.Array(Schema.String))),
+});
+
+const decodeLangNames = Schema.decodeUnknownResult(Schema.Array(LangName));
+
+type LangNameFacts = typeof LangName.Type;
+
+/** langnames keyed by lower-cased code; empty when it could not be read. */
+const langNames = async (): Promise<ReadonlyMap<string, LangNameFacts>> => {
+  try {
+    const response = await fetch(LANGNAMES_URL, { headers: { accept: "application/json" } });
+    if (!response.ok) return new Map();
+    const decoded = decodeLangNames(await response.json());
+    if (Result.isFailure(decoded)) return new Map();
+    return new Map(decoded.success.map((row) => [row.lc.toLowerCase(), row]));
+  } catch {
+    return new Map();
+  }
+};
 
 const blankToUndefined = (value: string | null | undefined): string | undefined =>
   value === null || value === undefined || value.trim() === "" ? undefined : value;
 
-const toEntry = (repo: typeof ConsolidatedRepo.Type): CatalogueEntry => ({
+const toEntry = (
+  repo: typeof ConsolidatedRepo.Type,
+  facts: LangNameFacts | undefined,
+): CatalogueEntry => ({
   id: `${repo.username}/${repo.repo_name}`,
   code: repo.language_ietf,
   naturalName: repo.language_name === "" ? repo.language_english_name : repo.language_name,
   anglicizedName:
     repo.language_english_name === "" ? repo.language_name : repo.language_english_name,
-  region: blankToUndefined(repo.region),
+  alternateNames: facts?.alt ?? [],
+  region: blankToUndefined(repo.region) ?? blankToUndefined(facts?.lr),
   updated: blankToUndefined(repo.updated_at),
-  type: typeOf(repo.username),
+  type:
+    facts?.gw === undefined || facts.gw === null
+      ? typeOf(repo.username)
+      : facts.gw
+        ? "gateway"
+        : "translation",
   owner: repo.username,
   repo: repo.repo_name,
   cloneUrl: repo.repo_url,
@@ -126,12 +173,17 @@ const languageApiCatalogue = (origin: string): CatalogueService => ({
   source: "live",
   origin,
   entries: async () => {
-    const response = await fetch(origin, { headers: { accept: "application/json" } });
+    const [response, names] = await Promise.all([
+      fetch(origin, { headers: { accept: "application/json" } }),
+      langNames(),
+    ]);
     if (!response.ok) throw new CatalogueError(`Language API error: ${response.status}`);
     const decoded = decodeRepos(await response.json());
     if (Result.isFailure(decoded))
       throw new CatalogueError(`Language API payload not understood: ${decoded.failure.message}`);
-    return decoded.success.vw_consolidated_repos.map(toEntry);
+    return decoded.success.vw_consolidated_repos.map((repo) =>
+      toEntry(repo, names.get(repo.language_ietf.toLowerCase())),
+    );
   },
 });
 
@@ -182,6 +234,7 @@ const SAMPLE_CATALOGUE: readonly CatalogueEntry[] = [
   // Deliberately empty: a sample row must not offer a download that would
   // clone a repository that does not exist.
   cloneUrl: "",
+  alternateNames: [],
 }));
 
 const sampleCatalogue = (): CatalogueService => ({

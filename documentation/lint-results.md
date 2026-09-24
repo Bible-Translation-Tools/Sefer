@@ -61,7 +61,7 @@ None.
 | `src/app/ProjectContext.tsx` | `oxlint-disable-next-line` | solid/reactivity -- runs once, when composition settles, under the component's owner |
 | `src/app/ui/cloud/CloudScreen.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: reads the query once, when the transfer settles |
 | `src/app/ui/CloudPanel.tsx` | `oxlint-disable-next-line` | solid/reactivity -- the account's work: runs once per press, reading the field at the moment of the ask |
-| `src/app/ui/landing/FindProject.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: runs once, when the download settles |
+| `src/app/ui/landing/WacsProjects.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: runs once, when the download settles |
 | `src/app/ui/review/ReviewPanel.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: runs once, when Apply settles |
 | `src/app/ui/workspace/ReferenceColumn.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: runs once, when the bindings resolve |
 | `src/app/workflows/drafting.ts` | `fallow-ignore-file` | unused-file -- a deliberate stub; see the note below for why it is not wired. |
@@ -73,7 +73,7 @@ None.
 
 From `.fallowrc.jsonc`, where each one's reason is written beside it.
 
-- **Extra entries:** `src/App.tsx`, `src/Document.tsx`, `tools/vite/lucideSolidShim.ts`
+- **Extra entries:** `src/App.tsx`, `src/Document.tsx`, `tools/vite/lucideSolidShim.ts`, `src/app/ui/landing/ImportHub.tsx`
 - **Dependencies it cannot see used:** `@tauri-apps/cli`, `@solidjs/diagnostics`, `@tauri-apps/plugin-opener`
 
 <!-- lint-results:end -->

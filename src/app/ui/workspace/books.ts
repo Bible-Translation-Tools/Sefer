@@ -11,10 +11,10 @@
 
 import type { Project } from "#core/project/project";
 import { CANON, testamentOf, type Testament } from "#core/reference/canon";
-import { parseReference, type ReferenceLookup } from "#core/reference/reference";
+import type { ReferenceLookup } from "#core/reference/reference";
 import { localized, type ProjectMetadata } from "#core/resources/projectMetadata";
 
-export { CANON, testamentOf, parseReference };
+export { CANON, testamentOf };
 export type { Testament, ReferenceLookup };
 
 const BY_ID = new Map(CANON.map((book) => [book.id, book]));

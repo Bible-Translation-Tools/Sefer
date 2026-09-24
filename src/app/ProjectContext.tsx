@@ -182,6 +182,12 @@ export interface Shell {
   readonly showReference: (reference: Reference) => void;
 
   /**
+   * Open the project at `root` and land in its text: Matthew 1 when it has
+   * Matthew, else chapter 1 of its first book. The landing list's "Open".
+   */
+  readonly openProjectAtStart: (root: string) => void;
+
+  /**
    * Where the caret is in the open book, in document offsets — or `undefined`
    * when no editor is mounted.
    *
@@ -334,6 +340,13 @@ export interface Shell {
    * a project is open again.
    */
   readonly sidebarShowing: Accessor<boolean>;
+  /**
+   * Nothing is installed on this device: `/` draws a greyed-out shell of the
+   * Refine screen, and the only live control is the sidebar's project button.
+   * Set by the landing route while it is on screen.
+   */
+  readonly firstRun: Accessor<boolean>;
+  readonly setFirstRun: (empty: boolean) => void;
   /** A fraction of the workspace row; see `SIDEBAR_WIDTH`. */
   readonly sidebarWidth: Accessor<number>;
   readonly setSidebarWidth: (fraction: number) => void;
@@ -469,6 +482,11 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     name: "pendingPlace",
   });
   const [chapter, setChapter] = createSignal<number | null>(null, { name: "chapter" });
+  /** A project root that should land in its text as soon as it is open. */
+  const [firstRun, setFirstRun] = createSignal(false, { name: "firstRun" });
+  const [landOnOpen, setLandOnOpen] = createSignal<string | undefined>(undefined, {
+    name: "landOnOpen",
+  });
 
   /**
    * The open project, as a plain value.
@@ -1105,6 +1123,22 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     });
   };
 
+  const openProjectAtStart = (root: string): void => {
+    setLandOnOpen(root);
+    // The route opens it; the effect below takes over once it has.
+    void navigate({ to: "/project/$slug", params: { slug: slugFor(root) } });
+  };
+
+  createEffect(
+    () => ({ open: project(), want: landOnOpen() }),
+    ({ open, want }) => {
+      if (open === undefined || want === undefined || open.root !== want) return;
+      setLandOnOpen(undefined);
+      const book = open.book("MAT") ?? open.books[0];
+      if (book !== undefined) showReference({ bookId: book.id, chapter: 1 });
+    },
+  );
+
   createEffect(
     () => ({ book: focused()?.id, want: pendingPlace() }),
     ({ book, want }) => {
@@ -1217,6 +1251,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     reveal,
     showChapter,
     showReference,
+    openProjectAtStart,
     caret,
     noteCaret,
     noteChapterAtTop,
@@ -1247,7 +1282,10 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       setSidebarOpen(open);
       persist(keys.sidebarOpen, open);
     },
-    sidebarShowing: () => sidebarOpen() && (project() !== undefined || recentProjects().length > 0),
+    sidebarShowing: () =>
+      firstRun() || (sidebarOpen() && (project() !== undefined || recentProjects().length > 0)),
+    firstRun,
+    setFirstRun,
     recentProjects,
     slugFor,
     slug,

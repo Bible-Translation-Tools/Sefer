@@ -1,41 +1,34 @@
 /**
- * Find Project — the remote catalogue browser, built to the mockup in
- * `documentation/architecture/design-direction.md`: a filter card on the
- * left, a large search field and a sortable four-column table on the right.
+ * Projects Available on WACS: the remote catalogue, as the second section of
+ * the projects page. A header with the search field inline, then a windowed
+ * five-column table — Code, Language, Region, Date, Download.
  *
- * The rows come from `src/app/catalogue.ts`, which is either the Language API
- * or twelve sample rows depending on whether this build was given a URL. The
- * table says which, because a screen full of plausible sample data that claims
- * to be live is worse than an empty one.
+ * The rows come from `src/app/catalogue.ts`: the Language API's consolidated
+ * repos, joined with langnames for region, alternate names and the gateway
+ * flag. **Gateway languages are left out** — this table is for a translation
+ * team finding its own work. A row's date is the most recent update across
+ * every repo of its language — blank until the API carries one (see
+ * `catalogue.ts`).
  *
- * Two of the mockup's four columns — Region and Date — are not in the live
- * payload. They are drawn anyway and print an em dash: the columns are the
- * design's, the blanks are the API's, and inventing values to fill them would
- * hide exactly the gap someone needs to see.
+ * Search matches the code, both names, and every alternate name.
  *
- * Download clones rather than fetching an archive. Sefer can read a zip a
- * person hands it (see the import hub), but what this payload carries is
- * `repo_url` — a git URL — and `cloneRepository` is what takes one. A row with
- * no URL, or a build with no transfer configured, gets a disabled link with
- * the reason in a tooltip.
+ * Download clones: what the payload carries is `repo_url`, and
+ * `cloneRepository` is what takes one. A row with no URL, or a build with no
+ * transfer configured, gets a disabled link with the reason in a tooltip.
  */
 
-import { Link } from "@tanstack/solid-router";
 import { Effect } from "effect";
 import ArrowDown from "lucide-solid/icons/arrow-down";
-import ArrowLeft from "lucide-solid/icons/arrow-left";
 import ArrowUp from "lucide-solid/icons/arrow-up";
 import ChevronsUpDown from "lucide-solid/icons/chevrons-up-down";
 import Download from "lucide-solid/icons/download";
-import Globe from "lucide-solid/icons/globe";
-import Plus from "lucide-solid/icons/plus";
 import SearchIcon from "lucide-solid/icons/search";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
 import { lastSegment } from "#core/fileSystem/path";
 import { cloneRepository } from "#core/remote/clone";
 
-import { catalogueFor, type CatalogueEntry, type ProjectType } from "../../catalogue";
+import { catalogueFor, type CatalogueEntry } from "../../catalogue";
 import { describe } from "../../describe";
 import { wacsUrlFor } from "../../endpoints";
 import { t } from "../../i18n";
@@ -45,8 +38,7 @@ import {
   Button,
   Card,
   Input,
-  SegmentedControl,
-  Select,
+  PanelHeader,
   Tooltip,
   VirtualList,
   cx,
@@ -71,53 +63,49 @@ const SORTABLE: readonly (readonly [Column, () => string])[] = [
  */
 const COLUMNS = "grid grid-cols-[5rem_minmax(0,1fr)_8rem_7rem_9rem] items-center";
 
+/** What a row sorts by in `key`, with the date read through `updated`. */
+const sortValue =
+  (key: Column, updated: (entry: CatalogueEntry) => string | undefined) =>
+  (entry: CatalogueEntry): string => {
+    switch (key) {
+      case "code":
+        return entry.code;
+      case "language":
+        return entry.naturalName;
+      case "region":
+        return entry.region ?? "";
+      case "date":
+        return updated(entry) ?? "";
+    }
+  };
+
 /** What one catalogue row is tall, before it has been measured. */
 const ROW_HEIGHT = 41;
 
 const ariaSort = (sort: SortDirection): "none" | "ascending" | "descending" =>
   sort === "asc" ? "ascending" : sort === "desc" ? "descending" : "none";
 
-type NameStyle = "natural" | "anglicized";
-
 type Column = "code" | "language" | "region" | "date";
-
-/** What a row sorts by in `key`, with the language column read through `name`. */
-const sortValue =
-  (key: Column, name: (entry: CatalogueEntry) => string) =>
-  (entry: CatalogueEntry): string => {
-    switch (key) {
-      case "code":
-        return entry.code;
-      case "language":
-        return name(entry);
-      case "region":
-        return entry.region ?? "";
-      case "date":
-        return entry.updated ?? "";
-    }
-  };
-
-const ALL_REGIONS = "*";
 
 /**
  * One row, with every value the table draws already computed.
  *
  * The whole point of this shape: **a row must not read a signal.** The live
- * catalogue is thousands of rows, and `nameOf(entry)` inside a row body would
- * make every one of them a subscriber of the name-style signal — thousands of
+ * catalogue is thousands of rows, and `nameOf(entry)` inside the `<For>` body
+ * made every one of them a subscriber of the name-style signal — thousands of
  * scopes re-running to move one segmented control, which is what the
- * `HUGE_FAN_OUT` diagnostic reports. The derivation happens once, in the
+ * `HUGE_FAN_OUT` diagnostic was reporting. The derivation happens once, in the
  * `rows` memo; a row receives plain values, `busy` included.
  *
- * Two alternatives measured worse against a 1,333-row catalogue, and both are
- * worth writing down because both look right:
+ * Two things were measured against a 1,333-row catalogue before this shape was
+ * settled on, and both are worth writing down because both look right:
  *
  *   * a per-key store `createProjection` keyed by row id — the repair the
  *     diagnostic's own text suggests — measured WORSE (13,000 subscribers
  *     against 6,500), because a store read still registers a node per row;
- *   * a memo returning fresh row objects with an unkeyed list measured worse
- *     for the same reason: every flip tore down and rebuilt all 1,333 rows.
- *     Hence the `VirtualList` below is keyed by `row.entry.id`.
+ *   * a memo returning fresh row objects with an unkeyed `<For>` measured
+ *     worse for the same reason: every flip tore down and rebuilt all 1,333
+ *     rows. Hence `keyed={(row) => row.entry.id}` below.
  *
  * What is left is NOT ours and cannot be fixed here: at 1,333 rows the page
  * still reports ~6,500 subscribers on one unnamed signal, and the same number
@@ -128,15 +116,19 @@ const ALL_REGIONS = "*";
  */
 interface CatalogueRow {
   readonly entry: CatalogueEntry;
-  /** The language as this reader asked to see it — natural or anglicized. */
+  /** The language's own name. */
   readonly name: string;
+  /** The English name, when it differs from `name`; else empty. */
+  readonly english: string;
+  /** The most recent update across every repo of this language. */
+  readonly updated: string | undefined;
   /** Empty when Download is offered; otherwise why it is not. */
   readonly refusal: string;
   /** True while this row's clone is running. A value, never a signal read. */
   readonly downloading: boolean;
 }
 
-export function FindProject(props: { readonly onDownloaded: () => void }) {
+export function WacsProjects(props: { readonly onDownloaded: () => void }) {
   const shell = useShell();
   const { services } = shell;
   // One catalogue per mount. It is a pure value over `env`, so there is nothing
@@ -153,9 +145,6 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
   });
   const [problem, setProblem] = createSignal("", { name: "catalogueProblem" });
   const [query, setQuery] = createSignal("", { name: "catalogueQuery" });
-  const [nameStyle, setNameStyle] = createSignal<NameStyle>("natural", { name: "nameStyle" });
-  const [type, setType] = createSignal<ProjectType>("translation", { name: "projectType" });
-  const [region, setRegion] = createSignal(ALL_REGIONS, { name: "catalogueRegion" });
   const [column, setColumn] = createSignal<Column>("language", { name: "catalogueSort" });
   const [direction, setDirection] = createSignal<SortDirection>("asc", {
     name: "catalogueDirection",
@@ -164,41 +153,44 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
 
   void catalogue
     .entries()
-    .then(setEntries)
+    .then((all) => {
+      // Gateway languages are not offered here at all — see the file header.
+      const translations = all.filter((entry) => entry.type !== "gateway");
+      setEntries(translations);
+    })
     .catch((cause: unknown) => {
       setEntries([]);
       setProblem(describe(cause));
     });
 
-  const nameOf = (entry: CatalogueEntry): string =>
-    nameStyle() === "natural" ? entry.naturalName : entry.anglicizedName;
-
-  /** Region options, each with the count of rows it would leave. */
-  const regions = createMemo(
+  /** Per language code, the newest date across all of its repos. */
+  const latest = createMemo(
     () => {
-      const counted = new Map<string, number>();
+      const newest = new Map<string, string>();
       for (const entry of entries() ?? []) {
-        if (entry.region === undefined) continue;
-        counted.set(entry.region, (counted.get(entry.region) ?? 0) + 1);
+        const updated = entry.updated;
+        if (updated === undefined) continue;
+        const key = entry.code.toLowerCase();
+        const seen = newest.get(key);
+        if (seen === undefined || updated > seen) newest.set(key, updated);
       }
-      return [...counted.entries()].sort(([left], [right]) => left.localeCompare(right));
+      return newest;
     },
-    { name: "catalogueRegions" },
+    { name: "catalogueLatest" },
   );
+  const updatedOf = (entry: CatalogueEntry): string | undefined =>
+    latest().get(entry.code.toLowerCase());
 
   const filtered = createMemo(
     () => {
       const needle = query().trim().toLowerCase();
       return (entries() ?? []).filter((entry) => {
-        if (entry.type !== type()) return false;
-        if (region() !== ALL_REGIONS && entry.region !== region()) return false;
         if (needle === "") return true;
         return (
           entry.code.toLowerCase().includes(needle) ||
           entry.naturalName.toLowerCase().includes(needle) ||
           entry.anglicizedName.toLowerCase().includes(needle) ||
-          entry.owner.toLowerCase().includes(needle) ||
-          entry.repo.toLowerCase().includes(needle)
+          entry.alternateNames.some((name) => name.toLowerCase().includes(needle))
         );
       });
     },
@@ -207,7 +199,8 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
 
   const sorted = createMemo(
     () => {
-      const value = sortValue(column(), nameOf);
+      const newest = latest();
+      const value = sortValue(column(), (entry) => newest.get(entry.code.toLowerCase()));
       const sign = direction() === "desc" ? -1 : 1;
       return [...filtered()].sort((left, right) => sign * value(left).localeCompare(value(right)));
     },
@@ -224,16 +217,18 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
   };
 
   /**
-   * The rows the table draws. Every reactive read a row would otherwise make —
-   * the name style, the two filters, the sort — happens HERE, once, and each
-   * row receives plain strings.
+   * The rows the table draws. Every reactive read the rows used to make — the
+   * name style, the two filters, the sort — happens HERE, once, and each row
+   * receives plain strings.
    */
   const rows = createMemo(
     (): readonly CatalogueRow[] => {
       const running = busy();
       return sorted().map((entry) => ({
         entry,
-        name: nameOf(entry),
+        name: entry.naturalName,
+        english: entry.anglicizedName === entry.naturalName ? "" : entry.anglicizedName,
+        updated: updatedOf(entry),
         refusal: downloadReason(entry),
         downloading: entry.id === running,
       }));
@@ -305,95 +300,23 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
   };
 
   return (
-    <div class="flex flex-col gap-4 lg:flex-row lg:items-start">
-      <Card class="flex w-full shrink-0 flex-col gap-4 lg:w-72" data-find-filters>
-        <div class="space-y-1">
-          <h2 class="text-h4 font-bold text-on-surface-primary">{t("Find Project")}</h2>
-          <Link
-            to="/"
-            search={true}
-            class="inline-flex items-center gap-1 text-smallest text-on-surface-tertiary no-underline hover:text-on-surface-secondary"
-          >
-            <ArrowLeft size={13} aria-hidden="true" />
-            {t("Go back")}
-          </Link>
-        </div>
-
-        <div class="space-y-1.5">
-          <SegmentedControl
-            label={t("Language name")}
-            size="sm"
-            value={nameStyle()}
-            onChange={setNameStyle}
-            items={[
-              { value: "natural", label: t("Natural") },
-              { value: "anglicized", label: t("Anglicized") },
-            ]}
-          />
-          <p class="text-smallest text-on-surface-tertiary">
-            {t("Show each language written as its own speakers write it, or in English.")}
-          </p>
-        </div>
-
-        <div class="space-y-1.5">
-          <SegmentedControl
-            label={t("Project type")}
-            size="sm"
-            value={type()}
-            onChange={setType}
-            items={[
-              { value: "translation", label: t("Translation") },
-              { value: "gateway", label: t("Gateway") },
-            ]}
-          />
-          <p class="text-smallest text-on-surface-tertiary">
-            {t("Gateway projects are the curated wa-catalog set others translate from.")}
-          </p>
-        </div>
-
-        <label class="space-y-1.5">
-          <span class="flex items-center gap-1 text-smallest font-medium text-on-surface-secondary">
-            <Globe size={13} aria-hidden="true" />
-            {t("Region")}
-          </span>
-          <Select
-            size="sm"
-            wrapperClass="w-full"
-            class="w-full"
-            value={region()}
-            onChange={(event) => setRegion(event.currentTarget.value)}
-          >
-            <option value={ALL_REGIONS}>
-              {t("All regions ({count})", { count: (entries() ?? []).length })}
-            </option>
-            <For each={regions()}>
-              {([name, count]) => (
-                <option value={name}>{t("{name} ({count})", { name, count })}</option>
-              )}
-            </For>
-          </Select>
-        </label>
-
-        <Link to="/start/create" search={true} class="no-underline">
-          <Button variant="secondary" class="w-full" icon={<Plus size={15} aria-hidden="true" />}>
-            {t("Create new project")}
-          </Button>
-        </Link>
-      </Card>
-
-      <div class="min-w-0 flex-1 space-y-3">
+    <section class="space-y-3">
+      <div class="flex flex-wrap items-end gap-3">
+        <PanelHeader level={3} title={t("Projects Available on WACS")} class="me-auto" />
         <Input
           type="search"
           size="md"
-          class="h-11 text-body"
-          wrapperClass="w-full"
-          icon={<SearchIcon size={17} aria-hidden="true" />}
-          aria-label={t("Search projects")}
+          wrapperClass="w-full sm:w-80"
+          class="w-full"
+          icon={<SearchIcon size={16} aria-hidden="true" />}
+          aria-label={t("Search projects available on WACS")}
           placeholder={t("Search 'english' or 'axd'…")}
           value={query()}
           onInput={(event) => setQuery(event.currentTarget.value)}
         />
+      </div>
 
+      <div class="min-w-0 space-y-3">
         <div class="flex flex-wrap items-center gap-2 text-smallest text-on-surface-tertiary">
           <Badge tone={catalogue.source === "live" ? "success" : "warning"} size="sm">
             {catalogue.source === "live" ? t("live catalogue") : t("sample data")}
@@ -496,15 +419,17 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
                   </div>
                   <div role="cell" class="min-w-0 px-3 py-2">
                     <strong class="font-medium text-on-surface-primary">{item().name}</strong>
-                    <span class="ms-2 text-smallest text-on-surface-tertiary">
-                      {entry().owner}/{entry().repo}
-                    </span>
+                    <Show when={item().english !== ""}>
+                      <span class="ms-2 text-smallest text-on-surface-tertiary">
+                        {item().english}
+                      </span>
+                    </Show>
                   </div>
                   <div role="cell" class="px-3 py-2 text-on-surface-secondary">
                     {entry().region ?? "—"}
                   </div>
                   <div role="cell" class="px-3 py-2 text-on-surface-secondary">
-                    {formatDate(entry().updated) || "—"}
+                    {formatDate(item().updated) || "—"}
                   </div>
                   <div role="cell" class="px-3 py-2 text-end">
                     <Show
@@ -535,6 +460,6 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
           />
         </Card>
       </div>
-    </div>
+    </section>
   );
 }
