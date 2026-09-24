@@ -151,6 +151,8 @@ A bounded ring of events, spans and verdicts, and a second ring of 200 for `fail
 - The Web header has no OS version or architecture: a browser freezes both in its user agent. macOS's WKWebView reports no version either.
 - The export allowlist (`STRING_KEYS` in `src/core/diagnostics/export.ts`) must be extended by hand when a producer adds a string attribute; until then that field exports as `"redacted"`.
 - An OPFS append rewrites the whole part, which is why parts are 256 KB.
+- `analysis.warm` is in the name union and nothing opens it.
+- `sync.plan`, and the `unavailable` endings of `sync.transfer` and `import.remote`, have only been read against the in-memory fixture, which has no repository and no remote; they need a real Gitea to be seen end to end. `reference.pair` has not been seen either: it needs an empty block in the open book that the reference lacks.
 
 ### Ideas / future
 
@@ -505,11 +507,11 @@ The `/cloud` screen. It reads the two clocks and sorts the project into one of n
 
 ### Overview
 
-Browsing the online catalogue on the landing screens. `src/app/catalogue.ts`. → [landing](architecture/landing.md)
+Browsing the online catalogue on the landing screens. One `catalogue.browse` operation per load of the table: a Language API that is down or answers non-2xx ends `unavailable`, a payload the decoder cannot read `failed`. `src/app/catalogue.ts`. → [landing](architecture/landing.md)
 
 ### Constraints and known bugs
 
-- Emits no observability.
+- None.
 
 ### Ideas / future
 
