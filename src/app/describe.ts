@@ -19,6 +19,8 @@
  * three copies drifted apart once already.
  */
 
+import type { RemoteFailureReason } from "#core/remote/remote";
+
 /** Bounded so a server that answers with an HTML error page cannot fill a toast. */
 const MAX = 400;
 
@@ -75,4 +77,26 @@ export const reasonOf = (cause: unknown): string | undefined => {
   if (!isRecord(cause)) return undefined;
   const reason = stringAt(cause, "reason");
   return reason === "" ? undefined : reason;
+};
+
+const REMOTE_REASONS: ReadonlySet<string> = new Set<RemoteFailureReason>([
+  "Unauthorized",
+  "Network",
+  "Unavailable",
+  "Rejected",
+]);
+
+/**
+ * A `RemoteError`'s reason, which is the whole difference between "the network
+ * did not answer" (`offline`) and "the far side said no" (a refusal worth
+ * reading). Read off the error's own `reason` field, not out of the sentence
+ * `describe` makes of it.
+ */
+export const remoteReasonOf = (cause: unknown): RemoteFailureReason | undefined => {
+  const reason = reasonOf(cause);
+  // SAFETY: membership in REMOTE_REASONS, a set built from RemoteFailureReason
+  // values, is exactly the check this narrowing claims.
+  return reason !== undefined && REMOTE_REASONS.has(reason)
+    ? (reason as RemoteFailureReason)
+    : undefined;
 };

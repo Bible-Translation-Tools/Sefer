@@ -23,8 +23,8 @@ import CloudIcon from "lucide-solid/icons/cloud";
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 
 import { Git } from "#core/git/git";
-import { Observability } from "#core/observability";
-import { Remote, type RemoteFailureReason } from "#core/remote/remote";
+import { Observability, type Attrs, type Verdict } from "#core/observability";
+import { Remote, remoteVerdict } from "#core/remote/remote";
 import {
   combine,
   CombineError,
@@ -37,7 +37,7 @@ import {
   type SyncActionId,
 } from "#core/sync";
 
-import { describe, reasonOf } from "../../describe";
+import { describe, remoteReasonOf } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { Button, Card, Dialog, EmptyState, PanelHeader } from "../primitives";
@@ -73,28 +73,6 @@ const COMBINE_AUTHOR = { name: "Sefer", email: "sefer@localhost" } as const;
 const explainCombine = (cause: unknown): string | undefined => {
   if (!(cause instanceof CombineError)) return undefined;
   return cause.refusal === undefined ? combineTrouble(cause.state) : combineRefusal(cause.refusal);
-};
-
-const REMOTE_REASONS: ReadonlySet<string> = new Set<RemoteFailureReason>([
-  "Unauthorized",
-  "Network",
-  "Unavailable",
-  "Rejected",
-]);
-
-/**
- * A `RemoteError`'s reason, which is the whole difference between "the network
- * did not answer" (`offline`) and "the far side said no" (a refusal worth
- * reading). Read off the error's own `reason` field, not out of the sentence
- * `describe` makes of it.
- */
-const remoteReasonOf = (cause: unknown): RemoteFailureReason | undefined => {
-  const reason = reasonOf(cause);
-  // SAFETY: membership in REMOTE_REASONS, a set built from RemoteFailureReason
-  // values, is exactly the check this narrowing claims.
-  return reason !== undefined && REMOTE_REASONS.has(reason)
-    ? (reason as RemoteFailureReason)
-    : undefined;
 };
 
 export function CloudScreen() {
@@ -259,10 +237,7 @@ export function CloudScreen() {
     });
     const close = operation.span("sync.transfer", undefined, { "sync.action": action });
     let settled = false;
-    const finish = (
-      verdict: "passed" | "failed",
-      attrs: Readonly<Record<string, string | number | boolean>>,
-    ): void => {
+    const finish = (verdict: Verdict, attrs: Attrs): void => {
       if (settled) return;
       settled = true;
       close(attrs);
@@ -278,7 +253,9 @@ export function CloudScreen() {
       .catch((cause: unknown) => {
         const reason = remoteReasonOf(cause);
         if (reason !== undefined) network.noteFailure(reason);
-        finish("failed", {
+        // The port's own reason decides it: offline is the world saying no,
+        // not the alarm. A failure with no reason did not come from the port.
+        finish(remoteVerdict(reason), {
           "sync.action": action,
           "sync.reason": reason ?? "unknown",
         });

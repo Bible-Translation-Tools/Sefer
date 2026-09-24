@@ -33,12 +33,13 @@ import FolderOpen from "lucide-solid/icons/folder-open";
 import { For, Show, createSignal } from "solid-js";
 
 import { lastSegment } from "#core/fileSystem/path";
-import { Observability } from "#core/observability";
+import { Observability, type Verdict } from "#core/observability";
 import { cloneRepository } from "#core/remote/clone";
 import { Gitea, type RemoteRepo } from "#core/remote/gitea";
+import { remoteVerdict } from "#core/remote/remote";
 import { classify, commit, stage } from "#core/resources/import";
 
-import { describe, reasonOf } from "../../describe";
+import { describe, reasonOf, remoteReasonOf } from "../../describe";
 import { wacsUrlFor } from "../../endpoints";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
@@ -343,10 +344,7 @@ export function ImportHub(props: { readonly onImported: () => void }) {
     });
     let phase = "clone";
     let ended = false;
-    const end = (
-      verdict: "passed" | "failed",
-      attrs: Parameters<typeof operation.end>[1],
-    ): void => {
+    const end = (verdict: Verdict, attrs: Parameters<typeof operation.end>[1]): void => {
       if (ended) return;
       ended = true;
       operation.end(verdict, attrs);
@@ -380,7 +378,12 @@ export function ImportHub(props: { readonly onImported: () => void }) {
       props.onImported();
     })().catch((cause: unknown) => {
       const message = describe(cause);
-      end("failed", { "import.phase": phase, "import.reason": reasonOf(cause) ?? "Unknown" });
+      // Offline or a dead server is the world saying no; only a failure the
+      // Remote port did not name stays the alarm.
+      end(remoteVerdict(remoteReasonOf(cause)), {
+        "import.phase": phase,
+        "import.reason": reasonOf(cause) ?? "Unknown",
+      });
       finished(t("Couldn't bring it in"), message, true);
       toasts.update(toast, {
         title: t("Clone failed"),

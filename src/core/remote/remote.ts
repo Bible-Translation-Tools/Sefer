@@ -13,6 +13,7 @@
 import { Context, Data, Effect, Option, Stream } from "effect";
 
 import type { Repo } from "../git/git";
+import type { Verdict } from "../observability";
 
 /**
  * Transfer progress as the host reports it. `total` is absent until the far
@@ -33,6 +34,21 @@ export interface Progress {
  * retrying unchanged.
  */
 export type RemoteFailureReason = "Unavailable" | "Unauthorized" | "Network" | "Rejected";
+
+/**
+ * How a transfer that failed for `reason` is recorded.
+ *
+ * The Remote port is one of the outside boundaries, so it is where the world
+ * saying no becomes `unavailable` rather than the alarm: no transport, or a
+ * transport that did not answer. A credential or a far side that refused is
+ * a rule holding, `refused`. No reason at all means the failure did not come
+ * from the port, and that stays `failed`.
+ */
+export const remoteVerdict = (reason: RemoteFailureReason | undefined): Verdict => {
+  if (reason === "Unavailable" || reason === "Network") return "unavailable";
+  if (reason === "Unauthorized" || reason === "Rejected") return "refused";
+  return "failed";
+};
 
 export class RemoteError extends Data.TaggedError("RemoteError")<{
   readonly reason: RemoteFailureReason;
