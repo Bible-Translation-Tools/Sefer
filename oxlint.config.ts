@@ -37,6 +37,19 @@ export default defineConfig({
   },
   overrides: [
     {
+      // One front door for evidence: app code writes `operation` / `span` /
+      // `note` into the ring, and a `console.*` call is a hole the ring never
+      // sees. Tests may print; the console renderer below is the exception.
+      files: ["src/**/*.{ts,tsx}"],
+      rules: { "no-console": "error" },
+    },
+    {
+      // The console stream and the dev alarm: the ring's own renderer to the
+      // console, which is the one place printing IS the job.
+      files: ["src/platform/observability.ts", "src/**/*.test.{ts,tsx}"],
+      rules: { "no-console": "off" },
+    },
+    {
       files: ["src/core/**/*.{ts,tsx}"],
       rules: {
         "no-restricted-imports": [

@@ -16,6 +16,7 @@ import { type Extension } from "@codemirror/state";
 
 import {
   makeTracer,
+  reportOutcome,
   tracer,
   type Emitter,
   type TraceEntry,
@@ -71,6 +72,14 @@ export const traceSink = {
   of: (sink: TraceSink): Extension => tracer.of(sinkTracer(sink)),
 };
 
-export const stateFailed = (where: string, err: unknown) => {
-  console.error(`[${where}]`, err);
+/**
+ * A derivation threw and the caller fell back to an empty answer: our bug,
+ * so `failed` — the one verdict the dev console prints unasked.
+ */
+export const stateFailed = (where: string, err: unknown): void => {
+  reportOutcome(
+    `editor.${where}`,
+    "failed",
+    err instanceof Error ? `${err.name}: ${err.message}` : String(err),
+  );
 };

@@ -48,6 +48,7 @@ import type {
 
 import {
   makeTracer,
+  onEditorOutcome,
   onOrphanDerived,
   type Emitter,
   type TraceEmit,
@@ -150,6 +151,12 @@ export const annotateRepaint = (
 };
 
 onOrphanDerived(repaint);
+
+// Outcomes outside any transaction go to the same ring as the repaints, as
+// loose notes: they belong to no gesture, and naming one would date them.
+onEditorOutcome((rule, verdict, detail, fields) => {
+  repaintInto?.note(rule, verdict, detail, fields);
+});
 
 /** Level `off`: the trace still runs (the refusal slot needs it), silently. */
 const SILENT: TraceEmit = {

@@ -62,6 +62,7 @@ const guardedFetch = (): typeof globalThis.fetch => {
       return await globalThis.fetch(input, init);
     } catch (cause) {
       stopped = true;
+      // oxlint-disable-next-line no-console -- the telemetry bridge itself failed; the ring cannot report on its own exporter
       console.warn(
         "[sefer] telemetry export failed; not trying again this session.",
         "Set VITE_SEFER_OTLP_URL to a reachable collector, or unset it.",
@@ -253,10 +254,10 @@ const telemetryBridge = async (): Promise<Telemetry | undefined> => {
 const fanOut = (sinks: readonly ObservabilitySink[]): ObservabilitySink | undefined => {
   if (sinks.length === 0) return undefined;
   if (sinks.length === 1) return sinks[0];
-  return (event, line) => {
+  return (event) => {
     for (const sink of sinks) {
       try {
-        sink(event, line);
+        sink(event);
       } catch {
         // The ring's `dropped` counter is for the sink it was given; a sink
         // that throws here has already had its turn and the next one gets its.
@@ -327,9 +328,7 @@ export const composeApplication = async (
   });
   // The raw JSONL sink stays on the events themselves: a line per event is the
   // evidence format, and it must not wait for an operation to finish.
-  // SAFETY: an assembler takes one `ObservabilityEvent` and returns nothing,
-  // which is a sink's shape minus the JSONL line it does not read.
-  const sinks = [hostSink(env.log), assemble as ObservabilitySink].filter(
+  const sinks = [hostSink(env.log), assemble].filter(
     (sink): sink is ObservabilitySink => sink !== undefined,
   );
   // The session stamp: what every event of this run has in common, which

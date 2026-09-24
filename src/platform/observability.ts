@@ -1,7 +1,7 @@
 import type { Result } from "effect";
 
 import type { BootError, BootInfo } from "#core/boot";
-import { matchesQuery, printSpan } from "#core/observability";
+import { eventLine, matchesQuery, printSpan } from "#core/observability";
 import type {
   AssembledSpan,
   AssemblerSinks,
@@ -9,6 +9,7 @@ import type {
   ObservabilityService,
   ObservabilitySink,
   TraceQuery,
+  Verdict,
 } from "#core/observability";
 
 interface NodeRuntime {
@@ -42,8 +43,13 @@ interface ObservabilityDevSurface {
    * example for long enough to mislead two tests.
    */
   readonly logs: { readonly recent: (limit?: number) => readonly ObservabilityEvent[] };
-  /** The `client.error` notes: boundary-caught, uncaught and unhandled-rejection failures. */
+  /**
+   * Every `failed` event — `client.error` notes included — from the failure
+   * ring, which ordinary work cannot overwrite. Oldest first.
+   */
   readonly errors: (limit?: number) => readonly ObservabilityEvent[];
+  /** The whole failure ring: `failed`, `unavailable` and `refused`. Oldest first. */
+  readonly failures: ObservabilityService["failures"];
   /** The lossless format: one JSON object per line, every event in the ring. */
   readonly export: ObservabilityService["export"];
   readonly level: ObservabilityService["level"];
@@ -70,6 +76,16 @@ export interface StreamOptions {
    * a reasonable way to ask for it.
    */
   readonly exclude?: readonly string[];
+  /**
+   * Only these outcomes, applied after the names. An operation matches on its
+   * own verdict. Empty or absent means any.
+   */
+  readonly verdicts?: readonly Verdict[];
+  /**
+   * Whether every `failed` prints as a `console.error` even when the stream
+   * is off. On by default in dev; absent leaves it as it was.
+   */
+  readonly alarms?: boolean;
 }
 
 export interface DevState {
@@ -110,8 +126,8 @@ const requested = (runtime: NodeRuntime | undefined, log: string): boolean =>
 const stderrSink = (runtime: NodeRuntime, log: string): ObservabilitySink | undefined => {
   const stderr = runtime.stderr;
   if (stderr === undefined || !requested(runtime, log)) return undefined;
-  return (_event, line) => {
-    stderr.write(line);
+  return (event) => {
+    stderr.write(`${eventLine(event)}\n`);
   };
 };
 
@@ -163,6 +179,8 @@ const wanted = (name: string, filters: readonly string[], exclude: readonly stri
  *   VITE_SEFER_STREAM=1                       everything
  *   VITE_SEFER_STREAM=editor.mutation         one prefix
  *   VITE_SEFER_STREAM=boot,project.,save.     several
+ *   VITE_SEFER_STREAM=!editor.selection       everything but caret moves
+ *   VITE_SEFER_STREAM=@failed,@unavailable    only those outcomes
  *
  * Its own variable rather than `VITE_SEFER_LOG`, which stays the RAW sink: one
  * writes JSONL to stderr under Node, the other prints trees to a browser
@@ -178,14 +196,31 @@ const streamed = (raw: string): StreamOptions => {
     .filter((one) => one !== "");
   return {
     enabled: true,
-    filters: asked.filter((one) => !one.startsWith("!")),
+    filters: asked.filter((one) => !one.startsWith("!") && !one.startsWith("@")),
     exclude: asked.filter((one) => one.startsWith("!")).map((one) => one.slice(1)),
+    // SAFETY: an unknown word after `@` is a verdict that never matches, which
+    // is what a typo in a filter should do — print nothing, not throw.
+    verdicts: asked.filter((one) => one.startsWith("@")).map((one) => one.slice(1) as Verdict),
   };
 };
 
-/** `stream` is `VITE_SEFER_STREAM`, which `src/app/env.ts` reads. */
+/** Whether an assembled operation carries the alarm anywhere inside it. */
+const alarming = (span: AssembledSpan): boolean =>
+  span.verdict === "failed" ||
+  span.events.some((one) => one.verdict === "failed") ||
+  span.children.some(alarming);
+
+/**
+ * `stream` is `VITE_SEFER_STREAM`, which `src/app/env.ts` reads.
+ *
+ * Independently of what the stream is asked to print, a dev build prints
+ * every `failed` as a `console.error` — the one alarm (see `Verdict`). It goes
+ * through the same idle drain, so a failure costs the keystroke nothing, and
+ * `stream({ alarms: false })` silences it for a session that is failing on
+ * purpose.
+ */
 export const consoleStream = (stream = ""): ConsoleStream => {
-  const backlog: { readonly head: string; readonly body: unknown }[] = [];
+  const backlog: { readonly head: string; readonly body: unknown; readonly loud: boolean }[] = [];
   const schedule = idle();
   let armed = false;
   // On from the start when the env asked; otherwise `stream()` turns it on at
@@ -194,34 +229,48 @@ export const consoleStream = (stream = ""): ConsoleStream => {
   let enabled = asked.enabled;
   let filters: readonly string[] = asked.filters ?? [];
   let exclude: readonly string[] = asked.exclude ?? [];
+  let verdicts: readonly Verdict[] = asked.verdicts ?? [];
+  let alarms = import.meta.env.DEV;
 
   const drain = (): void => {
     armed = false;
-    for (const one of backlog.splice(0, backlog.length)) console.log(one.head, one.body);
+    for (const one of backlog.splice(0, backlog.length))
+      if (one.loud) console.error(one.head, one.body);
+      else console.log(one.head, one.body);
   };
 
-  const push = (head: string, body: unknown): void => {
-    if (!enabled || backlog.length >= MAX_CONSOLE_BACKLOG) return;
-    backlog.push({ head, body });
+  const push = (head: string, body: unknown, loud: boolean): void => {
+    if (backlog.length >= MAX_CONSOLE_BACKLOG) return;
+    backlog.push({ head, body, loud });
     if (armed) return;
     armed = true;
     schedule(drain);
   };
+
+  /** What the stream was asked for: names, then verdicts when any were named. */
+  const shown = (name: string, verdict: Verdict | undefined): boolean =>
+    enabled &&
+    wanted(name, filters, exclude) &&
+    (verdicts.length === 0 || (verdict !== undefined && verdicts.includes(verdict)));
 
   return {
     set: (options) => {
       enabled = options.enabled;
       filters = options.filters ?? [];
       exclude = options.exclude ?? [];
+      verdicts = options.verdicts ?? [];
+      if (options.alarms !== undefined) alarms = import.meta.env.DEV && options.alarms;
       if (!enabled) backlog.length = 0;
     },
     operation: (span) => {
-      if (!wanted(span.name, filters, exclude)) return;
-      push(`sefer ${span.name}${span.ms === undefined ? "" : ` ${span.ms}ms`}`, span);
+      const loud = alarms && alarming(span);
+      if (!loud && !shown(span.name, span.verdict)) return;
+      push(`sefer ${span.name}${span.ms === undefined ? "" : ` ${span.ms}ms`}`, span, loud);
     },
     loose: (event) => {
-      if (!wanted(event.name, filters, exclude)) return;
-      push(`sefer ${event.name} ${event.verdict ?? ""}`.trimEnd(), event);
+      const loud = alarms && event.verdict === "failed";
+      if (!loud && !shown(event.name, event.verdict)) return;
+      push(`sefer ${event.name} ${event.verdict ?? ""}`.trimEnd(), event, loud);
     },
   };
 };
@@ -297,9 +346,10 @@ export const installObservabilityDevSurface = (
     },
     logs: { recent: rings.logs },
     errors: (limit?: number) => {
-      const all = service.recent().filter((event) => event.name === "client.error");
+      const all = service.failures().filter((event) => event.verdict === "failed");
       return limit === undefined ? all : all.slice(-limit);
     },
+    failures: service.failures,
     export: service.export,
     level: service.level,
     setLevel: service.setLevel,
