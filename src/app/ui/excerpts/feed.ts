@@ -29,6 +29,7 @@ import {
   type OutlineRow,
 } from "#core/excerpts/excerpts";
 import { describesExactly, type Analysis } from "#core/galley";
+import type { ObservabilityService } from "#core/observability";
 import type { EditorBook } from "#editor/index";
 
 import { t } from "../../i18n";
@@ -42,7 +43,17 @@ export interface ExcerptFeed {
   /** Show one more verse above (-1) or below (+1) of one card. */
   readonly expand: (sid: string, direction: -1 | 1) => void;
   readonly seat: (bookId: BookId) => Promise<EditorBook | undefined>;
-  readonly openInEditor: (bookId: BookId, from: number, to?: number) => void;
+  /**
+   * `into` is the operation the jump belongs to, when the caller opened one
+   * (the Findings panel's `findings.navigate`); without it the span is a root
+   * of its own, as it always was.
+   */
+  readonly openInEditor: (
+    bookId: BookId,
+    from: number,
+    to?: number,
+    into?: ObservabilityService,
+  ) => void;
   /** An excerpt's edit session ended: rebuild, then tell the caller. */
   readonly edited: () => void;
 }
@@ -198,13 +209,15 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
    * is what says where the remaining time goes — the route's own `focus`
    * instantiates the book, and on a big one that is the part worth measuring.
    */
-  const openInEditor = (bookId: BookId, from: number, to?: number): void => {
+  const openInEditor = (
+    bookId: BookId,
+    from: number,
+    to?: number,
+    into: ObservabilityService = shell.services.composition.observability,
+  ): void => {
     const project = shell.project();
     if (project === undefined) return;
-    const done = shell.services.composition.observability.span(
-      `${options.name}.openInEditor`,
-      `${bookId} ${from}`,
-    );
+    const done = into.span(`${options.name}.openInEditor`, `${bookId} ${from}`);
     shell.aim(bookId, from, to);
     void navigate({
       to: "/project/$slug/book/$book",
