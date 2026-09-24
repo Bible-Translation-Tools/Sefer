@@ -155,6 +155,9 @@ export const startLogFiles = (services: Grounds): LogFiles => {
     busy = true;
     writing = write().finally(() => {
       busy = false;
+      // The queue wakes the writer only on empty → not empty, so anything
+      // left behind here would never wake it again.
+      if (queue.size() > 0) wake();
     });
     return writing;
   };
