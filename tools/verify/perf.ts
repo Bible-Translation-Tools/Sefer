@@ -15,7 +15,7 @@
  * TWO INSTRUMENTS, because the app's own one says nothing at `off`:
  *
  *  - `meter` — the keystroke meter's numbers as the ring records them on each
- *    `editor.mutation` (`editor.js_ms` = the meter's `gesture`,
+ *    `editor.mutation` (`editor.gesture_ms` = the meter's `gesture`,
  *    `editor.to_paint_ms` = its `render`/`input`). Absent at `off`, where the
  *    ring records nothing — including the operation the meter writes onto.
  *  - `probe` — this script's own, installed before the app and the same at
@@ -230,6 +230,10 @@ interface Measurement {
   readonly meter: {
     readonly samples: number;
     readonly gesture: Tails;
+    /** The browser and CodeMirror taking the input, before the first transaction. */
+    readonly browserInput: Tails;
+    /** What no span and no bucket accounted for. */
+    readonly unaccounted: Tails;
     readonly render: Tails;
     readonly renderSource: Record<string, number>;
   };
@@ -358,7 +362,8 @@ const measure = async (
     const mutations = lines
       .map((line) => JSON.parse(line) as { name: string; attrs?: Record<string, unknown> })
       .filter(
-        (event) => event.name === "editor.mutation" && event.attrs?.["editor.js_ms"] !== undefined,
+        (event) =>
+          event.name === "editor.mutation" && event.attrs?.["editor.gesture_ms"] !== undefined,
       );
     const numeric = (key: string) =>
       mutations
@@ -380,7 +385,9 @@ const measure = async (
       seconds: Number(seconds.toFixed(1)),
       meter: {
         samples: mutations.length,
-        gesture: tails(numeric("editor.js_ms")),
+        gesture: tails(numeric("editor.gesture_ms")),
+        browserInput: tails(numeric("editor.browser_input_ms")),
+        unaccounted: tails(numeric("editor.unaccounted_ms")),
         render: tails(numeric("editor.to_paint_ms")),
         renderSource,
       },

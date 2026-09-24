@@ -177,7 +177,7 @@ Every event carries the correlation `<bookId>#<trace seq>`, so one keystroke's s
 
 **Reading a keystroke.** Set the level to `spans` (`__sefer.observability.setLevel("spans")` under the dev server) and read `__sefer.observability.traces.recent()` (or `logs.recent()` for loose events): each frame is an `editor.phase.<name>` or `editor.command.<name>` span plus its verdict note, in pipeline order, all under one `<bookId>#<seq>` correlation, followed by the meter's one note with the derivation totals. There is no separate editor surface on `globalThis`.
 
-`core/meter.ts` (wall time from the DOM event to the last update of a gesture) rounds out the surface. None of it is Effect: it runs inside change and transaction filters thousands of times per typed paragraph, where a service lookup per rule is not free and there is no fiber to carry a context.
+`core/meter.ts` (elapsed time from the DOM event to the last update that carried a transaction, split into the browser's half, CodeMirror's `dispatch`, the derivation spans and a remainder) rounds out the surface. None of it is Effect: it runs inside change and transaction filters thousands of times per typed paragraph, where a service lookup per rule is not free and there is no fiber to carry a context.
 
 ## What was not ported
 

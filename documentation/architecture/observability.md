@@ -108,7 +108,7 @@ jq -c 'select(.kind=="operation" and .ms > 50) | {name, ms, verdict}' sefer.json
 jq -c --arg t "$TRACE" 'select(.trace==$t)' sefer.jsonl
 # the ten seconds before an event (epoch ms in $T)
 jq -c --argjson T "$T" 'select(.t >= $T-10000 and .t <= $T)' sefer.jsonl
-# the keystroke tail: each mutation's time to paint (JS work is editor.js_ms), sorted
+# the keystroke tail: each mutation's time to paint (event to last transaction is editor.gesture_ms), sorted
 jq -r 'select(.name=="editor.mutation") | .attrs["editor.to_paint_ms"] // empty' sefer.jsonl | sort -n
 # per-operation count and mean ms, to compare two captures side by side
 jq -s 'map(select(.kind=="operation")) | group_by(.name) | map({name: .[0].name, n: length, mean: (map(.ms) | add / length)})' sefer.jsonl
@@ -160,18 +160,19 @@ There are two separate axes, and they must not be confused.
 When a book is mounted, the editor's `keystrokeMeter` closes one gesture per DOM event and writes one bounded note per gesture, correlated by book id:
 
 ```text
-keystroke · ready · gesture=4.6ms render=21.3ms analyzes=1 analyze=2.1 decorate=1.0 scan=0.7 paint=0.3 phase:admission=0.1 other=0.4
+gesture=2.2ms input=16.0ms analyzes=1 browser=1.1 dispatch=0.4 analyze=0.3 scan=0.1 decorate=0.1 phase:settleTheCaretOnALegalPosition=0.2
 ```
 
 Read it left to right:
 
-- **`gesture`** — the JS work: the DOM event to the LAST state update of the gesture. This is the part Sefer's own code owns.
+- **`gesture`** — elapsed time (not CPU time) from the DOM event to the last update that carried a TRANSACTION. An update with no transaction — CodeMirror's measure pass reporting that a line's height changed — does not extend it: that runs in the frame after the key, and counting it billed the wait for that frame to the keystroke (a 1.5 ms key read 8 ms from the moment the line wrapped). On the ring it is `editor.gesture_ms`.
 - **`render`** — the same event to after the browser painted. The Event Timing API answers it where the browser offers one, and the line then prints it as **`input=`**; otherwise it is measured by waiting a frame and then a macrotask inside it (a `requestAnimationFrame` callback runs _before_ the paint) and prints as `render=`. Omitted entirely when neither observed anything — a headless state, a background tab — rather than printed as a guess. It is always larger than `gesture` and it is not a sum: between the last update and the paint sit CodeMirror's measure pass, style and layout.
 - **`analyzes`** — parses the gesture actually caused, counted by `Analysis.revision` moving, so a memo hit is not counted.
-- **the per-span totals** — exclusive milliseconds per span inside the gesture, biggest first: `analyze` (the engine parse, timed in `core/analyzer.ts`), the derivation spans `scan`, `index`, `decorate`, `paint`, and one `phase:<name>` per editing phase that cost anything. Buckets under 0.05 ms are dropped from the line.
-- **`other`** — gesture milliseconds no span accounted for.
+- **`browser`** — the DOM event to the first transaction (`editor.browser_input_ms`): the browser's own handling of the key — for typing, the native insertion into the content-editable — and CodeMirror reading the change back. Sefer owns none of it and it cannot be split further from inside the page, so it is one honest bucket rather than part of a remainder. Marked by a highest-precedence change filter, the first thing CodeMirror runs as a transaction is created.
+- **the per-span totals** — exclusive milliseconds per span inside the gesture, biggest first: `dispatch` (CodeMirror's `view.update` and DOM sync, wrapped at `dispatchTransactions` in `BookEditor.tsx`), `analyze` (the engine parse, timed in `core/analyzer.ts`), the derivation spans `scan`, `index`, `decorate`, `paint`, and one `phase:<name>` per editing phase that cost anything. Buckets under 0.05 ms are dropped from the line.
+- **`other`** — gesture milliseconds no bucket and no span accounted for (`editor.unaccounted_ms`). On Psalms in `pnpm verify:perf` it averages 0.05 ms of a 2.2 ms gesture; a large one means a span is missing, not that the clock is noisy.
 
-**The arithmetic closes:** every printed span plus `other` sums to `gesture`. That is why the meter opens no span of its own — the old note printed a `keystroke=` wrapper span whose exclusive time ran past the last update to the macrotask that closed it, so the numbers added up to nothing in particular and the one wall number was ambiguous between JS work and time to paint.
+**The arithmetic closes:** `browser` plus every printed span plus `other` sums to `gesture`. That is why the meter opens no span of its own — the old note printed a `keystroke=` wrapper span whose exclusive time ran past the last update to the macrotask that closed it, so the numbers added up to nothing in particular and the one wall number was ambiguous between JS work and time to paint.
 
 There is no separate editor surface on `globalThis` — no `__sefer.editor`. The editor reports through this one ring like everything else, so `__sefer.observability.traces.recent()` at level `spans` is how a keystroke is read. The engine's own `analyze` span lands here too, under the Galley adapter. (If an agent ever needs to drive the editor programmatically over CDP rather than by clicking, the thing to expose is the editor view itself, not a second instrument.)
 

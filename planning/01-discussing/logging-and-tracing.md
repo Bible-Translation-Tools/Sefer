@@ -4,9 +4,9 @@
 
 ## Open after the pass
 
-1. **Disk cap vs volume.** At `all`, continuous typing writes about 745 KB a minute (after a keystroke stopped recording phases the clock could not see; it was 974). 5 MB therefore holds roughly seven minutes of non-stop typing, or perhaps half an hour of real editing. Choose: raise the cap (20 MB is still small), write a slimmer record to disk than the ring keeps (drop the `derive.*` notes, which exist only at `all`), or accept that the disk is the last half hour and the failure ring is the long memory.
-2. **The meter's `editor.js_ms` overstates a keystroke's JS work** about twofold once a line wraps: nearly all of it is `editor.unaccounted_ms`, probably CodeMirror's measure pass counted into the gesture. Not confirmed.
-3. **`terms.load` runs twice** when /terms is revisited. Seen in traces; not changed.
+1. **Disk cap vs volume — decided 2026-09-24: keep 5 MB.** About half an hour of real editing is enough to capture the state around a bug; it is a rolling window of everything, enforced during the session as well as at start.
+2. **The meter — done 2026-09-24.** `editor.js_ms` was elapsed time to the last update of ANY kind, including CodeMirror's measure pass in the next frame once a line wrapped. It is `editor.gesture_ms` now, ending at the last transaction, with `editor.browser_input_ms` (the browser and CodeMirror taking the key) and a `dispatch` span, so `editor.unaccounted_ms` averages 0.05 ms of a 2.2 ms gesture.
+3. **`terms.load` — fixed 2026-09-24.** The guide cache was rebuilt empty on every call, so every visit decoded the guide again; 38.5 ms first visit, 0.9 ms after.
 4. **Not yet seen at runtime**, because the fixture has no repository or remote: `sync.plan`, the `unavailable` endings of `sync.transfer` and `import.remote`, `update.install` (desktop), `reference.pair`, and the desktop log directory.
 5. `analysis.warm` is in `OperationName` and nothing opens it.
 

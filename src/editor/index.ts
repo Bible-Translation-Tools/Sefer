@@ -77,5 +77,6 @@ export { noteBookIs, noteEditing } from "./recipes/noteEditor";
 // the keystroke meter attributes time with; `core/trace.ts` is the flat
 // per-event adapter over the same instrument.
 export { keystrokeMeter } from "./core/meter";
+export { span } from "./core/timing";
 export { annotateRepaint, gestureTrace } from "./observability";
 export { annotateOpen } from "./core/instrument";
