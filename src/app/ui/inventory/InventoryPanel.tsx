@@ -24,7 +24,7 @@
 import { Link } from "@tanstack/solid-router";
 import Type from "lucide-solid/icons/case-sensitive";
 import Search from "lucide-solid/icons/search";
-import { For, Show, createMemo, createSignal } from "solid-js";
+import { For, Show, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
 import { codePointLabel, type Glyph } from "#core/findings/inventory";
 import { POOLS, type Pool } from "#core/galley";
@@ -103,6 +103,36 @@ export function InventoryPanel() {
    * it and `tick` was waking this screen for every one of them.
    */
   const held = createMemo(() => shell.inventory(), { name: "inventory" });
+
+  // The screen opening, as one operation: mount to the frame after the first
+  // paint, which is the same `requestAnimationFrame`-then-timeout the
+  // findings panel defers its list with — a bare rAF runs before the paint.
+  // The inventory is already pivoted by the time anyone mounts this, so what
+  // the record measures is the table, and what it carries is how big it was.
+  // `inventory.glyphs` of 0 with `inventory.books` of 0 is "no publication
+  // yet", which is worth being able to tell from a clean project.
+  {
+    const opening = shell.services.composition.observability.operation("inventory.load");
+    const snapshot = untrack(held);
+    const facts = {
+      "inventory.glyphs": snapshot.glyphs.length,
+      "inventory.flagged": snapshot.glyphs.filter((glyph) => glyph.flagged.length > 0).length,
+      "inventory.flagged_sites": snapshot.flaggedSites,
+      "inventory.patterns": snapshot.patternCount,
+      "inventory.word_patterns": snapshot.wordPatterns.length,
+      "inventory.books": snapshot.bookCount,
+    };
+    let after: ReturnType<typeof setTimeout> | undefined;
+    const frame = requestAnimationFrame(() => {
+      after = setTimeout(() => opening.end("passed", facts), 0);
+    });
+    onCleanup(() => {
+      cancelAnimationFrame(frame);
+      if (after !== undefined) clearTimeout(after);
+      // Left before it painted: still one record, saying so.
+      opening.end("declined", { ...facts, "inventory.painted": false });
+    });
+  }
 
   const shown = createMemo(
     () =>
