@@ -22,7 +22,7 @@ Above the list sits the [recovery](recovery.md) banner, rendered only when a pro
 
 ### The index
 
-The table is drawn from `<projectsRoot>/.sefer/projects.json` — one row per project, `{ root, name, language, languageTag?, books, lastOpened? }`, decoded through the Effect Schema in `src/core/project/projectIndex.ts`. One file read draws the whole screen.
+The table is drawn from `<projectsRoot>/.sefer/projects.json` — one row per project, `{ root, name, language, languageTag?, books, lastOpened?, from? }`, decoded through the Effect Schema in `src/core/project/projectIndex.ts`. One file read draws the whole screen.
 
 The index is written at the moments a project's identity changes and at no other time: `recordProject` after an import or a clone, `touchProject` on open (beside the `shell.recentProjects` write the sidebar reads), `recordProject` again after a rename, `forgetProject` after a delete. It is then **assumed correct** — it is not a cache with an invalidation story, and nothing re-derives a row behind the reader's back.
 
@@ -75,7 +75,9 @@ The progress dialog counts files while the write runs, because an import of sixt
 
 The decoder reads `region` and `updated_at` when a row has them; the live payload carries neither today, only a code and a language name, so those columns print an em dash for a row that has none. Inventing a region would be worse than a blank column. `type` (translation or gateway) is derived from the owner — `wa-catalog` is the curated gateway set — and that mapping is stated in the port so the filter's meaning is readable rather than buried in a comparison inside a component.
 
-Download reuses the clone flow: the catalogue row hands its `cloneUrl` to the same `cloneRepository` the import hub calls.
+Download reuses the clone flow: the catalogue row hands its `cloneUrl` and its id to the same `cloneRepository` the import hub calls, and `rememberProject` runs in the same pipeline, so the row and its link exist before the toast says it is done.
+
+`from` is where a project first arrived — a zip, a folder, or which remote — cached from `<root>/.sefer/provenance.json` (`src/core/project/provenance.ts`), which is the record itself: one entry per arrival, appended by import `commit` before it copies and by `cloneRepository` after a clone succeeds. A remote entry keeps the URL as the person saw it, not the proxy's, and Find's `owner/repo`. Entries written before `via` existed are read as a zip when their source ends in `.zip`, else a folder. A project made here has no entry and no `from`.
 
 ## Create project: where it stops, and why
 

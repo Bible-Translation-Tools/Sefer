@@ -15,8 +15,8 @@
 
 import { Data, Effect, FileSystem, Result, type PlatformError } from "effect";
 
-import { writeFileStringAtomic } from "../fileSystem/atomic";
 import { joinPath, lastSegment, parentPath } from "../fileSystem/path";
+import { appendArrival } from "../project/provenance";
 import { decode } from "../source/source";
 import { decodeBurritoMetadata } from "./burrito";
 import { decodeResourceContainerManifest } from "./resourceContainer";
@@ -49,8 +49,6 @@ class ImportError extends Data.TaggedError("ImportError")<{
   readonly reason: ImportRefusal;
   readonly description: string;
 }> {}
-
-const PROVENANCE_PATH = ".sefer/provenance.json";
 
 const refuse = (reason: ImportRefusal, description: string): ImportError =>
   new ImportError({ reason, description });
@@ -187,29 +185,6 @@ export const classify = (
     return files.some(isUsfm) ? "looseUsfm" : "unknown";
   });
 
-interface ProvenanceRecord {
-  readonly stageId: string;
-  readonly sources: readonly string[];
-  readonly classification: Classification;
-  /** ISO-8601, from the host clock; provenance is a fact about the import. */
-  readonly at: string;
-  /** Book paths relative to the project root, as committed. */
-  readonly books: readonly string[];
-}
-
-/**
- * Reads the existing provenance list. A missing or unparseable file is an empty
- * list rather than a failure: provenance is a record, and losing the record
- * must not block an import. Entries stay `unknown` because this module only
- * ever appends to the list and writes it back — nothing reads a past record's
- * fields, so nothing needs to trust their shape.
- */
-const readProvenance = (
-  fileSystem: FileSystem.FileSystem,
-  path: string,
-): Effect.Effect<readonly unknown[]> =>
-  Effect.map(readJson(fileSystem, path), (value) => (Array.isArray(value) ? value : []));
-
 /**
  * Validates every staged book, records provenance and copies the staged files
  * into the project. Returns the committed book paths (relative to
@@ -225,6 +200,7 @@ export const commit = (
   fileSystem: FileSystem.FileSystem,
   staged: Staged,
   into: { readonly root: string },
+  via: "zip" | "folder",
 ): Effect.Effect<readonly string[], ImportError> =>
   Effect.gen(function* () {
     const classification = yield* classify(fileSystem, staged);
@@ -250,26 +226,15 @@ export const commit = (
         return yield* Effect.fail(refuse("InvalidBook", `${book}: ${source.failure.description}`));
     }
 
-    const provenancePath = joinPath(into.root, PROVENANCE_PATH);
-    const existing = yield* readProvenance(fileSystem, provenancePath);
-    const record: ProvenanceRecord = {
-      stageId: staged.stageId,
-      sources: staged.sources,
-      classification,
-      at: new Date(Date.now()).toISOString(),
-      books,
-    };
     yield* Effect.mapError(
-      fileSystem.makeDirectory(parentPath(provenancePath), { recursive: true }),
-      io(provenancePath),
-    );
-    yield* Effect.mapError(
-      writeFileStringAtomic(
-        fileSystem,
-        provenancePath,
-        `${JSON.stringify([...existing, record], undefined, 2)}\n`,
-      ),
-      io(provenancePath),
+      appendArrival(fileSystem, into.root, {
+        via,
+        stageId: staged.stageId,
+        sources: staged.sources,
+        classification,
+        books,
+      }),
+      io(`${into.root}/.sefer/provenance.json`),
     );
 
     for (const file of staged.files) {

@@ -25,6 +25,7 @@ import { ProjectAdmin } from "#core/admin/projectAdmin";
 import { lastSegment } from "#core/fileSystem/path";
 import { HostInfo } from "#core/host/hostInfo";
 import { recordProject, repairProjectIndex, type ProjectRow } from "#core/project/projectIndex";
+import { firstArrival, type ProjectOrigin } from "#core/project/provenance";
 
 import { languageName, languageTag, projectDisplayName } from "../../language";
 import type { Domain } from "../../services";
@@ -45,6 +46,8 @@ export interface ProjectSummary {
   readonly books: number;
   /** ISO-8601, or undefined when this root has never been opened here. */
   readonly lastOpened: string | undefined;
+  /** How it first arrived — a zip, a folder, or which remote — or undefined for one made here. */
+  readonly from: ProjectOrigin | undefined;
   /** Dev only: the seeded in-memory fixture, which has no metadata at all. */
   readonly fixture: boolean;
 }
@@ -76,6 +79,7 @@ const summarize = (
     // The second answer for a name, and the only one a project with no burrito
     // has: what `ProjectAdmin.rename` wrote into `.sefer/project.json`.
     const recorded = yield* Effect.map(admin.recordedName(root), Option.getOrUndefined);
+    const from = yield* Effect.map(firstArrival(fileSystem, root), Option.getOrUndefined);
 
     const folder = lastSegment(root);
     const locale = host.locale();
@@ -87,6 +91,7 @@ const summarize = (
       languageTag: languageTag(metadata),
       books: entries.filter(isUsfm).length,
       lastOpened,
+      from,
       fixture,
     };
   });
@@ -99,6 +104,7 @@ const asRow = (summary: ProjectSummary): ProjectRow => ({
   ...(summary.languageTag === "" ? {} : { languageTag: summary.languageTag }),
   books: summary.books,
   ...(summary.lastOpened === undefined ? {} : { lastOpened: summary.lastOpened }),
+  ...(summary.from === undefined ? {} : { from: summary.from }),
 });
 
 /** A row as the table draws it. `folder` is derived; the index need not store it. */
@@ -110,6 +116,7 @@ const asSummary = (row: ProjectRow, lastOpened: string | undefined): ProjectSumm
   languageTag: row.languageTag ?? "",
   books: row.books,
   lastOpened: row.lastOpened ?? lastOpened,
+  from: row.from,
   fixture: false,
 });
 
@@ -141,7 +148,11 @@ export const listProjects = (
     return [fixture, ...listed];
   });
 
-/** Adds or refreshes one project's row — import, create and rename all end here. */
+/**
+ * Adds or refreshes one project's row — every arrival (a zip, a folder, a
+ * clone from the import hub or from Find), create and rename all end here, so
+ * the list shows a new project the moment its files and history are on disk.
+ */
 export const rememberProject = (
   projectsRoot: string,
   root: string,

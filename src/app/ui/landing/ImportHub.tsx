@@ -164,7 +164,10 @@ export function ImportHub(props: { readonly onImported: () => void }) {
       phase = "commit";
       toasts.update(toast, { title: t("Importing project"), message: t("Committing books") });
       const into = `${services.projectsRoot}/${lastSegment(source)}`;
-      const books = await run(commit(services.fileSystem, staged, { root: into }), "import.commit");
+      const books = await run(
+        commit(services.fileSystem, staged, { root: into }, "folder"),
+        "import.commit",
+      );
       operation.attr({ "import.kind": kind, "import.books": books.length });
 
       finished(
@@ -263,7 +266,10 @@ export function ImportHub(props: { readonly onImported: () => void }) {
       phase = "commit";
       toasts.update(toast, { title: t("Importing project"), message: t("Committing books") });
       const into = `${services.projectsRoot}/${picked.name}`;
-      const books = await run(commit(services.fileSystem, staged, { root: into }), "import.commit");
+      const books = await run(
+        commit(services.fileSystem, staged, { root: into }, source),
+        "import.commit",
+      );
       operation.attr({
         "import.kind": kind,
         "import.books": books.length,

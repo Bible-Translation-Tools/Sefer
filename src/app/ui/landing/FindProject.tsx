@@ -21,6 +21,7 @@
  */
 
 import { Link } from "@tanstack/solid-router";
+import { Effect } from "effect";
 import ArrowDown from "lucide-solid/icons/arrow-down";
 import ArrowLeft from "lucide-solid/icons/arrow-left";
 import ArrowUp from "lucide-solid/icons/arrow-up";
@@ -52,7 +53,7 @@ import {
   toasts,
   type SortDirection,
 } from "../primitives";
-import { formatDate } from "./summaries";
+import { formatDate, rememberProject } from "./summaries";
 
 /** The four sortable columns, in the order they are drawn. */
 const SORTABLE: readonly (readonly [Column, () => string])[] = [
@@ -275,7 +276,14 @@ export function FindProject(props: { readonly onDownloaded: () => void }) {
     setBusy(entry.id);
     const toast = toasts.progress({ title: t("Downloading {name}", { name: entry.repo }) });
     void services
-      .run(cloneRepository(entry.cloneUrl, into))
+      .run(
+        // The index learns about the project in the same pipeline, the moment
+        // its files and history are on disk, so the list and its links are
+        // right before the toast says it is done.
+        cloneRepository(entry.cloneUrl, into, entry.id).pipe(
+          Effect.andThen(rememberProject(services.projectsRoot, into, undefined)),
+        ),
+      )
       // oxlint-disable-next-line solid/reactivity -- a promise continuation: runs once, when the download settles
       .then(() => {
         toasts.update(toast, {

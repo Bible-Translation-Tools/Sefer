@@ -36,6 +36,7 @@ import { Effect, FileSystem, PlatformError, Result, Schema } from "effect";
 
 import { writeFileStringAtomic } from "../fileSystem/atomic";
 import { joinPath } from "../fileSystem/path";
+import { ProjectOrigin } from "./provenance";
 
 /**
  * Sefer's own corner of the projects folder, alongside `.sefer/` inside a
@@ -55,6 +56,8 @@ const Row = Schema.Struct({
   books: Schema.Number,
   /** ISO-8601; absent until this device opens the project. */
   lastOpened: Schema.optionalKey(Schema.String),
+  /** How it first arrived, cached from `.sefer/provenance.json`; absent for one made here. */
+  from: Schema.optionalKey(ProjectOrigin),
 });
 
 export type ProjectRow = typeof Row.Type;
@@ -80,8 +83,11 @@ export type ProjectRow = typeof Row.Type;
  * only describes a root it has no row for, so a project already in the index
  * would never be looked at again. Teaching the reader about `manifest.yaml`
  * fixes new rows; bumping the version is what fixes the ones already written.
+ *
+ * `v: 4` adds `from`, the project's first arrival (a zip, a folder, or which
+ * remote). Rows written before it cannot say, so every one is described again.
  */
-const INDEX_VERSION = 3;
+const INDEX_VERSION = 4;
 
 const Index = Schema.Struct({ v: Schema.Literal(INDEX_VERSION), rows: Schema.Array(Row) });
 
