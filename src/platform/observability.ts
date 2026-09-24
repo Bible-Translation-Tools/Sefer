@@ -152,9 +152,9 @@ export interface ConsoleStream extends AssemblerSinks {
  */
 const MAX_CONSOLE_BACKLOG = 200;
 
-type Idle = (run: () => void) => void;
+export type Idle = (run: () => void) => void;
 
-const idle = (): Idle => {
+export const idle = (): Idle => {
   // SAFETY: `requestIdleCallback` is absent in Safari and in Node, so the
   // shape is narrowed to the one function used and checked before it is
   // called; `setTimeout` is the fallback.

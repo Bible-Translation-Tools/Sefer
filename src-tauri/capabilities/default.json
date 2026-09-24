@@ -36,6 +36,12 @@
           "path": "$APPDATA/**/.*/**"
         },
         {
+          "path": "$APPLOG"
+        },
+        {
+          "path": "$APPLOG/**"
+        },
+        {
           "path": "$APPLOCALDATA"
         },
         {

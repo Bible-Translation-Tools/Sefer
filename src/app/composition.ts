@@ -1,6 +1,7 @@
 import { Effect, Exit, FileSystem, Layer, ManagedRuntime, Option, Result, Tracer } from "effect";
 
 import { boot, type BootError, type BootInfo } from "#core/boot";
+import { makeLogQueue, type LogQueue } from "#core/diagnostics/logFiles";
 import {
   makeAssembler,
   Observability,
@@ -29,6 +30,12 @@ export interface Composition {
   readonly boot: Result.Result<BootInfo, BootError>;
   readonly observability: ObservabilityService;
   readonly fileSystem: FileSystem.FileSystem | undefined;
+  /**
+   * Every recorded event, waiting for the disk. It exists from boot so boot's
+   * own events are kept; `composeServices` attaches the writer once there is
+   * a FileSystem (`src/app/diagnostics.ts`).
+   */
+  readonly logs: LogQueue;
   readonly layer: Layer.Layer<Observability>;
   readonly runtime: ManagedRuntime.ManagedRuntime<Observability, never>;
   readonly dispose: () => Promise<void>;
@@ -328,7 +335,8 @@ export const composeApplication = async (
   });
   // The raw JSONL sink stays on the events themselves: a line per event is the
   // evidence format, and it must not wait for an operation to finish.
-  const sinks = [hostSink(env.log), assemble].filter(
+  const logs = makeLogQueue();
+  const sinks = [hostSink(env.log), assemble, logs.sink].filter(
     (sink): sink is ObservabilitySink => sink !== undefined,
   );
   // The session stamp: what every event of this run has in common, which
@@ -359,6 +367,7 @@ export const composeApplication = async (
 
   return {
     ...composed,
+    logs,
     layer: Layer.succeedContext(context),
     runtime,
     dispose: async () => {

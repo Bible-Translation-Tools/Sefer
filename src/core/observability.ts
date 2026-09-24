@@ -31,11 +31,7 @@ export type Verdict =
  * The verdicts the failure ring keeps, so a burst of ordinary work cannot
  * overwrite the one event someone will ask about.
  */
-export const HELD_VERDICTS: ReadonlySet<Verdict> = new Set<Verdict>([
-  "failed",
-  "unavailable",
-  "refused",
-]);
+const HELD_VERDICTS: ReadonlySet<Verdict> = new Set<Verdict>(["failed", "unavailable", "refused"]);
 
 export type EventKind = "operation" | "span" | "note" | "log";
 
@@ -100,6 +96,8 @@ export type OperationName =
   | "find.run"
   | "sync.transfer"
   | "review.apply"
+  /** Settings → Advanced → Export diagnostics: its size, never its content. */
+  | "diagnostics.export"
   /**
    * One command run from the palette, a keybinding or a click. The id is in
    * the name so a trace list reads as what the person did, and `command.` is a
@@ -230,7 +228,7 @@ export interface ObservabilityOptions {
 
 const DEFAULT_CAPACITY = 2000;
 
-export const FAILURE_CAPACITY = 200;
+const FAILURE_CAPACITY = 200;
 
 const DEFAULT_LEVEL: Level = "all";
 
