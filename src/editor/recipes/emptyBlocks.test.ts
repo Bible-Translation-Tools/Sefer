@@ -156,11 +156,12 @@ describe("empty blocks", () => {
       /**
        * The source breaks verse 1 across THREE poetry lines, and three is the
        * point. The engine inserts each inside block with no words — it cannot
-       * know where the target's own sentence splits — and they stack:
+       * know where the target's own sentence splits — and they stack, in
+       * source order since scripture-kitchen v0.1.6:
        *
        *     \v 1 Paul a prisoner of Christ Jesus and a brother
-       *     \q3        <- empty BLOCK: nothing before the next marker
-       *     \q2        <- not empty: it opens the block \v 2 lives in
+       *     \q2        <- empty BLOCK: nothing before the next marker
+       *     \q3        <- not empty: it opens the block \v 2 lives in
        *     \v 2 and to the church in thy house
        *
        * So one source break leaves no empty block at all (the marker adopts
@@ -186,8 +187,8 @@ describe("empty blocks", () => {
       applyOverlay(previewed.success, book);
 
       const after = book.source().text;
-      expect(emptyBlocks(on(after)).map((row) => row.marker)).toEqual(["q3"]);
-      expect(labelsIn(on(after))).toEqual(["Needs text — Q3"]);
+      expect(emptyBlocks(on(after)).map((row) => row.marker)).toEqual(["q2"]);
+      expect(labelsIn(on(after))).toEqual(["Needs text — Q2"]);
     }));
 
   it("goes away when the block gets words", () =>

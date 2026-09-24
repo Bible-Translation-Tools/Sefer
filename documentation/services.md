@@ -169,7 +169,7 @@ A bounded ring of events, spans and verdicts, with JSONL export. The dev surface
 
 ### Overview
 
-The pinned Scripture Kitchen WASM build (tagged git dependency, v0.1.5). Onion parses, Sous proofreads, and Galley composes both. It is one in-process synchronous handle: `analyze`, the corpus (`update`, `updateReference`, `publish`), `find`, `lint`, `toc`, `mask`, `diff`/`merge`, `formatEdits`, `skeleton`/`overlay`, `hash`. `src/core/galley`; loading happens in `src/platform/{web,node}/galley.ts`. → [galley](architecture/galley.md)
+The pinned Scripture Kitchen WASM build (tagged git dependency, v0.1.6). Onion parses, Sous proofreads, and Galley composes both. It is one in-process synchronous handle: `analyze`, the corpus (`update`, `updateReference`, `publish`), `find`, `lint`, `toc`, `mask`, `diff`/`merge`, `formatEdits`, `skeleton`/`overlay`, `hash`. `src/core/galley`; loading happens in `src/platform/{web,node}/galley.ts`. → [galley](architecture/galley.md)
 
 ### Constraints and known bugs
 
