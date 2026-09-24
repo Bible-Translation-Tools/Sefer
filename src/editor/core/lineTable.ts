@@ -40,10 +40,10 @@ export const NO_LINES: LineTable = {
 function openerOfLine(f: Fold, from: number, to: number): number {
   const cst = f.cst;
   const { startAt, endAt, kindAt } = cst;
-  for (let i = cst.tokenAt(from); i < cst.count && startAt[i] <= to; i++) {
+  for (let i = cst.firstTokenFrom(from); i < cst.count && startAt[i] <= to; i++) {
     if (kindAt[i] === TOKEN.NEWLINE) return -1;
     if (endAt[i] <= startAt[i]) continue;
-    if (cst.isBlank(i)) continue;
+    if (cst.isHorizontalSpace(i)) continue;
     return cst.isLineOpening(i) && kindAt[i] === TOKEN.MARKER ? i : -1;
   }
   return -1;

@@ -7,6 +7,16 @@
  * offset, where does it end, what shape is its node). One pass into
  * `Int32Array`s answers all of them in constant time and allocates nothing per
  * question.
+ *
+ * These planes are a CACHE over the Galley reader, not a second reader. Every
+ * value is read through `TokenRow`/`NodeRow`/`Tree`/`Toc`; nothing here knows a
+ * byte offset or a stride, so a wire change lands in scripture-kitchen's
+ * generated reader and reaches this file as a type error, not a misread. What
+ * the planes add is Sefer's own: line openings, note/origin/wrapper scope,
+ * block extents, designator roles and the `mapping.ts` rows.
+ *
+ * TODO: pin with a test once editor behaviour is locked. The planes must agree
+ * with the reader they cache (spans, kinds, owners) on a real fixture.
  */
 
 import {
@@ -80,9 +90,9 @@ export interface CstScan {
   designatorOf: Int32Array;
   spanning: number[];
   tree: Tree;
-  tokenAt: (pos: number) => number;
+  firstTokenFrom: (pos: number) => number;
   payloadEnd: (i: number) => number;
-  isBlank: (i: number) => boolean;
+  isHorizontalSpace: (i: number) => boolean;
   isLineOpening: (i: number) => boolean;
   shapeAt: (i: number) => TokenShape;
   rowAt: (i: number) => Row<TokenShape>;
@@ -136,7 +146,12 @@ export function scanCst(doc: string, analysis: Analysis): CstScan {
   const payloadEnd = (i: number): number =>
     (flagsAt[i] & TOKEN_DELIMITER_FOLDED) !== 0 ? endAt[i] - 1 : endAt[i];
 
-  const isBlank = (i: number): boolean =>
+  /**
+   * Horizontal whitespace of either shape the engine names: a `Pad` token, or
+   * a `Text` token carrying `TOKEN_BLANK`. Wider than `TokenView.isBlank()`,
+   * which is the flag alone; Sefer's line walks treat both as nothing to open.
+   */
+  const isHorizontalSpace = (i: number): boolean =>
     kindAt[i] === TOKEN.PAD || (flagsAt[i] & TOKEN_BLANK) !== 0;
 
   const lineCount = breaks.length + 1;
@@ -148,7 +163,12 @@ export function scanCst(doc: string, analysis: Analysis): CstScan {
   }
   lineTo[lineCount - 1] = doc.length;
 
-  const tokenAt = (pos: number): number => {
+  /**
+   * The first token that starts at or after `pos` (`count` when none does).
+   * Not `Tree.tokenAt`, which answers the token CONTAINING an offset and
+   * throws outside the document.
+   */
+  const firstTokenFrom = (pos: number): number => {
     let lo = 0;
     let hi = count;
     while (lo < hi) {
@@ -330,9 +350,9 @@ export function scanCst(doc: string, analysis: Analysis): CstScan {
     designatorOf,
     spanning,
     tree,
-    tokenAt,
+    firstTokenFrom,
     payloadEnd,
-    isBlank,
+    isHorizontalSpace,
     isLineOpening: (i: number) => openingAt[i] === 1,
     shapeAt,
     rowAt: (i: number) => rowForToken(shapeAt(i)),
