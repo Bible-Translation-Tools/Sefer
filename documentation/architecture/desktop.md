@@ -59,6 +59,7 @@ command per port member, and the whole `Git` port is answered — no member refu
 | `git_resolve_ref`           | `Git.resolve`                              | `Git`    |
 | `git_current_branch`        | `Git.branch`                               | `Git`    |
 | `git_changed_paths_between` | `Git.changedPathsBetween`                  | `Git`    |
+| `git_clone`                 | `Remote.clone`                             | `Remote` |
 | `git_ensure_remote`         | `Remote.attach`                            | `Remote` |
 | `git_remote_url`            | `Remote.origin`                            | `Remote` |
 | `git_fetch`                 | `Remote.fetch`                             | `Remote` |

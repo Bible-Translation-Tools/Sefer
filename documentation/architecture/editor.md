@@ -187,6 +187,8 @@ Every event carries the correlation `<bookId>#<trace seq>`, so one keystroke's s
 
 ## The file map, by responsibility
 
+`cst.ts`'s typed arrays are a CACHE over the Galley reader, not a second reader: every value is read through `TokenRow`/`NodeRow`/`Tree`/`Toc`, so a wire change lands in scripture-kitchen's generated reader and reaches the editor as a type error, not a misread. What the planes add is the editor's own — line openings, note/origin/wrapper scope, block extents, designator roles, the `mapping.ts` rows. Two helpers are named so they cannot be mistaken for the reader's: `firstTokenFrom(pos)` (the first token starting at or after a position; `Tree.tokenAt` answers the one containing it and throws outside the document) and `isHorizontalSpace(i)` (a `Pad` token or a `Text` token flagged `TOKEN_BLANK`; `TokenView.isBlank()` is the flag alone).
+
 | what                                  | where                                                                                                                                         |
 | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | the engine seam                       | `core/analyzer.ts`                                                                                                                            |

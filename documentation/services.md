@@ -527,7 +527,7 @@ Browsing the online catalogue on the landing screens. `src/app/catalogue.ts`. �
 
 ### Overview
 
-Staged, validated import with provenance (`stage` → `classify` → `commit`, `.sefer/provenance.json`). Web intake takes a folder or a zip. `src/core/resources/import.ts`, `platform/web/intake.ts`, `ImportHub.tsx`. → [resources](architecture/resources.md), [landing](architecture/landing.md)
+Staged, validated import with provenance (`stage` → `classify` → `commit`, `.sefer/provenance.json`, `via` zip or folder; a clone appends a `remote` record, `src/core/project/provenance.ts`). Every arrival then writes its projects-index row at once, `from` included. Web intake takes a folder or a zip. `src/core/resources/import.ts`, `platform/web/intake.ts`, `ImportHub.tsx`. → [resources](architecture/resources.md), [landing](architecture/landing.md)
 
 ### Constraints and known bugs
 

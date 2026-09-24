@@ -32,17 +32,17 @@ the settings page's Network card offers a Reload exactly when
 `endpointsChangedSinceBoot` says the preference has drifted from them. `endpoints.ts` carries a dated TODO
 for making the endpoint live instead.
 
-| variable                       | used by             | meaning                                                                                                                                                |
-| ------------------------------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `VITE_SEFER_UPDATER_HOST`      | desktop updater     | updater worker base; the plugin appends `/{{target}}/{{current_version}}`, the version picker reads `/versions` and `/{{target}}/at/{{version}}`       |
-| `VITE_SEFER_WACS_WEB_URL`      | Web remote sync     | the ONE endpoint a browser build uses, for transfers and the Gitea API alike. Overridable in Settings                                                  |
-| `VITE_SEFER_WACS_DESKTOP_URL`  | desktop remote sync | the same for desktop, which needs no proxy and so is normally Gitea itself                                                                             |
-| `VITE_SEFER_WACS_APP_ID`       | Web remote sync     | what the proxy expects in `X-Requested-With`; empty sends none                                                                                         |
-| `VITE_SEFER_LANGUAGE_API_URL`  | shell               | language names and directions. Overridable in Settings                                                                                                 |
-| `VITE_SEFER_OTLP_URL`          | dev only            | OTLP endpoint merged beside the observability ring; traces and logs only                                                                               |
-| `VITE_SEFER_OTLP_METRICS`      | dev only            | `1` to send OTLP metrics as well. Off by default — see below                                                                                           |
-| `VITE_SEFER_LOG` / `SEFER_LOG` | dev only            | the RAW sink: one JSONL line per event to stderr, under a Node-shaped host                                                                             |
-| `VITE_SEFER_STREAM`            | dev only            | console stream: `1` for every operation, or comma-separated name prefixes. A `!` prefix excludes: `!editor.selection` is everything except caret moves |
+| variable                       | used by             | meaning                                                                                                                                                                                           |
+| ------------------------------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `VITE_SEFER_UPDATER_HOST`      | desktop updater     | updater worker base; the plugin appends `/{{target}}/{{current_version}}`, the version picker reads `/versions` and `/{{target}}/at/{{version}}`                                                  |
+| `VITE_SEFER_WACS_WEB_URL`      | Web remote sync     | the ONE endpoint a browser build uses, for transfers and the Gitea API alike, WITH its scheme (`https://…`): a bare host becomes a clone URL isomorphic-git cannot parse. Overridable in Settings |
+| `VITE_SEFER_WACS_DESKTOP_URL`  | desktop remote sync | the same for desktop, which needs no proxy and so is normally Gitea itself                                                                                                                        |
+| `VITE_SEFER_WACS_APP_ID`       | Web remote sync     | what the proxy expects in `X-Requested-With`; empty sends none                                                                                                                                    |
+| `VITE_SEFER_LANGUAGE_API_URL`  | shell               | language names and directions. Overridable in Settings                                                                                                                                            |
+| `VITE_SEFER_OTLP_URL`          | dev only            | OTLP endpoint merged beside the observability ring; traces and logs only                                                                                                                          |
+| `VITE_SEFER_OTLP_METRICS`      | dev only            | `1` to send OTLP metrics as well. Off by default — see below                                                                                                                                      |
+| `VITE_SEFER_LOG` / `SEFER_LOG` | dev only            | the RAW sink: one JSONL line per event to stderr, under a Node-shaped host                                                                                                                        |
+| `VITE_SEFER_STREAM`            | dev only            | console stream: `1` for every operation, or comma-separated name prefixes. A `!` prefix excludes: `!editor.selection` is everything except caret moves                                            |
 
 ## Telemetry sends traces and logs, and metrics only when asked
 
