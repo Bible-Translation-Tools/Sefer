@@ -116,6 +116,34 @@ With a lot of generated code adding attributes, an allowlist fails safe and a de
 - **Where it runs:** first on a laptop against the Web build, then desktop.
 - **Write rules for any sink:** batch, flush when the browser is idle, never write per event.
 
+#### Baseline, 2026-09-24
+
+`pnpm verify:perf --runs 5` (200 chars at 150 ms, 20 warm-up, medians of five runs, levels alternating order), on an Apple M1 Max, 32 GB, macOS 26.5.2, Playwright's headless Chromium (1.63), against the **dev server** over the fixture's Psalms (3 KB, USFM mode). Master at `f9e3c7f`. Run `.verify/2026-09-24T16-47-13-934Z-5fd1fbb7`.
+
+|                                             | `off`              | `all`                  | all vs off                  |
+| ------------------------------------------- | ------------------ | ---------------------- | --------------------------- |
+| key handlers (Event Timing) p50 / p95 / p99 | 4.2 / 6.7 / 8.2 ms | 4.4 / 6.7 / 7.9 ms     | +5% / 0% / −4%              |
+| input-to-paint (Event Timing) p95 / p99     | 16 / 16 ms         | 24 / 24 ms             | one 8 ms quantum; see below |
+| frame-trick paint p95 / p99                 | 18.8 / 23.2 ms     | 19.9 / 21.8 ms         | +6% / −6%                   |
+| meter `editor.js_ms` p50 / p95 / p99        | —                  | 8.2 / 14.2 / 16.7 ms   |                             |
+| meter `editor.to_paint_ms` p95              | —                  | 30 ms (mostly `frame`) |                             |
+| JS heap after GC                            | 37.5 MB            | 39.1 MB                | +1.6 MB                     |
+| events / min                                | 0                  | 2,400                  |                             |
+| JSONL bytes / min                           | 0                  | 974 KB                 |                             |
+| minutes the 2,000-event ring covers         | —                  | 0.83                   |                             |
+| failure ring                                | 0                  | 0                      |                             |
+| project open (click → book list)            | 124 ms             | 127 ms                 |                             |
+| Compare (click → "1 book(s) differ")        | 111 ms             | 109 ms                 |                             |
+
+What it says:
+
+- **`all` costs nothing measurable on the keystroke tail** here: the handlers' p95 is identical and p99 is inside run-to-run noise. By the rule above, `all` stays the default — pending a run against a build and a large book.
+- **The input-to-paint "+50%" is not a cost.** Event Timing rounds to 8 ms, and each run's p95 lands on 16 or 24 ms: two of five `off` runs read 24, three of five `all` runs. The median across runs flips one quantum.
+- **Bytes, not time, are the constraint.** Continuous typing records ~6 events and ~2.4 KB per keystroke; `editor.mutation` alone is ~1.2 KB a record (its per-phase `editor.phase.*.ms` attributes) and half the bytes. At that rate the 5 MB disk cap in (6) holds about five minutes of continuous typing, and the ring under a minute. Real editing pauses, so this is an upper bound, but the caps (or the mutation record's width) need a decision before they are fixed.
+- **The meter's `js_ms` is not the key's JS work.** It runs about twice the handlers' time, and it jumps from ~1.5 ms to ~8 ms roughly when the typed line starts to wrap — nearly all of it `editor.unaccounted_ms`, i.e. a later update (CodeMirror's measure pass) after the key's own task. And in headless the meter's `to_paint` mostly comes from the frame trick (reads ~30 ms) where Event Timing says 16–24.
+
+Not measured yet: the disk sink's pending-list drops and idle-flush cost (over the fixture the sink writes nothing — `startLogFiles` skips it), a production build, en_ulb, and desktop.
+
 ### 6. Persistence (goals 3, 6 and 7): write everything, bounded by age and size
 
 **Lean (Will, 2026-09-24): flush every recorded event to disk.** The ring's 2,000 events is then only a memory bound: enough for the dev surface and the failure ring's neighbours, small enough not to pressure the Web heap or the GC. It stops being the retention promise.

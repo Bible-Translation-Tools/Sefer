@@ -33,7 +33,8 @@
     "typecheck": "tsc --noEmit",
     "verify:chrome": "node tools/verify/chrome.ts",
     "verify:design": "node tools/verify/designBundle.ts",
-    "verify:launch": "node tools/verify/launch.ts"
+    "verify:launch": "node tools/verify/launch.ts",
+    "verify:perf": "node tools/verify/perf.ts"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",
