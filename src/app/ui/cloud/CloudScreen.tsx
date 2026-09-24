@@ -23,7 +23,7 @@ import CloudIcon from "lucide-solid/icons/cloud";
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 
 import { Git } from "#core/git/git";
-import { Observability, type Attrs, type Verdict } from "#core/observability";
+import { Observability, type Attrs, type Operation, type Verdict } from "#core/observability";
 import { Remote, remoteVerdict } from "#core/remote/remote";
 import {
   combine,
@@ -174,13 +174,71 @@ export function CloudScreen() {
     };
   };
 
-  /** One pass over the repository. */
+  /**
+   * One pass over the repository, as two operations.
+   *
+   * `sync.survey` is the reading and ends with the state it derived — the
+   * last state this session observed, which is what a diagnostics export
+   * reports — and `sync.plan` is the incoming plan, opened only when the
+   * device is behind. The plan FOLLOWS the survey rather than running inside
+   * it: the survey has already decided the state and ended by the time the
+   * plan starts, so it is a cause and not a parent.
+   *
+   * Counts and flags only. Never the origin URL, the account or a commit.
+   */
   const load = (options: ReadSyncOptions | undefined): void => {
     if (options === undefined) return;
+    const observability = services.composition.observability;
+    const surveying = observability.operation("sync.survey", {
+      "sync.online": options.online,
+      ...(options.fetchedAt === undefined ? {} : { "sync.fetched_at": options.fetchedAt }),
+    });
+    let planning: Operation | undefined;
     void services
-      .run(readSync(options))
+      .run(Effect.provideService(readSync(options), Observability, surveying))
+      .then(async (survey): Promise<SyncFacts> => {
+        const { reading } = survey;
+        const state = sync(reading).state;
+        // `offline` is the device, or the last transfer, saying the network
+        // did not answer: kept and exported, but not the alarm.
+        surveying.end(state === "offline" ? "unavailable" : "passed", {
+          "sync.state": state,
+          "sync.ahead": reading.ahead.length,
+          "sync.behind": reading.behind.length,
+          "sync.remote": reading.origin !== undefined,
+          "sync.signed_in": reading.signedIn,
+          "sync.online": reading.online,
+          "sync.uncommitted": reading.uncommitted,
+          "sync.merge": reading.mergeInProgress,
+          ...(reading.fetchedAt === undefined ? {} : { "sync.fetched_at": reading.fetchedAt }),
+          ...(reading.lastFailure === undefined ? {} : { "sync.reason": reading.lastFailure }),
+        });
+        if (survey.plan === undefined) return { reading, plan: emptyPlan };
+        planning = observability.operation(
+          "sync.plan",
+          { "sync.behind": reading.behind.length },
+          { cause: surveying.trace },
+        );
+        const plan = await services.run(
+          Effect.provideService(survey.plan, Observability, planning),
+        );
+        planning.end("passed", {
+          "sync.books": plan.books.length,
+          "sync.contested": plan.contested.length,
+          "sync.chapters": plan.chapterCount,
+          "sync.overlap": plan.overlapCount,
+          "sync.clean": plan.clean,
+        });
+        return { reading, plan };
+      })
       .then(setFacts)
-      .catch((cause: unknown) => setProblem(describe(cause)));
+      .catch((cause: unknown) => {
+        // Both programs are typed never-failing, so reaching here is a defect
+        // in our code: the alarm. `end` is a no-op on whichever already ended.
+        surveying.end("failed");
+        planning?.end("failed");
+        setProblem(describe(cause));
+      });
   };
 
   // Solid 2 has no `onMount`; an effect whose compute gathers the reading's

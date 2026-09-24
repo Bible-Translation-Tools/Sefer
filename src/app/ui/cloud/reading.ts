@@ -20,7 +20,6 @@ import { Git, type Commit } from "#core/git/git";
 import { Gitea } from "#core/remote/gitea";
 import { Remote } from "#core/remote/remote";
 import {
-  emptyPlan,
   emptyReading,
   mergeBase,
   notIn,
@@ -34,6 +33,19 @@ import {
 export interface SyncFacts {
   readonly reading: SyncReading;
   readonly plan: IncomingPlan;
+}
+
+/**
+ * The reading, and the plan still to be worked out.
+ *
+ * Two halves because they are two pieces of work: the reading is cheap and
+ * decides the state, and the plan — every changed blob, read three ways — is
+ * only asked for when the device is behind. `plan` is that work unrun, or
+ * `undefined` when there is nothing arriving.
+ */
+export interface SyncSurvey {
+  readonly reading: SyncReading;
+  readonly plan: Effect.Effect<IncomingPlan, never, Git | FileSystem.FileSystem> | undefined;
 }
 
 /** The branch to assume when HEAD is unborn — the one `git.init` creates. */
@@ -88,7 +100,7 @@ const orEmpty = <A, E>(effect: Effect.Effect<A, E>, fallback: A): Effect.Effect<
  */
 export const readSync = (
   options: ReadSyncOptions,
-): Effect.Effect<SyncFacts, never, Git | Remote | Gitea | FileSystem.FileSystem> =>
+): Effect.Effect<SyncSurvey, never, Git | Remote | Gitea | FileSystem.FileSystem> =>
   Effect.gen(function* () {
     const git = yield* Git;
     const remote = yield* Remote;
@@ -107,7 +119,7 @@ export const readSync = (
     };
 
     const opened = yield* Effect.result(git.open(options.root));
-    if (Result.isFailure(opened)) return { reading: base, plan: emptyPlan };
+    if (Result.isFailure(opened)) return { reading: base, plan: undefined };
     const repo = opened.success;
 
     const origin = Option.getOrUndefined(yield* orEmpty(remote.origin(repo), Option.none()));
@@ -138,15 +150,14 @@ export const readSync = (
       mergeInProgress: yield* mergeInProgress(fileSystem, options.root),
     };
 
-    if (behind.length === 0) return { reading, plan: emptyPlan };
+    if (behind.length === 0) return { reading, plan: undefined };
 
     // The plan. `surveyIncoming` is core's, and it is core's for a reason:
     // Combine asks the same question before it runs, and the screen must not
     // be able to offer a move the program then refuses.
-    const survey = yield* surveyIncoming(repo, {
-      tracking,
-      base: mergeBase(localLog, remoteLog),
-      behind,
-    });
-    return { reading, plan: survey.plan };
+    const plan = Effect.map(
+      surveyIncoming(repo, { tracking, base: mergeBase(localLog, remoteLog), behind }),
+      (survey) => survey.plan,
+    );
+    return { reading, plan };
   });
