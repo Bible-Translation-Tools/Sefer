@@ -1,4 +1,4 @@
-import { Outlet, createFileRoute } from "@tanstack/solid-router";
+import { Outlet, createFileRoute, useRouterState } from "@tanstack/solid-router";
 import { Show, onCleanup } from "solid-js";
 
 import { installCommandKeys, runCommand } from "#app/commands";
@@ -48,9 +48,15 @@ import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
 
 function Workspace() {
   const shell = useShell();
+  const path = useRouterState({ select: (state) => state.location.pathname });
+  // Never on the projects page: `/projects`, and `/` whenever it is drawing
+  // that page. The first-run shell on `/` keeps it — the sidebar's project
+  // control is that screen's one way in.
+  const onProjectsPage = (): boolean =>
+    path() === "/projects" || (path() === "/" && !shell.firstRun());
   return (
     <div class="flex h-full">
-      <div class={shell.sidebarShowing() ? "w-80 shrink-0" : "hidden"}>
+      <div class={shell.sidebarShowing() && !onProjectsPage() ? "w-80 shrink-0" : "hidden"}>
         <ProjectSidebar />
       </div>
       {/* `relative`, and the door OUTSIDE the scroller: a full-page screen
@@ -77,7 +83,7 @@ function Chrome() {
   const shell = () => readyShell(state());
 
   return (
-    <div class="flex h-screen bg-surface-secondary">
+    <div class="flex h-screen bg-surface-canvas">
       <Show
         when={shell()}
         fallback={<div class="w-13 shrink-0 border-e border-sidebar-border bg-surface-primary" />}

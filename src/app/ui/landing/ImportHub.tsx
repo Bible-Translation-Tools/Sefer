@@ -82,7 +82,15 @@ interface SourceCard {
   readonly onRun: () => void;
 }
 
-export function ImportHub(props: { readonly onImported: () => void }) {
+export function ImportHub(props: {
+  readonly onImported: () => void;
+  /**
+   * `cards` (the default) is the three explained sources. `buttons` is just
+   * "Import zip" and "Import folder", each going straight to the system
+   * picker — the same pipeline and progress dialog, less chrome.
+   */
+  readonly variant?: "cards" | "buttons";
+}) {
   const shell = useShell();
   const { services } = shell;
   const capabilities = services.hostInfo.capabilities();
@@ -440,9 +448,46 @@ export function ImportHub(props: { readonly onImported: () => void }) {
     },
   ];
 
+  const pick = (source: "zip" | "folder"): void => {
+    if (source === "zip") importPicked(t("Import from a zip"), "zip");
+    else if (nativeFolder) importFolder();
+    else importPicked(t("Import from a folder"), "folder");
+  };
+  // 56px tall with the 1px border, a 16px radius and body text: the large
+  // button of the projects page.
+  const bigButton = "h-auto! rounded-2xl! p-[15px]! px-[31px]! text-body! leading-6! text-brand!";
+
   return (
     <>
-      <ul class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" data-import-hub>
+      <Show when={props.variant === "buttons"}>
+        <div class="flex flex-wrap items-center justify-center gap-4">
+          <Button
+            variant="secondary"
+            data-testid="import-zip"
+            class={bigButton}
+            icon={<FileArchive size={24} aria-hidden="true" />}
+            onClick={() => pick("zip")}
+          >
+            {t("Import zip")}
+          </Button>
+          <Button
+            variant="secondary"
+            data-testid="import-folder"
+            class={bigButton}
+            icon={<FolderOpen size={24} aria-hidden="true" />}
+            onClick={() => pick("folder")}
+          >
+            {t("Import folder")}
+          </Button>
+        </div>
+      </Show>
+      <ul
+        class={cx(
+          "grid gap-3 sm:grid-cols-2 lg:grid-cols-3",
+          props.variant === "buttons" && "hidden",
+        )}
+        data-import-hub
+      >
         <For each={sources()}>
           {(source) => (
             <li class="contents">

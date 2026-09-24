@@ -14,7 +14,7 @@ import { merge, omit } from "solid-js";
 
 import { cx, variants, type ClassValue } from "./cx";
 
-export type InputSize = "sm" | "md";
+export type InputSize = "sm" | "md" | "lg";
 
 const field = variants({
   base: [
@@ -26,10 +26,22 @@ const field = variants({
     size: {
       sm: "h-7 text-smallest",
       md: "h-9 text-small",
+      // The page-level search: 56px tall — the height of the large buttons
+      // (16px text with 16px padding) — a 16px radius, body text.
+      lg: "h-14 rounded-2xl! text-body",
     },
   },
   defaults: { size: "md" },
 });
+
+/**
+ * Side padding, and room for the icon: at `lg` the icon sits 32px in and the
+ * text starts 16px after a 20px icon, so 32 + 20 + 16 = 68px.
+ */
+const padding = (size: InputSize, icon: boolean): string => {
+  if (size === "lg") return icon ? "ps-[4.25rem] pe-8" : "px-8";
+  return icon ? "pe-2.5 ps-8" : "px-2.5";
+};
 
 export interface InputProps extends Omit<ComponentProps<"input">, "size"> {
   readonly size?: InputSize;
@@ -45,7 +57,7 @@ export function Input(props: InputProps) {
     get class() {
       return cx(
         field({ size: props.size }),
-        props.icon === undefined ? "px-2.5" : "pe-2.5 ps-8",
+        padding(props.size ?? "md", props.icon !== undefined),
         props.class,
       );
     },
@@ -56,7 +68,10 @@ export function Input(props: InputProps) {
       {props.icon !== undefined && (
         <span
           aria-hidden="true"
-          class="pointer-events-none absolute start-2.5 flex text-on-surface-tertiary"
+          class={cx(
+            "pointer-events-none absolute flex text-on-surface-tertiary",
+            props.size === "lg" ? "start-8" : "start-2.5",
+          )}
         >
           {props.icon}
         </span>

@@ -117,11 +117,12 @@
   --surface-primary: var(--neutral-100);
   --surface-secondary: var(--neutral-95);
   --surface-tertiary: var(--neutral-90);
+  /* The app background, behind every screen (the shell root in _app.tsx). */
   --surface-canvas: #f4f8fb;
   --surface-border: var(--neutral-90);
   --surface-overlay: rgba(31, 31, 31, 0.6);
   --on-surface-primary: var(--neutral-5);
-  --on-surface-secondary: var(--neutral-20);
+  --on-surface-secondary: #516b86;
   --on-surface-tertiary: var(--neutral-60);
 
   --surface-error: var(--error-95);
@@ -371,6 +372,13 @@
 }
 @utility shadow-large {
   box-shadow: var(--shadow-large);
+}
+
+/* A scrollbar that stays out of the way: no track, a thin light-gray thumb.
+   Tokens, so the dark swap reaches it. */
+@utility scrollbar-subtle {
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-tertiary) transparent;
 }
 
 /* The reset essentials, in Tailwind's own `base` layer so every utility

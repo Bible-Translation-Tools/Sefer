@@ -5,7 +5,7 @@
  * Form, Refine, Key terms — the three ways of working on a project's text;
  * they are offered with nothing open but disabled, so the rail keeps one shape.
  * Form is not built yet and stays disabled. At the foot: More, Import (the
- * way a project comes in, `/projects`), Settings, and Account (a placeholder
+ * rail slot for bringing a project in, disabled for now), Settings, and Account (a placeholder
  * until there is an account).
  *
  * Every enabled tile is a place: a navigation lit from the pathname, never a
@@ -175,7 +175,7 @@ export function IconRail() {
     <nav
       data-testid="rail"
       aria-label={t("Sefer")}
-      class="flex w-20 shrink-0 flex-col items-center overflow-y-auto bg-surface-invert px-0 py-4"
+      class="scrollbar-subtle flex w-20 shrink-0 flex-col items-center overflow-x-hidden overflow-y-auto bg-surface-invert px-0 py-4"
     >
       {/* The mark. Deliberately inert for the moment; it is the same
           `public/sefer.svg` the tab shows, at 32px in an 80px box, used as a
@@ -230,12 +230,13 @@ export function IconRail() {
 
       <div class="flex w-full flex-col items-center">
         <MoreMenu />
+        {/* Disabled for now: the one way to the projects page is the
+            sidebar's project control. Kept on the rail for its place. */}
         <RailButton
           label={t("Import")}
           testId="rail-import"
-          pressed={at("/projects")}
           icon={<Download size={20} />}
-          onClick={() => void navigate({ to: "/projects" })}
+          disabled
         />
         <RailButton
           label={t("Settings")}

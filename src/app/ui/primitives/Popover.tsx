@@ -40,6 +40,13 @@ export interface PopoverProps {
   readonly onOpenChange?: (open: boolean) => void;
   /** Classes for the panel — a width, usually. */
   readonly class?: ClassValue;
+  /** Classes for the trigger's wrapper, when it must fill its box (a table header). */
+  readonly triggerClass?: ClassValue;
+  /**
+   * Cap the panel at the room left in the viewport and scroll inside it,
+   * for a panel that can be taller than the space below its trigger.
+   */
+  readonly fitViewport?: boolean;
 }
 
 export function Popover(props: PopoverProps) {
@@ -48,9 +55,14 @@ export function Popover(props: PopoverProps) {
       open={props.open}
       onOpenChange={props.onOpenChange}
       placement={placementOf(props.side ?? "bottom", props.align ?? "center")}
-      floatingOptions={{ offset: 8, flip: true, shift: true }}
+      floatingOptions={{
+        offset: 8,
+        flip: true,
+        shift: true,
+        ...(props.fitViewport === true ? { size: { fitViewPort: true, padding: 8 } } : {}),
+      }}
     >
-      <CorvuPopover.Trigger as="span" class="inline-flex">
+      <CorvuPopover.Trigger as="span" class={cx("inline-flex", props.triggerClass)}>
         {props.trigger}
       </CorvuPopover.Trigger>
       <CorvuPopover.Portal>
@@ -59,6 +71,7 @@ export function Popover(props: PopoverProps) {
           class={cx(
             "z-40 rounded-lg border border-surface-border bg-surface-primary p-3 text-small",
             "text-on-surface-primary shadow-large",
+            props.fitViewport === true && "scrollbar-subtle overflow-y-auto",
             props.class,
           )}
         >

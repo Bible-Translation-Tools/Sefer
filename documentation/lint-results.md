@@ -47,8 +47,8 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | oxlint errors | 0 | `pnpm lint`, every commit |
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
 | fallow dead code (`pnpm deadcode`) | 0 issue(s) | every deploy; advisory on branches |
-| fallow duplication | 1.9% in 45 clone group(s) | none — advisory |
-| suppression comments | 10 | each listed below with its reason |
+| fallow duplication | 1.8% in 45 clone group(s) | none — advisory |
+| suppression comments | 9 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file
 
@@ -61,7 +61,6 @@ None.
 | `src/app/ProjectContext.tsx` | `oxlint-disable-next-line` | solid/reactivity -- runs once, when composition settles, under the component's owner |
 | `src/app/ui/cloud/CloudScreen.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: reads the query once, when the transfer settles |
 | `src/app/ui/CloudPanel.tsx` | `oxlint-disable-next-line` | solid/reactivity -- the account's work: runs once per press, reading the field at the moment of the ask |
-| `src/app/ui/landing/WacsProjects.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: runs once, when the download settles |
 | `src/app/ui/review/ReviewPanel.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: runs once, when Apply settles |
 | `src/app/ui/workspace/ReferenceColumn.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: runs once, when the bindings resolve |
 | `src/app/workflows/drafting.ts` | `fallow-ignore-file` | unused-file -- a deliberate stub; see the note below for why it is not wired. |
@@ -73,7 +72,7 @@ None.
 
 From `.fallowrc.jsonc`, where each one's reason is written beside it.
 
-- **Extra entries:** `src/App.tsx`, `src/Document.tsx`, `tools/vite/lucideSolidShim.ts`, `src/app/ui/landing/ImportHub.tsx`
+- **Extra entries:** `src/App.tsx`, `src/Document.tsx`, `tools/vite/lucideSolidShim.ts`
 - **Dependencies it cannot see used:** `@tauri-apps/cli`, `@solidjs/diagnostics`, `@tauri-apps/plugin-opener`
 
 <!-- lint-results:end -->

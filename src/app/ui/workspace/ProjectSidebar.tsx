@@ -249,13 +249,6 @@ export function ProjectSidebar() {
           )}
         </For>
       </ul>
-      <button
-        type="button"
-        class="mt-2 w-full cursor-pointer rounded-md px-2 py-1.5 text-start text-small text-brand transition-colors hover:bg-sidebar-surface-hover"
-        onClick={() => void navigate({ to: "/projects" })}
-      >
-        {t("All projects")}
-      </button>
     </nav>
   );
 

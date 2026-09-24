@@ -42,7 +42,16 @@ import { homedir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 
-const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+/**
+ * Google Chrome, unless `SEFER_CHROME` names another Chromium build — Brave on
+ * a machine without Chrome, say. Anything that speaks CDP and honours
+ * `--user-data-dir` works; the rig's profile is still its own, so a person's
+ * profile in that browser is never touched.
+ *
+ *     SEFER_CHROME="/Applications/Brave Browser.app/Contents/MacOS/Brave Browser" pnpm verify:chrome
+ */
+const CHROME =
+  process.env["SEFER_CHROME"] ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PROFILE = path.join(homedir(), ".sefer-cdp-profile");
 const PORT = 9222;
 
