@@ -1,6 +1,6 @@
 # Observability shorthand
 
-Sefer records what it did into one bounded, in-process ring, with no hosted telemetry service and no manuscript content. The event vocabulary is in the [glossary](../glossary.md), "Observability names".
+Sefer records what it did into one bounded, in-process ring, writes every event to a bounded log directory on the device, and hands it over only when a person exports it — no hosted telemetry service, nothing sent anywhere unasked, and no manuscript content. The event vocabulary is in the [glossary](../glossary.md), "Observability names".
 
 ## Principles
 
@@ -9,7 +9,8 @@ Sefer records what it did into one bounded, in-process ring, with no hosted tele
 - **No capture-session API.** There is no Begin/Mark/Inspect/End protocol. The ring is queryable in place, `export()` is JSONL for `jq`/`rg`, and an OTLP collector is optional. Add an API only when a real workflow cannot be served this way.
 - **A run is identifiable.** `session()` stamps every event of one run with its id, build and host; `pnpm verify:launch` gives each isolated instance its own run directory.
 - **One application API.** Code narrates through the `Observability` service. A platform logger — the console, `tauri-plugin-log` — is a sink behind it, never a second API called in parallel.
-- **Never record** manuscript text, clipboard or search contents, tokens, full paths, or arbitrary objects.
+- **Never record** manuscript text, clipboard or search contents, tokens, account names, or arbitrary objects. A local path may be recorded — the ring and the log files stay on the device, like the projects — and export is where paths are cut to their last segment (see [Disk and export](#disk-and-export)).
+- **`failed` is the one alarm.** A verdict is an outcome, not a severity. `failed` means our code or an invariant broke, and a dev build prints every one as a `console.error`, unasked. `unavailable` means the world said no — offline, a server down, a host without the capability — and is set only at the outside boundaries (the Remote port, the catalogue, the language API, the updater, `fetch`); anything uncaught elsewhere stays `failed`. `refused` and `declined` are usually the app working. There is no severity ladder.
 
 ## The service
 
@@ -17,12 +18,15 @@ Sefer records what it did into one bounded, in-process ring, with no hosted tele
 
 - `operation(name, attrs?, options?) => Operation` — opens ONE end-to-end piece of work, which in practice is one thing the user did. The returned `Operation` IS an `ObservabilityService`, plus `attr(attrs)`, `end(verdict?, attrs?)`, and its own `trace` and `id`.
 - `span(name, note?, attrs?) => (attrs?) => number` — synchronous and nestable. The returned closer records inclusive `ms` and exclusive `self` (inclusive minus the time billed to spans opened and closed inside it) and returns the inclusive milliseconds. Below level `spans` it is two `performance.now()` reads and records nothing.
-- `note(rule, verdict, detail?, attrs?)` — synchronous. `verdict` is the closed union `ready | passed | refused | rewrote | consumed | declined | failed`.
+- `note(rule, verdict, detail?, attrs?)` — synchronous. `verdict` is the closed union `ready | passed | refused | rewrote | consumed | declined | unavailable | failed`.
 - `session()` — the id, build and host every event of this run has in common.
 - `recent(limit?)` — the newest events, oldest first.
+- `failures(limit?)` — the newest events whose verdict is `failed`, `unavailable` or `refused` (`HELD_VERDICTS`), oldest first, from a second ring of 200 kept at recording time, so ordinary work wrapping the main ring cannot evict one.
 - `export()` — JSONL, one event per line, each line terminated by a newline.
 - `level()` / `setLevel(level)`.
 - `dropped()` — how many events the sink refused, by throwing.
+
+A sink is `(event) => void` and sees the event object only: a sink that wants the JSONL line calls `eventLine(event)` itself, later and in a batch, rather than the ring serialising every event for sinks that never read the text.
 
 The recording level is `off | verdicts | spans | all` — see [Levels](#levels).
 
@@ -48,9 +52,9 @@ Work that no gesture caused — a filesystem watcher — carries no `trace` and 
 
 `ObservabilityLive(options)` in core builds the ring and merges three layers: the service itself, `Logger.layer` with a logger that writes every `Effect.log*` into the ring as a `log` event (`name` is the message, `detail` is the Effect log level, `verdict` is `failed` for `Error` and `Fatal`), and `Tracer.Tracer` replaced by a tracer that wraps `Tracer.NativeSpan` and records each span as it ends, under its own `traceId` and `spanId`. Because the logger layer replaces the default, `Effect.log*` no longer writes to the console on its own.
 
-Sinks are the host's job, in `src/platform/observability.ts`. `hostSink()` returns a stderr writer that emits each JSONL line when `SEFER_LOG` or `VITE_SEFER_LOG` is set under a Node-shaped host, and `undefined` otherwise. The composition also feeds the ring's events through core's `makeAssembler`, which reassembles each operation into a tree and fans it out to the dev rings, the console stream and the OTLP bridge. The console stream (`consoleStream()`) prints operations as they finish, drained on idle; it is off unless `VITE_SEFER_STREAM` asks for it (`1`, or comma-separated name prefixes, `!` to exclude) or `stream({ enabled: true, filters? })` turns it on at runtime. Under the dev server, `installObservabilityDevSurface` publishes `globalThis.__sefer.observability = { traces: { recent, print }, logs: { recent }, errors, export, level, setLevel, stream }`, and nothing in any other build. Core references neither `console` nor `globalThis`.
+Sinks are the host's job, in `src/platform/observability.ts`. `hostSink()` returns a stderr writer that emits each JSONL line when `SEFER_LOG` or `VITE_SEFER_LOG` is set under a Node-shaped host, and `undefined` otherwise. The composition also feeds the ring's events through core's `makeAssembler`, which reassembles each operation into a tree and fans it out to the dev rings, the console stream and the OTLP bridge. The console stream (`consoleStream()`) prints operations as they finish, drained on idle; it is off unless `VITE_SEFER_STREAM` asks for it (`1`, or comma-separated name prefixes, `!` to exclude) or `stream({ enabled: true, filters? })` turns it on at runtime. Independently of the stream, a dev build prints every `failed` — an operation carrying one anywhere inside it, or a loose event — as a `console.error`, through the same idle drain; `stream({ enabled, alarms: false })` silences it for a session failing on purpose. The stream also filters by outcome: `stream({ enabled: true, verdicts: ["failed", "unavailable"] })`, or `@failed,@unavailable` in `VITE_SEFER_STREAM`. Under the dev server, `installObservabilityDevSurface` publishes `globalThis.__sefer.observability = { traces: { recent, print }, logs: { recent }, errors, failures, export, level, setLevel, stream }`, and nothing in any other build. `errors()` is the `failed` half of the failure ring; `failures()` is all of it. Core references neither `console` nor `globalThis`.
 
-Client failures are recorded in every build, as one `client.error` note with verdict `failed` and `error.handling` saying which door heard it (`src/app/clientErrors.ts`). `boundary` means Solid's `configureClientErrors` hook: an error boundary caught the error and rendered its fallback, which nothing else sees. `uncaught` is the browser's `error` event, including a halted reactive graph. `rejection` is `unhandledrejection`. One `error` event is not recorded: the browser's `ResizeObserver loop completed with undelivered notifications`, which carries no `error` object — an observer callback resized something and delivery slipped a frame (the virtualizer and floating-ui both do it), and nothing threw. The detail is `describe(error)`; `error.owner` and `error.boundary` carry Solid's owner paths where the runtime keeps owner names. `errors()` lists them.
+Client failures are recorded in every build, as one `client.error` note with verdict `failed`, `error.type` naming the class, and `error.handling` saying which door heard it (`src/app/clientErrors.ts`). `boundary` means Solid's `configureClientErrors` hook: an error boundary caught the error and rendered its fallback, which nothing else sees. `uncaught` is the browser's `error` event, including a halted reactive graph. `rejection` is `unhandledrejection`. One `error` event is not recorded: the browser's `ResizeObserver loop completed with undelivered notifications`, which carries no `error` object — an observer callback resized something and delivery slipped a frame (the virtualizer and floating-ui both do it), and nothing threw. The detail is `describe(error)`; `error.owner` and `error.boundary` carry Solid's owner paths where the runtime keeps owner names. `errors()` lists them, with every other `failed`. `no-console` is a lint error in `src/` outside the console renderer (`src/platform/observability.ts`) and tests, so nothing prints around the ring; the editor's own fallbacks (`stateFailed`, a lint fix discarded because the text moved) report through `reportOutcome` in `src/editor/core/instrument.ts`, which the ring bridge registers.
 
 `src/app/composition.ts` builds the Layer at the root and runs `boot` inside `root.operation("boot")`, which ends `ready` (with host, build and boot phase) or `failed` (with the error tag).
 
@@ -68,7 +72,47 @@ and read it in motel on that same port — `motel tui`, or `http://127.0.0.1:276
 
 The bridge holds a gesture's events until its operation record arrives, because the ring writes the wide record LAST — everything known by the time the work finished — and an exporter needs the parent first. The hold is core's `makeAssembler`, bounded at 64 traces and 256 events each, oldest dropped: an operation that never ends must not grow it. Children are emitted inside the parent span's context, so the OTLP logger stamps each note with the trace and span it belongs to.
 
-Not present yet: JSONL files on disk, rotation, retention, and cross-process correlation with the Tauri host — a Rust `invoke` is one opaque child span, timed from the web side, which is the same shape Effect gives an async filesystem call. The desktop direction is a JSONL file sink behind the same application-facing contract (`tauri-plugin-log` or a small native writer), with bounded size, count and age.
+Not present yet: cross-process correlation with the Tauri host — a Rust `invoke` is one opaque child span, timed from the web side, which is the same shape Effect gives an async filesystem call.
+
+## Disk and export
+
+**Every recorded event is written to disk.** The ring's 2,000 events are the MEMORY bound — enough for the dev surface, small enough not to pressure a Web heap — and the log directory is what is kept, so nothing is lost when the ring wraps or the app restarts. `src/core/diagnostics/logFiles.ts` is the mechanism and `src/app/diagnostics.ts` wires it:
+
+- **From boot, a queue.** `composeApplication` puts `makeLogQueue().sink` beside the other sinks: one array push per event, nothing serialised. It holds up to 5,000 events; when full the OLDEST are dropped and counted, and the count is written as `{"kind":"dropped","t","count"}`. Recording never waits on disk.
+- **Once the services exist, a writer.** `composeServices` calls `startLogFiles`, because that is when there is a FileSystem. It drains the queue when the browser is idle, at most every 2 s, and at once on `visibilitychange` to hidden and on `pagehide`: one serialise-and-append per batch, chained, never concurrent. The first write that fails stops the writer for the session and says so once, as `diagnostics.persist` `unavailable`.
+- **Where:** `HostInfo.paths().logs` — `/sefer/logs` in OPFS on the Web, the OS app log directory on desktop (`$APPLOG` is in the Tauri fs scope). The seeded fixture writes nothing: its FileSystem is memory.
+- **Shape:** one session is a run of parts, `<UTC stamp>-<session id>-<part>.jsonl`, each at most 256 KB (appending to OPFS rewrites the file, so parts stay small) and each opening with the session header, so any one file read alone says what wrote it.
+- **Retention:** at start, parts older than seven days are deleted, then whole sessions oldest-first until the directory is under 5 MB. The session being written is never deleted. `LOG_LIMITS` holds the numbers.
+
+**The session header** (`src/core/diagnostics/header.ts`, `schema: 1`, `kind: "sefer.session"`): session id and start, `build` (`<sha>+<mode>`), `channel`, the engine tag, `host`, `os`, `osVersion`, `arch`, `webview`, `userAgent`, `locale`, the desktop app `version`, and the endpoints with whether a preference moved them — the `VITE_SEFER_*` URLs ship in the public bundle and are not secret. A fact the host cannot answer is `"unknown"`, never a guess; a browser freezes the OS version in its user agent, so the Web reports none.
+
+**Export** is Settings → Advanced → Export diagnostics (`exportDiagnostics`): a named file on desktop, a download on the Web, and one `diagnostics.export` operation recording its size. The file (`src/core/diagnostics/export.ts`) is JSONL:
+
+1. the header, with `kind: "sefer.export"`, when it was exported, both rings' sizes and oldest times, `dropped`, and a **project snapshot** from local reads only — folder name, HEAD, branch, whether an origin exists, unsaved books, whether a journal is pending, and the last sync state the app OBSERVED (the newest `sync.survey` operation, with its time; never a fetch — an export must not wait on the network)
+2. `{"kind":"section","name":"failures"}` and the failure ring
+3. `{"kind":"section","name":"recent"}` and the main ring
+4. `{"kind":"section","name":"disk"}` and every part on disk, this session's included, flushed first
+
+Recording keeps everything; **export decides disclosure, once, by allowlist.** A string attribute passes only under a key in `STRING_KEYS`, and is scrubbed even then; under any other key it is written as `"redacted"` — present, so the gap is visible and someone lists the key. Numbers and booleans pass. `*.root` and `*.path` keep their last segment. Free text — `detail`, and a log's message — loses home directories, URL credentials and query strings, and e-mail addresses, and is cut to 200 characters. Adding a key to `STRING_KEYS` is the review question: can this string ever carry a person's data?
+
+## Reading it with `jq`
+
+The ring, a log part and an export are the same lines, so one set of filters reads all three. Get lines from a running dev build with `__sefer.observability.export()` (a Playwright script can write it into `.verify/<runId>/`), from desktop's log directory directly, or from an exported file. Add a recipe when the same question has been asked of traces twice.
+
+```sh
+# failures, newest last
+jq -c 'select(.verdict=="failed" or .verdict=="unavailable")' sefer.jsonl
+# operations over a budget (ms)
+jq -c 'select(.kind=="operation" and .ms > 50) | {name, ms, verdict}' sefer.jsonl
+# one operation and everything inside it: pick its trace id first
+jq -c --arg t "$TRACE" 'select(.trace==$t)' sefer.jsonl
+# the ten seconds before an event (epoch ms in $T)
+jq -c --argjson T "$T" 'select(.t >= $T-10000 and .t <= $T)' sefer.jsonl
+# the keystroke tail: each mutation's time to paint (JS work is editor.js_ms), sorted
+jq -r 'select(.name=="editor.mutation") | .attrs["editor.to_paint_ms"] // empty' sefer.jsonl | sort -n
+# per-operation count and mean ms, to compare two captures side by side
+jq -s 'map(select(.kind=="operation")) | group_by(.name) | map({name: .[0].name, n: length, mean: (map(.ms) | add / length)})' sefer.jsonl
+```
 
 ## Operations
 
@@ -94,9 +138,9 @@ Inside those, as spans: `galley.parse` (with `galley.why` naming its caller), `f
 
 There are two separate axes, and they must not be confused.
 
-**What the ring records** is `level()` / `setLevel(level)`, one of `off | verdicts | spans | all`: `off` records nothing; `verdicts` records notes and Effect `Logger` output; `spans` adds the synchronous `span` events and the editor's per-frame spans; `all` adds spans created by `Effect.withSpan`. The default is `all` in every build. Whether production should default lower is an open question.
+**What the ring records** — and therefore what reaches disk — is `level()` / `setLevel(level)`, one of `off | verdicts | spans | all`: `off` records nothing; `verdicts` records notes and Effect `Logger` output; `spans` adds the synchronous `span` events and the editor's per-frame spans; `all` adds spans created by `Effect.withSpan`. The default is `all` in every build. Whether production should default lower is an open question.
 
-**What reaches a console or a log stream** is decided separately, by the sinks: the stderr JSONL sink under Node (`SEFER_LOG` / `VITE_SEFER_LOG`) and the console stream's name-prefix filters (`VITE_SEFER_STREAM`, or `stream()` at runtime). Printing less never changes what the ring keeps, so turning a stream off never loses evidence. There is no severity ladder (`error`/`info`/`debug`/`trace`) today.
+**What reaches a console or a log stream** is decided separately, by the sinks: the stderr JSONL sink under Node (`SEFER_LOG` / `VITE_SEFER_LOG`) and the console stream's name-prefix filters (`VITE_SEFER_STREAM`, or `stream()` at runtime). Printing less never changes what the ring keeps, so turning a stream off never loses evidence. There is no severity ladder (`error`/`info`/`debug`/`trace`), by decision: the verdict is the outcome, `failed` is the alarm, and the operation and span hierarchy is the depth.
 
 ## The keystroke meter
 

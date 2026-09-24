@@ -38,6 +38,9 @@ export const reportClientErrors = (observability: ObservabilityService): (() => 
     const boundary = path(context.boundaryPath);
     observability.note(CLIENT_ERROR, "failed", describe(error), {
       "error.handling": handling,
+      // The class, which an export keeps whole; the detail is free text and
+      // leaves the device scrubbed and cut to a sentence.
+      "error.type": error instanceof Error ? error.name : typeof error,
       ...(owner === undefined ? {} : { "error.owner": owner }),
       ...(boundary === undefined ? {} : { "error.boundary": boundary }),
     });

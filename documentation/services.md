@@ -143,23 +143,19 @@ Desktop self-update: `core/host/updater.ts` (port), `platform/tauri/updater.ts`,
 
 ### Overview
 
-A bounded ring of events, spans and verdicts, with JSONL export. The dev surface is `__sefer.observability` (`traces.recent/print`, `logs.recent`, `export`, `level`, `setLevel`, `stream`). There is a dev-only OTLP bridge, and a keystroke meter in the editor. Client failures (boundary-caught, uncaught, unhandled rejections) are `client.error` notes in every build, with owner names kept in production by Solid's observe runtime. `src/core/observability.ts`, `src/platform/observability.ts`, `src/editor/observability.ts`. → [observability](architecture/observability.md)
+A bounded ring of events, spans and verdicts, and a second ring of 200 for `failed`/`unavailable`/`refused` that ordinary work cannot evict. Every event is also written to a log directory on the device (OPFS on the Web, the app log directory on desktop): 256 KB JSONL parts, each opening with a session header, kept seven days and 5 MB. Settings → Advanced → Export diagnostics hands over one file: header and a project snapshot, the failure ring, the main ring and every part on disk, with string fields allowlisted and paths cut to their last segment. `failed` is the one alarm — a dev build prints each as a `console.error` — and `unavailable` is the world saying no. The dev surface is `__sefer.observability` (`traces.recent/print`, `logs.recent`, `errors`, `failures`, `export`, `level`, `setLevel`, `stream`). There is a dev-only OTLP bridge, and a keystroke meter in the editor. Client failures are `client.error` notes in every build. `src/core/observability.ts`, `src/core/diagnostics/`, `src/app/diagnostics.ts`, `src/platform/observability.ts`, `src/editor/observability.ts`. → [observability](architecture/observability.md)
 
 ### Constraints and known bugs
 
-- There are two axes with no names yet, and the doc conflates them.
-  - What the ring and traces record: `off | verdicts | spans | all`, defaulting to `all`.
-  - How loud the console or log stream is: the doc's `error | info | debug | trace`. Today that is only `VITE_SEFER_LOG`/`VITE_SEFER_STREAM` prefixes.
-  - Decide whether the second axis exists, and what production records.
-- Five operations in the name union are only emitted as notes: `project.close`, `journal.write`, `journal.pending`, `project.watch`, `file.changed`. Catalogue, review comparison, cloud survey/plan, terms and inventory emit nothing.
-- Nothing is persisted on desktop.
+- Recording defaults to `all` in every build until the perf baseline says otherwise (`pnpm verify:perf`; numbers in `planning/01-discussing/logging-and-tracing.md`).
+- The Web header has no OS version or architecture: a browser freezes both in its user agent. macOS's WKWebView reports no version either.
+- The export allowlist (`STRING_KEYS` in `src/core/diagnostics/export.ts`) must be extended by hand when a producer adds a string attribute; until then that field exports as `"redacted"`.
+- An OPFS append rewrites the whole part, which is why parts are 256 KB.
 
 ### Ideas / future
 
-- Open questions and leans (no severity ladder, one write API, measure before lowering the default, close the coverage gaps, export diagnostics): `planning/01-discussing/logging-and-tracing.md`.
-- Desktop JSONL under the `logs` root, with a bounded queue and rotation. Correlate with Rust logs (`tauri-plugin-log`).
-- A user-facing "export diagnostics".
-- Measure the overhead with telemetry off and at `all`.
+- Correlate with Rust logs (`tauri-plugin-log`), if the Rust side ever needs it.
+- A query layer in code, if the `jq` recipes in the observability doc get unwieldy.
 
 ---
 
