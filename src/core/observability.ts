@@ -78,24 +78,42 @@ export type OperationName =
   | "boot"
   | "project.open"
   | "project.close"
-  | "project.watch"
   | "editor.mutation"
   | "editor.selection"
   | "editor.render"
   | "save"
-  | "file.changed"
   | "analysis.pass"
   | "analysis.warm"
+  /** One debounced flush of the recovery journals; `op.cause` is the edit that armed it. */
   | "journal.write"
-  | "journal.pending"
   | "journal.restore"
   | "journal.discard"
   | "journal.offer"
   | "import.resource"
   | "import.remote"
+  /** The Find Project table's one read of the catalogue. */
+  | "catalogue.browse"
   | "find.run"
-  | "sync.transfer"
+  /** Jumping from the Findings panel to a finding's span in the editor. */
+  | "findings.navigate"
+  /** One bound reference read and measured against the open book. */
+  | "reference.load"
+  /** One comparison on /review: the book diff and the engine's decision units. */
+  | "review.compare"
   | "review.apply"
+  /** One reading of the repository against the cloud; ends with the state. */
+  | "sync.survey"
+  /** What a pull would change, worked out after a survey found the device behind. */
+  | "sync.plan"
+  | "sync.transfer"
+  /** The key-terms guide for one locale, decoded and listed. */
+  | "terms.load"
+  /** One term's references mapped onto the project, and its source side read. */
+  | "terms.select"
+  /** The character inventory screen, from mount to its first paint. */
+  | "inventory.load"
+  | "update.check"
+  | "update.install"
   /** Settings → Advanced → Export diagnostics: its size, never its content. */
   | "diagnostics.export"
   /**
