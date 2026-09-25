@@ -390,24 +390,10 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       run: () => bridge.setSidebarOpen(!bridge.sidebarOpen()),
     }),
 
-    registerCommand({
-      id: "project.open",
-      title: t("Open project…"),
-      keys: "Mod-o",
-      run: () =>
-        Effect.gen(function* () {
-          const picked = yield* services.dialogs.pickFolder(t("Open project"));
-          if (Option.isNone(picked)) {
-            // The Web picker returns a handle NAME, not a path (see
-            // services.ts), so there is nothing honest to open from it yet;
-            // the projects list is the working route.
-            bridge.report(t("no folder chosen"));
-            void bridge.navigate({ to: "/projects" });
-            return;
-          }
-          yield* Effect.promise(() => bridge.openProject(picked.value));
-        }),
-    }),
+    // `project.open` (Mod-o) is registered by the rail's Import menu, which
+    // owns the import pipeline and its progress dialog: opening a folder is
+    // importing it. Nothing opens a folder in place — every project is a copy
+    // in Sefer's own storage, on both hosts (documentation/architecture/landing.md).
 
     registerCommand({
       id: "project.settings",

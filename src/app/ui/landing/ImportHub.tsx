@@ -30,7 +30,7 @@ import { Effect, Option, Scope } from "effect";
 import CloudDownload from "lucide-solid/icons/cloud-download";
 import FileArchive from "lucide-solid/icons/file-archive";
 import FolderOpen from "lucide-solid/icons/folder-open";
-import { For, Show, createSignal } from "solid-js";
+import { For, Show, createSignal, onCleanup, untrack } from "solid-js";
 
 import { lastSegment } from "#core/fileSystem/path";
 import { Observability, type Verdict } from "#core/observability";
@@ -39,6 +39,7 @@ import { Gitea, type RemoteRepo } from "#core/remote/gitea";
 import { remoteVerdict } from "#core/remote/remote";
 import { classify, commit, stage } from "#core/resources/import";
 
+import { registerCommand } from "../../commands";
 import { describe, reasonOf, remoteReasonOf } from "../../describe";
 import { contentHostFor } from "../../endpoints";
 import { t } from "../../i18n";
@@ -401,6 +402,19 @@ export function ImportHub(props: {
     else if (nativeFolder) importFolder();
     else importPicked(t("Import from a folder"), "folder");
   };
+
+  // "Open project…" is importing a folder. Only the rail's menu registers it:
+  // it is mounted on every screen, and one owner means one progress dialog.
+  // `variant` is read once: an instance is one shape for its whole life.
+  if (untrack(() => props.variant) === "menu")
+    onCleanup(
+      registerCommand({
+        id: "project.open",
+        title: t("Open project…"),
+        keys: "Mod-o",
+        run: () => pick("folder"),
+      }),
+    );
 
   return (
     <>

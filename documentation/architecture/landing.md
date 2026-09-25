@@ -47,6 +47,8 @@ Every row carries a kebab of three `ProjectAdmin` calls. (The port also has `met
 
 ## Adding a project: what each source needs, per host
 
+**Every project is a copy in Sefer's own storage.** Importing a folder or a zip stages the files, checks them and commits them into the projects root — OPFS on the Web, the app's projects folder on desktop — and nothing points back at the original afterwards. There is no "open a folder where it sits": `Open project…` (`Mod-o`) is Import folder, registered by the rail's Import menu, which owns the pipeline and its progress dialog. One storage model on both hosts; Sefer's `.sefer/` and git history never land inside somebody's own folder; no other program edits a project underneath it. Getting work back out is Export as zip or cloud sync.
+
 The rule the import hub is built around: a source this host cannot serve is rendered DISABLED with the reason in place of its explainer — never hidden, never offered-then-failed. `HostInfo.capabilities()` and `env` are asked before the button exists.
 
 | source           | web | Tauri | needs                                                                                                                                        |
