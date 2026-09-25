@@ -1,31 +1,18 @@
 /**
  * The icon rail: the one piece of chrome that is always on screen.
  *
- * It is the collapsed sidebar of the mockups' "STET / Ideal" screen promoted
- * to a permanent column, because the two halves answer different questions.
- * The rail is "where in Sefer am I"; the project sidebar beside it is "where
- * in this project am I". Collapsing the sidebar leaves the rail, which is why
- * `Resizable` deliberately does not implement collapsing — a collapsed pane is
- * a different tree, not a zero-width one (primitives/Resizable.tsx).
+ * Three bands. The mark at the top, inert for now. The MODES in the middle —
+ * Form, Refine, Key terms — the three ways of working on a project's text;
+ * with no project open they are there but disabled, so the rail keeps one
+ * shape — the empty state's included.
+ * Form is not built yet and stays disabled. At the foot: More, Import (a zip,
+ * a folder or a clone, from anywhere), Settings, and Account (disabled until
+ * there is an account).
  *
- * The project tiles appear only while a project is open: a projection, a
- * term list, a character census and a comparison are all things you apply to
- * a project, and offering one with nothing open is an affordance that answers
- * nothing. **Form is not built and has no icon here** — an offered mode that
- * cannot be entered is worse than an absent one
- * (`documentation/architecture/design-direction.md`).
- *
- * The project-wide screens the rail reaches — `/terms`, `/review`,
- * `/inventory` and the rest — are ROUTES, lit from the pathname, not signals.
- * Key terms is its own pane rather than a mode on the search screen
- * (`documentation/architecture/stet.md`), so its tile is a plain navigation
- * and the URL is the whole of its state.
- *
- * EVERY TILE IS A PLACE. A tile that changed a setting and went nowhere would
- * sit among navigations and mean something else; a projection is a preference
- * about how the editor draws, not a screen, so it belongs where preferences
- * live — the toolbar's own control and the `view.mode` commands in the
- * palette. So `Refine` navigates to the book, and there is no `USFM` tile.
+ * Every enabled tile is a place: a navigation lit from the pathname, never a
+ * setting. The project-wide screens that used to sit here (findings, history,
+ * glyphs, compare, cloud) live in the "More" menu at the foot until the rail
+ * decides where they belong.
  */
 
 import type { JSX } from "@solidjs/web";
@@ -33,67 +20,121 @@ import { useNavigate, useRouterState } from "@tanstack/solid-router";
 import Bell from "lucide-solid/icons/bell";
 import BookOpen from "lucide-solid/icons/book-open";
 import CloudIcon from "lucide-solid/icons/cloud";
-import FolderOpen from "lucide-solid/icons/folder-open";
+import Download from "lucide-solid/icons/download";
+import Ellipsis from "lucide-solid/icons/ellipsis";
 import GitCompare from "lucide-solid/icons/git-compare";
 import HistoryIcon from "lucide-solid/icons/history";
 import ListChecks from "lucide-solid/icons/list-checks";
 import PanelLeft from "lucide-solid/icons/panel-left";
+import PenLine from "lucide-solid/icons/pen-line";
 import SettingsIcon from "lucide-solid/icons/settings";
 import TypeIcon from "lucide-solid/icons/type";
-import { Show } from "solid-js";
+import UserIcon from "lucide-solid/icons/user";
+import { createSignal, For } from "solid-js";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { IconButton } from "../primitives";
-
-/** The reader's initials, on the tile the mockup puts at the foot of the rail. */
-const INITIALS = "GO";
+import { ImportHub } from "../landing/ImportHub";
+import { Menu, MenuItem } from "../primitives";
 
 /**
- * A rail tile: the icon, and the word under it.
+ * A rail tile: one 80×80 button holding the icon and the word under it, so
+ * the hover and the active fill cover both. Active is the brand blue.
  *
- * The words are the change. A column of unlabelled glyphs is a memory test —
- * the tooltip only helps the reader who already suspected what the icon was —
- * and there is room for them, so the rail says what it is offering.
- *
- * The tooltip stays anyway: it is what a screen reader gets, and the label is
- * `aria-hidden` for exactly that reason. Announcing "Findings Findings" is
- * worse than announcing it once.
+ * The caption is the accessible name already, so there is no tooltip.
  */
-function Tile(props: {
+function RailButton(props: {
   readonly label: string;
-  /**
-   * The word under the icon, when the accessible label is a sentence.
-   *
-   * The panel toggle's label has to say what pressing it will DO, and it
-   * changes ("Show the project panel" / "Back to the book"); neither fits in
-   * sixteen pixels of rail. The caption names the thing instead.
-   */
-  readonly caption?: string;
   readonly testId: string;
   readonly icon: JSX.Element;
   readonly pressed?: "true" | "false";
-  readonly onClick: () => void;
-  readonly children?: JSX.Element;
+  readonly disabled?: boolean;
+  /** The native tooltip; for a disabled tile, the reason. */
+  readonly title?: string;
+  readonly onClick?: () => void;
 }) {
   return (
-    <span class="relative flex w-full flex-col items-center gap-0.5 py-1">
-      <IconButton
-        label={props.label}
-        data-testid={props.testId}
-        tooltipSide="right"
-        aria-pressed={props.pressed}
-        icon={props.icon}
-        onClick={props.onClick}
-      />
-      <span
-        aria-hidden="true"
-        class="max-w-full truncate px-0.5 text-center text-[10px] leading-3 text-on-surface-tertiary"
-      >
-        {props.caption ?? props.label}
-      </span>
-      {props.children}
-    </span>
+    <button
+      type="button"
+      data-testid={props.testId}
+      aria-pressed={props.pressed}
+      disabled={props.disabled}
+      title={props.title}
+      onClick={() => props.onClick?.()}
+      class="flex size-20 shrink-0 cursor-pointer flex-col items-center justify-center gap-1 text-on-surface-invert transition-colors hover:not-disabled:bg-surface-invert-hover aria-pressed:bg-surface-invert-active aria-pressed:hover:bg-surface-invert-active disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      {props.icon}
+      <span class="max-w-full truncate px-1 text-center text-caption">{props.label}</span>
+    </button>
+  );
+}
+
+type ProjectScreen =
+  | "/project/$slug/findings"
+  | "/project/$slug/history"
+  | "/project/$slug/inventory"
+  | "/project/$slug/review"
+  | "/project/$slug/cloud";
+
+/**
+ * The project screens the rail no longer shows, parked in one menu until
+ * there is a decision about where each belongs. All need an open project.
+ */
+function MoreMenu() {
+  const navigate = useNavigate();
+  const shell = useShell();
+  const [open, setOpen] = createSignal(false, { name: "railMoreOpen" });
+  const attention = () => shell.findingCounts().errors + shell.findingCounts().warnings;
+
+  const items: ReadonlyArray<{ label: string; to: ProjectScreen; icon: JSX.Element }> = [
+    { label: t("Findings"), to: "/project/$slug/findings", icon: <Bell size={16} /> },
+    { label: t("History"), to: "/project/$slug/history", icon: <HistoryIcon size={16} /> },
+    {
+      label: t("Character inventory"),
+      to: "/project/$slug/inventory",
+      icon: <TypeIcon size={16} />,
+    },
+    { label: t("Compare"), to: "/project/$slug/review", icon: <GitCompare size={16} /> },
+    { label: t("Cloud"), to: "/project/$slug/cloud", icon: <CloudIcon size={16} /> },
+  ];
+
+  return (
+    <Menu
+      label={t("More")}
+      side="right"
+      align="end"
+      open={open()}
+      onOpenChange={setOpen}
+      class="w-52"
+      trigger={
+        <RailButton
+          label={t("More")}
+          testId="rail-more"
+          pressed={open() ? "true" : "false"}
+          icon={<Ellipsis size={20} />}
+        />
+      }
+    >
+      <For each={items}>
+        {(item) => (
+          <MenuItem
+            data-testid={`rail-more-${item.to.split("/").pop()}`}
+            disabled={shell.project() === undefined}
+            icon={item.icon}
+            onSelect={() =>
+              void navigate({ to: item.to, params: { slug: shell.slug() }, search: {} })
+            }
+          >
+            <span class="flex-1">{item.label}</span>
+            {item.to === "/project/$slug/findings" && attention() > 0 ? (
+              <span class="min-w-4 rounded-full bg-on-surface-error px-1 text-center text-smallest leading-4 font-semibold text-surface-error">
+                {attention() > 99 ? "99+" : attention()}
+              </span>
+            ) : null}
+          </MenuItem>
+        )}
+      </For>
+    </Menu>
   );
 }
 
@@ -101,32 +142,24 @@ export function IconRail() {
   const navigate = useNavigate();
   const shell = useShell();
 
-  const findings = () => shell.findingCounts();
-  const attention = () => findings().errors + findings().warnings;
-
-  // Where in Sefer the reader is, so the rail can say so. A prefix test and
-  // not an equality: `/start/*` is the projects screen's second half and must
-  // not read as somewhere else. Project screens are tested on the part after
-  // `/project/$slug`, so `at("/terms")` means "this project's terms".
   const path = useRouterState({ select: (state) => state.location.pathname });
+  // Project screens are tested on the part after `/project/$slug`, so
+  // `at("/terms")` means "this project's terms".
   const within = (): string => path().replace(/^\/project\/[^/]+/, "");
   const at = (prefix: string): "true" | "false" => (within().startsWith(prefix) ? "true" : "false");
-  /** Is the reader on the projects side — the list, or bringing one in? */
-  const choosing = (): "true" | "false" =>
-    path() === "/" || path().startsWith("/start") ? "true" : "false";
-
+  const open = (): boolean => shell.project() !== undefined;
   /** Is the reader looking at a project, or at one of the full-page screens? */
   const inProject = (): boolean => path().startsWith("/project/");
 
   /**
-   * The top tile does two jobs, and which one depends on where you are.
+   * The Panel tile does two jobs, and which one depends on where you are.
    *
-   * On a project route it is the panel toggle. On a
-   * full-page screen -- settings, findings, history, review -- there is no
-   * panel to toggle, and what a reader wants from the one tile at the top of
-   * the rail is the way BACK: it opens the panel and returns to the book they
-   * were in (the remembered location). Left as a plain toggle, pressing it on
-   * `/settings` appeared to do nothing at all.
+   * On a project route it is the project panel's show/hide (`Mod-b` too). On
+   * a full-page screen — settings, the projects page — there is no panel to
+   * toggle, and what a reader wants from it is the way BACK: it opens the
+   * panel and returns to the book they were in. A hotkey cannot be the only
+   * way to bring a hidden panel back, and the panel holds the way to all
+   * projects.
    */
   const togglePanel = (): void => {
     const project = shell.project();
@@ -137,64 +170,68 @@ export function IconRail() {
     }
     shell.setSidebarOpen(!shell.sidebarOpen());
   };
-
   const panelLabel = (): string => {
     if (shell.project() !== undefined && !inProject()) return t("Back to the book");
     return shell.sidebarShowing() ? t("Hide the project panel") : t("Show the project panel");
   };
 
+  /** Refine is the text itself: any project route that is not another mode. */
+  const refining = (): "true" | "false" =>
+    path().startsWith("/project/") && !within().startsWith("/terms") ? "true" : "false";
+  const terms = (): "true" | "false" => at("/terms");
+
   return (
     <nav
       data-testid="rail"
       aria-label={t("Sefer")}
-      class="flex w-16 shrink-0 flex-col items-center gap-0.5 overflow-y-auto border-e border-sidebar-border bg-surface-primary py-3"
+      class="scrollbar-subtle flex w-20 shrink-0 flex-col items-center overflow-x-hidden overflow-y-auto bg-surface-invert px-0 py-4"
     >
-      {/* The mark, and the way home. It is the same `public/sefer.svg` the tab
-          shows, so the application is recognisable in a row of tabs and at the
-          top of its own window by one image rather than two that drift. */}
-      <button
-        type="button"
+      {/* The mark. Deliberately inert for the moment; it is the same
+          `public/sefer.svg` the tab shows, at 32px in an 80px box, used as a
+          MASK so it takes the rail's `on-surface-invert` white. */}
+      <span
         data-testid="rail-home"
+        role="img"
         aria-label={t("Sefer")}
-        class="mb-2 flex cursor-pointer items-center justify-center rounded-lg p-1 transition-colors hover:bg-surface-secondary"
-        onClick={() => void navigate({ to: "/" })}
+        class="flex size-20 shrink-0 items-center justify-center"
       >
-        <img src="/sefer.svg" alt="" width="24" height="24" class="size-6" />
-      </button>
+        <span
+          class="size-8 bg-on-surface-invert"
+          style={{
+            "mask-image": "url(/sefer.svg)",
+            "mask-size": "contain",
+            "mask-repeat": "no-repeat",
+            "mask-position": "center",
+          }}
+        />
+      </span>
 
-      {/* Pressed reports what is ON SCREEN, not what the preference says: with
-          no project and no history the panel has nothing to show and the shell
-          collapses it (`shell.sidebarShowing`), and a toggle lit over a
-          collapsed panel would be the rail claiming otherwise. The click still
-          writes the reader's own answer, which is waiting when a project opens. */}
-      <Tile
+      <RailButton
+        label={t("Panel")}
+        title={panelLabel()}
         testId="rail-panel"
-        label={panelLabel()}
-        caption={t("Panel")}
-        icon={<PanelLeft size={18} />}
-        pressed={shell.sidebarShowing() ? "true" : "false"}
+        icon={<PanelLeft size={20} />}
+        pressed={inProject() && shell.sidebarShowing() ? "true" : "false"}
+        disabled={!open()}
         onClick={togglePanel}
       />
 
-      <Show when={shell.project() !== undefined}>
-        <span aria-hidden="true" class="my-2 h-px w-6 bg-surface-border" />
-
-        {/* The text itself — the place every other tile is a detour from, so
-            it navigates to the book rather than changing the mode: the one
-            tile that means "back to my work" has to leave the screen you are
-            on. */}
-        <Tile
+      <div class="my-auto flex w-full flex-col items-center">
+        <RailButton label={t("Form")} testId="rail-form" icon={<PenLine size={20} />} disabled />
+        <RailButton
           label={t("Refine")}
           testId="rail-refine"
-          icon={<BookOpen size={18} />}
-          pressed={inProject() ? "true" : "false"}
+          icon={<BookOpen size={20} />}
+          pressed={refining()}
+          disabled={!open()}
           onClick={() => void navigate({ to: "/project/$slug", params: { slug: shell.slug() } })}
         />
-        <Tile
+        <RailButton
           label={t("Key terms")}
           testId="rail-terms"
-          icon={<ListChecks size={18} />}
-          pressed={at("/terms")}
+          icon={<ListChecks size={20} />}
+          pressed={terms()}
+          disabled={!open()}
           onClick={() =>
             void navigate({
               to: "/project/$slug/terms",
@@ -203,126 +240,34 @@ export function IconRail() {
             })
           }
         />
-      </Show>
+      </div>
 
-      <div class="mt-auto flex flex-col items-center gap-1">
-        {/* The way back out of a project, and the only tile here that means
-            something with nothing open. Lit on `/start/*` as well as
-            `/projects`: bringing a project in is the chooser's second half,
-            and marking only the list would make the rail disagree with the
-            screen (`ProjectSidebar` reads the same two prefixes). */}
-        <Tile
-          label={t("Projects")}
-          testId="rail-projects"
-          pressed={choosing()}
-          icon={<FolderOpen size={18} />}
-          onClick={() => void navigate({ to: "/projects" })}
-        />
-
-        {/* Which characters this project actually uses, and this project
-            against another source. Both are project questions, so the tiles
-            are only offered while one is open. */}
-        <Show when={shell.project() !== undefined}>
-          <Tile
-            label={t("Character inventory")}
-            caption={t("Glyphs")}
-            testId="rail-inventory"
-            pressed={at("/inventory")}
-            icon={<TypeIcon size={18} />}
-            onClick={() =>
-              void navigate({
-                to: "/project/$slug/inventory",
-                params: { slug: shell.slug() },
-                search: {},
-              })
-            }
-          />
-          <Tile
-            label={t("Compare")}
-            testId="rail-compare"
-            pressed={at("/review")}
-            icon={<GitCompare size={18} />}
-            onClick={() =>
-              void navigate({
-                to: "/project/$slug/review",
-                params: { slug: shell.slug() },
-                search: {},
-              })
-            }
-          />
-          <Tile
-            label={t("Cloud")}
-            testId="rail-cloud"
-            pressed={at("/cloud")}
-            icon={<CloudIcon size={18} />}
-            onClick={() =>
-              void navigate({
-                to: "/project/$slug/cloud",
-                params: { slug: shell.slug() },
-                search: {},
-              })
-            }
-          />
-        </Show>
-
-        {/* The count rides the tile rather than sitting beside it: the rail is
-            one tile wide, and a badge in the flow would push the icon off its
-            own centre line. `Tile` is already the positioned box, so the badge
-            goes inside it. */}
-        <Tile
-          label={t("Findings")}
-          testId="rail-findings"
-          pressed={at("/findings")}
-          icon={<Bell size={18} />}
-          onClick={() =>
-            void navigate({
-              to: "/project/$slug/findings",
-              params: { slug: shell.slug() },
-              search: {},
-            })
-          }
-        >
-          <Show when={attention() > 0}>
-            <span
-              aria-hidden="true"
-              data-findings={attention()}
-              class="pointer-events-none absolute end-2 top-0 min-w-4 rounded-full bg-on-surface-error px-1 text-center text-smallest leading-4 font-semibold text-surface-error"
-            >
-              {attention() > 99 ? "99+" : attention()}
-            </span>
-          </Show>
-        </Tile>
-
-        <Tile
-          label={t("History")}
-          testId="rail-history"
-          pressed={at("/history")}
-          icon={<HistoryIcon size={18} />}
-          onClick={() =>
-            void navigate({
-              to: "/project/$slug/history",
-              params: { slug: shell.slug() },
-              search: {},
-            })
+      <div class="flex w-full flex-col items-center">
+        <MoreMenu />
+        {/* The import menu from anywhere; a finished import lands on the
+            projects page, where the new project is. */}
+        <ImportHub
+          variant="menu"
+          onImported={() => void navigate({ to: "/projects" })}
+          trigger={
+            <RailButton label={t("Import")} testId="rail-import" icon={<Download size={20} />} />
           }
         />
-        <Tile
+        <RailButton
           label={t("Settings")}
           testId="rail-settings"
           pressed={at("/settings")}
-          icon={<SettingsIcon size={18} />}
+          icon={<SettingsIcon size={20} />}
           onClick={() => void navigate({ to: "/settings" })}
         />
-
-        {/* A placeholder until there is an account to read a name from: the
-            tile is part of the layout, and leaving a hole where it goes would
-            make the rail read differently now than it will later. */}
-        <span
-          class="mt-1 flex size-8 items-center justify-center rounded-full bg-brand-light text-smallest font-semibold text-brand"
-          title={t("Signed out")}
-        >
-          {INITIALS}
-        </span>
+        {/* A placeholder until there is an account to read a name from. */}
+        <RailButton
+          label={t("Account")}
+          testId="rail-account"
+          icon={<UserIcon size={20} />}
+          title="TODO: WIP"
+          disabled
+        />
       </div>
     </nav>
   );

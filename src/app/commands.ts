@@ -30,7 +30,7 @@ import { Remote } from "#core/remote/remote";
 import { emptyBlocks, structureAt, withoutScrolling } from "#editor/index";
 import type { EditorAction, EditorBook, ProjectionName } from "#editor/index";
 
-import { wacsUrlFor } from "./endpoints";
+import { contentHostFor } from "./endpoints";
 import { t } from "./i18n";
 import type { Domain, Services } from "./services";
 import { shellKeys } from "./settings";
@@ -100,6 +100,8 @@ export interface ShellBridge {
   readonly slug: () => string;
   readonly openProject: (root: string) => Promise<void>;
   readonly setPaletteOpen: (open: boolean) => void;
+  readonly sidebarOpen: () => boolean;
+  readonly setSidebarOpen: (open: boolean) => void;
   /** Shown in the status bar; the shell's one place for a transient message. */
   /**
    * Scroll the editor to an offset and flash it — the door `shell.aim`
@@ -377,6 +379,17 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       },
     }),
 
+    // The project panel's show/hide. The rail's panel tile went in the
+    // designer's pass and has no new home yet, and `workspace.sidebarOpen`
+    // persists — so without this a panel once hidden could never come back,
+    // and with it the panel's project button, the way back to all projects.
+    registerCommand({
+      id: "workspace.togglePanel",
+      title: t("Show or hide the project panel"),
+      keys: "Mod-b",
+      run: () => bridge.setSidebarOpen(!bridge.sidebarOpen()),
+    }),
+
     registerCommand({
       id: "project.open",
       title: t("Open project…"),
@@ -649,11 +662,9 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
         // The sign-in form needs a password and an OTP field, which is a
         // surface, not a command; this takes the user to it. A build with no
         // Gitea host configured says so rather than opening an empty form.
-        const host = wacsUrlFor(services.settings, services.hostInfo.kind());
+        const host = contentHostFor(services.settings);
         if (host === null) {
-          bridge.report(
-            t("no WACS endpoint: set one in Settings, or VITE_SEFER_WACS_WEB_URL at build"),
-          );
+          bridge.report(t("no WACS server is set for this build: set one in Settings"));
           return;
         }
         const project = bridge.project();

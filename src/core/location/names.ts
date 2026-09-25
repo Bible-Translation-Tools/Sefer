@@ -96,6 +96,19 @@ export const nameCatalogue = (input: CatalogueInput = {}): NameCatalogue => {
 export type BookMatch = "exact" | "prefix";
 
 /**
+ * Every book a partly typed word could mean, in catalogue order: any name that
+ * starts with it, or has a later word that does — "john" is John and 1, 2 and
+ * 3 John. A filter's answer; `matchBook` is the one best book for navigation.
+ */
+export const booksMatching = (word: string, catalogue: NameCatalogue): readonly BookId[] => {
+  const wanted = fold(word);
+  if (wanted === "") return [];
+  return catalogue.ids.filter((id) =>
+    catalogue.names(id).some((name) => name.startsWith(wanted) || name.includes(` ${wanted}`)),
+  );
+};
+
+/**
  * The book a word names, or `undefined`.
  *
  * Each step is tried across every book before the next, so an exact match

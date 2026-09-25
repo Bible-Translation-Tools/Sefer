@@ -21,10 +21,12 @@
 
 import { useNavigate, useSearch } from "@tanstack/solid-router";
 import { Effect, FileSystem, Result } from "effect";
+import ArrowRight from "lucide-solid/icons/arrow-right";
 import Download from "lucide-solid/icons/download";
 import FolderOpen from "lucide-solid/icons/folder-open";
 import MoreVertical from "lucide-solid/icons/more-vertical";
 import PencilLine from "lucide-solid/icons/pencil-line";
+import Share2 from "lucide-solid/icons/share-2";
 import Trash2 from "lucide-solid/icons/trash-2";
 import { For, Show, createEffect, createSignal } from "solid-js";
 
@@ -39,26 +41,24 @@ import {
   Button,
   Card,
   Dialog,
-  EmptyState,
   IconButton,
   Input,
-  Popover,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Menu,
+  MenuItem,
   toasts,
 } from "../primitives";
-import { formatDate, listProjects, type ProjectSummary } from "./summaries";
+import { flyCard, type PendingDownload } from "./downloads";
+import { listProjects, type ProjectSummary } from "./summaries";
 
 /** One row of the kebab menu; the same class the toolbar's menu uses. */
-const item =
-  "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start text-small text-on-surface-primary hover:bg-surface-secondary disabled:cursor-not-allowed disabled:text-on-surface-tertiary";
-
-export function YourProjects(props: { readonly reload: number }) {
-  const navigate = useNavigate();
+export function YourProjects(props: {
+  readonly reload: number;
+  /** Downloads in flight, drawn first until the project each becomes is listed. */
+  readonly downloads: readonly PendingDownload[];
+  /** Where the newest download's row was, to fly its card up from. */
+  readonly flyFrom: DOMRect | undefined;
+  readonly onDismiss: (id: string) => void;
+}) {
   const shell = useShell();
   const { services } = shell;
   const keys = shellKeys(services.settings);
@@ -68,7 +68,19 @@ export function YourProjects(props: { readonly reload: number }) {
   });
   /** Raised by this component's own writes; `props.reload` is the import hub's. */
   const [changed, setChanged] = createSignal(0, { name: "projectsChanged" });
-  const [menu, setMenu] = createSignal("", { name: "projectMenu" });
+  const navigate = useNavigate();
+
+  /** The card strip, and how many cards sit past its right edge. */
+  const [strip, setStrip] = createSignal<HTMLUListElement>();
+  const [hidden, setHidden] = createSignal(0, { name: "projectsHidden" });
+  /** Sharing is the cloud screen of that project; opening it gets there. */
+  const share = (row: ProjectSummary): void => {
+    void navigate({
+      to: "/project/$slug/cloud",
+      params: { slug: shell.slugFor(row.root) },
+      search: {},
+    });
+  };
   const [renaming, setRenaming] = createSignal<ProjectSummary | undefined>(undefined, {
     name: "renamingProject",
   });
@@ -115,13 +127,81 @@ export function YourProjects(props: { readonly reload: number }) {
   );
 
   /** Most recently opened first; never-opened projects fall to the bottom. */
-  const sorted = (): readonly ProjectSummary[] =>
-    [...(rows() ?? [])].sort((left, right) => {
+  /** The downloads still to draw: a listed root means the real card is here. */
+  const pending = (): readonly PendingDownload[] => {
+    const listed = new Set((rows() ?? []).map((row) => row.root));
+    return props.downloads.filter((download) => !listed.has(download.root));
+  };
+
+  // Counted by an IntersectionObserver rather than by measuring every card
+  // on every scroll event: the browser reports a card only when it crosses
+  // the strip's edge, so a scroll that moves nothing past it costs nothing.
+  // Re-observed when the cards change; the cleanup is the effect's RETURN
+  // value — Solid 2 runs an `onCleanup` here unowned.
+  createEffect(
+    () => ({ box: strip(), count: rows()?.length, pending: pending().length }),
+    ({ box }) => {
+      if (box === undefined) return;
+      const past = new Set<Element>();
+      const observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            const beyond =
+              entry.intersectionRatio < 0.99 &&
+              entry.boundingClientRect.left > (entry.rootBounds?.left ?? 0);
+            if (beyond) past.add(entry.target);
+            else past.delete(entry.target);
+          }
+          setHidden(past.size);
+        },
+        { root: box, threshold: [0.99] },
+      );
+      for (const card of box.children) observer.observe(card);
+      return () => observer.disconnect();
+    },
+  );
+
+  /** Each download flies up once, when its card first mounts. */
+  const flown = new Set<string>();
+  const arrive = (card: HTMLElement, download: PendingDownload): void => {
+    if (flown.has(download.id)) return;
+    flown.add(download.id);
+    const from = props.flyFrom;
+    requestAnimationFrame(() => {
+      strip()?.scrollTo({ left: 0 });
+      card.scrollIntoView({ block: "nearest" });
+      if (from !== undefined) flyCard(from, card, download.language);
+      card.animate(
+        [
+          { opacity: 0, transform: "scale(0.96)" },
+          { opacity: 1, transform: "none" },
+        ],
+        {
+          duration: 300,
+          delay: 350,
+          easing: "ease-out",
+          fill: "backwards",
+        },
+      );
+    });
+  };
+
+  // Downloaded this session first, newest first, so a finished download's
+  // card lands where its downloading card was; then most recently opened.
+  const sorted = (): readonly ProjectSummary[] => {
+    const fresh = props.downloads.map((download) => download.root);
+    const rank = (row: ProjectSummary): number => {
+      const at = fresh.indexOf(row.root);
+      return at === -1 ? fresh.length : at;
+    };
+    return [...(rows() ?? [])].sort((left, right) => {
+      if (rank(left) !== rank(right)) return rank(left) - rank(right);
       const l = left.lastOpened ?? "";
       const r = right.lastOpened ?? "";
       if (l !== r) return r.localeCompare(l);
       return left.name.localeCompare(right.name);
     });
+  };
 
   const open = (row: ProjectSummary): void => {
     const stamp = new Date(Date.now()).toISOString();
@@ -137,15 +217,13 @@ export function YourProjects(props: { readonly reload: number }) {
         yield* Effect.ignore(touchProject(fileSystem, services.projectsRoot, row.root, stamp));
       }),
     );
-    // Navigate and let the route open it. `project/$slug` is the one place a
-    // project is opened, and a landing row that opened it first was the third
-    // caller racing the other two.
-    void navigate({ to: "/project/$slug", params: { slug: shell.slugFor(row.root) } });
+    // The route still does the opening (`project/$slug` is the one place a
+    // project is opened); the shell then lands the reader in Matthew 1.
+    shell.openProjectAtStart(row.root);
   };
 
   /** Saves a copy: the project as a zip, handed to the browser's downloads. */
   const exportZip = (row: ProjectSummary): void => {
-    setMenu("");
     void exportProjectZip(services, row.root);
   };
 
@@ -207,137 +285,206 @@ export function YourProjects(props: { readonly reload: number }) {
       fallback={<p class="text-small text-on-surface-tertiary">{t("Reading…")}</p>}
     >
       <Show
-        when={sorted().length > 0}
+        when={sorted().length > 0 || pending().length > 0}
         fallback={
-          <EmptyState
-            icon={<FolderOpen size={22} />}
-            title={t("No projects yet")}
-            description={t("Import one below, or find one to download.")}
-          />
+          <p data-testid="projects-empty" class="text-small text-on-surface-secondary">
+            {t(
+              "To load a project into Sefer, download your translated work from WACS below. Then it will appear here, and you can open it.",
+            )}
+          </p>
         }
       >
-        <Card padded={false} class="overflow-hidden">
-          <Table data-projects={sorted().length}>
-            <TableHead>
-              <TableRow>
-                <TableHeader>{t("Project")}</TableHeader>
-                <TableHeader>{t("Language")}</TableHeader>
-                <TableHeader>{t("Books")}</TableHeader>
-                <TableHeader>{t("Last opened")}</TableHeader>
-                <TableHeader>
-                  <span class="sr-only">{t("Actions")}</span>
-                </TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              <For each={sorted()}>
-                {(row) => (
-                  <TableRow data-project={row.root}>
-                    <TableCell>
-                      <div class="flex items-center gap-2">
-                        <strong class="font-medium text-on-surface-primary">{row.name}</strong>
-                        <Show when={row.fixture}>
-                          <Badge tone="brand" size="sm">
-                            {t("fixture")}
-                          </Badge>
+        {/* ONE row of cards, scrolled sideways. The "+N more" pill counts the
+            cards past the right edge and scrolls to them; it goes when there
+            is nothing further to see. */}
+        <div class="relative">
+          <ul
+            ref={setStrip}
+            data-projects={sorted().length}
+            class="scrollbar-subtle flex snap-x gap-4 overflow-x-auto pb-2"
+          >
+            <For each={pending()}>
+              {(download) => (
+                <li
+                  ref={(card) => arrive(card, download)}
+                  data-downloading={download.id}
+                  class="shrink-0 snap-start"
+                >
+                  <Card
+                    class="flex w-64 flex-col gap-1"
+                    aria-busy={download.state === "downloading" ? "true" : "false"}
+                  >
+                    <h3 class="truncate text-h4 font-semibold text-on-surface-primary">
+                      {download.language}
+                    </h3>
+                    <code class="truncate font-mono text-smallest text-on-surface-tertiary">
+                      {download.code}
+                    </code>
+                    <div class="mt-auto flex flex-col gap-1.5 pt-4">
+                      <div class="flex items-baseline gap-2 text-smallest">
+                        <span
+                          class={
+                            download.state === "failed"
+                              ? "min-w-0 flex-1 truncate text-on-surface-error"
+                              : "min-w-0 flex-1 truncate text-on-surface-secondary"
+                          }
+                          title={download.status}
+                        >
+                          {download.state === "failed"
+                            ? t("Download failed")
+                            : t("Downloading… {status}", { status: download.status })}
+                        </span>
+                        <Show
+                          when={download.state === "downloading" && download.percent !== undefined}
+                        >
+                          <span class="shrink-0 tabular-nums font-medium text-on-surface-primary">
+                            {t("{percent}%", { percent: download.percent ?? 0 })}
+                          </span>
                         </Show>
                       </div>
-                      <code class="font-mono text-smallest text-on-surface-tertiary">
-                        {row.root}
-                      </code>
-                    </TableCell>
-                    <TableCell class="text-on-surface-secondary">
-                      {/* The NAME, as the column heading promises. The tag rides
-                          under it, muted, and a project that declares neither
-                          gets an em dash — its folder name is not its language,
-                          and printing one there was the bug. */}
                       <Show
-                        when={row.language !== "" || row.languageTag !== ""}
+                        when={download.state === "downloading"}
                         fallback={
-                          <span
-                            class="text-on-surface-tertiary"
-                            title={t("No language declared in this project's metadata.")}
-                          >
-                            —
-                          </span>
+                          <Button size="sm" onClick={() => props.onDismiss(download.id)}>
+                            {t("Dismiss")}
+                          </Button>
                         }
                       >
-                        <span class="block">{row.language || row.languageTag}</span>
-                        <Show when={row.language !== "" && row.languageTag !== ""}>
-                          <code class="font-mono text-smallest text-on-surface-tertiary">
-                            {row.languageTag}
-                          </code>
-                        </Show>
-                      </Show>
-                    </TableCell>
-                    <TableCell class="tabular-nums text-on-surface-secondary">
-                      {row.books}
-                    </TableCell>
-                    <TableCell class="text-on-surface-secondary">
-                      {formatDate(row.lastOpened) || "—"}
-                    </TableCell>
-                    <TableCell class="text-end">
-                      <div class="flex items-center justify-end gap-2">
-                        <Button size="sm" variant="primary" onClick={() => open(row)}>
-                          {t("Open")}
-                        </Button>
-                        {/* The fixture is an in-memory copy of the seeded
-                            folder: there is nothing on disk to rename, zip or
-                            delete, so it gets no menu rather than a menu of
-                            things that would fail. */}
-                        <Show when={!row.fixture}>
-                          <Popover
-                            label={t("Project actions")}
-                            side="bottom"
-                            align="end"
-                            class="w-52 p-1"
-                            open={menu() === row.root}
-                            onOpenChange={(open) => setMenu(open ? row.root : "")}
-                            trigger={
-                              <IconButton
-                                size="sm"
-                                label={t("More")}
-                                icon={<MoreVertical size={16} />}
-                              />
+                        {/* Indeterminate until the server says how much there
+                            is: a bar pinned at 0% reads as stuck. */}
+                        <div
+                          role="progressbar"
+                          aria-label={t("Downloading {name}", { name: download.language })}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={download.percent}
+                          class="h-1.5 overflow-hidden rounded-full bg-surface-tertiary"
+                        >
+                          <div
+                            class={
+                              download.percent === undefined
+                                ? "h-full w-1/3 animate-pulse rounded-full bg-brand"
+                                : "h-full rounded-full bg-brand transition-[width] duration-300"
                             }
+                            style={
+                              download.percent === undefined
+                                ? undefined
+                                : { width: `${String(download.percent)}%` }
+                            }
+                          />
+                        </div>
+                      </Show>
+                    </div>
+                  </Card>
+                </li>
+              )}
+            </For>
+            <For each={sorted()}>
+              {(row) => (
+                <li data-project={row.root} class="shrink-0 snap-start">
+                  <Card class="flex w-64 flex-col gap-1" title={row.name}>
+                    <div class="flex items-start gap-2">
+                      <h3 class="min-w-0 flex-1 truncate text-h4 font-semibold text-on-surface-primary">
+                        {row.language || row.name}
+                      </h3>
+                      <Show when={row.fixture}>
+                        <Badge tone="brand" size="sm">
+                          {t("fixture")}
+                        </Badge>
+                      </Show>
+                    </div>
+                    {/* The code, or the folder when the metadata declares no
+                        language — muted, so it never reads as one. */}
+                    <code class="truncate font-mono text-smallest text-on-surface-tertiary">
+                      {row.languageTag || row.folder}
+                    </code>
+
+                    {/* `mt-auto` keeps the button on the card's floor when a
+                        neighbour in the row is taller; the 16px above it is
+                        the whole of the space otherwise. */}
+                    <div class="mt-auto flex items-center gap-2 pt-4">
+                      <Button
+                        variant="accent"
+                        size="lg"
+                        class="flex-1 justify-between"
+                        onClick={() => open(row)}
+                      >
+                        {t("Open Project")}
+                        <ArrowRight size={16} aria-hidden="true" />
+                      </Button>
+                      <Menu
+                        label={t("Project actions")}
+                        side="bottom"
+                        align="end"
+                        class="w-52"
+                        trigger={
+                          <IconButton
+                            size="lg"
+                            label={t("More actions for {name}", { name: row.name })}
+                            icon={<MoreVertical size={24} />}
+                          />
+                        }
+                      >
+                        <MenuItem
+                          icon={<FolderOpen size={14} aria-hidden="true" />}
+                          onSelect={() => open(row)}
+                        >
+                          {t("Open")}
+                        </MenuItem>
+                        {/* The fixture is an in-memory copy of the seeded
+                            folder: there is nothing on disk to rename, zip,
+                            share or delete, so it offers Open and nothing
+                            that would fail. */}
+                        <Show when={!row.fixture}>
+                          <MenuItem
+                            icon={<Share2 size={14} aria-hidden="true" />}
+                            onSelect={() => share(row)}
                           >
-                            <button
-                              type="button"
-                              class={item}
-                              onClick={() => {
-                                setMenu("");
-                                setNewName(row.name);
-                                setRenaming(row);
-                              }}
-                            >
-                              <PencilLine size={14} aria-hidden="true" />
-                              {t("Rename…")}
-                            </button>
-                            <button type="button" class={item} onClick={() => exportZip(row)}>
-                              <Download size={14} aria-hidden="true" />
-                              {t("Export as zip")}
-                            </button>
-                            <button
-                              type="button"
-                              class={item}
-                              onClick={() => {
-                                setMenu("");
-                                setDeleting(row);
-                              }}
-                            >
-                              <Trash2 size={14} aria-hidden="true" />
-                              {t("Delete…")}
-                            </button>
-                          </Popover>
+                            {t("Share…")}
+                          </MenuItem>
+                          <MenuItem
+                            icon={<PencilLine size={14} aria-hidden="true" />}
+                            onSelect={() => {
+                              setNewName(row.name);
+                              setRenaming(row);
+                            }}
+                          >
+                            {t("Rename…")}
+                          </MenuItem>
+                          <MenuItem
+                            icon={<Download size={14} aria-hidden="true" />}
+                            onSelect={() => exportZip(row)}
+                          >
+                            {t("Export as zip")}
+                          </MenuItem>
+                          <MenuItem
+                            icon={<Trash2 size={14} aria-hidden="true" />}
+                            onSelect={() => setDeleting(row)}
+                          >
+                            {t("Delete…")}
+                          </MenuItem>
                         </Show>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </For>
-            </TableBody>
-          </Table>
-        </Card>
+                      </Menu>
+                    </div>
+                  </Card>
+                </li>
+              )}
+            </For>
+          </ul>
+          <Show when={hidden() > 0}>
+            <Button
+              size="sm"
+              data-testid="projects-more"
+              class="absolute end-0 top-1/2 -translate-y-1/2 shadow-medium"
+              onClick={() => {
+                const box = strip();
+                box?.scrollBy({ left: box.clientWidth, behavior: "smooth" });
+              }}
+            >
+              {t("+{count} more", { count: hidden() })}
+            </Button>
+          </Show>
+        </div>
       </Show>
 
       <Dialog

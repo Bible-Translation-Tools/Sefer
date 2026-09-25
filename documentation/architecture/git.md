@@ -66,8 +66,9 @@ exist because only one of them is worth retrying unchanged.
 repository on `master` arrives on `master`. It used to be `Git.init` → `attach` → `pull`, and that
 was wrong twice: the init chose `main` before the server was asked, and on the Web isomorphic-git's
 pull then tried to merge into that unborn branch ("Could not find main", every browser download).
-On the Web the URL is re-based onto the endpoint first, exactly as `attach` does, so `.git/config`
-holds the same thing either way. `cloneRepository(url, into, catalogueId?)` in
+The URL is mapped to its content host first (`identityOf`, a proxy URL back to the server it
+fronts), exactly as `attach` does, so `.git/config` names the server on both hosts and a project
+moves between them unchanged; the Web's proxy is applied inside the HTTP client, per request. `cloneRepository(url, into, catalogueId?)` in
 `src/core/remote/clone.ts` runs it and then appends a `remote` arrival to `.sefer/provenance.json`
 with the URL as the caller gave it — after the clone, because git refuses a folder that is not
 empty ([landing](landing.md) has the record and the index field it feeds). Updates stay an ordinary
@@ -109,9 +110,10 @@ no proxy is involved.
 
 Configuration is `src/app/env.ts` for the build's defaults and `src/app/endpoints.ts` for the
 preference that may override them (see [configuration.md](configuration.md)):
-`VITE_SEFER_WACS_WEB_URL`, `VITE_SEFER_WACS_DESKTOP_URL`, `VITE_SEFER_WACS_APP_ID`. The Gitea API rides
-the same endpoint and sends the same `X-Requested-With` the transfers do; before that it went direct and
-a successful sign-in was followed immediately by "Failed to fetch". The SURFACE is `/cloud` (`src/app/ui/cloud/`), which owns the state, the two clocks, the incoming
+`VITE_SEFER_CONTENT_HOST` (the identity: what `origin` names and a sign-in is filed under) and, on the
+Web, `VITE_SEFER_WEB_TRANSPORT` (the proxy each host is reached through, applied at request time). The
+Gitea API rides the same transport and sends the same `X-Requested-With` the transfers do; before that
+it went direct and a successful sign-in was followed immediately by "Failed to fetch". The SURFACE is `/cloud` (`src/app/ui/cloud/`), which owns the state, the two clocks, the incoming
 plan and the one right button — see [sync.md](sync.md). `src/app/ui/CloudPanel.tsx` keeps the
 attach-and-publish half beside a project and shares the account half with it; the commands are
 `remote.login`, `remote.pull`, `remote.push`.

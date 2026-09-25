@@ -45,7 +45,7 @@ import type { Inventory } from "#core/findings/inventory";
 import * as Fixes from "#core/fixes/fixes";
 import { tocViewOf } from "#core/galley";
 import type { SettingKey } from "#core/host/settings";
-import type { Address } from "#core/location/address";
+import { chaptersAddress, type Address } from "#core/location/address";
 import { resolve } from "#core/location/locate";
 import { Observability } from "#core/observability";
 import { openProject as openProjectEffect, type Project } from "#core/project/project";
@@ -189,6 +189,12 @@ export interface Shell {
    * call an Address, which Address an offset is in. See `app/location.ts`.
    */
   readonly location: Location;
+
+  /**
+   * Open the project at `root` and land in its text: Matthew 1 when it has
+   * Matthew, else chapter 1 of its first book. The landing list's "Open".
+   */
+  readonly openProjectAtStart: (root: string) => void;
 
   /**
    * Where the caret is in the open book, in document offsets — or `undefined`
@@ -478,6 +484,10 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     name: "pendingPlace",
   });
   const [chapter, setChapter] = createSignal<number | null>(null, { name: "chapter" });
+  /** A project root that should land in its text as soon as it is open. */
+  const [landOnOpen, setLandOnOpen] = createSignal<string | undefined>(undefined, {
+    name: "landOnOpen",
+  });
   const location = createLocation(project);
 
   /**
@@ -1133,6 +1143,22 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     });
   };
 
+  const openProjectAtStart = (root: string): void => {
+    setLandOnOpen(root);
+    // The route opens it; the effect below takes over once it has.
+    void navigate({ to: "/project/$slug", params: { slug: slugFor(root) } });
+  };
+
+  createEffect(
+    () => ({ open: project(), want: landOnOpen() }),
+    ({ open, want }) => {
+      if (open === undefined || want === undefined || open.root !== want) return;
+      setLandOnOpen(undefined);
+      const book = open.book("MAT") ?? open.books[0];
+      if (book !== undefined) showReference(chaptersAddress(book.id, 1));
+    },
+  );
+
   createEffect(
     () => ({ held: focused(), want: pendingPlace() }),
     ({ held, want }) => {
@@ -1263,6 +1289,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     reveal,
     showChapter,
     showReference,
+    openProjectAtStart,
     location,
     caret,
     noteCaret,
@@ -1338,6 +1365,8 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     navigate,
     openProject,
     setPaletteOpen: shell.setPaletteOpen,
+    sidebarOpen: shell.sidebarOpen,
+    setSidebarOpen: shell.setSidebarOpen,
     aim,
     report,
     changed,

@@ -107,7 +107,7 @@ primitives already do most of this — which is the strongest reason to reuse
 them.
 
 **Do the units make sense?** He thinks in pixels, and sometimes that is right.
-The rule (Josh Comeau, [The surprising truth about pixels and accessibility](https://www.joshwcomeau.com/css/surprising-truth-about-pixels-and-accessibility/)):
+The rule:
 ask "should this grow when the person raises their browser's default font
 size?" **Yes → rem**: font sizes, and spacing or widths that hold text
 (padding around a label, a column that must fit a language name, media-query

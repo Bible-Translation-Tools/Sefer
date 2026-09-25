@@ -38,8 +38,26 @@ export interface PopoverProps {
   readonly align?: PopoverAlign;
   readonly open?: boolean;
   readonly onOpenChange?: (open: boolean) => void;
-  /** Classes for the panel — a width, usually. */
+  /**
+   * `panel` (the default) is a padded card for free content. `menu` has no
+   * inner padding and a larger radius, because its rows run edge to edge —
+   * it is what `Menu` renders into, and the only other shape a popover has.
+   */
+  readonly variant?: "panel" | "menu";
+  /** Classes for the panel — a width, usually. Not padding or radius: those are the variant's. */
   readonly class?: ClassValue;
+  /** Classes for the trigger's wrapper, when it must fill its box (a table header). */
+  readonly triggerClass?: ClassValue;
+  /**
+   * Cap the panel at the room left in the viewport and scroll inside it,
+   * for a panel that can be taller than the space below its trigger.
+   */
+  readonly fitViewport?: boolean;
+  /**
+   * A selector inside the panel for what takes focus on open — `Menu`'s
+   * first row. Without it corvu focuses the panel itself.
+   */
+  readonly initialFocus?: string;
 }
 
 export function Popover(props: PopoverProps) {
@@ -47,18 +65,41 @@ export function Popover(props: PopoverProps) {
     <CorvuPopover
       open={props.open}
       onOpenChange={props.onOpenChange}
+      onInitialFocus={(event) => {
+        const panel = event.target instanceof HTMLElement ? event.target : undefined;
+        const first =
+          props.initialFocus === undefined
+            ? undefined
+            : panel?.querySelector<HTMLElement>(props.initialFocus);
+        if (first === undefined || first === null) return;
+        event.preventDefault();
+        first.focus();
+      }}
+      // Closing leaves focus where corvu puts it: its wrapper `span`, which
+      // cannot hold it, so `Esc` drops focus to the page. Handing it to the
+      // button inside needs a stable element, and there is none — the trigger
+      // is a JSX getter corvu re-reads, so the whole subtree is new by then,
+      // and a `ref` on corvu's parts displaced corvu's own and stopped every
+      // popover opening a second time. A known gap; see services.md, UI layer.
       placement={placementOf(props.side ?? "bottom", props.align ?? "center")}
-      floatingOptions={{ offset: 8, flip: true, shift: true }}
+      floatingOptions={{
+        offset: 8,
+        flip: true,
+        shift: true,
+        ...(props.fitViewport === true ? { size: { fitViewPort: true, padding: 8 } } : {}),
+      }}
     >
-      <CorvuPopover.Trigger as="span" class="inline-flex">
+      <CorvuPopover.Trigger as="span" class={cx("inline-flex", props.triggerClass)}>
         {props.trigger}
       </CorvuPopover.Trigger>
       <CorvuPopover.Portal>
         <CorvuPopover.Content
           aria-label={props.label}
           class={cx(
-            "z-40 rounded-lg border border-surface-border bg-surface-primary p-3 text-small",
+            "z-40 border border-surface-border bg-surface-primary text-small",
             "text-on-surface-primary shadow-large",
+            props.variant === "menu" ? "rounded-xl py-2" : "rounded-lg p-3",
+            props.fitViewport === true && "scrollbar-subtle overflow-y-auto",
             props.class,
           )}
         >

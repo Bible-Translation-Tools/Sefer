@@ -1,4 +1,4 @@
-import { Outlet, createFileRoute } from "@tanstack/solid-router";
+import { Outlet, createFileRoute, useRouterState } from "@tanstack/solid-router";
 import { Show, onCleanup, untrack } from "solid-js";
 
 import { installCommandKeys, runCommand } from "#app/commands";
@@ -18,15 +18,15 @@ import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
  *
  * ## Why this is a route and not the root
  *
- * In `__root.tsx` every route in the tree would render inside the rail —
- * `/design` included. That is right for a design screen which genuinely sits
- * inside the workspace and wrong for onboarding, a project list, or anything
- * full-bleed: a designer judging a screen could not see its real framing,
- * only this one.
+ * It used to live in `__root.tsx`, which meant every route in the tree
+ * rendered inside the rail — `/design` included. That is right for a design
+ * screen which genuinely sits inside the workspace and wrong for onboarding,
+ * a project list, or anything full-bleed: a designer judging a screen could
+ * not see its real framing, only this one.
  *
- * A frame-level dial (`?chrome=0`) read in the root is the alternative, and
- * it is wrong because "is this screen inside the application frame" is a
- * structural fact about a screen, and a query parameter answers it at
+ * The alternative considered was a frame-level dial (`?chrome=0`) read in the
+ * root. It was rejected because "is this screen inside the application frame"
+ * is a structural fact about a screen, and a query parameter answers it at
  * runtime, from a URL somebody can mistype or share. Expressed as a layout it
  * is visible in the file tree, cannot be got wrong by accident, and `/design`
  * is a blank canvas because of WHERE IT IS rather than because of a flag.
@@ -38,11 +38,10 @@ import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
  * is here. A prototype answering the application's Mod-K would be answering
  * for an application it is not part of.
  *
- * The chrome is the mockups' workspace
- * (`documentation/architecture/design-direction.md`, "Overall layout"): a
- * permanent icon RAIL for "where in Sefer am I", and beside it a resizable
- * project SIDEBAR for "where in this project am I". The rail's panel toggle
- * collapses the second, never the first.
+ * The chrome is the mockups' workspace (`documentation/architecture/design-direction.md`,
+ * "Overall layout"): a permanent icon RAIL for "where in Sefer am I", and
+ * beside it a resizable project SIDEBAR for "where in this project am I",
+ * which the projects page does without.
  *
  * Why the collapsed sidebar is hidden rather than unmounted: `Resizable`
  * registers its panels DURING render, in document order, so a conditionally
@@ -55,6 +54,11 @@ import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
 
 function Workspace() {
   const shell = useShell();
+  const path = useRouterState({ select: (state) => state.location.pathname });
+  // Never on `/` or `/projects`. `/` is either the projects page or, with
+  // nothing installed, `EmptyWorkspace` — a skeleton that draws its own
+  // sidebar, so nothing else in the chrome has to know which.
+  const showing = (): boolean => shell.sidebarShowing() && path() !== "/projects" && path() !== "/";
   // Plain variables, not expressions in the props: `Resizable.Panel` reads its
   // three sizes ONCE, during registration, and a JSX expression is a lazy memo
   // Solid 2 warns about when it is read outside a tracking scope. The width is
@@ -76,18 +80,18 @@ function Workspace() {
         initialSize={initialWidth}
         minSize={minWidth}
         maxSize={maxWidth}
-        class={shell.sidebarShowing() ? undefined : "hidden"}
+        class={showing() ? undefined : "hidden"}
       >
         <ProjectSidebar />
       </Resizable.Panel>
       <Resizable.Handle
         label={t("Resize the project panel")}
-        class={shell.sidebarShowing() ? undefined : "hidden"}
+        class={showing() ? undefined : "hidden"}
       />
       {/* The `!` is load-bearing: `Resizable.Panel` writes its share as an
           inline `flex-basis`, and with the sidebar hidden the routed content
           has to take the whole row back. */}
-      <Resizable.Panel class={shell.sidebarShowing() ? undefined : "[flex-basis:100%]!"}>
+      <Resizable.Panel class={showing() ? "min-w-0" : "min-w-0 [flex-basis:100%]!"}>
         {/* `relative`, and the door OUTSIDE the scroller: a full-page screen
             scrolls its own content, and a button that scrolled away with it
             would be a door you have to go back to the top to find. */}
@@ -113,7 +117,7 @@ function Chrome() {
   const shell = () => readyShell(state());
 
   return (
-    <div class="flex h-screen bg-surface-secondary">
+    <div class="flex h-screen bg-surface-canvas">
       <Show
         when={shell()}
         fallback={<div class="w-13 shrink-0 border-e border-sidebar-border bg-surface-primary" />}

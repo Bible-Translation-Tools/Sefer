@@ -140,6 +140,12 @@ export interface VirtualListProps<T> {
   /** Told which section the reader is currently under, for an outline column. */
   readonly onActive?: (key: string) => void;
   readonly class?: string;
+  /**
+   * The scroller's role, for a list that is part of a larger structure: a
+   * windowed table's body is a `rowgroup` (its rows then carry
+   * `aria-rowindex`, because most of them are not in the DOM).
+   */
+  readonly role?: "rowgroup" | "list";
   readonly empty?: JSX.Element;
   /** Handed a `goTo`, so a caller can drive the list from an outline. */
   readonly ref?: (scrollTo: (sectionKey: string) => void) => void;
@@ -406,6 +412,7 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
       ref={setScroller}
       onScroll={(event) => setOffset(event.currentTarget.scrollTop)}
       data-virtual={props.sections.length}
+      role={props.role}
       class={props.class ?? "min-h-0 min-w-0 flex-1 overflow-y-auto pe-1"}
     >
       <Show when={props.sections.length > 0} fallback={props.empty}>

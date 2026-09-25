@@ -4,15 +4,14 @@ Where a project comes from, and what each host can actually do about it. Everyth
 
 ## The routes
 
-| route               | file                                                        | what it is                                                                               |
-| ------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `/` and `/projects` | `src/routes/_app/index.tsx`, `src/routes/_app/projects.tsx` | both render `ProjectsLanding` — what is on this device, plus the three ways to add to it |
-| `/start/find`       | `src/routes/_app/start/find.tsx`                            | the remote catalogue                                                                     |
-| `/start/create`     | `src/routes/_app/start/create.tsx`                          | the create form, which stops one step short of writing (below)                           |
+| route               | file                                                        | what it is                                                                                                                                                                                                                                                                               |
+| ------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/` and `/projects` | `src/routes/_app/index.tsx`, `src/routes/_app/projects.tsx` | both render `ProjectsLanding` — "Projects Loaded into Sefer", then "Projects Available on WACS" (`WacsProjects`). `/` shows `EmptyWorkspace` instead when nothing is installed: a skeleton of the workspace that draws its own sidebar, and the one place that knows the device is empty |
+| `/start/create`     | `src/routes/_app/start/create.tsx`                          | the create form, which stops one step short of writing (below)                                                                                                                                                                                                                           |
 
 `/` renders the landing rather than redirecting to `/projects`, because the composition reads `?fixture=1` off `location` before the router exists and a redirect that dropped the search would compose over OPFS instead of the seeded fixture. For the same reason every crumb and every tab switch passes `search: true`.
 
-`ProjectsLanding` and `/start/find` share `LandingHeader`: the muted breadcrumb, then the two-way segmented control. The two halves are two ROUTES, not two signals — one lists this device and the other browses a service on the internet, and a reader who bookmarks the catalogue or presses Back should land where they expect. The trail ends in the tab, so it reads "Sefer / Projects / Find project" and the crumbs a screen passes are the ones ABOVE it.
+The projects page has no breadcrumb or tabs any more, and the add-a-project cards are gone. `ImportHub` is the one import pipeline, in two shapes: the projects page's "Import zip" / "Import folder" buttons, and the rail's Import menu (zip, folder, and "Clone from cloud", disabled with the reason when the build has no WACS server), so a project can be brought in from any screen. `LandingHeader` survives only on `/start/create`.
 
 The only state on the landing page is `reload`: a counter the import hub raises and `YourProjects` reads. That is the whole subscription between them — an import that finished shows up in the list without either component knowing what the other is. `YourProjects` keeps a second counter of its own for the writes it makes itself (a rename, a delete), read in the same effect.
 
@@ -50,11 +49,11 @@ Every row carries a kebab of three `ProjectAdmin` calls. (The port also has `met
 
 The rule the import hub is built around: a source this host cannot serve is rendered DISABLED with the reason in place of its explainer — never hidden, never offered-then-failed. `HostInfo.capabilities()` and `env` are asked before the button exists.
 
-| source           | web | Tauri | needs                                                                                                                                                                        |
-| ---------------- | --- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Import zip       | yes | yes   | nothing: the archive is read in the page (`fflate`) and written into OPFS                                                                                                    |
-| Open folder      | yes | yes   | web copies the folder's files into its own storage; Tauri reads the real path                                                                                                |
-| Clone from cloud | yes | yes   | `VITE_SEFER_WACS_WEB_URL` / `VITE_SEFER_WACS_DESKTOP_URL` — one endpoint per host, normally a proxy on the web because its fetches are cross-origin. Overridable in Settings |
+| source           | web | Tauri | needs                                                                                                                                        |
+| ---------------- | --- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Import zip       | yes | yes   | nothing: the archive is read in the page (`fflate`) and written into OPFS                                                                    |
+| Open folder      | yes | yes   | web copies the folder's files into its own storage; Tauri reads the real path                                                                |
+| Clone from cloud | yes | yes   | `VITE_SEFER_CONTENT_HOST`, the same on both hosts; the web reaches it through `VITE_SEFER_WEB_TRANSPORT`. Overridable in Settings (Advanced) |
 
 Every source ends in the same pipeline — `stage → classify → commit` from `src/core/resources/import.ts` ([resources](resources.md) owns the steps), run one step at a time so the dialog can name the step it is on. Nothing touches the project root until `commit`, so cancelling or failing leaves a staging directory and nothing else.
 
@@ -67,15 +66,17 @@ Intake also does the two things a picker leaves to its caller: it strips the one
 
 The progress dialog counts files while the write runs, because an import of sixty-six books is long enough that a spinner is not an answer.
 
-## Find project: the Catalogue port
+## Projects Available on WACS: the Catalogue port
 
-`src/app/catalogue.ts` is a port in `src/app`, not a module in `src/core`, because it is not policy: it is one HTTP GET against a service Sefer does not own, and core may not name `fetch`.
+**Current behaviour (supersedes the older notes below where they differ):** the table leaves out gateway languages entirely, and search matches the code, both names and every alternate name. The catalogue is the Language API's GraphQL endpoint, in two queries: `vw_consolidated_repos` for the rows, then `vw_langnames` and `content` filtered to exactly those codes and content ids, which supply the region (`lr`), the alternate names (`alt`), the gateway flag (`gw`; the `wa-catalog` owner rule is only the fallback) and the date (`content.modified_on`). If the second query fails the table still draws, and `catalogue.browse` records `catalogue.enriched: false`.
 
-`catalogueFor()` is the one place that decides the source. With `VITE_SEFER_LANGUAGE_API_URL` set it reads the Language API's consolidated-repos view; without it, it serves `SAMPLE_CATALOGUE` so the screen is real in development instead of empty. Either way the service says which one it gave you in `source`, and the screen shows that rather than implying live data.
+`src/app/catalogue.ts` is a port in `src/app`, not a module in `src/core`, because it is not policy: it is two requests against a service Sefer does not own, and core may not name `fetch`.
 
-The decoder reads `region` and `updated_at` when a row has them; the live payload carries neither today, only a code and a language name, so those columns print an em dash for a row that has none. Inventing a region would be worse than a blank column. `type` (translation or gateway) is derived from the owner — `wa-catalog` is the curated gateway set — and that mapping is stated in the port so the filter's meaning is readable rather than buried in a comparison inside a component.
+`catalogueFor()` is the one place that decides the source. With `VITE_SEFER_CATALOGUE_URL` set it reads the Language API; without it, it serves `SAMPLE_CATALOGUE` so the screen is real in development instead of empty. Either way the service says which one it gave you in `source`, and the screen shows that rather than implying live data.
 
-Download reuses the clone flow: the catalogue row hands its `cloneUrl` and its id to the same `cloneRepository` the import hub calls, and `rememberProject` runs in the same pipeline, so the row and its link exist before the toast says it is done.
+A row whose language has no langnames entry prints an em dash for its region. Inventing a region would be worse than a blank column. `type` (translation or gateway) is derived from the owner — `wa-catalog` is the curated gateway set — and that mapping is stated in the port so the filter's meaning is readable rather than buried in a comparison inside a component.
+
+Download reuses the clone flow: the catalogue row hands its `gitUrl` and its id to the same `cloneRepository` the import hub calls, and `rememberProject` runs in the same pipeline, so the row and its link exist before the toast says it is done.
 
 `from` is where a project first arrived — a zip, a folder, or which remote — cached from `<root>/.sefer/provenance.json` (`src/core/project/provenance.ts`), which is the record itself: one entry per arrival, appended by import `commit` before it copies and by `cloneRepository` after a clone succeeds. A remote entry keeps the URL as the person saw it, not the proxy's, and Find's `owner/repo`. Entries written before `via` existed are read as a zip when their source ends in `.zip`, else a folder. A project made here has no entry and no `from`.
 

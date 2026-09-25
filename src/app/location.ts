@@ -23,9 +23,9 @@ import { createMemo, type Accessor } from "solid-js";
 import type { BookId } from "#core/book/book";
 import { stampMatches, tocViewOf, type Analysis, type EngineStamp } from "#core/galley";
 import { addressLabel, type Address } from "#core/location/address";
-import { parseCitation, type Citation } from "#core/location/citation";
+import { citationWords, parseCitation, type Citation } from "#core/location/citation";
 import { addressAt } from "#core/location/locate";
-import { nameCatalogue, type NameCatalogue } from "#core/location/names";
+import { booksMatching, nameCatalogue, type NameCatalogue } from "#core/location/names";
 import type { Project } from "#core/project/project";
 
 import { t } from "./i18n";
@@ -38,6 +38,11 @@ export interface Location {
    * filter. Loose: a book prefix is enough, and "luk 3,1" is 3:1.
    */
   readonly read: (text: string) => Citation;
+  /**
+   * Every book the words of what was typed could mean, canon order — the
+   * sidebar's filter, where `read` is the one book Enter would go to.
+   */
+  readonly books: (text: string) => readonly BookId[];
   /** Does this project hold the book an Address names? */
   readonly holds: (book: BookId) => boolean;
   /**
@@ -80,6 +85,7 @@ export const createLocation = (project: Accessor<Project | undefined>): Location
 
   return {
     read: (text) => parseCitation(text, catalogue(), { grammar: "navigation", held: held() }),
+    books: (text) => booksMatching(citationWords(text), catalogue()),
     holds: (book) => held().has(book.toUpperCase()),
     label: (address) =>
       addressLabel(address, bookName(address.book, metadataOf(project())), t("Intro")),

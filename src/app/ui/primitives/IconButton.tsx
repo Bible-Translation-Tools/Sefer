@@ -14,11 +14,11 @@ import { variants } from "./cx";
 import { Tooltip, type TooltipSide } from "./Tooltip";
 
 export type IconButtonVariant = "subtle" | "filled" | "outlined";
-export type IconButtonSize = "sm" | "md";
+export type IconButtonSize = "sm" | "md" | "lg";
 
 const classes = variants({
   base: [
-    "inline-flex items-center justify-center rounded-md border transition-colors",
+    "inline-flex items-center justify-center border transition-colors",
     "cursor-pointer disabled:cursor-not-allowed disabled:opacity-60",
     "aria-pressed:bg-brand-light aria-pressed:border-brand aria-pressed:text-brand",
   ].join(" "),
@@ -32,8 +32,11 @@ const classes = variants({
         "border-surface-border bg-surface-primary text-on-surface-secondary hover:not-disabled:bg-surface-secondary",
     },
     size: {
-      sm: "size-7",
-      md: "size-9",
+      // Radius lives with the size, as in `Button`: the 56px one matches
+      // `Button size="lg"` beside it.
+      sm: "size-7 rounded-md",
+      md: "size-9 rounded-md",
+      lg: "size-14 rounded-xl",
     },
   },
   defaults: { variant: "subtle", size: "md" },

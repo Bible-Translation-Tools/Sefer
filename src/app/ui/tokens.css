@@ -75,6 +75,13 @@
   --neutral-95: #f2f2f2;
   --neutral-100: #ffffff;
 
+  /* Slate: the blue-grey of the projects page and the rail, from the
+     designer's mockups. A ramp like the others, so the semantic layer below
+     names a step and never a hex. */
+  --slate-20: #0f2f4c;
+  --slate-45: #516b86;
+  --slate-97: #f4f8fb;
+
   --error-20: #611a16;
   --error-30: #922821;
   --error-40: #c33620;
@@ -117,11 +124,12 @@
   --surface-primary: var(--neutral-100);
   --surface-secondary: var(--neutral-95);
   --surface-tertiary: var(--neutral-90);
-  --surface-canvas: #f4f8fb;
+  /* The app background, behind every screen (the shell root in _app.tsx). */
+  --surface-canvas: var(--slate-97);
   --surface-border: var(--neutral-90);
   --surface-overlay: rgba(31, 31, 31, 0.6);
   --on-surface-primary: var(--neutral-5);
-  --on-surface-secondary: var(--neutral-20);
+  --on-surface-secondary: var(--slate-45);
   --on-surface-tertiary: var(--neutral-60);
 
   --surface-error: var(--error-95);
@@ -149,6 +157,14 @@
   --sidebar-on-surface: var(--on-surface-primary);
   --sidebar-on-surface-muted: var(--on-surface-tertiary);
 
+  /* The inverted surface: a dark column whatever the theme, with white on it.
+     The icon rail is the first user. Active is the brand blue, held at the
+     light-theme shade in both themes so white text keeps its contrast. */
+  --surface-invert: var(--slate-20);
+  --surface-invert-hover: color-mix(in srgb, var(--slate-20), white 12%);
+  --surface-invert-active: var(--brand-40);
+  --on-surface-invert: var(--neutral-100);
+
   --button-primary-surface: var(--brand-40);
   --button-primary-surface-hover: var(--brand-30);
   --button-primary-on-surface: var(--neutral-100);
@@ -159,7 +175,7 @@
   --button-tertiary-surface-hover: var(--neutral-95);
   --button-tertiary-on-surface: var(--neutral-20);
 
-  --kbd-surface: #f4f8fb;
+  --kbd-surface: var(--slate-97);
   --kbd-on-surface: rgba(15, 47, 76, 0.8);
   --kbd-border: var(--neutral-90);
 
@@ -298,6 +314,10 @@
   --color-on-surface-warning: var(--on-surface-warning);
   --color-on-surface-highlight: var(--on-surface-highlight);
   --color-on-surface-success: var(--on-surface-success);
+  --color-surface-invert: var(--surface-invert);
+  --color-surface-invert-hover: var(--surface-invert-hover);
+  --color-surface-invert-active: var(--surface-invert-active);
+  --color-on-surface-invert: var(--on-surface-invert);
 
   --color-sidebar-surface: var(--sidebar-surface);
   --color-sidebar-surface-hover: var(--sidebar-surface-hover);
@@ -334,6 +354,9 @@
   --text-body: 1rem;
   --text-small: 0.875rem;
   --text-smallest: 0.75rem;
+  /* The rail's tile caption: the one size below smallest, set tight. */
+  --text-caption: 0.6875rem;
+  --text-caption--line-height: 0.75rem;
 
   /* Our radii REPLACE Tailwind's, so `rounded-lg` is the product's 12px and
      not the framework's 8px. The card radius the mockups use is lg/xl. */
@@ -359,6 +382,13 @@
 }
 @utility shadow-large {
   box-shadow: var(--shadow-large);
+}
+
+/* A scrollbar that stays out of the way: no track, a thin light-gray thumb.
+   Tokens, so the dark swap reaches it. */
+@utility scrollbar-subtle {
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-tertiary) transparent;
 }
 
 /* The reset essentials, in Tailwind's own `base` layer so every utility

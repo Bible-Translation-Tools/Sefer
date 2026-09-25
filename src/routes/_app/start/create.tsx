@@ -19,7 +19,6 @@ function CreateProjectRoute() {
         crumbs={[
           { label: t("Sefer"), to: "/" },
           { label: t("Projects"), to: "/projects" },
-          { label: t("Find project"), to: "/start/find" },
           { label: t("Create") },
         ]}
       />
