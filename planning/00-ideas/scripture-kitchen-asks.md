@@ -58,3 +58,11 @@ Rarity's denominator today is the corpus total, so `Glyph.sites` has to take Rar
 **Change:** the parse (and the plan built from it) produces an EMPTY body target for a note whose body is empty — a zero-width part at the position after the body marker's space — so an empty body is a place like any other and the carve-out can be deleted. The same likely holds for any character-style body that can be empty (`\fr`, `\xt`), which is worth checking while there.
 
 **Sefer side:** delete the carve-out in `sealed.ts` and verify typing into a fresh footnote by hand.
+
+## 7. An unknown marker leaves its paragraph open
+
+**Asked 2026-09-25.** Sefer treats an unknown marker as passthrough (invisible, immutable, the caret goes around it), like a registered standalone. But the engine closes the paragraph at the end of the line an unknown marker is on, inline or alone on its line: type `\zqq` into a paragraph and every line after it belongs to no paragraph and shows as a separate line. A registered standalone (`\s5` via `setExtensions`) already leaves its paragraph open.
+
+**Change:** an unknown marker does not end its paragraph — the recovery a registered standalone gets, applied to a marker nobody registered. Findings still report it as unknown.
+
+**Sefer side:** nothing to change; the paragraph then flows through it as it does through `\s5`.
