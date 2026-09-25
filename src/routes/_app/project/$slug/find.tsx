@@ -1,6 +1,6 @@
 import type { JSX } from "@solidjs/web";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/solid-router";
-import { Result } from "effect";
+import { Option, Result } from "effect";
 import CaseSensitiveIcon from "lucide-solid/icons/case-sensitive";
 import ChevronDownIcon from "lucide-solid/icons/chevron-down";
 import ChevronUpIcon from "lucide-solid/icons/chevron-up";
@@ -27,6 +27,8 @@ import { ShellGate } from "#app/ui/ShellGate";
 import * as Workflows from "#app/workflows/references";
 import type { BookId } from "#core/book/book";
 import { refOccurrences, type Excerpt, type Occurrence } from "#core/excerpts/excerpts";
+import type { Analysis } from "#core/galley";
+import type { Address } from "#core/location/address";
 import { createReadings } from "#core/search/reading";
 import * as Search from "#core/search/search";
 
@@ -88,6 +90,24 @@ type Scope = "book" | "project" | "reference";
  * `58-PHM.usfm` — and the full path is on the element for anyone debugging.
  */
 const fileName = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
+
+/**
+ * Every whole verse a verse Address names, as `BOOK chapter:verse` — the key
+ * a reference hit and a project card meet on. A segment meets its verse (a
+ * reference's `4a` pairs with a project's `4`), and a range across chapters
+ * offers its two ends: counting the verses between would be versification.
+ * Nothing for any other kind of Address, which is no verse to pair.
+ */
+const verseKeys = (address: Address): readonly string[] => {
+  if (address.kind !== "verses") return [];
+  const { book, from, to } = address;
+  if (from.chapter !== to.chapter)
+    return [`${book} ${from.chapter}:${from.verse}`, `${book} ${to.chapter}:${to.verse}`];
+  const keys: string[] = [];
+  for (let verse = from.verse; verse <= to.verse; verse += 1)
+    keys.push(`${book} ${from.chapter}:${verse}`);
+  return keys;
+};
 
 interface FindSearch {
   readonly q?: string;
@@ -169,6 +189,33 @@ function Find() {
   const analyze = shell.services.galley.memoize();
 
   /**
+   * What a hit's Address is read from, per text — Search reads no marker
+   * itself and parses nothing (`Search.Options.analysisOf`).
+   *
+   * A project book answers with ProjectAnalysis' held parse; Search ignores
+   * it unless it describes exactly the text scanned, so a book being typed in
+   * gets its hits without an Address rather than one from the text before
+   * the edit. No card label comes from here — the feed labels a card from its
+   * own analysis — so what goes missing is nothing a reader sees.
+   *
+   * A reference is not a project book and ProjectAnalysis holds no parse of
+   * it, so this parses it: once per exact text, kept for as long as the
+   * screen is, and only when a search finds something in it.
+   */
+  const referenceParses = new Map<string, Analysis>();
+  const analysisOf = (id: string): Analysis | undefined => {
+    const held = Option.getOrUndefined(shell.services.projectAnalysis.analysis(id));
+    if (held !== undefined) return held.analysis;
+    const text = shell.services.projectAnalysis.referenceText(id);
+    if (text === undefined) return undefined;
+    const parsed = referenceParses.get(id);
+    if (parsed !== undefined && parsed.text === text) return parsed;
+    const fresh = shell.services.galley.analyze(text, "find.reference");
+    referenceParses.set(id, fresh);
+    return fresh;
+  };
+
+  /**
    * The reference scope's hits, resolved against THIS project's books.
    *
    * A reference hit names a verse in somebody else's book. What the reader
@@ -186,11 +233,11 @@ function Find() {
     (): readonly Occurrence[] => {
       const wanted = referenceHits();
       if (wanted.length === 0) return [];
-      const refs = wanted.flatMap((hit) => (hit.ref === undefined ? [] : [hit.ref]));
-      if (refs.length === 0) return [];
+      const addresses = wanted.flatMap((hit) => (hit.address === undefined ? [] : [hit.address]));
+      if (addresses.length === 0) return [];
 
-      const books = readBooks(shell, new Set(refs.map((ref) => ref.book)), analyze);
-      return books.flatMap((book) => refOccurrences(book, refs));
+      const books = readBooks(shell, new Set(addresses.map((address) => address.book)), analyze);
+      return books.flatMap((book) => refOccurrences(book, addresses));
     },
     { name: "referenceMatches" },
   );
@@ -295,7 +342,8 @@ function Find() {
     // No limit. Every hit, and the count beside the box is therefore the
     // answer rather than a ceiling — see `Search.MINIMUM_QUERY` for the
     // measurements that say a project-wide find can afford it.
-    const options = only === undefined ? {} : { books: [only] };
+    const options: Search.Options =
+      only === undefined ? { analysisOf } : { books: [only], analysisOf };
     if (staticQuery.text === "") {
       setHits([]);
       setReferenceHits([]);
@@ -516,21 +564,20 @@ function Find() {
    * excerpts built from its text, which is a second feed; the preview is what
    * the search already returned and it reads as the verse it came from.
    *
-   * Keyed by `BOOK chapter:verse` rather than by sid because the two sides need
-   * not agree on bridges: a reference may write `\v 4` where this project has
-   * `\v 4-5`, and the excerpt would then be `PHM 1:4-5` against a hit on
-   * `PHM 1:4`. `pairFor` walks the excerpt's own range instead of matching the
-   * string.
+   * Keyed by single verse (`BOOK chapter:verse`) rather than by Address
+   * because the two sides need not agree on bridges: a reference may write
+   * `\v 4` where this project has `\v 4-5`, and the excerpt would then be
+   * `PHM 1:4-5` against a hit on `PHM 1:4`. So a hit is filed under every
+   * verse of its own Address, and `pairFor` walks the excerpt's Address.
    */
   const referenceReadings = createMemo(
     (): ReadonlyMap<string, Search.ReferenceHit> => {
       const out = new Map<string, Search.ReferenceHit>();
       for (const hit of referenceHits()) {
-        if (hit.ref?.verse === undefined) continue;
-        const key = `${hit.ref.book} ${hit.ref.chapter}:${hit.ref.verse}`;
+        if (hit.address === undefined) continue;
         // First hit in a verse wins: the card shows one reading, and a verse
         // matched twice is still one verse.
-        if (!out.has(key)) out.set(key, hit);
+        for (const key of verseKeys(hit.address)) if (!out.has(key)) out.set(key, hit);
       }
       return out;
     },
@@ -556,13 +603,8 @@ function Find() {
 
   const pairFor = (excerpt: Excerpt): Search.ReferenceHit | undefined => {
     const readings = referenceReadings();
-    const match = /^(\S+) (\d+):(\d+)(?:-(\d+))?$/.exec(excerpt.sid);
-    if (match === null) return undefined;
-    // SAFETY: groups 1..3 are required by the pattern that just matched.
-    const [book, chapter, first, last] = [match[1]!, match[2]!, Number(match[3]!), match[4]];
-    const end = last === undefined ? first : Number(last);
-    for (let verse = first; verse <= end; verse += 1) {
-      const held = readings.get(`${book} ${chapter}:${verse}`);
+    for (const key of verseKeys(excerpt.address)) {
+      const held = readings.get(key);
       if (held !== undefined) return held;
     }
     return undefined;

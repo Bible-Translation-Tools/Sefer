@@ -28,7 +28,7 @@ import {
   type Occurrence,
   type OutlineRow,
 } from "#core/excerpts/excerpts";
-import { describesExactly, type Analysis } from "#core/galley";
+import { bookHeading, describesExactly, type Analysis } from "#core/galley";
 import type { ObservabilityService } from "#core/observability";
 import type { EditorBook } from "#editor/index";
 
@@ -109,7 +109,15 @@ export const readBooks = (
       held !== undefined && describesExactly(held.analysis, source.text)
         ? held.analysis
         : analyze(source.text);
-    books.push({ bookId: book.id, text: source.text, analysis });
+    // Labelled by the one display rule (`shell.location.label`), with the
+    // book's own heading as its second choice, read once off this parse.
+    const heading = bookHeading(analysis);
+    books.push({
+      bookId: book.id,
+      text: source.text,
+      analysis,
+      label: (address) => shell.location.label(address, heading),
+    });
   }
   return books;
 };

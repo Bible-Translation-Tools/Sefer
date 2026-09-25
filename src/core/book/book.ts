@@ -32,13 +32,6 @@ import {
 /** The `\id` code when the text declares one, otherwise the file stem. */
 export type BookId = string;
 
-/** A scripture reference in the vocabulary the shell and Findings navigate by. */
-export interface Ref {
-  readonly book: BookId;
-  readonly chapter: number;
-  readonly verse?: number;
-}
-
 /**
  * Who asked for an edit. Trusted origins (fix, format, project.*, recovery,
  * revert) bypass the keyboard guards the way a fix-it does; untrusted ones are

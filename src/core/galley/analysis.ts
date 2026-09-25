@@ -310,3 +310,59 @@ export const diagnosticSeverity = (
       return null;
   }
 };
+
+// ---------------------------------------------------------------------------
+// The book's own name
+// ---------------------------------------------------------------------------
+
+const headings = new WeakMap<Dish, string | null>();
+
+/**
+ * What the book calls itself: the words of its `\h` running header, else of
+ * its `\toc2` short title, whitespace collapsed; `undefined` when it has
+ * neither, or they are empty.
+ *
+ * Read off the engine's TOKENS — which marker a paragraph is, and the text
+ * tokens after it — never by matching the source, the rule every place in
+ * Sefer follows for markers. Only the book's head is walked: the walk stops
+ * at the first `\c`, since both markers belong to the identification block.
+ * Kept per dish, because a feed names a book once per card.
+ */
+export const bookHeading = (analysis: Analysis): string | undefined => {
+  const dish = analysis.dish;
+  const held = headings.get(dish);
+  if (held !== undefined) return held ?? undefined;
+
+  let header: string | undefined;
+  let short: string | undefined;
+  let into: "h" | "toc2" | undefined;
+  let words = "";
+  const close = (): void => {
+    const found = words.replace(/\s+/g, " ").trim();
+    if (into === "h" && header === undefined && found !== "") header = found;
+    if (into === "toc2" && short === undefined && found !== "") short = found;
+    into = undefined;
+    words = "";
+  };
+  const rows = dish.tokens.rows;
+  for (let i = 0, n = rows.length; i < n; i++) {
+    const token = rows.seek(i);
+    const kind = token.kind & ~TOKEN_SPELLING_BIT;
+    if (kind === TokenKind.Text) {
+      if (into !== undefined) words += analysis.text.slice(token.start, token.end);
+      continue;
+    }
+    if (kind !== TokenKind.Marker) continue;
+    close();
+    const row = MARKERS[token.marker];
+    if (row === undefined) continue;
+    if (row.kind === MarkerKind.Chapter) break;
+    if (row.name === "h" && token.level <= 1) into = "h";
+    else if (row.name === "toc" && token.level === 2) into = "toc2";
+    if (header !== undefined) break;
+  }
+  close();
+  const name = header ?? short;
+  headings.set(dish, name ?? null);
+  return name;
+};

@@ -31,6 +31,7 @@
 import { Context, Data, Effect, Option, Result, Schema } from "effect";
 
 import type { BookId } from "../book/book";
+import { versesAddress, type Address } from "../location/address";
 
 // ---------------------------------------------------------------------------
 // The envelope, as it is written
@@ -120,9 +121,12 @@ export interface Span {
  * fact the view must be able to state.
  */
 export interface TermOccurrence {
-  readonly book: BookId;
-  readonly chapter: number;
-  readonly verse: number;
+  /**
+   * The verse the guide names, as an Address: always one verse, `from` and
+   * `to` equal. Where it is in a project's text is `resolve`'s answer
+   * (`core/excerpts`' `refOccurrences`), never this module's.
+   */
+  readonly address: Address;
   /** `PHM 1:5` — the canonical single-verse sid the guide names. */
   readonly sid: string;
   readonly sourceText?: string;
@@ -280,9 +284,7 @@ const termsOf = (envelope: StetEnvelope): readonly Term[] => {
               .map(([from, to]) => ({ from, to }))
               .filter((span) => span.from >= 0 && span.to <= text.length && span.from < span.to);
       return {
-        book: parsed.book,
-        chapter: parsed.chapter,
-        verse: parsed.verse,
+        address: versesAddress(parsed.book, { chapter: parsed.chapter, verse: parsed.verse }),
         sid: parsed.sid,
         curated: curated.has(parsed.sid),
         ...(text === undefined ? {} : { sourceText: text }),

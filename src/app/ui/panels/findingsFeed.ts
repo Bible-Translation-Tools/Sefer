@@ -123,13 +123,12 @@ const rankOfKey = (key: string): number =>
 /**
  * The matter before the first chapter.
  *
- * An excerpt built around a span with no verse anchor carries chapter 0 and no
- * verse (`core/excerpts`, `buildExcerpt`) — an id line, a running header, a
- * table of contents entry. "Genesis 0" is not a chapter anybody has, so the
+ * An excerpt built around a span before the first chapter is at the book's
+ * `intro` Address (`core/excerpts`, `buildExcerpt`) — an id line, a running
+ * header, a table of contents entry. That is not a chapter anybody has, so the
  * page groups these under their own header and labels the card itself.
  */
-const isFront = (excerpt: Excerpt): boolean =>
-  excerpt.ref.verse === undefined && excerpt.ref.chapter < 1;
+const isFront = (excerpt: Excerpt): boolean => excerpt.address.kind === "intro";
 
 /**
  * One occurrence, if it is a finding.

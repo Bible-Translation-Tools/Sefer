@@ -16,10 +16,15 @@ export type { Testament };
 const BY_ID = new Map(CANON.map((book) => [book.id, book]));
 
 /**
- * What to call a book: what the project calls it, else the English canon, else
- * the id itself. Never blank — the id is always something a reader can act on.
+ * What to call a book: what the project calls it, else what the book calls
+ * itself (`heading` — its `\h` or `\toc2`, as the engine reads them, when the
+ * caller holds a parse), else the English canon, else the id itself. Native
+ * first, English second; never blank — the id is always something a reader
+ * can act on.
  */
-export const bookName = (id: string, metadata?: ProjectMetadata): string => {
+export const bookName = (id: string, metadata?: ProjectMetadata, heading?: string): string => {
   const local = localized(metadata?.bookNames[id], [metadata?.defaultLocale]);
-  return local !== "" ? local : (BY_ID.get(id.toUpperCase())?.name ?? id);
+  if (local !== "") return local;
+  if (heading !== undefined && heading !== "") return heading;
+  return BY_ID.get(id.toUpperCase())?.name ?? id;
 };

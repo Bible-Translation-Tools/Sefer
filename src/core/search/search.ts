@@ -50,8 +50,11 @@ import {
   type Book,
   type BookId,
   type Receipt,
-  type Ref,
 } from "../book/book";
+import { describesExactly, type Analysis } from "../galley/analysis";
+import { tocViewOf } from "../galley/location";
+import type { Address } from "../location/address";
+import { addressAt } from "../location/locate";
 import type { Change, SourceStamp } from "../source/source";
 import type { Readings } from "./reading";
 
@@ -74,6 +77,18 @@ export interface Options {
   readonly limit?: number;
   /** When given, only these books are scanned, in the order the books arrive. */
   readonly books?: readonly BookId[];
+  /**
+   * The caller's analysis of a scanned text, by the id the text arrived under
+   * (a Book's id, a reference's registered id) — what a hit's `address` is
+   * read from. For project books that is ProjectAnalysis' held parse; for a
+   * reference, one parse per exact text that the caller keeps.
+   *
+   * Asked at most once per text per call, and only for a text with a hit. An
+   * analysis of different text is ignored, and so is an omitted one: the hits
+   * still arrive, without an address. Search never parses and never scans for
+   * a marker to make up for it.
+   */
+  readonly analysisOf?: (id: string) => Analysis | undefined;
 }
 
 /**
@@ -86,7 +101,13 @@ export interface Hit {
   readonly stamp: SourceStamp;
   readonly from: number;
   readonly to: number;
-  readonly ref: Ref;
+  /**
+   * Which place the hit is in — `PHM 1:5`, `JUD 1:1-2` inside a bridge,
+   * `PSA intro` — read from the TOC of the analysis the caller supplied
+   * (`Options.analysisOf`). Absent when that analysis was missing or described
+   * other text. Display only: an action on the hit goes through its stamp.
+   */
+  readonly address?: Address;
   readonly preview: string;
   /**
    * Where the hit sits in the reading — what a reader sees in visual mode.
@@ -166,79 +187,53 @@ const isWordChar = (text: string, index: number): boolean =>
 const escapeLiteral = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // ---------------------------------------------------------------------------
-// References
+// Addresses
 // ---------------------------------------------------------------------------
 
 /**
- * The `\c`/`\v` markers of one text, in order, each with the offset it takes
- * effect at. Built once per text per `find` call so that N hits cost one scan
- * plus N binary searches instead of N scans.
+ * Which Address an offset of one text is in, from an analysis the caller
+ * supplied — or nothing.
  *
- * This is deliberately a marker scan and not a parse, because search takes
- * plain Books and a book with no analysis still needs a reference for its
- * cards. Galley's TOC is the real answer; the Location module is meant to
- * replace this table
- * (`planning/01-discussing/editor-primitives-consistency.md`).
+ * Search reads no designator itself: the engine's TOC answers, through
+ * Location's inverse lookup (`core/location/locate`, `addressAt`). The
+ * analysis is asked for only once a book has a hit, and once per book per
+ * call, so N hits cost one lookup of the analysis plus N binary searches over
+ * one TOC — never a parse per hit, and never a parse here at all.
+ *
+ * `undefined` when the caller has no analysis for the book, or has one of
+ * different text: a TOC of other text answers confidently and wrongly, and a
+ * label that names a verse the text may no longer be is worse than none. So a
+ * book with no fresh analysis still gets every hit, with no address, and
+ * there is no fallback scanner.
  */
-interface RefTable {
-  /** Ascending offsets at which the reference changes. */
-  readonly at: readonly number[];
-  readonly chapter: readonly number[];
-  /** 0 means "no verse yet in this chapter". */
-  readonly verse: readonly number[];
-}
+type AddressOf = (offset: number) => Address | undefined;
 
-const MARKER = /\\(c|v)[ \t]+(\d+)/g;
+const NO_ADDRESS: AddressOf = () => undefined;
 
-const buildRefTable = (text: string): RefTable => {
-  const at: number[] = [];
-  const chapter: number[] = [];
-  const verse: number[] = [];
-  let currentChapter = 0;
-  let currentVerse = 0;
-
-  MARKER.lastIndex = 0;
-  for (let match = MARKER.exec(text); match !== null; match = MARKER.exec(text)) {
-    const number = Number(match[2]);
-    if (match[1] === "c") {
-      currentChapter = number;
-      // A chapter marker ends the previous chapter's verse numbering; text
-      // between `\c` and the first `\v` belongs to the chapter, not a verse.
-      currentVerse = 0;
-    } else currentVerse = number;
-    at.push(match.index);
-    chapter.push(currentChapter);
-    verse.push(currentVerse);
-  }
-
-  return { at, chapter, verse };
+const addressesOf = (
+  analysisOf: Options["analysisOf"],
+  id: string,
+  book: BookId,
+  text: string,
+): AddressOf => {
+  const analysis = analysisOf?.(id);
+  if (analysis === undefined || !describesExactly(analysis, text)) return NO_ADDRESS;
+  const toc = tocViewOf(analysis);
+  return (offset) => addressAt(book, toc, offset);
 };
 
-/** Index of the last marker at or before `pos`, or -1 when there is none. */
-const markerBefore = (table: RefTable, pos: number): number => {
-  let low = 0;
-  let high = table.at.length - 1;
-  let found = -1;
-  while (low <= high) {
-    const middle = (low + high) >> 1;
-    // SAFETY: `middle` is inside [low, high] which is inside the array bounds.
-    if (table.at[middle]! <= pos) {
-      found = middle;
-      low = middle + 1;
-    } else high = middle - 1;
-  }
-  return found;
+/**
+ * Resolved on first use: a book with no hit never asks for its analysis, so a
+ * search that finds nothing in a reference never makes the caller parse it.
+ */
+const lazily = (make: () => AddressOf): AddressOf => {
+  let held: AddressOf | undefined;
+  return (offset) => (held ??= make())(offset);
 };
 
-const refFrom = (table: RefTable, book: BookId, pos: number): Ref => {
-  const index = markerBefore(table, pos);
-  if (index < 0) return { book, chapter: 0 };
-  // SAFETY: `markerBefore` returned an index into the three parallel arrays.
-  const chapter = table.chapter[index]!;
-  // SAFETY: same index, same length.
-  const verse = table.verse[index]!;
-  return verse > 0 ? { book, chapter, verse } : { book, chapter };
-};
+/** The optional field, spread: absent rather than `undefined` under exact types. */
+const withAddress = (address: Address | undefined): { readonly address?: Address } =>
+  address === undefined ? {} : { address };
 
 // ---------------------------------------------------------------------------
 // Find
@@ -327,7 +322,7 @@ export const find = (
   for (const book of books) {
     if (wanted !== null && !wanted.has(book.id)) continue;
     const { text, stamp } = book.source();
-    const table = buildRefTable(text);
+    const addressOf = lazily(() => addressesOf(options?.analysisOf, book.id, book.id, text));
 
     pattern.lastIndex = 0;
     for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) {
@@ -343,7 +338,7 @@ export const find = (
           stamp,
           from,
           to,
-          ref: refFrom(table, book.id, from),
+          ...withAddress(addressOf(from)),
           preview: previewAt(text, from, to),
         });
         if (limit !== undefined && hits.length >= limit) return Result.succeed(hits);
@@ -408,10 +403,10 @@ export const findInReading = (
     if (reading === undefined) continue;
 
     const text = reading.text;
-    // The ref table is built over the SOURCE, because a ref is a fact about
-    // the document and the reading has no `\c`/`\v` markers left in it — they
-    // are exactly what the mask cut out.
-    const table = buildRefTable(source.text);
+    // Addressed in the SOURCE, because a place is a fact about the document
+    // and the reading has no `\c`/`\v` markers left in it — they are exactly
+    // what the mask cut out.
+    const addressOf = lazily(() => addressesOf(options?.analysisOf, book.id, book.id, source.text));
 
     pattern.lastIndex = 0;
     for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) {
@@ -431,7 +426,7 @@ export const findInReading = (
         stamp: source.stamp,
         from: first.from,
         to: first.to,
-        ref: refFrom(table, book.id, first.from),
+        ...withAddress(addressOf(first.from)),
         // Cut from the READING, so the preview reads as the reader sees it —
         // no markers, no footnote bodies — which is the whole point of
         // searching this side.
@@ -471,13 +466,14 @@ export interface ReferenceHit {
   /** Display text around the match. Ellipsed; never parsed back to offsets. */
   readonly preview: string;
   /**
-   * Which verse the hit landed in.
+   * Which place the hit landed in, in the REFERENCE's own TOC — absent when
+   * the caller supplied no analysis of that exact text.
    *
    * The join that lets Find show reference results as the same excerpt cards
    * every other screen uses: the project's own verse is the card, and the
    * reference's reading sits beside it.
    */
-  readonly ref: Ref;
+  readonly address?: Address;
   /**
    * The match in the REFERENCE's canonical text.
    *
@@ -539,10 +535,12 @@ export const findInReferences = (
     if (reading === undefined) continue;
 
     const text = reading.text;
-    const table = buildRefTable(reference.text);
-    // The reference's OWN book code, off its `\id`, so the ref this produces
-    // can be matched against a project book of the same code.
+    // The reference's OWN book code, off its `\id`, so the address this
+    // produces can be matched against a project book of the same code.
     const bookId = identifyBook(reference.text, reference.id);
+    const addressOf = lazily(() =>
+      addressesOf(options?.analysisOf, reference.id, bookId, reference.text),
+    );
 
     pattern.lastIndex = 0;
     for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) {
@@ -558,7 +556,7 @@ export const findInReferences = (
         source: reference.id,
         projected: { from, to },
         preview: previewAt(text, from, to),
-        ref: refFrom(table, bookId, first.from),
+        ...withAddress(addressOf(first.from)),
         from: first.from,
         to: first.to,
       });

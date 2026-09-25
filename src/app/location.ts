@@ -47,9 +47,10 @@ export interface Location {
   readonly holds: (book: BookId) => boolean;
   /**
    * What a person reads: the project's own name for the book when it has
-   * one, English otherwise — "Lucas 1:1-2" in a Spanish project.
+   * one, else the book's own heading when the caller holds a parse of it
+   * (`bookHeading`), English otherwise — "Lucas 1:1-2" in a Spanish project.
    */
-  readonly label: (address: Address) => string;
+  readonly label: (address: Address, heading?: string) => string;
   /**
    * The Address at an offset of a book, from the analysis that offset was
    * measured against, or `undefined` when the analysis has moved on. A stale
@@ -87,8 +88,8 @@ export const createLocation = (project: Accessor<Project | undefined>): Location
     read: (text) => parseCitation(text, catalogue(), { grammar: "navigation", held: held() }),
     books: (text) => booksMatching(citationWords(text), catalogue()),
     holds: (book) => held().has(book.toUpperCase()),
-    label: (address) =>
-      addressLabel(address, bookName(address.book, metadataOf(project())), t("Intro")),
+    label: (address, heading) =>
+      addressLabel(address, bookName(address.book, metadataOf(project()), heading), t("Intro")),
     addressAt: (book, offset, measured, analysis) => {
       if (analysis === undefined || !stampMatches(measured, analysis)) return undefined;
       return addressAt(book, tocViewOf(analysis), offset);

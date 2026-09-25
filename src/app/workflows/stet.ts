@@ -11,9 +11,8 @@
 
 import { Effect, Option } from "effect";
 
-import type { BookId, Ref } from "#core/book/book";
+import type { BookId } from "#core/book/book";
 import { Galley, tocViewOf, type Analysis } from "#core/galley";
-import { versesAddress } from "#core/location/address";
 import { resolve } from "#core/location/locate";
 import { ROLES, type LibraryService, type Resource } from "#core/resources/library";
 import { StetCatalogFixtureLive } from "#core/stet/fixture";
@@ -64,13 +63,6 @@ export const keyTermGuides = (): Effect.Effect<readonly Guide[], StetError> =>
 export const keyTerms = (locale?: string): Effect.Effect<readonly Term[], StetError> =>
   withCatalog(Effect.flatMap(StetCatalog, (catalog) => catalog.terms(locale)));
 
-/** The reference an occurrence names, in the vocabulary the shell navigates by. */
-export const occurrenceRef = (occurrence: TermOccurrence): Ref => ({
-  book: occurrence.book,
-  chapter: occurrence.chapter,
-  verse: occurrence.verse,
-});
-
 /** What the source card shows for one occurrence, and where it came from. */
 export interface SourceReading {
   readonly text: string;
@@ -120,16 +112,17 @@ export const sourceReadings = (
     // One parse per book, not per occurrence: a term's occurrences cluster.
     const books = new Map<BookId, Analysis | undefined>();
     for (const occurrence of missing) {
-      if (!books.has(occurrence.book)) {
+      const book = occurrence.address.book;
+      if (!books.has(book)) {
         const text = yield* library
-          .readBook(resource.value.id, occurrence.book)
+          .readBook(resource.value.id, book)
           .pipe(Effect.orElseSucceed(() => Option.none<string>()));
         books.set(
-          occurrence.book,
+          book,
           Option.isSome(text) ? galley.analyze(text.value, "stet.source") : undefined,
         );
       }
-      const analysis = books.get(occurrence.book);
+      const analysis = books.get(book);
       const text = analysis === undefined ? undefined : verseReading(analysis, occurrence);
       if (text !== undefined) out.set(occurrence.sid, { text, origin: "library" });
     }
@@ -144,8 +137,7 @@ export const sourceReadings = (
  */
 const verseReading = (analysis: Analysis, occurrence: TermOccurrence): string | undefined => {
   const toc = tocViewOf(analysis);
-  const point = { chapter: occurrence.chapter, verse: occurrence.verse };
-  const found = resolve(toc, versesAddress(occurrence.book, point));
+  const found = resolve(toc, occurrence.address);
   if (found.kind !== "found") return undefined;
   // A found verse starts at its anchor, so the anchor is the one at `from`.
   const anchor = toc.verses.find((verse) => verse.at === found.from);

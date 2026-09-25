@@ -7,15 +7,9 @@ import { useShell } from "#app/ProjectContext";
 import { createExcerptFeed, readBooks, StetView } from "#app/ui/excerpts";
 import { PanelHeader } from "#app/ui/primitives";
 import { ShellGate } from "#app/ui/ShellGate";
-import {
-  keyTermGuides,
-  keyTerms,
-  occurrenceRef,
-  sourceReadings,
-  type SourceReading,
-} from "#app/workflows/stet";
-import type { Ref } from "#core/book/book";
+import { keyTermGuides, keyTerms, sourceReadings, type SourceReading } from "#app/workflows/stet";
 import { refOccurrences, type Occurrence } from "#core/excerpts/excerpts";
+import type { Address } from "#core/location/address";
 import { DEFAULT_LOCALE } from "#core/stet/fixture";
 import type { Guide, Term } from "#core/stet/stet";
 
@@ -32,8 +26,9 @@ import type { Guide, Term } from "#core/stet/stet";
  *     `src/core/stet`. It names references for the whole canon and has never
  *     heard of this project.
  *  2. **The mapping.** For each book the project has, `refOccurrences` asks
- *     Galley's table of contents where those references ARE in that book's own
- *     text, and drops the ones it does not have — the guide covers sixty-six
+ *     Location (`resolve`, over Galley's table of contents) where those
+ *     Addresses ARE in that book's own text — `JUD 1:2` inside a `\v 1-2` —
+ *     and drops the ones it does not have — the guide covers sixty-six
  *     books and a project covers four. What comes out is the same
  *     `Occurrence` shape a search produces, so the whole multibuffer below it
  *     is the one Find uses (`createExcerptFeed`).
@@ -137,10 +132,11 @@ function Terms() {
     { name: "selectedTerm" },
   );
 
-  /** The guide's references for the open term, as refs. */
-  const refs = createMemo((): readonly Ref[] => selected()?.occurrences.map(occurrenceRef) ?? [], {
-    name: "termRefs",
-  });
+  /** The guide's references for the open term, as Addresses. */
+  const addresses = createMemo(
+    (): readonly Address[] => selected()?.occurrences.map((held) => held.address) ?? [],
+    { name: "termAddresses" },
+  );
 
   /**
    * The mapping, per book the project has.
@@ -154,9 +150,9 @@ function Terms() {
 
   const hits = createMemo(
     (): readonly Occurrence[] => {
-      const wanted = refs();
+      const wanted = addresses();
       if (wanted.length === 0) return [];
-      const books = readBooks(shell, new Set(wanted.map((ref) => ref.book)), analyze);
+      const books = readBooks(shell, new Set(wanted.map((address) => address.book)), analyze);
       return books.flatMap((book) => refOccurrences(book, wanted));
     },
     { name: "termOccurrences" },

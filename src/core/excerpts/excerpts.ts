@@ -30,7 +30,7 @@
  * freshness is the search hit's stamp to judge (`search.planReplace`).
  */
 
-import type { BookId, Ref } from "../book/book";
+import type { BookId } from "../book/book";
 import {
   CLASS,
   FLAG,
@@ -39,8 +39,11 @@ import {
   classWordOf,
   coarse,
   has,
+  tocViewOf,
   type Analysis,
 } from "../galley";
+import { addressCode, bookAddress, type Address } from "../location/address";
+import { addressAt, resolve } from "../location/locate";
 
 /** One match inside an excerpt, in the book's SOURCE coordinates. */
 export interface Occurrence {
@@ -102,10 +105,19 @@ export interface Mark {
  */
 export interface Excerpt {
   readonly bookId: BookId;
-  /** `PHM 1:4` — the verse anchor this excerpt is grouped under. */
+  /**
+   * `PHM 1:4` — the place this excerpt is grouped under, in its machine
+   * spelling (`addressCode`): `JUD 1:1-2` for a bridge, `PSA 0` for the
+   * introduction. A key, never parsed back: `address` is the value.
+   */
   readonly sid: string;
-  readonly ref: Ref;
-  /** `Philemon 1:4`, for the card header. */
+  /**
+   * The place the excerpt's own verse IS, from Location over the book's TOC:
+   * a bridge is its whole range, the matter before the first chapter is
+   * `intro`, a chapter's head is that chapter.
+   */
+  readonly address: Address;
+  /** `Philemon 1:4`, for the card header — `BookText.label` of `address`. */
   readonly label: string;
   readonly span: { readonly from: number; readonly to: number };
   readonly hits: readonly Occurrence[];
@@ -149,7 +161,7 @@ export interface Excerpt {
 /** Every excerpt of one book, under the header the list renders. */
 export interface BookExcerpts {
   readonly bookId: BookId;
-  /** The book's `\h` name when it has one, else its id. */
+  /** What the book is called: `BookText.label` of the whole book. */
   readonly name: string;
   readonly excerpts: readonly Excerpt[];
   /** Matches, not excerpts: "PHM · Philemon · 3 hits". */
@@ -168,32 +180,14 @@ export interface BookText {
   readonly bookId: BookId;
   readonly text: string;
   readonly analysis: Analysis;
+  /**
+   * What a person reads for a place in this book — `Philemon 1:4`, and for
+   * `bookAddress` the book's own name. The caller's, because which name a
+   * book goes by (the project's, the book's own heading, English) and the
+   * word for an introduction are the project's language, not this module's.
+   */
+  readonly label: (address: Address) => string;
 }
-
-// ---------------------------------------------------------------------------
-// Names and references
-// ---------------------------------------------------------------------------
-
-const HEADER = /^\\h[ \t]+(.+)$/m;
-const TOC2 = /^\\toc2[ \t]+(.+)$/m;
-
-/**
- * The book's display name: its `\h` running header, its `\toc2` short title,
- * or its id. Read from the text rather than from a table because the table
- * that would answer for every translation is the translation's own front
- * matter, and this is it.
- */
-const bookName = (text: string, bookId: BookId): string => {
-  const header = HEADER.exec(text) ?? TOC2.exec(text);
-  const found = header?.[1]?.trim();
-  return found === undefined || found === "" ? bookId : found;
-};
-
-const refLabel = (name: string, ref: Ref): string =>
-  ref.verse === undefined ? `${name} ${ref.chapter}` : `${name} ${ref.chapter}:${ref.verse}`;
-
-const sidOf = (bookId: BookId, chapter: number, first: number, last: number): string =>
-  `${bookId} ${chapter}:${first === last ? first : `${first}-${last}`}`;
 
 // ---------------------------------------------------------------------------
 // The projection
@@ -573,7 +567,7 @@ const walk = (spans: readonly VerseSpan[], index: number, steps: number, by: -1 
 class LazyExcerpt implements Excerpt {
   readonly bookId: BookId;
   readonly sid: string;
-  readonly ref: Ref;
+  readonly address: Address;
   readonly span: { readonly from: number; readonly to: number };
   readonly hits: readonly Occurrence[];
 
@@ -589,19 +583,17 @@ class LazyExcerpt implements Excerpt {
   constructor(
     private readonly book: BookText,
     private readonly spans: readonly VerseSpan[],
-    private readonly name: string,
     private readonly verse: VerseSpan | undefined,
     private readonly low: number,
     private readonly high: number,
     from: number,
     to: number,
     hits: readonly Occurrence[],
-    sid: string,
-    ref: Ref,
+    address: Address,
   ) {
     this.bookId = book.bookId;
-    this.sid = sid;
-    this.ref = ref;
+    this.sid = addressCode(address);
+    this.address = address;
     this.span = { from, to };
     this.hits = hits;
   }
@@ -633,7 +625,7 @@ class LazyExcerpt implements Excerpt {
 
   /** Built on read rather than stored: a card asks once, and a string is cheaper than a field. */
   get label(): string {
-    return refLabel(this.name, this.ref);
+    return this.book.label(this.address);
   }
 
   get text(): string {
@@ -677,18 +669,15 @@ class LazyExcerpt implements Excerpt {
 const buildExcerpt = (
   book: BookText,
   spans: readonly VerseSpan[],
-  name: string,
   chapters: readonly { readonly number: number; readonly from: number; readonly to: number }[],
   index: number,
   held: readonly Occurrence[],
   extent: Extent,
 ): Excerpt => {
   const verse = index < 0 ? undefined : spans[index];
+  const first = held[0]?.from ?? 0;
   const chapter =
-    verse?.chapter ??
-    chapters.find((row) => row.from <= (held[0]?.from ?? 0) && (held[0]?.from ?? 0) < row.to)
-      ?.number ??
-    0;
+    verse?.chapter ?? chapters.find((row) => row.from <= first && first < row.to)?.number ?? 0;
 
   const low = verse === undefined ? index : walk(spans, index, extent.up, -1);
   const high = verse === undefined ? index : walk(spans, index, extent.down, 1);
@@ -699,17 +688,15 @@ const buildExcerpt = (
   const to =
     verse === undefined ? (spans[0]?.from ?? book.analysis.docLen) : (spans[high]?.to ?? verse.to);
 
-  const ref: Ref =
-    verse === undefined
-      ? { book: book.bookId, chapter }
-      : { book: book.bookId, chapter: verse.chapter, verse: verse.first };
+  // Location names the place, from the same TOC: the verse's anchor for a
+  // verse — a bridge as its range, a segment as itself — and, before the
+  // first anchor, where the first occurrence sits (the introduction, or a
+  // chapter's head).
+  const address =
+    addressAt(book.bookId, tocViewOf(book.analysis), verse?.from ?? first) ??
+    bookAddress(book.bookId);
 
-  const sid =
-    verse === undefined
-      ? `${book.bookId} ${chapter}`
-      : sidOf(book.bookId, verse.chapter, verse.first, verse.last);
-
-  return new LazyExcerpt(book, spans, name, verse, low, high, from, to, held, sid, ref);
+  return new LazyExcerpt(book, spans, verse, low, high, from, to, held, address);
 };
 
 /**
@@ -724,7 +711,6 @@ const buildExcerpt = (
 const excerptsOf = (book: BookText, hits: readonly Occurrence[]): readonly Excerpt[] => {
   if (hits.length === 0) return [];
   const spans = verseSpans(book.analysis);
-  const name = bookName(book.text, book.bookId);
   const chapters = book.analysis.dish.toc.chapters();
 
   // Verse index (or -1 for "before the first anchor") → the hits it owns, in
@@ -742,9 +728,7 @@ const excerptsOf = (book: BookText, hits: readonly Occurrence[]): readonly Excer
 
   const out: Excerpt[] = [];
   for (const index of order)
-    out.push(
-      buildExcerpt(book, spans, name, chapters, index, grouped.get(index) ?? [], ONE_EITHER_SIDE),
-    );
+    out.push(buildExcerpt(book, spans, chapters, index, grouped.get(index) ?? [], ONE_EITHER_SIDE));
   return out;
 };
 
@@ -760,15 +744,10 @@ export const extend = (book: BookText, excerpt: Excerpt, extent: Extent): Excerp
   const spans = verseSpans(book.analysis);
   const index = verseAt(spans, excerpt.hits[0]?.from ?? excerpt.span.from);
   if (index < 0) return excerpt;
-  return buildExcerpt(
-    book,
-    spans,
-    bookName(book.text, book.bookId),
-    book.analysis.dish.toc.chapters(),
-    index,
-    excerpt.hits,
-    { up: Math.max(1, extent.up), down: Math.max(1, extent.down) },
-  );
+  return buildExcerpt(book, spans, book.analysis.dish.toc.chapters(), index, excerpt.hits, {
+    up: Math.max(1, extent.up),
+    down: Math.max(1, extent.down),
+  });
 };
 
 /**
@@ -799,7 +778,7 @@ export const group = (
     if (excerpts.length === 0) continue;
     groups.push({
       bookId: book.bookId,
-      name: bookName(book.text, book.bookId),
+      name: book.label(bookAddress(book.bookId)),
       excerpts,
       count: held.length,
     });
@@ -820,8 +799,8 @@ export const group = (
 // ---------------------------------------------------------------------------
 
 /**
- * A reference feed's hits: one ZERO-WIDTH occurrence at each verse of `refs`
- * that this book actually has, in document order.
+ * A reference feed's hits: one ZERO-WIDTH occurrence at each verse of
+ * `addresses` that this book actually has, in document order.
  *
  * Zero width is the honest span. A search hit knows which characters matched;
  * a reference does not — the guide's highlight offsets index into the guide's
@@ -830,28 +809,31 @@ export const group = (
  * drawn with no highlight and the source card carries the guide's, and the
  * excerpt's `focus` still dims the verses either side.
  *
- * References the book does not have are skipped rather than reported: a guide
- * covers the whole canon and a project covers a few books, and every reference
- * outside them is expected, not a failure. Two references landing in one verse
- * bridge become one occurrence, because they are one card.
+ * WHERE each one is, is Location's `resolve` over the book's TOC: `JUD 1:2`
+ * is found inside a `\v 1-2` the project happens to have, and missing from a
+ * `\v 1,3`. The occurrence sits where the found span starts, which is a verse
+ * anchor — the one `group` then files the card under.
+ *
+ * Only verse Addresses are fed here, and only this book's. What `resolve`
+ * cannot place is skipped rather than reported — missing, or ambiguous in
+ * malformed text, where guessing an anchor would put the card on the wrong
+ * verse: a guide covers the whole canon and a project covers a few books, and
+ * every reference outside them is expected, not a failure. Two references
+ * landing on one anchor — both verses of a bridge — become one occurrence,
+ * because they are one card.
  */
-export const refOccurrences = (book: BookText, refs: readonly Ref[]): readonly Occurrence[] => {
-  const spans = verseSpans(book.analysis);
-  const byVerse = new Map<string, number>();
-  for (const span of spans)
-    for (let verse = span.first; verse <= span.last; verse += 1)
-      byVerse.set(`${span.chapter}:${verse}`, span.from);
-
-  const found: number[] = [];
-  const seen = new Set<number>();
-  for (const ref of refs) {
-    if (ref.book !== book.bookId || ref.verse === undefined) continue;
-    const at = byVerse.get(`${ref.chapter}:${ref.verse}`);
-    if (at === undefined || seen.has(at)) continue;
-    seen.add(at);
-    found.push(at);
+export const refOccurrences = (
+  book: BookText,
+  addresses: readonly Address[],
+): readonly Occurrence[] => {
+  const toc = tocViewOf(book.analysis);
+  const found = new Set<number>();
+  for (const address of addresses) {
+    if (address.kind !== "verses" || address.book !== book.bookId) continue;
+    const resolved = resolve(toc, address);
+    if (resolved.kind === "found") found.add(resolved.from);
   }
-  return found
+  return [...found]
     .sort((left, right) => left - right)
     .map((at) => ({ bookId: book.bookId, from: at, to: at }));
 };
