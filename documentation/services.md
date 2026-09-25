@@ -242,7 +242,7 @@ On it today: the palette and sidebar jump, `showReference` (found / missing with
 
 - Two address types still: `Address`, and `Ref` in book.ts, which Search, Excerpts/STET and Library use until the second pass moves them.
 - The rule: Sefer never scans for `\c`/`\v` with a regex; the engine's TOC answers. One place still does on its own: search's `buildRefTable`/`refFrom`, the second pass.
-- Kitchen v0.1.7 carries segments, verse-list members and each designator's label span in the TOC, and Sefer's seam (`tocViewOf`) reads only a verse label's end so far (the STET source card skips the number with it): `3a` still resolves as all of verse 3 (`coarser`), and `\v 1,3,5` as 1–5, until it does.
+- Kitchen v0.1.7 carries segments, verse-list members and each designator's label span in the TOC. Sefer's seam (`tocViewOf`) reads a verse label's end (the STET source card skips the number with it) and the members, kept only on a verse whose hull does not say what it covers — a list or a segment — so a plain book carries no array per verse. `resolve` honours them: `3a` finds `\v 3a` exactly and is `coarser` only when the text has plain `\v 3`; `3` over `\v 3a` … `\v 3b` finds both; `2` is missing from `\v 1,3,5`. Known and deliberate: `addressAt` inside `\v 1,3,5` says `1-5`, the hull — an Address is one range, and the hull leaves out nothing the caret is in; `resolve` is what refuses the holes. The label's START is not read yet; nothing needs it.
 
 ### Ideas / future
 

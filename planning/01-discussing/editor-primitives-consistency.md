@@ -178,6 +178,8 @@ The shared thing is the **value**, not the parser: both grammars yield `{ verse,
 
 **Until the ask lands,** from JS a segment is invisible and a verse list looks like its endpoints. So `MAT 1:3a` resolves to verse 3's span marked coarser than asked (the same visible, incomplete outcome as a chapter fallback), and a hit inside `\v 1,3,5` is labelled by its endpoints. Neither is presented as exact.
 
+**Landed (v0.1.7, 2026-09-25):** `tocViewOf` reads members and segments, and `resolve` uses them: `MAT 1:3a` finds `\v 3a` exactly (coarser only where the text has plain `\v 3`), `MAT 1:3` over `\v 3a` … `\v 3b` finds both, and `MAT 1:2` is missing from `\v 1,3,5`. A caret in a list is still labelled by its hull (`1-5`): an Address is one range, and the hull leaves out none of what the caret is in.
+
 ### Chapter number versus position
 
 The TOC's `chapter` on a verse row is the row's POSITION; `number` on a chapter row is the designator. An Address means the designator, so the resolver goes through chapter rows by `number`, never by index. Recorded so nobody takes the shortcut.
