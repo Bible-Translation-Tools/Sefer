@@ -7,6 +7,13 @@
  * chapter. Admission refuses edits outside it; settlement pulls a stray
  * selection back in. Both read the same extents, so what is guarded and what is
  * shown cannot drift apart.
+ *
+ * The two rules take the range as a function, and the chapter clip is only one
+ * of their callers: a satellite's range (`recipes/satellite.ts`) is guarded by
+ * the same pair. The difference is trust. The chapter clip is the canonical
+ * editor's view choice, so a trusted edit (a fix, the front matter card) may
+ * write outside it; a satellite's range is what that surface IS, so nothing
+ * waives it — `{ trustWaives: false }`.
  */
 
 import { EditorState, MapMode, StateEffect, StateField, type Text } from "@codemirror/state";
@@ -73,11 +80,17 @@ export function visibleClipAt(st: EditorState): ClipRange {
   return ch ? chapterExtents(ch, st.doc).visible : null;
 }
 
+/** Whether a `trusted` edit may pass a range rule. The chapter clip: yes. */
+export interface RangeRuleOptions {
+  readonly trustWaives?: boolean;
+}
+
 export function refuseEditsOutsideTheClip(
   getRange: (state: EditorState) => { from: number; to: number } | null,
+  { trustWaives = true }: RangeRuleOptions = {},
 ): ChangeRule {
   return (tr) => {
-    if (isTrusted(tr)) return true;
+    if (trustWaives && isTrusted(tr)) return true;
     const r = getRange(tr.startState);
     if (!r) return true;
     const len = tr.startState.doc.length;
@@ -96,9 +109,10 @@ export function refuseEditsOutsideTheClip(
 
 export function pullSelectionsIntoTheClip(
   getRange: (state: EditorState) => { from: number; to: number } | null,
+  { trustWaives = true }: RangeRuleOptions = {},
 ): TransactionRule {
   return (tr) => {
-    if (!tr.selection || isTrusted(tr)) return tr;
+    if (!tr.selection || (trustWaives && isTrusted(tr))) return tr;
     const win = getRange(tr.state);
     if (!win) return tr;
     let hi = win.to;

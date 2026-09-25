@@ -13,8 +13,9 @@ import { defaultKeymap } from "@codemirror/commands";
 import { EditorState, Facet, type Extension, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, keymap } from "@codemirror/view";
 
-import type { Trust } from "#core/book/book";
+import { Refusal, type Trust } from "#core/book/book";
 
+import { pullSelectionsIntoTheClip, refuseEditsOutsideTheClip } from "../core/clip";
 import { viewLayer } from "../core/compose";
 import { borrowedStructure } from "../core/docStructure";
 import { trusted } from "../core/kernel";
@@ -44,6 +45,33 @@ const scope = StateField.define<{ from: number; to: number }>({
 });
 
 export const satelliteRange = (state: EditorState) => state.field(scope, false) ?? null;
+
+/**
+ * The range is an EDIT GUARD, not only a clip — and it is installed here, by
+ * `mountSatellite`, so no surface can mount without it.
+ *
+ * `clippedToScope` only hides what is outside the range, and a satellite's
+ * document is the whole book: select all, Backspace, and the reader deleted
+ * every verse they could not see (Philemon went from 2,679 characters to the
+ * 158 the Book's own marker rules protect). So the guard is on the CHANGE,
+ * where every way an edit can arrive passes — a key, a command that edits
+ * away from the caret, drag and drop, a paste, a programmatic dispatch — and
+ * `refuseEditsOutsideTheClip` drops whatever part of it lies outside. The
+ * selection is pulled into the range as well, so the caret never sits where
+ * typing would be refused, and select-all selects the range.
+ *
+ * The same two rules as the chapter clip (`core/clip.ts`), over this range.
+ * Trust never waives them: the range is what this surface is.
+ *
+ * The canonical text coming home is dispatched with `filter: false`, so these
+ * never see it.
+ */
+const guardedByScope: Extension = [
+  EditorState.changeFilter.of(refuseEditsOutsideTheClip(satelliteRange, { trustWaives: false })),
+  EditorState.transactionFilter.of(
+    pullSelectionsIntoTheClip(satelliteRange, { trustWaives: false }),
+  ),
+];
 
 /**
  * Re-clips a LIVE satellite to a new range.
@@ -151,6 +179,7 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
     extensions: [
       initialRange.of(opts.range),
       scope,
+      guardedByScope,
       borrowedStructure.of(() => opts.host.structure()),
       EditorView.editable.of(opts.editable),
       viewLayer(),
@@ -159,6 +188,22 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
         { key: "Mod-Shift-z", run: () => opts.host.redo() },
         { key: "Mod-y", run: () => opts.host.redo() },
       ]),
+      // The browser's own undo, which a key the host declined falls through
+      // to (nothing left to undo), and which the Edit menu sends directly. A
+      // satellite has no history, so the browser's is of this contenteditable's
+      // DOM — and replaying it here made an EDIT out of it: Mod-z past the
+      // bottom of the stack, then Mod-Shift-z, left "you have" as "youfhave".
+      // CodeMirror's `history()` answers the same event for the canonical view.
+      EditorView.domEventHandlers({
+        beforeinput(event) {
+          const undo = event.inputType === "historyUndo";
+          if (!undo && event.inputType !== "historyRedo") return false;
+          event.preventDefault();
+          if (undo) opts.host.undo();
+          else opts.host.redo();
+          return true;
+        },
+      }),
       keymap.of(defaultKeymap),
       ...opts.extensions,
     ],
@@ -173,8 +218,12 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
         return;
       }
       const done2 = span("satellite-reconcile", opts.label);
-      opts.host.submit(changesOf(tr.changes), opts.label, opts.trust);
-      if (tr.selection)
+      const outcome = opts.host.submit(changesOf(tr.changes), opts.label, opts.trust);
+      // The caret follows an ACCEPTED edit. A refused one left the text as it
+      // was, and `tr.selection` is in the coordinates of a text that never
+      // came to be — past the end of it, for a refused deletion — so the
+      // caret stays where the reader left it.
+      if (tr.selection && !(outcome instanceof Refusal))
         self.dispatch({ selection: tr.selection, annotations: fromCanonical.of(true) });
       done2();
     },
