@@ -6,9 +6,10 @@
  * (`documentation/architecture/design-direction.md`, "Find"). It is NOT a
  * copy of the text and it holds no text of its own — `mountSatellite`'s whole
  * discipline is that a local edit becomes changes, goes through the `Funnel`
- * (which is `book.apply`, phases and all), and comes back as the canonical
- * text. So an edit made here is the same edit the main editor would have
- * made: one write path, one history, one undo.
+ * (the Book's own phases, run under this excerpt's projection, mode and range),
+ * and comes back as the canonical text. So an edit made here is the same edit
+ * the main editor would have made: one write path, one history, one undo —
+ * and nothing outside the excerpt's lines, however the edit arrives.
  *
  * Two things this component adds over `mountSatellite`:
  *
@@ -24,7 +25,7 @@
 
 import { Compartment, Prec } from "@codemirror/state";
 import { keymap } from "@codemirror/view";
-import { createEffect, createSignal, onCleanup, untrack } from "solid-js";
+import { createEffect, createSignal, untrack } from "solid-js";
 
 import type { Excerpt } from "#core/excerpts/excerpts";
 import type { Analysis } from "#core/galley";
@@ -140,12 +141,18 @@ export function ExcerptEditor(props: ExcerptEditorProps) {
 
       setLive(satellite);
 
-      onCleanup(() => {
+      // RETURNED, not `onCleanup`: an effect's callback runs with no owner in
+      // Solid 2, so an `onCleanup` registered inside it never ran
+      // (NO_OWNER_CLEANUP) — BookEditor's mount effect learned the same. Every
+      // excerpt ever opened stayed attached: its view still received every
+      // publication (the fifth excerpt opened on a book reported five
+      // receivers on each receipt) and its hold kept `project.release` refusing.
+      return () => {
         setLive(undefined);
         setMode(undefined);
         satellite.destroy();
         release();
-      });
+      };
     },
   );
 
