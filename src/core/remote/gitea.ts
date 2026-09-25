@@ -22,9 +22,10 @@
  *   bookkeeping (`tokenName`, `tokenId`) rides on the same `Credential` record
  *   so a host that persists one persists all of it, atomically, or none.
  *
- * The base URL is the caller's — `src/app/env.ts` reads it from
- * `VITE_SEFER_WACS_WEB_URL` / `VITE_SEFER_WACS_DESKTOP_URL`, the same endpoint
- * transfers use. No hostname appears in this file, and none should.
+ * The base URL is the caller's — the content host `src/app/env.ts` reads from
+ * `VITE_SEFER_CONTENT_HOST`, the same host transfers name. On the Web the
+ * `HttpFetch` it is handed applies the transport. No hostname appears in this
+ * file, and none should.
  */
 import { Context, Data, Effect, Layer, Option, Schema } from "effect";
 

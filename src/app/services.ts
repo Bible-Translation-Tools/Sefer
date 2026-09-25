@@ -51,6 +51,7 @@ import type { Seat } from "#core/project/project";
 import { Recovery, RecoveryLive, type RecoveryService } from "#core/recovery/recovery";
 import { Gitea, GiteaLive, type GiteaService, type HttpFetch } from "#core/remote/gitea";
 import { Remote, type RemoteService } from "#core/remote/remote";
+import { parseTransport, through } from "#core/remote/transport";
 import { Library, LibraryLive, type LibraryService } from "#core/resources/library";
 import {
   SaveCoordinator,
@@ -79,7 +80,7 @@ import { WebRemoteLive } from "#platform/web/remote";
 
 import type { Composition } from "./composition";
 import { startLogFiles, type LogFiles } from "./diagnostics";
-import { rememberBootEndpoints, resolveEndpoints } from "./endpoints";
+import { appIdFor, bootTransport, rememberBootEndpoints, resolveEndpoints } from "./endpoints";
 import { env } from "./env";
 
 /**
@@ -323,27 +324,28 @@ const domainLayer = (
   // to the second because Gitea refuses a duplicate token NAME, and a
   // day-granular one made a second sign-in from one device impossible.
   /**
-   * The transport the Gitea API rides on.
+   * The fetch the Gitea API rides on.
    *
-   * It goes to the SAME endpoint the transfers do, through the same door: on
-   * the Web that door is a proxy which gates on `X-Requested-With`, so the
-   * identifier goes on every request. Before this, git traffic was proxied and
-   * the API was not — which meant a successful sign-in was followed by
-   * "Failed to fetch" on the very next call, and read like a bad password.
+   * Gitea is handed the CONTENT HOST — the identity, the key a session is
+   * filed under — and on the Web this rewrites each request through the same
+   * transport the git transfers use, with the app id the proxy gates on.
+   * Before the two shared one door, git traffic was proxied and the API was
+   * not, and a successful sign-in was followed by "Failed to fetch" on the
+   * very next call, which read like a bad password.
    *
-   * Desktop passes `null` and sends no header: it talks to Gitea directly.
+   * Desktop sends every request as it is: it talks to Gitea directly.
    */
-  const wacsFetch =
-    (appId: string | null): HttpFetch =>
+  const webFetch =
+    (appId: string): HttpFetch =>
     (input, init) =>
-      globalThis.fetch(input, {
+      globalThis.fetch(through(bootTransport(), input), {
         ...init,
-        headers: appId === null ? init?.headers : { ...init?.headers, "X-Requested-With": appId },
+        headers: { ...init?.headers, "X-Requested-With": appId },
       });
 
   const account = Layer.provideMerge(
     GiteaLive({
-      fetch: wacsFetch(tauri === undefined ? env.wacsAppId : null),
+      fetch: tauri === undefined ? webFetch(appIdFor(build)) : globalThis.fetch.bind(globalThis),
       platform: tauri === undefined ? "web" : "desktop",
     }),
     // Desktop persists tokens in the OS keychain. The Web host has no secure
@@ -418,7 +420,7 @@ const domainLayer = (
   const modules = Layer.provideMerge(
     Layer.unwrap(
       Effect.map(Settings, (settings) => {
-        const endpoints = resolveEndpoints(settings, tauri === undefined ? "web" : "tauri");
+        const endpoints = resolveEndpoints(settings);
         rememberBootEndpoints(endpoints);
         return Layer.mergeAll(
           // The project census, the held per-book analyses, and every finding.
@@ -428,13 +430,16 @@ const domainLayer = (
           // History: git2 through Tauri commands on desktop, isomorphic-git over
           // the same FileSystem port in a browser.
           tauri === undefined ? WebGitLive : tauri.TauriGitLive,
-          // Transfer. Both hosts take ONE endpoint: on desktop that is normally
-          // Gitea itself, since git2 is not a browser origin; on the Web it is
-          // whatever answers on Gitea's paths, which is a proxy wherever
-          // something stands in front of the content host.
+          // Transfer. Both hosts take the content host, which is what a
+          // project's `origin` names; the Web also takes the transport it is
+          // reached through (git2 is not a browser origin and needs none).
           tauri === undefined
-            ? WebRemoteLive({ endpoint: endpoints.wacsUrl, appId: env.wacsAppId })
-            : tauri.TauriRemoteLive({ endpoint: endpoints.wacsUrl }),
+            ? WebRemoteLive({
+                contentHost: endpoints.contentHost,
+                transport: parseTransport(endpoints.webTransport),
+                appId: appIdFor(build),
+              })
+            : tauri.TauriRemoteLive({ endpoint: endpoints.contentHost }),
           // Save, Recovery, and — rename, delete, metadata, export — ProjectAdmin.
           saveAndRecovery,
         );

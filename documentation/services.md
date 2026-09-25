@@ -481,7 +481,6 @@ Clone, fetch, pull, push and branch moves against a Gitea (WACS) server, plus th
 
 - Desktop transfer progress is a `TODO(seam)` (`platform/tauri/remote.ts:141`).
 - Desktop `git_clone` (git2 `RepoBuilder`) compiles but has not been run against a server; the web clone was checked on `main` and `master` repositories through the prod proxy.
-- The dev channel has no WACS Language API URL yet (`tools/deploy/channels.ts:67`). Onboarding and project loading on dev can't reach it.
 
 ### Ideas / future
 
@@ -505,7 +504,7 @@ The `/cloud` screen. It reads the two clocks and sorts the project into one of n
 
 ### Overview
 
-Browsing the online catalogue on the landing screens. One `catalogue.browse` operation per load of the table: a Language API that is down or answers non-2xx ends `unavailable`, a payload the decoder cannot read `failed`. `src/app/catalogue.ts`. → [landing](architecture/landing.md)
+Browsing the online catalogue on the projects page: the Language API's GraphQL endpoint, prod and dev, listing each repository with its git URL on its own server. One `catalogue.browse` operation per load of the table: a Language API that is down or answers non-2xx ends `unavailable`, a payload the decoder cannot read `failed`, and a failed second query (regions, alternates, dates) is `catalogue.enriched: false` on a passed browse. `src/app/catalogue.ts`. → [landing](architecture/landing.md)
 
 ### Constraints and known bugs
 

@@ -49,11 +49,11 @@ Every row carries a kebab of three `ProjectAdmin` calls. (The port also has `met
 
 The rule the import hub is built around: a source this host cannot serve is rendered DISABLED with the reason in place of its explainer — never hidden, never offered-then-failed. `HostInfo.capabilities()` and `env` are asked before the button exists.
 
-| source           | web | Tauri | needs                                                                                                                                                                        |
-| ---------------- | --- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Import zip       | yes | yes   | nothing: the archive is read in the page (`fflate`) and written into OPFS                                                                                                    |
-| Open folder      | yes | yes   | web copies the folder's files into its own storage; Tauri reads the real path                                                                                                |
-| Clone from cloud | yes | yes   | `VITE_SEFER_WACS_WEB_URL` / `VITE_SEFER_WACS_DESKTOP_URL` — one endpoint per host, normally a proxy on the web because its fetches are cross-origin. Overridable in Settings |
+| source           | web | Tauri | needs                                                                                                                                        |
+| ---------------- | --- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Import zip       | yes | yes   | nothing: the archive is read in the page (`fflate`) and written into OPFS                                                                    |
+| Open folder      | yes | yes   | web copies the folder's files into its own storage; Tauri reads the real path                                                                |
+| Clone from cloud | yes | yes   | `VITE_SEFER_CONTENT_HOST`, the same on both hosts; the web reaches it through `VITE_SEFER_WEB_TRANSPORT`. Overridable in Settings (Advanced) |
 
 Every source ends in the same pipeline — `stage → classify → commit` from `src/core/resources/import.ts` ([resources](resources.md) owns the steps), run one step at a time so the dialog can name the step it is on. Nothing touches the project root until `commit`, so cancelling or failing leaves a staging directory and nothing else.
 
@@ -68,15 +68,15 @@ The progress dialog counts files while the write runs, because an import of sixt
 
 ## Projects Available on WACS: the Catalogue port
 
-**Current behaviour (supersedes the older notes below where they differ):** the table leaves out gateway languages entirely, and search matches the code, both names and every alternate name. The live catalogue joins the consolidated-repos view with the public langnames export (`LANGNAMES_URL` in `src/app/catalogue.ts`), which supplies the region (`lr`), the alternate names (`alt`) and the gateway flag (`gw`; the `wa-catalog` owner rule is only the fallback). A row's date is the newest across its language's repos, and it stays blank because the view carries no `updated_at`. Asking the content server for each repo's date was tried and dropped because it rate-limits (HTTP 429).
+**Current behaviour (supersedes the older notes below where they differ):** the table leaves out gateway languages entirely, and search matches the code, both names and every alternate name. The catalogue is the Language API's GraphQL endpoint, in two queries: `vw_consolidated_repos` for the rows, then `vw_langnames` and `content` filtered to exactly those codes and content ids, which supply the region (`lr`), the alternate names (`alt`), the gateway flag (`gw`; the `wa-catalog` owner rule is only the fallback) and the date (`content.modified_on`). If the second query fails the table still draws, and `catalogue.browse` records `catalogue.enriched: false`.
 
-`src/app/catalogue.ts` is a port in `src/app`, not a module in `src/core`, because it is not policy: it is one HTTP GET against a service Sefer does not own, and core may not name `fetch`.
+`src/app/catalogue.ts` is a port in `src/app`, not a module in `src/core`, because it is not policy: it is two requests against a service Sefer does not own, and core may not name `fetch`.
 
-`catalogueFor()` is the one place that decides the source. With `VITE_SEFER_LANGUAGE_API_URL` set it reads the Language API's consolidated-repos view; without it, it serves `SAMPLE_CATALOGUE` so the screen is real in development instead of empty. Either way the service says which one it gave you in `source`, and the screen shows that rather than implying live data.
+`catalogueFor()` is the one place that decides the source. With `VITE_SEFER_CATALOGUE_URL` set it reads the Language API; without it, it serves `SAMPLE_CATALOGUE` so the screen is real in development instead of empty. Either way the service says which one it gave you in `source`, and the screen shows that rather than implying live data.
 
-The decoder reads `region` and `updated_at` when a row has them; the live payload carries neither today, only a code and a language name, so those columns print an em dash for a row that has none. Inventing a region would be worse than a blank column. `type` (translation or gateway) is derived from the owner — `wa-catalog` is the curated gateway set — and that mapping is stated in the port so the filter's meaning is readable rather than buried in a comparison inside a component.
+A row whose language has no langnames entry prints an em dash for its region. Inventing a region would be worse than a blank column. `type` (translation or gateway) is derived from the owner — `wa-catalog` is the curated gateway set — and that mapping is stated in the port so the filter's meaning is readable rather than buried in a comparison inside a component.
 
-Download reuses the clone flow: the catalogue row hands its `cloneUrl` and its id to the same `cloneRepository` the import hub calls, and `rememberProject` runs in the same pipeline, so the row and its link exist before the toast says it is done.
+Download reuses the clone flow: the catalogue row hands its `gitUrl` and its id to the same `cloneRepository` the import hub calls, and `rememberProject` runs in the same pipeline, so the row and its link exist before the toast says it is done.
 
 `from` is where a project first arrived — a zip, a folder, or which remote — cached from `<root>/.sefer/provenance.json` (`src/core/project/provenance.ts`), which is the record itself: one entry per arrival, appended by import `commit` before it copies and by `cloneRepository` after a clone succeeds. A remote entry keeps the URL as the person saw it, not the proxy's, and Find's `owner/repo`. Entries written before `via` existed are read as a zip when their source ends in `.zip`, else a folder. A project made here has no entry and no `from`.
 

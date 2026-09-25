@@ -6,16 +6,18 @@
  * visible in this file:
  *
  * 1. A browser cannot speak git smart-HTTP to an arbitrary origin — the
- *    server would have to send CORS headers, and Gitea does not. So this host
- *    talks to ONE endpoint, `VITE_SEFER_WACS_WEB_URL`, which is either a Gitea
- *    instance with nothing in front of it or the proxy Will runs
- *    (`wacs-isomorphic-git-proxy`) where something is. The proxy answers on
- *    Gitea's own paths, so there is no `corsProxy` option here and no URL
- *    rewriting at transfer time: the remote URL simply IS the endpoint, put
- *    there by `attach`.
+ *    server would have to send CORS headers, and Gitea does not. So every
+ *    request goes through the TRANSPORT (`src/core/remote/transport.ts`): the
+ *    proxy that fronts the URL's host (`wacs-isomorphic-git-proxy`), which
+ *    answers on Gitea's own paths. The rewrite happens inside the HTTP client,
+ *    at request time and nowhere else, so `.git/config` names the CONTENT
+ *    HOST — the same URL a desktop clone stores — and a project moves between
+ *    the two hosts unchanged. isomorphic-git's `corsProxy` is not used: its
+ *    URL shape (`/{host}/{owner}/{repo}.git/…`) is not the proxy's.
  * 2. Credentials come from the host `Credentials` service, keyed by the
- *    remote's ORIGIN. Tokens never reach a project file, and `onAuth` is the
- *    only place isomorphic-git is told one.
+ *    remote's origin — the content host, the same key Gitea files a sign-in
+ *    under. Tokens never reach a project file, and `onAuth` is the only place
+ *    isomorphic-git is told one.
  * 3. `progress()` is a real stream because a browser transfer over a proxy is
  *    the slowest thing Sefer does. Every transfer publishes isomorphic-git's
  *    phase counters into one sliding PubSub, so the panel showing them cannot
@@ -42,6 +44,7 @@ import {
   type RemoteFailureReason,
   type RemoteService,
 } from "#core/remote/remote";
+import { identityOf, through, type Transport } from "#core/remote/transport";
 
 // isomorphic-git reads a global `Buffer` that no bundler supplies to a browser
 // build. `./git` installs one at module load for exactly that reason; importing
@@ -50,13 +53,15 @@ import "./git";
 
 export interface WebRemoteOptions {
   /**
-   * `VITE_SEFER_WACS_WEB_URL` — the one endpoint, for transfers and the API
-   * alike. `null` is a build with no cloud at all, and the landing screens
-   * say so rather than offering a button that cannot work.
+   * The content host a publish-by-name creates its repository on. `null` is
+   * a build with no cloud at all, and the landing screens say so rather than
+   * offering a button that cannot work.
    */
-  readonly endpoint: string | null;
-  /** `VITE_SEFER_WACS_APP_ID`; `null` sends no `X-Requested-With`. */
-  readonly appId: string | null;
+  readonly contentHost: string | null;
+  /** How this browser reaches each content host. */
+  readonly transport: Transport;
+  /** What the proxy expects in `X-Requested-With`. */
+  readonly appId: string;
 }
 
 /** The remote Sefer attaches and transfers; one per project, always. */
@@ -141,36 +146,6 @@ const classify = (error: unknown): RemoteError => {
 const attempt = <A>(call: () => Promise<A>): Effect.Effect<A, RemoteError> =>
   Effect.tryPromise({ try: call, catch: classify });
 
-/**
- * The same repository, addressed through THIS build's endpoint.
- *
- * Gitea hands out absolute URLs and so does the catalogue — `clone_url` and
- * `repo_url` both name the content host directly. Taken at face value in a
- * browser they go straight at the origin this host cannot reach, which is the
- * failure the endpoint exists to avoid, reintroduced by the one field nobody
- * rewrote. Downloading from the catalogue is the first thing most people
- * click, so that was the first thing that would have broken.
- *
- * The rewrite is a path move and nothing more, because the proxy answers on
- * Gitea's own paths: origin from the endpoint, path and query from the URL.
- * It is idempotent, so a URL already on the endpoint passes through unchanged.
- *
- * Web only. Desktop attaches exactly what it was given — git2 can reach any
- * host it likes, and rewriting a URL that would have worked would be a
- * regression rather than a fix.
- */
-const onEndpoint = (endpoint: string | null, url: string): string => {
-  if (endpoint === null) return url;
-  try {
-    const target = new URL(url);
-    return `${endpoint.replace(/\/+$/u, "")}${target.pathname}${target.search}`;
-  } catch {
-    // Not an absolute URL. Nothing to re-base, and guessing would be worse
-    // than handing it on for isomorphic-git to refuse by itself.
-    return url;
-  }
-};
-
 const makeWebRemote = (
   options: WebRemoteOptions,
   fileSystem: FileSystem.FileSystem,
@@ -184,6 +159,13 @@ const makeWebRemote = (
     // a transfer wait or a long fetch grow the heap.
     const events = yield* PubSub.sliding<Progress>({ capacity: PROGRESS_DEPTH });
 
+    // isomorphic-git's client, with every request sent through the transport.
+    // The one place a proxy URL exists; everything outside sees content hosts.
+    const transported: typeof http = {
+      request: (request) =>
+        http.request({ ...request, url: through(options.transport, request.url) }),
+    };
+
     const originUrl = (repo: Repo): Effect.Effect<string, RemoteError> =>
       Effect.gen(function* () {
         const remotes = yield* attempt(() => git.listRemotes({ fs, dir: repo.root }));
@@ -191,7 +173,12 @@ const makeWebRemote = (
         if (found === undefined) {
           return yield* Effect.fail(fail("Unavailable", "this project has no remote attached yet"));
         }
-        return found.url;
+        // A project cloned before transport moved into the client has the
+        // PROXY as its origin. Put it back on the content host the first
+        // time it is read, so it syncs the same from either host.
+        const identity = identityOf(options.transport, found.url);
+        if (identity !== found.url) yield* attach(repo, identity);
+        return identity;
       });
 
     /** The branch to transfer: whatever HEAD is on, else the default. */
@@ -202,18 +189,13 @@ const makeWebRemote = (
       );
 
     /**
-     * Records where this project's bytes come from.
-     *
-     * Every URL reaches the far side through here — cloning, publishing, the
-     * cloud panel's attach — so re-basing onto the endpoint at this one point
-     * covers every caller, including ones that do not exist yet. What ends up
-     * in `.git/config` is therefore the endpoint, which is also the right
-     * answer: a project remembers the door it came through, and keeps syncing
-     * there even if this build is later pointed somewhere else.
+     * Records where this project's bytes come from: the CONTENT HOST's URL,
+     * never a proxy's. A URL pasted from a proxy is mapped back to the host it
+     * fronts, so whatever a caller hands in, `.git/config` names the server.
      */
     const attach = (repo: Repo, requested: string): Effect.Effect<void, RemoteError> =>
       Effect.gen(function* () {
-        const url = onEndpoint(options.endpoint, requested);
+        const url = identityOf(options.transport, requested);
         const remotes = yield* attempt(() => git.listRemotes({ fs, dir: repo.root }));
         const existing = remotes.find((entry) => entry.remote === ORIGIN);
         if (existing?.url === url) return;
@@ -271,14 +253,11 @@ const makeWebRemote = (
         const credential = Option.getOrNull(held);
         return {
           fs,
-          http,
+          http: transported,
           dir,
           remote: ORIGIN,
-          // No `corsProxy`: the remote URL IS the endpoint, so isomorphic-git
-          // talks to it as if it were the git host. The proxy answers on
-          // Gitea's own paths, which is what makes that work and what lets the
-          // same code point straight at an unprotected Gitea instead.
-          headers: options.appId === null ? undefined : { "X-Requested-With": options.appId },
+          // The proxy gates on this; a host reached directly ignores it.
+          headers: { "X-Requested-With": options.appId },
           onAuth:
             credential === null
               ? undefined
@@ -318,11 +297,11 @@ const makeWebRemote = (
     return {
       // isomorphic-git's own clone, not init-then-pull: it reads the server's
       // HEAD symref and checks that branch out, and it writes `origin` itself.
-      // The URL is re-based onto the endpoint first, exactly as `attach` does,
-      // so what lands in `.git/config` is the same either way.
+      // The URL is mapped to its content host first, exactly as `attach`
+      // does, so what lands in `.git/config` is the same either way.
       clone: (requested, into) =>
         Effect.gen(function* () {
-          const url = onEndpoint(options.endpoint, requested);
+          const url = identityOf(options.transport, requested);
           const last = { current: { phase: "done", loaded: 0 } satisfies Progress };
           const wire = yield* wireAt(url, into, last, "optional");
           yield* attempt(() => git.clone({ ...wire, url, singleBranch: true }));
@@ -379,9 +358,9 @@ const makeWebRemote = (
             ? target
             : yield* createOnGitea(
                 gitea,
-                options.endpoint,
+                options.contentHost,
                 target,
-                "this build has no WACS endpoint: set VITE_SEFER_WACS_WEB_URL",
+                "this build has no WACS server: set one in Settings",
               );
           yield* attach(repo, url);
           yield* transfer(repo, "required", (wire, branch) =>

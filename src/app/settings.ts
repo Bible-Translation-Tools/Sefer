@@ -256,14 +256,17 @@ export interface ShellKeys {
   /** Enables the destructive multi-match action in Find. */
   readonly enableReplaceAll: SettingKey<boolean>;
   /**
-   * The WACS endpoint, overriding the one this build was released with.
+   * The content host, overriding the one this build was released with — the
+   * Gitea itself, never a proxy (the Web's transport is not a preference).
    *
    * Empty means "use the build's" — `src/app/endpoints.ts` resolves the two,
    * and is the only reader of either.
    */
-  readonly wacsUrl: SettingKey<string>;
-  /** The Language API, same rule. */
-  readonly languageApiUrl: SettingKey<string>;
+  readonly contentHost: SettingKey<string>;
+  /** The catalogue, same rule. */
+  readonly catalogueUrl: SettingKey<string>;
+  /** The Web transport's `host=proxy` pairs, same rule. */
+  readonly webTransport: SettingKey<string>;
   /**
    * Mark the block the caret is in, and the block that answers it in every
    * reference beside it. Off by default: it paints on every block change, and
@@ -375,8 +378,12 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
       true,
     ),
     enableReplaceAll: settings.register("find.enableReplaceAll", Schema.Boolean, false),
-    wacsUrl: settings.register("network.wacsUrl", Schema.String, ""),
-    languageApiUrl: settings.register("network.languageApiUrl", Schema.String, ""),
+    // New names, not the old `network.wacsUrl` / `network.languageApiUrl`:
+    // those held a proxy URL and a REST path, neither of which means anything
+    // here, and a stale override is worse than none.
+    contentHost: settings.register("network.contentHost", Schema.String, ""),
+    catalogueUrl: settings.register("network.catalogueUrl", Schema.String, ""),
+    webTransport: settings.register("network.webTransport", Schema.String, ""),
     // Off by default, for the reason on the interface: it is a comparison
     // tool, and the comparison is not what most sessions are doing.
     pairBlocks: settings.register("editor.pairBlocks", Schema.Boolean, false),
@@ -511,21 +518,29 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
       group: "advanced",
     },
     {
-      key: keys.wacsUrl,
-      label: "WACS endpoint",
+      key: keys.contentHost,
+      label: "Content host",
       description:
-        "Where sign-in, the repository list and every transfer go. A Gitea instance, or the proxy in front of one — they answer on the same paths, so either works here. Empty uses this build's.",
+        "The WACS server a sign-in, the repository list and a publish go to. Empty uses this build's.",
+      kind: "string",
+      group: "network",
+    },
+    {
+      key: keys.catalogueUrl,
+      label: "Catalogue",
+      description:
+        "The Language API the projects page lists from. Each project it lists carries its own address, so this can point at a different server from the content host. Empty uses this build's.",
+      kind: "string",
+      group: "network",
+    },
+    {
+      key: keys.webTransport,
+      label: "Browser transport",
+      description:
+        "How this browser reaches each server, as host=proxy pairs separated by commas. Each proxy serves exactly one server, so a wrong pair breaks every transfer to it. Empty uses this build's.",
       kind: "string",
       group: "network",
       hosts: ["web"],
-    },
-    {
-      key: keys.languageApiUrl,
-      label: "Language API",
-      description:
-        "Language names and directions, and the catalogue the Find Project screen lists. Empty uses this build's.",
-      kind: "string",
-      group: "network",
     },
   ];
 };
@@ -545,7 +560,7 @@ export const SETTING_GROUPS: readonly {
   {
     id: "network",
     title: "Network",
-    subtitle: "Which hosts this build talks to. Changing one needs a reload.",
+    subtitle: "Which servers this build talks to. Changing one needs a reload.",
   },
   { id: "advanced", title: "Advanced", subtitle: "Timings and machinery." },
 ];

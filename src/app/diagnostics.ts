@@ -45,14 +45,15 @@ const FLUSH_INTERVAL_MS = 2000;
 
 /** What the header says about the endpoints, and whether a preference moved them. */
 const endpointsOf = (services: Grounds): SessionHeader["endpoints"] => {
-  const host = services.hostInfo.kind();
   const keys = shellKeys(services.settings);
-  const resolved = resolveEndpoints(services.settings, host);
-  const edited = (key: typeof keys.wacsUrl): boolean => services.settings.get(key).trim() !== "";
+  const resolved = resolveEndpoints(services.settings);
+  const edited = (key: typeof keys.contentHost): boolean =>
+    services.settings.get(key).trim() !== "";
   const out: Record<string, { readonly url: string; readonly edited: boolean }> = {};
-  if (resolved.wacsUrl !== null) out.wacs = { url: resolved.wacsUrl, edited: edited(keys.wacsUrl) };
-  if (resolved.languageApiUrl !== null)
-    out.languageApi = { url: resolved.languageApiUrl, edited: edited(keys.languageApiUrl) };
+  if (resolved.contentHost !== null)
+    out.contentHost = { url: resolved.contentHost, edited: edited(keys.contentHost) };
+  if (resolved.catalogueUrl !== null)
+    out.catalogue = { url: resolved.catalogueUrl, edited: edited(keys.catalogueUrl) };
   if (env.updaterHost !== null) out.updater = { url: env.updaterHost, edited: false };
   return out;
 };

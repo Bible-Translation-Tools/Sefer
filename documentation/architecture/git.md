@@ -109,9 +109,10 @@ no proxy is involved.
 
 Configuration is `src/app/env.ts` for the build's defaults and `src/app/endpoints.ts` for the
 preference that may override them (see [configuration.md](configuration.md)):
-`VITE_SEFER_WACS_WEB_URL`, `VITE_SEFER_WACS_DESKTOP_URL`, `VITE_SEFER_WACS_APP_ID`. The Gitea API rides
-the same endpoint and sends the same `X-Requested-With` the transfers do; before that it went direct and
-a successful sign-in was followed immediately by "Failed to fetch". The SURFACE is `/cloud` (`src/app/ui/cloud/`), which owns the state, the two clocks, the incoming
+`VITE_SEFER_CONTENT_HOST` (the identity: what `origin` names and a sign-in is filed under) and, on the
+Web, `VITE_SEFER_WEB_TRANSPORT` (the proxy each host is reached through, applied at request time). The
+Gitea API rides the same transport and sends the same `X-Requested-With` the transfers do; before that
+it went direct and a successful sign-in was followed immediately by "Failed to fetch". The SURFACE is `/cloud` (`src/app/ui/cloud/`), which owns the state, the two clocks, the incoming
 plan and the one right button — see [sync.md](sync.md). `src/app/ui/CloudPanel.tsx` keeps the
 attach-and-publish half beside a project and shares the account half with it; the commands are
 `remote.login`, `remote.pull`, `remote.push`.

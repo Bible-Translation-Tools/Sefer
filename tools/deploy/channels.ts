@@ -12,12 +12,12 @@
  * out loud, which is exactly the failure `web.ts` exists to prevent for the
  * mode-to-channel pairing.
  *
- * These are DEFAULTS, not destinations. The endpoint is a preference as well as
- * a build value (`src/app/endpoints.ts`), so any build can be pointed at any
- * environment from the Network card of `/settings` — a production build can
- * look at dev WACS by typing the dev proxy's URL, and does not need a special
- * build to do it. What this table decides is only where a build points when
- * nobody has said otherwise.
+ * These are DEFAULTS, not destinations. Each is a preference as well as a
+ * build value (`src/app/endpoints.ts`), so any build can be pointed at any
+ * environment from the Network card of `/settings` (under Advanced) — a
+ * production build can look at dev WACS by typing the dev content host, and
+ * does not need a special build to do it. What this table decides is only
+ * where a build points when nobody has said otherwise.
  *
  * `preview` therefore points at PRODUCTION content. Preview is a release
  * channel in the Zed sense — ahead of stable, but people doing real work in
@@ -29,8 +29,8 @@
  *
  * What keeps real translations safe is not this table and never was. It is
  * Gitea auth: a push needs a token with write access to that repository. The
- * proxies still pin one upstream each, so an ENDPOINT reaches exactly the
- * content it says it does — that is a property worth keeping, and it is a
+ * proxies still pin one upstream each, so a content host is reached exactly
+ * where it says it is — that is a property worth keeping, and it is a
  * different property from "which build am I running".
  */
 
@@ -39,77 +39,64 @@ export type Channel = "production" | "preview" | "dev";
 
 export interface ChannelEndpoints {
   /**
-   * The WACS endpoint a browser build uses: the proxy, because a browser
-   * cannot reach the content host directly.
+   * The content host: the Gitea a project comes from and publishes to. The
+   * same on the Web and on desktop — it is an identity; only how a browser
+   * reaches it differs, and that is `WEB_TRANSPORT`.
    */
-  readonly wacsWebUrl: string;
+  readonly contentHost: string;
   /**
-   * The WACS endpoint a desktop build uses: the content host itself. git2
-   * speaks smart-HTTP and is not a browser origin, so no proxy is involved.
+   * The catalogue: the Language API's GraphQL endpoint. Each row carries its
+   * own git URL, so a catalogue may list repositories on hosts other than
+   * `contentHost` — the dev one lists production repositories too — and
+   * `WEB_TRANSPORT` covers every host either catalogue names.
    */
-  readonly wacsDesktopUrl: string;
-  /**
-   * What the proxy expects in `X-Requested-With`.
-   *
-   * One per channel, not one per application. It is a label rather than a
-   * credential — it ships in this bundle — so its whole value is telling the
-   * proxy's logs which build made a request, and letting one channel be
-   * dropped from an allowlist without touching another. A single shared
-   * identifier would throw both away for nothing.
-   */
-  readonly wacsAppId: string;
-  /**
-   * Language names, directions and the catalogue.
-   *
-   * The production URL is the one `scripture-editor-proto-2/.env.example`
-   * documents, and it is the endpoint `src/app/catalogue.ts` already decodes
-   * (`ConsolidatedRepos`, with the `repo_url` rows Find Project lists).
-   *
-   * TODO(2026-09-22): the dev deployment — the one built against dev WACS —
-   * has no URL written down anywhere in this estate, so `dev` leaves this
-   * unset and shows the sample catalogue while saying so. Pointing dev at the
-   * PRODUCTION catalogue would be worse than the sample: its rows would be
-   * re-based onto the dev endpoint by `attach`, and every download would look
-   * for a production repository on the dev content host and 404.
-   */
-  readonly languageApiUrl?: string;
+  readonly catalogueUrl: string;
 }
+
+/**
+ * How a browser reaches each content host: the proxy in front of it, which
+ * answers on Gitea's own paths. Infrastructure, not a channel choice — each
+ * proxy is pinned to one upstream — so it is one table every channel ships,
+ * which is what lets a dev build download a production repository its
+ * catalogue lists. Written as `host=proxy` pairs, as `VITE_SEFER_WEB_TRANSPORT`
+ * carries them (`src/core/remote/transport.ts` reads it).
+ */
+const WEB_TRANSPORT: Readonly<Record<string, string>> = {
+  "https://content.bibletranslationtools.org": "https://wacs-proxy.bibletranslationtools.org",
+  "https://content.wacsdev.org": "https://wacs-proxy.bttdev.org",
+};
+
+const transportSpec = (): string =>
+  Object.entries(WEB_TRANSPORT)
+    .map(([host, proxy]) => `${host}=${proxy}`)
+    .join(",");
 
 export const CHANNEL_ENDPOINTS: Readonly<Record<Channel, ChannelEndpoints>> = {
   production: {
-    wacsWebUrl: "https://wacs-proxy.bibletranslationtools.org",
-    wacsDesktopUrl: "https://content.bibletranslationtools.org",
-    wacsAppId: "sefer-prod",
-    languageApiUrl: "https://api.bibleineverylanguage.org/api/rest/consolidated-repos",
+    contentHost: "https://content.bibletranslationtools.org",
+    catalogueUrl: "https://api.bibleineverylanguage.org/v1/graphql",
   },
   preview: {
-    wacsWebUrl: "https://wacs-proxy.bibletranslationtools.org",
-    wacsDesktopUrl: "https://content.bibletranslationtools.org",
-    wacsAppId: "sefer-preview",
-    languageApiUrl: "https://api.bibleineverylanguage.org/api/rest/consolidated-repos",
+    contentHost: "https://content.bibletranslationtools.org",
+    catalogueUrl: "https://api.bibleineverylanguage.org/v1/graphql",
   },
   dev: {
-    wacsWebUrl: "https://wacs-proxy.bttdev.org",
-    wacsDesktopUrl: "https://content.wacsdev.org",
-    wacsAppId: "sefer-dev",
+    contentHost: "https://content.wacsdev.org",
+    catalogueUrl: "https://api-biel-dev.walink.org/v1/graphql",
   },
 };
 
 /**
  * The channel's endpoints as the variables `src/app/env.ts` reads.
  *
- * An absent value is LEFT ABSENT rather than set to an empty string: `env.ts`
- * treats blank as unset, but a variable that is present and empty reads as a
- * decision somebody made, and this one has not been made yet.
+ * The proxy app id is not among them: `src/app/endpoints.ts` derives it
+ * from the channel the build already names.
  */
 export const channelEnv = (channel: Channel): Readonly<Record<string, string>> => {
   const endpoints = CHANNEL_ENDPOINTS[channel];
   return {
-    VITE_SEFER_WACS_WEB_URL: endpoints.wacsWebUrl,
-    VITE_SEFER_WACS_DESKTOP_URL: endpoints.wacsDesktopUrl,
-    VITE_SEFER_WACS_APP_ID: endpoints.wacsAppId,
-    ...(endpoints.languageApiUrl === undefined
-      ? {}
-      : { VITE_SEFER_LANGUAGE_API_URL: endpoints.languageApiUrl }),
+    VITE_SEFER_CONTENT_HOST: endpoints.contentHost,
+    VITE_SEFER_CATALOGUE_URL: endpoints.catalogueUrl,
+    VITE_SEFER_WEB_TRANSPORT: transportSpec(),
   };
 };

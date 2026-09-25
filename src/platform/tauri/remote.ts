@@ -3,8 +3,8 @@
  * `src-tauri/src/git.rs`.
  *
  * The desktop half is the simple one: git2 speaks smart-HTTP directly and is
- * not a browser origin, so its endpoint (`VITE_SEFER_WACS_DESKTOP_URL`) is
- * normally Gitea itself and no proxy is in the picture at all. What
+ * not a browser origin, so it reaches the content host
+ * (`VITE_SEFER_CONTENT_HOST`) itself and no proxy is in the picture. What
  * it shares with the Web half is the rules, and those are deliberately the
  * same on both hosts:
  *
@@ -45,7 +45,7 @@ const ORIGIN = "origin";
 const PROGRESS_DEPTH = 64;
 
 export interface TauriRemoteOptions {
-  /** `VITE_SEFER_GITEA_DESKTOP_HOST`; `null` disables publishing by name. */
+  /** The content host (`VITE_SEFER_CONTENT_HOST`); `null` disables publishing by name. */
   readonly endpoint: string | null;
 }
 
@@ -208,7 +208,7 @@ const makeTauriRemote = (
                 gitea,
                 options.endpoint,
                 target,
-                "this build has no WACS endpoint: set VITE_SEFER_WACS_DESKTOP_URL",
+                "this build has no WACS server: set one in Settings",
               );
           yield* attach(repo, url);
           yield* transfer("git_push", repo, "required");

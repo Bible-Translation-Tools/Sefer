@@ -76,7 +76,7 @@ function SettingsPage() {
    */
   const drifted = (): boolean => {
     tick();
-    return endpointsChangedSinceBoot(services.settings, services.hostInfo.kind());
+    return endpointsChangedSinceBoot(services.settings);
   };
 
   const read = <S,>(key: SettingKey<S>): S => {
@@ -201,11 +201,12 @@ function SettingsPage() {
             descriptors.filter(
               (descriptor) =>
                 descriptor.group === group.id &&
-                (group.id !== "advanced" || advancedVisible()) &&
-                // A preference that cannot matter on this host is not drawn.
-                // The WACS endpoint is the only one: on the Web it is normally a
-                // proxy, because a browser cannot reach the content host
-                // directly, and desktop has no such problem.
+                // The network card is machinery too: which servers a build
+                // talks to is the build's answer, and overriding it is for
+                // somebody who has opened Advanced on purpose.
+                ((group.id !== "advanced" && group.id !== "network") || advancedVisible()) &&
+                // A preference that cannot matter on this host is not drawn:
+                // the browser transport, which desktop has no use for.
                 (descriptor.hosts === undefined ||
                   descriptor.hosts.includes(services.hostInfo.kind())),
             );

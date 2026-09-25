@@ -40,7 +40,7 @@ import { remoteVerdict } from "#core/remote/remote";
 import { classify, commit, stage } from "#core/resources/import";
 
 import { describe, reasonOf, remoteReasonOf } from "../../describe";
-import { wacsUrlFor } from "../../endpoints";
+import { contentHostFor } from "../../endpoints";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import type { Domain } from "../../services";
@@ -87,10 +87,9 @@ export function ImportHub(props: {
   const shell = useShell();
   const { services } = shell;
   const capabilities = services.hostInfo.capabilities();
-  // One endpoint, one condition. Not a Gitea host AND, on the Web, a CORS
-  // proxy, which could disagree with each other: the endpoint IS whichever of
-  // the two this build talks to.
-  const endpoint = wacsUrlFor(services.settings, services.hostInfo.kind());
+  // The content host: whether this build has a cloud at all. How a browser
+  // reaches it is the Remote's business, not this screen's.
+  const endpoint = contentHostFor(services.settings);
 
   const [progress, setProgress] = createSignal<Progress | undefined>(undefined, {
     name: "importProgress",

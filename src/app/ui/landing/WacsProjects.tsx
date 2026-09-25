@@ -31,6 +31,7 @@ import { lastSegment } from "#core/fileSystem/path";
 import { Observability } from "#core/observability";
 import { cloneRepository } from "#core/remote/clone";
 import { Remote, remoteVerdict } from "#core/remote/remote";
+import { through } from "#core/remote/transport";
 
 import {
   catalogueFailureAttrs,
@@ -39,7 +40,7 @@ import {
   type CatalogueEntry,
 } from "../../catalogue";
 import { describe, reasonOf, remoteReasonOf } from "../../describe";
-import { wacsUrlFor } from "../../endpoints";
+import { transportFor } from "../../endpoints";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import {
@@ -253,10 +254,12 @@ export function WacsProjects(props: {
   // to keep reactive and nothing to dispose.
   const catalogue = catalogueFor(services.settings);
 
-  // One endpoint, one condition: it is either configured or this build has no
-  // cloud. On the Web that endpoint is normally a proxy, but nothing here
-  // needs to know which — it answers on the same paths either way.
-  const transfersConfigured = wacsUrlFor(services.settings, services.hostInfo.kind()) !== null;
+  // A row names its own server, which need not be this build's content host:
+  // a catalogue can list repositories on more than one. Desktop reaches any
+  // of them; a browser only those it has a transport for.
+  const transport = transportFor(services.settings, services.hostInfo.kind());
+  const reachable = (url: string): boolean =>
+    services.hostInfo.kind() !== "web" || through(transport, url) !== url;
 
   const [entries, setEntries] = createSignal<readonly CatalogueEntry[] | undefined>(undefined, {
     name: "catalogueEntries",
@@ -305,10 +308,13 @@ export function WacsProjects(props: {
   });
   void catalogue
     .entries()
-    .then((all) => {
+    .then(({ rows: all, enriched }) => {
+      // Enrichment failing is the table drawing without regions and dates,
+      // not the browse failing: it passes, and says what it went without.
       browsing.end("passed", {
         "catalogue.entries": all.length,
         "catalogue.gateways": all.filter((entry) => entry.type === "gateway").length,
+        "catalogue.enriched": enriched,
       });
       // Gateway languages are not offered here at all — see the file header.
       const translations = all.filter((entry) => entry.type !== "gateway");
@@ -367,11 +373,9 @@ export function WacsProjects(props: {
   );
 
   const downloadReason = (entry: CatalogueEntry): string => {
-    if (entry.cloneUrl === "") return t("Sample data — this row names no repository to download.");
-    if (!transfersConfigured)
-      return t(
-        "Transfers have no server for this build. Set the WACS endpoint on the Network card in Settings.",
-      );
+    if (entry.gitUrl === "") return t("Sample data — this row names no repository to download.");
+    if (!reachable(entry.gitUrl))
+      return t("This browser has no way to reach the server this project is on.");
     return "";
   };
 
@@ -457,7 +461,7 @@ export function WacsProjects(props: {
    * not per clone, which is fine while `busy` allows one download at a time.
    */
   const download = (entry: CatalogueEntry, from: DOMRect): void => {
-    const into = `${services.projectsRoot}/${lastSegment(entry.cloneUrl.replace(/\.git$/u, ""))}`;
+    const into = `${services.projectsRoot}/${lastSegment(entry.gitUrl.replace(/\.git$/u, ""))}`;
     // Read once, at the click: the callbacks below run long after, outside
     // any tracking scope, and must not read props there.
     const { downloads, onDownloaded } = props;
@@ -503,7 +507,7 @@ export function WacsProjects(props: {
           // The index learns about the project in the same pipeline, the moment
           // its files and history are on disk, so the list and its links are
           // right before the card says it is done.
-          cloneRepository(entry.cloneUrl, into, entry.id).pipe(
+          cloneRepository(entry.gitUrl, into, entry.id).pipe(
             Effect.andThen(rememberProject(services.projectsRoot, into, undefined)),
           ),
           Observability,

@@ -21,36 +21,24 @@ export interface SeferEnv {
   /** Updater worker base, e.g. https://updater.sefer.example.org; `/{{target}}/{{current_version}}` is appended by the plugin. */
   readonly updaterHost: string | null;
   /**
-   * The WACS endpoint the Web build talks to — ONE URL, for both git transfers
-   * and the Gitea API.
-   *
-   * It is either a Gitea instance directly, where nothing stands in front of
-   * it, or the browser proxy where something does. The proxy answers on the
-   * same paths Gitea does, so this build cannot tell the two apart and does
-   * not need to: whichever it is, the endpoint is the base of every URL.
-   *
-   * That is why there is no second "which upstream should the proxy use"
-   * setting. Each proxy deployment is pinned to one content host, so choosing
-   * the endpoint already chose the content — and a preview build pointed at
-   * the dev proxy cannot reach production content however it is configured.
+   * The content host: the Gitea a project comes from and publishes to, WITH
+   * its scheme. It is the IDENTITY — what the UI prints, what `.git/config`
+   * stores, what a sign-in is filed under — on the Web and on desktop alike.
+   * Never a proxy: how a browser reaches it is `webTransport`.
    */
-  readonly wacsWebUrl: string | null;
+  readonly contentHost: string | null;
   /**
-   * The same for the desktop build, which needs no proxy: git2 speaks
-   * smart-HTTP itself and is not a browser origin, so this is normally the
-   * Gitea host.
+   * `host=proxy,host=proxy`: how a browser reaches each content host
+   * (`src/core/remote/transport.ts`). Applied at request time on the Web
+   * only, never stored or shown. Every pair is listed, not only this build's
+   * host, because a catalogue lists repositories on more than one.
    */
-  readonly wacsDesktopUrl: string | null;
+  readonly webTransport: string;
   /**
-   * What the proxy expects in `X-Requested-With`; null sends no header.
-   *
-   * A label rather than a credential — it ships in this bundle, so anyone can
-   * read it. The gate that matters is server-side, in the proxy's own
-   * allowlist; this only says which application is calling.
+   * The catalogue: the Language API's GraphQL endpoint, which lists the
+   * repositories this app can open and where each one's git URL is.
    */
-  readonly wacsAppId: string | null;
-  /** Language API for language names and directions in the shell. */
-  readonly languageApiUrl: string | null;
+  readonly catalogueUrl: string | null;
   /** Dev-only OTLP endpoint; see composition.ts. */
   readonly otlpUrl: string | null;
   /**
@@ -72,10 +60,9 @@ export interface SeferEnv {
 
 export const env: SeferEnv = {
   updaterHost: cleanUrl(import.meta.env.VITE_SEFER_UPDATER_HOST),
-  wacsWebUrl: cleanUrl(import.meta.env.VITE_SEFER_WACS_WEB_URL),
-  wacsDesktopUrl: cleanUrl(import.meta.env.VITE_SEFER_WACS_DESKTOP_URL),
-  wacsAppId: cleanUrl(import.meta.env.VITE_SEFER_WACS_APP_ID),
-  languageApiUrl: cleanUrl(import.meta.env.VITE_SEFER_LANGUAGE_API_URL),
+  contentHost: cleanUrl(import.meta.env.VITE_SEFER_CONTENT_HOST),
+  webTransport: (import.meta.env.VITE_SEFER_WEB_TRANSPORT ?? "").trim(),
+  catalogueUrl: cleanUrl(import.meta.env.VITE_SEFER_CATALOGUE_URL),
   otlpUrl: cleanUrl(import.meta.env.VITE_SEFER_OTLP_URL),
   otlpMetrics: import.meta.env.VITE_SEFER_OTLP_METRICS === "1",
   log: (import.meta.env.VITE_SEFER_LOG ?? "").trim(),
