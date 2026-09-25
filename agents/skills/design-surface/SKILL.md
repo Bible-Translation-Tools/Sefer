@@ -373,6 +373,9 @@ real screens.
 
 ### Reviewing the designer's work
 
+The full procedure — merging master into his branch, the review questions,
+getting green — is [merging designer code](../merging-designer-code/SKILL.md).
+
 - **He owns** feel, polish, motion, hierarchy, density, spacing, and colour
   within the semantic tokens. Those are his calls; do not relitigate them in
   review.

@@ -6,6 +6,7 @@ Loadable skills live in `agents/skills/` (`.claude/skills` is a symlink to it):
 
 - [Release channels](agents/skills/release-channels/SKILL.md): read before deploying, tagging, or answering "what does a push to master do"; the dev/preview/production matrix, the tag format, the exact commands, and why master deploys `dev`.
 - [The design surface](agents/skills/design-surface/SKILL.md): read before design work; prototyping on `/design`, the point-and-comment collector, variants and tweaks, and how a designer's change graduates into the real screens.
+- [Merging designer code](agents/skills/merging-designer-code/SKILL.md): read before merging, reviewing or getting green the designer's branch; the merge mechanics and the developer questions he does not ask for himself.
 
 Read only the guidance relevant to the task:
 
