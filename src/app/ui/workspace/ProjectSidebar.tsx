@@ -19,7 +19,6 @@ import ArrowRight from "lucide-solid/icons/arrow-right";
 import BookIcon from "lucide-solid/icons/book";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";
-import FolderClock from "lucide-solid/icons/folder-clock";
 import Library from "lucide-solid/icons/library";
 import SearchIcon from "lucide-solid/icons/search";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
@@ -232,46 +231,8 @@ export function ProjectSidebar() {
     );
   };
 
-  /**
-   * With no project open, the panel is the way back into one.
-   *
-   * The book list and the reference box both need a project to mean anything —
-   * an empty list under a search box that searches it is the panel saying
-   * nothing twice. `shell.recentProjects` is what the landing screen wrote as
-   * it opened each one, so this is a history and not a directory listing; when
-   * it is empty there is nothing to show and the shell collapses the panel
-   * altogether (`shell.sidebarShowing`).
-   */
-  const Recents = () => (
-    <nav aria-label={t("Recent projects")} class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-      <p class="px-2 pt-3 pb-1 text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase">
-        {t("Recent projects")}
-      </p>
-      <ul>
-        <For each={shell.recentProjects()}>
-          {(recent) => (
-            <li>
-              <button
-                type="button"
-                data-recent={recent.root}
-                class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start text-small text-sidebar-on-surface transition-colors hover:bg-sidebar-surface-hover"
-                onClick={() =>
-                  void navigate({
-                    to: "/project/$slug",
-                    params: { slug: shell.slugFor(recent.root) },
-                    search: {},
-                  })
-                }
-              >
-                <FolderClock size={15} aria-hidden="true" class="shrink-0" />
-                <span class="min-w-0 flex-1 truncate">{recent.name}</span>
-              </button>
-            </li>
-          )}
-        </For>
-      </ul>
-    </nav>
-  );
+  // With no project open the panel says what it is for — its books arrive
+  // with a project — and the project control above it is the way to one.
 
   const path = useRouterState({ select: (state) => state.location.pathname });
   const choosing = (): boolean => path() === "/" || path().startsWith("/start");
@@ -305,44 +266,42 @@ export function ProjectSidebar() {
             </button>
           }
         >
-          <button
-            type="button"
-            data-testid="sidebar-project"
-            data-current={choosing() ? "" : undefined}
-            class="flex w-full cursor-pointer items-center gap-2 rounded-2xl border bg-surface-primary p-4 text-start transition-colors hover:bg-sidebar-surface-hover data-current:border-brand data-current:bg-brand-light not-data-current:border-surface-border"
-            onClick={() => void navigate({ to: "/projects" })}
-          >
-            <span class="min-w-0 flex-1">
-              <span class="block truncate text-small font-bold text-on-surface-primary">
-                {projectName(shell.project())}
-              </span>
-              <Show when={projectLanguage(shell.project()) !== ""}>
-                <span class="block truncate text-smallest text-on-surface-tertiary">
-                  {projectLanguage(shell.project())}
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              data-testid="sidebar-project"
+              data-current={choosing() ? "" : undefined}
+              class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-2xl border bg-surface-primary p-4 text-start transition-colors hover:bg-sidebar-surface-hover data-current:border-brand data-current:bg-brand-light not-data-current:border-surface-border"
+              onClick={() => void navigate({ to: "/projects" })}
+            >
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-small font-bold text-on-surface-primary">
+                  {projectName(shell.project())}
                 </span>
-              </Show>
-            </span>
-            <ChevronDown size={16} aria-hidden="true" class="shrink-0 text-on-surface-tertiary" />
-          </button>
+                <Show when={projectLanguage(shell.project()) !== ""}>
+                  <span class="block truncate text-smallest text-on-surface-tertiary">
+                    {projectLanguage(shell.project())}
+                  </span>
+                </Show>
+              </span>
+              <ChevronDown size={16} aria-hidden="true" class="shrink-0 text-on-surface-tertiary" />
+            </button>
+          </div>
         </Show>
       </div>
 
       <Show
         when={shell.project()}
         fallback={
-          <Show when={shell.recentProjects().length === 0} fallback={<Recents />}>
-            <div
-              data-testid="sidebar-empty"
-              class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-8 text-center text-small text-on-surface-tertiary"
-            >
-              <Library size={32} strokeWidth={1.5} aria-hidden="true" />
-              <p>
-                {t(
-                  "When your translation project is loaded into Sefer, its books will appear here.",
-                )}
-              </p>
-            </div>
-          </Show>
+          <div
+            data-testid="sidebar-empty"
+            class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-8 text-center text-small text-on-surface-tertiary"
+          >
+            <Library size={32} strokeWidth={1.5} aria-hidden="true" />
+            <p>
+              {t("When your translation project is loaded into Sefer, its books will appear here.")}
+            </p>
+          </div>
         }
       >
         <div class="flex flex-col gap-2 px-4 pb-2">

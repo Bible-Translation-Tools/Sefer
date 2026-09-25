@@ -9,6 +9,7 @@ import { CommandPalette } from "#app/ui/CommandPalette";
 import { Kbd, Resizable, Toaster } from "#app/ui/primitives";
 import { BackToEditor } from "#app/ui/workspace/BackToEditor";
 import { IconRail } from "#app/ui/workspace/IconRail";
+import { PanelToggleColumn } from "#app/ui/workspace/PanelToggle";
 import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
 
 /**
@@ -80,11 +81,19 @@ function Workspace() {
         initialSize={initialWidth}
         minSize={minWidth}
         maxSize={maxWidth}
+        // Dragged well past its narrowest, the panel closes instead.
+        onCollapse={() => shell.setSidebarOpen(false)}
+        collapseHint={{
+          title: t("Keep dragging to close the panel"),
+          detail: t("Release to keep it open."),
+        }}
         class={showing() ? undefined : "hidden"}
       >
         <ProjectSidebar />
       </Resizable.Panel>
+      {/* On the panel's own edge: dragging its border resizes it. */}
       <Resizable.Handle
+        edge
         label={t("Resize the project panel")}
         class={showing() ? undefined : "hidden"}
       />
@@ -95,10 +104,15 @@ function Workspace() {
         {/* `relative`, and the door OUTSIDE the scroller: a full-page screen
             scrolls its own content, and a button that scrolled away with it
             would be a door you have to go back to the top to find. */}
-        <div class="relative h-full">
-          <BackToEditor />
-          <div class="h-full overflow-y-auto">
-            <Outlet />
+        <div class="flex h-full">
+          {/* The panel toggle for project screens without the editor's
+              toolbar: a column of its own, so it covers nothing. */}
+          <PanelToggleColumn />
+          <div class="relative h-full min-w-0 flex-1">
+            <BackToEditor />
+            <div class="h-full overflow-y-auto">
+              <Outlet />
+            </div>
           </div>
         </div>
       </Resizable.Panel>
@@ -117,15 +131,12 @@ function Chrome() {
   const shell = () => readyShell(state());
 
   return (
-    <div class="flex h-screen bg-surface-canvas">
-      <Show
-        when={shell()}
-        fallback={<div class="w-13 shrink-0 border-e border-sidebar-border bg-surface-primary" />}
-      >
+    <div class="flex h-screen flex-col bg-surface-canvas">
+      <Show when={shell()} fallback={<div class="h-18 shrink-0 bg-surface-invert" />}>
         <IconRail />
       </Show>
 
-      <div class="flex min-w-0 flex-1 flex-col">
+      <div class="flex min-h-0 min-w-0 flex-1 flex-col">
         <div class="min-h-0 flex-1">
           <Show
             when={shell()}

@@ -1,9 +1,9 @@
-import { Outlet, createFileRoute, useNavigate } from "@tanstack/solid-router";
+import { Outlet, createFileRoute } from "@tanstack/solid-router";
 import { Match, Switch, createEffect, createSignal, untrack } from "solid-js";
 
 import { t } from "#app/i18n";
 import { useShell } from "#app/ProjectContext";
-import { Button, EmptyState } from "#app/ui/primitives";
+import { EmptyState } from "#app/ui/primitives";
 import { ShellGate } from "#app/ui/ShellGate";
 import "#app/ui/theme";
 
@@ -32,7 +32,6 @@ import "#app/ui/theme";
 
 function ProjectLayout() {
   const shell = useShell();
-  const navigate = useNavigate();
   const params = Route.useParams();
 
   const [phase, setPhase] = createSignal<"opening" | "ready" | "unknown">("opening");
@@ -42,8 +41,9 @@ function ProjectLayout() {
     (slug) => {
       const root = shell.rootForSlug(slug);
       // A slug nothing answers to: a bookmark to a project that has been
-      // removed, or a hand-typed URL. Say so rather than opening something
-      // else or hanging on a spinner forever.
+      // removed, or a hand-typed URL. Draw an empty main area rather than
+      // opening something else or hanging on a spinner forever; the panel
+      // beside it is the way to a project.
       if (root === undefined) {
         setPhase("unknown");
         return;
@@ -67,14 +67,11 @@ function ProjectLayout() {
       <Match when={phase() === "ready"}>
         <Outlet />
       </Match>
+      {/* A slug nothing answers to draws nothing here: the project panel
+          beside it says what the space is for, and its project control is
+          the way to a project. */}
       <Match when={phase() === "unknown"}>
-        <EmptyState
-          title={t("no project here")}
-          description={t("that link names a project this device does not have open or remember.")}
-          action={
-            <Button onClick={() => void navigate({ to: "/" })}>{t("see your projects")}</Button>
-          }
-        />
+        <main data-testid="no-project" aria-label={t("No project open")} class="h-full" />
       </Match>
       <Match when={phase() === "opening"}>
         {/* The open reads every book, parses every book and proofreads the
