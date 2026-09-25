@@ -4,9 +4,9 @@
  * Three bands. The mark at the top, inert for now. The MODES in the middle —
  * Form, Refine, Key terms — the three ways of working on a project's text;
  * they are offered with nothing open but disabled, so the rail keeps one shape.
- * Form is not built yet and stays disabled. At the foot: More, Import (the
- * rail slot for bringing a project in, disabled for now), Settings, and Account (a placeholder
- * until there is an account).
+ * Form is not built yet and stays disabled. At the foot: More, Import (a zip,
+ * a folder or a clone, from anywhere), Settings, and Account (disabled until
+ * there is an account).
  *
  * Every enabled tile is a place: a navigation lit from the pathname, never a
  * setting. The project-wide screens that used to sit here (findings, history,
@@ -32,7 +32,8 @@ import { createSignal, For } from "solid-js";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { Popover } from "../primitives";
+import { ImportHub } from "../landing/ImportHub";
+import { Menu, MenuItem } from "../primitives";
 
 /**
  * A rail tile: one 80×80 button holding the icon and the word under it, so
@@ -46,6 +47,8 @@ function RailButton(props: {
   readonly icon: JSX.Element;
   readonly pressed?: "true" | "false";
   readonly disabled?: boolean;
+  /** The native tooltip; for a disabled tile, the reason. */
+  readonly title?: string;
   readonly onClick?: () => void;
 }) {
   return (
@@ -54,11 +57,12 @@ function RailButton(props: {
       data-testid={props.testId}
       aria-pressed={props.pressed}
       disabled={props.disabled}
+      title={props.title}
       onClick={() => props.onClick?.()}
       class="flex size-20 shrink-0 cursor-pointer flex-col items-center justify-center gap-1 text-on-surface-invert transition-colors hover:not-disabled:bg-surface-invert-hover aria-pressed:bg-surface-invert-active aria-pressed:hover:bg-surface-invert-active disabled:cursor-not-allowed disabled:opacity-50"
     >
       {props.icon}
-      <span class="max-w-full truncate px-1 text-center text-[11px] leading-3">{props.label}</span>
+      <span class="max-w-full truncate px-1 text-center text-caption">{props.label}</span>
     </button>
   );
 }
@@ -77,7 +81,7 @@ type ProjectScreen =
 function MoreMenu() {
   const navigate = useNavigate();
   const shell = useShell();
-  const [open, setOpen] = createSignal(false);
+  const [open, setOpen] = createSignal(false, { name: "railMoreOpen" });
   const attention = () => shell.findingCounts().errors + shell.findingCounts().warnings;
 
   const items: ReadonlyArray<{ label: string; to: ProjectScreen; icon: JSX.Element }> = [
@@ -92,19 +96,14 @@ function MoreMenu() {
     { label: t("Cloud"), to: "/project/$slug/cloud", icon: <CloudIcon size={16} /> },
   ];
 
-  const go = (to: ProjectScreen): void => {
-    setOpen(false);
-    void navigate({ to, params: { slug: shell.slug() }, search: {} });
-  };
-
   return (
-    <Popover
+    <Menu
       label={t("More")}
       side="right"
       align="end"
       open={open()}
       onOpenChange={setOpen}
-      class="w-52 p-1"
+      class="w-52"
       trigger={
         <RailButton
           label={t("More")}
@@ -114,31 +113,26 @@ function MoreMenu() {
         />
       }
     >
-      <ul role="menu" class="flex flex-col">
-        <For each={items}>
-          {(item) => (
-            <li role="none">
-              <button
-                type="button"
-                role="menuitem"
-                data-testid={`rail-more-${item.to.split("/").pop()}`}
-                disabled={shell.project() === undefined}
-                class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start hover:not-disabled:bg-surface-secondary disabled:cursor-not-allowed disabled:opacity-60"
-                onClick={() => go(item.to)}
-              >
-                {item.icon}
-                <span class="flex-1">{item.label}</span>
-                {item.to === "/project/$slug/findings" && attention() > 0 ? (
-                  <span class="min-w-4 rounded-full bg-on-surface-error px-1 text-center text-smallest leading-4 font-semibold text-surface-error">
-                    {attention() > 99 ? "99+" : attention()}
-                  </span>
-                ) : null}
-              </button>
-            </li>
-          )}
-        </For>
-      </ul>
-    </Popover>
+      <For each={items}>
+        {(item) => (
+          <MenuItem
+            data-testid={`rail-more-${item.to.split("/").pop()}`}
+            disabled={shell.project() === undefined}
+            icon={item.icon}
+            onSelect={() =>
+              void navigate({ to: item.to, params: { slug: shell.slug() }, search: {} })
+            }
+          >
+            <span class="flex-1">{item.label}</span>
+            {item.to === "/project/$slug/findings" && attention() > 0 ? (
+              <span class="min-w-4 rounded-full bg-on-surface-error px-1 text-center text-smallest leading-4 font-semibold text-surface-error">
+                {attention() > 99 ? "99+" : attention()}
+              </span>
+            ) : null}
+          </MenuItem>
+        )}
+      </For>
+    </Menu>
   );
 }
 
@@ -230,13 +224,14 @@ export function IconRail() {
 
       <div class="flex w-full flex-col items-center">
         <MoreMenu />
-        {/* Disabled for now: the one way to the projects page is the
-            sidebar's project control. Kept on the rail for its place. */}
-        <RailButton
-          label={t("Import")}
-          testId="rail-import"
-          icon={<Download size={20} />}
-          disabled
+        {/* The import menu from anywhere; a finished import lands on the
+            projects page, where the new project is. */}
+        <ImportHub
+          variant="menu"
+          onImported={() => void navigate({ to: "/projects" })}
+          trigger={
+            <RailButton label={t("Import")} testId="rail-import" icon={<Download size={20} />} />
+          }
         />
         <RailButton
           label={t("Settings")}
@@ -246,7 +241,13 @@ export function IconRail() {
           onClick={() => void navigate({ to: "/settings" })}
         />
         {/* A placeholder until there is an account to read a name from. */}
-        <RailButton label={t("Account")} testId="rail-account" icon={<UserIcon size={20} />} />
+        <RailButton
+          label={t("Account")}
+          testId="rail-account"
+          icon={<UserIcon size={20} />}
+          title="TODO: WIP"
+          disabled
+        />
       </div>
     </nav>
   );

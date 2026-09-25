@@ -181,7 +181,7 @@ export function CreateProject() {
           subtitle={t("Everything a Scripture Burrito needs to identify itself.")}
           actions={
             <Link
-              to="/start/find"
+              to="/projects"
               search={true}
               class="inline-flex items-center gap-1 text-smallest text-on-surface-tertiary no-underline hover:text-on-surface-secondary"
             >

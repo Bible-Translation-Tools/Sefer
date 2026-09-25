@@ -36,14 +36,21 @@ import { t } from "../../i18n";
 import { exportProjectZip, renameProject } from "../../projectCommands";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
-import { Badge, Button, Card, Dialog, IconButton, Input, Popover, toasts } from "../primitives";
+import {
+  Badge,
+  Button,
+  Card,
+  Dialog,
+  IconButton,
+  Input,
+  Menu,
+  MenuItem,
+  toasts,
+} from "../primitives";
 import { flyCard, type PendingDownload } from "./downloads";
 import { listProjects, type ProjectSummary } from "./summaries";
 
 /** One row of the kebab menu; the same class the toolbar's menu uses. */
-const item =
-  "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start text-small text-on-surface-primary hover:bg-surface-secondary disabled:cursor-not-allowed disabled:text-on-surface-tertiary";
-
 export function YourProjects(props: {
   readonly reload: number;
   /** Downloads in flight, drawn first until the project each becomes is listed. */
@@ -61,33 +68,11 @@ export function YourProjects(props: {
   });
   /** Raised by this component's own writes; `props.reload` is the import hub's. */
   const [changed, setChanged] = createSignal(0, { name: "projectsChanged" });
-  const [menu, setMenu] = createSignal("", { name: "projectMenu" });
   const navigate = useNavigate();
 
   /** The card strip, and how many cards sit past its right edge. */
   const [strip, setStrip] = createSignal<HTMLUListElement>();
   const [hidden, setHidden] = createSignal(0, { name: "projectsHidden" });
-  const measure = (): void => {
-    const box = strip();
-    if (box === undefined) return;
-    const edge = box.getBoundingClientRect().right;
-    let past = 0;
-    for (const card of box.children) if (card.getBoundingClientRect().right > edge + 1) past += 1;
-    setHidden(past);
-  };
-  // Re-count when the strip resizes or its cards change. The cleanup is the
-  // effect's RETURN value — Solid 2 runs an `onCleanup` here unowned.
-  createEffect(
-    () => ({ box: strip(), count: rows()?.length, pending: pending().length }),
-    ({ box }) => {
-      if (box === undefined) return;
-      const observer = new ResizeObserver(measure);
-      observer.observe(box);
-      measure();
-      return () => observer.disconnect();
-    },
-  );
-
   /** Sharing is the cloud screen of that project; opening it gets there. */
   const share = (row: ProjectSummary): void => {
     void navigate({
@@ -148,6 +133,34 @@ export function YourProjects(props: {
     return props.downloads.filter((download) => !listed.has(download.root));
   };
 
+  // Counted by an IntersectionObserver rather than by measuring every card
+  // on every scroll event: the browser reports a card only when it crosses
+  // the strip's edge, so a scroll that moves nothing past it costs nothing.
+  // Re-observed when the cards change; the cleanup is the effect's RETURN
+  // value — Solid 2 runs an `onCleanup` here unowned.
+  createEffect(
+    () => ({ box: strip(), count: rows()?.length, pending: pending().length }),
+    ({ box }) => {
+      if (box === undefined) return;
+      const past = new Set<Element>();
+      const observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            const beyond =
+              entry.intersectionRatio < 0.99 &&
+              entry.boundingClientRect.left > (entry.rootBounds?.left ?? 0);
+            if (beyond) past.add(entry.target);
+            else past.delete(entry.target);
+          }
+          setHidden(past.size);
+        },
+        { root: box, threshold: [0.99] },
+      );
+      for (const card of box.children) observer.observe(card);
+      return () => observer.disconnect();
+    },
+  );
+
   /** Each download flies up once, when its card first mounts. */
   const flown = new Set<string>();
   const arrive = (card: HTMLElement, download: PendingDownload): void => {
@@ -170,7 +183,6 @@ export function YourProjects(props: {
           fill: "backwards",
         },
       );
-      measure();
     });
   };
 
@@ -212,7 +224,6 @@ export function YourProjects(props: {
 
   /** Saves a copy: the project as a zip, handed to the browser's downloads. */
   const exportZip = (row: ProjectSummary): void => {
-    setMenu("");
     void exportProjectZip(services, row.root);
   };
 
@@ -291,7 +302,6 @@ export function YourProjects(props: {
             ref={setStrip}
             data-projects={sorted().length}
             class="scrollbar-subtle flex snap-x gap-4 overflow-x-auto pb-2"
-            onScroll={measure}
           >
             <For each={pending()}>
               {(download) => (
@@ -394,88 +404,67 @@ export function YourProjects(props: {
                         the whole of the space otherwise. */}
                     <div class="mt-auto flex items-center gap-2 pt-4">
                       <Button
-                        variant="secondary"
-                        class="h-auto! flex-1 justify-between rounded-2xl! p-[15px]! text-body! leading-6! text-brand!"
+                        variant="accent"
+                        size="lg"
+                        class="flex-1 justify-between"
                         onClick={() => open(row)}
                       >
                         {t("Open Project")}
                         <ArrowRight size={16} aria-hidden="true" />
                       </Button>
-                      <Popover
+                      <Menu
                         label={t("Project actions")}
                         side="bottom"
                         align="end"
-                        class="w-52 p-1"
-                        open={menu() === row.root}
-                        onOpenChange={(open) => setMenu(open ? row.root : "")}
+                        class="w-52"
                         trigger={
                           <IconButton
-                            size="md"
-                            // A 56px touch target: a 24px icon, 16px all round
-                            // (15px padding inside the 1px border), the same
-                            // height and radius as Open Project beside it.
-                            class="size-14! rounded-2xl! p-[15px]"
+                            size="lg"
                             label={t("More actions for {name}", { name: row.name })}
                             icon={<MoreVertical size={24} />}
                           />
                         }
                       >
-                        <button
-                          type="button"
-                          class={item}
-                          onClick={() => {
-                            setMenu("");
-                            open(row);
-                          }}
+                        <MenuItem
+                          icon={<FolderOpen size={14} aria-hidden="true" />}
+                          onSelect={() => open(row)}
                         >
-                          <FolderOpen size={14} aria-hidden="true" />
                           {t("Open")}
-                        </button>
+                        </MenuItem>
                         {/* The fixture is an in-memory copy of the seeded
                             folder: there is nothing on disk to rename, zip,
                             share or delete, so it offers Open and nothing
                             that would fail. */}
                         <Show when={!row.fixture}>
-                          <button
-                            type="button"
-                            class={item}
-                            onClick={() => {
-                              setMenu("");
-                              share(row);
-                            }}
+                          <MenuItem
+                            icon={<Share2 size={14} aria-hidden="true" />}
+                            onSelect={() => share(row)}
                           >
-                            <Share2 size={14} aria-hidden="true" />
                             {t("Share…")}
-                          </button>
-                          <button
-                            type="button"
-                            class={item}
-                            onClick={() => {
-                              setMenu("");
+                          </MenuItem>
+                          <MenuItem
+                            icon={<PencilLine size={14} aria-hidden="true" />}
+                            onSelect={() => {
                               setNewName(row.name);
                               setRenaming(row);
                             }}
                           >
-                            <PencilLine size={14} aria-hidden="true" />
                             {t("Rename…")}
-                          </button>
-                          <button type="button" class={item} onClick={() => exportZip(row)}>
-                            <Download size={14} aria-hidden="true" />
-                            {t("Export as zip")}
-                          </button>
-                          <button
-                            type="button"
-                            class={item}
-                            onClick={() => {
-                              setMenu("");
-                              setDeleting(row);
-                            }}
+                          </MenuItem>
+                          <MenuItem
+                            icon={<Download size={14} aria-hidden="true" />}
+                            onSelect={() => exportZip(row)}
                           >
-                            <Trash2 size={14} aria-hidden="true" />
+                            {t("Export as zip")}
+                          </MenuItem>
+                          <MenuItem
+                            icon={<Trash2 size={14} aria-hidden="true" />}
+                            onSelect={() => setDeleting(row)}
+                          >
                             {t("Delete…")}
-                          </button>
+                          </MenuItem>
                         </Show>
-                      </Popover>
+                      </Menu>
                     </div>
                   </Card>
                 </li>
@@ -487,7 +476,10 @@ export function YourProjects(props: {
               size="sm"
               data-testid="projects-more"
               class="absolute end-0 top-1/2 -translate-y-1/2 shadow-medium"
-              onClick={() => strip()?.scrollBy({ left: strip()!.clientWidth, behavior: "smooth" })}
+              onClick={() => {
+                const box = strip();
+                box?.scrollBy({ left: box.clientWidth, behavior: "smooth" });
+              }}
             >
               {t("+{count} more", { count: hidden() })}
             </Button>

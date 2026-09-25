@@ -20,7 +20,6 @@
 import { Effect, Fiber, Stream } from "effect";
 import ArrowDown from "lucide-solid/icons/arrow-down";
 import ArrowUp from "lucide-solid/icons/arrow-up";
-import Check from "lucide-solid/icons/check";
 import ChevronsUpDown from "lucide-solid/icons/chevrons-up-down";
 import Download from "lucide-solid/icons/download";
 import Filter from "lucide-solid/icons/filter";
@@ -47,7 +46,11 @@ import {
   Button,
   Card,
   Input,
-  Popover,
+  Menu,
+  MenuCheckbox,
+  MenuLabel,
+  MenuRadio,
+  MenuSeparator,
   PanelHeader,
   Tooltip,
   VirtualList,
@@ -104,29 +107,6 @@ const sortChoices = (column: Column): readonly (readonly [SortDirection, string]
         ["asc", t("A to Z")],
         ["desc", t("Z to A")],
       ];
-
-/*
- * The header menus: 16px all round, everywhere. An item leads with whatever
- * it has first (a sort arrow, or the region's name), and the heading starts at
- * the same 16px, so the first thing on every line shares one edge.
- */
-const menuHeading =
-  "px-4 pb-1 text-small font-semibold tracking-wide text-on-surface-tertiary uppercase";
-const menuItem =
-  "flex w-full cursor-pointer items-center gap-4 p-4 text-start text-body font-medium text-on-surface-primary hover:bg-surface-secondary";
-
-/**
- * The drawn box beside a visually hidden checkbox, which must come just before
- * it (`peer`): an outline when off, a blue check when on, a ring when focused.
- */
-const CheckBox = () => (
-  <span
-    aria-hidden="true"
-    class="flex size-4 shrink-0 items-center justify-center rounded border-[1.5px] border-on-surface-tertiary text-transparent transition-colors peer-checked:border-brand peer-checked:bg-brand peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-brand peer-focus-visible:ring-offset-1"
-  >
-    <Check size={12} strokeWidth={3} />
-  </span>
-);
 
 /** What one catalogue row is tall, before it has been measured. */
 const ROW_HEIGHT = 57;
@@ -400,6 +380,12 @@ export function WacsProjects(props: {
    * name style, the two filters, the sort — happens HERE, once, and each row
    * receives plain strings.
    */
+  /** Each row's place in the sorted whole, for `aria-rowindex`. */
+  const rowIndex = createMemo(
+    (): ReadonlyMap<string, number> => new Map(sorted().map((entry, at) => [entry.id, at])),
+    { name: "catalogueRowIndex" },
+  );
+
   const rows = createMemo(
     (): readonly CatalogueRow[] => {
       const running = busy();
@@ -430,6 +416,10 @@ export function WacsProjects(props: {
    * The Code column, as wide as the longest code and no wider. Measured once
    * per catalogue in the table's own font: every virtual row is its own grid,
    * so `max-content` would size each row differently.
+   *
+   * Measured at 16px and returned in REM, because the column holds body text
+   * (`text-body`, 1rem): when somebody raises their browser's default font
+   * size, the codes grow, and the column has to grow with them.
    */
   const codeColumn = createMemo(
     () => {
@@ -442,7 +432,7 @@ export function WacsProjects(props: {
       // The header's word and its sort arrow are the floor.
       let widest = context.measureText(t("Code")).width + 16;
       for (const code of codes) widest = Math.max(widest, context.measureText(code).width);
-      return `${String(Math.ceil(widest) + 2)}px`;
+      return `${String((Math.ceil(widest) + 2) / 16)}rem`;
     },
     { name: "catalogueCodeColumn" },
   );
@@ -567,8 +557,15 @@ export function WacsProjects(props: {
           </p>
         </Show>
 
+        {/* A grid with table ROLES, so a screen reader hears a table: the
+            header row and the windowed body are each a rowgroup, and every
+            row says its place in the whole (`aria-rowindex`), since most rows
+            are not in the DOM at any moment. */}
         <Card
           padded={false}
+          role="table"
+          aria-label={t("Projects available on WACS")}
+          aria-rowcount={rows().length + 1}
           class="flex min-h-0 flex-1 flex-col overflow-hidden"
           style={{ "--code-column": codeColumn() }}
         >
@@ -586,9 +583,13 @@ export function WacsProjects(props: {
           {/* The column row, above the scroll pane. Both it and the list
               reserve the scrollbar's gutter (`scrollbar-gutter: stable`),
               scrolling or not, so the columns line up without measuring. */}
-          <div class="scrollbar-subtle shrink-0 overflow-hidden [scrollbar-gutter:stable] border-b border-surface-border bg-surface-secondary">
+          <div
+            role="rowgroup"
+            class="scrollbar-subtle shrink-0 overflow-hidden [scrollbar-gutter:stable] border-b border-surface-border bg-surface-secondary"
+          >
             <div
               role="row"
+              aria-rowindex={1}
               data-catalogue={rows().length}
               class={cx(COLUMNS, "text-on-surface-secondary")}
             >
@@ -598,11 +599,12 @@ export function WacsProjects(props: {
                     {/* The whole cell is the button, so the hover lights the
                         area and not just the word. It opens the column's
                         menu: Sort always, Filter where the column has one. */}
-                    <Popover
+                    <Menu
+                      size="lg"
                       label={t("{column} options", { column: label() })}
                       side="bottom"
                       align="start"
-                      class="w-60 rounded-2xl! px-0! py-4!"
+                      class="w-60"
                       fitViewport
                       triggerClass={
                         // The hover reaches 16px into the 32px gap each side;
@@ -635,81 +637,56 @@ export function WacsProjects(props: {
                         </button>
                       }
                     >
-                      <p class={menuHeading}>{t("Sort")}</p>
+                      <MenuLabel>{t("Sort")}</MenuLabel>
                       <For each={sortChoices(column)}>
                         {([choice, text]) => (
-                          <button
-                            type="button"
-                            class={menuItem}
-                            aria-pressed={sortOf(column) === choice ? "true" : "false"}
-                            onClick={() => {
+                          <MenuRadio
+                            checked={sortOf(column) === choice}
+                            icon={
+                              choice === "asc" ? (
+                                <ArrowUp size={16} aria-hidden="true" class="shrink-0" />
+                              ) : (
+                                <ArrowDown size={16} aria-hidden="true" class="shrink-0" />
+                              )
+                            }
+                            onSelect={() => {
                               setColumn(column);
                               setDirection(choice);
-                              setMenuFor("");
                             }}
                           >
-                            {choice === "asc" ? (
-                              <ArrowUp size={16} aria-hidden="true" class="shrink-0" />
-                            ) : (
-                              <ArrowDown size={16} aria-hidden="true" class="shrink-0" />
-                            )}
-                            <span class="min-w-0 flex-1">{text}</span>
-                            <Show when={sortOf(column) === choice}>
-                              <Check size={16} aria-hidden="true" class="shrink-0 text-brand" />
-                            </Show>
-                          </button>
+                            {text}
+                          </MenuRadio>
                         )}
                       </For>
                       <Show when={column === "region" && regions().length > 0}>
-                        <p class={cx(menuHeading, "mt-2 border-t border-surface-border pt-4")}>
-                          {t("Filter")}
-                        </p>
-                        <div>
-                          <For each={regions()}>
-                            {([name, count]) => (
-                              <label class={menuItem}>
-                                <RegionIcon region={name} />
-                                <span class="min-w-0 flex-1 truncate">
-                                  {name}
-                                  <span class="ms-2 text-smallest font-semibold tabular-nums text-on-surface-secondary">
-                                    {count}
-                                  </span>
-                                </span>
-                                {/* The real input stays, visually hidden, for the
-                                    keyboard and screen readers; the box beside it
-                                    is drawn: an outline when off, a blue check
-                                    when on, and the focus ring when focused. */}
-                                <input
-                                  type="checkbox"
-                                  class="peer sr-only"
-                                  checked={regionFilter().has(name)}
-                                  onChange={(event) =>
-                                    toggleRegion(name, event.currentTarget.checked)
-                                  }
-                                />
-                                <CheckBox />
-                              </label>
-                            )}
-                          </For>
-                          <label class={menuItem}>
-                            <RegionIcon region="" />
-                            <span class="min-w-0 flex-1 truncate">
-                              {t("All regions")}
+                        <MenuSeparator />
+                        <MenuLabel>{t("Filter")}</MenuLabel>
+                        <For each={regions()}>
+                          {([name, count]) => (
+                            <MenuCheckbox
+                              checked={regionFilter().has(name)}
+                              icon={<RegionIcon region={name} />}
+                              onChange={(on) => toggleRegion(name, on)}
+                            >
+                              {name}
                               <span class="ms-2 text-smallest font-semibold tabular-nums text-on-surface-secondary">
-                                {(entries() ?? []).length}
+                                {count}
                               </span>
-                            </span>
-                            <input
-                              type="checkbox"
-                              class="peer sr-only"
-                              checked={regionFilter().size === 0}
-                              onChange={() => setRegionFilter(new Set<string>())}
-                            />
-                            <CheckBox />
-                          </label>
-                        </div>
+                            </MenuCheckbox>
+                          )}
+                        </For>
+                        <MenuCheckbox
+                          checked={regionFilter().size === 0}
+                          icon={<RegionIcon region="" />}
+                          onChange={() => setRegionFilter(new Set<string>())}
+                        >
+                          {t("All regions")}
+                          <span class="ms-2 text-smallest font-semibold tabular-nums text-on-surface-secondary">
+                            {(entries() ?? []).length}
+                          </span>
+                        </MenuCheckbox>
                       </Show>
-                    </Popover>
+                    </Menu>
                   </div>
                 )}
               </For>
@@ -719,6 +696,7 @@ export function WacsProjects(props: {
             </div>
           </div>
           <VirtualList<CatalogueRow>
+            role="rowgroup"
             class="scrollbar-subtle min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]"
             // No section at all when nothing matches: the list shows `empty` only
             // then, and a section with zero rows would draw nothing instead.
@@ -749,6 +727,7 @@ export function WacsProjects(props: {
               return (
                 <div
                   role="row"
+                  aria-rowindex={(rowIndex().get(entry().id) ?? 0) + 2}
                   data-entry={entry().id}
                   class={cx(
                     COLUMNS,
@@ -774,18 +753,26 @@ export function WacsProjects(props: {
                     <Show
                       when={item().refusal === ""}
                       fallback={
+                        // Focusable although it does nothing, so a keyboard
+                        // reaches the tooltip that says why: `aria-disabled`,
+                        // not `disabled`, which would take it out of the tab
+                        // order along with its reason.
                         <Tooltip label={item().refusal}>
-                          <span class="inline-flex cursor-not-allowed items-center gap-1 text-on-surface-tertiary opacity-60">
-                            <Download size={16} aria-hidden="true" />
+                          <Button
+                            variant="link"
+                            size="flush"
+                            aria-disabled="true"
+                            class="opacity-60"
+                            icon={<Download size={16} aria-hidden="true" />}
+                          >
                             {t("Download")}
-                          </span>
+                          </Button>
                         </Tooltip>
                       }
                     >
                       <Button
-                        size="sm"
-                        variant="tertiary"
-                        class="h-auto px-0 text-body! text-brand!"
+                        variant="link"
+                        size="flush"
                         loading={item().downloading}
                         icon={<Download size={16} aria-hidden="true" />}
                         onClick={(event) =>

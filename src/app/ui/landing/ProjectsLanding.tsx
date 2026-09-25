@@ -2,9 +2,9 @@
  * The projects page: what is already on this device, then what is available
  * on WACS to download.
  *
- * Two sections, one page. There is no longer a separate find screen
- * (`/start/find` now lands here), and the add-a-project cards are gone for
- * now — their functionality is moving elsewhere (`ImportHub` is kept, unused).
+ * Two sections, one page. There is no separate find screen, and the
+ * add-a-project cards are gone:
+ * importing is `ImportHub`, as buttons under the table and as the rail's menu.
  *
  * The state here is `reload`, a counter a download raises and the projects
  * list reads, and `downloads`: every download the WACS table started, which

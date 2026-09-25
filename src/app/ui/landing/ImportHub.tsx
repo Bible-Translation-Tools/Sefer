@@ -1,6 +1,6 @@
 /**
- * The import hub: the three ways a project gets onto this device, as three
- * cards that say up front which of them this host can actually do.
+ * The import hub: the ways a project gets onto this device — a zip, a folder,
+ * a clone — as the projects page's buttons or the rail's menu.
  *
  * The rule the whole component is built around: a source the host cannot serve
  * is rendered DISABLED with the reason in place of its explainer, never hidden
@@ -44,7 +44,7 @@ import { wacsUrlFor } from "../../endpoints";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import type { Domain } from "../../services";
-import { Button, Card, Dialog, Input, cx, toasts } from "../primitives";
+import { Button, Dialog, Input, Menu, MenuItem, cx, toasts } from "../primitives";
 import { rememberProject } from "./summaries";
 
 /** Each step the pipeline runs, in order. The dialog draws all four. */
@@ -72,25 +72,17 @@ interface Progress {
   readonly detail?: string;
 }
 
-interface SourceCard {
-  readonly id: string;
-  readonly icon: JSX.Element;
-  readonly title: string;
-  /** The one-line explainer — or, when unavailable, the reason. */
-  readonly explainer: string;
-  readonly action: string;
-  readonly available: boolean;
-  readonly onRun: () => void;
-}
-
 export function ImportHub(props: {
   readonly onImported: () => void;
   /**
-   * `cards` (the default) is the three explained sources. `buttons` is just
-   * "Import zip" and "Import folder", each going straight to the system
-   * picker — the same pipeline and progress dialog, less chrome.
+   * `buttons` (the default) is "Import zip" and "Import folder" as the
+   * projects page's two large buttons, each going straight to the system
+   * picker. `menu` is the same two plus "Clone from cloud", opened from
+   * `trigger` — the rail's Import. Same pipeline and progress dialog either way.
    */
-  readonly variant?: "cards" | "buttons";
+  readonly variant?: "buttons" | "menu";
+  /** The menu's trigger; `menu` only. */
+  readonly trigger?: JSX.Element;
 }) {
   const shell = useShell();
   const { services } = shell;
@@ -405,123 +397,67 @@ export function ImportHub(props: {
   /** True when the host reads a real path; false when the browser must copy. */
   const nativeFolder = capabilities.nativeDisk && capabilities.dialogs;
 
-  const folderExplainer = (): string =>
-    nativeFolder
-      ? t("Copy a Burrito, Resource Container or folder of USFM into Sefer.")
-      : t(
-          "Choose a folder and the browser copies its files into Sefer's own storage — the files on your disk are left alone.",
-        );
-
-  const cloudExplainer = (): string => {
-    if (endpoint === null)
-      return t("No WACS endpoint: set one in Settings, or VITE_SEFER_WACS_WEB_URL at build.");
-    return t("Clone a repository you can write from {host}.", { host: endpoint });
-  };
-
-  const sources = (): readonly SourceCard[] => [
-    {
-      id: "zip",
-      icon: <FileArchive size={18} aria-hidden="true" />,
-      title: t("Import zip"),
-      explainer: t(
-        "A .zip of a Burrito, a Resource Container or a folder of USFM. It is read here, in the page.",
-      ),
-      action: t("Choose file"),
-      available: true,
-      onRun: () => importPicked(t("Import from a zip"), "zip"),
-    },
-    {
-      id: "folder",
-      icon: <FolderOpen size={18} aria-hidden="true" />,
-      title: t("Open folder"),
-      explainer: folderExplainer(),
-      action: t("Choose folder"),
-      available: true,
-      onRun: () =>
-        nativeFolder ? importFolder() : importPicked(t("Import from a folder"), "folder"),
-    },
-    {
-      id: "cloud",
-      icon: <CloudDownload size={18} aria-hidden="true" />,
-      title: t("Clone from cloud"),
-      explainer: cloudExplainer(),
-      action: t("Browse repositories"),
-      available: endpoint !== null,
-      onRun: openClone,
-    },
-  ];
-
   const pick = (source: "zip" | "folder"): void => {
     if (source === "zip") importPicked(t("Import from a zip"), "zip");
     else if (nativeFolder) importFolder();
     else importPicked(t("Import from a folder"), "folder");
   };
-  // 56px tall with the 1px border, a 16px radius and body text: the large
-  // button of the projects page.
-  const bigButton = "h-auto! rounded-2xl! p-[15px]! px-[31px]! text-body! leading-6! text-brand!";
 
   return (
     <>
-      <Show when={props.variant === "buttons"}>
-        <div class="flex flex-wrap items-center justify-center gap-4">
-          <Button
-            variant="secondary"
+      <Show
+        when={props.variant === "menu"}
+        fallback={
+          <div class="flex flex-wrap items-center justify-center gap-4">
+            <Button
+              variant="accent"
+              size="lg"
+              data-testid="import-zip"
+              icon={<FileArchive size={24} aria-hidden="true" />}
+              onClick={() => pick("zip")}
+            >
+              {t("Import zip")}
+            </Button>
+            <Button
+              variant="accent"
+              size="lg"
+              data-testid="import-folder"
+              icon={<FolderOpen size={24} aria-hidden="true" />}
+              onClick={() => pick("folder")}
+            >
+              {t("Import folder")}
+            </Button>
+          </div>
+        }
+      >
+        <Menu label={t("Import")} side="right" align="end" class="w-56" trigger={props.trigger}>
+          <MenuItem
             data-testid="import-zip"
-            class={bigButton}
-            icon={<FileArchive size={24} aria-hidden="true" />}
-            onClick={() => pick("zip")}
+            icon={<FileArchive size={16} aria-hidden="true" />}
+            onSelect={() => pick("zip")}
           >
             {t("Import zip")}
-          </Button>
-          <Button
-            variant="secondary"
+          </MenuItem>
+          <MenuItem
             data-testid="import-folder"
-            class={bigButton}
-            icon={<FolderOpen size={24} aria-hidden="true" />}
-            onClick={() => pick("folder")}
+            icon={<FolderOpen size={16} aria-hidden="true" />}
+            onSelect={() => pick("folder")}
           >
             {t("Import folder")}
-          </Button>
-        </div>
+          </MenuItem>
+          {/* Disabled with the reason, never hidden: a source this build
+              cannot serve says so where it would have been. */}
+          <MenuItem
+            data-testid="import-cloud"
+            icon={<CloudDownload size={16} aria-hidden="true" />}
+            disabled={endpoint === null}
+            title={endpoint === null ? t("No WACS server is set for this build.") : undefined}
+            onSelect={openClone}
+          >
+            {t("Clone from cloud")}
+          </MenuItem>
+        </Menu>
       </Show>
-      <ul
-        class={cx(
-          "grid gap-3 sm:grid-cols-2 lg:grid-cols-3",
-          props.variant === "buttons" && "hidden",
-        )}
-        data-import-hub
-      >
-        <For each={sources()}>
-          {(source) => (
-            <li class="contents">
-              <Card
-                class="flex flex-col gap-2"
-                data-source={source.id}
-                data-available={String(source.available)}
-              >
-                <div class="flex items-center gap-2">
-                  <span
-                    class="flex size-8 items-center justify-center rounded-md bg-surface-secondary text-on-surface-secondary"
-                    aria-hidden="true"
-                  >
-                    {source.icon}
-                  </span>
-                  <h3 class="text-small font-semibold text-on-surface-primary">{source.title}</h3>
-                </div>
-                <p class="min-h-10 text-smallest text-on-surface-tertiary">{source.explainer}</p>
-                <Button
-                  size="sm"
-                  class="mt-auto self-start"
-                  disabled={!source.available}
-                  onClick={source.onRun}
-                >
-                  {source.action}
-                </Button>
-              </Card>
-            </li>
-          )}
-        </For>
-      </ul>
 
       <Dialog
         open={cloneOpen()}
