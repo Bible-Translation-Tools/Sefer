@@ -1365,6 +1365,8 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     navigate,
     openProject,
     setPaletteOpen: shell.setPaletteOpen,
+    sidebarOpen: shell.sidebarOpen,
+    setSidebarOpen: shell.setSidebarOpen,
     aim,
     report,
     changed,

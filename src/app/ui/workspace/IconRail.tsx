@@ -25,6 +25,7 @@ import Ellipsis from "lucide-solid/icons/ellipsis";
 import GitCompare from "lucide-solid/icons/git-compare";
 import HistoryIcon from "lucide-solid/icons/history";
 import ListChecks from "lucide-solid/icons/list-checks";
+import PanelLeft from "lucide-solid/icons/panel-left";
 import PenLine from "lucide-solid/icons/pen-line";
 import SettingsIcon from "lucide-solid/icons/settings";
 import TypeIcon from "lucide-solid/icons/type";
@@ -147,6 +148,33 @@ export function IconRail() {
   const within = (): string => path().replace(/^\/project\/[^/]+/, "");
   const at = (prefix: string): "true" | "false" => (within().startsWith(prefix) ? "true" : "false");
   const open = (): boolean => shell.project() !== undefined;
+  /** Is the reader looking at a project, or at one of the full-page screens? */
+  const inProject = (): boolean => path().startsWith("/project/");
+
+  /**
+   * The Panel tile does two jobs, and which one depends on where you are.
+   *
+   * On a project route it is the project panel's show/hide (`Mod-b` too). On
+   * a full-page screen — settings, the projects page — there is no panel to
+   * toggle, and what a reader wants from it is the way BACK: it opens the
+   * panel and returns to the book they were in. A hotkey cannot be the only
+   * way to bring a hidden panel back, and the panel holds the way to all
+   * projects.
+   */
+  const togglePanel = (): void => {
+    const project = shell.project();
+    if (project !== undefined && !inProject()) {
+      shell.setSidebarOpen(true);
+      void navigate(shell.landingTarget(project.root));
+      return;
+    }
+    shell.setSidebarOpen(!shell.sidebarOpen());
+  };
+  const panelLabel = (): string => {
+    if (shell.project() !== undefined && !inProject()) return t("Back to the book");
+    return shell.sidebarShowing() ? t("Hide the project panel") : t("Show the project panel");
+  };
+
   /** Refine is the text itself: any project route that is not another mode. */
   const refining = (): "true" | "false" =>
     path().startsWith("/project/") && !within().startsWith("/terms") ? "true" : "false";
@@ -177,6 +205,16 @@ export function IconRail() {
           }}
         />
       </span>
+
+      <RailButton
+        label={t("Panel")}
+        title={panelLabel()}
+        testId="rail-panel"
+        icon={<PanelLeft size={20} />}
+        pressed={inProject() && shell.sidebarShowing() ? "true" : "false"}
+        disabled={!open()}
+        onClick={togglePanel}
+      />
 
       <div class="my-auto flex w-full flex-col items-center">
         <RailButton label={t("Form")} testId="rail-form" icon={<PenLine size={20} />} disabled />

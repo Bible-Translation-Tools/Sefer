@@ -100,6 +100,8 @@ export interface ShellBridge {
   readonly slug: () => string;
   readonly openProject: (root: string) => Promise<void>;
   readonly setPaletteOpen: (open: boolean) => void;
+  readonly sidebarOpen: () => boolean;
+  readonly setSidebarOpen: (open: boolean) => void;
   /** Shown in the status bar; the shell's one place for a transient message. */
   /**
    * Scroll the editor to an offset and flash it — the door `shell.aim`
@@ -375,6 +377,17 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       run: () => {
         bridge.setPaletteOpen(true);
       },
+    }),
+
+    // The project panel's show/hide. The rail's panel tile went in the
+    // designer's pass and has no new home yet, and `workspace.sidebarOpen`
+    // persists — so without this a panel once hidden could never come back,
+    // and with it the panel's project button, the way back to all projects.
+    registerCommand({
+      id: "workspace.togglePanel",
+      title: t("Show or hide the project panel"),
+      keys: "Mod-b",
+      run: () => bridge.setSidebarOpen(!bridge.sidebarOpen()),
     }),
 
     registerCommand({
