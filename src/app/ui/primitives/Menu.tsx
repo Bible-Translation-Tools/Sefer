@@ -1,9 +1,10 @@
 /**
  * The menu: a list of actions or choices that opens from a trigger.
  *
- * Built on our `Popover`, so corvu supplies the floating, the outside click,
- * `Esc` and focus returning to the trigger; the first row takes focus on open
- * through `Popover`'s `initialFocus`. What a menu adds over a popover is
+ * Built on our `Popover`, so corvu supplies the floating, the outside click
+ * and `Esc`; the first row takes focus on open through `Popover`'s
+ * `initialFocus`. Focus does NOT go back to the trigger on close yet — see the
+ * note in `Popover.tsx`. What a menu adds over a popover is
  * the keyboard a menu promises: focus lands on the first item, the arrow keys
  * move between items (wrapping), Home and End jump to the ends, and every row
  * says what it is — `menuitem`, `menuitemradio` or `menuitemcheckbox`.

@@ -81,12 +81,24 @@ const pickFiles = (attributes: Readonly<Record<string, string>>): Promise<readon
     // `cancel` is not universal, so the picker also resolves on the next focus
     // after `change` never fired: a dialog nobody completed must not hang the
     // caller forever.
+    let done = false;
     const finish = (files: readonly File[]): void => {
+      if (done) return;
+      done = true;
+      globalThis.removeEventListener("focus", focused);
       input.remove();
       resolve(files);
     };
+    // The window gets focus back when the dialog closes, either way. `change`
+    // can land a moment after that focus, so give it a beat before deciding
+    // nothing was chosen. Without this a browser that sends no `cancel` left
+    // the import's "Selecting the source…" dialog up for good, over the rail.
+    const focused = (): void => {
+      setTimeout(() => finish([...(input.files ?? [])]), 500);
+    };
     input.addEventListener("change", () => finish([...(input.files ?? [])]), { once: true });
     input.addEventListener("cancel", () => finish([]), { once: true });
+    globalThis.addEventListener("focus", focused);
     document.body.append(input);
     input.click();
   });

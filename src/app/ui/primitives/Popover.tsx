@@ -60,35 +60,27 @@ export interface PopoverProps {
   readonly initialFocus?: string;
 }
 
-/** What in the trigger can hold focus: the caller's own button, not our wrapper. */
-const focusableIn = (wrapper: HTMLElement | undefined): HTMLElement | undefined =>
-  wrapper?.querySelector<HTMLElement>("button, a[href], input, [tabindex]") ?? undefined;
-
 export function Popover(props: PopoverProps) {
-  let trigger: HTMLElement | undefined;
-  let content: HTMLElement | undefined;
   return (
     <CorvuPopover
       open={props.open}
       onOpenChange={props.onOpenChange}
       onInitialFocus={(event) => {
+        const panel = event.target instanceof HTMLElement ? event.target : undefined;
         const first =
           props.initialFocus === undefined
             ? undefined
-            : content?.querySelector<HTMLElement>(props.initialFocus);
+            : panel?.querySelector<HTMLElement>(props.initialFocus);
         if (first === undefined || first === null) return;
         event.preventDefault();
         first.focus();
       }}
-      // corvu gives focus back to the TRIGGER, which here is the `span`
-      // wrapping the caller's button and cannot hold focus — so without this
-      // `Esc` left focus nowhere. Hand it to the button inside instead.
-      onFinalFocus={(event) => {
-        const target = focusableIn(trigger);
-        if (target === undefined) return;
-        event.preventDefault();
-        target.focus();
-      }}
+      // Closing leaves focus where corvu puts it: its wrapper `span`, which
+      // cannot hold it, so `Esc` drops focus to the page. Handing it to the
+      // button inside needs a stable element, and there is none — the trigger
+      // is a JSX getter corvu re-reads, so the whole subtree is new by then,
+      // and a `ref` on corvu's parts displaced corvu's own and stopped every
+      // popover opening a second time. A known gap; see services.md, UI layer.
       placement={placementOf(props.side ?? "bottom", props.align ?? "center")}
       floatingOptions={{
         offset: 8,
@@ -97,16 +89,11 @@ export function Popover(props: PopoverProps) {
         ...(props.fitViewport === true ? { size: { fitViewPort: true, padding: 8 } } : {}),
       }}
     >
-      <CorvuPopover.Trigger
-        as="span"
-        ref={(element: HTMLElement) => (trigger = element)}
-        class={cx("inline-flex", props.triggerClass)}
-      >
+      <CorvuPopover.Trigger as="span" class={cx("inline-flex", props.triggerClass)}>
         {props.trigger}
       </CorvuPopover.Trigger>
       <CorvuPopover.Portal>
         <CorvuPopover.Content
-          ref={(element: HTMLElement) => (content = element)}
           aria-label={props.label}
           class={cx(
             "z-40 border border-surface-border bg-surface-primary text-small",

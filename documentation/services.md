@@ -592,11 +592,11 @@ Composed exactly once (`composeApplication`), with services reached through `use
 
 ### Overview
 
-Tailwind over semantic tokens, a primitives inventory, and corvu only inside `primitives/`. Sizes own radius and padding, so a look a primitive lacks is a size or variant added to it, never a `!` override from a caller; text sizes come from the type scale, and a width that holds text is rem. `Menu` (built on `Popover`: roles, arrow keys, focus on open and back on close) is the one menu. → [ui](architecture/ui.md), [design surface](architecture/design.md), [merging designer code](../agents/skills/merging-designer-code/SKILL.md)
+Tailwind over semantic tokens, a primitives inventory, and corvu only inside `primitives/`. Sizes own radius and padding, so a look a primitive lacks is a size or variant added to it, never a `!` override from a caller; text sizes come from the type scale, and a width that holds text is rem. `Menu` (built on `Popover`: roles, arrow keys, focus on the first row on open) is the one menu. → [ui](architecture/ui.md), [design surface](architecture/design.md), [merging designer code](../agents/skills/merging-designer-code/SKILL.md)
 
 ### Constraints and known bugs
 
-- None known.
+- Closing a popover or menu leaves focus on the page, not on the button that opened it. corvu hands focus to its wrapper `span`, and the trigger subtree is re-created on close, so there is no stable element to return to; a `ref` on corvu's parts made every popover refuse to open a second time (2026-09-25). Fixing it wants the trigger resolved once without upsetting corvu, or corvu's `finalFocusEl` fed from a stable element.
 
 ### Ideas / future
 
