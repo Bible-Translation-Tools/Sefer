@@ -18,6 +18,7 @@ export { IconButton } from "./IconButton";
 export { FilterList } from "./FilterList";
 export { Input } from "./Input";
 export { Kbd } from "./Kbd";
+export { Menu, MenuCheckbox, MenuItem, MenuLabel, MenuRadio, MenuSeparator } from "./Menu";
 export { Popover } from "./Popover";
 export { Resizable } from "./Resizable";
 export { SegmentedControl } from "./SegmentedControl";

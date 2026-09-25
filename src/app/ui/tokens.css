@@ -75,6 +75,13 @@
   --neutral-95: #f2f2f2;
   --neutral-100: #ffffff;
 
+  /* Slate: the blue-grey of the projects page and the rail, from the
+     designer's mockups. A ramp like the others, so the semantic layer below
+     names a step and never a hex. */
+  --slate-20: #0f2f4c;
+  --slate-45: #516b86;
+  --slate-97: #f4f8fb;
+
   --error-20: #611a16;
   --error-30: #922821;
   --error-40: #c33620;
@@ -118,11 +125,11 @@
   --surface-secondary: var(--neutral-95);
   --surface-tertiary: var(--neutral-90);
   /* The app background, behind every screen (the shell root in _app.tsx). */
-  --surface-canvas: #f4f8fb;
+  --surface-canvas: var(--slate-97);
   --surface-border: var(--neutral-90);
   --surface-overlay: rgba(31, 31, 31, 0.6);
   --on-surface-primary: var(--neutral-5);
-  --on-surface-secondary: #516b86;
+  --on-surface-secondary: var(--slate-45);
   --on-surface-tertiary: var(--neutral-60);
 
   --surface-error: var(--error-95);
@@ -153,8 +160,8 @@
   /* The inverted surface: a dark column whatever the theme, with white on it.
      The icon rail is the first user. Active is the brand blue, held at the
      light-theme shade in both themes so white text keeps its contrast. */
-  --surface-invert: #0f2f4c;
-  --surface-invert-hover: color-mix(in srgb, #0f2f4c, white 12%);
+  --surface-invert: var(--slate-20);
+  --surface-invert-hover: color-mix(in srgb, var(--slate-20), white 12%);
   --surface-invert-active: var(--brand-40);
   --on-surface-invert: var(--neutral-100);
 
@@ -168,7 +175,7 @@
   --button-tertiary-surface-hover: var(--neutral-95);
   --button-tertiary-on-surface: var(--neutral-20);
 
-  --kbd-surface: #f4f8fb;
+  --kbd-surface: var(--slate-97);
   --kbd-on-surface: rgba(15, 47, 76, 0.8);
   --kbd-border: var(--neutral-90);
 
@@ -347,6 +354,9 @@
   --text-body: 1rem;
   --text-small: 0.875rem;
   --text-smallest: 0.75rem;
+  /* The rail's tile caption: the one size below smallest, set tight. */
+  --text-caption: 0.6875rem;
+  --text-caption--line-height: 0.75rem;
 
   /* Our radii REPLACE Tailwind's, so `rounded-lg` is the product's 12px and
      not the framework's 8px. The card radius the mockups use is lg/xl. */

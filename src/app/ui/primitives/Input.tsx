@@ -18,17 +18,17 @@ export type InputSize = "sm" | "md" | "lg";
 
 const field = variants({
   base: [
-    "w-full rounded-md border border-surface-border bg-surface-primary",
+    "w-full border border-surface-border bg-surface-primary",
     "text-on-surface-primary placeholder:text-on-surface-tertiary",
     "transition-colors hover:border-brand/40 focus:border-brand",
   ].join(" "),
   variants: {
     size: {
-      sm: "h-7 text-smallest",
-      md: "h-9 text-small",
+      sm: "h-7 rounded-md text-smallest",
+      md: "h-9 rounded-md text-small",
       // The page-level search: 56px tall — the height of the large buttons
       // (16px text with 16px padding) — a 16px radius, body text.
-      lg: "h-14 rounded-2xl! text-body",
+      lg: "h-14 rounded-xl text-body",
     },
   },
   defaults: { size: "md" },
