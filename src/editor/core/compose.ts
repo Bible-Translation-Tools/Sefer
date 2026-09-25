@@ -227,7 +227,13 @@ const traced =
     }
   };
 
-export function usfmKeys(): readonly KeyBinding[] {
+/**
+ * The caret's motion keys over the stops (`stops.ts`): arrows, Home/End, word
+ * jumps, Shift-extend. The canonical editor's, and a satellite's too — a
+ * surface over part of a book moves exactly as the book does, and its range
+ * then pulls the result in (`recipes/satellite.ts`).
+ */
+export function motionKeys(): readonly KeyBinding[] {
   const move = (right: boolean) =>
     traced("moveCaret", moveCaret(structureAt, right, undefined, PAINT_PORT));
   const extend = (right: boolean) =>
@@ -236,9 +242,6 @@ export function usfmKeys(): readonly KeyBinding[] {
     traced("caretLineBoundary", caretLineBoundary(structureAt, end, PAINT_PORT));
   const byWord = (right: boolean) =>
     traced("moveCaretByWord", moveCaretByWord(structureAt, right, PAINT_PORT));
-  const backspace = () =>
-    traced("guardedBackspace", guardedBackspace(structureAt, planAt, PAINT_PORT));
-  const del = () => traced("guardedDelete", guardedDelete(structureAt, planAt, PAINT_PORT));
   return [
     { key: "ArrowLeft", run: move(false) },
     { key: "ArrowRight", run: move(true) },
@@ -250,6 +253,15 @@ export function usfmKeys(): readonly KeyBinding[] {
     { key: "Mod-ArrowRight", run: boundary(true) },
     { key: "Alt-ArrowLeft", run: byWord(false) },
     { key: "Alt-ArrowRight", run: byWord(true) },
+  ];
+}
+
+export function usfmKeys(): readonly KeyBinding[] {
+  const backspace = () =>
+    traced("guardedBackspace", guardedBackspace(structureAt, planAt, PAINT_PORT));
+  const del = () => traced("guardedDelete", guardedDelete(structureAt, planAt, PAINT_PORT));
+  return [
+    ...motionKeys(),
     { key: "Enter", run: traced("guardedEnter", guardedEnter(structureAt, planAt)) },
     { key: "Backspace", run: backspace() },
     {

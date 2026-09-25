@@ -29,6 +29,7 @@ import {
   undoDepth,
 } from "@codemirror/commands";
 import {
+  Annotation,
   EditorState,
   Prec,
   StateEffect,
@@ -135,15 +136,27 @@ export interface EditorBookOptions {
 }
 
 /**
- * The origin a view-driven transaction claims.
+ * The origin an edit was committed under, in its OWN annotation.
  *
- * CodeMirror's `userEvent` is the editor's own vocabulary ("input.type",
- * "delete.backward", "undo"), and `apply` writes ours into it as
- * `input.<origin>`. Stripping the `input.` prefix recovers the origin an
- * `apply` caller named and leaves CodeMirror's other events as they are, which
- * is what a receipt should say about a keystroke.
+ * It used to ride in `userEvent` as `input.<origin>`, and that cost a
+ * satellite its undo granularity: CodeMirror's history joins only
+ * `input.type`/`delete` events made within half a second of each other, so
+ * every character typed in an excerpt, committed as `input.find-excerpt`, was
+ * an undo step of its own. A surface's edit is now committed with the
+ * gesture's own `userEvent` and the origin beside it, and typing in an excerpt
+ * undoes a word at a time, as it does in the book.
+ */
+const originAnnotation = Annotation.define<Origin>();
+
+/**
+ * The origin a view-driven transaction claims: the annotation when `apply` or
+ * `applyFrom` wrote one; otherwise CodeMirror's own `userEvent` ("input.type",
+ * "delete.backward", "undo") with any `input.` prefix stripped, which is what
+ * a receipt should say about a keystroke.
  */
 const originOf = (tr: Transaction): Origin => {
+  const named = tr.annotation(originAnnotation);
+  if (named !== undefined) return named;
   const event = tr.annotation(Transaction.userEvent);
   if (event === undefined) return "keyboard";
   return event.startsWith("input.") ? event.slice("input.".length) : event;
@@ -257,8 +270,14 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
     });
   };
 
-  const specFor = (changes: readonly Change[], origin: Origin, trust: Trust) => {
+  /**
+   * `event` is the gesture's own `userEvent` when a surface reported one
+   * (`SurfaceTerms.event`); without it the edit is `input.<origin>`, which no
+   * history event joins — right for a fix, a format or a project operation.
+   */
+  const specFor = (changes: readonly Change[], origin: Origin, trust: Trust, event?: string) => {
     const annotations = [
+      originAnnotation.of(origin),
       ...(trust.trusted ? [trusted.of(trust.by)] : []),
       // A project-wide operation is ONE undo step per book, whatever it did to
       // this book's text: `isolateHistory` stops CodeMirror from folding it
@@ -271,8 +290,8 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
         to: change.to,
         insert: change.insert,
       })),
-      userEvent: `input.${origin}`,
-      ...(annotations.length === 0 ? {} : { annotations }),
+      userEvent: event ?? `input.${origin}`,
+      annotations,
     };
   };
 
@@ -393,10 +412,7 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
       // Judged as the gesture it was in the surface — a typed key, a paste —
       // so the rules that act on the kind of gesture see it; committed below
       // under the surface's origin, which is what the receipt names.
-      const judged = judge.update({
-        ...specFor(list, origin, UNTRUSTED),
-        ...(terms.event === undefined ? {} : { userEvent: terms.event }),
-      });
+      const judged = judge.update(specFor(list, origin, UNTRUSTED, terms.event));
       if (!judged.docChanged) return Result.fail(refuse(origin, list.length, judge));
       // The phases have run, once, under the surface's terms; what they let
       // through is the edit. It lands on the canonical state unfiltered —
@@ -406,7 +422,13 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
       judging = judge;
       try {
         return commit(
-          { ...specFor([], origin, UNTRUSTED), changes: judged.changes, filter: false },
+          // The gesture's own event on the commit as well as the judgement, so
+          // the book's history joins a satellite's typing like the book's own.
+          {
+            ...specFor([], origin, UNTRUSTED, terms.event),
+            changes: judged.changes,
+            filter: false,
+          },
           origin,
           list.length,
         );

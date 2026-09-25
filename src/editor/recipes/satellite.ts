@@ -13,6 +13,7 @@ import { defaultKeymap } from "@codemirror/commands";
 import {
   EditorState,
   Facet,
+  Prec,
   type Extension,
   StateEffect,
   StateField,
@@ -22,11 +23,14 @@ import { Decoration, type DecorationSet, EditorView, keymap } from "@codemirror/
 
 import { Refusal } from "#core/book/book";
 
+import { settleTheCaretOnALegalPosition } from "../core/caret";
 import { pullSelectionsIntoTheClip } from "../core/clip";
-import { viewLayer } from "../core/compose";
-import { borrowedStructure } from "../core/docStructure";
-import { modeFacet, trusted } from "../core/kernel";
+import { motionKeys, viewLayer } from "../core/compose";
+import { borrowedStructure, structureAt, structureField } from "../core/docStructure";
+import { PAINT_PORT } from "../core/editorState";
+import { isVisual, modeFacet, trusted } from "../core/kernel";
 import { assignment } from "../core/registry";
+import { stopsIn } from "../core/stops";
 import { span } from "../core/timing";
 import { changesOf, fromCanonical, type Funnel, type SurfaceTerms } from "../funnel";
 
@@ -79,6 +83,81 @@ export const satelliteRange = (state: EditorState) => state.field(scope, false) 
 const caretKeptInScope: Extension = EditorState.transactionFilter.of(
   pullSelectionsIntoTheClip(satelliteRange, { trustWaives: false }),
 );
+
+/** A satellite that installed the structure (every editable one does) can be settled. */
+const structured = (state: EditorState): boolean =>
+  state.field(structureField, false) !== undefined;
+
+const settleAsTheBookDoes = settleTheCaretOnALegalPosition(structureAt, PAINT_PORT);
+
+/**
+ * THE BOOK'S SETTLEMENT, over the satellite's own state: the same rule, the
+ * same stops, read under the surface's projection and mode — and then the
+ * range pulls the caret in, so the rule is the book's and the range is
+ * smaller. Before it a satellite had no settlement at all, and its caret
+ * rested where the main editor's never could: before a hidden `\v` at a line
+ * start, one past a paragraph's end.
+ *
+ * A local edit is skipped: it is never applied here (it goes to the Book and
+ * comes home), and its caret is settled when it does.
+ */
+const caretSettled: Extension = EditorState.transactionFilter.of((tr) =>
+  tr.docChanged || !structured(tr.state) ? tr : settleAsTheBookDoes(tr),
+);
+
+/**
+ * A selection the range cut — select-all, a drag past the edge — ends where
+ * the range does, which may be inside hidden markup (the `\v 5 ` a verse line
+ * opens with). Each end the range put there is moved onto the nearest stop
+ * inside the selection, as the caret would be: the edge of the range is the
+ * edge of the document for this surface, and the book's own select-all starts
+ * and ends on what a reader can see as well.
+ */
+const rangeEdgesSettled: Extension = EditorState.transactionFilter.of((tr) => {
+  if (!tr.selection || tr.docChanged || !structured(tr.state) || !isVisual(tr.state)) return tr;
+  const sel = tr.state.selection.main;
+  const win = satelliteRange(tr.state);
+  if (win === null) return tr;
+  // Where the range rule pulls a selection's far end: the range's end, less
+  // the line break a whole-line range closes on.
+  let edge = win.to;
+  if (win.to < tr.state.doc.length)
+    while (edge > win.from && tr.state.doc.sliceString(edge - 1, edge) === "\n") edge--;
+  const lo = Math.min(sel.anchor, sel.head);
+  const hi = Math.max(sel.anchor, sel.head);
+  if (lo > win.from && hi < edge) return tr;
+  const stops = stopsIn(tr.state, structureAt(tr.state), PAINT_PORT);
+  // Inward only, and never past the other end: a caret the book's settlement
+  // sent to a stop OUTSIDE the range (Home on an excerpt's first row settles
+  // back to the paragraph before it) and the range then pulled to its edge is
+  // settled again, toward the inside.
+  const inward = (pos: number, toward: "forward" | "backward", limit: number): number => {
+    if (stops.isStop(pos)) return pos;
+    const settled = stops.settle(pos, toward);
+    const inside =
+      toward === "forward"
+        ? settled >= pos && settled <= limit
+        : settled <= pos && settled >= limit;
+    return inside ? settled : pos;
+  };
+  if (sel.empty) {
+    let at = lo;
+    if (lo <= win.from) at = inward(lo, "forward", edge);
+    else if (hi >= edge) at = inward(hi, "backward", win.from);
+    return at === lo ? tr : [tr, { selection: { anchor: at }, sequential: true }];
+  }
+  const from = lo <= win.from ? inward(lo, "forward", hi) : lo;
+  const to = hi >= edge ? inward(hi, "backward", from) : hi;
+  if (from === lo && to === hi) return tr;
+  const forward = sel.head >= sel.anchor;
+  return [
+    tr,
+    {
+      selection: forward ? { anchor: from, head: to } : { anchor: to, head: from },
+      sequential: true,
+    },
+  ];
+});
 
 /**
  * What this surface shows, for the Book to judge its edit under: its own
@@ -200,10 +279,25 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
     extensions: [
       initialRange.of(opts.range),
       scope,
+      // Transaction filters run LAST-registered first, so these three run
+      // settle → pull into the range → settle what the range cut.
+      rangeEdgesSettled,
       caretKeptInScope,
+      caretSettled,
       borrowedStructure.of(() => opts.host.structure()),
       EditorView.editable.of(opts.editable),
       viewLayer(),
+      // The book's own motion over the stops; a satellite with no structure
+      // (none editable today) keeps CodeMirror's.
+      Prec.high(
+        keymap.of(
+          motionKeys().map((binding) => ({
+            ...binding,
+            run: (target: EditorView) =>
+              structured(target.state) && binding.run !== undefined && binding.run(target),
+          })),
+        ),
+      ),
       keymap.of([
         { key: "Mod-z", run: () => opts.host.undo() },
         { key: "Mod-Shift-z", run: () => opts.host.redo() },

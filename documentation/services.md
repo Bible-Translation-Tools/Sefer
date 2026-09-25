@@ -262,6 +262,7 @@ CodeMirror over an EditorBook: the phases, registry, mapping and plan; one funne
 
 ### Constraints and known bugs
 
+- In headless Chromium and headless Chrome, CodeMirror's `posAtCoords` on the fixture's Psalms answers a position one to three visual lines below the point it is given (master as well as today), so a scripted click, and End (which finds the line's end by coordinates), land low. Not seen in a real window; scripted checks dispatch the selection a click would make instead.
 - Input and accessibility have not been exercised at all: no IME, RTL, screen-reader or keyboard-only evidence, in either mode or any of the three desktop webviews. Only groundwork exists (text direction, bidi isolates).
 
 ### Ideas / future
@@ -276,12 +277,10 @@ CodeMirror over an EditorBook: the phases, registry, mapping and plan; one funne
 
 ### Overview
 
-Editable views over one range of a book that own no text: they submit through the host book's funnel, and the Book judges each edit with its own phases under the satellite's terms (projection, mode, range, gesture) — nothing is trusted, and nothing outside the range is accepted however the edit arrives. This covers the footnote editor (`note-satellite` projection), the excerpt cards in Find and Key terms, and `recipes/satellite.ts`. The read-only reference pane (`recipes/reference.ts`) is deliberately not a satellite. → [editor](architecture/editor.md#satellites-borrow)
+Editable views over one range of a book that own no text: they submit through the host book's funnel, and the Book judges each edit with its own phases under the satellite's terms (projection, mode, range, gesture) — nothing is trusted, and nothing outside the range is accepted however the edit arrives. A satellite settles its caret with the book's own settlement and motion keys, bounded by its range, and its typing undoes in the same steps as the book's. This covers the footnote editor (`note-satellite` projection), the excerpt cards in Find and Key terms, and `recipes/satellite.ts`. The read-only reference pane (`recipes/reference.ts`) is deliberately not a satellite. → [editor](architecture/editor.md#satellites-borrow)
 
 ### Constraints and known bugs
 
-- A satellite has no settlement of its own, so its caret can sit where the main editor's could not (before a hidden `\v` at a line start); what is typed there meets the Book's rules. Select-all in an excerpt starts at its first line's start.
-- Typing in a satellite is one undo step per character: the commit's `userEvent` is `input.<origin>`, which CodeMirror's history never joins.
 - Judging costs a plan and paint index under the surface's projection per edit (~0.3 ms on the fixture), on top of the canonical state's own.
 
 ### Ideas / future
