@@ -53,6 +53,7 @@ import { IncomingPlanCard } from "./IncomingPlanCard";
 import { createNetworkStatus } from "./network";
 import { ProjectCard } from "./ProjectCard";
 import { readSync, type ReadSyncOptions, type SyncFacts } from "./reading";
+import { SharedProjectCard, type SharedProjectActions } from "./SharedProjectCard";
 
 /** A project's folder name, which is what a person calls it. */
 const projectName = (root: string): string => root.slice(root.lastIndexOf("/") + 1);
@@ -88,6 +89,8 @@ export function CloudScreen() {
     name: "lastFetchedAt",
   });
   const [busy, setBusy] = createSignal(false, { name: "syncBusy" });
+  /** The shared-project card's own actions, once it is showing. */
+  let shared: SharedProjectActions | undefined;
   const [phase, setPhase] = createSignal("", { name: "syncPhase" });
   const [problem, setProblem] = createSignal("", { name: "syncProblem" });
   /** A pull is confirmed against the plan the person actually read. */
@@ -450,9 +453,15 @@ export function CloudScreen() {
       case "resolve":
         transfer(action, abortMerge);
         return;
-      case "sign-in":
+      // The shared-project card below does these; the button starts it rather
+      // than being a primary action that does nothing.
       case "attach":
+        shared?.list();
+        return;
       case "publish":
+        shared?.focusName();
+        return;
+      case "sign-in":
       case "compare":
         // Handled by another card or another screen; the narrative says which.
         return;
@@ -504,6 +513,15 @@ export function CloudScreen() {
                   problem={problem()}
                   onRun={() => run(held().primary)}
                 />
+
+                <Show when={held().primary === "attach" || held().primary === "publish"}>
+                  <SharedProjectCard
+                    account={account}
+                    root={shell.project()?.root}
+                    onChanged={() => load(ask())}
+                    actions={(actions) => (shared = actions)}
+                  />
+                </Show>
 
                 <Show when={combining()}>
                   {(replay) => (

@@ -7,3 +7,4 @@
 export { AccountCard } from "./AccountCard";
 export { createAccount } from "./account";
 export { CloudScreen } from "./CloudScreen";
+export { SharedProjectCard } from "./SharedProjectCard";
