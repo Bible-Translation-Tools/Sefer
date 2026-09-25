@@ -27,7 +27,7 @@ Empty is not a value. A stored override of `""` means "use this build's", which 
 
 An override reaches the SCREENS immediately — they call `contentHostFor(settings)` each time — and the SERVICES not at all, because `composeApplication()` runs once and the transfer Layers close over the values they were handed. The composition records what it built with (`rememberBootEndpoints`); the Gitea fetch, which is built before `Settings` exists, reads the recorded transport per request (`bootTransport`) so the API and git never disagree; and the Network card offers a Reload exactly when `endpointsChangedSinceBoot` says a preference has drifted.
 
-**Migration.** A Web project cloned before transport moved into the client has the proxy as its `origin`; the first time it is read, `identityOf` maps it back to the content host and `origin` is rewritten. Saved sign-ins filed under a proxy host are not carried over — one fresh sign-in. The old preferences (`network.wacsUrl`, `network.languageApiUrl`) are not read: they held a proxy URL and a REST path, neither of which means anything now.
+**No migration.** Sefer is alpha with no users to carry, so there is no shim: a Web project cloned before this change keeps a proxy `origin` until it is cloned again, and the old preferences (`network.wacsUrl`, `network.languageApiUrl`) are simply not read.
 
 | variable                       | used by           | meaning                                                                                                                                                |
 | ------------------------------ | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |

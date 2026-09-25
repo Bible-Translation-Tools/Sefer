@@ -58,9 +58,8 @@ export const through = (transport: Transport, url: string): string => {
 
 /**
  * The content-host URL a proxy URL stands for — the reverse of `through`.
- * For anything that was stored before transport was applied at request time
- * (a Web clone's `origin`, a typed-in endpoint), and for a URL somebody pastes
- * from a proxy. Anything else is returned as it is.
+ * For a URL somebody pastes from a proxy, so what `attach` stores is always
+ * the server. Anything else is returned as it is.
  */
 export const identityOf = (transport: Transport, url: string): string => {
   const at = parsed(url);

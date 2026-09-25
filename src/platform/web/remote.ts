@@ -173,12 +173,7 @@ const makeWebRemote = (
         if (found === undefined) {
           return yield* Effect.fail(fail("Unavailable", "this project has no remote attached yet"));
         }
-        // A project cloned before transport moved into the client has the
-        // PROXY as its origin. Put it back on the content host the first
-        // time it is read, so it syncs the same from either host.
-        const identity = identityOf(options.transport, found.url);
-        if (identity !== found.url) yield* attach(repo, identity);
-        return identity;
+        return found.url;
       });
 
     /** The branch to transfer: whatever HEAD is on, else the default. */

@@ -475,13 +475,12 @@ The flow needs one top-to-bottom pass before more is added.
 
 ### Overview
 
-Clone, fetch, pull, push and branch moves against a Gitea (WACS) server, plus the Gitea account half (sign-in, tokens). The CONTENT HOST is the identity on both hosts — what `origin` names and a sign-in is filed under; on the Web every request goes through the transport (`src/core/remote/transport.ts`, the proxy that fronts each host), applied inside the HTTP clients and stored nowhere. A proxy `origin` from an older Web clone is mapped back on first read. `src/core/remote`, `platform/{web,tauri}/remote.ts`. → [git](architecture/git.md), [configuration](architecture/configuration.md)
+Clone, fetch, pull, push and branch moves against a Gitea (WACS) server, plus the Gitea account half (sign-in, tokens). The CONTENT HOST is the identity on both hosts — what `origin` names and a sign-in is filed under; on the Web every request goes through the transport (`src/core/remote/transport.ts`, the proxy that fronts each host), applied inside the HTTP clients and stored nowhere. `src/core/remote`, `platform/{web,tauri}/remote.ts`. → [git](architecture/git.md), [configuration](architecture/configuration.md)
 
 ### Constraints and known bugs
 
 - Desktop transfer progress is a `TODO(seam)` (`platform/tauri/remote.ts:141`).
 - Desktop `git_clone` (git2 `RepoBuilder`) compiles but has not been run against a server; the web clone was checked on `main` and `master` repositories through the prod proxy, and (2026-09-25) stores the content host as `origin`.
-- A sign-in saved under a proxy host before 2026-09-25 is not carried over: one fresh sign-in.
 
 ### Ideas / future
 
@@ -514,7 +513,7 @@ Browsing the online catalogue on the projects page: the Language API's GraphQL e
 
 ### Ideas / future
 
-- None.
+- Paste a repository URL into the catalogue's search box and offer it directly, as the old app did. The Language API and WACS drift apart and some repositories are untagged, so the catalogue does not list everything that exists. When the text is a git URL on a server this build can reach (a content host, or a host in the transport), show it as a downloadable row whether or not the catalogue knows it.
 
 ---
 

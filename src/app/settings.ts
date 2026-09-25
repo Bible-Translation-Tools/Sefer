@@ -378,9 +378,6 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
       true,
     ),
     enableReplaceAll: settings.register("find.enableReplaceAll", Schema.Boolean, false),
-    // New names, not the old `network.wacsUrl` / `network.languageApiUrl`:
-    // those held a proxy URL and a REST path, neither of which means anything
-    // here, and a stale override is worse than none.
     contentHost: settings.register("network.contentHost", Schema.String, ""),
     catalogueUrl: settings.register("network.catalogueUrl", Schema.String, ""),
     webTransport: settings.register("network.webTransport", Schema.String, ""),
