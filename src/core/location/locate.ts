@@ -3,6 +3,8 @@
  *
  *     resolve(toc, LUK 3:1)        → found 1204..1388, covers LUK 3:1
  *     resolve(toc, LUK 1:2)        → found over `\v 1-2`, covers LUK 1:1-2
+ *     resolve(toc, LUK 1:3a)       → found over `\v 3a`, covers LUK 1:3a
+ *     resolve(toc, LUK 1:2)        → missing verse, when the text has `\v 1,3`
  *     resolve(toc, LUK 30:1)       → missing chapter
  *     addressAt(LUK, toc, 1300)    → LUK 3:1
  *
@@ -28,6 +30,7 @@ import type { BookId } from "../book/book";
 import {
   bookAddress,
   chaptersAddress,
+  comparePoints,
   introAddress,
   versesAddress,
   type Address,
@@ -50,7 +53,10 @@ export interface TocVerse {
   readonly row: number;
   /** Lowest verse the designator names; 0 when it is absent or malformed. */
   readonly first: number;
-  /** Highest — equal to `first` unless this is a bridge. */
+  /**
+   * Highest — equal to `first` unless this is a bridge or a list.
+   * `first..last` is the HULL: `\v 1,3,5` spans 1 to 5 and covers 1, 3, 5.
+   */
   readonly last: number;
   /**
    * Where the designator AS WRITTEN ends (`5`, `1-2`, `6a`), before its folded
@@ -59,6 +65,24 @@ export interface TocVerse {
    * A point inside the verse's extent, not a second extent.
    */
   readonly labelEnd: number;
+  /**
+   * What the designator COVERS, in written order, when the hull does not say
+   * it: a list (`1,3,5`) or a segment (`6a`, `12a-14b`). Absent for a whole
+   * verse or a bridge of whole verses, which cover exactly `first..last` —
+   * nearly every verse, so nearly no verse carries an array.
+   */
+  readonly members?: readonly TocMember[];
+}
+
+/** One member of a designator: a place, or a range joined by `-`. */
+export interface TocMember {
+  readonly from: number;
+  /** `a` in `12a`; absent when the member starts with a whole verse. */
+  readonly fromSegment?: string | undefined;
+  /** Equal to `from` for a single place. */
+  readonly to: number;
+  /** The segment after the last number; for `12a` alone, `a` again. */
+  readonly toSegment?: string | undefined;
 }
 
 export interface TocView {
@@ -106,9 +130,42 @@ const units = (toc: TocView): readonly Unit[] => {
   return out;
 };
 
+const compareSegments = (a: string, b: string): number => a.localeCompare(b, "en");
+
+/**
+ * Where two places END, in order: a whole verse runs past every one of its
+ * segments, so `14` ends after `14b` — the reverse of how `comparePoints`
+ * orders the two as starts.
+ */
+const compareEnds = (a: Point, b: Point): number => {
+  if (a.chapter !== b.chapter || a.verse !== b.verse) return comparePoints(a, b);
+  if (a.segment === undefined) return b.segment === undefined ? 0 : 1;
+  if (b.segment === undefined) return -1;
+  return compareSegments(a.segment, b.segment);
+};
+
+const startPoint = (chapter: number, member: TocMember): Point =>
+  member.fromSegment === undefined
+    ? { chapter, verse: member.from }
+    : { chapter, verse: member.from, segment: member.fromSegment };
+
+const endPoint = (chapter: number, member: TocMember): Point =>
+  member.toSegment === undefined
+    ? { chapter, verse: member.to }
+    : { chapter, verse: member.to, segment: member.toSegment };
+
 /**
  * The Address one unit names. A bridge names its whole range: a caret in
  * `\v 1-2` is in LUK 1:1-2, whichever of the two verses it was asked for by.
+ * A segment names itself: `\v 3a` is LUK 1:3a.
+ *
+ * A list names its hull, first member to last: a caret in `\v 1,3,5` is in
+ * LUK 1:1-5. An Address is one range and cannot say "1, 3 and 5", so the
+ * choice is between a label that leaves out verses the caret's text IS (`1`)
+ * and one that takes in verses it is not (`2`, `4`). Every verse the unit
+ * covers is inside the hull, as it is for a bridge, and `resolve` of that
+ * label finds this same unit; what the hull over-states, `resolve` refuses —
+ * LUK 1:2 alone is missing from `\v 1,3,5`.
  */
 const unitAddress = (book: BookId, toc: TocView, unit: Unit): Address => {
   const chapter = toc.chapters[unit.row];
@@ -116,11 +173,23 @@ const unitAddress = (book: BookId, toc: TocView, unit: Unit): Address => {
   if (chapter === undefined || chapter.number === 0) return bookAddress(book);
   const verse = unit.verse;
   if (verse === undefined || verse.first === 0) return chaptersAddress(book, chapter.number);
-  return versesAddress(
-    book,
-    { chapter: chapter.number, verse: verse.first },
-    { chapter: chapter.number, verse: verse.last },
-  );
+  const head = verse.members?.[0];
+  if (verse.members === undefined || head === undefined) {
+    return versesAddress(
+      book,
+      { chapter: chapter.number, verse: verse.first },
+      { chapter: chapter.number, verse: verse.last },
+    );
+  }
+  let from = startPoint(chapter.number, head);
+  let to = endPoint(chapter.number, head);
+  for (const member of verse.members) {
+    const start = startPoint(chapter.number, member);
+    const end = endPoint(chapter.number, member);
+    if (comparePoints(start, from) < 0) from = start;
+    if (compareEnds(end, to) > 0) to = end;
+  }
+  return versesAddress(book, from, to);
 };
 
 const sameAddress = (a: Address, b: Address): boolean => JSON.stringify(a) === JSON.stringify(b);
@@ -188,8 +257,9 @@ export type Resolution =
       readonly covers: Address;
       /**
        * True when the text could only answer less precisely than asked: a
-       * segment (`3a`) the TOC cannot see, so the whole verse was found. Show
-       * it as found, never as exact.
+       * segment (`3a`) in a text that does not divide the verse (`\v 3`), so
+       * the whole verse was found. Show it as found, never as exact. A text
+       * that has `\v 3a` answers `3a` exactly, and this is false.
        */
       readonly coarser: boolean;
     }
@@ -206,7 +276,7 @@ export type Resolution =
     };
 
 type Endpoint =
-  | { readonly kind: "unit"; readonly unit: Span }
+  | { readonly kind: "unit"; readonly unit: Span; readonly coarser: boolean }
   | Exclude<Resolution, { readonly kind: "found" }>;
 
 const chapterRows = (toc: TocView, number: number): number[] =>
@@ -220,27 +290,88 @@ const oneChapter = (toc: TocView, number: number): Endpoint => {
   const [only] = spans;
   return only === undefined
     ? { kind: "missing", missing: "chapter" }
-    : { kind: "unit", unit: only };
+    : { kind: "unit", unit: only, coarser: false };
 };
 
-const oneVerse = (toc: TocView, all: readonly Unit[], point: Point): Endpoint => {
+/**
+ * How one member meets one point of the same chapter.
+ *
+ * - `whole`: it covers the point entirely.
+ * - `part`: the point is a whole verse and the member only some of it — `\v
+ *   3a` for verse 3.
+ * - `coarser`: the point is a segment and the member covers its whole verse,
+ *   so the text cannot say where the segment is.
+ * - `none`.
+ */
+type Meet = "whole" | "part" | "coarser" | "none";
+
+const meet = (member: TocMember, point: Point): Meet => {
+  const verse = point.verse;
+  if (verse < member.from || verse > member.to) return "none";
+  const cutAtStart = verse === member.from && member.fromSegment !== undefined;
+  const cutAtEnd = verse === member.to && member.toSegment !== undefined;
+  const segment = point.segment;
+  if (segment === undefined) return cutAtStart || cutAtEnd ? "part" : "whole";
+  if (cutAtStart && compareSegments(segment, member.fromSegment ?? "") < 0) return "none";
+  if (cutAtEnd && compareSegments(segment, member.toSegment ?? "") > 0) return "none";
+  return cutAtStart || cutAtEnd ? "whole" : "coarser";
+};
+
+/**
+ * The best any of a verse's members does: one member covering it wins. A
+ * verse without members covers its hull whole.
+ */
+const meetVerse = (verse: TocVerse, point: Point): Meet => {
+  if (verse.members === undefined) {
+    if (point.verse < verse.first || point.verse > verse.last) return "none";
+    return point.segment === undefined ? "whole" : "coarser";
+  }
+  let best: Meet = "none";
+  for (const member of verse.members) {
+    const one = meet(member, point);
+    if (one === "whole") return one;
+    if (one !== "none") best = one;
+  }
+  return best;
+};
+
+/**
+ * Where one point is: the one unit covering it, or — for a whole verse the
+ * text divides into segments (`\v 3a` … `\v 3b`) — the span from its first
+ * segment to its last. Two units covering it, or two segments naming the same
+ * part, is malformed text and ambiguous.
+ */
+const oneVerse = (book: BookId, toc: TocView, all: readonly Unit[], point: Point): Endpoint => {
   const chapter = oneChapter(toc, point.chapter);
   if (chapter.kind !== "unit") return chapter;
   const row = chapterRows(toc, point.chapter)[0];
-  const hits = all.filter(
-    (unit) =>
-      unit.row === row &&
-      unit.verse !== undefined &&
-      unit.verse.first > 0 &&
-      unit.verse.first <= point.verse &&
-      point.verse <= unit.verse.last,
-  );
-  if (hits.length === 0) return { kind: "missing", missing: "verse", within: chapter.unit };
-  if (hits.length > 1) return { kind: "ambiguous", spans: hits };
-  const [only] = hits;
-  return only === undefined
-    ? { kind: "missing", missing: "verse", within: chapter.unit }
-    : { kind: "unit", unit: only };
+  const whole: Unit[] = [];
+  const parts: Unit[] = [];
+  let coarser = false;
+  for (const unit of all) {
+    if (unit.row !== row || unit.verse === undefined || unit.verse.first === 0) continue;
+    const how = meetVerse(unit.verse, point);
+    if (how === "none") continue;
+    if (how === "part") parts.push(unit);
+    else {
+      whole.push(unit);
+      if (how === "coarser") coarser = true;
+    }
+  }
+  const missing: Endpoint = { kind: "missing", missing: "verse", within: chapter.unit };
+  if (whole.length === 1 && parts.length === 0) {
+    const [only] = whole;
+    return only === undefined ? missing : { kind: "unit", unit: only, coarser };
+  }
+  if (whole.length === 0 && parts.length > 0) {
+    const named = parts.map((unit) => JSON.stringify(unitAddress(book, toc, unit)));
+    if (new Set(named).size < named.length) return { kind: "ambiguous", spans: parts };
+    const from = Math.min(...parts.map((unit) => unit.from));
+    const to = Math.max(...parts.map((unit) => unit.to));
+    return { kind: "unit", unit: { from, to }, coarser: false };
+  }
+  if (whole.length === 0) return missing;
+  return { kind: "ambiguous", spans: [...whole, ...parts] };
 };
 
 /**
@@ -277,9 +408,9 @@ export const resolve = (toc: TocView, address: Address): Resolution => {
     }
     case "verses": {
       const all = units(toc);
-      const from = oneVerse(toc, all, address.from);
+      const from = oneVerse(address.book, toc, all, address.from);
       if (from.kind !== "unit") return from;
-      const to = oneVerse(toc, all, address.to);
+      const to = oneVerse(address.book, toc, all, address.to);
       if (to.kind !== "unit") return to;
       const span = {
         from: Math.min(from.unit.from, to.unit.from),
@@ -288,17 +419,24 @@ export const resolve = (toc: TocView, address: Address): Resolution => {
       const covered = addressesCovering(address.book, toc, span);
       const first = covered[0];
       const last = covered[covered.length - 1];
-      const covers =
-        first?.kind === "verses" && last?.kind === "verses"
-          ? versesAddress(address.book, first.from, last.to)
-          : address;
+      let covers: Address = address;
+      if (first?.kind === "verses" && last?.kind === "verses") {
+        // The earliest start and the latest end, which a list can put apart
+        // from the first and last Address: `\v 1,3,5` then `\v 2,4` is 1-5.
+        let from = first.from;
+        let to = first.to;
+        for (const one of covered) {
+          if (one.kind !== "verses") continue;
+          if (comparePoints(one.from, from) < 0) from = one.from;
+          if (compareEnds(one.to, to) > 0) to = one.to;
+        }
+        covers = versesAddress(address.book, from, to);
+      }
       return {
         kind: "found",
         ...span,
         covers,
-        // The TOC carries no segments yet (Kitchen ask 5), so `3a` finds all
-        // of verse 3 and says so.
-        coarser: address.from.segment !== undefined || address.to.segment !== undefined,
+        coarser: from.coarser || to.coarser,
       };
     }
   }
