@@ -14,25 +14,45 @@ Everything downstream is a function of that facet rather than of a global: `engi
 
 `editorBook(plain, { analyze, extensions?, observability? })` is the Plain → Instantiated transition ([project](project.md), [source and book](source.md)). The state is created **from** `plain.source().text`, and from that moment the state _is_ the canonical text: `source()` derives the string from it, cached per `EditorState`, and the stamp's `revision` continues from the plain Book's and increments once per accepted doc-changing transaction.
 
-`apply(changes, origin, trust?)` builds one transaction — `userEvent: input.<origin>`, `trusted` when the trust says so, `isolateHistory` for a `project.*` origin so a cross-book operation is one undo step per book — and runs it through the phases. Accepted: `Result.succeed(receipt)`. Refused (the doc did not change): `Result.fail(Refusal)`, whose `rule` names the phase rule when one recorded a refusal on the trace and `editor.phases` otherwise.
+`apply(changes, origin, trust?)` builds one transaction — `userEvent: input.<origin>`, `trusted` when the trust says so, `isolateHistory` for a `project.*` origin so a cross-book operation is one undo step per book — and runs it through the phases. Accepted: `Result.succeed(receipt)`. Refused (the doc did not change): `Result.fail(Refusal)`, whose `rule` names the phase rule when one recorded a refusal on the trace and `editor.phases` otherwise. A satellite's edit comes through `applyFrom` instead, judged under the satellite's own terms ([Satellites borrow](#satellites-borrow)).
 
-**The publication rule.** After the state has moved, and synchronously: borrowing surfaces first (`attach(receive)`, given CodeMirror's own `ChangeSet` so a window maps its caret through the exact same description), then the `Book` port's `changes(fn)` listeners with `(receipt, Change[])`. `apply` returns only after every subscriber has run. There is no bus and no queue — the keystroke path is `phases → analyze → mutate → publish` inside one frame.
+**The publication rule.** After the state has moved, and synchronously: borrowing surfaces first (`attach(receive)`, given CodeMirror's own `ChangeSet` so a satellite maps its caret through the exact same description), then the `Book` port's `changes(fn)` listeners with `(receipt, Change[])`. `apply` returns only after every subscriber has run. There is no bus and no queue — the keystroke path is `phases → analyze → mutate → publish` inside one frame.
 
 A bound view MUST route its transactions through `book.fromView(view, trs)`; that is where a keystroke becomes a receipt. `apply` throws if a bound view accepted an edit without it, rather than report a receipt nobody heard.
 
-`services.ts` builds the seat `openProject(root, { seat })` wants, one `editorBook` per book. `attached()` counts bound views plus `hold()`s (satellites) and is what makes `project.release` refuse.
+`services.ts` builds the seat `openProject(root, { seat })` wants, one `editorBook` per book. `attached()` counts bound views plus `hold()`s (satellites) and is what makes `project.release` refuse. An excerpt takes its hold when it opens and releases it, with its receiver, when it closes — its mount effect RETURNS that cleanup, because an `onCleanup` inside a Solid 2 effect callback has no owner and never runs; until 2026-09-25 every excerpt ever opened stayed attached.
 
 ## Satellites borrow
 
-`mountSatellite({ host: Funnel, range, … })` gives a view over one range — Find's and Key terms' editable excerpts are satellites, and a virtualised one simply mounts over the latest canonical text when it scrolls into view. A satellite is a reader that may write, and it keeps the discipline: a local edit is turned into changes, submitted through the `Funnel` (`funnel.ts` — `doc`, `structure`, `submit`, `attach`, `undo`/`redo`/`depth`), and applied locally only when the canonical Book publishes it back. It keeps its own caret across the round trip; it never keeps its own text. `fromCanonical` marks the text coming home, so nothing resubmits it.
+`mountSatellite({ host: Funnel, range, … })` gives a view over one range — Find's and Key terms' editable excerpts and the footnote editor are satellites, and a virtualised one simply mounts over the latest canonical text when it scrolls into view. A satellite is a reader that may write, and it keeps the discipline: a local edit is turned into changes, submitted through the `Funnel` (`funnel.ts` — `doc`, `structure`, `submit`, `attach`, `undo`/`redo`/`depth`), and applied locally only when the canonical Book publishes it back. It keeps its own caret across the round trip; it never keeps its own text. `fromCanonical` marks the text coming home, so nothing resubmits it. A refused submit leaves the caret where it was.
 
-Structure is **borrowed**, not recomputed: a window's `structureField` asks the `borrowedStructure` facet first and takes the canonical `Analysis` when `describesExactly` holds, so ten result cards over one book cost zero extra parses. The one turn a window pays for a parse of its own is between its submit and the answer.
+**The Book judges a satellite's edit under the satellite's terms.** Every `submit` carries `SurfaceTerms`: the surface's assignment deltas (`Assignment.deltas`), its `modeFacet`, its live range, and the gesture's own `userEvent` (`input.type`, `input.paste`, `delete.backward`). `EditorBook.applyFrom(terms, changes, origin)` reconfigures the canonical state with those terms beside `judgeLayer` — the engine, the structure and the same `PHASES`, none of the reading layer — runs the edit through it once, and commits what the phases let through to the canonical seat with `filter: false`, then publishes as any edit. One judge, the same rules as the main editor, nothing trusted. It exists because the canonical projection is the wrong judge for a surface that shows something the page hides: in it a footnote's body is hidden markup, and `refuseKeystrokesInsideHiddenMarkup` refused every key typed into the note editor, which is why that editor used to be trusted and so skipped every rule. The reconfigure keeps the parse (same field, same text); what an edit costs extra is the plan and paint index under the surface's projection, about 0.3 ms a keystroke on the fixture. Rejected: judging in the satellite and handing the Book a trusted result — the same shortcut in another place.
+
+Carrying the gesture matters on its own: several rules act on the kind of gesture — a typed backslash, a paste that would add a chapter, markup pasted inside a word — and a satellite's edit used to reach them as an anonymous `input.<origin>` change, so a `\c 9` pasted into an excerpt went in.
+
+**A satellite's range is an edit guard, not only a clip.** Both halves are installed by `mountSatellite`, so no surface can forget them, and both are `core/clip.ts`'s own two rules over the range. The change half is the Book's: `refuseEditsOutsideTheSurface`, the first admission rule, reads the `surfaceRange` facet (empty on the canonical state, set from the terms on the judging state) and drops whatever part of a change lies outside — the one place every way an edit can arrive passes: a key, a command that edits away from the caret, a drop, a paste, a programmatic dispatch. The selection half is the satellite's, because the caret is: `pullSelectionsIntoTheClip` over the range, so the caret never sits where typing would be refused and select-all selects the range. Neither is waived by trust (`{ trustWaives: false }`). Before this, a satellite's document was the whole book and only `clippedToScope` hid the rest: select all and Backspace in a Find excerpt on Philemon 1:5 deleted the whole book, 2,679 characters to the 158 the marker rules protected.
+
+A satellite has no history (below), and it answers the browser's own undo — `beforeinput` `historyUndo`/`historyRedo`, which a Mod-z the Book declined falls through to, and which the Edit menu sends — with the Book's, as CodeMirror's `history()` does for the canonical view. Left to the browser, it replayed the contenteditable's DOM history as an edit.
+
+Structure is **borrowed**, not recomputed: a satellite's `structureField` asks the `borrowedStructure` facet first and takes the canonical `Analysis` when `describesExactly` holds, so ten open excerpts over one book cost zero extra parses. The one turn a satellite pays for a parse of its own is between its submit and the answer.
+
+### Three range rules
+
+Each is named and each is its own contract; a visual clip is not an edit guard.
+
+| rule                   | where                                                      | what it holds                                                                                                                                                                                                         |
+| ---------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| the chapter clip       | `core/clip.ts` — `pickField`, `editableClipAt`             | the canonical editor's one chapter. Visible and editable DIFFER: the `\c` line shows but is not editable. A trusted edit (a fix, the front matter card) may write outside it; it is the editor's view choice.         |
+| the satellite range    | `recipes/satellite.ts` `scope`; `surfaceRange` in the Book | the part of the book a satellite covers. Visible and guarded ALIKE, and never waived by trust. Maps through every edit, so an edit at its edge grows it.                                                              |
+| an excerpt's line snap | `app/ui/excerpts/ExcerptEditor.tsx` `lineRange`            | a presentation choice: the excerpt's verse span widened to whole lines, because a block replacement CodeMirror will draw starts and ends at a line boundary. It chooses the satellite range; it is not a third guard. |
 
 **History is the Book's, and a borrowing surface has none.** A satellite's `Mod-z` calls `funnel.undo()`, and the toolbar's button, the palette and the keymap all reach the same `EditorBook.history()` — so undo means one thing whichever surface has focus. The consequence to watch is that the command runs against the CANONICAL view: CodeMirror's history restores the selection that view held before the change and asks to scroll to it, which is right when the reader is in it and wrong when they are in a satellite. `withoutScrolling` (`core/scroll.ts`) refuses the scroll for the length of that one gesture, through CodeMirror's own `scrollHandler` facet, and only when the canonical view does not have focus. The edit lands and every surface hears it back through its `Funnel`; only the page is kept still. Pressing the toolbar's Undo while typing in a footnote used to throw the page from the apparatus at the foot of the chapter back up to the verse and destroy the note editor with the widget that held it.
 
 ## The phases
 
 `admission → normalization → protection → settlement`, listed as data in `core/phases.ts`. Admission runs as a `changeFilter` (it can veto ranges before a transaction exists); the rest run as `transactionFilter`s, which CodeMirror runs last-registered-first — `compose.install` is the only place that knows, and it reverses so registration order is the order rules see. Every rule is named, so `omit` can turn one off and a trace can say which door a keystroke went through — see [Instrumentation](#instrumentation).
+
+The rules read their policy off the state: `rowAt(state, cls)` from the `assignment` facet (the registry plus a projection's deltas), `modeFacet`, and the paint index built from both. On a surface those three are one extension, `modeView(name, surface?)` (`views.ts`) — the assignment delta, the mode, and the `cm-mode-*` class (plus an optional surface class such as `cm-excerpt`), which must stay in step or a surface paints one way and is judged another. BookEditor, the reference pane, the excerpt editor and the note editor all install it. It is deliberately not the reading layer: what a surface decorates with is its own choice, and the note editor wears the `note-satellite` projection without `readingLayer`, whose regular projection collapses a note to its caller.
 
 ## Structured entry
 
@@ -95,11 +115,23 @@ Two rulings worth knowing:
   appeared at the top of the book. The window is read LIVE from the
   satellite's own scope, so a zero-width one grows with the first character
   rather than hiding it.
-- **The write is `trusted`.** In regular mode the entire note is hidden markup,
-  so `refuseKeystrokesInsideHiddenMarkup` guards every offset in it; an
-  untrusted satellite there is a text box that silently refuses every key. The
-  surface is narrow and its targets are hard-edged, which is the trade that
-  argument rests on.
+- **The write is NOT trusted.** It is judged by the Book's own phases, like
+  the main editor's, under the note editor's terms: the registry's
+  `note-satellite` projection (`note.caller` and `note.body` at point ×
+  direct — visible and directly editable — where the canonical projection
+  freezes them, and the note's markup still frozen), regular mode, and the
+  note's content as the range. So a typed backslash, a pasted `\c`, a Delete
+  that would eat the `\f*` are refused here exactly as they would be anywhere
+  else. It used to be trusted, because judged in the canonical projection the
+  whole note is hidden markup and every key was refused — and trusted meant no
+  rule applied at all. See [Satellites borrow](#satellites-borrow).
+- **An empty note is written at one position.** A fresh note (`\f + \ft \f*`)
+  has no body part, so the body's place sits between two hidden markers and
+  `refuseKeystrokesInsideHiddenMarkup` would drop an insertion there. Its
+  zero-width range is what says otherwise: a pure insertion at the one
+  position of a zero-width surface range passes that rule, and nothing else
+  does. After the first character there is a body and the ordinary rules
+  apply.
 
 Three more things the row has to get right, all of them learned the hard way:
 
@@ -130,8 +162,11 @@ a note of two sentences a keyhole.
 The satellite installs `structureField` and NOT the whole `readingLayer`:
 `readingLayer` brings `decoField`, whose regular-mode projection is the one that
 collapses a note to its caller, and inside this view that would hide the very
-text the reader clicked to write in. `buildNoteApparatus` is the projection it
-wears instead — markup elided, the origin as `usfm-fr`, the body as `usfm-ft`.
+text the reader clicked to write in. `buildNoteApparatus` is what it paints
+with instead — markup elided, the origin as `usfm-fr`, the body as `usfm-ft` —
+and `modeView("note-satellite", "cm-note")` is the projection its edits are
+judged in. The two agree on what is visible; one draws it, the other is data
+the Book's rules read.
 
 A clipped chapter still shows its own apparatus: the block is planned per
 chapter and sits at the end of the chapter's last line, so it is inside the
@@ -157,7 +192,7 @@ clip's own window rather than outside it.
 
 **One instrument for the whole pipeline.** `core/instrument.ts` opens one **trace** per transaction and records every stage that transaction flowed through, in order, with what each decided. The trace is keyed on the transaction's **start state**: a command reads that state, then the filters run against it, so a whole gesture — the keymap command, admission, normalization, protection, settlement, and the derivations in between — lands in one trace under one correlation id.
 
-- `tracer` is a **Facet** (`Facet<Tracer, Tracer | null>`), not a module global, because a book and a window over it trace separately, and because a test wants a ring while the app wants Sefer's Observability. `tracing(state)` is the guard every call site uses: one facet read, and **nothing is allocated when the facet is null**.
+- `tracer` is a **Facet** (`Facet<Tracer, Tracer | null>`), not a module global, because a book and a satellite over it trace separately, and because a test wants a ring while the app wants Sefer's Observability. `tracing(state)` is the guard every call site uses: one facet read, and **nothing is allocated when the facet is null**.
 - `Trace.stage(phase, name)` and `Trace.command(name)` open a **frame** and hand back its closer. `compose.install` opens a stage around each phase rule and closes it with the verdict; `compose.usfmKeys` opens a command frame around each keymap binding. A command's frame stays open across the dispatch it makes, so its stages nest inside it and the command's own line closes the group.
 - **A rule's own `note`/`noteTr` becomes its frame's verdict.** That is why adopting the tracer changed no rule: `guardedBackspace` still says `delete one character`, `moveCaret` still says `→ 76 → 83 (stepped to 77, forward)`, and nothing is recorded twice. When a rule says nothing, the verdict comes from what it returned — `true`/`tr` is `passed`, `false` or an empty spec list is `refused`, anything else is `rewrote`, and a protected range list is `passed` with the count as detail.
 - `makeTracer(emit)` is the **single** implementation; ordering, timing and the refusal slot live there once. Only emission is pluggable: `localTracer` keeps the refusal slot and emits nothing, `sinkTracer` (in `core/trace.ts`) feeds the flat `TraceSink` the test harness wants, `observabilityTracer` writes Sefer's ring.

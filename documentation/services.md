@@ -258,16 +258,14 @@ On it today: the palette, the sidebar's filter (`shell.location.books` for every
 
 ### Overview
 
-CodeMirror over an EditorBook: the phases, registry, mapping and plan; one funnel for every write (`src/editor/funnel.ts`); undo; regular and USFM modes; chapter and book views; clip. `src/editor`, mounted by `app/ui/BookEditor.tsx`. → [editor](architecture/editor.md), [solid](architecture/solid.md)
+CodeMirror over an EditorBook: the phases, registry, mapping and plan; one funnel for every write (`src/editor/funnel.ts`); undo; regular and USFM modes; chapter and book views; clip. A projection on a surface is one extension, `modeView(name, surface?)` (`views.ts`). `src/editor`, mounted by `app/ui/BookEditor.tsx`. → [editor](architecture/editor.md), [solid](architecture/solid.md)
 
 ### Constraints and known bugs
 
-- The mode bundle (`assignment` + `modeFacet` + `editorAttributes`) is hand-built in three places: BookEditor, ExcerptEditor and `recipes/reference.ts`. `cmMode` is repeated across six files.
 - Input and accessibility have not been exercised at all: no IME, RTL, screen-reader or keyboard-only evidence, in either mode or any of the three desktop webviews. Only groundwork exists (text direction, bidi isolates).
 
 ### Ideas / future
 
-- One mode-bundle helper (in the editor-primitives plan).
 - The input/a11y gate:
   - choose the target writing systems and IMEs
   - record evidence per mode and per webview
@@ -278,11 +276,13 @@ CodeMirror over an EditorBook: the phases, registry, mapping and plan; one funne
 
 ### Overview
 
-Editable windows that own no text: they submit through the host book's funnel. This covers the footnote editor, the excerpt cards in Find and Key terms, and `recipes/satellite.ts`. The read-only reference pane (`recipes/reference.ts`) is deliberately not a satellite. → [editor](architecture/editor.md)
+Editable views over one range of a book that own no text: they submit through the host book's funnel, and the Book judges each edit with its own phases under the satellite's terms (projection, mode, range, gesture) — nothing is trusted, and nothing outside the range is accepted however the edit arrives. This covers the footnote editor (`note-satellite` projection), the excerpt cards in Find and Key terms, and `recipes/satellite.ts`. The read-only reference pane (`recipes/reference.ts`) is deliberately not a satellite. → [editor](architecture/editor.md#satellites-borrow)
 
 ### Constraints and known bugs
 
-- A satellite still dispatches its selection when `submit` refuses (`satellite.ts:175`).
+- A satellite has no settlement of its own, so its caret can sit where the main editor's could not (before a hidden `\v` at a line start); what is typed there meets the Book's rules. Select-all in an excerpt starts at its first line's start.
+- Typing in a satellite is one undo step per character: the commit's `userEvent` is `input.<origin>`, which CodeMirror's history never joins.
+- Judging costs a plan and paint index under the surface's projection per edit (~0.3 ms on the fixture), on top of the canonical state's own.
 
 ### Ideas / future
 
