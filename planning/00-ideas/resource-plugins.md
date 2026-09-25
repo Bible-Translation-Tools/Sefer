@@ -151,6 +151,18 @@ Core defines the data interface above; the app registers a renderer per kind (`s
 - **References inside a TN note** — TN Markdown is full of citations ("see Rom 3:10"). This, not comments, may be the prose Citation scanner's first consumer (`citation.ts` already has the `prose` grammar and nothing that scans).
 - **Editing a TN note** — the notes pane's Edit → a Markdown editor over the note's WritableEntry → `apply` → Record a version writes the packed book.
 
+## The same shape reaches further: word-aligned USFM
+
+Will, 2026-09-24: with an editor that already handles references, Markdown and files, there is no reason the same interface should not carry word-aligned USFM, or something else again — it only takes deciding the intersection of addressing, finding, navigation and search for it.
+
+Word-aligned USFM is the case that tests that intersection, because it lives below the verse:
+
+- **The text is a Book.** Aligned USFM is ordinary USFM with alignment milestones (`\zaln-s` … `\zaln-e`, `\w`); the editor opens and edits it today, and custom `\z` markers already behave as their category (the Galley work). Nothing new at the text level.
+- **The alignment is the new thing.** It maps a WORD in the project's text — a Location, UTF-16 offsets in this Book — to a word in the original: a Macula word, or U23003's `MAT 2:1!3`. That is not an Address; an Address stops at the verse, and an alignment is a word-level fact about two specific texts.
+- **Where the capabilities meet it.** `places` answers it at the verse ("what aligns in 1:3") as today. Highlighting the aligned word on both sides needs a finer answer: a Location in the resource's own text beside the Address. `search` becomes "every place this lemma is rendered" — Macula `lookup` → the alignment → Locations in the project's text → the multibuffer. Navigation is jumping between the two sides, and the editor marks both the way block pairing already marks a verse extent.
+
+So `Places` likely grows a second, finer answer — an entry's Location in its own text, alongside its Addresses — and open question 2 below stops being hypothetical. The interface otherwise holds: a kind that aligns is a plugin with `places` (and that finer answer), `search`, and possibly `edit` for correcting an alignment, which is a write to the Book's milestones judged like any other edit.
+
 ## Open questions
 
 1. **Versification.** WLC Hebrew numbers some verses differently from English (Psalm titles, Malachi 4 as 3:19–24, Joel, others). A resource declares its scheme; mapping one Address between schemes is a separate primitive that Location does not have yet, and every cross-resource pane needs it. Not solved by this interface; named so no plugin hides it.
