@@ -50,6 +50,7 @@ import {
 } from "../core/decorations";
 import { docText, structureAt, structureField } from "../core/docStructure";
 import { planAt } from "../core/editorState";
+import { modeView } from "../views";
 import { mountSatellite, satelliteRange, type Satellite } from "./satellite";
 
 /** Which note the reader is editing, as a document offset, or nothing. */
@@ -281,10 +282,7 @@ class NoteSurfaces {
       trust: trustedBy("note"),
       label: `note:${String(at)}`,
       extensions: [
-        // Through the facet, never `classList`: CodeMirror rewrites the
-        // editor's class from `editorAttributes` on every update, so a class
-        // added by hand survives until the first keystroke and no longer.
-        EditorView.editorAttributes.of({ class: "cm-mode-regular cm-note" }),
+        modeView("default", "cm-note"),
         analyzer.of(this.#view.state.facet(analyzer)),
         // The structure only, NOT the whole reading layer. `readingLayer`
         // brings `decoField`, whose regular-mode projection is the one that

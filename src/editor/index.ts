@@ -21,10 +21,6 @@ export { commandsLayer, readingLayer, viewLayer } from "./core/compose";
 export { type EditorAction } from "./core/actions";
 export { frontMatterCard } from "./core/frontmatter";
 
-// Policy as data: which class paints how, under which projection.
-export { assignment } from "./core/registry";
-export { modeFacet } from "./core/kernel";
-
 // State: structure, plan, paint, decorations, render window.
 export { structureAt } from "./core/editorState";
 export { anchorFrom } from "./core/clip";
@@ -53,8 +49,8 @@ export {
   showEmptyBlocks,
 } from "./recipes/emptyBlocks";
 
-// Views.
-export { pickChapter, projectionFor, type ProjectionName } from "./views";
+// Views: a projection on a surface (`modeView`), and the chapter clip.
+export { modeView, pickChapter, type ProjectionName } from "./views";
 
 // The read-only reference pane: another resource's book, same projection.
 export { mountReference, type ReferenceMount } from "./recipes/reference";

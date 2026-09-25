@@ -23,19 +23,17 @@
  */
 
 import { Compartment, Prec } from "@codemirror/state";
-import { EditorView, keymap } from "@codemirror/view";
+import { keymap } from "@codemirror/view";
 import { createEffect, createSignal, onCleanup, untrack } from "solid-js";
 
 import type { Excerpt } from "#core/excerpts/excerpts";
 import type { Analysis } from "#core/galley";
 import {
   analyzer,
-  assignment,
   clippedToScope,
   markedRanges,
-  modeFacet,
+  modeView,
   mountSatellite,
-  projectionFor,
   readingLayer,
   reclip,
   type EditorBook,
@@ -61,14 +59,8 @@ export interface ExcerptEditorProps {
 }
 
 /** The projection, the facet and the class for one mode, as one extension. */
-const viewFor = (mode: "regular" | "usfm") => [
-  assignment.of(projectionFor(mode === "usfm" ? "usfm" : "default")),
-  modeFacet.of(mode),
-  // Through the facet, not `dom.classList`: CodeMirror rewrites the editor's
-  // class on every update from `editorAttributes`, so a class added by hand
-  // survives exactly until the first keystroke.
-  EditorView.editorAttributes.of({ class: `cm-mode-${mode} cm-excerpt` }),
-];
+const viewFor = (mode: "regular" | "usfm") =>
+  modeView(mode === "usfm" ? "usfm" : "default", "cm-excerpt");
 
 /**
  * The excerpt's span, snapped to whole lines and clamped to the document.

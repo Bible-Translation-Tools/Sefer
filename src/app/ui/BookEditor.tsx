@@ -41,7 +41,6 @@ import {
   annotateOpen,
   annotateRepaint,
   gestureTrace,
-  assignment,
   annotateEmptyBlocks,
   blockNamer,
   flash,
@@ -49,9 +48,8 @@ import {
   frontMatterCard,
   showCorpusFindings,
   type CorpusFinding,
-  modeFacet,
+  modeView,
   pickChapter,
-  projectionFor,
   structureAt,
   type EditorBook,
   type ProjectionName,
@@ -143,8 +141,6 @@ const placeOf = (
   );
   return verse?.markerFrom ?? chapter.from;
 };
-
-const cmMode = (mode: ProjectionName): "regular" | "usfm" => (mode === "usfm" ? "usfm" : "regular");
 
 interface Bound {
   readonly view: EditorView;
@@ -533,11 +529,7 @@ export function BookEditor(props: BookEditorProps) {
       // wiped on the first click into the text.
       held.view.dispatch({
         effects: [
-          held.projection.reconfigure([
-            assignment.of(projectionFor(mode)),
-            modeFacet.of(cmMode(mode)),
-            EditorView.editorAttributes.of({ class: `cm-mode-${cmMode(mode)}` }),
-          ]),
+          held.projection.reconfigure(modeView(mode)),
           // In the SAME transaction as the reconfigure, not a second one after
           // it. A separate dispatch measures the old layout — the decorations
           // have changed but the heights have not been recomputed — so the

@@ -18,9 +18,9 @@
  *  - `viewLayer()` — line wrapping, the render window (a 60,000-line reference
  *    is decorated a screenful at a time, like the editor), atomic ranges and
  *    bidi isolates.
- *  - the mode compartment — `assignment`, `modeFacet` and the `cm-mode-*`
- *    editor attribute, the same three things `BookEditor` reconfigures, so
- *    Regular/USFM switches both panes from one shell signal.
+ *  - the mode compartment — `modeView`, the same projection, mode and
+ *    `cm-mode-*` class `BookEditor` reconfigures, so Regular/USFM switches
+ *    both panes from one shell signal.
  *
  * What it deliberately does NOT install: the kernel phases (`rulesLayer`), the
  * command keymap, history, the linter. A rule that refuses an edit is dead
@@ -45,10 +45,8 @@ import { type Analyze, analyzer } from "../core/analyzer";
 import { anchorFrom } from "../core/clip";
 import { readingLayer, viewLayer } from "../core/compose";
 import { structureAt, type ChapterRow } from "../core/docStructure";
-import { type Mode, modeFacet } from "../core/kernel";
-import { assignment } from "../core/registry";
 import { span } from "../core/timing";
-import { pickChapter, projectionFor, type ProjectionName } from "../views";
+import { modeView, pickChapter, type ProjectionName } from "../views";
 import { pairingThere, showBlockPairs, showPaired, type PairedRange } from "./pairing";
 
 export interface ReferenceOptions {
@@ -99,8 +97,6 @@ export interface ReferenceMount {
   destroy(): void;
 }
 
-const cmMode = (mode: ProjectionName): Mode => (mode === "usfm" ? "usfm" : "regular");
-
 /**
  * The chapter of THIS text numbered `number`.
  *
@@ -113,19 +109,6 @@ const cmMode = (mode: ProjectionName): Mode => (mode === "usfm" ? "usfm" : "regu
 const chapterNumbered = (state: EditorState, number: number): ChapterRow | undefined =>
   structureAt(state).chapters.find((row) => Number.parseInt(row.label, 10) === number);
 
-/**
- * The three things a mode IS, as one compartment's contents — the same three
- * `BookEditor` reconfigures. The class rides `editorAttributes` rather than
- * being added to the element, because CodeMirror rewrites `view.dom`'s class
- * attribute from its facets and a hand-added class is wiped on the first
- * layout change.
- */
-const modeExtensions = (mode: ProjectionName) => [
-  assignment.of(projectionFor(mode)),
-  modeFacet.of(cmMode(mode)),
-  EditorView.editorAttributes.of({ class: `cm-mode-${cmMode(mode)}` }),
-];
-
 export function mountReference(options: ReferenceOptions): ReferenceMount {
   const done = span("reference-mount", `${(options.text.length / 1024) | 0}KB`);
   const projection = new Compartment();
@@ -136,7 +119,7 @@ export function mountReference(options: ReferenceOptions): ReferenceMount {
       analyzer.of(options.analyze),
       readingLayer,
       viewLayer(),
-      projection.of(modeExtensions(options.mode)),
+      projection.of(modeView(options.mode)),
       pairingThere(options.pairBlocks === true),
       EditorState.readOnly.of(true),
       EditorView.editable.of(false),
@@ -150,7 +133,7 @@ export function mountReference(options: ReferenceOptions): ReferenceMount {
     view,
 
     setMode: (mode) => {
-      view.dispatch({ effects: projection.reconfigure(modeExtensions(mode)) });
+      view.dispatch({ effects: projection.reconfigure(modeView(mode)) });
     },
 
     clipTo: (chapter) => {
