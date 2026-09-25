@@ -67,7 +67,7 @@ export const resolveEndpoints = (settings: SettingsService): ResolvedEndpoints =
  * transfer to that host — and it is editable only because a flags screen is
  * where somebody debugging a proxy goes.
  */
-const transportSpecFor = (settings: SettingsService): string =>
+export const transportSpecFor = (settings: SettingsService): string =>
   settings.get(shellKeys(settings).webTransport).trim() || env.webTransport;
 
 /** How this host reaches a content host: the proxy pairs on the Web, nothing on desktop. */

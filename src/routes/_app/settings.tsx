@@ -6,7 +6,12 @@ import Plus from "lucide-solid/icons/plus";
 import { For, Show, createSignal, onCleanup } from "solid-js";
 
 import { exportDiagnostics } from "#app/diagnostics";
-import { endpointsChangedSinceBoot } from "#app/endpoints";
+import {
+  catalogueUrlFor,
+  contentHostFor,
+  endpointsChangedSinceBoot,
+  transportSpecFor,
+} from "#app/endpoints";
 import { t } from "#app/i18n";
 import { useShell } from "#app/ProjectContext";
 import { SETTING_GROUPS, shellKeys, shellSettings, type AnyDescriptor } from "#app/settings";
@@ -142,6 +147,23 @@ function SettingsPage() {
     );
   };
 
+  /**
+   * What a network row resolves to right now — the override, or this build's
+   * value when the box is empty — so the screen shows which server is in use
+   * rather than only an empty box that means "the build's".
+   */
+  const inUse = (descriptor: AnyDescriptor): string | undefined => {
+    if (descriptor.group !== "network") return undefined;
+    // `tick` is read so this re-runs after every write, as `drifted` does.
+    tick();
+    if (descriptor.key === keys.contentHost) return contentHostFor(services.settings) ?? t("none");
+    if (descriptor.key === keys.catalogueUrl)
+      return catalogueUrlFor(services.settings) ?? t("none: sample data");
+    if (descriptor.key === keys.webTransport)
+      return transportSpecFor(services.settings).split(",").join("\n") || t("none");
+    return undefined;
+  };
+
   const widget = (descriptor: AnyDescriptor): JSX.Element => {
     switch (descriptor.kind) {
       case "boolean":
@@ -227,6 +249,16 @@ function SettingsPage() {
                             {(description) => (
                               <span class="block text-smallest text-on-surface-tertiary">
                                 {t(description())}
+                              </span>
+                            )}
+                          </Show>
+                          <Show when={inUse(descriptor)}>
+                            {(value) => (
+                              <span
+                                data-in-use={descriptor.key.name}
+                                class="mt-1 block font-mono text-smallest break-all whitespace-pre-line text-on-surface-secondary"
+                              >
+                                {t("In use: {value}", { value: value() })}
                               </span>
                             )}
                           </Show>
