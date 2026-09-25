@@ -112,7 +112,7 @@ const DEFAULT_REGISTRY: Registry = {
   "newline.inside": {
     cell: { paint: "point", mutability: "direct" },
     widget: "join",
-    note: "a joined newline IS a space (2026-09-03) — the positional rule, drawn by the widget column",
+    note: "a joined newline IS a space (2026-09-03) — the positional rule, drawn by the widget column. The `join` set: its anchor is the newline and every blank or passthrough line it holds, so Backspace or Delete at the space takes them together",
   },
   "slot.v": {
     cell: { paint: "point", mutability: "via-anchor" },
@@ -181,7 +181,12 @@ const DEFAULT_REGISTRY: Registry = {
   },
   standalone: {
     cell: { paint: "none", mutability: "immortal" },
-    note: "the engine's standalone category — a bare point that leaves its paragraph open (a registered legacy marker such as en_ulb's \\s5, `src/app/legacyMarkers.ts`). Not drawn, not deletable; the paragraph flows through it. USFM mode shows and edits it like any marker",
+    // PASSTHROUGH (Will, 2026-09-25). No key addresses it alone, and a delete
+    // that covers it takes it: that is the immortal cell's own rule, and the
+    // right one for a marker the reader cannot see. Writing around it instead
+    // (a `KEEP` bit, tried and dropped) lost its terminator: `\s5` glued to
+    // the next word became a different, unknown marker.
+    note: "PASSTHROUGH — the engine's standalone category (a registered legacy marker such as en_ulb's \\s5, `src/app/legacyMarkers.ts`) and any marker the engine does not know. Not drawn; the caret goes around it; no key takes it alone, a delete that covers it takes it, and a join that holds it takes it with the space. USFM mode shows and edits it like any marker",
   },
   "clamp.replaced": {
     cell: { paint: "none", mutability: "immortal" },
@@ -212,6 +217,10 @@ export const OWNED_SETS = {
   char: { painting: ["char"], hidden: ["chrome"] },
   note: { painting: ["note.caller"], hidden: ["note.markup", "note.body"] },
   standalone: { painting: ["standalone"], hidden: [] },
+  // The one newline a paragraph shows as a space where it flows through blank
+  // lines and passthrough lines (`plan.ts`'s held gap). The set is the space
+  // the reader sees, so it owns the lines it holds: taking the space takes them.
+  join: { painting: ["newline.inside"], hidden: ["standalone"] },
   milestone: { painting: ["milestone"], hidden: [] },
   optbreak: { painting: ["optbreak"], hidden: [] },
 } satisfies Record<string, OwnedSet>;

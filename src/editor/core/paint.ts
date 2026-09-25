@@ -1,6 +1,6 @@
 /**
  * The positional paint index: `hidden(from, to)`, `draws(pos)`, `joined(pos)`,
- * `atomic(line)`.
+ * `joinOver(pos)`, `atomic(line)`.
  *
  * A plan says what each row draws; this answers the same questions BY POSITION,
  * which is what the caret, the deletion rules and the linter actually ask. Built
@@ -10,12 +10,17 @@
  */
 
 import { lineIndexAt, type DocStructure } from "./docStructure";
-import type { DocPlan } from "./plan";
+import type { DocPlan, PlanSpan } from "./plan";
 
 export interface PaintIndex {
   hidden(from: number, to: number): boolean;
   draws(pos: number): boolean;
   joined(pos: number): boolean;
+  /**
+   * The join whose newline or held lines cover `pos`: from its newline to the
+   * end of the blank and passthrough lines it holds. Null if none does.
+   */
+  joinOver(pos: number): PlanSpan | null;
 }
 
 type Gather = (out: number[], from: number, t: number) => void;
@@ -80,14 +85,32 @@ export function paintOver(s: DocStructure, plan: DocPlan): PaintIndex {
     return hiddenMarks.length ? [...own, ...hiddenMarks] : own;
   });
 
+  // Triples: a join's newline `from, to`, and where the lines it holds end —
+  // the hide span `closeGap` pushes right after it, or the join's own end.
   const joinMemo: (number[] | null)[] = Array.from({ length: blocks.length }, () => null);
   const blockJoins = (i: number): number[] => {
     let g = joinMemo[i];
     if (g) return g;
     g = [];
-    for (const r of plan.block(i).reflow) if (r.kind === "join") g.push(r.from, r.to);
+    const reflow = plan.block(i).reflow;
+    reflow.forEach((r, k) => {
+      if (r.kind !== "join") return;
+      const held = reflow[k + 1];
+      g?.push(r.from, r.to, held && held.kind === "hide" && held.from === r.to ? held.to : r.to);
+    });
     joinMemo[i] = g;
     return g;
+  };
+
+  const joinOf = (pos: number, reach: 1 | 2): PlanSpan | null => {
+    if (!blocks.length) return null;
+    const r = reachOf();
+    for (let i = lastBlockOnLineOf(pos); i >= 0 && r[i] > pos; i--) {
+      const g = blockJoins(i);
+      for (let k = 0; k < g.length; k += 3)
+        if (g[k] <= pos && g[k + reach] > pos) return { from: g[k], to: g[k + 2] };
+    }
+    return null;
   };
 
   const blockMemo: (number[] | null)[] = Array.from({ length: blocks.length }, () => null);
@@ -178,15 +201,8 @@ export function paintOver(s: DocStructure, plan: DocPlan): PaintIndex {
       if (covers(whole("words"), from, t)) return true;
       return near(blockGroup, from, t);
     },
-    joined(pos: number): boolean {
-      if (!blocks.length) return false;
-      const r = reachOf();
-      for (let i = lastBlockOnLineOf(pos); i >= 0 && r[i] > pos; i--) {
-        const g = blockJoins(i);
-        for (let k = 0; k < g.length; k += 2) if (g[k] <= pos && g[k + 1] > pos) return true;
-      }
-      return false;
-    },
+    joined: (pos) => joinOf(pos, 1) !== null,
+    joinOver: (pos) => joinOf(pos, 2),
     draws(pos: number): boolean {
       if (apparatusBoxes().has(pos)) return true;
       const i = lineAt(pos);

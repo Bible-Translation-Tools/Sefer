@@ -309,7 +309,9 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
     // keeps when a range deletion writes around it. Its line's newline is the
     // paragraph's, not the marker's.
     const c = rl.standalone;
-    if (c) {
+    // A standalone line a join holds is the join's, not its own set.
+    const held = c !== null && (paint.joinOver(c.from)?.from ?? c.from) < c.from;
+    if (c && !held) {
       const head = { from: c.from, to: c.to };
       if (c.form === "point") make(out, "standalone", head, head, [head], NONE);
       else make(out, "standalone", head, head, NONE, [head]);
@@ -330,6 +332,15 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
     }
     for (let j = firstBlockFrom(l.from); j < blocks.length && blocks.fromAt(j) <= l.to; j++)
       blockTarget(out, j, i);
+    // A join on this line's newline: the space, and the lines it holds hidden
+    // behind it. Its anchor is all of it, so a key that reaches the space takes
+    // the whole gap at once — the newline alone would change nothing on screen.
+    const join = paint.joinOver(l.to);
+    if (join && join.from === l.to) {
+      const space = { from: join.from, to: join.from + 1 };
+      const holds = join.to > space.to ? [{ from: space.to, to: join.to }] : NONE;
+      make(out, "newline.inside", join, join, [space], holds);
+    }
     return out.length ? out : NO_TARGETS;
   };
 

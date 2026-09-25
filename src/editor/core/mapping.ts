@@ -211,14 +211,25 @@ const TOKEN_ROWS: readonly Row<TokenShape>[] = [
       "a ClosingMarker that closes no node prints raw; a P5 leak with no row",
     ),
   },
+  // An unknown marker is PASSTHROUGH, like a standalone one (Will,
+  // 2026-09-25): invisible, immutable, the caret goes around it and the
+  // paragraph flows through it. The engine still reports it as a finding, and
+  // USFM mode shows it as written. A marker the project registered is not
+  // unknown: it has its category's row (a legacy \\s5 is standalone).
+  {
+    id: "unknown.line",
+    kinds: MARKER_KINDS,
+    when: (t) => t.unknown && t.lineOpening,
+    verdict: cls("standalone"),
+    set: "standalone",
+    line: true,
+  },
   {
     id: "unknown",
     kinds: MARKER_KINDS,
     when: (t) => t.unknown,
-    verdict: unmapped(
-      "needs-ruling",
-      "an unknown marker is shown as written, at a line start or not, and the engine reports it; hiding it breaks P2. A marker the project registered is not unknown: it has its category's row (a legacy \\s5 is standalone)",
-    ),
+    verdict: cls("standalone"),
+    set: "standalone",
   },
   {
     id: "table",

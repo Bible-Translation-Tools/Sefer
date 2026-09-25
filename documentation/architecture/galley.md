@@ -22,7 +22,7 @@ It is **process-wide**. The table is the wasm module's, not the handle's, so eve
 
 "Contains" is a line-anchored regex over the texts (`^\\s5[ \t]*\r?$`, per entry), stopping at the first book that has one — the one place Sefer reads markup itself, deliberately: the answer decides the engine's configuration, which must be installed before the engine may parse, so asking the engine would be a parse under the wrong table and a second parse of every book. The cost is a scan: an s5 project stops in its first book (under 2 ms on en_ulb, 66 books); a project without one scans every book once, about 3–5 ms for a whole Bible (4.45 M characters). Both the registration and the scan are notes on the `project.open` record (`project.legacy_markers`, `project.legacy_scan_ms`) and `galley.extensions`.
 
-On en_ulb the registration takes the findings from 20,353 to 1,316, and on the `small-nt` fixture from 76 to 28: the "`\s5` is not a known marker" flood and the missing-paragraph findings its recovery caused are gone. How the editor paints and guards a standalone is the registry's `standalone` class ([editor](editor.md#standalone-markers)).
+On en_ulb the registration takes the findings from 20,353 to 1,316, and on the `small-nt` fixture from 76 to 28: the "`\s5` is not a known marker" flood and the missing-paragraph findings its recovery caused are gone. How the editor paints and guards a standalone is the registry's `standalone` class ([editor](editor.md#passthrough-markers)).
 
 ## Freshness
 

@@ -175,6 +175,7 @@ The pinned Scripture Kitchen WASM build (tagged git dependency, v0.1.7). Onion p
 - `setExtensions` is process-wide: the marker table a project opens with is the one every parse reads until the next open — reference texts, review sides and loose parses included. Legacy `\s5` is registered as `standalone` only for a project whose texts already contain it (the policy table is `LEGACY_MARKERS` in `src/app/legacyMarkers.ts`; empty means nothing registered); opening a project without it clears the registration. en_ulb: 20,353 findings → 1,316. Detection is the one deliberate regex over markup, because it must run before the first parse. Stripping `\s5` from text is a separate choice. → [galley](architecture/galley.md#the-marker-table-setextensions)
 - An unchanged Review row (no runs) still reads note prose joined to the word before it; only changed rows set notes apart.
 - Still open upstream: the Sous character census (engine-asks 2) and chapter labels (engine-asks 4).
+- Not yet asked: an unknown marker closes its paragraph at the end of its line (the recovery `\s5` caused before it was registered). The editor treats unknown markers as passthrough, and for the paragraph to flow through one the engine would have to leave it open, as it does for a registered standalone.
 
 ### Ideas / future
 
@@ -263,6 +264,8 @@ CodeMirror over an EditorBook: the phases, registry, mapping and plan; one funne
 ### Constraints and known bugs
 
 - In headless Chromium and headless Chrome, CodeMirror's `posAtCoords` on the fixture's Psalms answers a position one to three visual lines below the point it is given (master as well as today), so a scripted click, and End (which finds the line's end by coordinates), land low. Not seen in a real window; scripted checks dispatch the selection a click would make instead.
+- Passthrough markers (a registered standalone such as `\s5`, and any unknown marker) are invisible in regular mode and immortal: the caret goes around them, no key takes one alone, and a delete that covers one takes it — the matrix's immortal rule; a `KEEP` bit that wrote around them instead was tried and dropped because it glued `\s5` to the next word. The space a paragraph shows where it flows through blank and `\s5` lines is the registry's `join` set, which owns those lines, so Backspace or Delete at it removes the whole gap in one step. → [editor](architecture/editor.md#passthrough-markers)
+- An unknown marker closes its paragraph in the engine at the end of its line, so unlike `\s5` the paragraph does not flow through it: the marker is invisible, the lines after it read as their own lines. Needs an engine answer (see Galley).
 - Input and accessibility have not been exercised at all: no IME, RTL, screen-reader or keyboard-only evidence, in either mode or any of the three desktop webviews. Only groundwork exists (text direction, bidi isolates).
 
 ### Ideas / future

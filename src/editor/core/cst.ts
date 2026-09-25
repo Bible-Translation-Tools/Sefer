@@ -130,11 +130,14 @@ export function scanCst(doc: string, analysis: Analysis): CstScan {
       startAt[i] = from;
       endAt[i] = to;
       flagsAt[i] = flags;
-      // A standalone marker is a point inside its line, like a milestone; it
-      // is found by its row rather than its token kind, which it shares with
-      // every other marker.
-      if (to > from && (SPANNING[kind] || (kind === TOKEN.MARKER && STANDALONE_ROWS[r.marker])))
-        spanning.push(i);
+      // A passthrough marker — standalone, or one the engine does not know
+      // (row 0) — is a point inside its line, like a milestone; it is found by
+      // its row rather than its token kind, which it shares with every other
+      // marker. The mapping's row decides what it is; this only gathers.
+      const passthrough =
+        isMarkerKind(kind) &&
+        (r.marker === 0 || (kind === TOKEN.MARKER && STANDALONE_ROWS[r.marker]));
+      if (to > from && (SPANNING[kind] || passthrough)) spanning.push(i);
       if (kind === TOKEN.NEWLINE) {
         breaks.push(to);
         looking = true;

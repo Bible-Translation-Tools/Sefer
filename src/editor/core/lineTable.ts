@@ -136,7 +136,7 @@ class Line implements DocLine {
       } else if (row.id === "milestone.token") {
         if (this.#milestones === NO_MILESTONES) this.#milestones = [];
         this.#milestones.push({ from, to: cst.payloadEnd(i), name: spellingAt(cst, i, f.doc) });
-      } else if (row.id === "standalone") {
+      } else if (row.set === "standalone" && row.line !== true) {
         if (this.#standalones === NO_STANDALONES) this.#standalones = [];
         this.#standalones.push({ from, to });
       }
