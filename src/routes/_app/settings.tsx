@@ -3,15 +3,10 @@ import { createFileRoute } from "@tanstack/solid-router";
 import { Effect, Fiber, Result, Stream } from "effect";
 import Minus from "lucide-solid/icons/minus";
 import Plus from "lucide-solid/icons/plus";
-import { For, Show, createSignal, onCleanup } from "solid-js";
+import { For, Show, createSignal, onCleanup, untrack } from "solid-js";
 
 import { exportDiagnostics } from "#app/diagnostics";
-import {
-  catalogueUrlFor,
-  contentHostFor,
-  endpointsChangedSinceBoot,
-  transportSpecFor,
-} from "#app/endpoints";
+import { BUILD_ENDPOINTS, endpointsChangedSinceBoot } from "#app/endpoints";
 import { t } from "#app/i18n";
 import { useShell } from "#app/ProjectContext";
 import { SETTING_GROUPS, shellKeys, shellSettings, type AnyDescriptor } from "#app/settings";
@@ -30,6 +25,7 @@ import { ShellGate } from "#app/ui/ShellGate";
 import { applyAppearance, asTheme, type Appearance } from "#app/ui/theme";
 import { UpdatePanel } from "#app/ui/UpdatePanel";
 import type { SettingKey } from "#core/host/settings";
+import { parseTransport } from "#core/remote/transport";
 
 /**
  * The settings screen: one card per declared group, one row per registered key,
@@ -148,20 +144,113 @@ function SettingsPage() {
   };
 
   /**
-   * What a network row resolves to right now — the override, or this build's
-   * value when the box is empty — so the screen shows which server is in use
-   * rather than only an empty box that means "the build's".
+   * A network row. Not written per keystroke like the rest of this screen: a
+   * half-typed URL is a broken server, and every transfer reads the value. So
+   * the box holds a DRAFT, prefilled with the value in use; Save writes it
+   * once it parses, and "Use this build's" drops the override. Saving the
+   * build's own value stores nothing, so the row follows the build again.
    */
-  const inUse = (descriptor: AnyDescriptor): string | undefined => {
-    if (descriptor.group !== "network") return undefined;
-    // `tick` is read so this re-runs after every write, as `drifted` does.
-    tick();
-    if (descriptor.key === keys.contentHost) return contentHostFor(services.settings) ?? t("none");
-    if (descriptor.key === keys.catalogueUrl)
-      return catalogueUrlFor(services.settings) ?? t("none: sample data");
-    if (descriptor.key === keys.webTransport)
-      return transportSpecFor(services.settings).split(",").join("\n") || t("none");
-    return undefined;
+  const NetworkRow = (rowProps: { readonly descriptor: AnyDescriptor & { kind: "string" } }) => {
+    // Read once: `<For>` builds a row per descriptor, so a row's key never changes.
+    const key = untrack(() => rowProps.descriptor.key);
+    const which = (): keyof typeof BUILD_ENDPOINTS | undefined => {
+      const held = shellKeys(services.settings);
+      if (key === held.contentHost) return "contentHost";
+      if (key === held.catalogueUrl) return "catalogueUrl";
+      if (key === held.webTransport) return "webTransport";
+      return undefined;
+    };
+    const built = (): string => {
+      const name = which();
+      return (name === undefined ? null : BUILD_ENDPOINTS[name]) ?? "";
+    };
+    const stored = (): string => read(key).trim();
+    const inUse = (): string => stored() || built();
+    const [draft, setDraft] = createSignal(untrack(inUse), { name: "networkDraft" });
+
+    /** Why the draft cannot be saved, or "" when it can. */
+    const invalid = (): string => {
+      const value = draft().trim();
+      if (value === "") return "";
+      if (which() === "webTransport") {
+        const pairs = value.split(",").filter((pair) => pair.trim() !== "");
+        return parseTransport(value).size === pairs.length
+          ? ""
+          : t("Every pair must be host=proxy, both full URLs.");
+      }
+      try {
+        const url = new URL(value);
+        return url.protocol === "https:" || url.protocol === "http:"
+          ? ""
+          : t("Use a full http(s) URL.");
+      } catch {
+        return t("Use a full http(s) URL.");
+      }
+    };
+    const dirty = (): boolean => draft().trim() !== inUse();
+    const save = (): void => {
+      const value = draft().trim();
+      // The build's own value, or nothing, is no override at all.
+      write(key, value === built() ? "" : value);
+      if (value === "") setDraft(built());
+    };
+    const useBuilds = (): void => {
+      write(key, "");
+      setDraft(built());
+    };
+
+    return (
+      <div class="space-y-2 py-3" data-setting={key.name}>
+        <label for={key.name} class="block text-small text-on-surface-primary">
+          {t(rowProps.descriptor.label)}
+          <Show when={rowProps.descriptor.description}>
+            {(description) => (
+              <span class="block text-smallest text-on-surface-tertiary">{t(description())}</span>
+            )}
+          </Show>
+        </label>
+        <div class="flex items-center gap-2">
+          <Input
+            id={key.name}
+            type="text"
+            size="sm"
+            wrapperClass="min-w-0 flex-1"
+            class="font-mono"
+            spellcheck={false}
+            placeholder={built() || t("none")}
+            value={draft()}
+            aria-invalid={invalid() === "" ? undefined : "true"}
+            onInput={(event) => setDraft(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && dirty() && invalid() === "") save();
+            }}
+          />
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={!dirty() || invalid() !== ""}
+            onClick={save}
+          >
+            {t("Save")}
+          </Button>
+          <Button size="sm" variant="secondary" disabled={stored() === ""} onClick={useBuilds}>
+            {t("Use this build's")}
+          </Button>
+        </div>
+        <p data-in-use={key.name} class="text-smallest text-on-surface-tertiary">
+          <Show
+            when={invalid() === ""}
+            fallback={<span class="text-on-surface-error">{invalid()}</span>}
+          >
+            {stored() === ""
+              ? t("In use: this build's value.")
+              : t("In use: your override. This build's is {built}.", {
+                  built: built() || t("none"),
+                })}
+          </Show>
+        </p>
+      </div>
+    );
   };
 
   const widget = (descriptor: AnyDescriptor): JSX.Element => {
@@ -238,34 +327,31 @@ function SettingsPage() {
                 <PanelHeader level={3} title={t(group.title)} subtitle={t(group.subtitle)} />
                 <div class="divide-y divide-surface-border">
                   <For each={rows()}>
-                    {(descriptor) => (
-                      <div class="flex items-center gap-6 py-3" data-setting={descriptor.key.name}>
-                        <label
-                          for={descriptor.key.name}
-                          class="min-w-0 flex-1 text-small text-on-surface-primary"
+                    {(descriptor) =>
+                      descriptor.group === "network" && descriptor.kind === "string" ? (
+                        <NetworkRow descriptor={descriptor} />
+                      ) : (
+                        <div
+                          class="flex items-center gap-6 py-3"
+                          data-setting={descriptor.key.name}
                         >
-                          {t(descriptor.label)}
-                          <Show when={descriptor.description}>
-                            {(description) => (
-                              <span class="block text-smallest text-on-surface-tertiary">
-                                {t(description())}
-                              </span>
-                            )}
-                          </Show>
-                          <Show when={inUse(descriptor)}>
-                            {(value) => (
-                              <span
-                                data-in-use={descriptor.key.name}
-                                class="mt-1 block font-mono text-smallest break-all whitespace-pre-line text-on-surface-secondary"
-                              >
-                                {t("In use: {value}", { value: value() })}
-                              </span>
-                            )}
-                          </Show>
-                        </label>
-                        <div class="shrink-0">{widget(descriptor)}</div>
-                      </div>
-                    )}
+                          <label
+                            for={descriptor.key.name}
+                            class="min-w-0 flex-1 text-small text-on-surface-primary"
+                          >
+                            {t(descriptor.label)}
+                            <Show when={descriptor.description}>
+                              {(description) => (
+                                <span class="block text-smallest text-on-surface-tertiary">
+                                  {t(description())}
+                                </span>
+                              )}
+                            </Show>
+                          </label>
+                          <div class="shrink-0">{widget(descriptor)}</div>
+                        </div>
+                      )
+                    }
                   </For>
                 </div>
                 <Show when={group.id === "network" && drifted()}>

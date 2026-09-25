@@ -517,8 +517,7 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
     {
       key: keys.contentHost,
       label: "Content host",
-      description:
-        "The WACS server a sign-in, the repository list and a publish go to. Empty uses this build's.",
+      description: "The WACS server a sign-in, the repository list and a publish go to.",
       kind: "string",
       group: "network",
     },
@@ -526,7 +525,7 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
       key: keys.catalogueUrl,
       label: "Catalogue",
       description:
-        "The Language API the projects page lists from. Each project it lists carries its own address, so this can point at a different server from the content host. Empty uses this build's.",
+        "The Language API the projects page lists from. Each project it lists carries its own address, so this can point at a different server from the content host.",
       kind: "string",
       group: "network",
     },
@@ -534,7 +533,7 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
       key: keys.webTransport,
       label: "Browser transport",
       description:
-        "How this browser reaches each server, as host=proxy pairs separated by commas. Each proxy serves exactly one server, so a wrong pair breaks every transfer to it. Empty uses this build's.",
+        "How this browser reaches each server, as host=proxy pairs separated by commas. Each proxy serves exactly one server, so a wrong pair breaks every transfer to it.",
       kind: "string",
       group: "network",
       hosts: ["web"],

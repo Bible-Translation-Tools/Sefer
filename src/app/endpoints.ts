@@ -61,13 +61,23 @@ export const resolveEndpoints = (settings: SettingsService): ResolvedEndpoints =
 });
 
 /**
+ * This build's own value for each network preference, before any override —
+ * what the settings screen offers to go back to.
+ */
+export const BUILD_ENDPOINTS: ResolvedEndpoints = {
+  contentHost: env.contentHost,
+  catalogueUrl: env.catalogueUrl,
+  webTransport: env.webTransport,
+};
+
+/**
  * The Web transport's pairs as text: the preference if someone set one in
  * Advanced, otherwise this build's. Each proxy is pinned to one upstream, so
  * this is infrastructure rather than a choice — a wrong pair breaks every
  * transfer to that host — and it is editable only because a flags screen is
  * where somebody debugging a proxy goes.
  */
-export const transportSpecFor = (settings: SettingsService): string =>
+const transportSpecFor = (settings: SettingsService): string =>
   settings.get(shellKeys(settings).webTransport).trim() || env.webTransport;
 
 /** How this host reaches a content host: the proxy pairs on the Web, nothing on desktop. */
