@@ -87,7 +87,7 @@ The port is `effect/FileSystem` used as-is. Implementations: memory (tests, fixt
 
 ### Overview
 
-Schema-validated preferences persisted as JSON through `writeFileAtomic`. Each module registers its own keys and gets a token back; a bad value falls back to its default. `src/core/host/settings.ts`, `src/app/settings.ts`, the `/settings` route. → [host](architecture/host.md), [shell](architecture/shell.md)
+Schema-validated preferences persisted as JSON through `writeFileAtomic`. Each module registers its own keys and gets a token back; a bad value falls back to its default. Writes go one at a time (a one-permit `Semaphore` across snapshot, save and publish): overlapping `set`s used to each save a file missing the other's key, and opening a project — three keys at once — lost its slug, so a reload found no project. `src/core/host/settings.ts`, `src/app/settings.ts`, the `/settings` route. → [host](architecture/host.md), [shell](architecture/shell.md)
 
 ### Constraints and known bugs
 
@@ -236,17 +236,17 @@ A folder of books, with discovery (including RC `manifest.yaml` and Burrito meta
 
 What a typed place means and where a place is in one text. `src/core/location`: `address.ts` (the Address union: book, intro, chapters, verses; U23003 spelling), `names.ts` (the name catalogue: canon, project names, abbreviations, intro words), `citation.ts` (the Citation parser, navigation and prose grammars; the one Sefer file with a test), `locate.ts` (`resolve` and `addressAt` over a `TocView`), `canon.ts`. `src/core/galley/location.ts` adapts the engine's dish TOC into a `TocView`. `src/app/location.ts` is the per-project piece the shell exposes as `shell.location`: the catalogue memo, the held books, and the display rule (the project's own book name, English otherwise). It has no architecture chapter yet; the plan is `planning/01-discussing/editor-primitives-consistency.md`.
 
-On it today: the palette and sidebar jump, `showReference` (found / missing with its chapter / ambiguous, each reported), and the inventory's site labels.
+On it today: the palette, the sidebar's filter (`shell.location.books` for every book the words could mean, `read` for the chapter) and its chapter tiles (the engine's TOC from the held analysis, never a scan of the text), `showReference` (found / missing with its chapter / ambiguous, each reported), the inventory's site labels, the Key terms source card (Library's text through the engine), and the sync plan's chapter rows.
 
 ### Constraints and known bugs
 
-- Two address types still: `Address`, and `Ref` in book.ts, which Search, Excerpts/STET and Library use until the second pass moves them.
+- Two address types still: `Address`, and `Ref` in book.ts, which Search and Excerpts/STET use until the second pass moves them. Library no longer takes one: `lookup` is gone, and STET reads the book and resolves the verse itself.
 - The rule: Sefer never scans for `\c`/`\v` with a regex; the engine's TOC answers. One place still does on its own: search's `buildRefTable`/`refFrom`, the second pass.
 - Kitchen v0.1.7 carries segments, verse-list members and each designator's label span in the TOC. Sefer's seam (`tocViewOf`) reads a verse label's end (the STET source card skips the number with it) and the members, kept only on a verse whose hull does not say what it covers — a list or a segment — so a plain book carries no array per verse. `resolve` honours them: `3a` finds `\v 3a` exactly and is `coarser` only when the text has plain `\v 3`; `3` over `\v 3a` … `\v 3b` finds both; `2` is missing from `\v 1,3,5`. Known and deliberate: `addressAt` inside `\v 1,3,5` says `1-5`, the hull — an Address is one range, and the hull leaves out nothing the caret is in; `resolve` is what refuses the holes. The label's START is not read yet; nothing needs it.
 
 ### Ideas / future
 
-- The second pass: Search (one-off `parseText` TOCs for resources, the last published TOC while typing), Excerpts/STET, Library; then `Ref` goes.
+- The second pass: Search (one-off `parseText` TOCs for resources, the last published TOC while typing), Excerpts (its `\h` and `\toc2` regexes too); then `Ref` goes. Library and the sync plan are done.
 - A prose scanner for comments, when comments exist. The grammar is already in `citation.ts`.
 
 ---
@@ -475,12 +475,13 @@ The flow needs one top-to-bottom pass before more is added.
 
 ### Overview
 
-Clone, fetch, pull, push and branch moves against a Gitea (WACS) server, plus the Gitea account half (sign-in, tokens). `src/core/remote`, `platform/{web,tauri}/remote.ts`. → [git](architecture/git.md), [configuration](architecture/configuration.md)
+Clone, fetch, pull, push and branch moves against a Gitea (WACS) server, plus the Gitea account half (sign-in, tokens). The CONTENT HOST is the identity on both hosts — what `origin` names and a sign-in is filed under; on the Web every request goes through the transport (`src/core/remote/transport.ts`, the proxy that fronts each host), applied inside the HTTP clients and stored nowhere. A proxy `origin` from an older Web clone is mapped back on first read. `src/core/remote`, `platform/{web,tauri}/remote.ts`. → [git](architecture/git.md), [configuration](architecture/configuration.md)
 
 ### Constraints and known bugs
 
 - Desktop transfer progress is a `TODO(seam)` (`platform/tauri/remote.ts:141`).
-- Desktop `git_clone` (git2 `RepoBuilder`) compiles but has not been run against a server; the web clone was checked on `main` and `master` repositories through the prod proxy.
+- Desktop `git_clone` (git2 `RepoBuilder`) compiles but has not been run against a server; the web clone was checked on `main` and `master` repositories through the prod proxy, and (2026-09-25) stores the content host as `origin`.
+- A sign-in saved under a proxy host before 2026-09-25 is not carried over: one fresh sign-in.
 
 ### Ideas / future
 
@@ -508,7 +509,8 @@ Browsing the online catalogue on the projects page: the Language API's GraphQL e
 
 ### Constraints and known bugs
 
-- None.
+- The Date column is `content.modified_on`, and on 2026-09-25 every production row read Jul 24, 2026: it may be when the catalogue last ingested the row, not when the repository changed. Ask the Language API's owners before a reader trusts it.
+- The catalogue is fetched again on every visit to the projects page (two small queries, about 0.3 s each). Not cached; nothing has needed it.
 
 ### Ideas / future
 
@@ -591,7 +593,7 @@ Composed exactly once (`composeApplication`), with services reached through `use
 
 ### Overview
 
-Tailwind over semantic tokens, a primitives inventory, and corvu only inside `primitives/`. → [ui](architecture/ui.md), [design surface](architecture/design.md)
+Tailwind over semantic tokens, a primitives inventory, and corvu only inside `primitives/`. Sizes own radius and padding, so a look a primitive lacks is a size or variant added to it, never a `!` override from a caller; text sizes come from the type scale, and a width that holds text is rem. `Menu` (built on `Popover`: roles, arrow keys, focus on open and back on close) is the one menu. → [ui](architecture/ui.md), [design surface](architecture/design.md), [merging designer code](../agents/skills/merging-designer-code/SKILL.md)
 
 ### Constraints and known bugs
 

@@ -66,8 +66,9 @@ exist because only one of them is worth retrying unchanged.
 repository on `master` arrives on `master`. It used to be `Git.init` → `attach` → `pull`, and that
 was wrong twice: the init chose `main` before the server was asked, and on the Web isomorphic-git's
 pull then tried to merge into that unborn branch ("Could not find main", every browser download).
-On the Web the URL is re-based onto the endpoint first, exactly as `attach` does, so `.git/config`
-holds the same thing either way. `cloneRepository(url, into, catalogueId?)` in
+The URL is mapped to its content host first (`identityOf`, a proxy URL back to the server it
+fronts), exactly as `attach` does, so `.git/config` names the server on both hosts and a project
+moves between them unchanged; the Web's proxy is applied inside the HTTP client, per request. `cloneRepository(url, into, catalogueId?)` in
 `src/core/remote/clone.ts` runs it and then appends a `remote` arrival to `.sefer/provenance.json`
 with the URL as the caller gave it — after the clone, because git refuses a folder that is not
 empty ([landing](landing.md) has the record and the index field it feeds). Updates stay an ordinary
