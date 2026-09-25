@@ -287,9 +287,13 @@ A token revoked on the server still reads as a session here until the next call 
 `Unauthorized`; the account card surfaces that, and a boot-time validation request is deliberately
 not made.
 
-`createAccount` (`src/app/ui/cloud/account.ts`) and `AccountCard` (`src/app/ui/cloud/AccountCard.tsx`) are shared with the project page's
-`CloudPanel`, which keeps the attach-and-publish half. The two surfaces cannot disagree about what
-"signed in" means because there is one implementation of it.
+`createAccount` (`src/app/ui/cloud/account.ts`) and `AccountCard` (`src/app/ui/cloud/AccountCard.tsx`) are shared with
+`CloudPanel` on `/settings`, and so is the attach-and-publish half, `SharedProjectCard`
+(`src/app/ui/cloud/SharedProjectCard.tsx`). `/cloud` shows that card whenever the next step is attach or
+publish, and its primary button drives it: listing the repositories, or putting the caret in the new
+name. An attach or publish re-reads the sync state. (Until 2026-09-25 the card was only on `/settings`, so
+"Choose a shared project" on `/cloud` did nothing.) The surfaces cannot disagree about what "signed in"
+means because there is one implementation of it.
 
 ## What the ports grew
 
