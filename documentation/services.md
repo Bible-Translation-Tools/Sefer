@@ -4,9 +4,9 @@ One section per service: what it is in plain words, what is wrong or constrained
 
 **Keep it short.** A section that grows past a screen is a sign its detail belongs in the architecture chapter. When an item is fixed, delete it; when an idea gets serious, give it a plan in `planning/01-discussing` and leave a one-line pointer here.
 
-## Where to focus (as of 2026-09-23)
+## Where to focus (as of 2026-09-25)
 
-1. **Location / references** — first pass landed (navigation and inventory); Search, Excerpts/STET and Library next. See [Location](#location-and-reference) and `planning/01-discussing/editor-primitives-consistency.md`.
+1. **Location** — done: every place question goes through Citation, Address and Location over the engine's TOC, and no regex reads a designator. Anchors (for comments) are the next piece, when comments start. See [Location](#location-and-reference) and [the Location chapter](architecture/location.md).
 2. **Git, top to bottom** — history time travel is next, and the pull/push/lifecycle flow needs one careful pass before anything else is added to it. See [Git](#git).
 3. **One diff and sync model** — after the primitives settle: retire the line diff, stop reading and diffing every book, one change classification for History, Review and Cloud. See [Diff](#diff) and `planning/01-discussing/diff-and-sync-model-2026-09-23.md`.
 4. **Data safety in Recovery** — a journal must know what text it started from. See [Recovery](#recovery).
@@ -234,7 +234,7 @@ A folder of books, with discovery (including RC `manifest.yaml` and Burrito meta
 
 ### Overview
 
-What a typed place means and where a place is in one text. `src/core/location`: `address.ts` (the Address union: book, intro, chapters, verses; U23003 spelling), `names.ts` (the name catalogue: canon, project names, abbreviations, intro words), `citation.ts` (the Citation parser, navigation and prose grammars; the one Sefer file with a test), `locate.ts` (`resolve` and `addressAt` over a `TocView`), `canon.ts`. `src/core/galley/location.ts` adapts the engine's dish TOC into a `TocView`. `src/app/location.ts` is the per-project piece the shell exposes as `shell.location`: the catalogue memo, the held books, and the display rule (the project's own book name, English otherwise). It has no architecture chapter yet; the plan is `planning/01-discussing/editor-primitives-consistency.md`.
+What a typed place means and where a place is in one text. `src/core/location`: `address.ts` (the Address union: book, intro, chapters, verses; U23003 spelling), `names.ts` (the name catalogue: canon, project names, abbreviations, intro words), `citation.ts` (the Citation parser, navigation and prose grammars; the one Sefer file with a test), `locate.ts` (`resolve` and `addressAt` over a `TocView`), `canon.ts`. `src/core/galley/location.ts` adapts the engine's dish TOC into a `TocView`. `src/app/location.ts` is the per-project piece the shell exposes as `shell.location`: the catalogue memo, the held books, and the display rule (the project's own book name, English otherwise). → [location](architecture/location.md)
 
 On it today: the palette, the sidebar's filter (`shell.location.books` for every book the words could mean, `read` for the chapter) and its chapter tiles (the engine's TOC from the held analysis, never a scan of the text), `showReference` (found / missing with its chapter / ambiguous, each reported), the inventory's site labels, the Key terms source card (Library's text through the engine), the sync plan's chapter rows, Search's hit Addresses (`addressAt` over an analysis the caller supplies), and Excerpts: each card's Address and label, and Key terms' and Find-in-references' mapping onto the project (`refOccurrences`, through `resolve`).
 

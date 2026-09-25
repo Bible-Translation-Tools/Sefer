@@ -2,7 +2,7 @@
 
 Every question of the form "where in scripture" goes through one set of pieces. What somebody typed is a **Citation**; the place it means is an **Address**; where that place is in one particular text is a **Location**. Nothing in Sefer keeps its own copy of any of those answers, and nothing reads a USFM designator (`\c 12`, `\v 3a`) itself: the engine does, and Sefer reads its TOC.
 
-`src/core/location` holds the pure pieces; `src/app/location.ts` is the per-project door the shell exposes as `shell.location`. The decisions below were made with Will on 2026-09-24 and 2026-09-25; the planning discussion they came from is in git history (`planning/01-discussing/editor-primitives-consistency.md`).
+`src/core/location` holds the pure pieces; `src/app/location.ts` is the per-project door the shell exposes as `shell.location`. The decisions below were made with Will on 2026-09-24 and 2026-09-25; the planning discussion they came from is in git history (`planning/01-discussing/editor-primitives-consistency.md`, retired 2026-09-25 when the work landed).
 
 ## Four words, one job each
 
@@ -90,7 +90,8 @@ The name catalogue and the held books are memos over the project and its metadat
 - **Findings** and the **character inventory** label a site with `addressAt`, only when the stamp matches.
 - **Key terms**: the source card reads a bound resource's book through Library, analyses it, and resolves the verse, skipping the `\v N` label by the TOC's label end.
 - The **sync plan** splits each revision of a book by the engine's chapter rows.
-- **Search** and **Excerpts** — see [search](search.md) and [key terms](stet.md) for how their labels and anchors are resolved.
+- **Search**: a hit's Address is `addressAt` over an analysis the CALLER supplies (`analysisOf`), and only when it describes exactly the scanned text; with none, the hit has no Address and there is no fallback scanner. Search stays synchronous and pure. See [search](search.md).
+- **Excerpts and Key terms**: `refOccurrences` resolves each guide Address in the project book (a bridge's two verses land on one card; a list's holes are missing), each card carries the Address of its unit, and a book's own name comes from its `\h` (`bookHeading`, off the engine's tokens) after the project's metadata name. See [key terms](stet.md).
 
 ## Not built yet
 
@@ -100,6 +101,8 @@ The name catalogue and the held books are memos over the project and its metadat
 - **Verse `end`** (U23003's `MAT 2:5-end`): one union member, added when a consumer types one.
 - **Non-verse targets** (a footnote, a heading): a Location is already a span, so they need no coordinates of their own. A `part` qualifier on the derived answer, or the engine's `(sid, where, ordinal)` block address, when a consumer needs one to survive edits; U25002's `@aid` for USFM 3.2 texts.
 - **`covering`** (the Addresses a selection spans), when a consumer needs it.
+- **`Occurrence` → `Hit`.** A search result is not a Location word; when it is renamed it becomes Hit, the word the replace gate already uses. Naming only.
+- **The next composition test** is a reference preview or a comment anchor: only after one of those is built is it worth judging whether an N-column aligned view needs a reusable container. Until then Find's excerpt list and the reference pane stay two recipes over the same Location answers.
 
 ## U23003
 
