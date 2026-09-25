@@ -52,6 +52,14 @@ const IGNORED = /(^|\/)(__MACOSX\/|\.DS_Store$|Thumbs\.db$|\._)/;
 const usable = (path: string): boolean => path !== "" && !path.endsWith("/") && !IGNORED.test(path);
 
 /**
+ * An archive entry's path as a relative one. Some zippers write entries with a
+ * leading `/` (`/en_ulb/66-JUD.usfm`), and some a leading `./`; either hid the
+ * shared top folder from `stripCommonRoot`, so the books landed one folder
+ * down and the project imported "successfully" and then would not open.
+ */
+const entryPath = (name: string): string => name.replace(/^(?:\.?\/)+/u, "");
+
+/**
  * Drops the one folder every entry sits in, if there is one.
  *
  * A zipped project is almost always `small-nt/…`, and a folder pick reports
@@ -204,17 +212,17 @@ export const pickZip = async (
   let entries: Record<string, Uint8Array>;
   try {
     entries = unzipSync(new Uint8Array(archiveBytes));
-    names = Object.keys(entries).filter((name) => usable(name));
+    names = Object.keys(entries).filter((name) => usable(entryPath(name)));
   } finally {
     unzip?.({ "import.entries": names.length });
   }
   if (names.length === 0) return undefined;
-  const { root, cut } = stripCommonRoot(names);
+  const { root, cut } = stripCommonRoot(names.map(entryPath));
   const files: IntakeFile[] = [];
   for (const name of names) {
     const bytes = entries[name];
     if (bytes === undefined) continue;
-    files.push({ path: name.slice(cut), bytes });
+    files.push({ path: entryPath(name).slice(cut), bytes });
   }
   const stem = lastSegment(archive.name).replace(/\.zip$/iu, "");
   return { name: root === "" ? stem : root, files };
