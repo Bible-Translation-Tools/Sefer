@@ -569,7 +569,13 @@ export function BookEditor(props: BookEditorProps) {
       // A finding or a search hit is a point in the middle of a page, so it is
       // centred; a CHAPTER is the first line you read, so it goes to the top
       // with the rest of the book below it.
+      // The caret goes where the reader was sent, not only the scroll: every
+      // command that asks "which chapter" or "where am I" reads the caret, and
+      // one left behind at the top of the book (or in the chapter before)
+      // made "Match formatting: this chapter" refuse, or quietly work on the
+      // wrong chapter, right after a chapter tile.
       held.view.dispatch({
+        selection: { anchor: at },
         effects: EditorView.scrollIntoView(at, { y: aimed.at === "top" ? "start" : "center" }),
       });
       const cancel = flash(held.view, { from: at, to: end });

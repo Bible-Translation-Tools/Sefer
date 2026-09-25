@@ -55,6 +55,14 @@ What follows is the agreed direction, not a description of suites that exist.
 - **Empirical checks** — real IME composition, RTL selection, platform interaction — need hands-on verification on supported systems; synthetic events do not close the real-IME gate. Performance sweeps stay separate from correctness checks.
 - **Cadence.** Node tests are the default feedback (aim below ten seconds); focused Browser Mode cases for editor work; the full fast suite plus a small Web smoke before merge; desktop smoke for changes to shared save contracts, permissions, packaging and dependencies. If a budget fails, look for unnecessary setup, duplication or misplaced coverage before moving a necessary check to a rarer cadence.
 
+### Journey candidates
+
+Flows a real user broke that a Playwright journey would have caught. Written down rather than built, because the screens are still moving (the designer may change them) and a suite that breaks on every redesign is one people delete. Each says what it guards, so a journey written later asserts the behaviour and not the pixels.
+
+- **Import a zip, then reload on the project** (2026-09-25). A zip whose entries start with `/` imported one folder down, said "Ready", and the project then opened as "no project here". Guard: after importing, the project opens, and a reload on its URL opens it again.
+- **Go to a chapter, then run a chapter command** (2026-09-25). A chapter tile scrolled the book but left the caret where it was, so "Match formatting from source: this chapter" refused ("put the cursor in a chapter first") or matched the chapter the caret was still in. Guard: after the sidebar's chapter N tile, a chapter-scoped command acts on chapter N.
+- **Open a menu twice** (2026-09-25). A change to `Popover` left every popover and menu refusing to open after its first close. Guard: the rail's Import menu opens, closes with `Esc`, and opens again.
+
 Colocate Node and focused browser tests with their owner; Web journeys live in `e2e/`.
 
 ## Tool references
