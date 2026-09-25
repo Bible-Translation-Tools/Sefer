@@ -33,7 +33,9 @@ Rarity's denominator today is the corpus total, so `Glyph.sites` has to take Rar
 
 ## 5. Designators model segments and list holes, and the TOC carries both
 
-**Asked 2026-09-24**, from the [editor primitives plan](../01-discussing/editor-primitives-consistency.md#subverses-and-verse-lists-two-grammars-one-value).
+**Delivered in v0.1.7 (2026-09-25)**; Sefer reads it (`tocViewOf`, `resolve`; see `documentation/architecture/location.md`). Kept below for the record until the next trim.
+
+**Asked 2026-09-24**, from the editor primitives plan (retired; in git history).
 
 **State:** Onion's `designator::verse` reads `\v 3a` as 3–3 ("a segment is a label, not a coordinate") and `\v 1,3,5` as 1–5 ("the hole is not modelled"). The Galley TOC keeps `first`/`last` and drops the designator span, so from JS a segment cannot be told apart from its verse and a verse list looks like a bridge.
 
@@ -46,3 +48,13 @@ Rarity's denominator today is the corpus total, so `Glyph.sites` has to take Rar
 - lint's duplicate and ordering rules then read members, so `\v 1,3,5` followed by `\v 2` is not an overlap.
 
 **Sefer side:** Location's resolver and the display of bridged Addresses. Until then `3a` resolves as verse 3, marked coarser than asked, and verse lists as their endpoints.
+
+## 6. An empty note has a body part
+
+**Asked 2026-09-25.** A fresh footnote, `\f + \ft \f*`, parses with no body part: nothing lies between `\ft ` and `\f*`, so the plan has no body target there, and the position where the body belongs sits inside one merged run of hidden markup.
+
+**Why it matters:** the note editor is now untrusted and judged by the Book's own phases under the `note-satellite` projection. With no body part, `refuseKeystrokesInsideHiddenMarkup` refuses the first keystroke into an empty note. Sefer carries a narrow carve-out for it (`src/editor/core/sealed.ts`: a pure insertion exactly at a zero-width surface range passes that one rule; every other rule still applies), which is policy standing in for a parse fact.
+
+**Change:** the parse (and the plan built from it) produces an EMPTY body target for a note whose body is empty — a zero-width part at the position after the body marker's space — so an empty body is a place like any other and the carve-out can be deleted. The same likely holds for any character-style body that can be empty (`\fr`, `\xt`), which is worth checking while there.
+
+**Sefer side:** delete the carve-out in `sealed.ts` and verify typing into a fresh footnote by hand.
