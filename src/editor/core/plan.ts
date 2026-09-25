@@ -40,7 +40,7 @@ export type SlotForm = "digits" | "box" | "pip" | "elided";
 
 export type MarkForm = "point" | "hidden";
 
-export type ReflowKind = "hide" | "join" | "chunk-point" | "chunk-hidden";
+export type ReflowKind = "hide" | "join";
 
 export interface ResolvedNote {
   from: number;
@@ -76,12 +76,13 @@ export interface ResolvedSlot {
 export interface ResolvedMark {
   readonly from: number;
   readonly to: number;
-  readonly kind: "milestone" | "optbreak";
+  readonly kind: "milestone" | "optbreak" | "standalone";
   readonly name: string;
   readonly form: MarkForm;
 }
 
-export interface ResolvedChunk {
+/** A standalone marker that opens its line: `from..to` is the marker, not the line. */
+export interface ResolvedStandalone {
   readonly from: number;
   readonly to: number;
   readonly form: MarkForm;
@@ -91,7 +92,7 @@ export interface ResolvedLine {
   readonly hidden: readonly PlanSpan[];
   readonly paints: boolean;
   readonly slot: ResolvedSlot | null;
-  readonly chunk: ResolvedChunk | null;
+  readonly standalone: ResolvedStandalone | null;
   readonly marks: readonly ResolvedMark[];
 }
 
@@ -213,10 +214,11 @@ class PlanLine implements ResolvedLine {
   readonly hidden: readonly PlanSpan[];
   readonly paints: boolean;
   readonly slot: ResolvedSlot | null;
-  readonly chunk: ResolvedChunk | null;
+  readonly standalone: ResolvedStandalone | null;
   readonly #line: DocLine;
   readonly #milestone: MarkForm;
   readonly #optbreak: MarkForm;
+  readonly #standaloneForm: MarkForm;
   #marks: readonly ResolvedMark[] | null = null;
 
   constructor(
@@ -224,17 +226,19 @@ class PlanLine implements ResolvedLine {
     hidden: readonly PlanSpan[],
     paints: boolean,
     slot: ResolvedSlot | null,
-    chunk: ResolvedChunk | null,
+    standalone: ResolvedStandalone | null,
     milestone: MarkForm,
     optbreak: MarkForm,
+    standaloneForm: MarkForm,
   ) {
     this.#line = line;
     this.hidden = hidden;
     this.paints = paints;
     this.slot = slot;
-    this.chunk = chunk;
+    this.standalone = standalone;
     this.#milestone = milestone;
     this.#optbreak = optbreak;
+    this.#standaloneForm = standaloneForm;
   }
 
   get marks(): readonly ResolvedMark[] {
@@ -245,6 +249,14 @@ class PlanLine implements ResolvedLine {
       out.push({ from: m.from, to: m.to, kind: "milestone", name: m.name, form: this.#milestone });
     for (const b of l.breaks)
       out.push({ from: b.from, to: b.to, kind: "optbreak", name: "", form: this.#optbreak });
+    for (const m of l.standalones)
+      out.push({
+        from: m.from,
+        to: m.to,
+        kind: "standalone",
+        name: "",
+        form: this.#standaloneForm,
+      });
     this.#marks = out.length ? out : NO_MARKS;
     return this.#marks;
   }
@@ -315,7 +327,7 @@ export function resolvePlan(s: DocStructure, a: Assignment): DocPlan {
   });
 
   const chromeHidden = paint("chrome") === "none";
-  const chunkForm: MarkForm = paint("chunk") === "point" ? "point" : "hidden";
+  const standaloneForm: MarkForm = paint("standalone") === "point" ? "point" : "hidden";
   const milestoneForm: MarkForm = paint("milestone") === "point" ? "point" : "hidden";
   const optbreakForm: MarkForm = paint("optbreak") === "point" ? "point" : "hidden";
   const blankElided = paint("blank") === "none";
@@ -385,17 +397,26 @@ export function resolvePlan(s: DocStructure, a: Assignment): DocPlan {
     let hidden: readonly PlanSpan[] = NO_SPANS;
     let paints = false;
     let slot: ResolvedSlot | null = null;
-    let chunk: ResolvedChunk | null = null;
+    let standalone: ResolvedStandalone | null = null;
     if (paintsItsOwnLine(l)) {
       paints = paint(l.cls) !== "none";
       if (chromeHidden && l.contentFrom > l.from) hidden = [{ from: l.from, to: l.contentFrom }];
-    } else if (l.cls === "chunk") {
-      chunk = { from: l.from, to: l.contentFrom, form: chunkForm };
+    } else if (l.cls === "standalone") {
+      standalone = { from: l.from, to: l.contentFrom, form: standaloneForm };
     } else if (l.cls === "slot.c") {
       slot = slotOf("c", l.from, l.markerEnd, l.numFrom, l.numTo, l.contentFrom, l.num);
       paints = slot.form !== "elided";
     }
-    return new PlanLine(l, hidden, paints, slot, chunk, milestoneForm, optbreakForm);
+    return new PlanLine(
+      l,
+      hidden,
+      paints,
+      slot,
+      standalone,
+      milestoneForm,
+      optbreakForm,
+      standaloneForm,
+    );
   };
 
   const lines: (ResolvedLine | null)[] = Array.from({ length: s.lines.length }, () => null);
@@ -416,14 +437,43 @@ export function resolvePlan(s: DocStructure, a: Assignment): DocPlan {
     const rows2 = b.lines;
     const holdsText = rows2.some((l) => !isBlankLine(l) && l.contentFrom < l.to);
     let prevEnd = -1;
-    let sawText = false;
     let joined = 0;
+    // Lines that draw nothing, met AFTER text whose newline is still pending:
+    // blank lines, and a standalone marker alone on its line. Whether they
+    // become one join or trail off the block is known only at the next text
+    // line or the block's end, so they are held rather than swallowed.
+    let gapTo = -1;
     const swallow = (l: DocLine) => {
       push(prevEnd >= 0 ? prevEnd : l.from, Math.min(l.to + 1, docLen), "hide");
       prevEnd = -1;
     };
+    // The held gap before a line that draws: ONE join, at the newline right
+    // after the text (so the caret at the text's end is the stop, and typing
+    // there lands in the text), and everything after it hidden. `\v 9 end.`,
+    // a blank line, `\s5`, `\v 10 Next` reads "end. Next".
+    const closeGap = (to: number) => {
+      if (gapTo < 0) return;
+      push(prevEnd, prevEnd + 1, joinKind);
+      push(prevEnd + 1, to, "hide");
+      joined++;
+      gapTo = -1;
+      prevEnd = -1;
+    };
+    // A gap nothing follows in this block: hidden up to the last invisible
+    // line's end, and NOT its newline — that newline is the boundary with the
+    // next block, and hiding it would pull the next block onto this line.
+    const trailGap = () => {
+      if (gapTo < 0) return;
+      push(prevEnd, gapTo, "hide");
+      gapTo = -1;
+      prevEnd = -1;
+    };
+    const invisible = (l: DocLine) =>
+      isBlankLine(l) ||
+      (l.cls === "standalone" && standaloneForm === "hidden" && l.contentFrom >= l.to);
     for (const l of rows2) {
       if (opensAParagraph(l)) {
+        trailGap();
         if (l.contentFrom >= l.to) {
           if (breaks && (holdsText || (l.cls === "blank" && blankElided))) {
             swallow(l);
@@ -434,28 +484,24 @@ export function resolvePlan(s: DocStructure, a: Assignment): DocPlan {
           continue;
         }
         if (chromeHidden) push(l.from, l.contentFrom, "hide");
-        sawText = true;
         prevEnd = breaks ? l.to : -1;
         continue;
       }
-      if (isBlankLine(l)) {
-        if (breaks) swallow(l);
+      if (invisible(l)) {
+        if (!breaks && isBlankLine(l)) continue;
+        if (prevEnd >= 0) gapTo = l.to;
+        else if (breaks) swallow(l);
+        else push(l.from, l.to, "hide");
         continue;
       }
-      if (l.cls === "chunk") {
-        const from = prevEnd >= 0 ? prevEnd : l.from;
-        push(from, l.to, chunkForm === "point" && sawText ? "chunk-point" : "chunk-hidden");
-        if (prevEnd >= 0) joined++;
-        prevEnd = breaks ? l.to : -1;
-        continue;
-      }
-      if (prevEnd >= 0) {
+      if (gapTo >= 0) closeGap(l.from);
+      else if (prevEnd >= 0) {
         push(prevEnd, l.from, joinKind);
         joined++;
       }
       prevEnd = breaks ? l.to : -1;
-      sawText = true;
     }
+    trailGap();
     const at = lineIndexAt(s, b.from);
     const startsLine = at >= 0 && s.lines.fromAt(at) === b.from;
     const paints = paint(b.cls) !== "none";

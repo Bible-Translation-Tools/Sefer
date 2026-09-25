@@ -69,9 +69,15 @@ export function paintOver(s: DocStructure, plan: DocPlan): PaintIndex {
 
   const NONE: readonly { from: number; to: number }[] = [];
   const heads = overLines((n) => plan.line(n).hidden);
-  const chunks = overLines((n) => {
-    const c = plan.line(n).chunk;
-    return c && c.form === "hidden" ? [c] : NONE;
+  // What a line hides that is not its opener's chrome: a standalone marker
+  // that opens it, and any point mark (milestone, optional break, standalone)
+  // the assignment does not draw.
+  const marks = overLines((n) => {
+    const rl = plan.line(n);
+    const c = rl.standalone;
+    const own = c && c.form === "hidden" ? [c] : NONE;
+    const hiddenMarks = rl.marks.filter((m) => m.form === "hidden");
+    return hiddenMarks.length ? [...own, ...hiddenMarks] : own;
   });
 
   const joinMemo: (number[] | null)[] = Array.from({ length: blocks.length }, () => null);
@@ -90,8 +96,7 @@ export function paintOver(s: DocStructure, plan: DocPlan): PaintIndex {
     if (g) return g;
     g = [];
     const rb = plan.block(i);
-    for (const r of rb.reflow)
-      if (r.kind === "hide" || r.kind === "chunk-hidden") g.push(r.from, r.to);
+    for (const r of rb.reflow) if (r.kind === "hide") g.push(r.from, r.to);
     if (rb.headHidden) g.push(rb.headHidden.from, rb.headHidden.to);
     blockMemo[i] = g;
     return g;
@@ -168,7 +173,7 @@ export function paintOver(s: DocStructure, plan: DocPlan): PaintIndex {
       const t = Math.max(to, from + 1);
       if (near(slots, from, t)) return true;
       if (near(heads, from, t)) return true;
-      if (near(chunks, from, t)) return true;
+      if (near(marks, from, t)) return true;
       if (covers(whole("notes"), from, t)) return true;
       if (covers(whole("words"), from, t)) return true;
       return near(blockGroup, from, t);

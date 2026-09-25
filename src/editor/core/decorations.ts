@@ -96,18 +96,6 @@ class PipWidget extends WidgetType {
   }
 }
 
-class ChunkWidget extends WidgetType {
-  eq() {
-    return true;
-  }
-  toDOM() {
-    const s = document.createElement("span");
-    s.className = "usfm-chunk";
-    s.title = "\\s5 chunk marker";
-    return s;
-  }
-}
-
 class VersePipWidget extends WidgetType {
   readonly num: string;
   constructor(num: string) {
@@ -423,14 +411,10 @@ export function buildRegular(
       hideAll(rl.hidden);
     } else if (l.cls === "block.heading") {
       hideAll(rl.hidden);
-    } else if (rl.chunk) {
-      add.push({
-        from: rl.chunk.from,
-        to: rl.chunk.to,
-        deco: Decoration.replace(
-          rl.chunk.form === "point" ? { widget: new ChunkWidget(), ...UNIT } : UNIT,
-        ),
-      });
+    } else if (rl.standalone) {
+      // A standalone marker draws nothing; "point" (a projection that shows
+      // it) leaves the marker's own text on the page.
+      if (rl.standalone.form === "hidden") hide(rl.standalone.from, rl.standalone.to);
     } else if (rl.slot) {
       if (rl.paints)
         add.push({ from: l.from, to: l.from, deco: Decoration.line({ class: "usfm-chap" }) });
@@ -442,6 +426,7 @@ export function buildRegular(
         hide(m.from, m.to);
         continue;
       }
+      if (m.kind === "standalone") continue;
       add.push({
         from: m.from,
         to: m.to,
@@ -502,17 +487,7 @@ export function buildRegular(
         add.push({ from: r.from, to: r.to, deco: HIDDEN });
         continue;
       }
-      if (r.kind === "join") {
-        add.push({ from: r.from, to: r.to, deco: join });
-        continue;
-      }
-      add.push({
-        from: r.from,
-        to: r.to,
-        deco: Decoration.replace(
-          r.kind === "chunk-point" ? { widget: new ChunkWidget(), ...UNIT } : UNIT,
-        ),
-      });
+      add.push({ from: r.from, to: r.to, deco: join });
     }
     joined += rb.joined;
     const head = b.cls === "block.heading" ? " usfm-head" : "";

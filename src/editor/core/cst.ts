@@ -48,6 +48,7 @@ import {
   opensBlock,
   rowForNode,
   rowForToken,
+  STANDALONE_ROWS,
   trimsRecoveryNewline,
 } from "./mapping";
 
@@ -129,7 +130,11 @@ export function scanCst(doc: string, analysis: Analysis): CstScan {
       startAt[i] = from;
       endAt[i] = to;
       flagsAt[i] = flags;
-      if (SPANNING[kind] && to > from) spanning.push(i);
+      // A standalone marker is a point inside its line, like a milestone; it
+      // is found by its row rather than its token kind, which it shares with
+      // every other marker.
+      if (to > from && (SPANNING[kind] || (kind === TOKEN.MARKER && STANDALONE_ROWS[r.marker])))
+        spanning.push(i);
       if (kind === TOKEN.NEWLINE) {
         breaks.push(to);
         looking = true;
@@ -299,6 +304,7 @@ export function scanCst(doc: string, analysis: Analysis): CstScan {
     kind: 0,
     markerKind: null,
     category: null,
+    closing: null,
     unknown: false,
     lineOpening: false,
     inNoteExtent: false,
@@ -321,6 +327,7 @@ export function scanCst(doc: string, analysis: Analysis): CstScan {
     SHAPE.kind = kind;
     SHAPE.markerKind = isMarkerKind(kind) ? (marker?.kind ?? 0) : null;
     SHAPE.category = isMarkerKind(kind) ? (marker?.category ?? 0) : null;
+    SHAPE.closing = isMarkerKind(kind) ? (marker?.closing ?? 0) : null;
     SHAPE.unknown = isMarkerKind(kind) ? markerAt[i] === 0 : false;
     SHAPE.lineOpening = openingAt[i] === 1;
     SHAPE.inNoteExtent = (flags & IN_NOTE) !== 0;

@@ -305,16 +305,18 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
     for (let k = firstVerseFrom(l.from); k < verses.length && verses[k].markerFrom <= l.to; k++)
       slotTarget(out, "slot.v", plan.verse(k));
     if (rl.slot) slotTarget(out, "slot.c", rl.slot);
-    const c = rl.chunk;
+    // A standalone marker is the marker's own span: what an immortal cell
+    // keeps when a range deletion writes around it. Its line's newline is the
+    // paragraph's, not the marker's.
+    const c = rl.standalone;
     if (c) {
       const head = { from: c.from, to: c.to };
-      const whole = { from: c.from, to: Math.min(l.to + 1, docLen) };
-      if (c.form === "point") make(out, "chunk", head, whole, [head], NONE);
-      else make(out, "chunk", head, whole, NONE, [whole]);
+      if (c.form === "point") make(out, "standalone", head, head, [head], NONE);
+      else make(out, "standalone", head, head, NONE, [head]);
     }
     for (const m of rl.marks) {
       const span = { from: m.from, to: m.to };
-      const cls: ClassKey = m.kind === "milestone" ? "milestone" : "optbreak";
+      const cls: ClassKey = m.kind;
       if (m.form === "point") make(out, cls, span, span, [span], NONE);
       else make(out, cls, span, span, NONE, [span]);
     }

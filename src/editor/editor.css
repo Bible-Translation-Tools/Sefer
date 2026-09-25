@@ -50,7 +50,6 @@
   --editor-faint: var(--on-surface-tertiary);
   --editor-muted: var(--on-surface-secondary);
   --editor-meta: var(--on-surface-tertiary);
-  --editor-chunk: var(--surface-border);
   --editor-rule: var(--surface-border);
   --editor-note: var(--on-surface-secondary);
   --editor-word-line: var(--surface-border);
@@ -237,11 +236,6 @@
   color: var(--editor-meta);
   text-indent: 0;
 }
-.cm-mode-regular .usfm-chunk::after {
-  content: "·";
-  color: var(--editor-chunk);
-  padding: 0 0.3em;
-}
 
 .cm-mode-usfm {
   background: #0c0a09;
@@ -279,9 +273,6 @@
 }
 .cm-mode-usfm .cm-usfm-front {
   color: #78716c;
-}
-.cm-mode-usfm .cm-usfm-chunk {
-  color: #57534e;
 }
 
 .cm-mode-regular .usfm-caller {

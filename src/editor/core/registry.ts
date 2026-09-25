@@ -41,7 +41,7 @@ export type ClassKey =
   | "note.caller"
   | "note.markup"
   | "note.body"
-  | "chunk"
+  | "standalone"
   | "clamp.replaced"
   | "table"
   | "sidebar";
@@ -65,7 +65,7 @@ export const CLASS_KEYS: readonly ClassKey[] = [
   "note.caller",
   "note.markup",
   "note.body",
-  "chunk",
+  "standalone",
   "clamp.replaced",
   "table",
   "sidebar",
@@ -179,9 +179,9 @@ const DEFAULT_REGISTRY: Registry = {
     elided: true,
     note: "none in the main editor; (point, trusted-constrained) in its satellite — the projection example",
   },
-  chunk: {
-    cell: { paint: "point", mutability: "via-anchor" },
-    note: "the unknown-marker toggle; hides to (none, immortal) declared-elided",
+  standalone: {
+    cell: { paint: "none", mutability: "immortal" },
+    note: "the engine's standalone category — a bare point that leaves its paragraph open (a registered legacy marker such as en_ulb's \\s5, `src/app/legacyMarkers.ts`). Not drawn, not deletable; the paragraph flows through it. USFM mode shows and edits it like any marker",
   },
   "clamp.replaced": {
     cell: { paint: "none", mutability: "immortal" },
@@ -211,7 +211,7 @@ export const OWNED_SETS = {
   "block.blank": { painting: ["blank"], hidden: ["chrome"] },
   char: { painting: ["char"], hidden: ["chrome"] },
   note: { painting: ["note.caller"], hidden: ["note.markup", "note.body"] },
-  chunk: { painting: ["chunk"], hidden: ["chrome"] },
+  standalone: { painting: ["standalone"], hidden: [] },
   milestone: { painting: ["milestone"], hidden: [] },
   optbreak: { painting: ["optbreak"], hidden: [] },
 } satisfies Record<string, OwnedSet>;
@@ -331,7 +331,6 @@ export const PROJECTIONS: Record<string, AssignmentDelta> = {
   },
   "hide-notes": { "note.caller": { paint: "none" } },
   "hide-verse-numbers": { "slot.v": { paint: "none" } },
-  "hide-chunks": { chunk: { paint: "none" } },
 };
 
 export const assignment = Facet.define<AssignmentDelta, Assignment>({

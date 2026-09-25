@@ -10,7 +10,9 @@
 
 import {
   Category,
+  ClosingBehavior,
   CloseReason,
+  MARKERS,
   MarkerKind,
   NOTE_PART,
   SpecContext,
@@ -24,6 +26,8 @@ export interface TokenShape {
   kind: number;
   markerKind: number | null;
   category: number | null;
+  /** The marker row's `ClosingBehavior`; `null` for a token that is no marker. */
+  closing: number | null;
   unknown: boolean;
   lineOpening: boolean;
   inNoteExtent: boolean;
@@ -95,6 +99,29 @@ const MARKER_KINDS: readonly number[] = [
   TokenKind.Milestone,
 ];
 
+/**
+ * The engine's `standalone` extension category, read off the marker row: a
+ * milestone that takes no closer. No spec milestone is bare (`\ts`, `\qt` and
+ * the rest close with `\*`), so this is exactly the template a registered
+ * standalone marker resolves to — the same test onion's own walker makes. The
+ * editor never names the marker; which markers are registered is the
+ * application's policy (`src/app/legacyMarkers.ts`).
+ */
+const standaloneRow = (idx: number): boolean => {
+  const row = MARKERS[idx];
+  return (
+    row !== undefined && row.kind === MarkerKind.Milestone && row.closing === ClosingBehavior.None
+  );
+};
+
+/** One flag per marker row — is it the standalone template? — for the scan's hot loop. */
+export const STANDALONE_ROWS: Uint8Array = Uint8Array.from(MARKERS, (_, i) =>
+  standaloneRow(i) ? 1 : 0,
+);
+
+const isStandalone = (t: TokenShape): boolean =>
+  t.markerKind === MarkerKind.Milestone && t.closing === ClosingBehavior.None;
+
 const TOKEN_ROWS: readonly Row<TokenShape>[] = [
   { id: "slot.v", when: (t) => t.designatorOf === "verse", verdict: cls("slot.v") },
   { id: "slot.c", when: (t) => t.designatorOf === "chapter", verdict: cls("slot.c") },
@@ -137,6 +164,21 @@ const TOKEN_ROWS: readonly Row<TokenShape>[] = [
   },
   { id: "newline.between", kinds: [TokenKind.Newline], verdict: cls("newline.between") },
   {
+    id: "standalone.line",
+    kinds: [TokenKind.Marker],
+    when: (t) => isStandalone(t) && t.lineOpening,
+    verdict: cls("standalone"),
+    set: "standalone",
+    line: true,
+  },
+  {
+    id: "standalone",
+    kinds: [TokenKind.Marker],
+    when: isStandalone,
+    verdict: cls("standalone"),
+    set: "standalone",
+  },
+  {
     id: "milestone.token",
     kinds: [TokenKind.Milestone, TokenKind.MilestoneTerminator],
     verdict: cls("milestone"),
@@ -170,20 +212,12 @@ const TOKEN_ROWS: readonly Row<TokenShape>[] = [
     ),
   },
   {
-    id: "chunk",
-    kinds: [TokenKind.Marker],
-    when: (t) => t.unknown && t.lineOpening,
-    verdict: cls("chunk"),
-    set: "chunk",
-    line: true,
-  },
-  {
-    id: "unknown.midline",
+    id: "unknown",
     kinds: MARKER_KINDS,
     when: (t) => t.unknown,
     verdict: unmapped(
       "needs-ruling",
-      "an unknown marker off a line start can swallow typed text; hiding it breaks P2, showing it breaks P5",
+      "an unknown marker is shown as written, at a line start or not, and the engine reports it; hiding it breaks P2. A marker the project registered is not unknown: it has its category's row (a legacy \\s5 is standalone)",
     ),
   },
   {

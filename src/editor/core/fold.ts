@@ -29,6 +29,8 @@ export interface DocLine {
   readonly words: WordRange[];
   readonly milestones: { from: number; to: number; name: string }[];
   readonly breaks: { from: number; to: number }[];
+  /** Standalone markers inside the line; one that opens the line is the line's class instead. */
+  readonly standalones: { from: number; to: number }[];
 }
 
 export interface NoteRange {

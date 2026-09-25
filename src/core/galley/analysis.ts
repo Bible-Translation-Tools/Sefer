@@ -27,6 +27,7 @@ import {
 export {
   Category,
   CloseReason,
+  ClosingBehavior,
   DiagnosticView,
   isMarkerKind,
   MARKERS,

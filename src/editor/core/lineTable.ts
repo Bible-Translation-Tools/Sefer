@@ -26,6 +26,7 @@ const NO_NOTES: NoteRange[] = [];
 const NO_WORDS: WordRange[] = [];
 const NO_MILESTONES: { from: number; to: number; name: string }[] = [];
 const NO_BREAKS: { from: number; to: number }[] = [];
+const NO_STANDALONES: { from: number; to: number }[] = [];
 
 export const NO_LINES: LineTable = {
   length: 0,
@@ -65,6 +66,7 @@ class Line implements DocLine {
   #num: string | null = null;
   #milestones = NO_MILESTONES;
   #breaks = NO_BREAKS;
+  #standalones = NO_STANDALONES;
 
   constructor(f: Fold, n: number, from: number, to: number) {
     this.#f = f;
@@ -134,6 +136,9 @@ class Line implements DocLine {
       } else if (row.id === "milestone.token") {
         if (this.#milestones === NO_MILESTONES) this.#milestones = [];
         this.#milestones.push({ from, to: cst.payloadEnd(i), name: spellingAt(cst, i, f.doc) });
+      } else if (row.id === "standalone") {
+        if (this.#standalones === NO_STANDALONES) this.#standalones = [];
+        this.#standalones.push({ from, to });
       }
     }
   }
@@ -173,6 +178,10 @@ class Line implements DocLine {
   get breaks(): { from: number; to: number }[] {
     this.#walk();
     return this.#breaks;
+  }
+  get standalones(): { from: number; to: number }[] {
+    this.#walk();
+    return this.#standalones;
   }
   get notes(): NoteRange[] {
     return this.#f.notesByLine.get(this.n) ?? NO_NOTES;
