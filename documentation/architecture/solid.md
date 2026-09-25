@@ -24,7 +24,7 @@ Name your signals/memos/effects (the `{ name: "..." }` option) — attribution r
 
 ## Measured: `HUGE_FAN_OUT` on a long list (2026-09-15)
 
-`/start/find` drew the live catalogue — thousands of rows — and reported
+The find screen (`/start/find` then, the catalogue on `/projects` now) drew the live catalogue — thousands of rows — and reported
 `HUGE_FAN_OUT`. The findings below are measurements against a 1,333-row
 catalogue on Solid `2.0.0-rc.6`, not readings of the code, and they are written
 down because two of the three obvious repairs made it worse.
@@ -32,7 +32,7 @@ down because two of the three obvious repairs made it worse.
 **What was ours, and is fixed.** Every row read the name-style signal
 (`nameOf(entry)` inside the `<For>` body) and the busy-row signal. Both are
 folded into one `createMemo` now, and a row receives plain values
-(`src/app/ui/landing/FindProject.tsx`). No application signal is read per row
+(`src/app/ui/landing/WacsProjects.tsx`, then `FindProject.tsx`). No application signal is read per row
 on that screen any more.
 
 **What looked right and was not.**
@@ -53,7 +53,7 @@ Nothing in the screen or in `primitives/Table.tsx` moves it — the only lever i
 rendering fewer components per row (or virtualising the list, which this table
 will want anyway at six thousand rows).
 
-Since then `FindProject` renders through `VirtualList`, keyed by `row.entry.id`,
+Since then the catalogue renders through `VirtualList`, keyed by `row.entry.id`,
 so only the visible rows are components at all.
 
 The lesson for the next long list: **name your signals**. The diagnostic prints

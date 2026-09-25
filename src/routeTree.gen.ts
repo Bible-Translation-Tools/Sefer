@@ -17,7 +17,6 @@ import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppDevFixtureRouteImport } from './routes/_app/dev/fixture'
 import { Route as AppProjectSlugRouteImport } from './routes/_app/project/$slug'
 import { Route as AppStartCreateRouteImport } from './routes/_app/start/create'
-import { Route as AppStartFindRouteImport } from './routes/_app/start/find'
 import { Route as AppProjectSlugIndexRouteImport } from './routes/_app/project/$slug/index'
 import { Route as AppProjectSlugCloudRouteImport } from './routes/_app/project/$slug/cloud'
 import { Route as AppProjectSlugFindRouteImport } from './routes/_app/project/$slug/find'
@@ -66,11 +65,6 @@ const AppProjectSlugRoute = AppProjectSlugRouteImport.update({
 const AppStartCreateRoute = AppStartCreateRouteImport.update({
   id: '/start/create',
   path: '/start/create',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppStartFindRoute = AppStartFindRouteImport.update({
-  id: '/start/find',
-  path: '/start/find',
   getParentRoute: () => AppRoute,
 } as any)
 const AppProjectSlugIndexRoute = AppProjectSlugIndexRouteImport.update({
@@ -133,7 +127,6 @@ export interface FileRoutesByFullPath {
   '/dev/fixture': typeof AppDevFixtureRoute
   '/project/$slug': typeof AppProjectSlugRouteWithChildren
   '/start/create': typeof AppStartCreateRoute
-  '/start/find': typeof AppStartFindRoute
   '/project/$slug/cloud': typeof AppProjectSlugCloudRoute
   '/project/$slug/find': typeof AppProjectSlugFindRoute
   '/project/$slug/findings': typeof AppProjectSlugFindingsRoute
@@ -152,7 +145,6 @@ export interface FileRoutesByTo {
   '/': typeof AppIndexRoute
   '/dev/fixture': typeof AppDevFixtureRoute
   '/start/create': typeof AppStartCreateRoute
-  '/start/find': typeof AppStartFindRoute
   '/project/$slug/cloud': typeof AppProjectSlugCloudRoute
   '/project/$slug/find': typeof AppProjectSlugFindRoute
   '/project/$slug/findings': typeof AppProjectSlugFindingsRoute
@@ -174,7 +166,6 @@ export interface FileRoutesById {
   '/_app/dev/fixture': typeof AppDevFixtureRoute
   '/_app/project/$slug': typeof AppProjectSlugRouteWithChildren
   '/_app/start/create': typeof AppStartCreateRoute
-  '/_app/start/find': typeof AppStartFindRoute
   '/_app/project/$slug/cloud': typeof AppProjectSlugCloudRoute
   '/_app/project/$slug/find': typeof AppProjectSlugFindRoute
   '/_app/project/$slug/findings': typeof AppProjectSlugFindingsRoute
@@ -196,7 +187,6 @@ export interface FileRouteTypes {
     | '/dev/fixture'
     | '/project/$slug'
     | '/start/create'
-    | '/start/find'
     | '/project/$slug/cloud'
     | '/project/$slug/find'
     | '/project/$slug/findings'
@@ -215,7 +205,6 @@ export interface FileRouteTypes {
     | '/'
     | '/dev/fixture'
     | '/start/create'
-    | '/start/find'
     | '/project/$slug/cloud'
     | '/project/$slug/find'
     | '/project/$slug/findings'
@@ -236,7 +225,6 @@ export interface FileRouteTypes {
     | '/_app/dev/fixture'
     | '/_app/project/$slug'
     | '/_app/start/create'
-    | '/_app/start/find'
     | '/_app/project/$slug/cloud'
     | '/_app/project/$slug/find'
     | '/_app/project/$slug/findings'
@@ -310,13 +298,6 @@ declare module '@tanstack/solid-router' {
       path: '/start/create'
       fullPath: '/start/create'
       preLoaderRoute: typeof AppStartCreateRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/start/find': {
-      id: '/_app/start/find'
-      path: '/start/find'
-      fullPath: '/start/find'
-      preLoaderRoute: typeof AppStartFindRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/project/$slug/': {
@@ -429,7 +410,6 @@ interface AppRouteChildren {
   AppDevFixtureRoute: typeof AppDevFixtureRoute
   AppProjectSlugRoute: typeof AppProjectSlugRouteWithChildren
   AppStartCreateRoute: typeof AppStartCreateRoute
-  AppStartFindRoute: typeof AppStartFindRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -439,7 +419,6 @@ const AppRouteChildren: AppRouteChildren = {
   AppDevFixtureRoute: AppDevFixtureRoute,
   AppProjectSlugRoute: AppProjectSlugRouteWithChildren,
   AppStartCreateRoute: AppStartCreateRoute,
-  AppStartFindRoute: AppStartFindRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
