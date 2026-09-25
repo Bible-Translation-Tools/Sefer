@@ -1,11 +1,12 @@
 import { Outlet, createFileRoute, useRouterState } from "@tanstack/solid-router";
-import { Show, onCleanup } from "solid-js";
+import { Show, onCleanup, untrack } from "solid-js";
 
 import { installCommandKeys, runCommand } from "#app/commands";
 import { t } from "#app/i18n";
 import { readyShell, useShell, useShellState } from "#app/ProjectContext";
+import { SIDEBAR_WIDTH } from "#app/settings";
 import { CommandPalette } from "#app/ui/CommandPalette";
-import { Kbd, Toaster } from "#app/ui/primitives";
+import { Kbd, Resizable, Toaster } from "#app/ui/primitives";
 import { BackToEditor } from "#app/ui/workspace/BackToEditor";
 import { IconRail } from "#app/ui/workspace/IconRail";
 import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
@@ -39,11 +40,16 @@ import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
  *
  * The chrome is the mockups' workspace (`documentation/architecture/design-direction.md`,
  * "Overall layout"): a permanent icon RAIL for "where in Sefer am I", and
- * beside it a fixed 320px project SIDEBAR for "where in this project am I".
+ * beside it a resizable project SIDEBAR for "where in this project am I",
+ * which the projects page does without.
  *
- * The collapsed sidebar is hidden rather than unmounted, so the routed
- * content beside it (and the editor's `EditorView` inside that) is never
- * torn down and rebuilt when the sidebar comes and goes.
+ * Why the collapsed sidebar is hidden rather than unmounted: `Resizable`
+ * registers its panels DURING render, in document order, so a conditionally
+ * rendered panel would renumber the split — and unmounting the sidebar's
+ * SIBLING (the panel holding the routed content) would destroy and rebuild the
+ * editor's `EditorView` every time someone tapped the toggle. The canonical
+ * text would survive that, because it lives in the Book; the reader's scroll
+ * position and selection would not.
  */
 
 function Workspace() {
@@ -54,21 +60,51 @@ function Workspace() {
   // control is that screen's one way in.
   const onProjectsPage = (): boolean =>
     path() === "/projects" || (path() === "/" && !shell.firstRun());
+  const showing = (): boolean => shell.sidebarShowing() && !onProjectsPage();
+  // Plain variables, not expressions in the props: `Resizable.Panel` reads its
+  // three sizes ONCE, during registration, and a JSX expression is a lazy memo
+  // Solid 2 warns about when it is read outside a tracking scope. The width is
+  // a one-time read by design — the persisted value seeds the split, and the
+  // split owns it from there (primitives/Resizable.tsx) — so it is untracked
+  // rather than merely read, which is the same statement said to the compiler.
+  const initialWidth = untrack(() => shell.sidebarWidth());
+  const minWidth = SIDEBAR_WIDTH.min;
+  const maxWidth = SIDEBAR_WIDTH.max;
   return (
-    <div class="flex h-full">
-      <div class={shell.sidebarShowing() && !onProjectsPage() ? "w-80 shrink-0" : "hidden"}>
+    <Resizable.Root
+      class="h-full"
+      onSizesChange={(sizes) => {
+        const first = sizes[0];
+        if (first !== undefined) shell.setSidebarWidth(first);
+      }}
+    >
+      <Resizable.Panel
+        initialSize={initialWidth}
+        minSize={minWidth}
+        maxSize={maxWidth}
+        class={showing() ? undefined : "hidden"}
+      >
         <ProjectSidebar />
-      </div>
-      {/* `relative`, and the door OUTSIDE the scroller: a full-page screen
-          scrolls its own content, and a button that scrolled away with it
-          would be a door you have to go back to the top to find. */}
-      <div class="relative h-full min-w-0 flex-1">
-        <BackToEditor />
-        <div class="h-full overflow-y-auto">
-          <Outlet />
+      </Resizable.Panel>
+      <Resizable.Handle
+        label={t("Resize the project panel")}
+        class={showing() ? undefined : "hidden"}
+      />
+      {/* The `!` is load-bearing: `Resizable.Panel` writes its share as an
+          inline `flex-basis`, and with the sidebar hidden the routed content
+          has to take the whole row back. */}
+      <Resizable.Panel class={showing() ? "min-w-0" : "min-w-0 [flex-basis:100%]!"}>
+        {/* `relative`, and the door OUTSIDE the scroller: a full-page screen
+            scrolls its own content, and a button that scrolled away with it
+            would be a door you have to go back to the top to find. */}
+        <div class="relative h-full">
+          <BackToEditor />
+          <div class="h-full overflow-y-auto">
+            <Outlet />
+          </div>
         </div>
-      </div>
-    </div>
+      </Resizable.Panel>
+    </Resizable.Root>
   );
 }
 

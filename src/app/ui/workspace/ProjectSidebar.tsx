@@ -14,6 +14,7 @@
  */
 
 import { useNavigate, useRouterState } from "@tanstack/solid-router";
+import { Option } from "effect";
 import ArrowRight from "lucide-solid/icons/arrow-right";
 import BookIcon from "lucide-solid/icons/book";
 import ChevronDown from "lucide-solid/icons/chevron-down";
@@ -22,9 +23,10 @@ import FolderClock from "lucide-solid/icons/folder-clock";
 import Library from "lucide-solid/icons/library";
 import SearchIcon from "lucide-solid/icons/search";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
-import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
+import { For, Show, createMemo, createSignal } from "solid-js";
 
-import { chaptersAddress } from "#core/location/address";
+import { tocViewOf } from "#core/galley";
+import { chaptersAddress, type Address } from "#core/location/address";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
@@ -46,40 +48,35 @@ interface Chapter {
   readonly intro: boolean;
 }
 
-const CHAPTER_MARKER = /^[ \t]*\\c[ \t]+(\d+)/gm;
-
-/** A Plain book's chapter numbers, read off its `\c` markers. */
-const chaptersInText = (text: string): readonly Chapter[] => {
-  const seen = new Set<number>();
-  for (const match of text.matchAll(CHAPTER_MARKER)) seen.add(Number(match[1]));
-  return [...seen].sort((a, b) => a - b).map((n) => ({ index: n, label: String(n), intro: false }));
-};
-
-/**
- * "Luke 3" → a book part and a chapter part. The chapter part is only split
- * off when it is a trailing number, so "1 John" is still all book.
- */
-const splitQuery = (raw: string): { readonly book: string; readonly chapter: string } => {
-  const query = raw.trim().toLowerCase();
-  const match = /^(.*\S)\s+(\d+)$/.exec(query);
-  return match === null ? { book: query, chapter: "" } : { book: match[1]!, chapter: match[2]! };
+/** The chapter a typed place names, if it names one: "Luke 3" and "Luke 3:1" do, "Luke" does not. */
+const chapterOf = (address: Address | undefined): number | undefined => {
+  if (address?.kind === "chapters") return address.from;
+  if (address?.kind === "verses") return address.from.chapter;
+  return undefined;
 };
 
 export function ProjectSidebar() {
   const navigate = useNavigate();
   const shell = useShell();
   const [query, setQuery] = createSignal("", { name: "sidebarQuery" });
-  const [testament, setTestament] = createSignal<Testament>(
-    testamentOf(shell.focused()?.id ?? "MAT"),
-    { name: "sidebarTestament" },
-  );
-  // Follow the book the editor opens, so landing in Psalms shows the OT.
-  createEffect(
-    () => shell.focused()?.id,
-    (id) => {
-      if (id !== undefined) setTestament(testamentOf(id));
-    },
-  );
+  /**
+   * The testament somebody picked, and the book that was focused when they
+   * did. Derived, not synced by an effect: a choice holds until the editor
+   * opens another book, and then the testament follows it — landing in
+   * Psalms shows the OT.
+   */
+  const [picked, setPicked] = createSignal<
+    { readonly testament: Testament; readonly during: string | undefined } | undefined
+  >(undefined, { name: "sidebarTestament" });
+  const testament = (): Testament => {
+    const focused = shell.focused()?.id;
+    const choice = picked();
+    if (choice !== undefined && choice.during === focused) return choice.testament;
+    return testamentOf(focused ?? "MAT");
+  };
+  const pickTestament = (next: Testament): void => {
+    setPicked({ testament: next, during: shell.focused()?.id });
+  };
   /** The one open book; `undefined` means "follow the focused book". */
   const [opened, setOpened] = createSignal<string | null | undefined>(undefined, {
     name: "sidebarOpened",
@@ -102,8 +99,26 @@ export function ProjectSidebar() {
     { name: "sidebarBooks" },
   );
 
-  const search = createMemo(() => splitQuery(query()), { name: "sidebarSearch" });
-  const searching = (): boolean => search().book !== "";
+  /**
+   * What the filter box means, read by the project's Location — the same
+   * names, localized and alternate, that the palette and every "go to" use.
+   * `books` is every book the words could mean; `chapter` is set once a
+   * number follows them.
+   */
+  const search = createMemo(
+    () => {
+      const text = query().trim();
+      if (text === "") return undefined;
+      const citation = shell.location.read(text);
+      const chapter = chapterOf(citation.ok ? citation.addresses[0] : undefined);
+      return {
+        books: new Set(shell.location.books(text)),
+        chapter: chapter === undefined ? "" : String(chapter),
+      };
+    },
+    { name: "sidebarSearch" },
+  );
+  const searching = (): boolean => search() !== undefined;
 
   /**
    * The books on show. While searching, both testaments: somebody typing
@@ -111,17 +126,15 @@ export function ProjectSidebar() {
    */
   const shown = createMemo(
     (): readonly Row[] => {
-      const { book } = search();
-      if (book === "") return rows().filter((row) => row.testament === testament());
-      return rows().filter(
-        (row) => row.name.toLowerCase().includes(book) || row.id.toLowerCase().startsWith(book),
-      );
+      const found = search();
+      if (found === undefined) return rows().filter((row) => row.testament === testament());
+      return rows().filter((row) => found.books.has(row.id));
     },
     { name: "sidebarShown" },
   );
 
   const isOpen = (id: string): boolean => {
-    if (searching() && search().chapter !== "") return true;
+    if ((search()?.chapter ?? "") !== "") return true;
     const choice = opened();
     return choice === undefined ? shell.focused()?.id === id : choice === id;
   };
@@ -137,8 +150,14 @@ export function ProjectSidebar() {
       });
       return rows;
     }
-    const book = shell.project()?.book(id);
-    return book === undefined ? [] : chaptersInText(book.source().text);
+    // Any other book: the engine's TOC from the analysis the project holds
+    // for it — never a scan of the text. Front matter is the focused book's
+    // concern; row 0 here is skipped.
+    const held = Option.getOrUndefined(shell.services.projectAnalysis.analysis(id));
+    if (held === undefined) return [];
+    return tocViewOf(held.analysis)
+      .chapters.filter((chapter) => chapter.number > 0)
+      .map((chapter) => ({ index: chapter.number, label: String(chapter.number), intro: false }));
   };
 
   const openChapter = (id: string, chapter: Chapter): void => {
@@ -155,7 +174,7 @@ export function ProjectSidebar() {
       (): readonly Chapter[] => {
         if (!open()) return [];
         const all = chaptersOf(rowProps.row.id);
-        const wanted = search().chapter;
+        const wanted = search()?.chapter ?? "";
         return wanted === "" ? all : all.filter((chapter) => chapter.label.startsWith(wanted));
       },
       { name: "sidebarChapters" },
@@ -274,11 +293,11 @@ export function ProjectSidebar() {
               class="flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-brand bg-brand-light p-4 text-start text-brand transition-colors hover:bg-sidebar-surface-hover"
               onClick={() => void navigate({ to: "/projects" })}
             >
-              <span class="flex min-w-0 flex-1 flex-col gap-1 leading-[1.5]">
-                <span class="block truncate text-[20px] leading-[1.5] font-bold">
+              <span class="flex min-w-0 flex-1 flex-col gap-1 leading-normal">
+                <span class="block truncate text-h4 leading-normal font-bold">
                   {t("Find a Project")}
                 </span>
-                <span class="block truncate text-body leading-[1.5]">
+                <span class="block truncate text-body leading-normal">
                   {t("Projects available on WACS")}
                 </span>
               </span>
@@ -346,7 +365,7 @@ export function ProjectSidebar() {
               { value: "nt", label: t("New Testament") },
             ]}
             value={testament()}
-            onChange={setTestament}
+            onChange={pickTestament}
           />
         </div>
 

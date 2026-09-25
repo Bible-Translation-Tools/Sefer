@@ -253,6 +253,13 @@ const splitGroup = (group: string): { readonly words: string; readonly refs: str
   return { words: group.slice(0, letter + digit), refs: group.slice(letter + digit) };
 };
 
+/**
+ * The words before the numbers in what was typed — "1 John 3:2" is "1 John" —
+ * for a filter that lists every book they could mean (`booksMatching`).
+ */
+export const citationWords = (input: string): string =>
+  splitGroup(input.split(";")[0] ?? "").words.trim();
+
 /** The book the words name, and whether they end with a word for "introduction". */
 const readBook = (
   words: string,
