@@ -55,12 +55,10 @@ import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
 function Workspace() {
   const shell = useShell();
   const path = useRouterState({ select: (state) => state.location.pathname });
-  // Never on the projects page: `/projects`, and `/` whenever it is drawing
-  // that page. The first-run shell on `/` keeps it — the sidebar's project
-  // control is that screen's one way in.
-  const onProjectsPage = (): boolean =>
-    path() === "/projects" || (path() === "/" && !shell.firstRun());
-  const showing = (): boolean => shell.sidebarShowing() && !onProjectsPage();
+  // Never on `/` or `/projects`. `/` is either the projects page or, with
+  // nothing installed, `EmptyWorkspace` — a skeleton that draws its own
+  // sidebar, so nothing else in the chrome has to know which.
+  const showing = (): boolean => shell.sidebarShowing() && path() !== "/projects" && path() !== "/";
   // Plain variables, not expressions in the props: `Resizable.Panel` reads its
   // three sizes ONCE, during registration, and a JSX expression is a lazy memo
   // Solid 2 warns about when it is read outside a tracking scope. The width is

@@ -349,13 +349,6 @@ export interface Shell {
    * a project is open again.
    */
   readonly sidebarShowing: Accessor<boolean>;
-  /**
-   * Nothing is installed on this device: `/` draws a greyed-out shell of the
-   * Refine screen, and the only live control is the sidebar's project button.
-   * Set by the landing route while it is on screen.
-   */
-  readonly firstRun: Accessor<boolean>;
-  readonly setFirstRun: (empty: boolean) => void;
   /** A fraction of the workspace row; see `SIDEBAR_WIDTH`. */
   readonly sidebarWidth: Accessor<number>;
   readonly setSidebarWidth: (fraction: number) => void;
@@ -492,7 +485,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   });
   const [chapter, setChapter] = createSignal<number | null>(null, { name: "chapter" });
   /** A project root that should land in its text as soon as it is open. */
-  const [firstRun, setFirstRun] = createSignal(false, { name: "firstRun" });
   const [landOnOpen, setLandOnOpen] = createSignal<string | undefined>(undefined, {
     name: "landOnOpen",
   });
@@ -1329,10 +1321,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       setSidebarOpen(open);
       persist(keys.sidebarOpen, open);
     },
-    sidebarShowing: () =>
-      firstRun() || (sidebarOpen() && (project() !== undefined || recentProjects().length > 0)),
-    firstRun,
-    setFirstRun,
+    sidebarShowing: () => sidebarOpen() && (project() !== undefined || recentProjects().length > 0),
     recentProjects,
     slugFor,
     slug,

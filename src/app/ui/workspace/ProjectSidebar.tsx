@@ -330,7 +330,7 @@ export function ProjectSidebar() {
       <Show
         when={shell.project()}
         fallback={
-          <Show when={shell.firstRun()} fallback={<Recents />}>
+          <Show when={shell.recentProjects().length === 0} fallback={<Recents />}>
             <div
               data-testid="sidebar-empty"
               class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-8 text-center text-small text-on-surface-tertiary"

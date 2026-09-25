@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/solid-router";
-import { Show, createSignal, onCleanup, untrack } from "solid-js";
+import { Show, createSignal, untrack } from "solid-js";
 
 import { useShell } from "#app/ProjectContext";
 import { shellKeys } from "#app/settings";
@@ -50,7 +50,7 @@ function Landing() {
   };
 
   // No history is not the same as nothing installed: a project can be on disk
-  // and never opened here. Only an empty list earns the first-run shell.
+  // and never opened here. Only an empty list earns the empty workspace.
   // `undefined` while the list is being read, so neither screen flashes.
   const [empty, setEmpty] = createSignal<boolean | undefined>(undefined, { name: "deviceEmpty" });
   if (!enter()) {
@@ -60,12 +60,8 @@ function Landing() {
       .run(
         listProjects(services.projectsRoot, services.fixtureProject, services.settings.get(recent)),
       )
-      .then((rows) => {
-        setEmpty(rows.length === 0);
-        shell.setFirstRun(rows.length === 0);
-      });
+      .then((rows) => setEmpty(rows.length === 0));
   }
-  onCleanup(() => shell.setFirstRun(false));
 
   // A first run, or a device whose projects have all been removed: there is no
   // work to go to, so the list IS the answer. Rendered rather than redirected,

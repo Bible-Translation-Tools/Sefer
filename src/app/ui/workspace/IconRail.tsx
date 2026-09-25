@@ -3,7 +3,8 @@
  *
  * Three bands. The mark at the top, inert for now. The MODES in the middle —
  * Form, Refine, Key terms — the three ways of working on a project's text;
- * they are offered with nothing open but disabled, so the rail keeps one shape.
+ * with no project open they are there but disabled, so the rail keeps one
+ * shape — the empty state's included.
  * Form is not built yet and stays disabled. At the foot: More, Import (a zip,
  * a folder or a clone, from anywhere), Settings, and Account (disabled until
  * there is an account).
@@ -146,24 +147,10 @@ export function IconRail() {
   const within = (): string => path().replace(/^\/project\/[^/]+/, "");
   const at = (prefix: string): "true" | "false" => (within().startsWith(prefix) ? "true" : "false");
   const open = (): boolean => shell.project() !== undefined;
-  /**
-   * Nothing installed: the modes still switch, but there is no project to
-   * navigate into, so the choice is only remembered here. Refine by default.
-   */
-  const empty = (): boolean => shell.firstRun();
-  const [emptyMode, setEmptyMode] = createSignal<"refine" | "terms">("refine", {
-    name: "emptyMode",
-  });
-
   /** Refine is the text itself: any project route that is not another mode. */
-  const refining = (): "true" | "false" => {
-    if (empty()) return emptyMode() === "refine" ? "true" : "false";
-    return path().startsWith("/project/") && !within().startsWith("/terms") ? "true" : "false";
-  };
-  const terms = (): "true" | "false" => {
-    if (empty()) return emptyMode() === "terms" ? "true" : "false";
-    return at("/terms");
-  };
+  const refining = (): "true" | "false" =>
+    path().startsWith("/project/") && !within().startsWith("/terms") ? "true" : "false";
+  const terms = (): "true" | "false" => at("/terms");
 
   return (
     <nav
@@ -198,27 +185,22 @@ export function IconRail() {
           testId="rail-refine"
           icon={<BookOpen size={20} />}
           pressed={refining()}
-          disabled={!empty() && !open()}
-          onClick={() => {
-            if (empty()) setEmptyMode("refine");
-            else void navigate({ to: "/project/$slug", params: { slug: shell.slug() } });
-          }}
+          disabled={!open()}
+          onClick={() => void navigate({ to: "/project/$slug", params: { slug: shell.slug() } })}
         />
         <RailButton
           label={t("Key terms")}
           testId="rail-terms"
           icon={<ListChecks size={20} />}
           pressed={terms()}
-          disabled={!empty() && !open()}
-          onClick={() => {
-            if (empty()) setEmptyMode("terms");
-            else
-              void navigate({
-                to: "/project/$slug/terms",
-                params: { slug: shell.slug() },
-                search: {},
-              });
-          }}
+          disabled={!open()}
+          onClick={() =>
+            void navigate({
+              to: "/project/$slug/terms",
+              params: { slug: shell.slug() },
+              search: {},
+            })
+          }
         />
       </div>
 
