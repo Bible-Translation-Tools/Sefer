@@ -131,10 +131,15 @@ interface IncomingBook {
 }
 ```
 
-Chapters come from a textual split at `\c` markers rather than an engine parse: this runs over two
-revisions of a file that may not be open, may not be a book Sefer instantiated, and may not even
-parse. A wrong answer costs a slightly coarse sentence, never a wrong edit. The text before the
-first `\c` is filed as chapter zero and called "the front matter".
+Chapters come from the engine's chapter rows, not a scan for `\c`: `surveyIncoming` hands
+`incomingPlan` a function from LF text to `tocViewOf(galley.analyze(text)).chapters`, so the plan
+itself stays pure and engine-free. The blobs may be files that are not open, or not books Sefer
+instantiated; the engine answers chapters for any text, and a wrong answer costs a slightly coarse
+sentence, never a wrong edit. The text before the first `\c` is filed as chapter zero and called
+"the front matter", and so is a chapter whose number the engine could not read. Every text is
+normalised to LF first, which the engine requires; a file whose only change is its line endings
+therefore names no chapter. The dev fixture (`src/app/ui/cloud/fixture.ts`) writes its plans out
+literally, because a module-level constant has no engine to ask.
 
 "Also changed here" is measured against the WORK TREE, not against HEAD, so an edit saved to disk
 but not yet recorded still counts as this device having touched the chapter.

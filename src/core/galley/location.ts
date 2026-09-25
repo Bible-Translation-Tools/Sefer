@@ -28,10 +28,15 @@ export const tocViewOf = (analysis: Analysis): TocView => {
     .map((row) => ({ number: row.number, from: row.from, to: row.to }));
   const verses: TocVerse[] = [];
   let row = 0;
-  dish.toc.forEachVerse((_chapter, first, last, at) => {
+  // The row cursor rather than `forEachVerse`, which does not pass the label;
+  // `verses()` would, at the cost of a members array per verse.
+  const rows = dish.toc.verseRows;
+  for (let i = 0, n = rows.length; i < n; i++) {
+    const verse = rows.seek(i);
+    const at = verse.at;
     while (row < chapters.length - 1 && at >= (chapters[row]?.to ?? 0)) row += 1;
-    verses.push({ at, row, first, last });
-  });
+    verses.push({ at, row, first: verse.first, last: verse.last, labelEnd: verse.labelEnd });
+  }
 
   const view: TocView = { length: analysis.docLen, chapters, verses };
   views.set(dish, view);

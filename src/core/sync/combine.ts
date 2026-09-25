@@ -40,6 +40,7 @@
 import { Data, Effect, FileSystem, Option, type PlatformError, Result } from "effect";
 
 import { parentPath } from "../fileSystem/path";
+import type { Galley } from "../galley";
 import {
   type Author,
   type ChangedPath,
@@ -269,7 +270,7 @@ export interface CombineOptions {
  */
 const gather = (
   repo: Repo,
-): Effect.Effect<CombineDecision, CombineError, Git | FileSystem.FileSystem> =>
+): Effect.Effect<CombineDecision, CombineError, Git | FileSystem.FileSystem | Galley> =>
   Effect.gen(function* () {
     const git = yield* Git;
     const untouched = fromPort("untouched");
@@ -327,7 +328,7 @@ const gather = (
  */
 export const previewCombine = (
   root: string,
-): Effect.Effect<CombineDecision, CombineError, Git | FileSystem.FileSystem> =>
+): Effect.Effect<CombineDecision, CombineError, Git | FileSystem.FileSystem | Galley> =>
   Effect.flatMap(
     Effect.flatMap(Git, (git) => Effect.mapError(git.open(root), fromPort("untouched"))),
     gather,
@@ -343,7 +344,7 @@ export const previewCombine = (
  */
 export const combine = (
   options: CombineOptions,
-): Effect.Effect<CombineResult, CombineError, Git | Remote | FileSystem.FileSystem> =>
+): Effect.Effect<CombineResult, CombineError, Git | Remote | FileSystem.FileSystem | Galley> =>
   Effect.gen(function* () {
     const git = yield* Git;
     const remote = yield* Remote;

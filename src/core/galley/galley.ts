@@ -218,7 +218,7 @@ export interface FindQuery {
  *
  * `targets` is the project's own books and is the default. `references` is the
  * Library-bound source and reference resources `ProjectAnalysis.attach`
- * registered with their text (`updateReference(id, text, true)`); one
+ * registered with their text (`updateReference(id, text, { keepText: true })`); one
  * registered without it retains nothing to search and is in no scope at all,
  * which is why the Reference segment on `/find` is disabled until one is bound.
  */
@@ -265,6 +265,13 @@ export interface EngineHit {
  * goes in the object. The generated `.d.ts` types the parameter `any`, which
  * is why this returns a shape rather than relying on the call site.
  */
+/**
+ * What every parse asks for: diagnostics, the chapter and verse index, and
+ * UTF-16 offsets, because structure and diagnostics come out of the same walk
+ * and CodeMirror speaks UTF-16. The engine's options default to false.
+ */
+const PARSE_ALL = { diagnostics: true, toc: true, utf16: true } as const;
+
 const findOptions = (query: FindQuery, scope?: FindScope): Record<string, unknown> => ({
   ...(query.caseSensitive === undefined ? {} : { caseSensitive: query.caseSensitive }),
   ...(query.wholeWord === undefined ? {} : { wholeWord: query.wholeWord }),
@@ -783,8 +790,8 @@ const makeService = (
     // here rather than at two call sites that merely intend to be adjacent.
     const dish = deserialize(
       id === undefined
-        ? handle.parseText(text, true, true, true)
-        : (handle.update(id, text), handle.parse(id, true, true, true)),
+        ? handle.parseText(text, PARSE_ALL)
+        : (handle.update(id, text), handle.parse(id, PARSE_ALL)),
     );
     const engineMs = Math.round((performance.now() - started) * 1000) / 1000;
     // Counts and codes only — a diagnostic's message quotes the document. On
@@ -835,7 +842,7 @@ const makeService = (
     // UTF-16, because a chapter row's offsets are handed to CodeMirror. The
     // project-wide `tocAll` cannot do this — the table that rebases offsets
     // travels with one book's text — which is why it answers counts only.
-    const one = ProjectToc.open(handle.toc(id, true));
+    const one = ProjectToc.open(handle.toc(id, { utf16: true }));
     return one.bookCount === 0 ? undefined : one.book(0);
   };
 
@@ -920,12 +927,13 @@ const makeService = (
     mask,
     readerMask,
     hash: (text) => wasmModule.xxh3Text(text),
-    tocAll: () => ProjectToc.open(handle.tocAll(undefined, undefined)),
+    tocAll: () => ProjectToc.open(handle.tocAll()),
     find: (id, query) => decodeHits(handle.find(id, query.text, findOptions(query))),
     findAll: (query, scope) =>
       decodeHits(handle.findAll(query.text, findOptions(query, scope ?? "targets"))),
     update: (id, text) => handle.update(id, text),
-    updateReference: (id, text, keepText) => handle.updateReference(id, text, keepText === true),
+    updateReference: (id, text, keepText) =>
+      handle.updateReference(id, text, { keepText: keepText === true }),
     remove: (id) => handle.remove(id),
     publish: () => FindingsSnapshot.open(handle.publish()),
     // Probed on the MODULE, where the stateless doors live: they are free
@@ -936,16 +944,12 @@ const makeService = (
     merge: (baseline, current, decisions, fallback) =>
       engineMerge(wasmModule, baseline, current, decisions, fallback),
     formatEdits: (text, opts) => engineFormatEdits(wasmModule, text, opts),
-    skeleton: (id, opts) => decodeBlockSkeleton(handle.skeleton(id, overlayOptions(opts), true)),
+    skeleton: (id, opts) => decodeBlockSkeleton(handle.skeleton(id, overlayOptions(opts))),
     overlay: overlayEdits,
     targetNodeFor: (targetId, sourceId, address, opts) =>
-      decodeEquivalent(
-        handle.targetNodeFor(targetId, sourceId, address, overlayOptions(opts), true),
-      ),
+      decodeEquivalent(handle.targetNodeFor(targetId, sourceId, address, overlayOptions(opts))),
     sourceNodeFor: (targetId, sourceId, address, opts) =>
-      decodeEquivalent(
-        handle.sourceNodeFor(targetId, sourceId, address, overlayOptions(opts), true),
-      ),
+      decodeEquivalent(handle.sourceNodeFor(targetId, sourceId, address, overlayOptions(opts))),
     // `undefined` is "not registered", which is the question a caller asks
     // before deciding to register it; an empty range list is "registered and
     // unchanged". The two are different answers and neither is a boolean on

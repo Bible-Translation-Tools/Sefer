@@ -15,10 +15,8 @@
  *
  * ## Why it reads files directly
  *
- * `Library.lookup` answers one reference at a time by slicing USFM with a regex
- * scan, which is the right shape for "show me this verse" and the wrong one
- * here: the engine wants whole books, exactly as they are on disk, because it
- * is going to parse them. So this reads the resource root through the
+ * The engine wants whole books, exactly as they are on disk, because it is
+ * going to parse them; nothing here wants one verse. So this reads the resource root through the
  * `FileSystem` port — the same port everything else in Sefer reads through —
  * and hands the bytes over undecorated.
  *

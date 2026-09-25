@@ -22,6 +22,7 @@ import { Effect, Fiber, type FileSystem, Stream } from "effect";
 import CloudIcon from "lucide-solid/icons/cloud";
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 
+import type { Galley } from "#core/galley";
 import { Git } from "#core/git/git";
 import { Observability, type Attrs, type Operation, type Verdict } from "#core/observability";
 import { Remote, remoteVerdict } from "#core/remote/remote";
@@ -291,7 +292,9 @@ export function CloudScreen() {
    */
   const transfer = (
     action: SyncActionId,
-    work: (root: string) => Effect.Effect<unknown, unknown, Git | Remote | FileSystem.FileSystem>,
+    work: (
+      root: string,
+    ) => Effect.Effect<unknown, unknown, Git | Remote | FileSystem.FileSystem | Galley>,
     explain?: (cause: unknown) => string | undefined,
   ): void => {
     const project = shell.project();

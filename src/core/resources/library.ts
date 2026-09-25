@@ -27,7 +27,6 @@ import {
   type PlatformError,
 } from "effect";
 
-import type { Ref } from "../book/book";
 import { writeFileStringAtomic } from "../fileSystem/atomic";
 import { joinPath, lastSegment, parentPath } from "../fileSystem/path";
 import { Observability, type ObservabilityService } from "../observability";
@@ -78,12 +77,6 @@ export interface Resource {
   readonly subject?: string;
 }
 
-/** Reference text for one verse (or one chapter, when `ref.verse` is absent). */
-export interface Passage {
-  readonly ref: Ref;
-  readonly text: string;
-}
-
 type LibraryRefusal = "Unclassified" | "NotFound" | "Io";
 
 class LibraryError extends Data.TaggedError("LibraryError")<{
@@ -121,11 +114,11 @@ export interface LibraryService {
    * of its `.usfm` file, decoded the one way `src/core/source/source.ts`
    * decodes anything.
    *
-   * `lookup` answers a passage and slices it with a regex; a reference pane
-   * that paints the reference the way the editor paints the project needs the
-   * document itself, because the engine parses a book and not a fragment. So
-   * this is the door beside `lookup` rather than a widening of it: same file
-   * resolution, no slicing, no interpretation.
+   * There is no door that answers a verse: the engine parses a book and not
+   * a fragment, and only its TOC knows where a verse begins, so a caller that
+   * wants one passage reads the book and asks the engine (the STET workflow's
+   * `sourceReadings` does). This is file resolution and decoding, and nothing
+   * else — no slicing, no interpretation.
    *
    * `none` when the resource is not registered or holds no file for `bookId`
    * — a reference Bible that simply lacks Philemon is the ordinary case and
@@ -136,15 +129,6 @@ export interface LibraryService {
     resourceId: string,
     bookId: string,
   ) => Effect.Effect<Option.Option<string>, LibraryError>;
-  /**
-   * Reference text for `ref` from a registered resource. `none` when the
-   * resource, its book file, or the chapter/verse is not there; fails `Io` only
-   * when a file that exists cannot be read.
-   */
-  readonly lookup: (
-    resourceId: string,
-    ref: Ref,
-  ) => Effect.Effect<Option.Option<Passage>, LibraryError>;
 }
 
 export class Library extends Context.Service<Library, LibraryService>()("Library") {}
@@ -260,49 +244,6 @@ const usfmFilesUnder = (
 const bookFileFor = (files: readonly string[], book: string): string | undefined => {
   const needle = book.toLowerCase();
   return files.find((file) => lastSegment(file).toLowerCase().includes(needle));
-};
-
-const CHAPTER = /\\c[ \t]+(\d+)/g;
-const VERSE = /\\v[ \t]+(\d+)/g;
-
-/**
- * Slices one chapter or verse out of USFM by scanning `\c` and `\v` markers.
- *
- * This is a regex scan, not parsing: it knows nothing about nested markers,
- * `\va` alternate numbers or verse bridges beyond their opening number, and it
- * returns the raw USFM of the span including any character markers inside it.
- * It exists so the Library can answer `lookup` before the engine is wired in.
- * ProjectAnalysis and the Galley TOC (`Dish.toc`) will give exact verse spans
- * with stamps; when they do, this function is the thing that gets deleted.
- */
-const sliceReference = (text: string, ref: Ref): string | undefined => {
-  CHAPTER.lastIndex = 0;
-  let start: number | undefined;
-  let end = text.length;
-  for (let match = CHAPTER.exec(text); match !== null; match = CHAPTER.exec(text)) {
-    if (start !== undefined) {
-      end = match.index;
-      break;
-    }
-    if (Number(match[1]) === ref.chapter) start = match.index + match[0].length;
-  }
-  if (start === undefined) return undefined;
-
-  const chapter = text.slice(start, end);
-  if (ref.verse === undefined) return chapter.trim();
-
-  VERSE.lastIndex = 0;
-  let verseStart: number | undefined;
-  let verseEnd = chapter.length;
-  for (let match = VERSE.exec(chapter); match !== null; match = VERSE.exec(chapter)) {
-    if (verseStart !== undefined) {
-      verseEnd = match.index;
-      break;
-    }
-    if (Number(match[1]) === ref.verse) verseStart = match.index + match[0].length;
-  }
-  if (verseStart === undefined) return undefined;
-  return chapter.slice(verseStart, verseEnd).trim();
 };
 
 const makeLibrary = (
@@ -444,24 +385,6 @@ const makeLibrary = (
           if (Result.isFailure(source))
             return yield* Effect.fail(refuse("Io", `${file}: ${source.failure.description}`));
           return Option.some(source.success.text);
-        }),
-
-      lookup: (resourceId, ref) =>
-        Effect.gen(function* () {
-          const resource = find(resourceId);
-          if (resource === undefined) return Option.none<Passage>();
-          const files = yield* usfmFilesUnder(fileSystem, resource.root);
-          const file = bookFileFor(files, ref.book);
-          if (file === undefined) return Option.none<Passage>();
-          const bytes = yield* Effect.mapError(
-            fileSystem.readFile(joinPath(resource.root, file)),
-            failure,
-          );
-          const source = decode(bytes);
-          if (Result.isFailure(source))
-            return yield* Effect.fail(refuse("Io", `${file}: ${source.failure.description}`));
-          const text = sliceReference(source.success.text, ref);
-          return text === undefined ? Option.none<Passage>() : Option.some({ ref, text });
         }),
     };
   });

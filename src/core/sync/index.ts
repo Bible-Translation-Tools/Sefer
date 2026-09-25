@@ -21,13 +21,7 @@ export {
   type SyncState,
 } from "./state";
 
-export {
-  FRONT_MATTER,
-  emptyPlan,
-  incomingPlan,
-  type IncomingBook,
-  type IncomingPlan,
-} from "./plan";
+export { FRONT_MATTER, emptyPlan, type IncomingBook, type IncomingPlan } from "./plan";
 
 export {
   combine,

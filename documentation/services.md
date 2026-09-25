@@ -167,7 +167,7 @@ A bounded ring of events, spans and verdicts, and a second ring of 200 for `fail
 
 ### Overview
 
-The pinned Scripture Kitchen WASM build (tagged git dependency, v0.1.6). Onion parses, Sous proofreads, and Galley composes both. It is one in-process synchronous handle: `analyze`, the corpus (`update`, `updateReference`, `publish`), `find`, `lint`, `toc`, `mask`, `diff`/`merge`, `formatEdits`, `skeleton`/`overlay`, `hash`. `src/core/galley`; loading happens in `src/platform/{web,node}/galley.ts`. → [galley](architecture/galley.md)
+The pinned Scripture Kitchen WASM build (tagged git dependency, v0.1.7). Onion parses, Sous proofreads, and Galley composes both. It is one in-process synchronous handle: `analyze`, the corpus (`update`, `updateReference`, `publish`), `find`, `lint`, `toc`, `mask`, `diff`/`merge`, `formatEdits`, `skeleton`/`overlay`, `hash`. `src/core/galley`; loading happens in `src/platform/{web,node}/galley.ts`. → [galley](architecture/galley.md)
 
 ### Constraints and known bugs
 
@@ -241,8 +241,8 @@ On it today: the palette and sidebar jump, `showReference` (found / missing with
 ### Constraints and known bugs
 
 - Two address types still: `Address`, and `Ref` in book.ts, which Search, Excerpts/STET and Library use until the second pass moves them.
-- The rule: Sefer never scans for `\c`/`\v` with a regex; the engine's TOC answers. Two places still do on their own: search's `buildRefTable`/`refFrom`, and Library's `CHAPTER` regex. Both are the second pass.
-- On Kitchen v0.1.6 the TOC carries no segments and no verse-list holes: `3a` resolves as all of verse 3 (`coarser`), and `\v 1,3,5` as 1–5. Kitchen v0.1.7 carries both once it is tagged; Sefer adopts it then.
+- The rule: Sefer never scans for `\c`/`\v` with a regex; the engine's TOC answers. One place still does on its own: search's `buildRefTable`/`refFrom`, the second pass.
+- Kitchen v0.1.7 carries segments, verse-list members and each designator's label span in the TOC, and Sefer's seam (`tocViewOf`) reads only a verse label's end so far (the STET source card skips the number with it): `3a` still resolves as all of verse 3 (`coarser`), and `\v 1,3,5` as 1–5, until it does.
 
 ### Ideas / future
 

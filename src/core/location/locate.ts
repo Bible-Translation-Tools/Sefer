@@ -52,6 +52,13 @@ export interface TocVerse {
   readonly first: number;
   /** Highest — equal to `first` unless this is a bridge. */
   readonly last: number;
+  /**
+   * Where the designator AS WRITTEN ends (`5`, `1-2`, `6a`), before its folded
+   * space — the marker's end when there is none. The engine's, so that a
+   * caller wanting a verse's words without its number never spells a `\v`.
+   * A point inside the verse's extent, not a second extent.
+   */
+  readonly labelEnd: number;
 }
 
 export interface TocView {

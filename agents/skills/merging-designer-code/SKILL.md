@@ -26,8 +26,8 @@ He does not use git. Assume you are the git.
    `git fetch origin && git rev-list --left-right --count origin/master...master`
    and `git merge-tree --write-tree --name-only master origin/<branch>`.
 2. **Merge master INTO his branch; never rebase it.** A rebase rewrites the
-   history his Claude is sitting on. A merge commit on his branch is harmless,
-   because the PR is squash-merged at the end anyway.
+   history his Claude is sitting on, and the merge commit is where the
+   conflict resolution is written down.
    `git switch <branch> && git merge master`
 3. **Resolve toward both intents.** The dangerous conflict is modify/delete:
    he deleted or replaced a file that master has since changed. Master's
@@ -43,8 +43,10 @@ He does not use git. Assume you are the git.
 5. **Review** (below). Small structural fixes go on HIS branch as their own
    commits, so his Claude sees exactly what changed and why.
 6. **Push master first, then his branch** (push needs Will's biometric), so the
-   PR is judged against the real trunk. **Squash-merge** the PR: one trunk,
-   linear history.
+   PR is judged against the real trunk. Land it with **"Create a merge
+   commit"**: his commits keep his authorship and messages, and the merge from
+   step 2 keeps the resolution notes. Not squash (it buries both), and never
+   "Rebase and merge" (it drops the step-2 merge and replays the conflicts).
 7. **Hand back.** Tell him (or his Claude) to switch to master, pull, and
    branch again. Name the fixes made on his behalf so the next branch does not
    reintroduce them.

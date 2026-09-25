@@ -16,6 +16,7 @@
 
 import { Effect, FileSystem, Option, Result } from "effect";
 
+import type { Galley } from "#core/galley";
 import { Git, type Commit } from "#core/git/git";
 import { Gitea } from "#core/remote/gitea";
 import { Remote } from "#core/remote/remote";
@@ -45,7 +46,9 @@ export interface SyncFacts {
  */
 export interface SyncSurvey {
   readonly reading: SyncReading;
-  readonly plan: Effect.Effect<IncomingPlan, never, Git | FileSystem.FileSystem> | undefined;
+  readonly plan:
+    | Effect.Effect<IncomingPlan, never, Git | FileSystem.FileSystem | Galley>
+    | undefined;
 }
 
 /** The branch to assume when HEAD is unborn — the one `git.init` creates. */

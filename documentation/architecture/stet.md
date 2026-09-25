@@ -82,7 +82,7 @@ References the book does not have are skipped rather than reported: a guide cove
 `sourceReadings` in `src/app/workflows/stet.ts` resolves, once per term rather than once per card, what the upper card of each pair shows. Three answers in a fixed order:
 
 1. the guide's frozen reading for that sid, with its precomputed highlights;
-2. otherwise a resource bound to the project under the `source` role (`Library.lookup`);
+2. otherwise a resource bound to the project under the `source` role (`Library.readBook`, then the engine's TOC for where the verse is and where its number ends);
 3. otherwise nothing — and the card prints "No source text bound" rather than showing the project's own text twice and calling one of them a source.
 
 The Library pass runs only over what the guide did not answer, and short-circuits entirely when no source resource is bound, which is the dev fixture's case.
