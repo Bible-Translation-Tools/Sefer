@@ -12,7 +12,7 @@
  * moment the state is created FROM the plain Book's text, the state IS the
  * text; `source()` derives a string from it (cached per state, so a reader may
  * ask on every publish). Nothing else holds an editable copy — a bound view
- * shares this state, and a window or satellite borrows and forwards.
+ * shares this state, and a satellite borrows and forwards.
  *
  * Why a class-free closure: everything mutable here (the held state, the bound
  * view, the revision counter, the subscriber sets) is one book's identity, and
@@ -28,7 +28,14 @@ import {
   undo as cmUndo,
   undoDepth,
 } from "@codemirror/commands";
-import { EditorState, Prec, Transaction, type Extension } from "@codemirror/state";
+import {
+  EditorState,
+  Prec,
+  StateEffect,
+  Transaction,
+  type Extension,
+  type TransactionSpec,
+} from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { Result } from "effect";
 
@@ -48,13 +55,15 @@ import type { Change, Source, SourceStamp } from "#core/source/source";
 
 import { actionCommand, type EditorAction } from "./core/actions";
 import type { Analyze } from "./core/analyzer";
-import { historyLayer, usfmEditorHeadless } from "./core/compose";
+import { surfaceRange } from "./core/clip";
+import { historyLayer, judgeLayer, usfmEditorHeadless } from "./core/compose";
 import { docText, structureAt, type DocStructure } from "./core/docStructure";
 import { traceOf } from "./core/instrument";
 import { clearRefusal, lastRefusal, localTracer, tracer } from "./core/instrument";
-import { trusted } from "./core/kernel";
+import { modeFacet, trusted } from "./core/kernel";
+import { assignment } from "./core/registry";
 import { withoutScrolling } from "./core/scroll";
-import { changesOf, fromCanonical, type Funnel, type Receive } from "./funnel";
+import { changesOf, fromCanonical, type Funnel, type Receive, type SurfaceTerms } from "./funnel";
 import { observabilityTracer } from "./observability";
 
 /**
@@ -78,10 +87,26 @@ export interface EditorBook extends Book {
   bindView(view: EditorView): () => void;
   /** The bound view's dispatch hook: update the view, then publish. */
   fromView(view: EditorView, trs: readonly Transaction[]): void;
-  /** Views plus windows currently holding this book; blocks `project.release`. */
+  /** Views plus satellites currently holding this book; blocks `project.release`. */
   attached(): number;
-  /** A non-view attachment (a window, a satellite). Release to let go. */
+  /** A non-view attachment (a satellite). Release to let go. */
   hold(): () => void;
+  /**
+   * An edit from a SURFACE, judged under that surface's terms — its
+   * projection, its mode, its range — by the Book's own phases, then
+   * committed and published like any other.
+   *
+   * This is how a satellite's edit is judged by the rules and not waved
+   * through: the canonical projection hides a footnote's body, so judging the
+   * note editor's keystrokes there refuses every one of them, and trust was
+   * the old way round that. Here the phases see what the surface shows, and
+   * the surface's range is refused past exactly as the chapter clip is.
+   */
+  applyFrom(
+    terms: SurfaceTerms,
+    changes: readonly Change[],
+    origin: Origin,
+  ): Result.Result<Receipt, Refusal>;
   /**
    * Runs one named editor gesture — an insertion, focusing the front matter
    * card — against whichever seat is canonical, and reports whether it ran.
@@ -94,7 +119,7 @@ export interface EditorBook extends Book {
   perform(action: EditorAction): boolean;
   /** Publication in CodeMirror's own vocabulary, for borrowing surfaces. */
   attach(receive: Receive): () => void;
-  /** This book as the port satellites and windows submit through. */
+  /** This book as the port satellites submit through. */
   funnel(): Funnel;
   /** Drops the state, the view binding and every subscriber. */
   close(): void;
@@ -160,6 +185,9 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
     ],
   });
   let view: EditorView | null = null;
+  // The state a surface's edit was judged in, while that edit is being
+  // committed — so the receipt lands on the trace its stages are on.
+  let judging: EditorState | null = null;
 
   const state = (): EditorState => (view === null ? own : view.state);
 
@@ -196,7 +224,7 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
       "book.broadcast_ms": round(satellites - broadcast),
       "book.publish_ms": round(published - satellites),
     };
-    const trace = traceOf(tr.startState);
+    const trace = traceOf(judging ?? tr.startState);
     if (trace === null) observability?.note("book.apply", "rewrote", undefined, fields);
     else trace.annotate(fields);
     return receipt;
@@ -210,7 +238,7 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
    * the first door to close is the one that decided. `reason` is that stage's
    * own words when it had any — the same detail the trace shows.
    */
-  const refuse = (origin: Origin, count: number): Refusal => {
+  const refuse = (origin: Origin, count: number, judged?: EditorState): Refusal => {
     const first = lastRefusal();
     const rule = first?.rule ?? "editor.phases";
     const fields = {
@@ -219,7 +247,7 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
       "book.rule": rule,
       "book.changes": count,
     };
-    const trace = traceOf(state());
+    const trace = traceOf(judged ?? state());
     if (trace === null) observability?.note("book.apply", "refused", first?.detail, fields);
     else trace.annotate(fields);
     return new Refusal({
@@ -281,6 +309,65 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
     return true;
   };
 
+  /**
+   * One transaction onto the canonical seat, and its receipt or refusal.
+   *
+   * Same phases, same publication, whichever door it came through: on a
+   * mounted book dispatching is how the view's own keystrokes arrive, so an
+   * edit takes that path rather than a second one.
+   */
+  const commit = (
+    spec: TransactionSpec,
+    origin: Origin,
+    count: number,
+  ): Result.Result<Receipt, Refusal> => {
+    const before = stamp();
+    const bound = view;
+    if (bound !== null) {
+      const doc = bound.state.doc;
+      bound.dispatch(spec);
+      if (bound.state.doc === doc) return Result.fail(refuse(origin, count));
+      if (revision === before.revision) {
+        throw new Error(
+          "editorBook: the bound view accepted an edit without going through fromView; " +
+            "bind it with dispatchTransactions: (trs) => book.fromView(view, trs)",
+        );
+      }
+      return Result.succeed({ before, after: stamp(), origin });
+    }
+    const tr = own.update(spec);
+    own = tr.state;
+    if (!tr.docChanged) return Result.fail(refuse(origin, count));
+    return Result.succeed(accept(tr, before, origin));
+  };
+
+  /**
+   * The state a surface's edit is judged in: the canonical text and parse,
+   * with the SURFACE's projection, mode and range in place of the canonical
+   * editor's — and the Book's own phases, installed as they are on the seat.
+   *
+   * A reconfigure of the canonical state rather than a fresh one, so the
+   * parse carries over (the structure is the same field over the same text)
+   * and nothing is analyzed again. It is thrown away after the one edit; its
+   * cost is the plan and paint index under the surface's projection, which
+   * the phases read.
+   */
+  const judgeFor = (terms: SurfaceTerms): EditorState => {
+    const canonical = state();
+    return canonical.update({
+      effects: StateEffect.reconfigure.of([
+        judgeLayer({ analyze: options.analyze }),
+        terms.projection.map((delta) => assignment.of(delta)),
+        modeFacet.of(terms.mode),
+        surfaceRange.of({ from: terms.range.from, to: terms.range.to }),
+        // The seat's own tracer, so the stages land on the ring the book
+        // already writes to and `Refusal.rule` can name the rule.
+        tracer.of(canonical.facet(tracer) ?? localTracer),
+      ]),
+      filter: false,
+    }).state;
+  };
+
   const book: EditorBook = {
     id,
     path,
@@ -295,29 +382,37 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
 
     apply: (changes, origin, trust = UNTRUSTED): Result.Result<Receipt, Refusal> => {
       const list = asChangeList(changes);
-      const before = stamp();
       clearRefusal();
-      const spec = specFor(list, origin, trust);
-      const bound = view;
-      if (bound !== null) {
-        const doc = bound.state.doc;
-        // Same phases, same publication: dispatching is how the view's own
-        // keystrokes arrive, so an `apply` on a mounted book takes that path
-        // rather than a second one.
-        bound.dispatch(spec);
-        if (bound.state.doc === doc) return Result.fail(refuse(origin, list.length));
-        if (revision === before.revision) {
-          throw new Error(
-            "editorBook: the bound view accepted an edit without going through fromView; " +
-              "bind it with dispatchTransactions: (trs) => book.fromView(view, trs)",
-          );
-        }
-        return Result.succeed({ before, after: stamp(), origin });
+      return commit(specFor(list, origin, trust), origin, list.length);
+    },
+
+    applyFrom: (terms, changes, origin) => {
+      const list = asChangeList(changes);
+      clearRefusal();
+      const judge = judgeFor(terms);
+      // Judged as the gesture it was in the surface — a typed key, a paste —
+      // so the rules that act on the kind of gesture see it; committed below
+      // under the surface's origin, which is what the receipt names.
+      const judged = judge.update({
+        ...specFor(list, origin, UNTRUSTED),
+        ...(terms.event === undefined ? {} : { userEvent: terms.event }),
+      });
+      if (!judged.docChanged) return Result.fail(refuse(origin, list.length, judge));
+      // The phases have run, once, under the surface's terms; what they let
+      // through is the edit. It lands on the canonical state unfiltered —
+      // judging it a second time under the CANONICAL projection is exactly
+      // the mistake this door exists to avoid: that projection hides a
+      // footnote's body, and would refuse every key typed into it.
+      judging = judge;
+      try {
+        return commit(
+          { ...specFor([], origin, UNTRUSTED), changes: judged.changes, filter: false },
+          origin,
+          list.length,
+        );
+      } finally {
+        judging = null;
       }
-      const tr = own.update(spec);
-      own = tr.state;
-      if (!tr.docChanged) return Result.fail(refuse(origin, list.length));
-      return Result.succeed(accept(tr, before, origin));
     },
 
     changes: listeners.add,
@@ -384,15 +479,15 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
 
 /**
  * The editor-backed Book as a `Funnel`. A thin adapter, not a second write
- * path: `submit` is `apply`, and the result is unwrapped because a satellite
- * wants the `Refusal` itself (to say which rule refused) rather than a Result
- * it must destructure.
+ * path: `submit` is `applyFrom` under the surface's terms, and the result is
+ * unwrapped because a satellite wants the `Refusal` itself (to say which rule
+ * refused) rather than a Result it must destructure.
  */
 export const funnelFor = (book: EditorBook): Funnel => ({
   doc: () => book.state.doc,
   structure: () => book.structure(),
-  submit: (changes, origin, trust) => {
-    const result = book.apply(changes, origin, trust);
+  submit: (changes, origin, terms) => {
+    const result = book.applyFrom(terms, changes, origin);
     return Result.isSuccess(result) ? result.success : result.failure;
   },
   attach: book.attach,

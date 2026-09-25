@@ -171,7 +171,7 @@ const SILENT: TraceEmit = {
  *
  * `editorBook` installs this on the canonical state when it was given an
  * Observability; every state that shares the book shares the trace, so a
- * window over the book traces under the same correlation.
+ * satellite edit the book judges traces under the same correlation.
  */
 export const observabilityTracer = (
   observability: ObservabilityService,

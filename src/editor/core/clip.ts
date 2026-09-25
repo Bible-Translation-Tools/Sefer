@@ -9,14 +9,16 @@
  * shown cannot drift apart.
  *
  * The two rules take the range as a function, and the chapter clip is only one
- * of their callers: a satellite's range (`recipes/satellite.ts`) is guarded by
- * the same pair. The difference is trust. The chapter clip is the canonical
- * editor's view choice, so a trusted edit (a fix, the front matter card) may
- * write outside it; a satellite's range is what that surface IS, so nothing
- * waives it — `{ trustWaives: false }`.
+ * of their callers: a satellite's range is guarded by the same pair — the
+ * change half by the Book, over `surfaceRange` (`refuseEditsOutsideTheSurface`
+ * in `phases.ts`), the selection half by the satellite itself
+ * (`recipes/satellite.ts`). The difference is trust. The chapter clip is the
+ * canonical editor's view choice, so a trusted edit (a fix, the front matter
+ * card) may write outside it; a satellite's range is what that surface IS, so
+ * nothing waives it — `{ trustWaives: false }`.
  */
 
-import { EditorState, MapMode, StateEffect, StateField, type Text } from "@codemirror/state";
+import { EditorState, Facet, MapMode, StateEffect, StateField, type Text } from "@codemirror/state";
 
 import { type ChapterRow, type DocStructure, structureField } from "./docStructure";
 import { isTrusted, type ChangeRule, type TransactionRule } from "./kernel";
@@ -84,6 +86,23 @@ export function visibleClipAt(st: EditorState): ClipRange {
 export interface RangeRuleOptions {
   readonly trustWaives?: boolean;
 }
+
+/**
+ * The range of the SURFACE an edit came from, when it came from one.
+ *
+ * Empty on the canonical state — the canonical editor's own range is the
+ * chapter clip above. The Book installs it on the state it judges a
+ * satellite's edit in (`book.ts`, `applyFrom`), from the range the satellite
+ * submitted with the edit, and `refuseEditsOutsideTheSurface` (`phases.ts`)
+ * reads it: the same rule as the chapter clip, over a different range, and
+ * never waived by trust.
+ */
+export const surfaceRange = Facet.define<
+  { from: number; to: number },
+  { from: number; to: number } | null
+>({ combine: (values) => values[0] ?? null });
+
+export const surfaceRangeAt = (state: EditorState): ClipRange => state.facet(surfaceRange);
 
 export function refuseEditsOutsideTheClip(
   getRange: (state: EditorState) => { from: number; to: number } | null,

@@ -10,7 +10,7 @@
  */
 
 import { settleTheCaretOnALegalPosition } from "./caret";
-import { pullSelectionsIntoTheClip, refuseEditsOutsideTheClip } from "./clip";
+import { pullSelectionsIntoTheClip, refuseEditsOutsideTheClip, surfaceRangeAt } from "./clip";
 import { deleteMarkersWholeOrNotAtAll } from "./deletion";
 import { PAINT_PORT, caretClipAt, editableClipAt, planAt, structureAt } from "./editorState";
 import {
@@ -46,6 +46,13 @@ export interface PhaseRule {
 }
 
 export const PHASES = [
+  // A satellite's edit is judged with that satellite's range installed
+  // (`surfaceRange`, empty on the canonical state), and nothing waives it.
+  {
+    phase: "admission",
+    name: "refuseEditsOutsideTheSurface",
+    rule: () => refuseEditsOutsideTheClip(surfaceRangeAt, { trustWaives: false }),
+  },
   {
     phase: "admission",
     name: "refuseEditsOutsideTheClip",

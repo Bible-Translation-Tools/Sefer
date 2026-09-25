@@ -7,7 +7,7 @@
  * nothing else from the app.
  *
  * Grouped by seam: the engine seam, the assembled editor,
- * the editor-backed Book and its funnel, satellites and windows, views,
+ * the editor-backed Book and its funnel, satellites, views,
  * diagnostics, instruments, and the test harness.
  */
 
@@ -29,7 +29,7 @@ export { type ChapterRow } from "./core/docStructure";
 // The editor-backed Book and the port other surfaces submit through.
 export { editorBook, type EditorBook } from "./book";
 
-// Satellites and windows.
+// Satellites.
 export {
   clippedToScope,
   markedRanges,

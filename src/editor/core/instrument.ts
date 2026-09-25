@@ -13,7 +13,7 @@
  * The shape:
  *
  *   - `tracer` is a Facet, not a module global, because two states (a book and
- *     a window over it) trace separately, and because the test harness wants a
+ *     a satellite over it) trace separately, and because the test harness wants a
  *     flat sink while the app wants the Observability bridge.
  *   - `Tracer.begin(state, origin)` opens one `Trace` per transaction. The
  *     trace is keyed on the *start* state's identity: a command reads that

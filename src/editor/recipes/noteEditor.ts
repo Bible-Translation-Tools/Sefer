@@ -36,7 +36,6 @@ import {
 } from "@codemirror/state";
 import { EditorView, ViewPlugin, keymap } from "@codemirror/view";
 
-import { trustedBy } from "#core/book/book";
 import { NOTE_PART } from "#core/galley";
 
 import { funnelFor, type EditorBook } from "../book";
@@ -272,17 +271,18 @@ class NoteSurfaces {
       host: funnelFor(book),
       range: span,
       editable: true,
-      // TRUSTED, for the same reason the front matter card is. In regular mode
-      // the whole note is hidden markup, so `refuseKeystrokesInsideHiddenMarkup`
-      // guards every offset in it and an untrusted satellite here is a text box
-      // that silently refuses every key. This surface is narrow — one note's
-      // origin and body, with the opener, the caller sigil and the closer left
-      // out of its range — and its targets are hard-edged, which is the trade
-      // that argument rests on. A marker rename is still a USFM-mode edit.
-      trust: trustedBy("note"),
       label: `note:${String(at)}`,
       extensions: [
-        modeView("default", "cm-note"),
+        // NOT trusted. Its edits are judged by the Book's own phases, like the
+        // main editor's, under THIS surface's terms: the `note-satellite`
+        // projection, where the caller and the body are visible and directly
+        // editable and the note's markup stays frozen, and a range of the
+        // note's content. In the canonical projection the whole note is hidden
+        // markup, so `refuseKeystrokesInsideHiddenMarkup` refused every key
+        // typed here — which is why this surface used to be trusted, and so
+        // skipped every rule: a backslash, a pasted `\c`, an edit outside the
+        // note all went straight in. See `EditorBook.applyFrom`.
+        modeView("note-satellite", "cm-note"),
         analyzer.of(this.#view.state.facet(analyzer)),
         // The structure only, NOT the whole reading layer. `readingLayer`
         // brings `decoField`, whose regular-mode projection is the one that

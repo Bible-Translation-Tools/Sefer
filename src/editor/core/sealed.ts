@@ -6,6 +6,7 @@
  * not the decoration set — and answers in change-filter ranges.
  */
 
+import { surfaceRangeAt } from "./clip";
 import { isUserReplacement } from "./deletion";
 import { lineIndexAt, type DocStructure } from "./docStructure";
 import {
@@ -55,6 +56,22 @@ export function refuseKeystrokesInsideHiddenMarkup(
     });
     if (hi < 0 || (deletes && isUserReplacement(tr))) return true;
     const state = tr.startState;
+    // A surface whose whole range is ONE position — the note editor over a
+    // note with nothing in it yet, whose body belongs between the `\ft ` and
+    // the `\f*` — shows exactly one caret, there, and exists to write at it.
+    // That position is inside hidden markup only because the body it marks is
+    // empty (the parse has no body part to paint), so an insertion exactly
+    // there is not a keystroke aimed at nothing. Any other change still meets
+    // the rule, and the surface's own range refuses everything else.
+    const surface = surfaceRangeAt(state);
+    if (
+      !deletes &&
+      surface !== null &&
+      surface.from === surface.to &&
+      lo === surface.from &&
+      hi === lo
+    )
+      return true;
     const s = structureAt(state);
     const doc = state.doc;
     const out: number[] = [];

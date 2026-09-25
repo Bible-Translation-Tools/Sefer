@@ -233,6 +233,12 @@ export type AssignmentDelta = Partial<Record<ClassKey, Partial<Cell>>>;
 export interface Assignment {
   rows: Registry;
   clamped: { cls: ClassKey; to: "pip" | "freeze"; set: OwnedSetName }[];
+  /**
+   * The deltas this was resolved from, in order. They are what a surface
+   * hands the Book with an edit (`SurfaceTerms`), so the Book can judge it
+   * under the same projection by installing the same deltas.
+   */
+  deltas: readonly AssignmentDelta[];
 }
 
 class UnclampableDelta extends Error {}
@@ -296,7 +302,7 @@ function resolve(base: Registry, deltas: readonly AssignmentDelta[]): Assignment
       `"${k}" would land at the struck cell ${cellKey(c)} — ${STRUCK[cellKey(c)]}`,
     );
   }
-  return { rows, clamped };
+  return { rows, clamped, deltas };
 }
 
 export const PROJECTIONS: Record<string, AssignmentDelta> = {

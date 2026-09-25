@@ -4,8 +4,8 @@
  *
  * Layers are separate because their costs and their requirements differ: the
  * reading layer is state only (it works in Node and in a worker), the rules
- * layer needs the engine, the commands and view layers need a DOM. A window or a
- * test takes the first two and stops.
+ * layer needs the engine, the commands and view layers need a DOM. A test takes
+ * the first two and stops; the Book judges a satellite's edit with `judgeLayer`.
  */
 
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
@@ -310,6 +310,21 @@ export function usfmEditor(options: EditorOptions): Extension[] {
  */
 export function usfmEditorHeadless(options: EditorOptions): Extension[] {
   return [analyzer.of(options.analyze), readingLayer, rulesLayer(options)];
+}
+
+/**
+ * What the Book judges a SURFACE's edit with (`book.ts`, `applyFrom`): the
+ * engine, the structure and the phases — the very rules `usfmEditorHeadless`
+ * installs, and nothing of the reading layer. The surface's own projection,
+ * mode and range are added beside it as data; the rules are the Book's.
+ *
+ * Not the reading layer, because the judging state is built per edit and
+ * thrown away: `decoField` would decorate the whole book for a state nobody
+ * draws, and `pickField` would bring the CANONICAL editor's chapter clip into
+ * a judgement about a surface that has its own range.
+ */
+export function judgeLayer(options: EditorOptions): Extension[] {
+  return [analyzer.of(options.analyze), structureField, rulesLayer(options)];
 }
 
 export const historyLayer: Extension = history();

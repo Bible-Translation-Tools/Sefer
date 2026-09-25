@@ -8,9 +8,9 @@
  *
  * `structureField` is the state's memo: by `Text` instance first (CodeMirror
  * shares the instance across non-doc transactions), then the `borrowedStructure`
- * facet (a window takes the canonical parse when its text matches), then the
+ * facet (a satellite takes the canonical parse when its text matches), then the
  * last structure built, and only then the engine. That chain is why ten open
- * result cards over one book cost zero extra parses.
+ * excerpts over one book cost zero extra parses.
  */
 
 import { EditorState, Facet, StateField, type Text } from "@codemirror/state";

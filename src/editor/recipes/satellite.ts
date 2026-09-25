@@ -10,17 +10,25 @@
  */
 
 import { defaultKeymap } from "@codemirror/commands";
-import { EditorState, Facet, type Extension, StateEffect, StateField } from "@codemirror/state";
+import {
+  EditorState,
+  Facet,
+  type Extension,
+  StateEffect,
+  StateField,
+  Transaction,
+} from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, keymap } from "@codemirror/view";
 
-import { Refusal, type Trust } from "#core/book/book";
+import { Refusal } from "#core/book/book";
 
-import { pullSelectionsIntoTheClip, refuseEditsOutsideTheClip } from "../core/clip";
+import { pullSelectionsIntoTheClip } from "../core/clip";
 import { viewLayer } from "../core/compose";
 import { borrowedStructure } from "../core/docStructure";
-import { trusted } from "../core/kernel";
+import { modeFacet, trusted } from "../core/kernel";
+import { assignment } from "../core/registry";
 import { span } from "../core/timing";
-import { changesOf, fromCanonical, type Funnel } from "../funnel";
+import { changesOf, fromCanonical, type Funnel, type SurfaceTerms } from "../funnel";
 
 export interface Satellite {
   view: EditorView;
@@ -47,31 +55,45 @@ const scope = StateField.define<{ from: number; to: number }>({
 export const satelliteRange = (state: EditorState) => state.field(scope, false) ?? null;
 
 /**
- * The range is an EDIT GUARD, not only a clip — and it is installed here, by
- * `mountSatellite`, so no surface can mount without it.
+ * The range is an EDIT GUARD, not only a clip — and both halves are installed
+ * by `mountSatellite`, so no surface can mount without them.
  *
  * `clippedToScope` only hides what is outside the range, and a satellite's
  * document is the whole book: select all, Backspace, and the reader deleted
  * every verse they could not see (Philemon went from 2,679 characters to the
- * 158 the Book's own marker rules protect). So the guard is on the CHANGE,
- * where every way an edit can arrive passes — a key, a command that edits
- * away from the caret, drag and drop, a paste, a programmatic dispatch — and
- * `refuseEditsOutsideTheClip` drops whatever part of it lies outside. The
- * selection is pulled into the range as well, so the caret never sits where
- * typing would be refused, and select-all selects the range.
+ * 158 the Book's own marker rules protect).
  *
- * The same two rules as the chapter clip (`core/clip.ts`), over this range.
- * Trust never waives them: the range is what this surface is.
+ * The CHANGE half is the Book's: every submit carries the range in its terms
+ * (`termsOf`), and the Book's admission refuses whatever part of the change
+ * lies outside it (`refuseEditsOutsideTheSurface`, `core/phases.ts`) — which
+ * is where every way an edit can arrive passes: a key, a command that edits
+ * away from the caret, drag and drop, a paste, a programmatic dispatch. The
+ * SELECTION half is the surface's own, because the caret is: it is pulled
+ * into the range here, so it never sits where typing would be refused, and
+ * select-all selects the range. Both are `core/clip.ts`'s rules, the chapter
+ * clip's own pair, over this range; trust waives neither.
  *
- * The canonical text coming home is dispatched with `filter: false`, so these
- * never see it.
+ * The canonical text coming home is dispatched with `filter: false`, so the
+ * selection rule never sees it.
  */
-const guardedByScope: Extension = [
-  EditorState.changeFilter.of(refuseEditsOutsideTheClip(satelliteRange, { trustWaives: false })),
-  EditorState.transactionFilter.of(
-    pullSelectionsIntoTheClip(satelliteRange, { trustWaives: false }),
-  ),
-];
+const caretKeptInScope: Extension = EditorState.transactionFilter.of(
+  pullSelectionsIntoTheClip(satelliteRange, { trustWaives: false }),
+);
+
+/**
+ * What this surface shows, for the Book to judge its edit under: its own
+ * projection and mode (whatever `modeView` the caller installed; the default
+ * projection in regular mode when it installed none) and its live range.
+ */
+const termsOf = (tr: Transaction): SurfaceTerms => {
+  const event = tr.annotation(Transaction.userEvent);
+  return {
+    projection: tr.startState.facet(assignment).deltas,
+    mode: tr.startState.facet(modeFacet),
+    range: tr.startState.field(scope),
+    ...(event === undefined ? {} : { event }),
+  };
+};
 
 /**
  * Re-clips a LIVE satellite to a new range.
@@ -151,7 +173,6 @@ export interface SatelliteOptions {
   readonly parent: HTMLElement;
   /** The canonical Book, as a Funnel. Every edit goes through it. */
   readonly host: Funnel;
-  readonly trust?: Trust;
   readonly range: { from: number; to: number };
   readonly extensions: Extension[];
   readonly editable: boolean;
@@ -179,7 +200,7 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
     extensions: [
       initialRange.of(opts.range),
       scope,
-      guardedByScope,
+      caretKeptInScope,
       borrowedStructure.of(() => opts.host.structure()),
       EditorView.editable.of(opts.editable),
       viewLayer(),
@@ -218,7 +239,7 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
         return;
       }
       const done2 = span("satellite-reconcile", opts.label);
-      const outcome = opts.host.submit(changesOf(tr.changes), opts.label, opts.trust);
+      const outcome = opts.host.submit(changesOf(tr.changes), opts.label, termsOf(tr));
       // The caret follows an ACCEPTED edit. A refused one left the text as it
       // was, and `tr.selection` is in the coordinates of a text that never
       // came to be — past the end of it, for a refused deletion — so the

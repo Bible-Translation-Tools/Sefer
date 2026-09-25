@@ -293,7 +293,7 @@ const frontMatterFocus = ViewPlugin.fromClass(
 
 /**
  * The card, as one extension. Mounted by `BookEditor`, so a headless state (a
- * Book with no view, a window, a satellite) never pays for it.
+ * Book with no view, a satellite) never pays for it.
  */
 export const frontMatterCard = (): Extension => [
   EditorView.decorations.compute(["doc", structureField, modeFacet], cardDecorations),
