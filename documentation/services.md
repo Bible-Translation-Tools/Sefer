@@ -6,7 +6,7 @@ One section per service: what it is in plain words, what is wrong or constrained
 
 ## Where to focus (as of 2026-09-23)
 
-1. **Location / references** — the next feature foundation. See [Location](#location-and-reference) and `planning/01-discussing/editor-primitives-consistency.md`.
+1. **Location / references** — first pass landed (navigation and inventory); Search, Excerpts/STET and Library next. See [Location](#location-and-reference) and `planning/01-discussing/editor-primitives-consistency.md`.
 2. **Git, top to bottom** — history time travel is next, and the pull/push/lifecycle flow needs one careful pass before anything else is added to it. See [Git](#git).
 3. **One diff and sync model** — after the primitives settle: retire the line diff, stop reading and diffing every book, one change classification for History, Review and Cloud. See [Diff](#diff) and `planning/01-discussing/diff-and-sync-model-2026-09-23.md`.
 4. **Data safety in Recovery** — a journal must know what text it started from. See [Recovery](#recovery).
@@ -143,23 +143,21 @@ Desktop self-update: `core/host/updater.ts` (port), `platform/tauri/updater.ts`,
 
 ### Overview
 
-A bounded ring of events, spans and verdicts, with JSONL export. The dev surface is `__sefer.observability` (`traces.recent/print`, `logs.recent`, `export`, `level`, `setLevel`, `stream`). There is a dev-only OTLP bridge, and a keystroke meter in the editor. Client failures (boundary-caught, uncaught, unhandled rejections) are `client.error` notes in every build, with owner names kept in production by Solid's observe runtime. `src/core/observability.ts`, `src/platform/observability.ts`, `src/editor/observability.ts`. → [observability](architecture/observability.md)
+A bounded ring of events, spans and verdicts, and a second ring of 200 for `failed`/`unavailable`/`refused` that ordinary work cannot evict. Every event is also written to a log directory on the device (OPFS on the Web, the app log directory on desktop): 256 KB JSONL parts, each opening with a session header, kept seven days and 5 MB. Settings → Advanced → Export diagnostics hands over one file: header and a project snapshot, the failure ring, the main ring and every part on disk, with string fields allowlisted and paths cut to their last segment. `failed` is the one alarm — a dev build prints each as a `console.error` — and `unavailable` is the world saying no. The dev surface is `__sefer.observability` (`traces.recent/print`, `logs.recent`, `errors`, `failures`, `export`, `level`, `setLevel`, `stream`). There is a dev-only OTLP bridge, and a keystroke meter in the editor. Client failures are `client.error` notes in every build. `src/core/observability.ts`, `src/core/diagnostics/`, `src/app/diagnostics.ts`, `src/platform/observability.ts`, `src/editor/observability.ts`. → [observability](architecture/observability.md)
 
 ### Constraints and known bugs
 
-- There are two axes with no names yet, and the doc conflates them.
-  - What the ring and traces record: `off | verdicts | spans | all`, defaulting to `all`.
-  - How loud the console or log stream is: the doc's `error | info | debug | trace`. Today that is only `VITE_SEFER_LOG`/`VITE_SEFER_STREAM` prefixes.
-  - Decide whether the second axis exists, and what production records.
-- Five operations in the name union are only emitted as notes: `project.close`, `journal.write`, `journal.pending`, `project.watch`, `file.changed`. Catalogue, review comparison, cloud survey/plan, terms and inventory emit nothing.
-- Nothing is persisted on desktop.
+- Recording defaults to `all` in every build: the `pnpm verify:perf` baseline (in [observability](architecture/observability.md#levels)) measured no cost on the keystroke tail. The cost is volume, about 750 KB a minute of continuous typing, which makes the 5 MB disk window roughly half an hour of real editing.
+- The Web header has no OS version or architecture: a browser freezes both in its user agent. macOS's WKWebView reports no version either.
+- The export allowlist (`STRING_KEYS` in `src/core/diagnostics/export.ts`) must be extended by hand when a producer adds a string attribute; until then that field exports as `"redacted"`.
+- An OPFS append rewrites the whole part, which is why parts are 256 KB.
+- `analysis.warm` is in the name union and nothing opens it.
+- `sync.plan`, and the `unavailable` endings of `sync.transfer` and `import.remote`, have only been read against the in-memory fixture, which has no repository and no remote; they need a real Gitea to be seen end to end. `reference.pair` has not been seen either: it needs an empty block in the open book that the reference lacks. Nor has `update.install`, or writing to the desktop log directory: both need the desktop build.
 
 ### Ideas / future
 
-- Open questions and leans (no severity ladder, one write API, measure before lowering the default, close the coverage gaps, export diagnostics): `planning/01-discussing/logging-and-tracing.md`.
-- Desktop JSONL under the `logs` root, with a bounded queue and rotation. Correlate with Rust logs (`tauri-plugin-log`).
-- A user-facing "export diagnostics".
-- Measure the overhead with telemetry off and at `all`.
+- Correlate with Rust logs (`tauri-plugin-log`), if the Rust side ever needs it.
+- A query layer in code, if the `jq` recipes in the observability doc get unwieldy.
 
 ---
 
@@ -236,22 +234,20 @@ A folder of books, with discovery (including RC `manifest.yaml` and Burrito meta
 
 ### Overview
 
-Book codes, the canon table and a forgiving reference parser (`src/core/reference/{reference,canon}.ts`). It has no architecture chapter yet.
+What a typed place means and where a place is in one text. `src/core/location`: `address.ts` (the Address union: book, intro, chapters, verses; U23003 spelling), `names.ts` (the name catalogue: canon, project names, abbreviations, intro words), `citation.ts` (the Citation parser, navigation and prose grammars; the one Sefer file with a test), `locate.ts` (`resolve` and `addressAt` over a `TocView`), `canon.ts`. `src/core/galley/location.ts` adapts the engine's dish TOC into a `TocView`. `src/app/location.ts` is the per-project piece the shell exposes as `shell.location`: the catalogue memo, the held books, and the display rule (the project's own book name, English otherwise). It has no architecture chapter yet; the plan is `planning/01-discussing/editor-primitives-consistency.md`.
+
+On it today: the palette and sidebar jump, `showReference` (found / missing with its chapter / ambiguous, each reported), and the inventory's site labels.
 
 ### Constraints and known bugs
 
-- Two address types (`Reference` in reference.ts, `Ref` in book.ts).
-- The rule: Sefer never scans for `\c`/`\v` with a regex or keeps its own diff; the engine's TOC and decision units answer. Four places still turn an offset into a verse on their own: search's `buildRefTable`/`refFrom`, Library's `CHAPTER` regex, the `showReference` scan in ProjectContext, and the findings/inventory exact-stamp + `toc.at`.
+- Two address types still: `Address`, and `Ref` in book.ts, which Search, Excerpts/STET and Library use until the second pass moves them.
+- The rule: Sefer never scans for `\c`/`\v` with a regex; the engine's TOC answers. Two places still do on their own: search's `buildRefTable`/`refFrom`, and Library's `CHAPTER` regex. Both are the second pass.
+- On Kitchen v0.1.6 the TOC carries no segments and no verse-list holes: `3a` resolves as all of verse 3 (`coarser`), and `\v 1,3,5` as 1–5. Kitchen v0.1.7 carries both once it is tagged; Sefer adopts it then.
 
 ### Ideas / future
 
-- **Next up:** a `src/core/location` module:
-  - one address type
-  - `parseNavigation` and a strict `matchProse`
-  - `at`/`covering`/`resolve` over the TOC
-  - an acceptance table: LUK 3:1, chapter-only, `\v 1-2`, a duplicate `\v`, front matter, stale analysis
-
-  Every caller above moves onto it. Plan: `planning/01-discussing/editor-primitives-consistency.md`.
+- The second pass: Search (one-off `parseText` TOCs for resources, the last published TOC while typing), Excerpts/STET, Library; then `Ref` goes.
+- A prose scanner for comments, when comments exist. The grammar is already in `citation.ts`.
 
 ---
 
@@ -509,11 +505,11 @@ The `/cloud` screen. It reads the two clocks and sorts the project into one of n
 
 ### Overview
 
-Browsing the online catalogue on the landing screens. `src/app/catalogue.ts`. → [landing](architecture/landing.md)
+Browsing the online catalogue on the landing screens. One `catalogue.browse` operation per load of the table: a Language API that is down or answers non-2xx ends `unavailable`, a payload the decoder cannot read `failed`. `src/app/catalogue.ts`. → [landing](architecture/landing.md)
 
 ### Constraints and known bugs
 
-- Emits no observability.
+- None.
 
 ### Ideas / future
 
@@ -527,7 +523,7 @@ Browsing the online catalogue on the landing screens. `src/app/catalogue.ts`. �
 
 ### Overview
 
-Staged, validated import with provenance (`stage` → `classify` → `commit`, `.sefer/provenance.json`). Web intake takes a folder or a zip. `src/core/resources/import.ts`, `platform/web/intake.ts`, `ImportHub.tsx`. → [resources](architecture/resources.md), [landing](architecture/landing.md)
+Staged, validated import with provenance (`stage` → `classify` → `commit`, `.sefer/provenance.json`, `via` zip or folder; a clone appends a `remote` record, `src/core/project/provenance.ts`). Every arrival then writes its projects-index row at once, `from` included. Web intake takes a folder or a zip. `src/core/resources/import.ts`, `platform/web/intake.ts`, `ImportHub.tsx`. → [resources](architecture/resources.md), [landing](architecture/landing.md)
 
 ### Constraints and known bugs
 

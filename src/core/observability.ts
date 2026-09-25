@@ -1,5 +1,22 @@
 import { Context, Effect, Layer, Logger, Tracer } from "effect";
 
+/**
+ * How a piece of work or a decision came out. An outcome, not a severity.
+ *
+ * Two of them mean "it did not happen", and the difference is whose fault:
+ *
+ *   - `failed` — OUR code or an invariant broke. The one alarm: the dev
+ *     console prints it unasked, and nothing else it prints unasked.
+ *   - `unavailable` — the world said no: offline, a server down or slow, a
+ *     timeout, a host without the capability. Expected in the field, so it is
+ *     kept and exported but does not shout. Set only at the outside
+ *     boundaries (the Remote port, the catalogue, the language API, the
+ *     updater, `fetch`); anything uncaught anywhere else stays `failed`, so a
+ *     bug cannot hide here by default.
+ *
+ * `refused` and `declined` are usually the app working — a rule holding, a
+ * person choosing no — and are not warnings.
+ */
 export type Verdict =
   | "ready"
   | "passed"
@@ -7,7 +24,14 @@ export type Verdict =
   | "rewrote"
   | "consumed"
   | "declined"
+  | "unavailable"
   | "failed";
+
+/**
+ * The verdicts the failure ring keeps, so a burst of ordinary work cannot
+ * overwrite the one event someone will ask about.
+ */
+const HELD_VERDICTS: ReadonlySet<Verdict> = new Set<Verdict>(["failed", "unavailable", "refused"]);
 
 export type EventKind = "operation" | "span" | "note" | "log";
 
@@ -54,24 +78,44 @@ export type OperationName =
   | "boot"
   | "project.open"
   | "project.close"
-  | "project.watch"
   | "editor.mutation"
   | "editor.selection"
   | "editor.render"
   | "save"
-  | "file.changed"
   | "analysis.pass"
   | "analysis.warm"
+  /** One debounced flush of the recovery journals; `op.cause` is the edit that armed it. */
   | "journal.write"
-  | "journal.pending"
   | "journal.restore"
   | "journal.discard"
   | "journal.offer"
   | "import.resource"
   | "import.remote"
+  /** The Find Project table's one read of the catalogue. */
+  | "catalogue.browse"
   | "find.run"
-  | "sync.transfer"
+  /** Jumping from the Findings panel to a finding's span in the editor. */
+  | "findings.navigate"
+  /** One bound reference read and measured against the open book. */
+  | "reference.load"
+  /** One comparison on /review: the book diff and the engine's decision units. */
+  | "review.compare"
   | "review.apply"
+  /** One reading of the repository against the cloud; ends with the state. */
+  | "sync.survey"
+  /** What a pull would change, worked out after a survey found the device behind. */
+  | "sync.plan"
+  | "sync.transfer"
+  /** The key-terms guide for one locale, decoded and listed. */
+  | "terms.load"
+  /** One term's references mapped onto the project, and its source side read. */
+  | "terms.select"
+  /** The character inventory screen, from mount to its first paint. */
+  | "inventory.load"
+  | "update.check"
+  | "update.install"
+  /** Settings → Advanced → Export diagnostics: its size, never its content. */
+  | "diagnostics.export"
   /**
    * One command run from the palette, a keybinding or a click. The id is in
    * the name so a trace list reads as what the person did, and `command.` is a
@@ -105,7 +149,13 @@ export interface ObservabilityEvent {
   readonly attrs?: Attrs;
 }
 
-export type ObservabilitySink = (event: ObservabilityEvent, line: string) => void;
+/**
+ * Host code that sees every event as it is recorded. Synchronous and on the
+ * hot path: a sink that needs the JSONL line calls `eventLine` itself, ideally
+ * later and in a batch — serialising every event for sinks that never read the
+ * text was a `JSON.stringify` per keystroke span.
+ */
+export type ObservabilitySink = (event: ObservabilityEvent) => void;
 
 /**
  * What every event of a session has in common, stamped ONCE.
@@ -173,6 +223,12 @@ export interface ObservabilityService {
   readonly span: (name: string, note?: string, attrs?: Attrs) => (attrs?: Attrs) => number;
   readonly note: (rule: string, verdict: Verdict, detail?: string, attrs?: Attrs) => void;
   readonly recent: (limit?: number) => readonly ObservabilityEvent[];
+  /**
+   * The newest events whose verdict is in `HELD_VERDICTS`, oldest first, from
+   * a ring of their own (`FAILURE_CAPACITY`). Kept at recording time, so the
+   * main ring wrapping never loses one.
+   */
+  readonly failures: (limit?: number) => readonly ObservabilityEvent[];
   readonly export: () => string;
   readonly level: () => Level;
   readonly setLevel: (level: Level) => void;
@@ -189,6 +245,8 @@ export interface ObservabilityOptions {
 }
 
 const DEFAULT_CAPACITY = 2000;
+
+const FAILURE_CAPACITY = 200;
 
 const DEFAULT_LEVEL: Level = "all";
 
@@ -263,7 +321,8 @@ const merge = (into: Attrs | undefined, from: Attrs | undefined): Attrs | undefi
   return narrow({ ...into, ...from });
 };
 
-const toLine = (event: ObservabilityEvent): string => {
+/** One event as its JSONL line, without the newline. The field order is the documented one. */
+export const eventLine = (event: ObservabilityEvent): string => {
   const record: Record<string, unknown> = {
     seq: event.seq,
     t: event.t,
@@ -308,6 +367,7 @@ const makeRing = (options: ObservabilityOptions): Ring => {
   let count = 0;
   let seq = 0;
   let dropped = 0;
+  const held: ObservabilityEvent[] = [];
 
   const push = (event: Omit<ObservabilityEvent, "seq" | "t">): void => {
     const recorded: ObservabilityEvent = {
@@ -320,9 +380,13 @@ const makeRing = (options: ObservabilityOptions): Ring => {
     buffer[at] = recorded;
     at = (at + 1) % capacity;
     if (count < capacity) count += 1;
+    if (recorded.verdict !== undefined && HELD_VERDICTS.has(recorded.verdict)) {
+      held.push(recorded);
+      if (held.length > FAILURE_CAPACITY) held.shift();
+    }
     if (sink === undefined) return;
     try {
-      sink(recorded, `${toLine(recorded)}\n`);
+      sink(recorded);
     } catch {
       dropped += 1;
     }
@@ -456,7 +520,9 @@ const makeRing = (options: ObservabilityOptions): Ring => {
       span: spanIn(frame),
       note: noteIn(frame),
       recent,
-      export: () => recent().reduce((text, event) => `${text}${toLine(event)}\n`, ""),
+      failures: (limit) =>
+        limit === undefined ? [...held] : held.slice(Math.max(0, held.length - Math.trunc(limit))),
+      export: () => recent().reduce((text, event) => `${text}${eventLine(event)}\n`, ""),
       level: () => level,
       setLevel: (next) => {
         level = next;

@@ -177,7 +177,7 @@ Every event carries the correlation `<bookId>#<trace seq>`, so one keystroke's s
 
 **Reading a keystroke.** Set the level to `spans` (`__sefer.observability.setLevel("spans")` under the dev server) and read `__sefer.observability.traces.recent()` (or `logs.recent()` for loose events): each frame is an `editor.phase.<name>` or `editor.command.<name>` span plus its verdict note, in pipeline order, all under one `<bookId>#<seq>` correlation, followed by the meter's one note with the derivation totals. There is no separate editor surface on `globalThis`.
 
-`core/meter.ts` (wall time from the DOM event to the last update of a gesture) rounds out the surface. None of it is Effect: it runs inside change and transaction filters thousands of times per typed paragraph, where a service lookup per rule is not free and there is no fiber to carry a context.
+`core/meter.ts` (elapsed time from the DOM event to the last update that carried a transaction, split into the browser's half, CodeMirror's `dispatch`, the derivation spans and a remainder) rounds out the surface. None of it is Effect: it runs inside change and transaction filters thousands of times per typed paragraph, where a service lookup per rule is not free and there is no fiber to carry a context.
 
 ## What was not ported
 
@@ -186,6 +186,8 @@ Every event carries the correlation `<bookId>#<trace seq>`, so one keystroke's s
 - **`startEngine` / `runAnalyze`** — replaced by the `Galley` Layer and the analyzer facet.
 
 ## The file map, by responsibility
+
+`cst.ts`'s typed arrays are a CACHE over the Galley reader, not a second reader: every value is read through `TokenRow`/`NodeRow`/`Tree`/`Toc`, so a wire change lands in scripture-kitchen's generated reader and reaches the editor as a type error, not a misread. What the planes add is the editor's own — line openings, note/origin/wrapper scope, block extents, designator roles, the `mapping.ts` rows. Two helpers are named so they cannot be mistaken for the reader's: `firstTokenFrom(pos)` (the first token starting at or after a position; `Tree.tokenAt` answers the one containing it and throws outside the document) and `isHorizontalSpace(i)` (a `Pad` token or a `Text` token flagged `TOKEN_BLANK`; `TokenView.isBlank()` is the flag alone).
 
 | what                                  | where                                                                                                                                         |
 | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |

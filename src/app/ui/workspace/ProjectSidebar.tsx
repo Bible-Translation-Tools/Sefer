@@ -24,6 +24,8 @@ import SearchIcon from "lucide-solid/icons/search";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
+import { chaptersAddress } from "#core/location/address";
+
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { Badge, Input, SegmentedControl } from "../primitives";
@@ -143,7 +145,7 @@ export function ProjectSidebar() {
     // The focused book goes through `showChapter`, which decides clip vs
     // scroll and knows the intro row; any other book is a reference.
     if (shell.focused()?.id === id) shell.showChapter(chapter.index);
-    else shell.showReference({ bookId: id, chapter: chapter.index });
+    else shell.showReference(chaptersAddress(id, chapter.index));
   };
 
   const BookRow = (rowProps: { readonly row: Row }) => {

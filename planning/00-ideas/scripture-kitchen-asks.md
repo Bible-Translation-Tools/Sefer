@@ -30,3 +30,19 @@ Rarity's denominator today is the corpus total, so `Glyph.sites` has to take Rar
 **Asked (the old app had it):** a chapter-label picker that rewrites `\cl` / `\cp`.
 
 **Decision:** Will: "will be an Onion thing." Deferred. No Sefer UI is planned until the engine defines the operation, most likely as edits, the way format works.
+
+## 5. Designators model segments and list holes, and the TOC carries both
+
+**Asked 2026-09-24**, from the [editor primitives plan](../01-discussing/editor-primitives-consistency.md#subverses-and-verse-lists-two-grammars-one-value).
+
+**State:** Onion's `designator::verse` reads `\v 3a` as 3–3 ("a segment is a label, not a coordinate") and `\v 1,3,5` as 1–5 ("the hole is not modelled"). The Galley TOC keeps `first`/`last` and drops the designator span, so from JS a segment cannot be told apart from its verse and a verse list looks like a bridge.
+
+**Will, 2026-09-24:** both should be modelled. A segment is a coordinate (`3a` and `3b` are different places), and a list has holes (`2` is not in `\v 1,3,5`).
+
+**Change:**
+
+- `Designator` carries its members: each `{ number, segment? }` point or range, in written order, not only the endpoints;
+- each TOC verse row exposes those members (and its label as written), and each chapter row its label (`\c 12b`);
+- lint's duplicate and ordering rules then read members, so `\v 1,3,5` followed by `\v 2` is not an overlap.
+
+**Sefer side:** Location's resolver and the display of bridged Addresses. Until then `3a` resolves as verse 3, marked coarser than asked, and verse lists as their endpoints.

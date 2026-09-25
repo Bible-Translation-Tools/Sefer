@@ -17,7 +17,7 @@
 
 import { Show, createSignal } from "solid-js";
 
-import type { AvailableUpdate } from "#core/host/updater";
+import { UpdaterError, type AvailableUpdate } from "#core/host/updater";
 
 import { t } from "../i18n";
 import { useServices } from "../ProjectContext";
@@ -38,7 +38,16 @@ export function UpdatePanel() {
     setBusy("checking");
     setNote("");
     setAvailable(undefined);
+    const operation = services.composition.observability.operation("update.check", {
+      "update.channel": services.updater.channel(),
+    });
     void services.run(services.updater.check()).then((result) => {
+      // `check` cannot fail by design, so "we could not find out" — no
+      // updater in this build, no endpoint, a worker that did not answer — is
+      // the world saying no. The reason is the host's sentence and stays out.
+      operation.end(result._tag === "Unavailable" ? "unavailable" : "passed", {
+        "update.result": result._tag,
+      });
       setBusy("");
       if (result._tag === "Available") {
         setAvailable(result.update);
@@ -55,10 +64,27 @@ export function UpdatePanel() {
   const install = (): void => {
     setBusy("installing");
     setNote("");
-    void services.run(services.updater.installAndRelaunch()).catch((cause: unknown) => {
-      setBusy("");
-      setNote(cause instanceof Error ? cause.message : String(cause));
+    const operation = services.composition.observability.operation("update.install", {
+      "update.channel": services.updater.channel(),
     });
+    void services
+      .run(services.updater.installAndRelaunch())
+      // Only reached when there turned out to be nothing to install; a real
+      // install relaunches first and this record is never written.
+      .then(() => {
+        operation.end("passed");
+      })
+      .catch((cause: unknown) => {
+        // A build that cannot update and a manifest that cannot be reached are
+        // the world; a host that refused the install — a bad signature — is the
+        // alarm, because that one must be seen.
+        const reason = cause instanceof UpdaterError ? cause.reason : undefined;
+        operation.end(reason === "Unavailable" || reason === "Network" ? "unavailable" : "failed", {
+          "update.reason": reason ?? "unknown",
+        });
+        setBusy("");
+        setNote(cause instanceof Error ? cause.message : String(cause));
+      });
   };
 
   const row = (label: string, value: string, mark?: Record<string, string>) => (

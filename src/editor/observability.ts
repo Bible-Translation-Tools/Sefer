@@ -48,6 +48,7 @@ import type {
 
 import {
   makeTracer,
+  onEditorOutcome,
   onOrphanDerived,
   type Emitter,
   type TraceEmit,
@@ -151,6 +152,12 @@ export const annotateRepaint = (
 
 onOrphanDerived(repaint);
 
+// Outcomes outside any transaction go to the same ring as the repaints, as
+// loose notes: they belong to no gesture, and naming one would date them.
+onEditorOutcome((rule, verdict, detail, fields) => {
+  repaintInto?.note(rule, verdict, detail, fields);
+});
+
 /** Level `off`: the trace still runs (the refusal slot needs it), silently. */
 const SILENT: TraceEmit = {
   frame: () => () => {},
@@ -242,7 +249,10 @@ export const observabilityTracer = (
         decided = entry.name;
         verdict = VERDICT[entry.verdict];
       }
-      if (volume > 1) timings[`editor.phase.${entry.name}.ms`] = entry.ms;
+      // Only a phase the clock could see. Most read 0 — below the browser's
+      // 100µs floor — and eleven zero fields were half the bytes of every
+      // keystroke on disk; an absent phase aggregates as 0 (`// 0` in jq).
+      if (volume > 1 && entry.ms > 0) timings[`editor.phase.${entry.name}.ms`] = entry.ms;
       // A stage that DECIDED is worth its own record at every level; a stage
       // that passed said nothing a field cannot say.
       if (entry.verdict !== "passed")

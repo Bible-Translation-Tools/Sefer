@@ -406,7 +406,7 @@ function analyzeState(state: EditorState): DocStructure {
     recent = s;
     return remember(text, s);
   } catch (err) {
-    stateFailed("engine analyze", err);
+    stateFailed("analyze", err);
     return EMPTY_STRUCTURE;
   }
 }

@@ -5,6 +5,7 @@ import Minus from "lucide-solid/icons/minus";
 import Plus from "lucide-solid/icons/plus";
 import { For, Show, createSignal, onCleanup } from "solid-js";
 
+import { exportDiagnostics } from "#app/diagnostics";
 import { endpointsChangedSinceBoot } from "#app/endpoints";
 import { t } from "#app/i18n";
 import { useShell } from "#app/ProjectContext";
@@ -258,6 +259,31 @@ function SettingsPage() {
 
       <Show when={problem() !== ""}>
         <p class="text-small text-on-surface-error">{problem()}</p>
+      </Show>
+
+      <Show when={advancedVisible()}>
+        <Card class="space-y-1" data-settings-group="diagnostics">
+          <PanelHeader
+            level={3}
+            title={t("Diagnostics")}
+            subtitle={t(
+              "What Sefer recorded on this device, as one file to send to someone helping you. Paths are shortened and account names are left out.",
+            )}
+          />
+          <div class="flex items-center gap-6 py-3">
+            <p class="min-w-0 flex-1 text-smallest text-on-surface-tertiary">
+              {t("Kept for seven days, at most {size} MB.", { size: 5 })}
+            </p>
+            <Button
+              size="sm"
+              variant="secondary"
+              data-action="export-diagnostics"
+              onClick={() => void exportDiagnostics(services, shell.project())}
+            >
+              {t("Export diagnostics")}
+            </Button>
+          </div>
+        </Card>
       </Show>
 
       <UpdatePanel />

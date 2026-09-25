@@ -35,11 +35,10 @@
 // Pure: no Effect, no Solid, no host. It takes the snapshot and a resolver and
 // returns plain values, exactly as `filter.ts` does for the panel.
 
-import type { BookId, Ref } from "../book/book";
+import type { BookId } from "../book/book";
 import {
   OUTER_CLASSES,
   PATTERN_DIGIT_GLYPH,
-  type Analysis,
   type Channel,
   type ConventionReason,
   type EngineStamp,
@@ -105,24 +104,6 @@ export interface FlaggedSite {
   readonly stamp: SourceStamp;
   readonly engine: EngineStamp;
 }
-
-/**
- * Where a flagged site points, as a chapter and verse — when, and only when,
- * the analysis handed over describes the very text the engine measured.
- *
- * The same rule as `findings.navigateTarget`, for the same reason: the table
- * of contents is the only route from an offset to a reference, and one from
- * another revision names the wrong verse with total confidence. `undefined`
- * means "show the offset", never "guess".
- */
-export const siteRef = (site: FlaggedSite, analysis: Analysis | undefined): Ref | undefined => {
-  if (analysis === undefined) return undefined;
-  if (analysis.docLen !== site.engine.docLen || analysis.sourceHash !== site.engine.sourceHash)
-    return undefined;
-  const at = analysis.dish.toc.at(site.from);
-  if (at === null) return undefined;
-  return { book: site.bookId, chapter: at.chapter, ...(at.verse > 0 ? { verse: at.verse } : {}) };
-};
 
 /** Everything the publication said about one code point. */
 export interface Glyph {

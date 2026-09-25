@@ -33,6 +33,7 @@ import {
   type ProjectAnalysisService,
 } from "#core/analysis/projectAnalysis";
 import type { BookId } from "#core/book/book";
+import type { HostFacts } from "#core/diagnostics/header";
 import {
   Galley,
   type EngineLoadError,
@@ -59,6 +60,7 @@ import {
 import {
   commandsLayer,
   editorBook,
+  gestureTrace,
   lintHoverGrace,
   noteEditing,
   usfmLinter,
@@ -66,6 +68,7 @@ import {
   type EditorBook,
 } from "#editor/index";
 import { detectHost } from "#platform/host";
+import { browserFacts } from "#platform/hostFacts";
 import { WebCredentialsLive } from "#platform/web/credentials";
 import { WebDialogsLive } from "#platform/web/dialogs";
 import { OpfsFileSystemLive } from "#platform/web/fileSystem";
@@ -75,6 +78,7 @@ import { OPFS_ROOT, WEB_PATHS, WebHostInfoLive } from "#platform/web/hostInfo";
 import { WebRemoteLive } from "#platform/web/remote";
 
 import type { Composition } from "./composition";
+import { startLogFiles, type LogFiles } from "./diagnostics";
 import { rememberBootEndpoints, resolveEndpoints } from "./endpoints";
 import { env } from "./env";
 
@@ -196,6 +200,10 @@ export interface Services {
    * which in a dev build is the shortest route to a real book on screen.
    */
   readonly fixtureProject: string | undefined;
+  /** The machine and WebView, as the diagnostics header states them. Read once. */
+  readonly hostFacts: HostFacts;
+  /** Every recorded event, being written to `HostInfo.paths().logs`. */
+  readonly logFiles: LogFiles;
   readonly dispose: () => Promise<void>;
 }
 
@@ -388,7 +396,12 @@ const domainLayer = (
   // Both come back out of the merge, so ProjectAdmin is still one instance.
   const saveAndRecovery = Layer.provideMerge(
     saveLayer,
-    Layer.merge(RecoveryLive({ journalRoot: paths.appData }), ProjectAdminLive),
+    // `cause` is the editor's open gesture, so a journal flush names the
+    // keystroke that armed it; core cannot ask the editor itself.
+    Layer.merge(
+      RecoveryLive({ journalRoot: paths.appData, cause: gestureTrace }),
+      ProjectAdminLive,
+    ),
   );
 
   /**
@@ -570,6 +583,18 @@ export const composeServices = async (
     return seated;
   };
 
+  const browser = browserFacts(resolved.hostInfo.kind());
+  const hostFacts = tauri === undefined ? browser : await tauri.tauriFacts(browser);
+  // Writing starts here because the FileSystem does; the queue has held every
+  // event since boot, so none of boot's are lost to the wait.
+  const logFiles = startLogFiles({
+    composition,
+    run,
+    ...resolved,
+    hostFacts,
+    storage: storageKind,
+  });
+
   return {
     composition,
     runtime,
@@ -582,6 +607,12 @@ export const composeServices = async (
     // subtree is all the projects list can honestly enumerate.
     projectsRoot: tauri === undefined ? PROJECTS_ROOT : `${paths.appData}/projects`,
     fixtureProject: fixture?.SMALL_NT_ROOT,
-    dispose: () => runtime.dispose(),
+    hostFacts,
+    logFiles,
+    dispose: async () => {
+      await logFiles.flush();
+      logFiles.stop();
+      await runtime.dispose();
+    },
   };
 };

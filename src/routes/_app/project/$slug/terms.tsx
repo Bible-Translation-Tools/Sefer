@@ -91,18 +91,32 @@ function Terms() {
     () => locale(),
     (want) => {
       setLoading(true);
+      // The guide load is one operation: the locale, how many terms and
+      // references it holds, how long the decode took. A locale is a tag,
+      // not content, and no term's text goes in.
+      const guide = shell.services.composition.observability.operation("terms.load", {
+        "terms.locale": want,
+      });
       void shell.services.run(Effect.result(keyTermGuides())).then((found) => {
         if (Result.isSuccess(found)) setGuides(found.success);
       });
       void shell.services.run(Effect.result(keyTerms(want))).then((found) => {
         setLoading(false);
         if (Result.isFailure(found)) {
+          guide.end("failed", { "terms.reason": found.failure.reason });
           setProblem(
             t("Could not read the key-terms guide: {reason}", { reason: found.failure.reason }),
           );
           setTerms([]);
           return;
         }
+        guide.end("passed", {
+          "terms.count": found.success.length,
+          "terms.references": found.success.reduce(
+            (total, term) => total + term.occurrences.length,
+            0,
+          ),
+        });
         setProblem("");
         setTerms(found.success);
       });
@@ -164,9 +178,29 @@ function Terms() {
         setReadings(new Map());
         return;
       }
+      // One term opened: its references mapped onto the project, and its
+      // source side read. The mapping is the memo the list renders from, read
+      // here so its cost lands in this record rather than in a paint; `dropped`
+      // is the references the project has no verse for. Counts only: no term,
+      // gloss or reference goes in.
+      const opening = shell.services.composition.observability.operation("terms.select", {
+        "terms.references": term.occurrences.length,
+      });
+      const mapped = opening.span("terms.map");
+      const staticHits = untrack(hits);
+      const books = new Set(staticHits.map((hit) => hit.bookId)).size;
+      mapped({ "terms.occurrences": staticHits.length });
       void shell.services
         .run(sourceReadings(shell.services.library, project.root, term.occurrences))
-        .then(setReadings);
+        .then((found) => {
+          opening.end("passed", {
+            "terms.occurrences": staticHits.length,
+            "terms.dropped": Math.max(0, term.occurrences.length - staticHits.length),
+            "terms.books": books,
+            "terms.readings": found.size,
+          });
+          setReadings(found);
+        });
     },
   );
 

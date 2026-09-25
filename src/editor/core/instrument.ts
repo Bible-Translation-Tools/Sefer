@@ -401,6 +401,42 @@ export const onOrphanDerived = (
   orphan = handle;
 };
 
+/**
+ * An outcome the editor has to report that is not a stage of a transaction: a
+ * derivation that threw and fell back, a fix refused because the text moved.
+ *
+ * `failed` is our bug — a paint or an analysis that threw; `declined` is the
+ * editor choosing not to act. One handler, registered by the ring bridge
+ * (`src/editor/observability.ts`) the way `onOrphanDerived` is, because the
+ * places that report have a state, not an `ObservabilityService`.
+ */
+export type EditorOutcome = (
+  rule: string,
+  verdict: "failed" | "declined",
+  detail: string,
+  fields?: Readonly<Record<string, string | number | boolean>>,
+) => void;
+
+let outcome: EditorOutcome | null = null;
+
+export const onEditorOutcome = (handle: EditorOutcome): void => {
+  outcome = handle;
+};
+
+/**
+ * Reports one outcome to the ring. With no ring — the editor running on its
+ * own, in a harness — a failure still reaches the console rather than
+ * vanishing; a decline is not worth saying there.
+ */
+export const reportOutcome: EditorOutcome = (rule, verdict, detail, fields) => {
+  if (outcome !== null) {
+    outcome(rule, verdict, detail, fields);
+    return;
+  }
+  // oxlint-disable-next-line no-console -- no ring is registered: a standalone editor still says it broke
+  if (verdict === "failed") console.error(`[${rule}]`, detail);
+};
+
 /** Fields onto the gesture that is open right now, if one is. */
 export const annotateOpen = (
   fields: Readonly<Record<string, string | number | boolean>>,

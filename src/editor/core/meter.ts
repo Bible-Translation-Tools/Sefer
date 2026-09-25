@@ -8,9 +8,13 @@
  *
  * ## The two numbers
  *
- *  - `gesture` — the JS work: the DOM event to the LAST state update of the
- *    gesture. This is the part Sefer's own code owns, and the part a slow
- *    phase, a re-parse or a decoration rebuild lands in.
+ *  - `gesture` — the DOM event to the last update that carried a
+ *    TRANSACTION: the browser taking the input, CodeMirror reading it, and
+ *    everything the dispatch then did. Elapsed time, not CPU time. An update
+ *    with no transaction — CodeMirror's measure pass reporting that a line
+ *    wrapped and its height changed — does not extend it: that runs in the
+ *    frame after the key, and counting it billed the wait for that frame to
+ *    the keystroke (a 1.5 ms key read 8 ms from the moment the line wrapped).
  *  - `render` — the same event to after the browser PAINTED. The Event Timing
  *    API answers it where the browser offers one, and the frame trick answers
  *    it otherwise; `renderSource` says which, because they are not the same
@@ -24,11 +28,16 @@
  *
  * ## The breakdown adds up
  *
+ * `browser` is the DOM event to the first transaction: the browser's own
+ * handling of the key (the native insertion into the content-editable, for
+ * typing) and CodeMirror reading the change back — time Sefer owns none of and
+ * cannot split further, so it is one honest bucket rather than a remainder.
  * `totals` is the exclusive per-span time of everything the editor's timing
- * ring measured inside the gesture (`analyze`, `scan`, `index`, `decorate`,
- * `paint`, `phase:*`), and `other` is `gesture` minus all of it. So
+ * ring measured after that (`dispatch` — CodeMirror's update and DOM sync,
+ * `analyze`, `scan`, `index`, `decorate`, `paint`, `phase:*`), and `other` is
+ * what is left. So
  *
- *     analyze + scan + index + decorate + paint + phase:* + other = gesture
+ *     browser + dispatch + analyze + … + phase:* + other = gesture
  *
  * exactly, and a reader who wants to know where a slow keystroke went reads
  * one line instead of subtracting spans by hand. The meter deliberately opens
@@ -37,7 +46,7 @@
  * update to the macrotask that closes it.
  */
 
-import { Prec, type Extension } from "@codemirror/state";
+import { EditorState, Prec, type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 import { analyzeCount } from "./analyzer";
@@ -51,6 +60,8 @@ export interface Measured {
   /** Which instrument answered `render` — see `afterPaint`. */
   renderSource: "event" | "frame" | null;
   analyzes: number;
+  /** The DOM event to the first transaction: the browser and CodeMirror taking the input. */
+  browser: number;
   /** Exclusive per-span totals inside the gesture. */
   totals: Gesture;
   /** Gesture milliseconds no span accounted for. Never negative. */
@@ -83,6 +94,7 @@ const noteOf = (m: Omit<Measured, "note">): string => {
   if (m.render !== null)
     parts.push(`${m.renderSource === "event" ? "input" : "render"}=${ms(m.render)}ms`);
   parts.push(`analyzes=${m.analyzes}`);
+  if (m.browser >= FLOOR) parts.push(`browser=${ms(m.browser)}`);
   const spans = [...m.totals]
     .filter(([, total]) => total.ms >= FLOOR)
     .sort((a, b) => b[1].ms - a[1].ms);
@@ -214,6 +226,8 @@ export function keystrokeMeter(sink: (m: Measured) => void): Meter {
   let analyzed = 0;
   let began = 0;
   let last = 0;
+  // When the first transaction of the gesture was created; 0 until one is.
+  let first = 0;
   let updates = 0;
   let docChanged = false;
   let fromEvent = false;
@@ -234,12 +248,15 @@ export function keystrokeMeter(sink: (m: Measured) => void): Meter {
     const gesture = +(last - began).toFixed(3);
     const analyzes = analyzeCount() - analyzed;
     const startedAt = began;
-    let attributed = 0;
+    // A gesture with no transaction (a click that only focused) has no
+    // input half: all of it is what the spans say, or other.
+    const browser = first === 0 ? 0 : +Math.max(0, Math.min(gesture, first - began)).toFixed(3);
+    let attributed = browser;
     for (const total of totals.values()) attributed += total.ms;
     const other = +Math.max(0, gesture - attributed).toFixed(3);
     afterPaint(startedAt, (cost, source) => {
       const render = cost === null ? null : +cost.toFixed(3);
-      const measured = { gesture, render, renderSource: source, analyzes, totals, other };
+      const measured = { gesture, render, renderSource: source, analyzes, browser, totals, other };
       sink({ ...measured, note: noteOf(measured) });
     });
   };
@@ -254,17 +271,27 @@ export function keystrokeMeter(sink: (m: Measured) => void): Meter {
     analyzed = analyzeCount();
     began = performance.now();
     last = began;
+    first = 0;
     updates = 0;
     docChanged = false;
     fromEvent = byEvent;
     setTimeout(settle, 0);
   };
 
-  const shut = (u: { docChanged: boolean }) => {
+  const shut = (u: { docChanged: boolean; transactions: readonly unknown[] }) => {
     if (!live) return;
+    // CodeMirror's measure pass updates the view with no transaction when a
+    // line's height changed — in the frame AFTER the key. It is not this
+    // gesture's work, and letting it move `last` billed the frame wait here.
+    if (u.transactions.length === 0) return;
     updates++;
     docChanged ||= u.docChanged;
     last = performance.now();
+  };
+
+  /** The first transaction of a live gesture: where the browser's half ends. */
+  const firstTransaction = (): void => {
+    if (live && first === 0) first = performance.now();
   };
 
   const on = () => {
@@ -287,6 +314,24 @@ export function keystrokeMeter(sink: (m: Measured) => void): Meter {
         }),
       ),
       Prec.highest(EditorView.updateListener.of(shut)),
+      // The first thing CodeMirror runs as a transaction is created: change
+      // filters go in precedence order (transaction filters and extenders go
+      // in reverse), so this sees the transaction before any phase rule does,
+      // and its first call is the end of the input's browser half. The
+      // extender catches a transaction created with `filter: false`, which
+      // skips change filters, at the cost of arriving after its rules.
+      Prec.highest(
+        EditorState.changeFilter.of(() => {
+          firstTransaction();
+          return true;
+        }),
+      ),
+      Prec.highest(
+        EditorState.transactionExtender.of(() => {
+          firstTransaction();
+          return null;
+        }),
+      ),
     ],
   };
 }

@@ -23,8 +23,8 @@ import CloudIcon from "lucide-solid/icons/cloud";
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 
 import { Git } from "#core/git/git";
-import { Observability } from "#core/observability";
-import { Remote, type RemoteFailureReason } from "#core/remote/remote";
+import { Observability, type Attrs, type Operation, type Verdict } from "#core/observability";
+import { Remote, remoteVerdict } from "#core/remote/remote";
 import {
   combine,
   CombineError,
@@ -37,7 +37,8 @@ import {
   type SyncActionId,
 } from "#core/sync";
 
-import { describe, reasonOf } from "../../describe";
+import { describe, remoteReasonOf } from "../../describe";
+import { rememberSync } from "../../diagnostics";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { Button, Card, Dialog, EmptyState, PanelHeader } from "../primitives";
@@ -73,28 +74,6 @@ const COMBINE_AUTHOR = { name: "Sefer", email: "sefer@localhost" } as const;
 const explainCombine = (cause: unknown): string | undefined => {
   if (!(cause instanceof CombineError)) return undefined;
   return cause.refusal === undefined ? combineTrouble(cause.state) : combineRefusal(cause.refusal);
-};
-
-const REMOTE_REASONS: ReadonlySet<string> = new Set<RemoteFailureReason>([
-  "Unauthorized",
-  "Network",
-  "Unavailable",
-  "Rejected",
-]);
-
-/**
- * A `RemoteError`'s reason, which is the whole difference between "the network
- * did not answer" (`offline`) and "the far side said no" (a refusal worth
- * reading). Read off the error's own `reason` field, not out of the sentence
- * `describe` makes of it.
- */
-const remoteReasonOf = (cause: unknown): RemoteFailureReason | undefined => {
-  const reason = reasonOf(cause);
-  // SAFETY: membership in REMOTE_REASONS, a set built from RemoteFailureReason
-  // values, is exactly the check this narrowing claims.
-  return reason !== undefined && REMOTE_REASONS.has(reason)
-    ? (reason as RemoteFailureReason)
-    : undefined;
 };
 
 export function CloudScreen() {
@@ -196,13 +175,78 @@ export function CloudScreen() {
     };
   };
 
-  /** One pass over the repository. */
+  /**
+   * One pass over the repository, as two operations.
+   *
+   * `sync.survey` is the reading and ends with the state it derived, which
+   * is also handed to `rememberSync` for a diagnostics export — and `sync.plan` is the incoming plan, opened only when the
+   * device is behind. The plan FOLLOWS the survey rather than running inside
+   * it: the survey has already decided the state and ended by the time the
+   * plan starts, so it is a cause and not a parent.
+   *
+   * Counts and flags only. Never the origin URL, the account or a commit.
+   */
   const load = (options: ReadSyncOptions | undefined): void => {
     if (options === undefined) return;
+    const observability = services.composition.observability;
+    const surveying = observability.operation("sync.survey", {
+      "sync.online": options.online,
+      ...(options.fetchedAt === undefined ? {} : { "sync.fetched_at": options.fetchedAt }),
+    });
+    let planning: Operation | undefined;
     void services
-      .run(readSync(options))
+      .run(Effect.provideService(readSync(options), Observability, surveying))
+      .then(async (survey): Promise<SyncFacts> => {
+        const { reading } = survey;
+        const state = sync(reading).state;
+        // What a diagnostics export reports as "last observed", kept with the
+        // project it was about.
+        rememberSync(options.root, {
+          state,
+          ahead: reading.ahead.length,
+          behind: reading.behind.length,
+          observedAt: Date.now(),
+        });
+        // `offline` is the device, or the last transfer, saying the network
+        // did not answer: kept and exported, but not the alarm.
+        surveying.end(state === "offline" ? "unavailable" : "passed", {
+          "sync.state": state,
+          "sync.ahead": reading.ahead.length,
+          "sync.behind": reading.behind.length,
+          "sync.remote": reading.origin !== undefined,
+          "sync.signed_in": reading.signedIn,
+          "sync.online": reading.online,
+          "sync.uncommitted": reading.uncommitted,
+          "sync.merge": reading.mergeInProgress,
+          ...(reading.fetchedAt === undefined ? {} : { "sync.fetched_at": reading.fetchedAt }),
+          ...(reading.lastFailure === undefined ? {} : { "sync.reason": reading.lastFailure }),
+        });
+        if (survey.plan === undefined) return { reading, plan: emptyPlan };
+        planning = observability.operation(
+          "sync.plan",
+          { "sync.behind": reading.behind.length },
+          { cause: surveying.trace },
+        );
+        const plan = await services.run(
+          Effect.provideService(survey.plan, Observability, planning),
+        );
+        planning.end("passed", {
+          "sync.books": plan.books.length,
+          "sync.contested": plan.contested.length,
+          "sync.chapters": plan.chapterCount,
+          "sync.overlap": plan.overlapCount,
+          "sync.clean": plan.clean,
+        });
+        return { reading, plan };
+      })
       .then(setFacts)
-      .catch((cause: unknown) => setProblem(describe(cause)));
+      .catch((cause: unknown) => {
+        // Both programs are typed never-failing, so reaching here is a defect
+        // in our code: the alarm. `end` is a no-op on whichever already ended.
+        surveying.end("failed");
+        planning?.end("failed");
+        setProblem(describe(cause));
+      });
   };
 
   // Solid 2 has no `onMount`; an effect whose compute gathers the reading's
@@ -259,10 +303,7 @@ export function CloudScreen() {
     });
     const close = operation.span("sync.transfer", undefined, { "sync.action": action });
     let settled = false;
-    const finish = (
-      verdict: "passed" | "failed",
-      attrs: Readonly<Record<string, string | number | boolean>>,
-    ): void => {
+    const finish = (verdict: Verdict, attrs: Attrs): void => {
       if (settled) return;
       settled = true;
       close(attrs);
@@ -278,7 +319,9 @@ export function CloudScreen() {
       .catch((cause: unknown) => {
         const reason = remoteReasonOf(cause);
         if (reason !== undefined) network.noteFailure(reason);
-        finish("failed", {
+        // The port's own reason decides it: offline is the world saying no,
+        // not the alarm. A failure with no reason did not come from the port.
+        finish(remoteVerdict(reason), {
           "sync.action": action,
           "sync.reason": reason ?? "unknown",
         });

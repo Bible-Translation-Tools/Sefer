@@ -60,6 +60,7 @@ import {
   pairingHere,
   showBlockPairs,
   showEmptyBlocks,
+  span,
   watchLocation,
 } from "#editor/index";
 
@@ -195,7 +196,13 @@ export function BookEditor(props: BookEditorProps) {
         state: book.state,
         parent,
         dispatchTransactions: (transactions) => {
-          if (view !== undefined) book.fromView(view, transactions);
+          if (view === undefined) return;
+          // CodeMirror's update and DOM sync, named, so the keystroke meter
+          // can say where a gesture went instead of leaving it in `other`.
+          // Spans opened inside (analyze, decorate, …) are subtracted from it.
+          const done = span("dispatch");
+          book.fromView(view, transactions);
+          done();
         },
       });
       const created = view;
@@ -244,7 +251,8 @@ export function BookEditor(props: BookEditorProps) {
           //
           // `to_paint_ms` is also mostly not work: a keystroke that lands
           // mid-frame waits for the next vsync, so ~16ms at 60Hz is the floor,
-          // not a cost. `js_ms` is the half we can do anything about.
+          // not a cost. `gesture_ms` is the half we can do anything about,
+          // and `browser_input_ms` is the part of it the browser owns.
           //
           // `to_paint_source` says which instrument answered. `event` is the
           // browser's own Event Timing number and is what to trust; `frame` is
@@ -260,7 +268,8 @@ export function BookEditor(props: BookEditorProps) {
           // were told", which on the event path includes the observer's own
           // latency. `editor.to_paint_ms` is the number to read.
           const onGesture = annotateOpen({
-            "editor.js_ms": measured.gesture,
+            "editor.gesture_ms": measured.gesture,
+            "editor.browser_input_ms": measured.browser,
             "editor.analyzes": measured.analyzes,
             "editor.unaccounted_ms": measured.other,
             ...(measured.render === null
@@ -274,7 +283,7 @@ export function BookEditor(props: BookEditorProps) {
             // No gesture was open — the meter measured a repaint nobody
             // typed for, and it belongs to that rather than to a keystroke.
             annotateRepaint({
-              "editor.js_ms": measured.gesture,
+              "editor.gesture_ms": measured.gesture,
               "book.id": book.id,
               ...(measured.render === null
                 ? {}

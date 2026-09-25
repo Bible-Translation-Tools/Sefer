@@ -6,6 +6,7 @@ Loadable skills live in `agents/skills/` (`.claude/skills` is a symlink to it):
 
 - [Release channels](agents/skills/release-channels/SKILL.md): read before deploying, tagging, or answering "what does a push to master do"; the dev/preview/production matrix, the tag format, the exact commands, and why master deploys `dev`.
 - [The design surface](agents/skills/design-surface/SKILL.md): read before design work; prototyping on `/design`, the point-and-comment collector, variants and tweaks, and how a designer's change graduates into the real screens.
+- [Merging designer code](agents/skills/merging-designer-code/SKILL.md): read before merging, reviewing or getting green the designer's branch; the merge mechanics and the developer questions he does not ask for himself.
 
 Read only the guidance relevant to the task:
 
@@ -35,7 +36,7 @@ Read only the guidance relevant to the task:
 Under the dev server (`pnpm dev`, where `import.meta.env.DEV` is true — not `pnpm build:dev`), `/dev/fixture` runs over a seeded in-memory copy of `fixtures/small-nt/` merged over the one composition, and lists it through the `FileSystem` service. The route is generated from `src/routes/_app/dev/fixture.tsx` in every build, but the page (`src/dev/FixturePage.tsx`) is imported only inside an `import.meta.env.DEV` branch, so production bundles none of the fixture code and answers the path with the not-found boundary.
 `pnpm verify:launch [--check]` starts a dev server on a free port against that route, writes artifacts to `.verify/<runId>/`, and prints one JSON line with `url`, `runId`, `runDir`, and `pid`.
 
-Under the dev server, `globalThis.__sefer.observability` exposes `traces.recent()` and `traces.print()` (assembled operations), `logs.recent()` (loose events), `errors()` (client failures), `export()` (JSONL), `level()`, `setLevel()`, and `stream()` (console streaming), and `globalThis.__sefer.state()` reports the boot result, the seeded fixture, and the ring depth — use them to read what the running application actually did instead of adding logging.
+Under the dev server, `globalThis.__sefer.observability` exposes `traces.recent()` and `traces.print()` (assembled operations), `logs.recent()` (loose events), `errors()` (every `failed`) and `failures()` (the failure ring), `export()` (JSONL, for `jq` — recipes in the observability doc), `level()`, `setLevel()`, and `stream()` (console streaming), and `globalThis.__sefer.state()` reports the boot result, the seeded fixture, and the ring depth — use them to read what the running application actually did instead of adding logging.
 
 Check `package.json` and runner configuration for executable commands. Distinguish intended tooling from working setup, and preserve unrelated worktree changes.
 
@@ -54,6 +55,7 @@ Check `package.json` and runner configuration for executable commands. Distingui
 - `pnpm branch:preview [branch]` gives one BRANCH its own URL without deploying anything: it builds `--mode dev` and uploads a Cloudflare _version_ of the `sefer-web-dev` Worker under a per-branch alias, so `sefer-dev.bttdev.org` is untouched. `check.yml` runs it on every push to a non-master branch. Two unrelated things are called "preview" here — **ChannelPreview** is the `preview` channel, **CloudflarePreview** is this — so always say which; [glossary](documentation/glossary.md), "Deployment names".
 - `pnpm deploy:updater <preview|production>` deploys the Tauri updater worker in `workers/sefer-updater` and refreshes its GitHub token. Separate deployable, separate hostname; there is no `dev` because dev is web-only. See `workers/README.md`.
 - `pnpm lint:release` adds the rules that only have to hold at release — today, no leftover `globalThis.__sefer.design` scaffolding. Run before `preview` and `production`, never before `dev`.
+- `pnpm verify:perf [--chars N] [--runs K] [--headed]` types into the fixture's Psalms at recording levels `off` and `all` and prints one JSON line: keystroke tails, heap, events and bytes per minute, and the all-vs-off delta; raw exports and `summary.json` in `.verify/<runId>/`. See [agent verification](documentation/agents/verification.md).
 - `pnpm verify:design` runs two real builds and proves the design surface is absent from production and present in the design build.
 - `pnpm design:scaffolding` lists real screens still borrowing the design panel through `globalThis.__sefer.design.register`. Informational; exits 0.
 - `pnpm deadcode` fails on an unused file, export, type or dependency, or an import cycle; `release.yml`'s `verify` runs it before every deploy (not `pnpm check`, so a branch may carry a half-wired file). `pnpm exec fallow dead-code | dupes | health` is the full, advisory report; `.fallowrc.jsonc` holds the entries and the dependencies it cannot see.

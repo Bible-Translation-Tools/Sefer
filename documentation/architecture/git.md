@@ -52,17 +52,26 @@ root commit. It refuses now, in the same words.
 
 ## Remote
 
-`src/core/remote/remote.ts` defines the port — `attach`, `origin`, `fetch`, `pull`, `push`,
+`src/core/remote/remote.ts` defines the port — `clone`, `attach`, `origin`, `fetch`, `pull`, `push`,
 `publish`, `moveBranch`, `abortMerge`, and `progress(): Stream<Progress>`. The last two transfer
 nothing: `moveBranch(repo, branch, toCommit)` points a branch at a commit and makes the work tree
 match (Combine's base), and `abortMerge(repo)` throws away a half-finished merge (Resolve). They
 live here rather than on `Git` because the sync surface is the only caller either will ever have,
 and both refuse the same things on both hosts — a branch that is not checked out, and an abort with
 nothing in progress. Its four reasons (`Unavailable`, `Unauthorized`, `Network`, `Rejected`)
-exist because only one of them is worth retrying unchanged. Cloning is not a fifth method:
-`cloneRepository(url, into)` in `src/core/remote/clone.ts` is `Git.init` → `attach` → `pull`, in core
-because the ORDER is policy — a project on disk always knows where its bytes came from, even if the
-pull fails half way.
+exist because only one of them is worth retrying unchanged.
+
+`clone(url, into)` is a real clone — isomorphic-git's `clone` on the Web, git2's `RepoBuilder`
+(`git_clone`) on desktop — and it checks out the branch the SERVER's HEAD symref names, so a
+repository on `master` arrives on `master`. It used to be `Git.init` → `attach` → `pull`, and that
+was wrong twice: the init chose `main` before the server was asked, and on the Web isomorphic-git's
+pull then tried to merge into that unborn branch ("Could not find main", every browser download).
+On the Web the URL is re-based onto the endpoint first, exactly as `attach` does, so `.git/config`
+holds the same thing either way. `cloneRepository(url, into, catalogueId?)` in
+`src/core/remote/clone.ts` runs it and then appends a `remote` arrival to `.sefer/provenance.json`
+with the URL as the caller gave it — after the clone, because git refuses a folder that is not
+empty ([landing](landing.md) has the record and the index field it feeds). Updates stay an ordinary
+`pull`.
 
 `src/core/remote/gitea.ts` is the account half. WACS is a Gitea instance, so the flow is v1's:
 `POST /api/v1/users/{user}/tokens` with HTTP Basic auth (plus `X-Gitea-OTP` when the account has two

@@ -43,12 +43,14 @@ import type { Finding } from "#core/findings/finding";
 import { navigateTarget } from "#core/findings/findings";
 import type { Inventory } from "#core/findings/inventory";
 import * as Fixes from "#core/fixes/fixes";
+import { tocViewOf } from "#core/galley";
 import type { SettingKey } from "#core/host/settings";
+import { chaptersAddress, type Address } from "#core/location/address";
+import { resolve } from "#core/location/locate";
 import { Observability } from "#core/observability";
 import { openProject as openProjectEffect, type Project } from "#core/project/project";
 import { mintSlug } from "#core/project/slug";
 import { DEFAULT_JOURNAL_POLICY, Recovery } from "#core/recovery/recovery";
-import type { Reference } from "#core/reference/reference";
 import { SaveCoordinator } from "#core/save/saveCoordinator";
 import type { SourceStamp } from "#core/source/source";
 import { anchorFrom, type ChapterRow, type EditorBook, type ProjectionName } from "#editor/index";
@@ -57,6 +59,7 @@ import { detectHost } from "#platform/host";
 import { registerShellCommands, type ShellBridge } from "./commands";
 import { useComposition } from "./CompositionContext";
 import { t } from "./i18n";
+import { createLocation, type Location } from "./location";
 import { registerProjectCommands } from "./projectCommands";
 import { composeServices, fixtureRequested, type Services } from "./services";
 import {
@@ -176,10 +179,16 @@ export interface Shell {
   readonly showChapter: (ordinal: number) => void;
 
   /**
-   * Go to a book, and to a chapter and verse of it when the text named one.
-   * The one door for every "take me to Luke 3:1" in the application.
+   * Go to a book, and to a chapter and verse of it when the Address names
+   * one. The one door for every "take me to Luke 3:1" in the application.
    */
-  readonly showReference: (reference: Reference) => void;
+  readonly showReference: (address: Address) => void;
+
+  /**
+   * The open project's answer to "where": what a typed place means, what to
+   * call an Address, which Address an offset is in. See `app/location.ts`.
+   */
+  readonly location: Location;
 
   /**
    * Open the project at `root` and land in its text: Matthew 1 when it has
@@ -477,8 +486,8 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     name: "focusedBook",
   });
   const [mode, setMode] = createSignal<ProjectionName>("default", { name: "mode" });
-  /** A reference waiting for the book it names to become the focused one. */
-  const [pendingPlace, setPendingPlace] = createSignal<Reference | undefined>(undefined, {
+  /** An Address waiting for the book it names to become the focused one. */
+  const [pendingPlace, setPendingPlace] = createSignal<Address | undefined>(undefined, {
     name: "pendingPlace",
   });
   const [chapter, setChapter] = createSignal<number | null>(null, { name: "chapter" });
@@ -487,6 +496,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   const [landOnOpen, setLandOnOpen] = createSignal<string | undefined>(undefined, {
     name: "landOnOpen",
   });
+  const location = createLocation(project);
 
   /**
    * The open project, as a plain value.
@@ -750,7 +760,15 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     setProject(undefined);
     // The stores describe a project. With none open they describe nothing.
     stores.clear();
-    if (staticOpen !== undefined) await services.run(staticOpen.close());
+    if (staticOpen === undefined) return;
+    // One record for closing, rather than a note written into the trace of
+    // the open that has long since ended. Books and seats come from core's
+    // note inside it; the root is not recorded, because it is a path.
+    const closing = services.composition.observability.operation("project.close", {
+      "project.books": staticOpen.books.length,
+    });
+    await services.run(Effect.provideService(staticOpen.close(), Observability, closing));
+    closing.end("passed");
   };
 
   /**
@@ -1114,12 +1132,22 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
    * the same thing, and two copies of "wait for the book, then scroll" would
    * drift.
    */
-  const showReference = (reference: Reference): void => {
+  const showReference = (address: Address): void => {
     if (project() === undefined) return;
-    if (reference.chapter !== undefined) setPendingPlace(reference);
+    // A Citation of a book this project lacks is still a Citation; the honest
+    // answer is to say so here, not to open a route to nothing.
+    if (!location.holds(address.book)) {
+      report(
+        t("This project has no {book}", {
+          book: location.label({ kind: "book", book: address.book }),
+        }),
+      );
+      return;
+    }
+    if (address.kind !== "book") setPendingPlace(address);
     void navigate({
       to: "/project/$slug/book/$book",
-      params: { slug: slug(), book: encodeURIComponent(reference.bookId) },
+      params: { slug: slug(), book: encodeURIComponent(address.book) },
     });
   };
 
@@ -1135,42 +1163,63 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       if (open === undefined || want === undefined || open.root !== want) return;
       setLandOnOpen(undefined);
       const book = open.book("MAT") ?? open.books[0];
-      if (book !== undefined) showReference({ bookId: book.id, chapter: 1 });
+      if (book !== undefined) showReference(chaptersAddress(book.id, 1));
     },
   );
 
   createEffect(
-    () => ({ book: focused()?.id, want: pendingPlace() }),
-    ({ book, want }) => {
-      if (want === undefined || book === undefined || book !== want.bookId) return;
+    () => ({ held: focused(), want: pendingPlace() }),
+    ({ held, want }) => {
+      if (want === undefined || held === undefined || held.id !== want.book) return;
       setPendingPlace(undefined);
-      const held = focused();
-      if (held === undefined || want.chapter === undefined) return;
-      // By LABEL, not by index: the engine's first chapter row is the front
-      // matter, so "3" is not necessarily the third row.
-      const at = held
-        .structure()
-        .chapters.findIndex((chapter) => chapter.label === String(want.chapter));
-      if (at >= 0) showChapter(at);
-      // The verse is a scroll WITHIN the chapter we just landed on, so it runs
-      // after: `showChapter` aims at the chapter's own anchor and this moves
-      // from there. A verse the book does not have leaves you at the chapter,
-      // which is the nearest true answer.
-      if (want.verse === undefined || at < 0) return;
-      const chapter = held.structure().chapters[at];
-      if (chapter === undefined) return;
-      // Verse rows are a flat list over the whole book and carry no chapter of
-      // their own, so the chapter's extent is what scopes the search — the
-      // same number appears once per chapter.
-      const verse = held
-        .structure()
-        .verses.find(
-          (row) =>
-            row.markerFrom >= chapter.from &&
-            row.markerFrom < chapter.to &&
-            row.num === String(want.verse),
-        );
-      if (verse !== undefined) aim(held.id, verse.markerFrom, undefined, "top");
+      const analysis = held.structure().analysis;
+      if (analysis == null) return;
+      const place = (): string => location.label(want);
+      // Where the Address is in THIS text, from the analysis the editor's
+      // structure was built on — exact for the open text by construction.
+      // The jump is a one-time act on the book just focused: every signal it
+      // reads (the chapter preference, the project's names for the message)
+      // is this moment's value, not a subscription.
+      untrack(() => {
+        const found = resolve(tocViewOf(analysis), want);
+        const chapters = held.structure().chapters;
+        const ordinalAt = (offset: number): number =>
+          chapters.findIndex((chapter) => chapter.from <= offset && offset < chapter.to);
+
+        switch (found.kind) {
+          case "found": {
+            const at = ordinalAt(found.from);
+            if (at >= 0) showChapter(at);
+            // A verse is a scroll WITHIN the chapter just landed on, so it runs
+            // after: `showChapter` aims at the chapter's own anchor and this
+            // moves from there.
+            if (want.kind === "verses") aim(held.id, found.from, undefined, "top");
+            return;
+          }
+          case "missing": {
+            // A verse the book does not have leaves you at its chapter, the
+            // nearest true answer, and says it stopped short.
+            if (found.within !== undefined) {
+              const at = ordinalAt(found.within.from);
+              if (at >= 0) showChapter(at);
+            }
+            report(t("{place} is not in this book", { place: place() }));
+            return;
+          }
+          case "ambiguous": {
+            // Malformed text: two places answer. Navigation may go to the first,
+            // because it changes nothing, but it must not pretend there was one.
+            const first = found.spans[0];
+            if (first !== undefined) {
+              const at = ordinalAt(first.from);
+              if (at >= 0) showChapter(at);
+              if (want.kind === "verses") aim(held.id, first.from, undefined, "top");
+            }
+            report(t("{place} appears more than once in this book", { place: place() }));
+            return;
+          }
+        }
+      });
     },
   );
 
@@ -1184,10 +1233,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     setCursor(next);
     const held = list[next];
     if (held === undefined) return;
-    const target = navigateTarget(
-      held,
-      Option.getOrUndefined(services.projectAnalysis.analysis(held.bookId))?.analysis,
-    );
+    const target = navigateTarget(held);
     const held_project = project();
     if (held_project === undefined) return;
     aim(target.bookId, target.from);
@@ -1252,6 +1298,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     showChapter,
     showReference,
     openProjectAtStart,
+    location,
     caret,
     noteCaret,
     noteChapterAtTop,

@@ -211,6 +211,32 @@ export function ReviewPanel() {
    */
   let running = false;
   let again = false;
+
+  /** Every changed book's decision units, one engine diff each. */
+  const skeletonsOf = (found: CompareResult): ReadonlyMap<BookId, SkeletonResult> => {
+    const held = new Map<BookId, SkeletonResult>();
+    for (const book of found.books) {
+      if (book.identical || book.leftText === undefined || book.rightText === undefined) continue;
+      held.set(
+        book.bookId,
+        diffSkeleton(services.galley, book.bookId, book.rightText, book.leftText),
+      );
+    }
+    return held;
+  };
+
+  /**
+   * The units the last comparison took, for the result it took them for. A
+   * plain variable, not a signal: `result` is the signal, and this is only
+   * what `skeletons` reads when it runs for that same result.
+   */
+  let computed:
+    | {
+        readonly result: CompareResult;
+        readonly skeletons: ReadonlyMap<BookId, SkeletonResult>;
+      }
+    | undefined;
+
   const runCompare = (): void => {
     const a = left();
     const b = right();
@@ -223,10 +249,45 @@ export function ReviewPanel() {
       return;
     }
     running = true;
+    // One comparison, one record: what it cost and how big the answer was.
+    // The sides by KIND only — a picked folder's label is somebody's path.
+    const comparing = services.composition.observability.operation("review.compare", {
+      "review.left": leftId(),
+      "review.right": rightId(),
+      "review.live": live(),
+    });
+    const compared = comparing.span("review.books");
     void services
-      .run(compareBooks(a, b))
+      .run(Effect.provideService(compareBooks(a, b), Observability, comparing))
       .then((found) => {
+        compared({ "review.books": found.books.length });
         running = false;
+        // The engine's decision units, taken here rather than on first read
+        // so the comparison's record carries them; `skeletons` below reads
+        // this and diffs nothing twice.
+        const units = comparing.span("review.units");
+        const held = skeletonsOf(found);
+        let unitCount = 0;
+        let refusedBooks = 0;
+        for (const skeleton of held.values()) {
+          if (Result.isFailure(skeleton)) refusedBooks += 1;
+          else
+            unitCount += skeleton.success.units.filter(
+              (unit) => unit.status !== "unchanged",
+            ).length;
+        }
+        units({ "review.unit_books": held.size });
+        comparing.end(refusedBooks > 0 ? "refused" : "passed", {
+          "review.books": found.books.length,
+          "review.changed": found.changedBooks,
+          "review.hunks": found.decisions,
+          "review.left_only": found.leftOnly,
+          "review.right_only": found.rightOnly,
+          "review.unit_books": held.size,
+          "review.units": unitCount,
+          "review.refused_books": refusedBooks,
+        });
+        computed = { result: found, skeletons: held };
         setNote("");
         setResult(found);
         setSelected((held) =>
@@ -240,6 +301,13 @@ export function ReviewPanel() {
         }
       })
       .catch((cause: unknown) => {
+        compared();
+        // A side that could not be read is the comparison refusing, in its
+        // own vocabulary; anything without a reason is the alarm.
+        const reason = reasonOf(cause);
+        comparing.end(reason === undefined ? "failed" : "refused", {
+          "review.reason": reason ?? "unknown",
+        });
         running = false;
         again = false;
         setNote(describe(cause));
@@ -317,15 +385,11 @@ export function ReviewPanel() {
    */
   const skeletons = createMemo(
     (): ReadonlyMap<BookId, SkeletonResult> => {
-      const held = new Map<BookId, SkeletonResult>();
-      for (const book of result()?.books ?? []) {
-        if (book.identical || book.leftText === undefined || book.rightText === undefined) continue;
-        held.set(
-          book.bookId,
-          diffSkeleton(services.galley, book.bookId, book.rightText, book.leftText),
-        );
-      }
-      return held;
+      const found = result();
+      if (found === undefined) return new Map();
+      // The comparison took them already, inside its own record; a result
+      // that did not come through `runCompare` is diffed here as before.
+      return computed?.result === found ? computed.skeletons : skeletonsOf(found);
     },
     { name: "reviewSkeletons" },
   );

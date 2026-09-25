@@ -92,6 +92,13 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # The environment's `url` is what puts a "View deployment" button on the
+    # pull request itself, beside the merge box — the step summary below only
+    # shows on the run's own page, and a pull request's Checks tab opens the
+    # `pull_request` run, where this job is skipped.
+    environment:
+      name: branch-preview
+      url: ${{ steps.upload.outputs.url }}
     # At JOB level, not on the step: a step's `if` cannot read its own `env:`
     # block, so guarding the 1Password step on a token declared inside it would
     # have been a condition that is always false.
@@ -116,6 +123,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: "op://DevOps/Sefer/cloudflare-account-id"
 
       - name: Upload a version for this branch
+        id: upload
         if: env.CLOUDFLARE_API_TOKEN != ''
         run: |
           set -euo pipefail
@@ -136,6 +144,10 @@ jobs:
           # content hash and names one upload forever, which is the right
           # fallback and the wrong thing to send somebody.
           url="${alias_url:-${version_url}}"
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+          # An annotation shows at the top of the run page and on the Checks
+          # tab, where a summary needs a scroll to find.
+          [ -n "$url" ] && echo "::notice title=Branch preview::${url}"
 
           {
             echo "### Branch preview"

@@ -39,6 +39,7 @@ import type { SourceStamp } from "#core/source/source";
 import { analyzed, analyzer } from "../core/analyzer";
 import { structureAt } from "../core/docStructure";
 import { PAINT_PORT } from "../core/editorState";
+import { reportOutcome } from "../core/instrument";
 import { trusted } from "../core/kernel";
 import { span } from "../core/timing";
 
@@ -110,7 +111,9 @@ function applyFix(
     stamp !== undefined &&
     !stampMatches(stamp, analyzed(view.state.facet(analyzer), view.state.doc.toString()))
   ) {
-    console.warn("[engine] fix discarded: the document moved under it");
+    reportOutcome("editor.fix", "declined", "the document moved under it", {
+      "fix.edits": fix.length,
+    });
     return false;
   }
   const done = span("apply-fix", `${fix.length} edits`);

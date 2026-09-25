@@ -1,6 +1,7 @@
 import { Effect, Exit, FileSystem, Layer, ManagedRuntime, Option, Result, Tracer } from "effect";
 
 import { boot, type BootError, type BootInfo } from "#core/boot";
+import { makeLogQueue, type LogQueue } from "#core/diagnostics/logFiles";
 import {
   makeAssembler,
   Observability,
@@ -29,6 +30,12 @@ export interface Composition {
   readonly boot: Result.Result<BootInfo, BootError>;
   readonly observability: ObservabilityService;
   readonly fileSystem: FileSystem.FileSystem | undefined;
+  /**
+   * Every recorded event, waiting for the disk. It exists from boot so boot's
+   * own events are kept; `composeServices` attaches the writer once there is
+   * a FileSystem (`src/app/diagnostics.ts`).
+   */
+  readonly logs: LogQueue;
   readonly layer: Layer.Layer<Observability>;
   readonly runtime: ManagedRuntime.ManagedRuntime<Observability, never>;
   readonly dispose: () => Promise<void>;
@@ -62,6 +69,7 @@ const guardedFetch = (): typeof globalThis.fetch => {
       return await globalThis.fetch(input, init);
     } catch (cause) {
       stopped = true;
+      // oxlint-disable-next-line no-console -- the telemetry bridge itself failed; the ring cannot report on its own exporter
       console.warn(
         "[sefer] telemetry export failed; not trying again this session.",
         "Set VITE_SEFER_OTLP_URL to a reachable collector, or unset it.",
@@ -253,10 +261,10 @@ const telemetryBridge = async (): Promise<Telemetry | undefined> => {
 const fanOut = (sinks: readonly ObservabilitySink[]): ObservabilitySink | undefined => {
   if (sinks.length === 0) return undefined;
   if (sinks.length === 1) return sinks[0];
-  return (event, line) => {
+  return (event) => {
     for (const sink of sinks) {
       try {
-        sink(event, line);
+        sink(event);
       } catch {
         // The ring's `dropped` counter is for the sink it was given; a sink
         // that throws here has already had its turn and the next one gets its.
@@ -327,9 +335,8 @@ export const composeApplication = async (
   });
   // The raw JSONL sink stays on the events themselves: a line per event is the
   // evidence format, and it must not wait for an operation to finish.
-  // SAFETY: an assembler takes one `ObservabilityEvent` and returns nothing,
-  // which is a sink's shape minus the JSONL line it does not read.
-  const sinks = [hostSink(env.log), assemble as ObservabilitySink].filter(
+  const logs = makeLogQueue();
+  const sinks = [hostSink(env.log), assemble, logs.sink].filter(
     (sink): sink is ObservabilitySink => sink !== undefined,
   );
   // The session stamp: what every event of this run has in common, which
@@ -360,6 +367,7 @@ export const composeApplication = async (
 
   return {
     ...composed,
+    logs,
     layer: Layer.succeedContext(context),
     runtime,
     dispose: async () => {

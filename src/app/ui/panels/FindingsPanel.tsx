@@ -306,8 +306,54 @@ export function FindingsPanel() {
    * makes and the same span is measured — `openInEditor` leaves the aim before
    * it navigates, because the book route reads it to decide the opening clip.
    */
-  const go = (finding: Finding): void => {
-    feed.excerpts.openInEditor(finding.bookId, finding.from, finding.to);
+  const go = (finding: Finding, via: "go" | "key" = "go"): void => {
+    navigateTo(finding.bookId, finding.from, finding.to, finding, via);
+  };
+
+  /**
+   * Every jump from this panel to the editor, as one `findings.navigate`.
+   *
+   * It says what KIND of finding was followed — code, severity, producer, never
+   * its message, which quotes the document — and whether the target still
+   * resolves: the book is in the project and has not moved since the
+   * publication that measured the finding. A stale jump still lands; it lands
+   * where the finding WAS, and that is the thing worth being able to count.
+   */
+  const navigateTo = (
+    bookId: BookId,
+    from: number,
+    to: number | undefined,
+    finding: Finding | undefined,
+    via: "go" | "key" | "card",
+  ): void => {
+    const inProject = shell.project()?.books.some((book) => book.id === bookId) === true;
+    const stale = finding === undefined ? undefined : isStale(finding);
+    const operation = shell.services.composition.observability.operation("findings.navigate", {
+      "book.id": bookId,
+      "findings.via": via,
+      ...(finding === undefined
+        ? {}
+        : {
+            "finding.code": finding.code,
+            "finding.severity": finding.severity,
+            "finding.producer": finding.producer,
+          }),
+    });
+    feed.excerpts.openInEditor(bookId, from, to, operation);
+    operation.end("passed", {
+      "findings.resolved": inProject && stale !== true,
+      "findings.in_project": inProject,
+      ...(stale === undefined ? {} : { "findings.stale": stale }),
+    });
+  };
+
+  /** A card's own "Open in editor", which names a span rather than a finding. */
+  const openCard = (bookId: BookId, from: number, to?: number): void => {
+    const finding = shown().find(
+      (held) =>
+        held.bookId === bookId && held.from === from && (to === undefined || held.to === to),
+    );
+    navigateTo(bookId, from, to, finding, "card");
   };
 
   const offer = (finding: Finding): void => {
@@ -370,7 +416,7 @@ export function FindingsPanel() {
         if (!walking()) setWalking(true);
         else {
           const finding = at(cursor())?.findings[0];
-          if (finding !== undefined) go(finding);
+          if (finding !== undefined) go(finding, "key");
         }
       } else return;
       event.preventDefault();
@@ -666,7 +712,7 @@ export function FindingsPanel() {
             <ExcerptList
               groups={feed.groups()}
               outline={feed.outline()}
-              onOpen={feed.excerpts.openInEditor}
+              onOpen={openCard}
               seat={feed.excerpts.seat}
               analyze={feed.excerpts.analyze}
               onEdited={feed.excerpts.edited}
