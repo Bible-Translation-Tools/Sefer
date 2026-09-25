@@ -27,6 +27,7 @@ This folder holds durable project guidance for humans and agents. Root `AGENTS.m
 - Reviewing two copies, recording a version, reverting, conflicts, and the save model: [review](./architecture/review.md).
 - What a project open asks about unsaved work, and what the reader is offered: [recovery](./architecture/recovery.md).
 - Comparing against the saved baseline or running one command across books: [diff and multibook](./architecture/diff-and-multibook.md).
+- Asking "where in scripture": what somebody typed, the place it means, and where it is in one text: [location](./architecture/location.md).
 - Finding text across the project, and Replace all behind its Advanced setting: [search](./architecture/search.md).
 - Committing receipts, reading history, project admin: [git](./architecture/git.md).
 - Sharing a project online, reading the two clocks, or deciding what a Receive would change: [cloud sync](./architecture/sync.md).
