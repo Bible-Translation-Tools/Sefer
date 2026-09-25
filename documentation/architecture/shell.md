@@ -81,9 +81,8 @@ the sidebar width — a record rewrite per click is a file write per click), and
   checked against the project first, so a book that has since been removed falls back to the census
   rather than to a not-found. `shell.landingTarget(root)` answers the same question for an Open, before
   the project is open.
-- **The rail's panel tile** uses it as the way back. On a project route the tile is the panel toggle;
-  on a full-page screen (settings, findings, history, review) there is no panel to toggle, so it opens
-  the panel and returns to the remembered book.
+- **`BackToEditor`** uses it as the way back from a full-page screen (settings, findings, history,
+  review), returning to the remembered book.
 
 `chapter` is the CLIP and `at` is the chapter that was at the top of the viewport. Both are needed,
 because a book opens WHOLE by default: a reader who had scrolled down to Psalm 3 had a clip of `null`
@@ -100,8 +99,7 @@ book an aim had named lands on the remembered place.
 ## The way back: `editor.back`
 
 Every full-page route — findings, history, review, find, terms, inventory, cloud, settings,
-the projects list — replaces the editor entirely. The rail's panel tile is one way back and reads as a
-panel toggle, so there is an explicit one as well: `src/app/ui/workspace/BackToEditor.tsx`, one
+the projects list — replaces the editor entirely. The way back is `src/app/ui/workspace/BackToEditor.tsx`, one
 `data-testid="back-to-editor"` button pinned to the top-right of the routed content, naming the book it
 returns to.
 
@@ -145,10 +143,20 @@ A prototype outside the layout still has services, a theme and the comment
 panel — but not the rail, and not `installCommandKeys`, so it does not answer
 the application's Mod-K for an application it is not part of.
 
-- **`IconRail`** is permanent and one tile wide. Its panel toggle collapses the
-  sidebar and never itself. Everything below the toggle is lit from the
-  `pathname`, not from a signal, and every tile but three is a plain
+- **`IconRail`** is permanent: a 72px near-black bar across the top of the window
+  (`surface-invert`, the same in both themes). Left, the mark and name; centre,
+  the three modes as a 48px `SegmentedControl` (`size="lg"`, `tone="invert"`),
+  centred, its tabs at most 10rem each, shrinking before they collapse to icons
+  below `md`; right, icon-only tiles. Everything on it is lit
+  from the `pathname`, not from a signal, and every tile but three is a plain
   navigation.
+- **The project panel's show/hide** is not on the rail. It is one button that
+  stays put and flips (`PanelToggle`, `panel-toggle`): left of the book's title
+  in the editor toolbar, and on project screens without that toolbar in the
+  same top-left spot, in a narrow column of its own (`PanelToggleColumn`).
+  Being outside the panel, it is also the way back. `Mod-b` does the same, and
+  dragging the panel's edge well past its minimum closes it
+  (`Resizable.Panel`'s `onCollapse`), keeping the width it had.
 
   The mode tiles (Refine, Key terms) and the project screens (Character
   inventory, Compare — which goes to `/project/$slug/review` — and Cloud)

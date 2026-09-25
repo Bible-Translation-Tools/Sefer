@@ -157,13 +157,17 @@
   --sidebar-on-surface: var(--on-surface-primary);
   --sidebar-on-surface-muted: var(--on-surface-tertiary);
 
-  /* The inverted surface: a dark column whatever the theme, with white on it.
-     The icon rail is the first user. Active is the brand blue, held at the
-     light-theme shade in both themes so white text keeps its contrast. */
-  --surface-invert: var(--slate-20);
-  --surface-invert-hover: color-mix(in srgb, var(--slate-20), white 12%);
-  --surface-invert-active: var(--brand-40);
+  /* The inverted surface: a near-black bar whatever the theme, with white on
+     it. The icon rail is the first user. Set here only and never overridden in
+     the dark blocks, so the rail looks the same in both themes. `raised` is a
+     step lighter — the mode switcher's track, and a hovered or pressed tile —
+     and `muted` is the text of a segment that is not the chosen one. */
+  --surface-invert: var(--neutral-10);
+  --surface-invert-raised: var(--neutral-20);
+  --surface-invert-hover: var(--neutral-20);
+  --surface-invert-active: var(--neutral-20);
   --on-surface-invert: var(--neutral-100);
+  --on-surface-invert-muted: var(--neutral-60);
 
   --button-primary-surface: var(--brand-40);
   --button-primary-surface-hover: var(--brand-30);
@@ -315,9 +319,11 @@
   --color-on-surface-highlight: var(--on-surface-highlight);
   --color-on-surface-success: var(--on-surface-success);
   --color-surface-invert: var(--surface-invert);
+  --color-surface-invert-raised: var(--surface-invert-raised);
   --color-surface-invert-hover: var(--surface-invert-hover);
   --color-surface-invert-active: var(--surface-invert-active);
   --color-on-surface-invert: var(--on-surface-invert);
+  --color-on-surface-invert-muted: var(--on-surface-invert-muted);
 
   --color-sidebar-surface: var(--sidebar-surface);
   --color-sidebar-surface-hover: var(--sidebar-surface-hover);

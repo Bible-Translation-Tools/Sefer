@@ -429,7 +429,7 @@ export function ImportHub(props: {
           </div>
         }
       >
-        <Menu label={t("Import")} side="right" align="end" class="w-56" trigger={props.trigger}>
+        <Menu label={t("Import")} side="bottom" align="end" class="w-56" trigger={props.trigger}>
           <MenuItem
             data-testid="import-zip"
             icon={<FileArchive size={16} aria-hidden="true" />}

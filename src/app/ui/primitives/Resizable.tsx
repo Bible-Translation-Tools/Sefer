@@ -26,7 +26,16 @@
  */
 
 import type { JSX } from "@solidjs/web";
-import { createContext, createEffect, createSignal, untrack, useContext } from "solid-js";
+import ChevronLeft from "lucide-solid/icons/chevron-left";
+import {
+  For,
+  Show,
+  createContext,
+  createEffect,
+  createSignal,
+  untrack,
+  useContext,
+} from "solid-js";
 
 import { cx, type ClassValue } from "./cx";
 
@@ -35,6 +44,7 @@ interface PanelSpec {
   readonly initialSize?: number;
   readonly minSize: number;
   readonly maxSize: number;
+  readonly onCollapse?: () => void;
 }
 
 interface SplitContext {
@@ -47,6 +57,13 @@ interface SplitContext {
   readonly setRoot: (element: HTMLDivElement) => void;
   /** Moves `pixels` of the axis across the boundary after panel `before`. */
   readonly drag: (before: number, pixels: number) => void;
+  /** The drag let go: clears the collapse hint. */
+  readonly end: () => void;
+  /**
+   * How far a collapsible panel has been pulled past its minimum, 0–1, where
+   * 1 closes it; undefined for any other panel, or when none is being pulled.
+   */
+  readonly pullOf: (index: number) => number | undefined;
   /** Snapshots the sizes, so a drag is measured from where it started. */
   readonly begin: () => void;
 }
@@ -91,6 +108,11 @@ function Root(props: ResizableRootProps) {
     name: "splitRoot",
   });
   let started: readonly number[] = [];
+  /** Set once a drag has collapsed its panel, so it collapses it only once. */
+  let collapsed = false;
+  const [pull, setPull] = createSignal<
+    { readonly index: number; readonly amount: number } | undefined
+  >(undefined, { name: "splitPull" });
 
   // Panels register during render, so the fractions are knowable only once the
   // tree exists — and the root's ref is set after its children are built, which
@@ -117,6 +139,12 @@ function Root(props: ResizableRootProps) {
     setRoot,
     begin: () => {
       started = sizes();
+      collapsed = false;
+    },
+    end: () => setPull(undefined),
+    pullOf: (index) => {
+      const held = pull();
+      return held !== undefined && held.index === index ? held.amount : undefined;
     },
     drag: (before, pixels) => {
       const total = axisSize();
@@ -126,6 +154,28 @@ function Root(props: ResizableRootProps) {
       const to = started[before + 1];
       if (total === 0) return;
       if (first === undefined || second === undefined || from === undefined || to === undefined) {
+        return;
+      }
+      if (collapsed) return;
+      // A collapsible panel dragged more than half its minimum PAST that
+      // minimum closes instead.
+      const wanted = from + pixels / total;
+      // Between the minimum and the point that closes it the panel no longer
+      // moves, so the pull is reported and the panel says what will happen.
+      if (first.onCollapse !== undefined && wanted < first.minSize && first.minSize > 0)
+        setPull({
+          index: before,
+          amount: Math.min(1, (first.minSize - wanted) / (first.minSize / 2)),
+        });
+      else setPull(undefined);
+      if (first.onCollapse !== undefined && wanted < first.minSize / 2) {
+        collapsed = true;
+        setPull(undefined);
+        // Back to the sizes the drag started from, so showing the panel
+        // again brings it back as it was, not squeezed to its minimum.
+        setSizes(started);
+        props.onSizesChange?.(started);
+        first.onCollapse();
         return;
       }
       // The pair's share is fixed; the boundary only decides how to split it.
@@ -165,9 +215,22 @@ interface ResizablePanelProps {
   readonly initialSize?: number;
   readonly minSize?: number;
   readonly maxSize?: number;
+  /**
+   * Called when a drag takes this panel well below its minimum — the caller
+   * hides it. Only the panel BEFORE a handle can collapse this way.
+   */
+  readonly onCollapse?: () => void;
+  /**
+   * What the panel says while it is being pulled closed — past its minimum,
+   * not yet closed. Given with `onCollapse`; without it there is no overlay.
+   */
+  readonly collapseHint?: { readonly title: string; readonly detail: string };
   readonly class?: ClassValue;
   readonly children: JSX.Element;
 }
+
+/** The collapse hint's chevrons, left to right; index 0 is the leftmost. */
+const CHEVRONS = [0, 1, 2, 3, 4] as const;
 
 function Panel(props: ResizablePanelProps) {
   const split = useSplit();
@@ -178,6 +241,7 @@ function Panel(props: ResizablePanelProps) {
       initialSize: props.initialSize,
       minSize: props.minSize ?? 0,
       maxSize: props.maxSize ?? 1,
+      onCollapse: props.onCollapse,
     }),
   );
 
@@ -185,9 +249,42 @@ function Panel(props: ResizablePanelProps) {
     <div
       data-resizable-panel={index}
       style={{ "flex-basis": `${split.sizeOf(index) * 100}%` }}
-      class={cx("min-h-0 min-w-0 shrink grow-0 overflow-hidden", props.class)}
+      class={cx("relative min-h-0 min-w-0 shrink grow-0 overflow-hidden", props.class)}
     >
       {props.children}
+      <Show when={props.collapseHint !== undefined && split.pullOf(index)}>
+        {(amount) => (
+          <div
+            data-collapse-hint=""
+            role="status"
+            class="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-surface-invert/85 p-4 text-center"
+          >
+            <p class="text-body font-semibold text-on-surface-invert">
+              {props.collapseHint?.title}
+            </p>
+            <p class="text-small text-on-surface-invert-muted">{props.collapseHint?.detail}</p>
+            {/* The pull, as chevrons pointing the way to close: they light
+                from the right as the drag goes on, all lit just before it
+                closes. */}
+            <div aria-hidden="true" class="flex items-center">
+              <For each={CHEVRONS}>
+                {(step) => (
+                  <ChevronLeft
+                    size={24}
+                    strokeWidth={2.5}
+                    class={cx(
+                      "-mx-1 transition-colors",
+                      amount() * CHEVRONS.length > CHEVRONS.length - 1 - step
+                        ? "text-on-surface-invert"
+                        : "text-on-surface-invert-muted/40",
+                    )}
+                  />
+                )}
+              </For>
+            </div>
+          </div>
+        )}
+      </Show>
     </div>
   );
 }
@@ -195,6 +292,13 @@ function Panel(props: ResizablePanelProps) {
 interface ResizableHandleProps {
   /** Names the divider for a screen reader. */
   readonly label?: string;
+  /**
+   * Sit ON the edge between the panels instead of between them: no width of
+   * its own, a 12px grab area straddling the edge, and a line that shows only
+   * on hover, focus or drag — for a panel whose own border already draws the
+   * edge. Without it the handle is a gutter with a hairline down the middle.
+   */
+  readonly edge?: boolean;
   readonly class?: ClassValue;
 }
 
@@ -218,7 +322,9 @@ function Handle(props: ResizableHandleProps) {
       data-dragging={dragging() ? "" : undefined}
       class={cx(
         "group relative flex shrink-0 items-stretch justify-center",
-        vertical ? "cursor-row-resize flex-col py-1" : "cursor-col-resize px-1",
+        vertical ? "cursor-row-resize flex-col" : "cursor-col-resize",
+        props.edge === true ? "z-10" : vertical ? "py-1" : "px-1",
+        props.edge === true && (vertical ? "h-0" : "w-0"),
         props.class,
       )}
       onPointerDown={(event) => {
@@ -231,6 +337,7 @@ function Handle(props: ResizableHandleProps) {
         };
         const stop = (): void => {
           setDragging(false);
+          split.end();
           document.removeEventListener("pointermove", move);
           document.removeEventListener("pointerup", stop);
         };
@@ -247,11 +354,26 @@ function Handle(props: ResizableHandleProps) {
         event.preventDefault();
       }}
     >
+      {/* The grab area of an edge handle: wider than the line, centred on
+          the edge, over both panels. Events bubble to the separator. */}
+      {props.edge === true && (
+        <span
+          aria-hidden="true"
+          class={cx("absolute", vertical ? "inset-x-0 -inset-y-1.5" : "inset-y-0 -inset-x-1.5")}
+        />
+      )}
       <span
         aria-hidden="true"
         class={cx(
-          "rounded-full bg-surface-border transition-colors",
-          vertical ? "h-px w-full" : "w-px",
+          "rounded-full transition-colors",
+          props.edge === true
+            ? cx(
+                "absolute bg-transparent",
+                vertical
+                  ? "inset-x-0 top-1/2 h-0.5 -translate-y-1/2"
+                  : "inset-y-0 start-1/2 w-0.5 -translate-x-1/2",
+              )
+            : cx("bg-surface-border", vertical ? "h-px w-full" : "w-px"),
           "group-hover:bg-brand group-focus-visible:bg-brand group-data-dragging:bg-brand",
         )}
       />

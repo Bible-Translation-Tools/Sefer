@@ -380,7 +380,7 @@ export interface Shell {
   /**
    * The OPEN project's slug — what every in-project link needs for its
    * `params`. Empty string when no project is open, which is a URL that
-   * resolves to the "no project here" state rather than a crash.
+   * resolves to the empty no-project state rather than a crash.
    */
   readonly slug: Accessor<string>;
   readonly rootForSlug: (slug: string) => string | undefined;
@@ -583,7 +583,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   // `justMinted` is what makes a fresh slug resolvable in the same tick. The
   // setting only answers a new value once the settings file has been written,
   // and a click mints then navigates at once, so without it the route would
-  // read the old map and say "no project here" for any project on its first
+  // read the old map and draw the no-project state for any project on its first
   // open. The setting still covers bookmarks and every later visit.
   const justMinted = new Map<string, string>();
   const slugFor = (root: string): string => {
