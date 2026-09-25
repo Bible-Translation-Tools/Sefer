@@ -3,10 +3,11 @@
  * worked out before anything is applied.
  *
  * Pure, like `./state.ts`. The shell reads the blobs (it has `Git.show` and
- * `Git.changedPathsBetween`) and hands them in as text; everything below is
- * arithmetic over USFM. That is what lets the sentence "3 chapters of Mark
- * changed on the cloud; 1 of them also changed here" be computed, tested and
- * rendered without a network.
+ * `Git.changedPathsBetween`) and hands them in as text, with the engine's
+ * chapter rows as a function; everything below is arithmetic over those rows.
+ * That is what lets the sentence "3 chapters of Mark changed on the cloud; 1
+ * of them also changed here" be computed, tested and rendered without a
+ * network.
  *
  * The plan exists for one reason: scripture text is never merged
  * automatically. A pull that can only fast-forward is safe and is described
@@ -15,6 +16,7 @@
  */
 
 import type { ChangeKind, Commit } from "../git/git";
+import type { TocChapter } from "../location/locate";
 
 /**
  * The chapter number the front matter is filed under.
@@ -26,35 +28,39 @@ import type { ChangeKind, Commit } from "../git/git";
  */
 export const FRONT_MATTER = 0;
 
-const CHAPTER_MARKER = /^\\c[ \t]+(\d+)/gmu;
+/**
+ * A text's chapter rows, as the ENGINE answers them — the caller's
+ * `tocViewOf(galley.analyze(text)).chapters`. Rows tile the text, row 0 is
+ * the front matter, and a malformed `\c` has number 0.
+ *
+ * A parameter rather than an import so the plan stays pure and engine-free:
+ * Sefer never reads a designator itself, and this module never loads the
+ * engine either. The text it is handed is LF (see `IncomingFile`), which is
+ * all `analyze` accepts.
+ */
+export type ChapterRows = (text: string) => readonly TocChapter[];
 
 /**
- * A book's text split at its chapter markers: chapter number → its whole slice,
- * marker line included. Everything before the first `\c` is `FRONT_MATTER`.
+ * A book's text split at the engine's chapter rows: chapter number → its whole
+ * slice, marker line included. Everything before the first `\c` is
+ * `FRONT_MATTER`, and so is a chapter whose number the engine could not read.
  *
- * A textual split rather than an engine parse because this runs over BLOBS —
- * two revisions of a file that may not be open, may not be a book Sefer
- * instantiated, and may not even parse. `\c` at the start of a line is the one
- * thing USFM guarantees about where a chapter begins, and a wrong answer here
- * costs a slightly coarse sentence, never a wrong edit.
+ * This runs over BLOBS — two revisions of a file that may not be open, may
+ * not be a book Sefer instantiated, and may not even parse cleanly. The engine
+ * answers chapters for any text, and a wrong answer here costs a slightly
+ * coarse sentence, never a wrong edit.
  */
-const chapterSlices = (text: string): ReadonlyMap<number, string> => {
+const chapterSlices = (text: string, rows: ChapterRows): ReadonlyMap<number, string> => {
   const slices = new Map<number, string>();
-  const starts: { readonly number: number; readonly at: number }[] = [];
-  CHAPTER_MARKER.lastIndex = 0;
-  for (let match = CHAPTER_MARKER.exec(text); match !== null; match = CHAPTER_MARKER.exec(text)) {
-    starts.push({ number: Number(match[1]), at: match.index });
-  }
-  const first = starts[0]?.at ?? text.length;
-  if (first > 0) slices.set(FRONT_MATTER, text.slice(0, first));
-  starts.forEach((start, index) => {
-    const end = starts[index + 1]?.at ?? text.length;
+  if (text === "") return slices;
+  for (const row of rows(text)) {
+    if (row.to <= row.from) continue;
     // A duplicated `\c 3` is a broken book, not a reason to lose one of them:
     // the slices are concatenated so the comparison still sees all the text.
-    const existing = slices.get(start.number);
-    const slice = text.slice(start.at, end);
-    slices.set(start.number, existing === undefined ? slice : existing + slice);
-  });
+    const existing = slices.get(row.number);
+    const slice = text.slice(row.from, row.to);
+    slices.set(row.number, existing === undefined ? slice : existing + slice);
+  }
   return slices;
 };
 
@@ -64,10 +70,10 @@ const chapterSlices = (text: string): ReadonlyMap<number, string> => {
  * A chapter present on one side only counts as changed — that is an added or
  * deleted chapter, and it is exactly the kind of thing a plan must mention.
  */
-const chaptersChanged = (before: string, after: string): readonly number[] => {
+const chaptersChanged = (before: string, after: string, rows: ChapterRows): readonly number[] => {
   if (before === after) return [];
-  const left = chapterSlices(before);
-  const right = chapterSlices(after);
+  const left = chapterSlices(before, rows);
+  const right = chapterSlices(after, rows);
   const numbers = new Set<number>([...left.keys(), ...right.keys()]);
   return [...numbers]
     .filter((number) => left.get(number) !== right.get(number))
@@ -82,6 +88,9 @@ const chaptersChanged = (before: string, after: string): readonly number[] => {
  * what makes "also changed here" answerable at all. With no common ancestor
  * (a repository attached to an unrelated history) the caller passes `""`, and
  * everything reads as changed on both sides, which is the safe answer.
+ *
+ * The three texts are LF: the engine refuses a carriage return, and a file
+ * whose only change is its line endings has no chapter to name.
  */
 export interface IncomingFile {
   /** Repository-relative, forward slashes. */
@@ -141,9 +150,9 @@ export const emptyPlan: IncomingPlan = {
   clean: true,
 };
 
-const bookOf = (file: IncomingFile): IncomingBook => {
-  const chapters = chaptersChanged(file.base, file.cloud);
-  const mine = new Set(chaptersChanged(file.base, file.here));
+const bookOf = (file: IncomingFile, rows: ChapterRows): IncomingBook => {
+  const chapters = chaptersChanged(file.base, file.cloud, rows);
+  const mine = new Set(chaptersChanged(file.base, file.here, rows));
   const alsoHere = chapters.filter((chapter) => mine.has(chapter));
   // Contested is per BOOK, not per chapter. Two people editing different
   // chapters of Mark still produce one file whose two versions must be
@@ -169,9 +178,10 @@ const bookOf = (file: IncomingFile): IncomingBook => {
 export const incomingPlan = (
   commits: readonly Commit[],
   files: readonly IncomingFile[],
+  rows: ChapterRows,
 ): IncomingPlan => {
   const books = files
-    .map(bookOf)
+    .map((file) => bookOf(file, rows))
     .filter((book) => book.chapters.length > 0)
     .sort((a, b) => a.bookId.localeCompare(b.bookId));
   const chapterCount = books.reduce((total, book) => total + book.chapters.length, 0);

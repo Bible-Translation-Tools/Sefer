@@ -10,14 +10,16 @@
  * refuses — or worse, the other way round.
  *
  * Nothing here decides anything. It reads three revisions of every file the
- * cloud touched, and `./plan.ts` does the arithmetic.
+ * cloud touched, asks the engine where each one's chapters are, and
+ * `./plan.ts` does the arithmetic.
  */
 
 import { Effect, FileSystem } from "effect";
 
 import { identifyBook } from "../book/book";
+import { Galley, toLf, tocViewOf } from "../galley";
 import { Git, type ChangedPath, type Commit, type Repo } from "../git/git";
-import { incomingPlan, type IncomingFile, type IncomingPlan } from "./plan";
+import { incomingPlan, type ChapterRows, type IncomingFile, type IncomingPlan } from "./plan";
 
 /** Only scripture files get a plan; a manifest change is not a chapter. */
 const USFM = /\.usfm$/iu;
@@ -61,7 +63,7 @@ const orEmpty = <A, E>(effect: Effect.Effect<A, E>, fallback: A): Effect.Effect<
   Effect.orElseSucceed(effect, () => fallback);
 
 /**
- * A blob as text, or `""` when the path did not exist at that revision.
+ * A blob as LF text, or `""` when the path did not exist at that revision.
  *
  * `TextDecoder` rather than `core/source`'s `decode`: this text is never
  * edited, saved or stamped — it is one side of a comparison, and running a
@@ -72,17 +74,21 @@ const textAt = (repo: Repo, rev: string, path: string): Effect.Effect<string, ne
   Effect.orElseSucceed(
     Effect.map(
       Effect.flatMap(Git, (git) => git.show(repo, rev, path)),
-      (bytes) => new TextDecoder().decode(bytes),
+      (bytes) => toLf(new TextDecoder().decode(bytes)).text,
     ),
     () => "",
   );
 
-/** The work tree's own copy, which may hold edits no version has recorded. */
+/** The work tree's own copy, which may hold edits no version has recorded. LF. */
 const textHere = (
   fileSystem: FileSystem.FileSystem,
   root: string,
   path: string,
-): Effect.Effect<string> => orEmpty(fileSystem.readFileString(`${root}/${path}`), "");
+): Effect.Effect<string> =>
+  orEmpty(
+    Effect.map(fileSystem.readFileString(`${root}/${path}`), (text) => toLf(text).text),
+    "",
+  );
 
 /**
  * What a pull would change, read out of the object database.
@@ -95,10 +101,13 @@ const textHere = (
 export const surveyIncoming = (
   repo: Repo,
   options: SurveyOptions,
-): Effect.Effect<IncomingSurvey, never, Git | FileSystem.FileSystem> =>
+): Effect.Effect<IncomingSurvey, never, Git | FileSystem.FileSystem | Galley> =>
   Effect.gen(function* () {
     const git = yield* Git;
     const fileSystem = yield* FileSystem.FileSystem;
+    const galley = yield* Galley;
+    // The loose-text door: these blobs are not books the corpus holds.
+    const rows: ChapterRows = (text) => tocViewOf(galley.analyze(text, "sync.plan")).chapters;
     const from = options.base?.id ?? options.tracking;
     // SAFETY: the fallback is the empty list, which inhabits `readonly
     // ChangedPath[]`; the annotation only stops TypeScript inferring `never[]`
@@ -126,5 +135,5 @@ export const surveyIncoming = (
       });
     }
 
-    return { plan: incomingPlan(options.behind, files), changed };
+    return { plan: incomingPlan(options.behind, files, rows), changed };
   });

@@ -2,10 +2,10 @@
  * `?syncState=behind` — every state of the sync screen, on demand, in a dev
  * build, with no Gitea instance and no network.
  *
- * This is a FIXTURE, not a second implementation. It builds a `SyncReading`
- * and an `IncomingPlan` — the same two values `./reading.ts` produces from the
- * real services — and hands them to the same pure derivation and the same
- * components. There is no branch anywhere in the rendering that asks whether
+ * This is a FIXTURE, not a second implementation. It writes out a
+ * `SyncReading` and an `IncomingPlan` — the same two values `./reading.ts`
+ * produces from the real services — and hands them to the same pure
+ * derivation and the same components. There is no branch anywhere in the rendering that asks whether
  * the data came from here, and the application's composition is untouched:
  * `src/app/services.ts` does not know this file exists.
  *
@@ -18,8 +18,8 @@ import type { Commit } from "#core/git/git";
 import {
   combineMessage,
   emptyPlan,
-  incomingPlan,
   type CombineReplay,
+  type IncomingPlan,
   type SyncReading,
   type SyncState,
 } from "#core/sync";
@@ -52,35 +52,42 @@ const mine = [
 
 const theirs = [commit("c3d4e5f6", "Mark 1–2 — reviewer's corrections", "Tomás Beye", 40 * MINUTE)];
 
-/** A tiny two-chapter book, as three revisions of one file. */
-const MARK_BASE = "\\id MRK\n\\h Mark\n\\c 1\n\\v 1 The beginning.\n\\c 2\n\\v 1 And again.\n";
-const MARK_CLOUD =
-  "\\id MRK\n\\h Mark\n\\c 1\n\\v 1 The beginning of it.\n\\c 2\n\\v 1 And again.\n";
-const MARK_HERE = MARK_BASE;
-const MARK_HERE_TOUCHED =
-  "\\id MRK\n\\h Mark\n\\c 1\n\\v 1 The very beginning.\n\\c 2\n\\v 1 And again.\n";
-const LUKE_BASE = "\\id LUK\n\\h Luke\n\\c 1\n\\v 1 Many have undertaken.\n";
-const LUKE_CLOUD = "\\id LUK\n\\h Luke\n\\c 1\n\\v 1 Many people have undertaken.\n";
-
-const planFor = (contested: boolean) =>
-  incomingPlan(theirs, [
+/**
+ * What arrives: Mark 1 and Luke 1, as the plan names them. `contested` is the
+ * same pull after this device also touched Mark 1.
+ *
+ * LITERAL plans rather than `incomingPlan` over three revisions of a toy
+ * book, because the plan's chapters come from the engine and a module-level
+ * constant has no engine to ask — the Galley is a Layer, built at boot, and
+ * this file must not reach for it. What a fixture owes the screen is the
+ * VALUE, not the arithmetic: these are what `incomingPlan` answered for the
+ * two-line Mark and Luke revisions that used to sit here.
+ */
+const planFor = (contested: boolean): IncomingPlan => ({
+  commits: theirs,
+  books: [
     {
-      path: "41-MRK.usfm",
-      bookId: "MRK",
-      kind: "modified",
-      base: MARK_BASE,
-      cloud: MARK_CLOUD,
-      here: contested ? MARK_HERE_TOUCHED : MARK_HERE,
-    },
-    {
-      path: "42-LUK.usfm",
       bookId: "LUK",
+      path: "42-LUK.usfm",
       kind: "modified",
-      base: LUKE_BASE,
-      cloud: LUKE_CLOUD,
-      here: LUKE_BASE,
+      chapters: [1],
+      alsoHere: [],
+      contested: false,
     },
-  ]);
+    {
+      bookId: "MRK",
+      path: "41-MRK.usfm",
+      kind: "modified",
+      chapters: [1],
+      alsoHere: contested ? [1] : [],
+      contested,
+    },
+  ],
+  contested: contested ? ["MRK"] : [],
+  chapterCount: 2,
+  overlapCount: contested ? 1 : 0,
+  clean: !contested,
+});
 
 const attached: SyncReading = {
   origin: "https://content.example.org/ana/mark-project.git",
