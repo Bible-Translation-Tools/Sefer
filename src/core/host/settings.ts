@@ -28,6 +28,7 @@ import {
   PubSub,
   Result,
   Schema,
+  Semaphore,
   Stream,
 } from "effect";
 
@@ -126,6 +127,13 @@ const makeSettings = (
       (value: unknown) => Result.Result<unknown, Schema.SchemaError>
     >();
     const pubsub = yield* PubSub.unbounded<Change>();
+    // One write at a time. `set` snapshots `stored`, waits on the save, and
+    // only then records its own key — so two overlapping sets each wrote a
+    // file missing the other's key, and the last save to land won. Opening a
+    // project sets three keys at once, and the slug was the one that lost:
+    // the page worked, and a reload found no project. Held across snapshot,
+    // save and commit, so each save includes every key before it.
+    const writing = yield* Semaphore.make(1);
 
     const register = <S>(
       name: string,
@@ -170,11 +178,16 @@ const makeSettings = (
             }),
           );
         }
-        const next = new Map(stored).set(key.name, value);
-        yield* store.save(Object.fromEntries(next));
-        stored.set(key.name, value);
-        decoded.set(key.name, validated.success);
-        yield* PubSub.publish(pubsub, { name: key.name, value: validated.success });
+        yield* Semaphore.withPermit(
+          writing,
+          Effect.gen(function* () {
+            const next = new Map(stored).set(key.name, value);
+            yield* store.save(Object.fromEntries(next));
+            stored.set(key.name, value);
+            decoded.set(key.name, validated.success);
+            yield* PubSub.publish(pubsub, { name: key.name, value: validated.success });
+          }),
+        );
         observability?.note(RULE, "passed", key.name);
       });
 
