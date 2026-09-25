@@ -1,6 +1,6 @@
 # Fast Web import for Translation Notes
 
-**Status:** idea to preserve, 2026-09-19. No implementation authorized. The roughly 27,000 note files are a user-reported corpus size, not a benchmark measured in this pass.
+**Status:** idea to preserve, 2026-09-19. No implementation authorized. The roughly 27,000 note files are a user-reported corpus size, not a benchmark measured in this pass. A count of `en_tn_condensed` on 2026-09-25 found 26,001 verse files and 70 intros, 55,833 notes, 5.75 MB in all; the resource-level discussion (what TN answers, how it is edited) is in [resource kinds](../00-ideas/resource-kinds.md).
 
 ## Problem and current evidence
 
