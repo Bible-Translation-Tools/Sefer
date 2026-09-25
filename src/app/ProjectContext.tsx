@@ -59,6 +59,7 @@ import { detectHost } from "#platform/host";
 import { registerShellCommands, type ShellBridge } from "./commands";
 import { useComposition } from "./CompositionContext";
 import { t } from "./i18n";
+import { registerLegacyMarkers } from "./legacyMarkers";
 import { createLocation, type Location } from "./location";
 import { registerProjectCommands } from "./projectCommands";
 import { composeServices, fixtureRequested, type Services } from "./services";
@@ -812,6 +813,19 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       return;
     }
     const ready = opened.success;
+    // The engine's marker table, BEFORE the first parse of this project: the
+    // legacy markers its texts already use, and none otherwise — which also
+    // clears what the previous project installed. `legacyMarkers.ts` is the
+    // policy and says why this one question is a regex, not a parse.
+    const started = performance.now();
+    const legacy = registerLegacyMarkers(services.galley, function* () {
+      for (const book of ready.books) yield book.source().text;
+    });
+    gesture.note("project.legacy_markers", "ready", undefined, {
+      "project.legacy_markers": legacy.markers.map((m) => m.name).join(",") || "none",
+      "project.legacy_refused": legacy.refused.length,
+      "project.legacy_scan_ms": Math.round((performance.now() - started) * 1000) / 1000,
+    });
     // The census, the corpus and every finding come from here; `attach` is what
     // analyses the project once at open and keeps it in step.
     await services.run(

@@ -350,12 +350,47 @@ export interface LintReport {
   readonly docLen: number;
 }
 
+/**
+ * One user marker for the engine's table: a name, and the spec category word
+ * it behaves as (`"standalone"`, `"footnote"`, `"milestone"`…). The engine
+ * resolves a registered name to the row that category behaves as; core holds
+ * no list of its own. Which markers a project gets is the application's
+ * policy (`src/app/legacyMarkers.ts`).
+ */
+export interface ExtensionMarker {
+  readonly name: string;
+  readonly category: string;
+}
+
+/** One entry the engine would not install, and why. A value, not a failure. */
+export interface ExtensionReport {
+  readonly name?: string;
+  readonly reason: string;
+}
+
 export interface GalleyService {
   /**
    * What artifact this is: the pinned tag from `package.json` and the format
    * versions the installed readers speak (`engineVersion` below).
    */
   readonly version: () => EngineVersion;
+
+  /**
+   * Install a list of user markers — PROCESS-WIDE — and answer the entries
+   * the engine could not keep. `[]` clears.
+   *
+   * Every parse afterwards, on every door and for every caller (a project's
+   * books, a reference text, a review side, a loose parse on the landing
+   * screen), reads the new table, and the engine invalidates every product it
+   * derived under the old one. So it is called when a project opens, BEFORE
+   * that project's first parse, and never between edits. `relaxZPrefix`
+   * admits a legacy name the spec does not define (`s5`); a name the spec
+   * does define is still a report.
+   */
+  readonly setExtensions: (
+    markers: readonly ExtensionMarker[],
+    opts?: { readonly relaxZPrefix?: boolean },
+  ) => readonly ExtensionReport[];
 
   /**
    * Parse one book. SYNCHRONOUS, and the only USFM parse in the app.
@@ -918,8 +953,27 @@ const makeService = (
     }
   };
 
+  const setExtensions = (
+    markers: readonly ExtensionMarker[],
+    opts?: { readonly relaxZPrefix?: boolean },
+  ): readonly ExtensionReport[] => {
+    // A free function on the module, like the stateless doors: the table it
+    // installs is the engine's own, shared by the handle and every loose parse.
+    const list = JSON.stringify(markers.map((m) => ({ name: m.name, category: m.category })));
+    const reports = wasmModule.setExtensions(list, { relaxZPrefix: opts?.relaxZPrefix === true });
+    // SAFETY: the engine answers a JSON array of `{ name, reason }` reports
+    // (`onion/src/extensions.rs`); a list report carries no `line`.
+    const parsed = JSON.parse(reports) as ExtensionReport[];
+    observe?.note("galley.extensions", "ready", undefined, {
+      "galley.extensions": markers.map((m) => m.name).join(",") || "none",
+      "galley.extensions_refused": parsed.length,
+    });
+    return parsed;
+  };
+
   return {
     version: engineVersion,
+    setExtensions,
     analyze,
     memoize,
     lint,

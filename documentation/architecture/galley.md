@@ -12,6 +12,18 @@
 
 `memoize()` returns a per-Book memo: the same text hands back the same `Analysis` instance, so a gesture that reads the analysis three times costs one parse and an undo back to a text we have seen costs none. One memo per Book, held by whatever owns that Book's editor state.
 
+## The marker table: `setExtensions`
+
+`setExtensions(markers, { relaxZPrefix? })` installs user markers into the engine's marker table and answers the entries it would not keep (`ExtensionReport`, a value, never a failure); `[]` clears. A registered marker behaves as its category: a `standalone` is a bare point that opens nothing, closes nothing and leaves its paragraph open. Core holds no list: which markers a project gets is the application's policy.
+
+It is **process-wide**. The table is the wasm module's, not the handle's, so every parse afterwards reads it — a project's books, the reference and source texts `ProjectAnalysis` registers, a review side, a Key terms source card, a loose parse on the landing screen — and the engine invalidates everything it derived under the old table (both caches key on content, and the same bytes are a different document once the rows change). So it is set once per project, when the project opens, **before its first parse**, and never between edits. A reference text is parsed under the table of the project that is open, whatever project it came from.
+
+**The policy** is `LEGACY_MARKERS` in `src/app/legacyMarkers.ts`, a table of one entry today — `{ name: "s5", category: "standalone" }`, en_ulb's chunk marker — with the rule beside it: each entry is registered (`relaxZPrefix: true`, since `s5` has no `z`) only for a project whose book texts already contain it alone on a line. `ProjectContext.openProject` calls `registerLegacyMarkers` between opening the files and `ProjectAnalysis.attach`, with the texts in book order; the answer is always set, so opening a project without `\s5` clears the previous project's registration. A `\s5` typed into such a project stays unknown markup and is reported. An empty table registers nothing anywhere, which is the behaviour before the table existed.
+
+"Contains" is a line-anchored regex over the texts (`^\\s5[ \t]*\r?$`, per entry), stopping at the first book that has one — the one place Sefer reads markup itself, deliberately: the answer decides the engine's configuration, which must be installed before the engine may parse, so asking the engine would be a parse under the wrong table and a second parse of every book. The cost is a scan: an s5 project stops in its first book (under 2 ms on en_ulb, 66 books); a project without one scans every book once, about 3–5 ms for a whole Bible (4.45 M characters). Both the registration and the scan are notes on the `project.open` record (`project.legacy_markers`, `project.legacy_scan_ms`) and `galley.extensions`.
+
+On en_ulb the registration takes the findings from 20,353 to 1,316, and on the `small-nt` fixture from 76 to 28: the "`\s5` is not a known marker" flood and the missing-paragraph findings its recovery caused are gone. How the editor paints and guards a standalone is the registry's `standalone` class ([editor](editor.md#standalone-markers)).
+
 ## Freshness
 
 `sourceHash` is the engine's xxh3-64 of the source bytes — the content identity core itself never computes (see [Source and Book](source.md)). `GalleyService.hash(text)` computes the same value without a parse, which is what Save's dirty and external-change comparison use. Two doors read it from an analysis:

@@ -1,6 +1,6 @@
 # Location: Citation, Address and places in a text
 
-Every question of the form "where in scripture" goes through one set of pieces. What somebody typed is a **Citation**; the place it means is an **Address**; where that place is in one particular text is a **Location**. Nothing in Sefer keeps its own copy of any of those answers, and nothing reads a USFM designator (`\c 12`, `\v 3a`) itself: the engine does, and Sefer reads its TOC.
+Every question of the form "where in scripture" goes through one set of pieces. What somebody typed is a **Citation**; the place it means is an **Address**; where that place is in one particular text is a **Location**. Nothing in Sefer keeps its own copy of any of those answers, and nothing reads a USFM designator (`\c 12`, `\v 3a`) itself: the engine does, and Sefer reads its TOC. The one allowed regex over markup is `src/app/legacyMarkers.ts`'s "does this project's text contain `\s5` alone on a line", because its answer configures the engine before the engine may parse ([galley](galley.md#the-marker-table-setextensions)).
 
 `src/core/location` holds the pure pieces; `src/app/location.ts` is the per-project door the shell exposes as `shell.location`. The decisions below were made with Will on 2026-09-24 and 2026-09-25; the planning discussion they came from is in git history (`planning/01-discussing/editor-primitives-consistency.md`, retired 2026-09-25 when the work landed).
 
