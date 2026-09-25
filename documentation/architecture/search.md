@@ -21,23 +21,29 @@ A book the engine holds no mask for contributes nothing: a project opening regis
 ## Queries, options, failures
 
 - `Query { text, caseSensitive?, wholeWord?, regex? }`.
-- `Options { limit?, books? }`. `limit` is a total across all books and omitted means no bound; `books` narrows the scan to those `BookId`s. The bound is on the question instead: `MINIMUM_QUERY = 2`, measured on a whole Bible, below which the screen does not search — a single character is a quarter of a million hits nobody can read, and a capped count would answer "how many are there" wrongly.
+- `Options { limit?, books?, analysisOf? }`. `limit` is a total across all books and omitted means no bound; `books` narrows the scan to those `BookId`s; `analysisOf` is where a hit's Address comes from (below). The bound is on the question instead: `MINIMUM_QUERY = 2`, measured on a whole Bible, below which the screen does not search — a single character is a quarter of a million hits nobody can read, and a capped count would answer "how many are there" wrongly.
 - `SearchError { reason: "InvalidRegex" }` is the only failure. An empty query, a book filter that matches nothing, and a text with no match are all a successful empty result.
 - Hits arrive in book order, then offset order.
 
 ## Hits are version-bound
 
-`Hit { bookId, stamp, from, to, ref, preview, pieces? }`. `from`/`to` are UTF-16 offsets into the revision named by `stamp`, the book's stamp at scan time. `preview` is display text only — the containing line (of the reading, for a reading hit) narrowed to about 90 characters — and must never be parsed back into coordinates. (`Hit` also declares an optional `projected`; no scan sets it.)
+`Hit { bookId, stamp, from, to, address?, preview, pieces? }`. `from`/`to` are UTF-16 offsets into the revision named by `stamp`, the book's stamp at scan time. `preview` is display text only — the containing line (of the reading, for a reading hit) narrowed to about 90 characters — and must never be parsed back into coordinates. (`Hit` also declares an optional `projected`; no scan sets it.)
 
 `pieces` appears only when a reading hit maps back to more than **one** source piece, which means it spans markup the reading dropped; `from`/`to` are then the first piece, so anything that only wants somewhere to scroll to still works. Such a hit is **not replaceable**: `planReplace` returns `null` and `replaceInBook` refuses it as `Stale`. That is a rule, not a limitation — the markup between the pieces either survives the replacement or does not, and only the person editing knows which.
 
-`ref` comes from a marker table built once per book per call over the source's `\c`/`\v` markers (`buildRefTable`, then `refFrom` by binary search). It is a marker scan, not a parse, and it is the current limitation: the Location work is meant to replace it with the engine's TOC.
+## Where a hit is
+
+`address` is the [Address](../glossary.md) the hit's first piece sits in — `PHM 1:5`, `JUD 1:1-2` inside a bridge, the hull `1-5` inside `\v 1,3,5`, `PSA intro` — from Location's inverse lookup (`addressAt` in `src/core/location/locate.ts`) over the TOC of an analysis. Search reads no marker and parses nothing: the CALLER supplies analyses through `Options.analysisOf(id)`, keyed by the id the text arrived under.
+
+- **Who supplies.** `/find` answers a project book with ProjectAnalysis' held parse and a bound reference with a parse of its exact text, made on first need and kept for the life of the screen (ProjectAnalysis holds none for references).
+- **When it is missing.** An analysis is used only when it `describesExactly` the text scanned; otherwise, or when none is supplied, the hits still arrive, with no `address`. A book being typed in is the usual case, and nothing a reader sees depends on it: an excerpt card is labelled from its own analysis (`core/excerpts`). There is no fallback scanner.
+- **Cost.** `analysisOf` is asked at most once per text per call, and only for a text with a hit, so N hits are one lookup plus N binary searches over one TOC (`tocViewOf` is kept per dish). A reference with no hit is never parsed.
 
 ## References
 
-`findInReferences(readings, references: BoundReference[], query, options?)` searches `BoundReference { id, text }` — the resources `ProjectAnalysis` registered with their text. `ReferenceHit { source, projected, preview, ref, from, to }` is a **separate shape from `Hit`, deliberately**: it carries no `SourceStamp`, and `from`/`to` are offsets into the reference's text, somewhere to highlight and never somewhere to write. A reference hit that could be mistaken for an editable one is the bug this separation exists to prevent.
+`findInReferences(readings, references: BoundReference[], query, options?)` searches `BoundReference { id, text }` — the resources `ProjectAnalysis` registered with their text. `ReferenceHit { source, projected, preview, address?, from, to }` is a **separate shape from `Hit`, deliberately**: it carries no `SourceStamp`, and `from`/`to` are offsets into the reference's text, somewhere to highlight and never somewhere to write. A reference hit that could be mistaken for an editable one is the bug this separation exists to prevent.
 
-`/find` draws a reference hit above the project's matching verse card — paired by book, chapter and verse, walking the card's verse range so a bridge on one side still pairs — read-only, with no Edit, no Open in editor and no staleness badge.
+`/find` resolves each hit's Address against the project's own book (`refOccurrences`, below) and draws the reference hit above the project's matching verse card — paired verse by verse over both Addresses, so a bridge on either side still pairs — read-only, with no Edit, no Open in editor and no staleness badge. A reference hit with no Address has no card to sit on.
 
 **Registration is not automatic.** `ProjectAnalysis.attachReferences(refs)` registers the books, and `src/app/workflows/references.ts` resolves the Library's `source` and `reference` bindings into texts and calls it. The set is REPLACED on each call and cleared when a project is attached. A project with nothing bound has no Reference scope: the segment on `/find` is disabled with the reason as its tooltip.
 
@@ -54,7 +60,8 @@ Every replacement goes through `book.apply(changes, "replace", UNTRUSTED)` — t
 
 `src/core/excerpts/excerpts.ts` turns a flat list of occurrences into what the Find screen shows: one card per VERSE, in book order, with an outline beside them. It is pure core, so the same model serves the find results, the key-terms feed and the findings feed.
 
-- `group(books: BookText[], hits: Occurrence[])` returns `{ groups, outline }`, where `BookText` is `{ bookId, text, analysis }`. A book with no hits is neither a group nor an outline row. Grouping is by verse, not by hit: three matches in Philemon 1:4 are one card with three highlights.
+- `group(books: BookText[], hits: Occurrence[])` returns `{ groups, outline }`, where `BookText` is `{ bookId, text, analysis, label }`. A book with no hits is neither a group nor an outline row. Grouping is by verse, not by hit: three matches in Philemon 1:4 are one card with three highlights.
+- **Every excerpt carries its `address`**, from `addressAt` at its verse anchor (or, before the first anchor, at its first hit: `intro`, or a chapter's head). `sid` is that Address's machine spelling (`addressCode`: `JUD 1:1-2`, `PSA 0`), a key and never parsed back. `label` is `BookText.label(address)`, the caller's display rule — in the app, `shell.location.label`: the project's name for the book, else the book's own `\h` or `\toc2` read off the engine's tokens (`bookHeading` in `src/core/galley/analysis.ts`), else English. A bridge reads as the bridge, "Jude 1:1-2". The group's `name` is the same rule for the whole book.
 - An `Occurrence` is `bookId`/`from`/`to`, plus `pieces` when a match crossed markup, so a `Hit` and a term's occurrence arrive the same way.
 - **Two coordinate systems.** `span` is the verse plus one either side, clamped to the chapter, in SOURCE offsets — what a satellite clips to. `text` is the projection of exactly that span and `marks` index into it; `hits` stay in source coordinates. `more` says whether the chapter has a verse above and below what is shown.
 - **The projection is lazy.** `text`, `source`, `marks`, `verses` and `focus` are getters over a memoised `project()` call, because a virtualised feed of twenty thousand excerpts shows about twenty. Never object-spread an excerpt: that evaluates every getter.

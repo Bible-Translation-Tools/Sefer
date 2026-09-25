@@ -35,9 +35,10 @@ StetEnvelope
 
 ```
 Term          { id, term, englishTerm, glosses[], definition, strongs?, occurrences[], done }
-TermOccurrence{ book, chapter, verse, sid, sourceText?, spans?, curated }
+TermOccurrence{ address, sid, sourceText?, spans?, curated }
 ```
 
+- **`address`** is the one verse the guide names, as an Address (`versesAddress`, equal ends). `sid` stays alongside it as the guide's own key into `referenceVerses` and `glossRanges`.
 - **`id`** is the English label slugged, with a counter on collision. The upstream data has no stable identifier; the previous application keyed on the display label and warned when two collided. A slug survives a URL, which is what `terms?term=grace` needs.
 - **`occurrences`** is the curated evaluation set unioned with the exhaustive recorded set, deduped, in the guide's own order. `curated` marks which is which — the old application's "exhaustive" toggle, as a property rather than a mode.
 - **`spans`** index into `sourceText`, never into the project's text. They are the guide's precomputed gloss offsets, bounds-checked on the way through.
@@ -69,13 +70,15 @@ The layer is provided in `src/app/workflows/stet.ts` (`withCatalog`), not in `sr
 
 ## How an occurrence maps onto the project
 
-This is the only genuinely new arithmetic, and it lives in `src/core/excerpts/excerpts.ts` because it is a fact about the project's text, not about the guide.
+It lives in `src/core/excerpts/excerpts.ts` because it is a fact about the project's text, not about the guide, and it does no arithmetic of its own: where a verse is, is Location's answer.
 
-- **`refOccurrences(book, refs)`** is the whole mapping, and the feed: it walks the verse spans Onion's table of contents gives (through the module's internal `verseSpans`), once per book, and answers with one **zero-width** occurrence at each verse of `refs` that this book actually has, in document order. A bridge answers for every verse it spans, so a reference to `JUD 1:2` is found inside a `\v 1-2` the project happens to have — dropping it would be the one case where the reader most wants to see how the target differs.
+- **`refOccurrences(book, addresses)`** is the whole mapping, and the feed: for each verse Address of this book it asks `resolve` (`src/core/location/locate.ts`) over the book's TOC (`tocViewOf`), and answers with one **zero-width** occurrence where each found span starts — a verse anchor — deduplicated and in document order. A bridge answers for every verse it spans, so a reference to `JUD 1:2` is found inside a `\v 1-2` the project happens to have — dropping it would be the one case where the reader most wants to see how the target differs — and the card reads "Jude 1:1-2". A verse list's holes are honoured: `JUD 1:2` is missing from `\v 1,3`.
 
 Zero width is the honest span. A search hit knows which characters matched; a reference does not — the guide's offsets index into the guide's own reading, and this project may put the term elsewhere in the verse, or render it with another word entirely, which is the very thing the reviewer is here to judge. So the **target card carries no highlight** and the **source card carries the guide's**. The excerpt's `focus` still dims the verses either side, so the reference is still visually located.
 
-References the book does not have are skipped rather than reported: a guide covers the whole canon and a project covers a few books. Two references landing in one verse bridge become one occurrence, because they are one card. Everything after that — grouping by verse sid, the per-book headers, the outline with counts, Edit → satellite, Open in editor — is `group()` and `ExcerptList`, unchanged.
+References the book does not have are skipped rather than reported: a guide covers the whole canon and a project covers a few books. So is one `resolve` calls ambiguous (malformed text with two anchors for the verse), rather than guessing which card it belongs on. Two references landing on one anchor — both verses of a bridge — become one occurrence, because they are one card.
+
+Everything after that — grouping by verse sid, the per-book headers, the outline with counts, Edit → satellite, Open in editor — is `group()` and `ExcerptList`, unchanged.
 
 ## What the source card shows
 
@@ -92,6 +95,7 @@ The Library pass runs only over what the guide did not answer, and short-circuit
 - **`done` counts are always 0.** Marking an occurrence settled needs a store that survives a reload, and nothing in Sefer keeps one yet. The term list says so in a muted line rather than showing progress that is not being recorded.
 - **The guide is a fixture.** A key-terms guide is properly a Library resource under the `glossary` role, or a remote guides API. The port exists so that swapping the layer is the only change.
 - **No replace, no in-editor highlight.** The same non-goals the previous application had. An edit happens through a card's Edit button, in the satellite, where the editing phases judge it like any other keystroke.
+- **A bridge card loses its guide reading.** The source card is looked up by the excerpt's `sid`, so a target card at `JUD 1:1-2` finds nothing under the guide's `JUD 1:2` and says "No source text bound". It did the same before the cards were labelled by Address; the fix is to look up by the occurrence's Address, not the card's.
 
 ## Match formatting moved
 
@@ -110,10 +114,10 @@ describes it.
 | `src/routes/_app/project/$slug/find.tsx`  | Find only, plus the `?mode=stet` redirect.                            |
 | `src/core/stet/stet.ts`                   | Envelope schema, `Term`/`TermOccurrence`, the `StetCatalog` port.     |
 | `src/core/stet/fixture.ts`                | The committed guides as a layer, one dynamic chunk per locale.        |
-| `src/core/excerpts/excerpts.ts`           | `refOccurrences` — the reference → project mapping.                   |
+| `src/core/excerpts/excerpts.ts`           | `refOccurrences` — Address → project mapping, through `resolve`.      |
 | `src/app/ui/excerpts/feed.ts`             | `createExcerptFeed`, shared by Find and Key terms.                    |
 | `src/app/ui/excerpts/StetView.tsx`        | The two-column view and the source/target pair.                       |
-| `src/app/workflows/stet.ts`               | `keyTermGuides`, `keyTerms`, `occurrenceRef`, `sourceReadings`.       |
+| `src/app/workflows/stet.ts`               | `keyTermGuides`, `keyTerms`, `sourceReadings`.                        |
 | `src/app/workflows/references.ts`         | Library bindings → texts → `ProjectAnalysis.attachReferences`.        |
 | `src/core/galley/overlay.ts`              | The overlay wire: addresses, skeletons, the report.                   |
 | `fixtures/stet/`                          | The four committed guide files and their provenance.                  |

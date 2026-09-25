@@ -236,17 +236,18 @@ A folder of books, with discovery (including RC `manifest.yaml` and Burrito meta
 
 What a typed place means and where a place is in one text. `src/core/location`: `address.ts` (the Address union: book, intro, chapters, verses; U23003 spelling), `names.ts` (the name catalogue: canon, project names, abbreviations, intro words), `citation.ts` (the Citation parser, navigation and prose grammars; the one Sefer file with a test), `locate.ts` (`resolve` and `addressAt` over a `TocView`), `canon.ts`. `src/core/galley/location.ts` adapts the engine's dish TOC into a `TocView`. `src/app/location.ts` is the per-project piece the shell exposes as `shell.location`: the catalogue memo, the held books, and the display rule (the project's own book name, English otherwise). It has no architecture chapter yet; the plan is `planning/01-discussing/editor-primitives-consistency.md`.
 
-On it today: the palette, the sidebar's filter (`shell.location.books` for every book the words could mean, `read` for the chapter) and its chapter tiles (the engine's TOC from the held analysis, never a scan of the text), `showReference` (found / missing with its chapter / ambiguous, each reported), the inventory's site labels, the Key terms source card (Library's text through the engine), and the sync plan's chapter rows.
+On it today: the palette, the sidebar's filter (`shell.location.books` for every book the words could mean, `read` for the chapter) and its chapter tiles (the engine's TOC from the held analysis, never a scan of the text), `showReference` (found / missing with its chapter / ambiguous, each reported), the inventory's site labels, the Key terms source card (Library's text through the engine), the sync plan's chapter rows, Search's hit Addresses (`addressAt` over an analysis the caller supplies), and Excerpts: each card's Address and label, and Key terms' and Find-in-references' mapping onto the project (`refOccurrences`, through `resolve`).
 
 ### Constraints and known bugs
 
-- Two address types still: `Address`, and `Ref` in book.ts, which Search and Excerpts/STET use until the second pass moves them. Library no longer takes one: `lookup` is gone, and STET reads the book and resolves the verse itself.
-- The rule: Sefer never scans for `\c`/`\v` with a regex; the engine's TOC answers. One place still does on its own: search's `buildRefTable`/`refFrom`, the second pass.
+- One address type: `Address`. `Ref` is gone from book.ts; `TermOccurrence`, `Hit`, `ReferenceHit` and `Excerpt` carry an Address. (`citation.ts` has a private token type of the same name; it is the parser's, not an address.)
+- The rule: Sefer never scans for `\c`/`\v` (or `\h`, `\toc2`) with a regex; the engine answers. No place in Sefer outside the editor does any more. A book's own name is `bookHeading` (`core/galley/analysis.ts`), off the engine's tokens; the display rule (`shell.location.label`, `bookName`) is project name, then that heading when the caller holds a parse, then English.
 - Kitchen v0.1.7 carries segments, verse-list members and each designator's label span in the TOC. Sefer's seam (`tocViewOf`) reads a verse label's end (the STET source card skips the number with it) and the members, kept only on a verse whose hull does not say what it covers — a list or a segment — so a plain book carries no array per verse. `resolve` honours them: `3a` finds `\v 3a` exactly and is `coarser` only when the text has plain `\v 3`; `3` over `\v 3a` … `\v 3b` finds both; `2` is missing from `\v 1,3,5`. Known and deliberate: `addressAt` inside `\v 1,3,5` says `1-5`, the hull — an Address is one range, and the hull leaves out nothing the caret is in; `resolve` is what refuses the holes. The label's START is not read yet; nothing needs it.
 
 ### Ideas / future
 
-- The second pass: Search (one-off `parseText` TOCs for resources, the last published TOC while typing), Excerpts (its `\h` and `\toc2` regexes too); then `Ref` goes. Library and the sync plan are done.
+- The second pass is done (Search, Excerpts/STET, Library, the sync plan). Search took the lean, not the stale-TOC variant: a book being typed in gets hits without an Address rather than labels from the last published TOC, which costs nothing visible because cards label themselves from their own analysis.
+- The palette and sidebar still name a book without its heading (they hold no parse); a project with no metadata names and a non-English `\h` reads English there and native on Find cards.
 - A prose scanner for comments, when comments exist. The grammar is already in `citation.ts`.
 
 ---
@@ -352,7 +353,8 @@ Project find over the reading text, in JavaScript over the engine's mask map (`f
 ### Constraints and known bugs
 
 - A hit that spans markup cannot be replaced (`Stale`).
-- `Hit.reading` is declared and never set; delete it next time search is touched.
+- A hit's `address` is there only when the caller's analysis describes exactly the scanned text (`Options.analysisOf`); otherwise it is absent. There is no fallback scanner. A bound reference is parsed once per exact text by `/find`, on its first hit.
+- `Hit.projected` is declared and never set; delete it next time search is touched.
 
 ### Ideas / future
 
@@ -367,6 +369,7 @@ The multibuffer shared by Find and Key terms: occurrences grouped into verse exc
 ### Constraints and known bugs
 
 - Grouping is O(all findings) up front, about 80 ms. Parked in `planning/04-parked/one-liners.md`; the loading behaviour itself may change.
+- An excerpt's Address and `sid` come from Location (`addressAt`), and its label from the caller's display rule; a bridge reads "Jude 1:1-2", a segment "Jude 1:4a". `refOccurrences` resolves Addresses with `resolve` and skips missing and ambiguous ones.
 
 ### Ideas / future
 
@@ -616,6 +619,8 @@ Tailwind over semantic tokens, a primitives inventory, and corvu only inside `pr
 
 - The guide is a fixture.
 - The "done" count is always 0, because nothing stores it across a reload.
+- A guide occurrence is an Address, mapped onto the project by Location's `resolve`: a verse inside a bridge is found, a hole in a verse list is missing, and missing verses are skipped.
+- A bridge target card shows "No source text bound": the source reading is looked up by the card's `sid` (`JUD 1:1-2`), not the guide's (`JUD 1:2`). Not new.
 
 ### Ideas / future
 
