@@ -165,7 +165,7 @@ function Terms() {
   const feed = createExcerptFeed({ hits, name: "terms", analyze });
 
   // The source side, resolved once per term rather than once per card: a card
-  // renders synchronously and a Library lookup is an Effect.
+  // renders synchronously and reading a resource is an Effect.
   createEffect(
     () => selected()?.id,
     () => {

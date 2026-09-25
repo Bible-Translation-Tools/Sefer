@@ -11,8 +11,11 @@
 
 import { Effect, Option } from "effect";
 
-import type { Ref } from "#core/book/book";
-import { ROLES, type LibraryService, type Passage, type Resource } from "#core/resources/library";
+import type { BookId, Ref } from "#core/book/book";
+import { Galley, tocViewOf, type Analysis } from "#core/galley";
+import { versesAddress } from "#core/location/address";
+import { resolve } from "#core/location/locate";
+import { ROLES, type LibraryService, type Resource } from "#core/resources/library";
 import { StetCatalogFixtureLive } from "#core/stet/fixture";
 import {
   StetCatalog,
@@ -80,16 +83,21 @@ export interface SourceReading {
  * The source reading for every occurrence that has one, keyed by sid.
  *
  * Resolved once per term rather than per card because the card renders
- * synchronously and a lookup is an Effect. The guide answers for almost
- * everything — its whole point is that the readings are baked — so the Library
- * pass runs only over what is left, and short-circuits entirely when no source
- * resource is bound, which is the dev fixture's case.
+ * synchronously and reading a resource is an Effect. The guide answers for
+ * almost everything — its whole point is that the readings are baked — so the
+ * Library pass runs only over what is left, and short-circuits entirely when
+ * no source resource is bound, which is the dev fixture's case.
+ *
+ * The Library pass reads each book once and asks the ENGINE where the verse
+ * is: Sefer never reads a designator itself. What the card shows is the raw
+ * USFM of the verse after its number, trimmed — character markers and all,
+ * as it always has.
  */
 export const sourceReadings = (
   library: LibraryService,
   projectId: string,
   occurrences: readonly TermOccurrence[],
-): Effect.Effect<ReadonlyMap<string, SourceReading>> =>
+): Effect.Effect<ReadonlyMap<string, SourceReading>, never, Galley> =>
   Effect.gen(function* () {
     const out = new Map<string, SourceReading>();
     const missing: TermOccurrence[] = [];
@@ -108,15 +116,41 @@ export const sourceReadings = (
 
     const resource = yield* sourceResource(library, projectId);
     if (Option.isNone(resource)) return out;
+    const galley = yield* Galley;
+    // One parse per book, not per occurrence: a term's occurrences cluster.
+    const books = new Map<BookId, Analysis | undefined>();
     for (const occurrence of missing) {
-      const passage = yield* library
-        .lookup(resource.value.id, occurrenceRef(occurrence))
-        .pipe(Effect.orElseSucceed(() => Option.none<Passage>()));
-      if (Option.isSome(passage))
-        out.set(occurrence.sid, { text: passage.value.text, origin: "library" });
+      if (!books.has(occurrence.book)) {
+        const text = yield* library
+          .readBook(resource.value.id, occurrence.book)
+          .pipe(Effect.orElseSucceed(() => Option.none<string>()));
+        books.set(
+          occurrence.book,
+          Option.isSome(text) ? galley.analyze(text.value, "stet.source") : undefined,
+        );
+      }
+      const analysis = books.get(occurrence.book);
+      const text = analysis === undefined ? undefined : verseReading(analysis, occurrence);
+      if (text !== undefined) out.set(occurrence.sid, { text, origin: "library" });
     }
     return out;
   });
+
+/**
+ * One verse of a resource's book, as the card shows it: from the end of its
+ * designator to the end of its structural extent, trimmed. `undefined` when
+ * the book has no such verse, or has it twice — malformed text is not a
+ * reason to pick one.
+ */
+const verseReading = (analysis: Analysis, occurrence: TermOccurrence): string | undefined => {
+  const toc = tocViewOf(analysis);
+  const point = { chapter: occurrence.chapter, verse: occurrence.verse };
+  const found = resolve(toc, versesAddress(occurrence.book, point));
+  if (found.kind !== "found") return undefined;
+  // A found verse starts at its anchor, so the anchor is the one at `from`.
+  const anchor = toc.verses.find((verse) => verse.at === found.from);
+  return anchor === undefined ? undefined : analysis.text.slice(anchor.labelEnd, found.to).trim();
+};
 
 /**
  * The resource this project reads as its SOURCE, or `none` when nothing is
