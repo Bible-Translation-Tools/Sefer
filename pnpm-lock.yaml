@@ -161,8 +161,8 @@ importers:
         specifier: ^2.12.0
         version: 2.12.0
       '@wycliffeassociates/scripture-kitchen':
-        specifier: github:WycliffeAssociates/scripture-kitchen#v0.1.6
-        version: https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/9696a9df12688c6b0c5d13fc696ce5b7cf8013ca
+        specifier: github:WycliffeAssociates/scripture-kitchen#v0.1.7
+        version: https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/b4681c035abfaa87e19426cddd6c4f8cd69b76a1
       buffer:
         specifier: 6.0.3
         version: 6.0.3
@@ -2199,9 +2199,9 @@ packages:
   '@vitest/utils@5.0.1':
     resolution: {integrity: sha512-E9+yEA+jsfaoxZcUHFzEqUrQcoNh2EwrPT5efIqkUPUwD5Ua2Li9BRWaYeRwvzvdLgTSVrre8oKNeyrfg7KkdQ==}
 
-  '@wycliffeassociates/scripture-kitchen@https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/9696a9df12688c6b0c5d13fc696ce5b7cf8013ca':
-    resolution: {gitHosted: true, integrity: sha512-BBDeUBr86FqXTcprmoMEKxpD6FjHPzkvoSj5Xxj2QS8Ea+00IJ2T8UxI02nDzq6FozOqw9/cwqvPi73gAIN4pg==, tarball: https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/9696a9df12688c6b0c5d13fc696ce5b7cf8013ca}
-    version: 0.1.6
+  '@wycliffeassociates/scripture-kitchen@https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/b4681c035abfaa87e19426cddd6c4f8cd69b76a1':
+    resolution: {gitHosted: true, integrity: sha512-XaTHFqDr9uam1gpCvdGKAM7NnVEEDzkSCseXjCTmXVcPG1WP69WGBeXFo2rCjzJo6h2GvWE8CXZMfbvudZ0ZUw==, tarball: https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/b4681c035abfaa87e19426cddd6c4f8cd69b76a1}
+    version: 0.1.7
 
   abort-controller@3.0.0:
     resolution: {integrity: sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==}
@@ -5244,7 +5244,7 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.1
 
-  '@wycliffeassociates/scripture-kitchen@https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/9696a9df12688c6b0c5d13fc696ce5b7cf8013ca': {}
+  '@wycliffeassociates/scripture-kitchen@https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/b4681c035abfaa87e19426cddd6c4f8cd69b76a1': {}
 
   abort-controller@3.0.0:
     dependencies:
