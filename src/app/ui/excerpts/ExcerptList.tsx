@@ -112,6 +112,8 @@ export interface ExcerptDecor {
 const LINE = 26;
 const CHARS_PER_LINE = 92;
 const CARD_CHROME = 42;
+/** The space above each card (`pt-3`), which is part of its row. */
+const ROW_GAP = 12;
 /** The context control's row, when the feed offers widening. */
 const FOOTER = 36;
 
@@ -133,7 +135,7 @@ const PROJECTED = 0.82;
 const estimate = (excerpt: Excerpt): number => {
   const source = excerpt.span.to - excerpt.span.from;
   const lines = Math.max(1, Math.ceil((source * PROJECTED) / CHARS_PER_LINE));
-  return CARD_CHROME + lines * LINE + 16;
+  return ROW_GAP + CARD_CHROME + lines * LINE + 16;
 };
 
 export function ExcerptList(props: ExcerptListProps) {
@@ -268,36 +270,41 @@ export function ExcerptList(props: ExcerptListProps) {
           </header>
         )}
         row={(excerpt, key) => (
-          <ExcerptCard
-            excerpt={excerpt()}
-            editing={editing() === key}
-            onEdit={() => setEditing(key)}
-            onDone={done}
-            onOpen={() =>
-              props.onOpen(
-                excerpt().bookId,
-                excerpt().hits[0]?.from ?? excerpt().span.from,
-                excerpt().hits[0]?.to,
-              )
-            }
-            seat={() => props.seat(excerpt().bookId)}
-            analyze={props.analyze}
-            paired={props.pairedOf?.(excerpt())}
-            onExpand={
-              props.onExpand === undefined
-                ? undefined
-                : // The EXTENT is keyed by sid, which is the verse — a section
-                  // key in front of it is about where the card is on screen,
-                  // and an expansion is about the verse wherever it is shown.
-                  (step) => props.onExpand?.(excerpt().sid, step)
-            }
-            active={props.focus === key ? props.activeHit : undefined}
-            mode={props.mode ?? "regular"}
-            label={props.decor?.label?.(excerpt(), key)}
-            notes={props.decor?.notes?.(excerpt(), key)}
-            actions={props.decor?.actions?.(excerpt(), key)}
-            markTone={props.decor?.markTone}
-          />
+          // The gap is padding INSIDE the measured row, not a margin between
+          // rows: the virtualizer positions rows by their measured height, and
+          // a margin would be outside what it measures.
+          <div class="pt-3">
+            <ExcerptCard
+              excerpt={excerpt()}
+              editing={editing() === key}
+              onEdit={() => setEditing(key)}
+              onDone={done}
+              onOpen={() =>
+                props.onOpen(
+                  excerpt().bookId,
+                  excerpt().hits[0]?.from ?? excerpt().span.from,
+                  excerpt().hits[0]?.to,
+                )
+              }
+              seat={() => props.seat(excerpt().bookId)}
+              analyze={props.analyze}
+              paired={props.pairedOf?.(excerpt())}
+              onExpand={
+                props.onExpand === undefined
+                  ? undefined
+                  : // The EXTENT is keyed by sid, which is the verse — a section
+                    // key in front of it is about where the card is on screen,
+                    // and an expansion is about the verse wherever it is shown.
+                    (step) => props.onExpand?.(excerpt().sid, step)
+              }
+              active={props.focus === key ? props.activeHit : undefined}
+              mode={props.mode ?? "regular"}
+              label={props.decor?.label?.(excerpt(), key)}
+              notes={props.decor?.notes?.(excerpt(), key)}
+              actions={props.decor?.actions?.(excerpt(), key)}
+              markTone={props.decor?.markTone}
+            />
+          </div>
         )}
       />
     </div>
