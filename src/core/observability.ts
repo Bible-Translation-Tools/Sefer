@@ -126,7 +126,12 @@ export type OperationName =
    * A dev playground experiment's own gestures (`src/dev/playground`): the
    * prototype is measured by the same ring the screen it may become would be.
    */
-  | `playground.${string}`;
+  | `playground.${string}`
+  /**
+   * The history prototype (`src/dev/playground/history`): its index, its
+   * walks and its comparisons, measured by the ring the screen would use.
+   */
+  | `history.${string}`;
 
 /**
  * One record in the ring.

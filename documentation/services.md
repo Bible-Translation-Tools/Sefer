@@ -471,9 +471,11 @@ The flow needs one top-to-bottom pass before more is added.
 - The commit author is hard-coded as `Sefer <sefer@localhost>` in three places.
 - There is no repository lifecycle (absent / busy / unhealthy / closing), and mutations are not serialised against each other.
 - Web `previousVersions` walks the whole log with no `depth`.
+- Web `log(repo, path)` (so `previousVersions` and `show` too) fails on real histories: isomorphic-git 1.42 parses every tree it walks and throws `UnsafeFilepathError` on an entry name git itself accepts, and one throw loses the whole result. `WycliffeAssociates/en_ulb`'s 2018 root tree has `00-About_the_ULB\ULB-Intro.md`, so Genesis history fails outright (native git: 156 changes). The `/playground/history-diff` spike walks raw tree objects instead (`src/dev/playground/bookHistory.ts`, matches native `git log -- 01-GEN.usfm` exactly); the port itself is unchanged.
 
 ### Ideas / future
 
+- **Measured direction (2026-09-25, `planning/01-discussing/local-review-and-history-plan.md` in the main checkout):** a pack-cached filesystem view under the Web port (37 s → ~2 s for a full walk; isomorphic-git's per-object probing is the cost), then a durable book-change index built at clone and extended at fetch (en_ulb: 4 s, 0.7 MB gzipped; any book's history in ~3 ms), two-point comparison from root trees (42 ms), and common-ancestor / changed-on-both-sides facts for incoming work.
 - **Next up:** book time travel: a read-only historical pane with previous/next, and a bounded log. Then chapter filtering via Location, with a per-(blob, chapter) hash cache and an LRU. Plan: `planning/01-discussing/next-git-considerations.md`, which folds into the diff and sync model.
 - Detect Git changes made outside Sefer; add "back to latest" and an unhealthy-repository recovery flow.
 

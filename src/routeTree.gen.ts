@@ -15,6 +15,7 @@ import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppProjectsRouteImport } from './routes/_app/projects'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppDevFixtureRouteImport } from './routes/_app/dev/fixture'
+import { Route as AppPlaygroundHistoryDiffRouteImport } from './routes/_app/playground/history-diff'
 import { Route as AppProjectSlugRouteImport } from './routes/_app/project/$slug'
 import { Route as AppStartCreateRouteImport } from './routes/_app/start/create'
 import { Route as AppProjectSlugIndexRouteImport } from './routes/_app/project/$slug/index'
@@ -57,6 +58,12 @@ const AppDevFixtureRoute = AppDevFixtureRouteImport.update({
   path: '/dev/fixture',
   getParentRoute: () => AppRoute,
 } as any)
+const AppPlaygroundHistoryDiffRoute =
+  AppPlaygroundHistoryDiffRouteImport.update({
+    id: '/playground/history-diff',
+    path: '/playground/history-diff',
+    getParentRoute: () => AppRoute,
+  } as any)
 const AppProjectSlugRoute = AppProjectSlugRouteImport.update({
   id: '/project/$slug',
   path: '/project/$slug',
@@ -125,6 +132,7 @@ export interface FileRoutesByFullPath {
   '/projects': typeof AppProjectsRoute
   '/settings': typeof AppSettingsRoute
   '/dev/fixture': typeof AppDevFixtureRoute
+  '/playground/history-diff': typeof AppPlaygroundHistoryDiffRoute
   '/project/$slug': typeof AppProjectSlugRouteWithChildren
   '/start/create': typeof AppStartCreateRoute
   '/project/$slug/cloud': typeof AppProjectSlugCloudRoute
@@ -144,6 +152,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AppSettingsRoute
   '/': typeof AppIndexRoute
   '/dev/fixture': typeof AppDevFixtureRoute
+  '/playground/history-diff': typeof AppPlaygroundHistoryDiffRoute
   '/start/create': typeof AppStartCreateRoute
   '/project/$slug/cloud': typeof AppProjectSlugCloudRoute
   '/project/$slug/find': typeof AppProjectSlugFindRoute
@@ -164,6 +173,7 @@ export interface FileRoutesById {
   '/_app/settings': typeof AppSettingsRoute
   '/_app/': typeof AppIndexRoute
   '/_app/dev/fixture': typeof AppDevFixtureRoute
+  '/_app/playground/history-diff': typeof AppPlaygroundHistoryDiffRoute
   '/_app/project/$slug': typeof AppProjectSlugRouteWithChildren
   '/_app/start/create': typeof AppStartCreateRoute
   '/_app/project/$slug/cloud': typeof AppProjectSlugCloudRoute
@@ -185,6 +195,7 @@ export interface FileRouteTypes {
     | '/projects'
     | '/settings'
     | '/dev/fixture'
+    | '/playground/history-diff'
     | '/project/$slug'
     | '/start/create'
     | '/project/$slug/cloud'
@@ -204,6 +215,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/'
     | '/dev/fixture'
+    | '/playground/history-diff'
     | '/start/create'
     | '/project/$slug/cloud'
     | '/project/$slug/find'
@@ -223,6 +235,7 @@ export interface FileRouteTypes {
     | '/_app/settings'
     | '/_app/'
     | '/_app/dev/fixture'
+    | '/_app/playground/history-diff'
     | '/_app/project/$slug'
     | '/_app/start/create'
     | '/_app/project/$slug/cloud'
@@ -284,6 +297,13 @@ declare module '@tanstack/solid-router' {
       path: '/dev/fixture'
       fullPath: '/dev/fixture'
       preLoaderRoute: typeof AppDevFixtureRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/playground/history-diff': {
+      id: '/_app/playground/history-diff'
+      path: '/playground/history-diff'
+      fullPath: '/playground/history-diff'
+      preLoaderRoute: typeof AppPlaygroundHistoryDiffRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/project/$slug': {
@@ -408,6 +428,7 @@ interface AppRouteChildren {
   AppSettingsRoute: typeof AppSettingsRoute
   AppIndexRoute: typeof AppIndexRoute
   AppDevFixtureRoute: typeof AppDevFixtureRoute
+  AppPlaygroundHistoryDiffRoute: typeof AppPlaygroundHistoryDiffRoute
   AppProjectSlugRoute: typeof AppProjectSlugRouteWithChildren
   AppStartCreateRoute: typeof AppStartCreateRoute
 }
@@ -417,6 +438,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSettingsRoute: AppSettingsRoute,
   AppIndexRoute: AppIndexRoute,
   AppDevFixtureRoute: AppDevFixtureRoute,
+  AppPlaygroundHistoryDiffRoute: AppPlaygroundHistoryDiffRoute,
   AppProjectSlugRoute: AppProjectSlugRouteWithChildren,
   AppStartCreateRoute: AppStartCreateRoute,
 }
