@@ -63,6 +63,28 @@ Terms (glossary): **Target** is the heart-language text being written or revised
 
 **One departure, on purpose:** the resting card is a read-only _reader_, not a read-only satellite. A satellite needs a seated Book, and seating means an editor-backed Book with a backup journal, per book shown. A list of forty results across twelve books would seat twelve books to be looked at. The reader is the same projection over the same parse, and Edit seats exactly one. To the eye they are one surface.
 
+## Measured (2026-09-26)
+
+en_ulb, "the" over the whole Bible (86,556 hits), Chrome through the CDP rig, dev server, the project's background analysis settled first. Interactions are Event Timing durations (what INP reads), the worst of each group; two runs per renderer agreed within a frame.
+
+| Operation                                  | Editor views (default) |    Stamped HTML |
+| ------------------------------------------ | ---------------------: | --------------: |
+| Search to first cards                      |             335–336 ms |      274–288 ms |
+| of which the search itself (one long task) |             190–204 ms |          182 ms |
+| Next match                                 |                  16 ms |           16 ms |
+| Context step                               |                  32 ms |           32 ms |
+| Chapter on / off                           |             32 / 40 ms |      32 / 32 ms |
+| Double-click to edit                       |             104–112 ms |       96–104 ms |
+| Keystroke while editing                    |                  32 ms |           32 ms |
+| Done                                       |                  72 ms |           72 ms |
+| Outline jump to a far book                 |                  96 ms |           96 ms |
+| Scope: This book                           |                 104 ms |          104 ms |
+| Scope: Whole project                       |             152–176 ms |      144–152 ms |
+| Scroll, per frame p50 / p95 / max          |        17 / 19 / 20 ms | 17 / 19 / 21 ms |
+| JS heap after the run                      |             151–181 MB |          214 MB |
+
+What is over 50 ms is not the card renderer: the search is one long task (~190 ms, stream it per book), double-click is seating the book (plus an 86k-hit regroup the seat swap causes and a whole-text compare per following card), Done re-runs the search and regroups, and a scope change is a new search. The stamp's win is first cards (~50–60 ms) and a little on scope changes; it holds more heap (the press's per-book states).
+
 ## Next
 
 - **Verse-markup lock:** a policy toggle in the matrix later (all markup immutable inside a small window), not a card feature.
