@@ -121,7 +121,12 @@ export type OperationName =
    * the name so a trace list reads as what the person did, and `command.` is a
    * prefix a filter can take whole.
    */
-  | `command.${string}`;
+  | `command.${string}`
+  /**
+   * A dev playground experiment's own gestures (`src/dev/playground`): the
+   * prototype is measured by the same ring the screen it may become would be.
+   */
+  | `playground.${string}`;
 
 /**
  * One record in the ring.

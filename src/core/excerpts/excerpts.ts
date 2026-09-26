@@ -541,7 +541,7 @@ class LazyExcerpt implements Excerpt {
  * the last thing a reader can read. A backward walk from the end: a handful
  * of tokens, not a pass over the book.
  */
-const readingEnd = (analysis: Analysis, from: number, to: number): number => {
+export const readingEnd = (analysis: Analysis, from: number, to: number): number => {
   const tokens = analysis.dish.tokens;
   if (to <= from || to > analysis.docLen) return to;
   // The token containing `to - 1`: tokens partition the text.

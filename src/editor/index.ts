@@ -43,6 +43,12 @@ export {
 } from "./recipes/satellite";
 export { mountReader, type ReaderMount } from "./recipes/reader";
 export { mountStamp, type StampMount } from "./recipes/stamp";
+export {
+  mountDiffView,
+  type DiffPaint,
+  type DiffViewMount,
+  type DiffWidget,
+} from "./recipes/diffView";
 
 // Doing something to the book without moving the page (core/scroll.ts).
 export { withoutScrolling } from "./core/scroll";
