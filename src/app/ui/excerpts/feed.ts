@@ -24,6 +24,7 @@ import {
   group,
   type BookExcerpts,
   type BookText,
+  type Excerpt,
   type Extent,
   type Occurrence,
   type OutlineRow,
@@ -42,6 +43,8 @@ export interface ExcerptFeed {
   readonly outline: Accessor<readonly OutlineRow[]>;
   /** One memoized parse for the whole screen; handed to every open satellite. */
   readonly analyze: (text: string) => Analysis;
+  /** What a card shows: the excerpt as grouped, widened by the reader's steps. */
+  readonly shownOf: (excerpt: Excerpt) => Excerpt;
   /** One context step for one card: a TOC unit up or down, or the whole chapter. */
   readonly expand: (sid: string, step: ContextStep) => void;
   readonly seat: (bookId: BookId) => Promise<EditorBook | undefined>;
@@ -173,36 +176,44 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
   // the project on every keystroke.
   const analyze = options.analyze ?? shell.services.galley.memoize();
 
-  /** The hits grouped over the books that hold them, as `readBooks` reads them. */
+  /**
+   * The hits grouped over the books that hold them, as `readBooks` reads them.
+   *
+   * NOT a function of the extents. Widening one card used to rebuild this for
+   * every hit — on "the" over en_ulb that is 86,556 cards regrouped, and the
+   * list's 86,556 rows re-estimated, for one click on one card. A card's own
+   * extent is applied where the card is drawn (`shownOf`), to the twenty the
+   * list is showing.
+   */
   const model = createMemo(
     () => {
       const project = shell.project();
-      if (project === undefined) return { groups: [], outline: [] };
+      if (project === undefined)
+        return { groups: [], outline: [], books: new Map<BookId, BookText>() };
       const hits = options.hits();
       const books = readBooks(shell, new Set(hits.map((hit) => hit.bookId)), analyze);
-      const built = group(books, hits, initial);
-      if (extents().size === 0) return built;
-      // Only the cards the reader actually expanded are rebuilt; the rest are
-      // the objects `group` already made, so a list of hundreds costs one
-      // extra projection per expansion and nothing per untouched card.
-      const texts = new Map(books.map((book) => [book.bookId, book] as const));
       return {
-        outline: built.outline,
-        groups: built.groups.map((entry) => {
-          const text = texts.get(entry.bookId);
-          if (text === undefined) return entry;
-          return {
-            ...entry,
-            excerpts: entry.excerpts.map((excerpt) => {
-              const want = extents().get(excerpt.sid);
-              return want === undefined ? excerpt : extend(text, excerpt, want);
-            }),
-          };
-        }),
+        ...group(books, hits, initial),
+        books: new Map(books.map((book) => [book.bookId, book] as const)),
       };
     },
     { name: "excerptModel" },
   );
+
+  /** The last widening computed per card, so a redraw of an unchanged card costs a lookup. */
+  const widened = new WeakMap<Excerpt, { readonly extent: Extent; readonly shown: Excerpt }>();
+
+  const shownOf = (excerpt: Excerpt): Excerpt => {
+    const want = extents().get(excerpt.sid);
+    if (want === undefined) return excerpt;
+    const held = widened.get(excerpt);
+    if (held?.extent === want) return held.shown;
+    const book = model().books.get(excerpt.bookId);
+    if (book === undefined) return excerpt;
+    const shown = extend(book, excerpt, want);
+    widened.set(excerpt, { extent: want, shown });
+    return shown;
+  };
 
   /**
    * The book the open excerpt editor is editing.
@@ -298,6 +309,7 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
   return {
     groups: () => model().groups,
     outline: () => model().outline,
+    shownOf,
     analyze,
     expand,
     seat,

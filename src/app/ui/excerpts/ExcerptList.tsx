@@ -34,6 +34,11 @@ export interface ExcerptListProps {
   readonly onOpen: (bookId: BookId, from: number, to?: number) => void;
   /** Plain → Instantiated, for the one excerpt being edited. */
   readonly seat: (bookId: BookId) => Promise<EditorBook | undefined>;
+  /**
+   * What a card shows: the grouped excerpt, widened by that card's own
+   * context steps. Per card, so a step redraws one card, not the list.
+   */
+  readonly shownOf?: (excerpt: Excerpt) => Excerpt;
   /** A book's seat while one is open, for every card of it to follow. */
   readonly seatedOf?: (bookId: BookId) => Funnel | undefined;
   readonly analyze: (text: string) => Analysis;
@@ -277,7 +282,7 @@ export function ExcerptList(props: ExcerptListProps) {
           // a margin would be outside what it measures.
           <div class="pt-3">
             <ExcerptCard
-              excerpt={excerpt()}
+              excerpt={props.shownOf?.(excerpt()) ?? excerpt()}
               editing={editing() === key}
               onEdit={() => setEditing(key)}
               onDone={done}

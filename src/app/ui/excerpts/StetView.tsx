@@ -56,6 +56,7 @@ export interface StetViewProps {
   readonly onOpen: (bookId: BookId, from: number, to?: number) => void;
   readonly seat: (bookId: BookId) => Promise<EditorBook | undefined>;
   readonly seatedOf?: (bookId: BookId) => Funnel | undefined;
+  readonly shownOf?: (excerpt: Excerpt) => Excerpt;
   readonly analyze: (text: string) => Analysis;
   readonly onEdited?: () => void;
   readonly onExpand?: (sid: string, step: ContextStep) => void;
@@ -247,6 +248,7 @@ export function StetView(props: StetViewProps) {
         onOpen={props.onOpen}
         seat={props.seat}
         seatedOf={props.seatedOf}
+        shownOf={props.shownOf}
         analyze={props.analyze}
         onEdited={props.onEdited}
         mode={props.mode ?? "regular"}

@@ -236,6 +236,7 @@ function Terms() {
           onOpen={feed.openInEditor}
           seat={feed.seat}
           seatedOf={feed.seatedOf}
+          shownOf={feed.shownOf}
           analyze={feed.analyze}
           onEdited={feed.edited}
           onExpand={feed.expand}

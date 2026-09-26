@@ -715,6 +715,7 @@ export function FindingsPanel() {
               onOpen={openCard}
               seat={feed.excerpts.seat}
               seatedOf={feed.excerpts.seatedOf}
+              shownOf={feed.excerpts.shownOf}
               analyze={feed.excerpts.analyze}
               onEdited={feed.excerpts.edited}
               onExpand={feed.excerpts.expand}
