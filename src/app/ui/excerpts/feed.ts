@@ -30,7 +30,7 @@ import {
 } from "#core/excerpts/excerpts";
 import { bookHeading, describesExactly, type Analysis } from "#core/galley";
 import type { ObservabilityService } from "#core/observability";
-import type { EditorBook } from "#editor/index";
+import type { EditorBook, Funnel } from "#editor/index";
 
 import { t } from "../../i18n";
 import { useShell, type Shell } from "../../ProjectContext";
@@ -45,6 +45,11 @@ export interface ExcerptFeed {
   /** One context step for one card: a TOC unit up or down, or the whole chapter. */
   readonly expand: (sid: string, step: ContextStep) => void;
   readonly seat: (bookId: BookId) => Promise<EditorBook | undefined>;
+  /**
+   * A book's seat, while one is open — the book in the editor, or the one a
+   * card is editing — for every card of that book to follow as it changes.
+   */
+  readonly seatedOf: (bookId: BookId) => Funnel | undefined;
   /**
    * `into` is the operation the jump belongs to, when the caller opened one
    * (the Findings panel's `findings.navigate`); without it the span is a root
@@ -208,6 +213,23 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
    * through `ExcerptList.onEdited`, which carries a card key and not a book.
    */
   let seated: BookId | undefined;
+  /**
+   * Moves whenever this screen seats a book. `services.seated` is a plain map,
+   * so without this a card mounted before the seat would never learn of it —
+   * and the one card that asked to edit would be the only one to change.
+   */
+  const [seats, setSeats] = createSignal(0, { name: "excerptSeats" });
+  const funnels = new WeakMap<EditorBook, Funnel>();
+  const seatedOf = (bookId: BookId): Funnel | undefined => {
+    seats();
+    const book = shell.services.seated(bookId);
+    if (book === undefined) return undefined;
+    const held = funnels.get(book);
+    if (held !== undefined) return held;
+    const made = book.funnel();
+    funnels.set(book, made);
+    return made;
+  };
 
   const seat = async (bookId: BookId): Promise<EditorBook | undefined> => {
     const project = shell.project();
@@ -218,6 +240,7 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
       return undefined;
     }
     seated = bookId;
+    setSeats((held) => held + 1);
     return shell.services.seated(bookId);
   };
 
@@ -278,6 +301,7 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
     analyze,
     expand,
     seat,
+    seatedOf,
     openInEditor,
     edited,
   };

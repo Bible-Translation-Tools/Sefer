@@ -372,7 +372,9 @@ The multibuffer shared by Find, Key terms and Findings: occurrences grouped by T
 
 - Grouping is O(all findings) up front, about 80 ms. Parked in `planning/04-parked/one-liners.md`; the loading behaviour itself may change.
 - An excerpt's Address and `sid` come from Location (`unitAddress`), and its label from the caller's display rule; a bridge reads "Jude 1:1-2", a segment "Jude 1:4a". `refOccurrences` resolves Addresses with `resolve` and skips missing and ambiguous ones.
-- Every visible card is a CodeMirror view over its whole book (clipped). Measured only on the 3 KB fixture so far; a big book at twenty cards, and scrolling, is not measured yet.
+- Every visible card is a CodeMirror view over its whole book (clipped). On en_ulb Psalms ("Yahweh", 691 hits), with the project's background analysis settled: first cards 187 ms (the whole Bible 279 ms), scrolling p50 17 ms and p95 25 ms a frame, about 2 ms of mounting per card. That needs the reader's three measures: a seeded render range (else a card decorates its whole book), views POOLED and handed a new state (the `EditorView` constructor forces a page style recalc through `document.fonts.ready`), and no-op updates skipped.
+- Cards follow the seat: while a book is seated (open in the editor, or a card editing it) every card of it applies the seat's published changes. Lazily: a card whose clip a change touches repaints on the next frame, the rest catch up 400 ms after typing pauses, so twenty followers cost a keystroke nothing measurable (they cost ~30 ms applied eagerly).
+- Opening a big project and searching at once is slow (13 s first results measured) because the project's background analysis holds the thread; the cards are not the cost there.
 - The context setting is read when a list opens; changing it does not move an open list.
 
 ### Ideas / future

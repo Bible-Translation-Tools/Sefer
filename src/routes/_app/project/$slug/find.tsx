@@ -851,6 +851,7 @@ function Find() {
           outline={feed.outline()}
           onOpen={feed.openInEditor}
           seat={feed.seat}
+          seatedOf={feed.seatedOf}
           analyze={feed.analyze}
           onEdited={feed.edited}
           onExpand={feed.expand}

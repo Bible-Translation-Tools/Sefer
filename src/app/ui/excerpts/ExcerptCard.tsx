@@ -52,7 +52,7 @@ import {
   type Occurrence,
 } from "#core/excerpts/excerpts";
 import type { Analysis } from "#core/galley";
-import type { EditorBook, MarkedRange } from "#editor/index";
+import type { EditorBook, Funnel, MarkedRange } from "#editor/index";
 
 import { t } from "../../i18n";
 import { Button, Card, cx, IconButton } from "../primitives";
@@ -100,6 +100,8 @@ export interface ExcerptCardProps {
    */
   readonly seat: () => Promise<EditorBook | undefined>;
   readonly analyze: (text: string) => Analysis;
+  /** This book's seat while one is open, which the read-only view follows live. */
+  readonly follow?: Funnel | undefined;
   readonly paired?: Paired | undefined;
   /** One context step. Absent means the feed does not offer widening. */
   readonly onExpand?: (step: ContextStep) => void;
@@ -311,6 +313,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
           mode={mode()}
           marks={marks()}
           label={`excerpt:${props.excerpt.sid}`}
+          follow={props.follow}
           onEdit={edit}
         />
       }

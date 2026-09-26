@@ -28,6 +28,7 @@ export { type ChapterRow } from "./core/docStructure";
 
 // The editor-backed Book and the port other surfaces submit through.
 export { editorBook, type EditorBook } from "./book";
+export { type Funnel } from "./funnel";
 
 // Satellites, and the read-only reader an excerpt shows until it is edited.
 export {

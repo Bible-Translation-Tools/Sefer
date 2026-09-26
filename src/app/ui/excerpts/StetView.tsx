@@ -31,7 +31,7 @@ import type { BookId } from "#core/book/book";
 import type { BookExcerpts, Excerpt, OutlineRow } from "#core/excerpts/excerpts";
 import type { Analysis } from "#core/galley";
 import type { Guide, Term } from "#core/stet/stet";
-import type { EditorBook } from "#editor/index";
+import type { EditorBook, Funnel } from "#editor/index";
 
 import { t } from "../../i18n";
 import type { SourceReading } from "../../workflows/stet";
@@ -55,6 +55,7 @@ export interface StetViewProps {
   readonly outline: readonly OutlineRow[];
   readonly onOpen: (bookId: BookId, from: number, to?: number) => void;
   readonly seat: (bookId: BookId) => Promise<EditorBook | undefined>;
+  readonly seatedOf?: (bookId: BookId) => Funnel | undefined;
   readonly analyze: (text: string) => Analysis;
   readonly onEdited?: () => void;
   readonly onExpand?: (sid: string, step: ContextStep) => void;
@@ -245,6 +246,7 @@ export function StetView(props: StetViewProps) {
         onExpand={props.onExpand}
         onOpen={props.onOpen}
         seat={props.seat}
+        seatedOf={props.seatedOf}
         analyze={props.analyze}
         onEdited={props.onEdited}
         mode={props.mode ?? "regular"}

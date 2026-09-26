@@ -13,7 +13,7 @@
 import { createEffect, createSignal, untrack } from "solid-js";
 
 import type { Analysis } from "#core/galley";
-import { mountReader, type MarkedRange, type ReaderMount } from "#editor/index";
+import { mountReader, type Funnel, type MarkedRange, type ReaderMount } from "#editor/index";
 
 import "#editor/editor.css";
 
@@ -24,6 +24,11 @@ export interface ExcerptReaderProps {
   readonly marks: readonly MarkedRange[];
   /** Names the view in the timing ring. */
   readonly label: string;
+  /**
+   * The seated Book of this text, when one is open: the view follows its
+   * published changes, so it shows another card's typing as it happens.
+   */
+  readonly follow?: Funnel | undefined;
   /** Double-click: edit, with the caret at this source offset. Absent: read-only for good. */
   readonly onEdit?: (at: number | undefined) => void;
 }
@@ -76,6 +81,16 @@ export function ExcerptReader(props: ExcerptReaderProps) {
   createEffect(
     () => ({ mount: live(), marks: props.marks }),
     ({ mount, marks }) => mount?.remark(marks),
+  );
+  createEffect(
+    () => ({ mount: live(), host: props.follow }),
+    ({ mount, host }) => {
+      if (mount === undefined || host === undefined) return;
+      mount.follow(host);
+      return () => {
+        mount.follow(undefined);
+      };
+    },
   );
 
   return (

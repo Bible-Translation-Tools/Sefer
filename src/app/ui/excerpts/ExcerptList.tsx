@@ -18,7 +18,7 @@ import { For, createMemo, createSignal, onCleanup } from "solid-js";
 import type { BookId } from "#core/book/book";
 import type { BookExcerpts, Excerpt, OutlineRow } from "#core/excerpts/excerpts";
 import type { Analysis } from "#core/galley";
-import type { EditorBook } from "#editor/index";
+import type { EditorBook, Funnel } from "#editor/index";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
@@ -34,6 +34,8 @@ export interface ExcerptListProps {
   readonly onOpen: (bookId: BookId, from: number, to?: number) => void;
   /** Plain → Instantiated, for the one excerpt being edited. */
   readonly seat: (bookId: BookId) => Promise<EditorBook | undefined>;
+  /** A book's seat while one is open, for every card of it to follow. */
+  readonly seatedOf?: (bookId: BookId) => Funnel | undefined;
   readonly analyze: (text: string) => Analysis;
   /** Told when an edit session ended, so the feed can re-read the books. */
   readonly onEdited?: () => void;
@@ -288,6 +290,7 @@ export function ExcerptList(props: ExcerptListProps) {
               }
               seat={() => props.seat(excerpt().bookId)}
               analyze={props.analyze}
+              follow={props.seatedOf?.(excerpt().bookId)}
               paired={props.pairedOf?.(excerpt())}
               onExpand={
                 props.onExpand === undefined
