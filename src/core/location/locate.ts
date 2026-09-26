@@ -102,14 +102,56 @@ export interface Span {
  * The places a TOC divides its text into, in source order, each tiling the
  * chapter it is in: the introduction, a chapter's head (its `\c` up to its
  * first verse), and each verse.
+ *
+ * These are the TOC's STEPS: an excerpt that shows "one more above" shows the
+ * previous unit, whatever kind it is, and Location names each one with
+ * `unitAddress`. Exported so that every surface stepping through a text walks
+ * the same list the Address arithmetic is done over.
  */
-interface Unit extends Span {
+export interface TocUnit extends Span {
+  /** The chapter row this unit tiles — a POSITION in `TocView.chapters`. */
   readonly row: number;
   /** For a verse; `undefined` for the introduction and a chapter's head. */
   readonly verse?: TocVerse;
 }
 
-const units = (toc: TocView): readonly Unit[] => {
+type Unit = TocUnit;
+
+/**
+ * One list per TOC, built on first ask: an excerpt list steps through the
+ * same book's units for every card, and `addressAt` walks them per call.
+ */
+const unitLists = new WeakMap<TocView, readonly Unit[]>();
+
+/** Every unit of `toc`, in source order. Tiling: each ends where the next begins. */
+export const tocUnits = (toc: TocView): readonly TocUnit[] => {
+  const held = unitLists.get(toc);
+  if (held !== undefined) return held;
+  const built = buildUnits(toc);
+  unitLists.set(toc, built);
+  return built;
+};
+
+/** Index of the unit containing `offset` — the last one starting at or before it — or -1. */
+export const unitIndexAt = (all: readonly TocUnit[], offset: number): number => {
+  let lo = 0;
+  let hi = all.length - 1;
+  let found = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const unit = all[mid];
+    if (unit === undefined) break;
+    if (unit.from <= offset) {
+      found = mid;
+      lo = mid + 1;
+    } else hi = mid - 1;
+  }
+  return found;
+};
+
+const units = tocUnits;
+
+const buildUnits = (toc: TocView): readonly Unit[] => {
   const out: Unit[] = [];
   let next = 0;
   toc.chapters.forEach((chapter, row) => {
@@ -167,7 +209,7 @@ const endPoint = (chapter: number, member: TocMember): Point =>
  * label finds this same unit; what the hull over-states, `resolve` refuses —
  * LUK 1:2 alone is missing from `\v 1,3,5`.
  */
-const unitAddress = (book: BookId, toc: TocView, unit: Unit): Address => {
+export const unitAddress = (book: BookId, toc: TocView, unit: TocUnit): Address => {
   const chapter = toc.chapters[unit.row];
   if (unit.row === 0) return introAddress(book);
   if (chapter === undefined || chapter.number === 0) return bookAddress(book);
@@ -207,18 +249,7 @@ export const addressAt = (book: BookId, toc: TocView, offset: number): Address |
   const all = units(toc);
   // The last unit starting at or before the offset. Units tile, so that is
   // the one containing it (or ending at it, for the final caret).
-  let lo = 0;
-  let hi = all.length - 1;
-  let found: Unit | undefined;
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    const unit = all[mid];
-    if (unit === undefined) break;
-    if (unit.from <= offset) {
-      found = unit;
-      lo = mid + 1;
-    } else hi = mid - 1;
-  }
+  const found = all[unitIndexAt(all, offset)];
   return found === undefined ? undefined : unitAddress(book, toc, found);
 };
 

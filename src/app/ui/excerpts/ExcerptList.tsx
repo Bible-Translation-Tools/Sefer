@@ -2,11 +2,10 @@
  * The multibuffer: an outline column beside a windowed list of excerpts under
  * sticky per-book headers.
  *
- * One component, two feeds. Find supplies groups built from search hits and
- * STET supplies groups built from a term's occurrences plus a `renderPair`
- * for the source verse; everything below this line is the same
- * (`documentation/architecture/design-direction.md`, "Key terms (STET) reuses
- * the Find excerpt pattern").
+ * One component, three feeds. Find supplies groups built from search hits,
+ * STET from a term's occurrences plus a `pairedOf` for the paired resource,
+ * Findings from diagnostics; everything below this line is the same
+ * (`planning/00-ideas/excerpt-compound-component.md`).
  *
  * The windowing itself lives in `primitives/VirtualList`, because `/findings`
  * needs the same thing. What is here is what is about EXCERPTS: the outline column, the height estimate for a card
@@ -23,7 +22,7 @@ import type { EditorBook } from "#editor/index";
 
 import { t } from "../../i18n";
 import { cx, VirtualList, type VirtualSection } from "../primitives";
-import { ExcerptCard, type MarkTone } from "./ExcerptCard";
+import { ExcerptCard, type ContextStep, type MarkTone, type Paired } from "./ExcerptCard";
 
 export interface ExcerptListProps {
   readonly groups: readonly BookExcerpts[];
@@ -52,15 +51,14 @@ export interface ExcerptListProps {
    * same text the editor shows, so USFM mode means markers here too.
    */
   readonly mode?: "regular" | "usfm";
-  /** STET's source verse for one excerpt. */
-  readonly renderPair?: (excerpt: Excerpt) => JSX.Element;
+  /** The paired resource read beside one excerpt, when the screen has one. */
+  readonly pairedOf?: ((excerpt: Excerpt) => Paired | undefined) | undefined;
   /**
-   * Show one more verse above (-1) or below (+1) of one excerpt. The EXTENT
-   * is the feed's state, keyed by sid, not this component's: a card scrolls
-   * out of the window and its row is unmounted, and an expansion the reader
-   * asked for must survive that.
+   * One context step for one excerpt. The EXTENT is the feed's state, keyed by
+   * sid, not this component's: a card scrolls out of the window and its row is
+   * unmounted, and a widening the reader asked for must survive that.
    */
-  readonly onExpand?: (sid: string, direction: -1 | 1) => void;
+  readonly onExpand?: (sid: string, step: ContextStep) => void;
   readonly empty?: JSX.Element;
   /**
    * What a screen adds to the shared multibuffer. Absent — Find, STET — is the
@@ -99,6 +97,8 @@ export interface ExcerptDecor {
   readonly label?: (excerpt: Excerpt, key: string) => JSX.Element;
   /** A block between a card's header and its reading. */
   readonly notes?: (excerpt: Excerpt, key: string) => JSX.Element;
+  /** A card's footer actions — review progress, a quick filter. */
+  readonly actions?: (excerpt: Excerpt, key: string) => JSX.Element;
   /** What a highlight means — see `ExcerptCardProps.markTone`. */
   readonly markTone?: (source: number | undefined, excerpt: Excerpt) => MarkTone | undefined;
   /** Pixels this card carries beyond the verse, before it has been measured. */
@@ -109,15 +109,17 @@ export interface ExcerptDecor {
 const LINE = 26;
 const CHARS_PER_LINE = 92;
 const CARD_CHROME = 42;
+/** The context control's row, when the feed offers widening. */
+const FOOTER = 36;
 
 /**
  * Markup, as a fraction of the source it is cut from.
  *
  * The estimate is made from `span`, the excerpt's SOURCE length, and not from
- * its projected text — reading `excerpt.text` projects the document, and this
- * runs for every row in the feed rather than for the twenty on screen (see
- * `Excerpt`'s note). Source is longer than what a card shows, by whatever the
- * markers take up, so it is discounted.
+ * what the card will render — that is only known once its view has laid out,
+ * and this runs for every row in the feed rather than for the twenty on screen
+ * (see `Excerpt`'s note). Source is longer than what a card shows, by whatever
+ * the markers take up, so it is discounted.
  *
  * A rough number on purpose: this is the height used until the row is measured,
  * and `VirtualList` refuses to compensate a FIRST measurement precisely so an
@@ -154,7 +156,10 @@ export function ExcerptList(props: ExcerptListProps) {
           return {
             key: staticKey,
             item: excerpt,
-            estimate: estimate(excerpt) + (props.decor?.extraHeight?.(excerpt, staticKey) ?? 0),
+            estimate:
+              estimate(excerpt) +
+              (props.onExpand === undefined ? 0 : FOOTER) +
+              (props.decor?.extraHeight?.(excerpt, staticKey) ?? 0),
           };
         }),
       })),
@@ -252,19 +257,20 @@ export function ExcerptList(props: ExcerptListProps) {
             }
             seat={() => props.seat(excerpt().bookId)}
             analyze={props.analyze}
-            pair={props.renderPair?.(excerpt())}
+            paired={props.pairedOf?.(excerpt())}
             onExpand={
               props.onExpand === undefined
                 ? undefined
                 : // The EXTENT is keyed by sid, which is the verse — a section
                   // key in front of it is about where the card is on screen,
                   // and an expansion is about the verse wherever it is shown.
-                  (direction) => props.onExpand?.(excerpt().sid, direction)
+                  (step) => props.onExpand?.(excerpt().sid, step)
             }
             active={props.focus === key ? props.activeHit : undefined}
             mode={props.mode ?? "regular"}
             label={props.decor?.label?.(excerpt(), key)}
             notes={props.decor?.notes?.(excerpt(), key)}
+            actions={props.decor?.actions?.(excerpt(), key)}
             markTone={props.decor?.markTone}
           />
         )}

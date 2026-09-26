@@ -29,14 +29,18 @@ export { type ChapterRow } from "./core/docStructure";
 // The editor-backed Book and the port other surfaces submit through.
 export { editorBook, type EditorBook } from "./book";
 
-// Satellites.
+// Satellites, and the read-only reader an excerpt shows until it is edited.
 export {
   clippedToScope,
   markedRanges,
   reclip,
+  remark,
   mountSatellite,
+  wholeLines,
+  type MarkedRange,
   type Satellite,
 } from "./recipes/satellite";
+export { mountReader, type ReaderMount } from "./recipes/reader";
 
 // Doing something to the book without moving the page (core/scroll.ts).
 export { withoutScrolling } from "./core/scroll";

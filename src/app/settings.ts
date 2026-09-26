@@ -256,6 +256,12 @@ export interface ShellKeys {
   /** Enables the destructive multi-match action in Find. */
   readonly enableReplaceAll: SettingKey<boolean>;
   /**
+   * How much of the book a result card shows around its match before the
+   * reader widens it, in TOC steps either side — a verse, a chapter's head.
+   * Read when a list opens; a card's own context control moves from there.
+   */
+  readonly excerptContext: SettingKey<number>;
+  /**
    * The content host, overriding the one this build was released with — the
    * Gitea itself, never a proxy (the Web's transport is not a preference).
    *
@@ -378,6 +384,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
       true,
     ),
     enableReplaceAll: settings.register("find.enableReplaceAll", Schema.Boolean, false),
+    excerptContext: settings.register("excerpts.context", Schema.Number, 1),
     contentHost: settings.register("network.contentHost", Schema.String, ""),
     catalogueUrl: settings.register("network.catalogueUrl", Schema.String, ""),
     webTransport: settings.register("network.webTransport", Schema.String, ""),
@@ -456,6 +463,17 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
       max: EDITOR_FONT_SIZE_RANGE.max,
       step: 1,
       unit: "px",
+    },
+    {
+      key: keys.excerptContext,
+      label: "Context around a result",
+      description:
+        "How many verses or headings a result card in Find, Key terms and Findings shows either side of its match.",
+      kind: "number",
+      group: "editor",
+      min: 0,
+      max: 10,
+      step: 1,
     },
     {
       key: keys.startInUsfmMode,

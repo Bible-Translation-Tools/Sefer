@@ -3,7 +3,7 @@
  * reaches into the files.
  */
 
-export { type MarkTone } from "./ExcerptCard";
+export { type MarkTone, type Paired } from "./ExcerptCard";
 export { ExcerptList, type ExcerptDecor } from "./ExcerptList";
 export { createExcerptFeed, readBooks, type ExcerptFeed } from "./feed";
 export { StetView } from "./StetView";

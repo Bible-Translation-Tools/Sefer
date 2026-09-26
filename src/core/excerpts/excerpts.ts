@@ -1,33 +1,32 @@
 /**
  * Excerpts: the multibuffer's model.
  *
- * One screen shows a list of small, addressable passages — the verse a match
- * fell in, with a verse either side for context — and lets the reader open any
- * one of them for editing. Find produces that list from search hits; STET
- * produces it from a term's occurrences. Both feeds arrive here as the same
- * three fields (`bookId`, `from`, `to`), so the component above is written
- * once (`documentation/architecture/design-direction.md`, "Key terms (STET)
- * reuses the Find excerpt pattern").
+ * One screen shows a list of small, addressable pieces of a book — the place a
+ * match fell in, with its neighbours for context — each one a clipped view of
+ * the book that the reader can open for editing. Find produces that list from
+ * search hits, STET from a term's occurrences, Findings from diagnostics. All
+ * of them arrive here as the same three fields (`bookId`, `from`, `to`), so the
+ * card above is written once (`planning/00-ideas/excerpt-compound-component.md`).
  *
- * Two decisions this module exists to hold:
+ * Three decisions this module exists to hold:
  *
- *  - **Grouping is by verse, not by hit.** Galley's table of contents names
- *    every verse anchor; a hit belongs to the last anchor at or before it, and
- *    every hit sharing an anchor shares one excerpt. Three matches in Philemon
- *    1:4 are one card with three highlights, never three cards.
- *  - **The read-only body is the PROJECTION, not the source.** A card shows
- *    what the reader sees: the text tokens of the span, with markers,
- *    designators and note bodies dropped — the same rule the engine's find
- *    runs over (`core/search/search.ts`, "TWO HAYSTACKS, ONE `Hit`"). `project`
- *    keeps a source offset per output character, so a hit found in source
- *    coordinates highlights exactly the right characters of the projection
- *    without either side guessing at the other's arithmetic.
+ *  - **Grouping is by TOC unit, not by hit.** Location's units tile the book —
+ *    the introduction, each chapter's head, each verse — and a hit belongs to
+ *    the unit it falls in. Three matches in Philemon 1:4 are one card with
+ *    three highlights, never three cards.
+ *  - **Context is TOC steps.** "One more above" is the unit above, whatever
+ *    it is; "the chapter" is the own unit's chapter row. The shown range is
+ *    a pair of Addresses, which is what a paired resource is locked to.
+ *  - **A card is a view of the book, not a copy.** An excerpt names a range
+ *    of one parse; the card renders the editor's own projection over it. What
+ *    is computed here in projected coordinates (`marks`) is for the questions
+ *    only the reading can answer — does this hit have a character a reader
+ *    can see at all.
  *
- * Everything here is pure and synchronous: text in, values out. The span it
- * computes is in SOURCE coordinates, which is what a satellite clips to, and
- * the marks it computes are in projected coordinates, which is what the
- * read-only body renders. Nothing here holds a Book, a stamp or a lifetime —
- * freshness is the search hit's stamp to judge (`search.planReplace`).
+ * Everything here is pure and synchronous: text in, values out. Spans are in
+ * SOURCE coordinates, which is what a view clips to. Nothing here holds a
+ * Book, a stamp or a lifetime — freshness is the search hit's stamp to judge
+ * (`search.planReplace`).
  */
 
 import type { BookId } from "../book/book";
@@ -43,7 +42,14 @@ import {
   type Analysis,
 } from "../galley";
 import { addressCode, bookAddress, type Address } from "../location/address";
-import { addressAt, resolve } from "../location/locate";
+import {
+  resolve,
+  tocUnits,
+  unitAddress,
+  unitIndexAt,
+  type TocUnit,
+  type TocView,
+} from "../location/locate";
 
 /** One match inside an excerpt, in the book's SOURCE coordinates. */
 export interface Occurrence {
@@ -67,41 +73,33 @@ export interface Mark {
    * one. It is the mark's identity, not its position: one occurrence can
    * produce several marks (a match that crossed markup), and the card needs to
    * know which of the highlights on screen belong to the match the find bar's
-   * cursor is on. Absent on `Excerpt.focus`, which is a verse, not a match.
+   * cursor is on.
    */
   readonly source?: number;
 }
 
 /**
- * One verse's worth of the multibuffer.
+ * One card's worth of a book, and what to paint on it.
  *
- * `span` is the verse plus one either side, clamped to the chapter, in source
- * coordinates — what an editable satellite is clipped to. `text` is the
- * projection of exactly that span and `marks` index into it. `hits` stays in
- * source coordinates because that is what Replace and "open in editor" need.
- */
-/**
- * One card's worth of text, and what to paint on it.
+ * The card is a VIEW of the book, not a copy of it: it renders the editor's
+ * own projection over `analysis`, clipped to `span`, so what a reader sees in
+ * a list is what the editor shows at that place. This value says which part
+ * of which parse, where the matches are, and how far the reader has widened
+ * it — and nothing about how it is drawn.
  *
- * FIVE of these fields are LAZY — `text`, `source`, `marks`, `verses` and
- * `focus`, everything that needs the projection. They are getters over a
- * memoised `project()` call, and reading any of them is what pays for it.
- *
- * Why: a feed builds one excerpt per hit, and `/findings` on a 66-book project
- * has twenty thousand of them — but the list is virtualised and shows about
- * twenty. Projecting every excerpt to render twenty cost ~1.15s of walking the
- * engine's reader on every arrival. Everything a feed
- * needs in order to GROUP, COUNT, ORDER and ESTIMATE is arithmetic over the
- * verse table, so all of that stays eager and the reader's twenty cards pay
- * for themselves.
+ * Two fields are LAZY — `source` and `marks`, the ones that slice or project
+ * the text. `/findings` on a 66-book project builds twenty thousand of these
+ * and shows about twenty; everything a feed needs in order to GROUP, COUNT,
+ * ORDER and ESTIMATE is arithmetic over the TOC, so all of that stays eager
+ * and the twenty cards on screen pay for themselves.
  *
  * The laziness is invisible and must stay so: every field reads like a value,
  * an excerpt is still a plain immutable object, and the memo is a closure with
  * no signal in it — `src/core` owns no reactivity (`pnpm boundaries`).
  *
  * One rule for callers: do NOT object-spread an excerpt. `{ ...excerpt }`
- * evaluates every getter and projects the document, which is exactly the cost
- * this shape exists to avoid. Spreading the ARRAY is fine.
+ * evaluates every getter, which is exactly the cost this shape exists to
+ * avoid. Spreading the ARRAY is fine.
  */
 export interface Excerpt {
   readonly bookId: BookId;
@@ -112,49 +110,43 @@ export interface Excerpt {
    */
   readonly sid: string;
   /**
-   * The place the excerpt's own verse IS, from Location over the book's TOC:
+   * The place the excerpt's own unit IS, from Location over the book's TOC:
    * a bridge is its whole range, the matter before the first chapter is
    * `intro`, a chapter's head is that chapter.
    */
   readonly address: Address;
   /** `Philemon 1:4`, for the card header — `BookText.label` of `address`. */
   readonly label: string;
-  readonly span: { readonly from: number; readonly to: number };
-  readonly hits: readonly Occurrence[];
-  readonly text: string;
   /**
-   * The raw USFM of exactly `span` — markers and all.
-   *
-   * The projection is what a card shows in regular mode; this is what it shows
-   * in USFM mode, where the reader has asked to see the markup. It is a slice,
-   * so a hit's source offsets index into it directly once `span.from` is
-   * subtracted, and no coordinate mapping is needed at all. Held rather than
-   * re-sliced by the card because the card has no book: the feed hands it a
-   * value, and the value must be complete.
+   * What is shown, in SOURCE coordinates: the own unit and its context, less
+   * any tail with nothing to read in it (a bare `\p` before the next verse).
+   */
+  readonly span: { readonly from: number; readonly to: number };
+  /** The own unit alone, in source coordinates. The rest of `span` is context. */
+  readonly own: { readonly from: number; readonly to: number };
+  readonly hits: readonly Occurrence[];
+  /**
+   * The whole book's parse, which `span` and every offset here index into.
+   * The card mounts its view over this text and borrows this parse, so a list
+   * of forty cards over one book analyses it once.
+   */
+  readonly analysis: Analysis;
+  /**
+   * The raw USFM of exactly `span` — markers and all. A slice, so a hit's
+   * source offsets index into it once `span.from` is subtracted.
    */
   readonly source: string;
+  /**
+   * The hits as ranges of the PROJECTED text of `span`. Empty for a hit the
+   * reading has no character of — one inside a marker, which Findings says
+   * in words rather than highlighting the wrong thing.
+   */
   readonly marks: readonly Mark[];
-  /**
-   * The verse numbers to paint over `text`, in order — `Projection.verses` for
-   * exactly this span. The card draws them superscript, as the editor does in
-   * regular mode, so three verses of context read as three verses.
-   */
-  readonly verses: readonly VerseMark[];
-  /**
-   * Where the excerpt's OWN verse sits in `text` — the rest is the verse
-   * either side. A card dims the context with it, so the reader can see which
-   * sentence the reference names without a second reference per line.
-   */
-  readonly focus: Mark | null;
-  /**
-   * Is there another verse of this chapter above and below what is shown?
-   *
-   * The card's expand chevrons are drawn from this, so "can I see more" is
-   * answered by the model that knows the chapter's extent rather than by a
-   * component counting anchors. Both are `false` on an excerpt with no verse
-   * anchor (front matter), which is not a place expanding by verse means
-   * anything.
-   */
+  /** How far the reader has widened it; what `extend` was last asked for. */
+  readonly extent: Extent;
+  /** The first and last places shown — what a paired resource is locked to. */
+  readonly shown: { readonly first: Address; readonly last: Address };
+  /** Is there another TOC unit above and below what is shown? */
   readonly more: { readonly up: boolean; readonly down: boolean };
 }
 
@@ -205,26 +197,6 @@ export interface BookText {
 interface Projection {
   readonly text: string;
   readonly src: Int32Array;
-  /**
-   * Where each verse of the span begins in `text`, in order.
-   *
-   * The projection drops `\v 4` with every other marker — it is markup, not
-   * the reading — and a page that then shows three verses as one paragraph has
-   * lost the only thing a reader navigates by. So the ANCHORS come back as
-   * their own segment kind: no character of `text` is one, nothing indexes
-   * into `text` differently because of them, and a caller that ignores the
-   * field gets exactly the string it got before. The editor paints the same
-   * marks the same way in regular mode (`.usfm-verse` in `editor.css`).
-   */
-  readonly verses: readonly VerseMark[];
-}
-
-/** One verse number to paint, and the offset in the projected text it sits at. */
-export interface VerseMark {
-  /** An offset into `Projection.text` — the first character of the verse. */
-  readonly at: number;
-  /** `4`, or `4-5` for a bridge. What the page shows, not a number. */
-  readonly label: string;
 }
 
 const isSpace = (code: number): boolean => code === 32 || code === 9 || code === 10 || code === 13;
@@ -241,18 +213,6 @@ const isSpace = (code: number): boolean => code === 32 || code === 9 || code ===
 const project = (analysis: Analysis, from: number, to: number): Projection => {
   const out: number[] = [];
   const map: number[] = [];
-  // The verse anchors inside the span, in order, consumed as the output passes
-  // them. From the TOC, which is the only thing that knows where a verse
-  // begins — the `\v` token itself is about to be dropped.
-  const anchors = analysis.dish.toc
-    .verses()
-    .filter((row) => row.at >= from && row.at < to)
-    .map((row) => ({
-      at: row.at,
-      label: row.first === row.last ? `${row.first}` : `${row.first}-${row.last}`,
-    }));
-  const verses: VerseMark[] = [];
-  let anchor = 0;
   // Note bodies are dropped whole: `\f + \ft …\f*` is apparatus, not the
   // reading, and the engine's own find agrees (galley/src/find.md).
   let note = 0;
@@ -290,12 +250,6 @@ const project = (analysis: Analysis, from: number, to: number): Projection => {
         map.push(gapAt);
         gapAt = -1;
       }
-      // After the separating space and before the character: the space belongs
-      // to the verse that ended, the number to the verse that starts here.
-      while (anchor < anchors.length && anchors[anchor]!.at <= at) {
-        verses.push({ at: out.length, label: anchors[anchor]!.label });
-        anchor += 1;
-      }
       out.push(code);
       map.push(at);
     }
@@ -308,7 +262,7 @@ const project = (analysis: Analysis, from: number, to: number): Projection => {
   for (let at = 0; at < out.length; at += 4096)
     text += String.fromCharCode(...out.slice(at, at + 4096));
 
-  return { text, src: Int32Array.from(map), verses };
+  return { text, src: Int32Array.from(map) };
 };
 
 /**
@@ -436,69 +390,53 @@ export const quote = (
 };
 
 // ---------------------------------------------------------------------------
-// Verses
+// Units: the TOC's steps
 // ---------------------------------------------------------------------------
 
 /**
- * A verse anchor with the extent it owns: from its own anchor to the next
- * anchor in the same chapter, or to the end of the chapter.
+ * How much of the text around its own unit an excerpt shows, in TOC STEPS.
+ *
+ * A step is one unit of Location's table — a verse, a chapter's head, the
+ * introduction — whatever comes next. Not a verse count and not clamped to
+ * the chapter: "one more above" is the unit above, and the unit above verse 1
+ * is its chapter's head. `chapter` shows the own unit's whole chapter row and
+ * ignores the counts, so turning it off returns to where the reader was.
  */
-interface VerseSpan {
-  readonly chapter: number;
-  readonly first: number;
-  readonly last: number;
-  readonly from: number;
-  readonly to: number;
+export interface Extent {
+  readonly up: number;
+  readonly down: number;
+  readonly chapter?: boolean;
 }
 
-/**
- * Every verse of the book, in order, each tiling forward to the next.
- *
- * Galley's toc gives anchors and chapter extents; the tiling is arithmetic over
- * them, and it is here rather than in the engine because "how much text does
- * this verse own" is a display question — the anchor is the fact.
- */
-const verseSpans = (analysis: Analysis): readonly VerseSpan[] => {
-  const chapters = analysis.dish.toc.chapters();
-  const ends = new Map<number, number>();
-  for (const chapter of chapters) ends.set(chapter.number, chapter.to);
+/** One step either side: what a card shows before the reader asks for more. */
+const DEFAULT_EXTENT: Extent = { up: 1, down: 1 };
 
-  const rows = analysis.dish.toc.verses();
-  const spans: VerseSpan[] = [];
-  for (let index = 0; index < rows.length; index += 1) {
-    // SAFETY: `index` is inside the array this loop is bounded by.
-    const row = rows[index]!;
-    const next = rows[index + 1];
-    const chapterEnd = ends.get(row.chapter) ?? analysis.docLen;
-    const to =
-      next !== undefined && next.chapter === row.chapter
-        ? Math.min(next.at, chapterEnd)
-        : chapterEnd;
-    spans.push({
-      chapter: row.chapter,
-      first: row.first,
-      last: row.last,
-      from: row.at,
-      to: Math.max(row.at, to),
-    });
-  }
-  return spans;
+/** The units of one book, and the TOC they came from, computed once per parse. */
+interface Units {
+  readonly toc: TocView;
+  readonly all: readonly TocUnit[];
+}
+
+const unitsOf = (analysis: Analysis): Units => {
+  const toc = tocViewOf(analysis);
+  return { toc, all: tocUnits(toc) };
 };
 
-/** Index of the last verse anchored at or before `pos`, or -1. */
-const verseAt = (spans: readonly VerseSpan[], pos: number): number => {
-  let low = 0;
-  let high = spans.length - 1;
-  let found = -1;
-  while (low <= high) {
-    const middle = (low + high) >> 1;
-    // SAFETY: `middle` is inside [low, high], which is inside the array.
-    if (spans[middle]!.from <= pos) {
-      found = middle;
-      low = middle + 1;
-    } else high = middle - 1;
+/** `[low, high]` around `own`, by `extent`, inside the book. */
+const window = (units: Units, own: number, extent: Extent): { low: number; high: number } => {
+  const { all } = units;
+  if (extent.chapter === true) {
+    const row = all[own]?.row;
+    let low = own;
+    let high = own;
+    while (low > 0 && all[low - 1]?.row === row) low -= 1;
+    while (high < all.length - 1 && all[high + 1]?.row === row) high += 1;
+    return { low, high };
   }
-  return found;
+  return {
+    low: Math.max(0, own - Math.max(0, extent.up)),
+    high: Math.min(all.length - 1, own + Math.max(0, extent.down)),
+  };
 };
 
 // ---------------------------------------------------------------------------
@@ -509,45 +447,6 @@ const rangesOf = (hit: Occurrence): readonly { from: number; to: number; source:
   hit.pieces !== undefined && hit.pieces.length > 1
     ? hit.pieces.map((piece) => ({ from: piece.from, to: piece.to, source: hit.from }))
     : [{ from: hit.from, to: hit.to, source: hit.from }];
-
-/**
- * The excerpts of one book: one per verse that holds at least one occurrence,
- * in document order, each carrying every occurrence inside it.
- *
- * An occurrence before the book's first verse anchor (front matter, a chapter
- * heading) still gets an excerpt — clamped to its chapter, or to the head of
- * the book — rather than being dropped, because a match the reader can see is
- * a match the list must show.
- */
-/**
- * How many verses either side of its own the excerpt shows. One each is the
- * default: context is what makes a one-line hit readable, and more than that
- * is the reader's choice, made with the card's chevrons.
- */
-export interface Extent {
-  readonly up: number;
-  readonly down: number;
-}
-
-const ONE_EITHER_SIDE: Extent = { up: 1, down: 1 };
-
-/**
- * Walk `steps` verses from `index` without leaving the chapter.
- *
- * Clamped to the CHAPTER, deliberately: a neighbour from the next chapter is
- * not context, it is a different place — the same rule the default extent
- * follows, applied however far the reader expands.
- */
-const walk = (spans: readonly VerseSpan[], index: number, steps: number, by: -1 | 1): number => {
-  const chapter = spans[index]?.chapter;
-  let at = index;
-  for (let taken = 0; taken < steps; taken += 1) {
-    const next = spans[at + by];
-    if (next === undefined || next.chapter !== chapter) break;
-    at += by;
-  }
-  return at;
-};
 
 /**
  * An excerpt whose lazy fields live on a PROTOTYPE, not on the object.
@@ -569,58 +468,38 @@ class LazyExcerpt implements Excerpt {
   readonly sid: string;
   readonly address: Address;
   readonly span: { readonly from: number; readonly to: number };
+  readonly own: { readonly from: number; readonly to: number };
   readonly hits: readonly Occurrence[];
+  readonly extent: Extent;
 
-  /** Set on first read of any projected field; see `body`. */
-  private held:
-    | {
-        readonly projection: Projection;
-        readonly marks: readonly Mark[];
-        readonly focus: Mark | null;
-      }
-    | undefined;
+  /** Set on first read of `marks`. */
+  private held: readonly Mark[] | undefined;
 
   constructor(
     private readonly book: BookText,
-    private readonly spans: readonly VerseSpan[],
-    private readonly verse: VerseSpan | undefined,
+    private readonly units: Units,
     private readonly low: number,
     private readonly high: number,
-    from: number,
-    to: number,
+    own: TocUnit,
     hits: readonly Occurrence[],
     address: Address,
+    extent: Extent,
   ) {
     this.bookId = book.bookId;
     this.sid = addressCode(address);
     this.address = address;
-    this.span = { from, to };
+    const from = units.all[low]?.from ?? own.from;
+    this.span = {
+      from,
+      to: Math.max(own.from, readingEnd(book.analysis, from, units.all[high]?.to ?? own.to)),
+    };
+    this.own = { from: own.from, to: own.to };
     this.hits = hits;
+    this.extent = extent;
   }
 
-  /**
-   * Everything the projection pays for, computed once.
-   *
-   * One bundle rather than three memos: a card that reads any of these reads
-   * all of them, so splitting them would buy nothing and cost per instance.
-   */
-  private body(): {
-    readonly projection: Projection;
-    readonly marks: readonly Mark[];
-    readonly focus: Mark | null;
-  } {
-    if (this.held !== undefined) return this.held;
-    const projection = project(this.book.analysis, this.span.from, this.span.to);
-    const verse = this.verse;
-    this.held = {
-      projection,
-      marks: marksFor(projection, this.hits.flatMap(rangesOf)),
-      focus:
-        verse === undefined
-          ? null
-          : (marksFor(projection, [{ from: verse.from, to: verse.to }])[0] ?? null),
-    };
-    return this.held;
+  get analysis(): Analysis {
+    return this.book.analysis;
   }
 
   /** Built on read rather than stored: a card asks once, and a string is cheaper than a field. */
@@ -628,97 +507,108 @@ class LazyExcerpt implements Excerpt {
     return this.book.label(this.address);
   }
 
-  get text(): string {
-    return this.body().projection.text;
-  }
-
   get source(): string {
     return this.book.analysis.text.slice(this.span.from, this.span.to);
   }
 
   get marks(): readonly Mark[] {
-    return this.body().marks;
+    if (this.held !== undefined) return this.held;
+    const projection = project(this.book.analysis, this.span.from, this.span.to);
+    this.held = marksFor(projection, this.hits.flatMap(rangesOf));
+    return this.held;
   }
 
-  get verses(): readonly VerseMark[] {
-    return this.body().projection.verses;
-  }
-
-  get focus(): Mark | null {
-    return this.body().focus;
-  }
-
-  /** Two walks of the verse table — only a rendered card draws expand chevrons. */
-  get more(): { readonly up: boolean; readonly down: boolean } {
-    if (this.verse === undefined) return { up: false, down: false };
-    return {
-      up: walk(this.spans, this.low, 1, -1) !== this.low,
-      down: walk(this.spans, this.high, 1, 1) !== this.high,
+  get shown(): { readonly first: Address; readonly last: Address } {
+    const name = (index: number): Address => {
+      const unit = this.units.all[index];
+      return unit === undefined ? this.address : unitAddress(this.bookId, this.units.toc, unit);
     };
+    return { first: name(this.low), last: name(this.high) };
+  }
+
+  get more(): { readonly up: boolean; readonly down: boolean } {
+    return { up: this.low > 0, down: this.high < this.units.all.length - 1 };
   }
 }
 
 /**
- * One excerpt: the verse at `index`, `extent` verses either side, and every
- * occurrence it owns.
+ * Where the reading in `[from, to)` ends: the end of its last text token,
+ * or `to` when the range has none.
  *
- * `excerptsOf` and `extend` both come through here, so a card the reader has
- * expanded is built by exactly the same arithmetic as the card they started
- * with — only the extent differs.
+ * A unit's extent is STRUCTURAL — it runs to the next unit's marker — so a
+ * verse followed by `\p` and a new verse line owns that bare `\p`, and a
+ * view clipped to it ends on an empty paragraph. What a card shows stops at
+ * the last thing a reader can read. A backward walk from the end: a handful
+ * of tokens, not a pass over the book.
  */
-const buildExcerpt = (
-  book: BookText,
-  spans: readonly VerseSpan[],
-  chapters: readonly { readonly number: number; readonly from: number; readonly to: number }[],
-  index: number,
-  held: readonly Occurrence[],
-  extent: Extent,
-): Excerpt => {
-  const verse = index < 0 ? undefined : spans[index];
-  const first = held[0]?.from ?? 0;
-  const chapter =
-    verse?.chapter ?? chapters.find((row) => row.from <= first && first < row.to)?.number ?? 0;
-
-  const low = verse === undefined ? index : walk(spans, index, extent.up, -1);
-  const high = verse === undefined ? index : walk(spans, index, extent.down, 1);
-  const from =
-    verse === undefined
-      ? (chapters.find((row) => row.number === chapter)?.from ?? 0)
-      : (spans[low]?.from ?? verse.from);
-  const to =
-    verse === undefined ? (spans[0]?.from ?? book.analysis.docLen) : (spans[high]?.to ?? verse.to);
-
-  // Location names the place, from the same TOC: the verse's anchor for a
-  // verse — a bridge as its range, a segment as itself — and, before the
-  // first anchor, where the first occurrence sits (the introduction, or a
-  // chapter's head).
-  const address =
-    addressAt(book.bookId, tocViewOf(book.analysis), verse?.from ?? first) ??
-    bookAddress(book.bookId);
-
-  return new LazyExcerpt(book, spans, verse, low, high, from, to, held, address);
+const readingEnd = (analysis: Analysis, from: number, to: number): number => {
+  const tokens = analysis.dish.tokens;
+  if (to <= from || to > analysis.docLen) return to;
+  // The token containing `to - 1`: tokens partition the text.
+  let lo = 0;
+  let hi = tokens.length - 1;
+  let last = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (tokens.at(mid).span().from <= to - 1) {
+      last = mid;
+      lo = mid + 1;
+    } else hi = mid - 1;
+  }
+  for (let index = last; index >= 0; index -= 1) {
+    const token = tokens.at(index);
+    const { to: end } = token.span();
+    if (end <= from) break;
+    if ((token.kind() & ~TOKEN_SPELLING_BIT) === TOKEN.TEXT && !token.isBlank())
+      return Math.min(end, to);
+  }
+  return to;
 };
 
 /**
- * The excerpts of one book: one per verse that holds at least one occurrence,
- * in document order, each carrying every occurrence inside it.
+ * One excerpt: the unit at `own`, `extent` steps either side, and every
+ * occurrence it owns.
  *
- * An occurrence before the book's first verse anchor (front matter, a chapter
- * heading) still gets an excerpt — clamped to its chapter, or to the head of
- * the book — rather than being dropped, because a match the reader can see is
- * a match the list must show.
+ * `excerptsOf`, `extend` and `pairedExcerpt` all come through here, so a card
+ * the reader has expanded — and the paired resource beside it — is built by
+ * exactly the same arithmetic as the card they started with.
  */
-const excerptsOf = (book: BookText, hits: readonly Occurrence[]): readonly Excerpt[] => {
-  if (hits.length === 0) return [];
-  const spans = verseSpans(book.analysis);
-  const chapters = book.analysis.dish.toc.chapters();
+const buildExcerpt = (
+  book: BookText,
+  units: Units,
+  own: number,
+  held: readonly Occurrence[],
+  extent: Extent,
+  range: { low: number; high: number } = window(units, own, extent),
+): Excerpt | undefined => {
+  const unit = units.all[own];
+  if (unit === undefined) return undefined;
+  const address = unitAddress(book.bookId, units.toc, unit);
+  return new LazyExcerpt(book, units, range.low, range.high, unit, held, address, extent);
+};
 
-  // Verse index (or -1 for "before the first anchor") → the hits it owns, in
-  // the order they arrived, which is offset order for both feeds.
+/**
+ * The excerpts of one book: one per TOC unit that holds at least one
+ * occurrence, in document order, each carrying every occurrence inside it.
+ *
+ * Units tile the text, so every occurrence has one — a match in front matter
+ * or a chapter's head is a card under that place, never dropped: a match the
+ * reader can see is a match the list must show.
+ */
+const excerptsOf = (
+  book: BookText,
+  hits: readonly Occurrence[],
+  extent: Extent,
+): readonly Excerpt[] => {
+  if (hits.length === 0) return [];
+  const units = unitsOf(book.analysis);
+
+  // Unit index → the hits it owns, in the order they arrived, which is offset
+  // order for both feeds.
   const grouped = new Map<number, Occurrence[]>();
   const order: number[] = [];
   for (const hit of [...hits].sort((a, b) => a.from - b.from)) {
-    const index = verseAt(spans, hit.from);
+    const index = unitIndexAt(units.all, hit.from);
     const held = grouped.get(index);
     if (held === undefined) {
       grouped.set(index, [hit]);
@@ -727,27 +617,72 @@ const excerptsOf = (book: BookText, hits: readonly Occurrence[]): readonly Excer
   }
 
   const out: Excerpt[] = [];
-  for (const index of order)
-    out.push(buildExcerpt(book, spans, chapters, index, grouped.get(index) ?? [], ONE_EITHER_SIDE));
+  for (const index of order) {
+    const built = buildExcerpt(book, units, index, grouped.get(index) ?? [], extent);
+    if (built !== undefined) out.push(built);
+  }
   return out;
 };
 
 /**
- * The same excerpt, showing `extent` verses either side of its own.
+ * The same excerpt, showing `extent` around its own unit.
  *
- * Rebuilt from the verse anchor rather than grown from the span it has, so
- * expanding is idempotent in the extent: the card holds "two up, one down",
- * not a span it has been nudging. An excerpt with no verse anchor comes back
- * unchanged — there is nothing to count in either direction.
+ * Rebuilt from the unit rather than grown from the span it has, so expanding
+ * is idempotent in the extent: the card holds "two up, one down", not a span
+ * it has been nudging.
  */
 export const extend = (book: BookText, excerpt: Excerpt, extent: Extent): Excerpt => {
-  const spans = verseSpans(book.analysis);
-  const index = verseAt(spans, excerpt.hits[0]?.from ?? excerpt.span.from);
-  if (index < 0) return excerpt;
-  return buildExcerpt(book, spans, book.analysis.dish.toc.chapters(), index, excerpt.hits, {
-    up: Math.max(1, extent.up),
-    down: Math.max(1, extent.down),
-  });
+  const units = unitsOf(book.analysis);
+  const own = unitIndexAt(units.all, excerpt.own.from);
+  return buildExcerpt(book, units, own, excerpt.hits, extent) ?? excerpt;
+};
+
+/** The unit a resolved Address starts in, or ends in. */
+const endOf = (units: Units, address: Address, side: "first" | "last"): number | undefined => {
+  const found = resolve(units.toc, address);
+  if (found.kind !== "found") return undefined;
+  // A verse's span is its own; a chapter or the introduction resolves to the
+  // whole row, and the unit that NAMED it is the row's first — its head.
+  const at = side === "last" && address.kind === "verses" ? found.to - 1 : found.from;
+  const index = unitIndexAt(units.all, at);
+  return index < 0 ? undefined : index;
+};
+
+/**
+ * The same place in a PAIRED RESOURCE: `target`'s range, found by Address in
+ * another text.
+ *
+ * The lock is by Address, never by step count: two texts of one book do not
+ * share a table of contents (one has a heading where the other has none), so
+ * "two steps up" in each would drift apart. What they share is the place.
+ *
+ * `hits` are the paired resource's own occurrences, when the match is on this
+ * side (Find over a reference); the own unit is the first hit's, and
+ * otherwise the target's Address found here. `collapsed` shows the own unit
+ * alone. An end of the range this text does not have falls back to the own
+ * unit rather than guessing a neighbour; an own place it does not have is
+ * `undefined`, which the card says in words.
+ */
+export const pairedExcerpt = (
+  book: BookText,
+  target: Excerpt,
+  hits: readonly Occurrence[],
+  collapsed: boolean,
+): Excerpt | undefined => {
+  const units = unitsOf(book.analysis);
+  const first = hits[0];
+  const own =
+    first === undefined
+      ? endOf(units, target.address, "first")
+      : unitIndexAt(units.all, first.from);
+  if (own === undefined || own < 0) return undefined;
+  if (collapsed)
+    return buildExcerpt(book, units, own, hits, target.extent, { low: own, high: own });
+  if (target.extent.chapter === true) return buildExcerpt(book, units, own, hits, target.extent);
+  const shown = target.shown;
+  const low = Math.min(own, endOf(units, shown.first, "first") ?? own);
+  const high = Math.max(own, endOf(units, shown.last, "last") ?? own);
+  return buildExcerpt(book, units, own, hits, target.extent, { low, high });
 };
 
 /**
@@ -762,6 +697,7 @@ export const extend = (book: BookText, excerpt: Excerpt, extent: Extent): Excerp
 export const group = (
   books: readonly BookText[],
   hits: readonly Occurrence[],
+  extent: Extent = DEFAULT_EXTENT,
 ): { readonly groups: readonly BookExcerpts[]; readonly outline: readonly OutlineRow[] } => {
   const byBook = new Map<BookId, Occurrence[]>();
   for (const hit of hits) {
@@ -774,7 +710,7 @@ export const group = (
   for (const book of books) {
     const held = byBook.get(book.bookId);
     if (held === undefined || held.length === 0) continue;
-    const excerpts = excerptsOf(book, held);
+    const excerpts = excerptsOf(book, held, extent);
     if (excerpts.length === 0) continue;
     groups.push({
       bookId: book.bookId,
@@ -806,8 +742,8 @@ export const group = (
  * a reference does not — the guide's highlight offsets index into the guide's
  * OWN frozen reading, not into this project's wording, which may put the term
  * somewhere else in the verse or not use it at all. So the target card is
- * drawn with no highlight and the source card carries the guide's, and the
- * excerpt's `focus` still dims the verses either side.
+ * drawn with no highlight and the paired resource carries the guide's, and
+ * the context either side of the own unit is still dimmed.
  *
  * WHERE each one is, is Location's `resolve` over the book's TOC: `JUD 1:2`
  * is found inside a `\v 1-2` the project happens to have, and missing from a

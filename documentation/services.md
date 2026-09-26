@@ -366,16 +366,19 @@ Project find over the reading text, in JavaScript over the engine's mask map (`f
 
 ### Overview
 
-The multibuffer shared by Find and Key terms: occurrences grouped into verse excerpts, with editable cards. `src/core/excerpts`, `src/app/ui/excerpts`.
+The multibuffer shared by Find, Key terms and Findings: occurrences grouped by TOC unit into cards, each a read-only view of the book in the editor's own projection that becomes a satellite on Edit or double-click. `src/core/excerpts`, `src/app/ui/excerpts`, `src/editor/recipes/reader.ts`. → [search](architecture/search.md#excerpts)
 
 ### Constraints and known bugs
 
 - Grouping is O(all findings) up front, about 80 ms. Parked in `planning/04-parked/one-liners.md`; the loading behaviour itself may change.
-- An excerpt's Address and `sid` come from Location (`addressAt`), and its label from the caller's display rule; a bridge reads "Jude 1:1-2", a segment "Jude 1:4a". `refOccurrences` resolves Addresses with `resolve` and skips missing and ambiguous ones.
+- An excerpt's Address and `sid` come from Location (`unitAddress`), and its label from the caller's display rule; a bridge reads "Jude 1:1-2", a segment "Jude 1:4a". `refOccurrences` resolves Addresses with `resolve` and skips missing and ambiguous ones.
+- Every visible card is a CodeMirror view over its whole book (clipped). Measured only on the 3 KB fixture so far; a big book at twenty cards, and scrolling, is not measured yet.
+- The context setting is read when a list opens; changing it does not move an open list.
 
 ### Ideas / future
 
-- None.
+- The verse-markup lock (all markup immutable inside a small window) as a matrix policy toggle.
+- Diff review by verses as this card, with the actions slot picking a side and an intra-word diff body.
 
 ---
 

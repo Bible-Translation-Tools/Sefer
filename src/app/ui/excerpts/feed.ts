@@ -34,14 +34,16 @@ import type { EditorBook } from "#editor/index";
 
 import { t } from "../../i18n";
 import { useShell, type Shell } from "../../ProjectContext";
+import { shellKeys } from "../../settings";
+import type { ContextStep } from "./ExcerptCard";
 
 export interface ExcerptFeed {
   readonly groups: Accessor<readonly BookExcerpts[]>;
   readonly outline: Accessor<readonly OutlineRow[]>;
   /** One memoized parse for the whole screen; handed to every open satellite. */
   readonly analyze: (text: string) => Analysis;
-  /** Show one more verse above (-1) or below (+1) of one card. */
-  readonly expand: (sid: string, direction: -1 | 1) => void;
+  /** One context step for one card: a TOC unit up or down, or the whole chapter. */
+  readonly expand: (sid: string, step: ContextStep) => void;
   readonly seat: (bookId: BookId) => Promise<EditorBook | undefined>;
   /**
    * `into` is the operation the jump belongs to, when the caller opened one
@@ -127,10 +129,10 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
   const navigate = useNavigate();
 
   /**
-   * How far each card has been expanded, by verse sid.
+   * How far each card has been widened, by sid.
    *
    * Here rather than in the card: a card scrolls out of the list's window and
-   * its row is unmounted, and "show me one more verse" must survive that — as
+   * its row is unmounted, and "show me one more" must survive that — as
    * it must survive the re-read an accepted edit provokes. A sid that is no
    * longer in the results is simply never asked for.
    */
@@ -138,13 +140,24 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
     name: "excerptExtents",
   });
 
-  const expand = (sid: string, direction: -1 | 1): void => {
+  /** What every card starts from: the reader's setting, read when the screen opens. */
+  const context = Math.max(
+    0,
+    shell.services.settings.get(shellKeys(shell.services.settings).excerptContext),
+  );
+  const initial: Extent = { up: context, down: context };
+
+  const expand = (sid: string, step: ContextStep): void => {
     setExtents((held) => {
       const next = new Map(held);
-      const now = next.get(sid) ?? { up: 1, down: 1 };
+      const now = next.get(sid) ?? initial;
       next.set(
         sid,
-        direction === -1 ? { up: now.up + 1, down: now.down } : { up: now.up, down: now.down + 1 },
+        step === "chapter"
+          ? { up: now.up, down: now.down, chapter: now.chapter !== true }
+          : step === "up"
+            ? { up: now.up + 1, down: now.down }
+            : { up: now.up, down: now.down + 1 },
       );
       return next;
     });
@@ -162,7 +175,7 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
       if (project === undefined) return { groups: [], outline: [] };
       const hits = options.hits();
       const books = readBooks(shell, new Set(hits.map((hit) => hit.bookId)), analyze);
-      const built = group(books, hits);
+      const built = group(books, hits, initial);
       if (extents().size === 0) return built;
       // Only the cards the reader actually expanded are rebuilt; the rest are
       // the objects `group` already made, so a list of hundreds costs one

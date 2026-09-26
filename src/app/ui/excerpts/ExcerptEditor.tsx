@@ -37,7 +37,10 @@ import {
   mountSatellite,
   readingLayer,
   reclip,
+  remark,
+  wholeLines,
   type EditorBook,
+  type MarkedRange,
   type Satellite,
 } from "#editor/index";
 
@@ -55,6 +58,13 @@ export interface ExcerptEditorProps {
   readonly mode: "regular" | "usfm";
   /** The book's own memo, so the satellite never parses a second time. */
   readonly analyze: (text: string) => Analysis;
+  /** What the reader view was painting, so the highlights survive the swap. */
+  readonly marks: readonly MarkedRange[];
+  /**
+   * Where the caret starts, in source coordinates: where the reader
+   * double-clicked. Absent — the Edit button — it starts on the first hit.
+   */
+  readonly at?: number | undefined;
   /** Escape, or the Done button. */
   readonly onDone: () => void;
 }
@@ -62,23 +72,6 @@ export interface ExcerptEditorProps {
 /** The projection, the facet and the class for one mode, as one extension. */
 const viewFor = (mode: "regular" | "usfm") =>
   modeView(mode === "usfm" ? "usfm" : "default", "cm-excerpt");
-
-/**
- * The excerpt's span, snapped to whole lines and clamped to the document.
- *
- * `collapseOutside` replaces what is outside the range with block widgets,
- * and a block replacement that does not start and end at a line boundary is
- * not something CodeMirror will draw. `end` is the next verse's anchor, which
- * sits at the START of its own line, so the last line is the one before it.
- */
-const lineRange = (
-  doc: { length: number; lineAt: (at: number) => { from: number; to: number } },
-  span: { readonly from: number; readonly to: number },
-): { from: number; to: number } => {
-  const start = Math.max(0, Math.min(span.from, doc.length));
-  const end = Math.max(start, Math.min(span.to, doc.length));
-  return { from: doc.lineAt(start).from, to: doc.lineAt(Math.max(start, end - 1)).to };
-};
 
 export function ExcerptEditor(props: ExcerptEditorProps) {
   const [host, setHost] = createSignal<HTMLDivElement | undefined>(undefined, {
@@ -102,7 +95,8 @@ export function ExcerptEditor(props: ExcerptEditorProps) {
       const book = untrack(() => props.book);
       const excerpt = untrack(() => props.excerpt);
       const analyze = untrack(() => props.analyze);
-      const range = lineRange(book.state.doc, excerpt.span);
+      const range = wholeLines(book.state.doc, excerpt.span);
+      const at = untrack(() => props.at);
       const view = new Compartment();
       setMode(view);
 
@@ -118,7 +112,7 @@ export function ExcerptEditor(props: ExcerptEditorProps) {
           analyzer.of(analyze),
           readingLayer,
           clippedToScope(),
-          markedRanges(excerpt.hits.map((hit) => ({ from: hit.from, to: hit.to }))),
+          markedRanges(untrack(() => props.marks)),
           Prec.high(
             keymap.of([
               {
@@ -132,10 +126,14 @@ export function ExcerptEditor(props: ExcerptEditorProps) {
           ),
         ],
       });
-      // The caret starts on the first hit, which is what the reader clicked
-      // Edit about — not at the top of the context verse.
+      // The caret starts where the reader double-clicked; from the Edit
+      // button, on the first hit — what they clicked Edit about, not the top
+      // of the context above it. The satellite's own filters settle either
+      // onto a legal stop.
       const first = excerpt.hits[0];
-      if (first !== undefined && first.from >= range.from && first.to <= range.to)
+      if (at !== undefined && at >= range.from && at <= range.to)
+        satellite.view.dispatch({ selection: { anchor: at } });
+      else if (first !== undefined && first.from >= range.from && first.to <= range.to)
         satellite.view.dispatch({ selection: { anchor: first.from, head: first.to } });
       satellite.view.focus();
 
@@ -147,9 +145,12 @@ export function ExcerptEditor(props: ExcerptEditorProps) {
       // excerpt ever opened stayed attached: its view still received every
       // publication (the fifth excerpt opened on a book reported five
       // receivers on each receipt) and its hold kept `project.release` refusing.
+      //
+      // And no signal write: this also runs when the list unmounts the row,
+      // inside the owner's disposal, where a write is refused
+      // (REACTIVE_WRITE_IN_OWNED_SCOPE) — scrolling an open card out of the
+      // window took the list down with it.
       return () => {
-        setLive(undefined);
-        setMode(undefined);
         satellite.destroy();
         release();
       };
@@ -173,7 +174,16 @@ export function ExcerptEditor(props: ExcerptEditorProps) {
     () => ({ satellite: live(), span: props.excerpt.span }),
     ({ satellite, span }) => {
       if (satellite === undefined) return;
-      reclip(satellite.view, lineRange(satellite.view.state.doc, span));
+      reclip(satellite.view, wholeLines(satellite.view.state.doc, span));
+    },
+  );
+
+  // The match cursor moved, or the context changed: repaint, keep the view.
+  createEffect(
+    () => ({ satellite: live(), marks: props.marks }),
+    ({ satellite, marks }) => {
+      if (satellite === undefined) return;
+      remark(satellite.view, marks);
     },
   );
 

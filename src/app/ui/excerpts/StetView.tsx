@@ -4,26 +4,26 @@
  * Left, the term list from the mockup — a search box over the guide, then a
  * card per term with its label in bold and a done/total count, and the open
  * term expanded to show its definition, its glosses and its references.
- * Right, the excerpt list, where every excerpt renders a PAIR: the source
- * verse above and the target verse below, and the target is the editable one.
+ * Right, the excerpt list, where every card reads the PAIRED RESOURCE beside
+ * the TARGET, and the target is the editable one.
  *
- * The source card is the honest part of this screen. Its reading is the
+ * The paired side is the honest part of this screen. Its reading is the
  * guide's own frozen text for that reference, with the guide's precomputed
  * gloss offsets highlighted; when the guide has no reading, a resource bound
  * to the project under the `source` role answers; when neither does, the card
- * says "no source text bound" rather than showing the project's own text twice
- * and calling one of them a source. `sourceOf` is that whole decision,
- * resolved by `src/app/workflows/stet.ts` before a card renders.
+ * says so rather than showing the project's own text twice and calling one of
+ * them the paired resource. `sourceOf` is that whole decision, resolved by
+ * `src/app/workflows/stet.ts` before a card renders. It is STATIC — a frozen
+ * reading has no markup view and no context to widen — so the card offers
+ * neither on that side and everything else as it does in Find.
  *
- * The TARGET card carries no highlight, deliberately. The guide's offsets
+ * The TARGET carries no highlight, deliberately. The guide's offsets
  * index into the guide's reading; this project may put the term elsewhere in
  * the verse, or render it with another word entirely — which is the very thing
  * the reviewer is here to judge. Guessing a highlight would answer the
  * question the screen is asking.
  */
 
-import type { JSX } from "@solidjs/web";
-import BookmarkIcon from "lucide-solid/icons/bookmark";
 import SearchIcon from "lucide-solid/icons/search";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
@@ -36,6 +36,7 @@ import type { EditorBook } from "#editor/index";
 import { t } from "../../i18n";
 import type { SourceReading } from "../../workflows/stet";
 import { Badge, Card, Input, Select, Switch, cx } from "../primitives";
+import type { ContextStep, Paired } from "./ExcerptCard";
 import { ExcerptList } from "./ExcerptList";
 
 export interface StetViewProps {
@@ -56,7 +57,7 @@ export interface StetViewProps {
   readonly seat: (bookId: BookId) => Promise<EditorBook | undefined>;
   readonly analyze: (text: string) => Analysis;
   readonly onEdited?: () => void;
-  readonly onExpand?: (sid: string, direction: -1 | 1) => void;
+  readonly onExpand?: (sid: string, step: ContextStep) => void;
   /** The shell's mode, handed to the excerpt cards. */
   readonly mode?: "regular" | "usfm";
 
@@ -70,23 +71,6 @@ export interface StetViewProps {
 const VISIBLE_REFERENCES = 8;
 
 /** `text`, with `spans` wrapped. Spans are sorted and non-overlapping already. */
-const highlighted = (text: string, spans: readonly { from: number; to: number }[]): JSX.Element => {
-  if (spans.length === 0) return text;
-  const out: JSX.Element[] = [];
-  let at = 0;
-  for (const span of spans) {
-    if (span.from > at) out.push(text.slice(at, span.from));
-    out.push(
-      <mark class="rounded-xs bg-surface-highlight text-on-surface-highlight">
-        {text.slice(span.from, span.to)}
-      </mark>,
-    );
-    at = span.to;
-  }
-  if (at < text.length) out.push(text.slice(at));
-  return out;
-};
-
 export function StetView(props: StetViewProps) {
   const [showAll, setShowAll] = createSignal(false, { name: "stetShowAll" });
 
@@ -116,36 +100,18 @@ export function StetView(props: StetViewProps) {
     { name: "stetShownTerms" },
   );
 
-  const pair = (excerpt: Excerpt): JSX.Element => {
+  /**
+   * The paired resource for one card: the guide's frozen reading of the place,
+   * or a bound resource's, or the words saying there is none. Static either
+   * way — no USFM view and no context, because what the guide baked is one
+   * verse's reading and not a parse.
+   */
+  const paired = (excerpt: Excerpt): Paired => {
     const reading = props.sourceOf?.(excerpt);
-    return (
-      <div class="flex items-start gap-2">
-        <BookmarkIcon
-          size={14}
-          class="mt-0.5 shrink-0 text-on-surface-tertiary"
-          aria-hidden="true"
-        />
-        <div class="min-w-0">
-          <span class="text-small font-medium text-on-surface-secondary">
-            {t("{ref} —", { ref: excerpt.label })}
-          </span>{" "}
-          <Show
-            when={reading}
-            fallback={
-              <span class="text-small text-on-surface-tertiary italic">
-                {t("No source text bound")}
-              </span>
-            }
-          >
-            {(found) => (
-              <span class="font-scripture text-small text-on-surface-secondary">
-                {highlighted(found().text, found().spans ?? [])}
-              </span>
-            )}
-          </Show>
-        </div>
-      </div>
-    );
+    const name = reading?.origin === "library" ? t("Paired resource") : t("Guide");
+    if (reading === undefined)
+      return { kind: "none", name: t("Paired resource"), message: t("No paired resource bound") };
+    return { kind: "static", name, text: reading.text, spans: reading.spans ?? [] };
   };
 
   return (
@@ -282,7 +248,7 @@ export function StetView(props: StetViewProps) {
         analyze={props.analyze}
         onEdited={props.onEdited}
         mode={props.mode ?? "regular"}
-        renderPair={pair}
+        pairedOf={paired}
         empty={
           <p class="text-small text-on-surface-tertiary">
             {t("No occurrence of this term falls in a book this project has.")}

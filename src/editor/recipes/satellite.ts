@@ -207,16 +207,63 @@ function collapseOutside(state: EditorState, range: { from: number; to: number }
 export const clippedToScope = (): Extension =>
   EditorView.decorations.compute([scope], (state) => collapseOutside(state, state.field(scope)));
 
-/** A range a satellite was asked to highlight. */
-export type MarkedRange = { readonly from: number; readonly to: number };
+/**
+ * The clip on its own, for a view that is not a satellite: the range, the
+ * field that holds it and the collapse outside it — the same three a
+ * satellite's clip is made of, so `reclip` and `satelliteRange` answer for
+ * both and an excerpt reads and edits through one definition of "the part of
+ * the book this card is".
+ */
+export const clipped = (range: { from: number; to: number }): Extension => [
+  initialRange.of(range),
+  scope,
+  clippedToScope(),
+];
 
-const HIT_MARK = Decoration.mark({ class: "cm-excerpt-hit" });
+/**
+ * A span of the book, snapped to whole lines and clamped to the document.
+ *
+ * `collapseOutside` replaces what is outside the range with block widgets,
+ * and a block replacement that does not start and end at a line boundary is
+ * not something CodeMirror will draw. A unit's end is the next unit's anchor,
+ * which sits at the START of its own line, so the last line is the one before
+ * it.
+ */
+export const wholeLines = (
+  doc: { length: number; lineAt: (at: number) => { from: number; to: number } },
+  span: { readonly from: number; readonly to: number },
+): { from: number; to: number } => {
+  const start = Math.max(0, Math.min(span.from, doc.length));
+  const end = Math.max(start, Math.min(span.to, doc.length));
+  return { from: doc.lineAt(start).from, to: doc.lineAt(Math.max(start, end - 1)).to };
+};
+
+/**
+ * A range a view was asked to highlight. `class` says what the mark means —
+ * the current match, a finding's severity, the context around the own unit —
+ * and defaults to the plain hit.
+ */
+export type MarkedRange = {
+  readonly from: number;
+  readonly to: number;
+  readonly class?: string;
+};
+
+const HIT_CLASS = "cm-excerpt-hit";
+const markings = new Map<string, Decoration>();
+const markFor = (name: string): Decoration => {
+  const held = markings.get(name);
+  if (held !== undefined) return held;
+  const made = Decoration.mark({ class: name });
+  markings.set(name, made);
+  return made;
+};
 
 const decorationsOf = (ranges: readonly MarkedRange[]): DecorationSet =>
   Decoration.set(
     ranges
       .filter((range) => range.to > range.from)
-      .map((range) => HIT_MARK.range(range.from, range.to)),
+      .map((range) => markFor(range.class ?? HIT_CLASS).range(range.from, range.to)),
     true,
   );
 
@@ -246,6 +293,11 @@ export const markedRanges = (ranges: readonly MarkedRange[]): Extension => [
   initialMarks.of(ranges),
   markField,
 ];
+
+/** Replaces what `markedRanges` paints — the match cursor moved, a tone changed. */
+export const remark = (view: EditorView, ranges: readonly MarkedRange[]): void => {
+  view.dispatch({ effects: setMarks.of(ranges) });
+};
 
 export interface SatelliteOptions {
   /** Where the view mounts. */

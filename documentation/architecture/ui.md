@@ -65,8 +65,8 @@ painted: a soft yellow in light, a muted amber in dark. It is not
 `--surface-warning`, which the excerpt cards used to borrow — a warning is a
 judgement about the text and a highlight is a place in it, and one token
 serving both meant restyling a finding would have restyled every search hit.
-Everything that shows a match uses the pair: `bg-surface-highlight` on the
-read-only excerpt marks, `.cm-excerpt-hit` inside an excerpt's satellite, and
+Everything that shows a match uses the pair: `.cm-excerpt-hit` on an
+excerpt's marks (the read-only reader and the satellite Edit opens), and
 `.cm-mode-regular .usfm-hit` in the page itself.
 
 `--editor-font-size` is the other value written onto `<html>` from outside a

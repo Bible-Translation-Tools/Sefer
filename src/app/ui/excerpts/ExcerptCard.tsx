@@ -1,43 +1,91 @@
 /**
- * One excerpt in the multibuffer: a reference, the reading, and a way in.
+ * One excerpt in the multibuffer: a small piece of a book, read as the editor
+ * reads it, and a way in.
  *
- * Read-only is the DEFAULT and the whole point
- * (`documentation/architecture/design-direction.md`, "Find"): a results list
- * is a place to look, not a place to edit by accident, and plain text is what
- * makes a list of two hundred of them cheap to scroll.
- * Edit is a click, and it swaps this one body for a satellite over the
- * canonical Book.
+ * Every list of places in Sefer is a list of these — Find, Key terms,
+ * Findings — and it is one compound component built from three primitives:
+ * an Address (where), the clip (how much of the book this card is), and the
+ * TOC (what "more" means). Anything a screen needs that those cannot express is
+ * a missing primitive, not a special case here
+ * (`planning/00-ideas/excerpt-compound-component.md`).
  *
- * The body is `Excerpt.text` — the projection, with the match highlighted
- * through `Excerpt.marks`, the verse numbers painted from `Excerpt.verses` and
- * the verses either side dimmed through `Excerpt.focus`. All three are
- * computed in `src/core/excerpts`, so this component does no offset arithmetic
- * of its own; it slices a string at the boundaries it was given.
+ * ## The parts
  *
- * ## The two modes
+ *  - **Header.** The place the match is — one small title row, never the
+ *    book's name set into the text, which the editor does not do either.
+ *  - **Body.** The TARGET: `ExcerptReader`, the editor's reading of the range,
+ *    read-only. Double-click or Edit swaps it for `ExcerptEditor`, a satellite
+ *    over the same range whose edits go through the Book's funnel. Regular or
+ *    USFM follows the shell, as in the editor.
+ *  - **Paired resource.** Optional: another text of the same place, never
+ *    editable. A parsed one (`kind: "text"`) is a reader too, locked to the
+ *    target's range by Address; a frozen one (`kind: "static"`, a guide's
+ *    reading) has no markup to show and no context to widen, so those two
+ *    controls simply do not apply to it.
+ *  - **Footer.** The context control — one TOC step up, the whole chapter,
+ *    one step down — and the ACTIONS slot, which is the screen's: review
+ *    progress for Key terms, a quick filter for proofreading.
  *
- * The shell's mode is a choice about what USFM IS on screen, and a results
- * list is no exception: in USFM mode the card shows `Excerpt.source` — the raw
- * slice, markers and all, mono on the editor's terminal ground — and the
- * satellite behind Edit opens in the same mode. That path needs no projection
- * and no coordinate mapping: a hit's offsets are source offsets, and the body
- * is the source, so the highlight is `hit.from - span.from` and nothing else.
+ * ## Width
+ *
+ * With room, the paired resource sits beside the target, locked to the same
+ * range. Narrow, it stacks above, and collapses to the unit the match is in:
+ * a whole chapter of somebody else's text above your own, stacked, is a page
+ * of scrolling to reach the part you came to edit. Either default can be
+ * flipped per card. The width is the CARD's (a ResizeObserver), not the
+ * window's, because the same card lives in a full-width list and a side panel.
  */
 
 import type { JSX } from "@solidjs/web";
-import ChevronsDownIcon from "lucide-solid/icons/chevrons-down";
-import ChevronsUpIcon from "lucide-solid/icons/chevrons-up";
+import ChevronDownIcon from "lucide-solid/icons/chevron-down";
+import ChevronUpIcon from "lucide-solid/icons/chevron-up";
+import FoldVerticalIcon from "lucide-solid/icons/fold-vertical";
 import PencilIcon from "lucide-solid/icons/pencil";
 import SquareArrowOutUpRightIcon from "lucide-solid/icons/square-arrow-out-up-right";
-import { For, Show, createMemo, createSignal } from "solid-js";
+import UnfoldVerticalIcon from "lucide-solid/icons/unfold-vertical";
+import { Show, createEffect, createMemo, createSignal } from "solid-js";
 
-import type { Excerpt } from "#core/excerpts/excerpts";
+import {
+  pairedExcerpt,
+  type BookText,
+  type Excerpt,
+  type Occurrence,
+} from "#core/excerpts/excerpts";
 import type { Analysis } from "#core/galley";
-import type { EditorBook } from "#editor/index";
+import type { EditorBook, MarkedRange } from "#editor/index";
 
 import { t } from "../../i18n";
 import { Button, Card, cx, IconButton } from "../primitives";
 import { ExcerptEditor } from "./ExcerptEditor";
+import { ExcerptReader } from "./ExcerptReader";
+
+/** One press of the context control. */
+export type ContextStep = "up" | "down" | "chapter";
+
+/**
+ * The text read beside the target.
+ *
+ *  - `text`: a parsed resource. Same reader, same mode, same context — locked
+ *    to the target's range by Address. `hits` are ITS occurrences when the
+ *    match is on this side (Find over a reference).
+ *  - `static`: a frozen reading (a guide's). Shown as it was baked, with its
+ *    own highlight offsets; no mode and no context, because there is no parse.
+ *  - `none`: nothing to show for this place, and the words that say why.
+ */
+export type Paired =
+  | {
+      readonly kind: "text";
+      readonly name: string;
+      readonly book: BookText;
+      readonly hits: readonly Occurrence[];
+    }
+  | {
+      readonly kind: "static";
+      readonly name: string;
+      readonly text: string;
+      readonly spans: readonly { readonly from: number; readonly to: number }[];
+    }
+  | { readonly kind: "none"; readonly name: string; readonly message: string };
 
 export interface ExcerptCardProps {
   readonly excerpt: Excerpt;
@@ -52,199 +100,136 @@ export interface ExcerptCardProps {
    */
   readonly seat: () => Promise<EditorBook | undefined>;
   readonly analyze: (text: string) => Analysis;
-  /** STET's source verse, rendered above the editable target. */
-  readonly pair?: JSX.Element;
-  /**
-   * Show one more verse above (-1) or below (+1). Absent means the feed does
-   * not offer expanding, and the chevrons are not drawn.
-   */
-  readonly onExpand?: (direction: -1 | 1) => void;
+  readonly paired?: Paired | undefined;
+  /** One context step. Absent means the feed does not offer widening. */
+  readonly onExpand?: (step: ContextStep) => void;
   /**
    * The SOURCE offset of the match the find bar's cursor is on, when it is one
    * of THIS excerpt's. That one highlight is painted stronger and the card
-   * takes a ring, so "3 of 62" names something the reader can see; the other
-   * matches keep the soft highlight they have when nothing is current.
+   * takes a ring, so "3 of 62" names something the reader can see.
    */
   readonly active?: number;
   /** The shell's mode. `usfm` shows the markup; anything else, the reading. */
   readonly mode?: "regular" | "usfm";
-  /**
-   * Replaces the reference in the header. Findings need it: an excerpt built
-   * from a span before the first verse anchor labels itself "Genesis 0", and
-   * the page that groups those under "Front matter" can say so properly.
-   */
+  /** Replaces the reference in the header. */
   readonly label?: JSX.Element;
-  /**
-   * A block between the header and the reading. Findings put one line per
-   * finding in this verse there — the severity, the code, the message, and the
-   * two things that can be done about it.
-   */
+  /** A block between the header and the text — Findings' one line per finding. */
   readonly notes?: JSX.Element;
+  /** The footer's slot: whatever this screen lets a reader do about this place. */
+  readonly actions?: JSX.Element;
   /**
    * What a highlight MEANS, by the source offset of the occurrence it came
-   * from (`Mark.source`). Find has one kind of hit and needs none of this; a
-   * findings list marks an error and a warning differently, and the colour is
-   * the only thing in the body that says which is which.
+   * from. Find has one kind of hit and needs none of this; a findings list
+   * marks an error and a warning differently.
    */
   readonly markTone?: (source: number | undefined, excerpt: Excerpt) => MarkTone | undefined;
 }
 
 /**
- * The three ways a mark can read. They are the semantic severity surfaces —
- * `surface-highlight` is deliberately not among them, because a highlight is a
- * place in the text and a severity is a judgement about it (tokens.css).
+ * The three ways a mark can read — the semantic severity surfaces, painted by
+ * `editor.css`'s `.cm-excerpt-error` and its two siblings.
  */
 export type MarkTone = "error" | "warning" | "info";
 
-/** A tone as the pair it wears. Literal strings: Tailwind scans source text. */
-const TONE: Readonly<Record<MarkTone, string>> = {
-  error: "rounded-xs bg-surface-error px-px font-medium text-on-surface-error",
-  warning: "rounded-xs bg-surface-warning px-px font-medium text-on-surface-warning",
-  info: "rounded-xs bg-surface-tertiary px-px text-on-surface-secondary",
-};
-
-interface Segment {
-  readonly text: string;
-  readonly hit: boolean;
-  /** Is this the match the find bar's cursor is on? */
-  readonly current: boolean;
-  readonly dim: boolean;
-  /** A verse number to paint before this segment — `Excerpt.verses`. */
-  readonly verse?: string;
-  /** USFM mode only: is this segment a marker rather than text? */
-  readonly marker?: boolean;
-  /** What the mark covering this segment means, when the caller says. */
-  readonly tone?: MarkTone;
-}
+/** Wide enough for two texts side by side at a readable measure. */
+const SIDE_BY_SIDE = 720;
 
 /**
- * The excerpt's text cut at every boundary the model named, so one pass of
- * `<For>` renders highlight, context and verse numbers without nesting or
- * overlap logic.
- *
- * A verse number is not a slice of the text — it is markup the projection
- * dropped — so it rides on the segment that STARTS at its offset, and the cut
- * it adds is what guarantees there is one.
+ * Everything the target view paints: each match (by meaning, and the current
+ * one stronger), and the context either side of the own unit, dimmed — so the
+ * reader sees which sentence the header names without a second reference.
  */
-const segmentsOf = (
+const marksOf = (
   excerpt: Excerpt,
+  hits: readonly Occurrence[],
   active: number | undefined,
   markTone: ExcerptCardProps["markTone"],
-): readonly Segment[] => {
-  const cuts = new Set<number>([0, excerpt.text.length]);
-  for (const mark of excerpt.marks) {
-    cuts.add(mark.from);
-    cuts.add(mark.to);
-  }
-  for (const verse of excerpt.verses) cuts.add(verse.at);
-  if (excerpt.focus !== null) {
-    cuts.add(excerpt.focus.from);
-    cuts.add(excerpt.focus.to);
-  }
-  const bounds = [...cuts].sort((a, b) => a - b);
-  const out: Segment[] = [];
-  for (let index = 0; index + 1 < bounds.length; index += 1) {
-    // SAFETY: `index` and `index + 1` are both inside a list of this length.
-    const from = bounds[index]!;
-    const to = bounds[index + 1]!;
-    if (to <= from) continue;
-    const verse = excerpt.verses.find((mark) => mark.at === from);
-    const covering = excerpt.marks.filter((mark) => mark.from <= from && mark.to >= to);
-    const tone = covering.length === 0 ? undefined : markTone?.(covering[0]?.source, excerpt);
-    out.push({
-      text: excerpt.text.slice(from, to),
-      hit: covering.length > 0,
-      current: active !== undefined && covering.some((mark) => mark.source === active),
-      dim: excerpt.focus !== null && (to <= excerpt.focus.from || from >= excerpt.focus.to),
-      ...(verse === undefined ? {} : { verse: verse.label }),
-      ...(tone === undefined ? {} : { tone }),
-    });
+): readonly MarkedRange[] => {
+  const out: MarkedRange[] = [];
+  const { span, own } = excerpt;
+  if (own.from > span.from)
+    out.push({ from: span.from, to: own.from, class: "cm-excerpt-context" });
+  if (span.to > own.to) out.push({ from: own.to, to: span.to, class: "cm-excerpt-context" });
+  for (const hit of hits) {
+    const tone = markTone?.(hit.from, excerpt);
+    const name = cx(
+      tone === undefined ? "cm-excerpt-hit" : `cm-excerpt-${tone}`,
+      active === hit.from && "cm-excerpt-current",
+    );
+    const pieces = hit.pieces !== undefined && hit.pieces.length > 1 ? hit.pieces : [hit];
+    for (const piece of pieces) out.push({ from: piece.from, to: piece.to, class: name });
   }
   return out;
 };
 
-/** A USFM marker: what the editor paints as `.cm-usfm-marker`. */
-const MARKER = /\\\+?[a-zA-Z][a-zA-Z0-9-]*\*?/g;
+/** A frozen reading with its baked highlights. */
+const highlighted = (
+  text: string,
+  spans: readonly { readonly from: number; readonly to: number }[],
+): JSX.Element => {
+  if (spans.length === 0) return text;
+  const out: JSX.Element[] = [];
+  let at = 0;
+  for (const span of spans) {
+    if (span.from > at) out.push(text.slice(at, span.from));
+    out.push(
+      <mark class="rounded-xs bg-surface-highlight text-on-surface-highlight">
+        {text.slice(span.from, span.to)}
+      </mark>,
+    );
+    at = span.to;
+  }
+  if (at < text.length) out.push(text.slice(at));
+  return out;
+};
 
-/**
- * The raw slice, cut at every marker and every hit.
- *
- * The arithmetic here is a subtraction, not a mapping: `Excerpt.source` is the
- * text of `Excerpt.span`, and a hit is already in source coordinates, so a
- * highlight is `hit.from - span.from`. The projection is not involved at all,
- * which is the point of showing the source.
- */
-const usfmSegmentsOf = (
-  excerpt: Excerpt,
-  active: number | undefined,
-  markTone: ExcerptCardProps["markTone"],
-): readonly Segment[] => {
-  const base = excerpt.span.from;
-  const length = excerpt.source.length;
-  const ranges = excerpt.hits.flatMap((hit) =>
-    (hit.pieces !== undefined && hit.pieces.length > 1 ? hit.pieces : [hit]).map((piece) => ({
-      from: Math.max(0, Math.min(length, piece.from - base)),
-      to: Math.max(0, Math.min(length, piece.to - base)),
-      source: hit.from,
-    })),
+/** The joined three-part control: step up, whole chapter, step down. */
+function ContextControl(props: {
+  readonly excerpt: Excerpt;
+  readonly onStep: (step: ContextStep) => void;
+}) {
+  const chapter = (): boolean => props.excerpt.extent.chapter === true;
+  const part =
+    "inline-flex h-6 cursor-pointer items-center gap-1 px-2 text-smallest font-medium text-on-surface-secondary transition-colors hover:not-disabled:bg-surface-secondary hover:not-disabled:text-on-surface-primary disabled:cursor-not-allowed disabled:opacity-40";
+  return (
+    <div
+      role="group"
+      aria-label={t("Context")}
+      data-context
+      class="inline-flex items-stretch divide-x divide-surface-border overflow-hidden rounded-md border border-surface-border"
+    >
+      <button
+        type="button"
+        data-step="up"
+        class={part}
+        aria-label={t("Show one more above")}
+        disabled={chapter() || !props.excerpt.more.up}
+        onClick={() => props.onStep("up")}
+      >
+        <ChevronUpIcon size={13} aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        data-step="chapter"
+        class={cx(part, chapter() && "bg-surface-secondary text-brand")}
+        aria-pressed={chapter() ? "true" : "false"}
+        onClick={() => props.onStep("chapter")}
+      >
+        {t("Chapter")}
+      </button>
+      <button
+        type="button"
+        data-step="down"
+        class={part}
+        aria-label={t("Show one more below")}
+        disabled={chapter() || !props.excerpt.more.down}
+        onClick={() => props.onStep("down")}
+      >
+        <ChevronDownIcon size={13} aria-hidden="true" />
+      </button>
+    </div>
   );
-  const markers: { from: number; to: number }[] = [];
-  MARKER.lastIndex = 0;
-  for (let found = MARKER.exec(excerpt.source); found !== null; found = MARKER.exec(excerpt.source))
-    markers.push({ from: found.index, to: found.index + found[0].length });
-
-  const cuts = new Set<number>([0, length]);
-  for (const range of [...ranges, ...markers]) {
-    cuts.add(range.from);
-    cuts.add(range.to);
-  }
-  const bounds = [...cuts].sort((a, b) => a - b);
-  const out: Segment[] = [];
-  for (let index = 0; index + 1 < bounds.length; index += 1) {
-    // SAFETY: `index` and `index + 1` are both inside a list of this length.
-    const from = bounds[index]!;
-    const to = bounds[index + 1]!;
-    if (to <= from) continue;
-    const covering = ranges.filter((range) => range.from <= from && range.to >= to);
-    const tone = covering.length === 0 ? undefined : markTone?.(covering[0]?.source, excerpt);
-    out.push({
-      text: excerpt.source.slice(from, to),
-      hit: covering.length > 0,
-      current: active !== undefined && covering.some((range) => range.source === active),
-      dim: false,
-      marker: markers.some((range) => range.from <= from && range.to >= to),
-      ...(tone === undefined ? {} : { tone }),
-    });
-  }
-  return out;
-};
-
-/** The editor's `.usfm-verse`, in the card's vocabulary. */
-const VERSE = "align-super font-sans text-[0.66em] font-bold text-brand select-none";
-
-/**
- * The strip a reader clicks for one more verse — Zed's multibuffer handles,
- * as a full-width hairline rather than a floating control: it is the edge of
- * the excerpt, and the edge is what is being moved.
- */
-const expander =
-  "flex w-full cursor-pointer items-center justify-center py-0.5 text-on-surface-tertiary transition-colors hover:bg-surface-secondary hover:text-on-surface-secondary";
-
-/**
- * One segment's look. A TONED mark wins over the plain highlight — a finding's
- * span is not a search hit — and the cursor's ring is added to whichever of the
- * two it lands on, so "this is the current one" and "this is an error" are two
- * facts a reader can read at once.
- */
-const classOf = (segment: Segment): string | undefined => {
-  if (segment.tone !== undefined)
-    return cx(TONE[segment.tone], segment.current && "ring-1 ring-brand");
-  if (segment.current) return "rounded-xs bg-brand-light font-medium text-brand ring-1 ring-brand";
-  if (segment.hit) return "rounded-xs bg-surface-highlight text-on-surface-highlight";
-  if (segment.marker) return "font-semibold text-[#38bdf8]";
-  if (segment.dim) return "text-on-surface-tertiary";
-  return undefined;
-};
+}
 
 export function ExcerptCard(props: ExcerptCardProps) {
   const [book, setBook] = createSignal<EditorBook | undefined>(undefined, {
@@ -255,19 +240,54 @@ export function ExcerptCard(props: ExcerptCardProps) {
   // is the only thing on screen that can say otherwise.
   const [opening, setOpening] = createSignal(false, { name: "excerptOpening" });
   const [refused, setRefused] = createSignal(false, { name: "excerptRefused" });
-  const usfm = (): boolean => props.mode === "usfm";
-  const segments = createMemo(
-    () =>
-      usfm()
-        ? usfmSegmentsOf(props.excerpt, props.active, props.markTone)
-        : segmentsOf(props.excerpt, props.active, props.markTone),
-    { name: "excerptSegments" },
+  /** Where a double-click asked the caret to start. */
+  const [at, setAt] = createSignal<number | undefined>(undefined, { name: "excerptCaret" });
+  const [body, setBody] = createSignal<HTMLDivElement | undefined>(undefined, {
+    name: "excerptBody",
+  });
+  const [wide, setWide] = createSignal(true, { name: "excerptWide" });
+  /** The reader's flip of the paired side's width default, or nothing. */
+  const [pairedFlip, setPairedFlip] = createSignal(false, { name: "excerptPairedFlip" });
+
+  const mode = (): "regular" | "usfm" => props.mode ?? "regular";
+
+  createEffect(
+    () => body(),
+    (element) => {
+      if (element === undefined) return;
+      const observer = new ResizeObserver(([entry]) => {
+        if (entry !== undefined) setWide(entry.contentRect.width >= SIDE_BY_SIDE);
+      });
+      observer.observe(element);
+      return () => observer.disconnect();
+    },
   );
+
+  const marks = createMemo(
+    () => marksOf(props.excerpt, props.excerpt.hits, props.active, props.markTone),
+    { name: "excerptMarks" },
+  );
+
+  /** Stacked, the paired side shows only its own unit — unless flipped. */
+  const collapsed = (): boolean => (wide() ? pairedFlip() : !pairedFlip());
+
+  const pairedView = createMemo(
+    () => {
+      const paired = props.paired;
+      if (paired?.kind !== "text") return undefined;
+      const excerpt = pairedExcerpt(paired.book, props.excerpt, paired.hits, collapsed());
+      if (excerpt === undefined) return undefined;
+      return { excerpt, marks: marksOf(excerpt, paired.hits, undefined, undefined) };
+    },
+    { name: "excerptPaired" },
+  );
+
   /** Does the current match live here? Drives the card's ring. */
   const current = (): boolean =>
     props.active !== undefined && props.excerpt.hits.some((hit) => hit.from === props.active);
 
-  const edit = (): void => {
+  const edit = (caret?: number): void => {
+    setAt(caret);
     props.onEdit();
     void props.seat().then((seated) => {
       setBook(seated);
@@ -277,15 +297,116 @@ export function ExcerptCard(props: ExcerptCardProps) {
 
   const done = (): void => {
     setBook(undefined);
+    setAt(undefined);
     props.onDone();
   };
+
+  const target = (
+    <Show
+      when={props.editing}
+      fallback={
+        <ExcerptReader
+          analysis={props.excerpt.analysis}
+          span={props.excerpt.span}
+          mode={mode()}
+          marks={marks()}
+          label={`excerpt:${props.excerpt.sid}`}
+          onEdit={edit}
+        />
+      }
+    >
+      <Show
+        when={book()}
+        fallback={
+          <p class="px-3 py-2 text-small text-on-surface-tertiary">
+            {refused() ? t("That book could not be opened for editing.") : t("Opening…")}
+          </p>
+        }
+      >
+        {(seated) => (
+          <ExcerptEditor
+            book={seated()}
+            excerpt={props.excerpt}
+            mode={mode()}
+            marks={marks()}
+            at={at()}
+            analyze={props.analyze}
+            onDone={done}
+          />
+        )}
+      </Show>
+    </Show>
+  );
+
+  const pairedText = () => (props.paired?.kind === "text" ? props.paired : undefined);
+  const pairedStatic = () => (props.paired?.kind === "static" ? props.paired : undefined);
+  const pairedNone = () => (props.paired?.kind === "none" ? props.paired : undefined);
+
+  const pairedSide = (
+    <section
+      data-paired={props.paired?.kind}
+      aria-label={props.paired?.name}
+      class="min-w-0 rounded-md border border-surface-border bg-surface-secondary/60"
+    >
+      <header class="flex items-center gap-2 px-3 pt-1.5 text-smallest text-on-surface-tertiary">
+        <span class="truncate" title={props.paired?.name}>
+          {props.paired?.name}
+        </span>
+        <Show when={pairedView()}>
+          <IconButton
+            size="sm"
+            class="ms-auto"
+            label={collapsed() ? t("Show the same range") : t("Show only the match")}
+            icon={collapsed() ? <UnfoldVerticalIcon size={13} /> : <FoldVerticalIcon size={13} />}
+            aria-pressed={collapsed() ? "false" : "true"}
+            onClick={() => setPairedFlip((held) => !held)}
+          />
+        </Show>
+      </header>
+      <Show when={pairedText()}>
+        {(text) => (
+          <Show
+            when={pairedView()}
+            fallback={
+              <p class="px-3 py-2 text-small text-on-surface-tertiary italic">
+                {t("{place} is not in {name}.", { place: props.excerpt.label, name: text().name })}
+              </p>
+            }
+          >
+            {(view) => (
+              <ExcerptReader
+                analysis={view().excerpt.analysis}
+                span={view().excerpt.span}
+                mode={mode()}
+                marks={view().marks}
+                label={`paired:${props.excerpt.sid}`}
+              />
+            )}
+          </Show>
+        )}
+      </Show>
+      <Show when={pairedStatic()}>
+        {(reading) => (
+          <p class="px-3 py-2 font-scripture text-body leading-relaxed text-on-surface-secondary">
+            {highlighted(reading().text, reading().spans)}
+          </p>
+        )}
+      </Show>
+      <Show when={pairedNone()}>
+        {(missing) => (
+          <p class="px-3 py-2 text-small text-on-surface-tertiary italic">{missing().message}</p>
+        )}
+      </Show>
+    </section>
+  );
 
   return (
     <Card
       padded={false}
       data-sid={props.excerpt.sid}
       data-current={current() ? "true" : undefined}
-      data-mode={usfm() ? "usfm" : "regular"}
+      data-mode={mode()}
+      data-editing={props.editing ? "true" : undefined}
       class={cx("overflow-hidden", current() && "ring-1 ring-brand")}
     >
       <header class="flex items-center gap-2 border-b border-surface-border px-3 py-1.5">
@@ -304,7 +425,12 @@ export function ExcerptCard(props: ExcerptCardProps) {
           <Show
             when={props.editing}
             fallback={
-              <Button size="sm" variant="secondary" icon={<PencilIcon size={13} />} onClick={edit}>
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<PencilIcon size={13} />}
+                onClick={() => edit()}
+              >
                 {t("Edit")}
               </Button>
             }
@@ -335,94 +461,29 @@ export function ExcerptCard(props: ExcerptCardProps) {
         </div>
       </Show>
 
-      <Show when={props.onExpand !== undefined && props.excerpt.more.up}>
-        <button
-          type="button"
-          data-expand="up"
-          aria-label={t("Show the verse above")}
-          class={expander}
-          onClick={() => props.onExpand?.(-1)}
-        >
-          <ChevronsUpIcon size={12} aria-hidden="true" />
-        </button>
-      </Show>
-
-      <Show when={props.pair}>
-        <div class="border-b border-surface-border bg-surface-secondary px-3 py-2">
-          {props.pair}
-        </div>
-      </Show>
-
-      <Show
-        when={props.editing}
-        fallback={
-          <p
-            class={cx(
-              "px-3 py-2",
-              usfm()
-                ? // The editor's USFM surface, in a card: the same terminal
-                  // ground and the same mono, so switching mode changes what
-                  // the text IS rather than only where it is shown.
-                  "whitespace-pre-wrap bg-[#0c0a09] font-mono text-small leading-relaxed text-[#d6d3d1]"
-                : "font-scripture text-body leading-relaxed text-on-surface-primary",
-            )}
-          >
-            <For each={segments()}>
-              {(segment) => (
-                <>
-                  <Show when={segment.verse}>
-                    {(label) => (
-                      <span class={VERSE} data-verse={label()}>
-                        {label()}
-                        {"\u2009"}
-                      </span>
-                    )}
-                  </Show>
-                  <span
-                    class={classOf(segment)}
-                    data-hit={segment.hit ? "true" : undefined}
-                    data-current={segment.current ? "true" : undefined}
-                    data-marker={segment.marker ? "true" : undefined}
-                    data-tone={segment.tone}
-                  >
-                    {segment.text}
-                  </span>
-                </>
-              )}
-            </For>
-          </p>
-        }
+      <div
+        ref={setBody}
+        data-layout={props.paired === undefined ? "single" : wide() ? "side" : "stacked"}
+        class={cx(
+          props.paired !== undefined && "grid gap-2 p-2",
+          props.paired !== undefined && (wide() ? "grid-cols-2 items-start" : "grid-cols-1"),
+        )}
       >
-        <Show
-          when={book()}
-          fallback={
-            <p class="px-3 py-2 text-small text-on-surface-tertiary">
-              {refused() ? t("That book could not be opened for editing.") : t("Opening…")}
-            </p>
-          }
-        >
-          {(seated) => (
-            <ExcerptEditor
-              book={seated()}
-              excerpt={props.excerpt}
-              mode={props.mode ?? "regular"}
-              analyze={props.analyze}
-              onDone={done}
-            />
-          )}
-        </Show>
-      </Show>
+        <Show when={props.paired !== undefined}>{pairedSide}</Show>
+        <div class="min-w-0">{target}</div>
+      </div>
 
-      <Show when={props.onExpand !== undefined && props.excerpt.more.down}>
-        <button
-          type="button"
-          data-expand="down"
-          aria-label={t("Show the verse below")}
-          class={`${expander} border-t border-surface-border`}
-          onClick={() => props.onExpand?.(1)}
-        >
-          <ChevronsDownIcon size={12} aria-hidden="true" />
-        </button>
+      <Show when={props.onExpand !== undefined || props.actions !== undefined}>
+        <footer class="flex items-center gap-2 border-t border-surface-border px-3 py-1.5">
+          <Show when={props.onExpand}>
+            {(step) => <ContextControl excerpt={props.excerpt} onStep={step()} />}
+          </Show>
+          <Show when={props.actions}>
+            <div data-excerpt-actions class="ms-auto flex items-center gap-1">
+              {props.actions}
+            </div>
+          </Show>
+        </footer>
       </Show>
     </Card>
   );

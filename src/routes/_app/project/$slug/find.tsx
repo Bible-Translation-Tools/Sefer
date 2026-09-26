@@ -1,4 +1,3 @@
-import type { JSX } from "@solidjs/web";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/solid-router";
 import { Option, Result } from "effect";
 import CaseSensitiveIcon from "lucide-solid/icons/case-sensitive";
@@ -13,7 +12,7 @@ import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js"
 import { t } from "#app/i18n";
 import { useShell } from "#app/ProjectContext";
 import { shellKeys } from "#app/settings";
-import { createExcerptFeed, ExcerptList, readBooks } from "#app/ui/excerpts";
+import { createExcerptFeed, ExcerptList, readBooks, type Paired } from "#app/ui/excerpts";
 import {
   Button,
   Card,
@@ -26,8 +25,13 @@ import {
 import { ShellGate } from "#app/ui/ShellGate";
 import * as Workflows from "#app/workflows/references";
 import type { BookId } from "#core/book/book";
-import { refOccurrences, type Excerpt, type Occurrence } from "#core/excerpts/excerpts";
-import type { Analysis } from "#core/galley";
+import {
+  refOccurrences,
+  type BookText,
+  type Excerpt,
+  type Occurrence,
+} from "#core/excerpts/excerpts";
+import { bookHeading, type Analysis } from "#core/galley";
 import type { Address } from "#core/location/address";
 import { createReadings } from "#core/search/reading";
 import * as Search from "#core/search/search";
@@ -585,20 +589,43 @@ function Find() {
   );
 
   /**
-   * The reference's reading, above this project's verse.
+   * The reference, as the paired resource beside this project's verse: its
+   * own text through its own parse, read-only, locked to the card's range by
+   * Address, with the match highlighted where it was found.
    *
-   * Read-only and visibly so: no Edit, no staleness badge, no open-in-editor.
-   * There is no Book behind it and nothing here could write to it.
+   * Nothing here can write: there is no Book behind a reference, and the card
+   * never offers Edit on the paired side.
    */
-  const renderReference = (excerpt: Excerpt): JSX.Element => {
+  const referenceBooks = new Map<string, BookText>();
+  const referenceBook = (hit: Search.ReferenceHit): BookText | undefined => {
+    const analysis = analysisOf(hit.source);
+    const book = hit.address?.book;
+    if (analysis === undefined || book === undefined) return undefined;
+    const held = referenceBooks.get(hit.source);
+    if (held !== undefined && held.analysis === analysis) return held;
+    const heading = bookHeading(analysis);
+    const made: BookText = {
+      bookId: book,
+      text: analysis.text,
+      analysis,
+      label: (address) => shell.location.label(address, heading),
+    };
+    referenceBooks.set(hit.source, made);
+    return made;
+  };
+
+  const pairedOf = (excerpt: Excerpt): Paired | undefined => {
     const held = pairFor(excerpt);
-    if (held === undefined) return null;
-    return (
-      <div class="mb-2 border-s-2 border-surface-border ps-3" data-reference-hit={held.source}>
-        <p class="truncate text-smallest text-on-surface-tertiary">{fileName(held.source)}</p>
-        <p class="text-small break-words text-on-surface-secondary">{held.preview}</p>
-      </div>
-    );
+    if (held === undefined) return undefined;
+    const book = referenceBook(held);
+    const name = fileName(held.source);
+    if (book === undefined) return { kind: "static", name, text: held.preview, spans: [] };
+    return {
+      kind: "text",
+      name,
+      book,
+      hits: [{ bookId: book.bookId, from: held.from, to: held.to }],
+    };
   };
 
   const pairFor = (excerpt: Excerpt): Search.ReferenceHit | undefined => {
@@ -830,7 +857,7 @@ function Find() {
           focus={cursorSid()}
           activeHit={cursorAt()}
           mode={mode()}
-          renderPair={scope() === "reference" ? renderReference : undefined}
+          pairedOf={scope() === "reference" ? pairedOf : undefined}
           empty={
             <EmptyState
               icon={<SearchIcon size={22} />}

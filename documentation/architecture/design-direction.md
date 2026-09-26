@@ -51,8 +51,8 @@ Not a modal over the text. A pane beside the text. Results are a virtualized lis
 Differs from Zed's multibuffer deliberately:
 
 - Hits are grouped by the **verse sid from Onion's table of contents**; one excerpt per unique sid, however many hits fall inside it. Each excerpt has its own small header: the reference ("Philemon 1:4"), an **Edit** button, and an **Open in editor** action (aims the main editor at the hit).
-- Excerpts are **read-only by default**: plain projected text of the hit's verse plus one verse either side, hits highlighted. Cheap to virtualize, no accidental edits from a results list.
-- **Edit is a click.** Edit swaps that one excerpt for a satellite editor (`src/editor/recipes/satellite.ts`) clipped to the same span, writing through the funnel to the canonical Book. Done (or leaving the excerpt) collapses it back to read-only text re-read from the Book. Only one or a few satellites are live at a time.
+- Excerpts are **read-only by default**: the editor's own reading of the hit's unit plus one TOC step either side (a setting), hits highlighted — a small piece of the file, not a flattened quotation of it. No accidental edits from a results list. A footer carries the context control (one step up, the whole chapter, one step down) and a slot for the screen's own actions.
+- **Edit is a click, or a double-click.** Either swaps that one excerpt for a satellite editor (`src/editor/recipes/satellite.ts`) clipped to the same span, writing through the funnel to the canonical Book. Done (or leaving the excerpt) collapses it back to the read-only view. Only one satellite is live at a time.
 - An **outline** beside the list: one row per book with its hit count ("PHM 3", "JUD 12"), in canonical order. Clicking a row scrolls the virtualized list to that book's sticky header; the row for the book currently in view is highlighted as the list scrolls. STET gets the same outline (per term, and per book inside a term).
 - Cross-project find stays the `/find` route with the same list.
 
