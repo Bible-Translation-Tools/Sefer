@@ -262,6 +262,13 @@ export interface ShellKeys {
    */
   readonly excerptContext: SettingKey<number>;
   /**
+   * How a result card draws its read-only body: `editor`, a read-only
+   * CodeMirror view per card, or `stamp`, static HTML copied from one hidden
+   * view's rendering (`src/editor/recipes/stamp.ts`). A measurement switch
+   * while the two are compared; read when a card mounts.
+   */
+  readonly excerptRenderer: SettingKey<string>;
+  /**
    * The content host, overriding the one this build was released with — the
    * Gitea itself, never a proxy (the Web's transport is not a preference).
    *
@@ -385,6 +392,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     ),
     enableReplaceAll: settings.register("find.enableReplaceAll", Schema.Boolean, false),
     excerptContext: settings.register("excerpts.context", Schema.Number, 1),
+    excerptRenderer: settings.register("excerpts.renderer", Schema.String, "editor"),
     contentHost: settings.register("network.contentHost", Schema.String, ""),
     catalogueUrl: settings.register("network.catalogueUrl", Schema.String, ""),
     webTransport: settings.register("network.webTransport", Schema.String, ""),
@@ -524,6 +532,18 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
       max: 10000,
       step: 100,
       unit: "ms",
+    },
+    {
+      key: keys.excerptRenderer,
+      label: "Result cards",
+      description:
+        "How result cards draw their text until you edit one: an editor view each, or static HTML copied from one hidden editor. For comparing the two.",
+      kind: "choice",
+      group: "advanced",
+      options: [
+        { value: "editor", label: "Editor views" },
+        { value: "stamp", label: "Stamped HTML" },
+      ],
     },
     {
       key: keys.enableReplaceAll,

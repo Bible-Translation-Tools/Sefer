@@ -21,7 +21,7 @@ function widen(len: number, from: number, to: number, margin = RENDER_MARGIN): R
   return { from: Math.max(0, from - margin), to: Math.min(len, to + margin) };
 }
 
-const setRenderRange = StateEffect.define<RenderRange | null>();
+export const setRenderRange = StateEffect.define<RenderRange | null>();
 
 export const renderRangeField = StateField.define<RenderRange | null>({
   create: () => null,

@@ -294,6 +294,14 @@ export const markedRanges = (ranges: readonly MarkedRange[]): Extension => [
   markField,
 ];
 
+/**
+ * The two moves as EFFECTS, for a caller that wants them in one transaction
+ * with others — the stamp press sets a card's clip, its render range and its
+ * marks in one dispatch, and reads the DOM once.
+ */
+export const clipEffect = (range: { from: number; to: number }) => windowEffect.of(range);
+export const marksEffect = (ranges: readonly MarkedRange[]) => setMarks.of(ranges);
+
 /** Replaces what `markedRanges` paints — the match cursor moved, a tone changed. */
 export const remark = (view: EditorView, ranges: readonly MarkedRange[]): void => {
   view.dispatch({ effects: setMarks.of(ranges) });

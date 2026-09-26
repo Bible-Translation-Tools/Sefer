@@ -65,6 +65,12 @@ export interface ExcerptEditorProps {
    * double-clicked. Absent — the Edit button — it starts on the first hit.
    */
   readonly at?: number | undefined;
+  /**
+   * Where the reader double-clicked on a STAMPED body, which has no view to
+   * turn a point into an offset. The satellite is laid out like the stamp, so
+   * it answers the same point with the same place.
+   */
+  readonly point?: { x: number; y: number } | undefined;
   /** Escape, or the Done button. */
   readonly onDone: () => void;
 }
@@ -97,6 +103,7 @@ export function ExcerptEditor(props: ExcerptEditorProps) {
       const analyze = untrack(() => props.analyze);
       const range = wholeLines(book.state.doc, excerpt.span);
       const at = untrack(() => props.at);
+      const point = untrack(() => props.point);
       const view = new Compartment();
       setMode(view);
 
@@ -131,7 +138,10 @@ export function ExcerptEditor(props: ExcerptEditorProps) {
       // of the context above it. The satellite's own filters settle either
       // onto a legal stop.
       const first = excerpt.hits[0];
-      if (at !== undefined && at >= range.from && at <= range.to)
+      const pointed = point === undefined ? null : satellite.view.posAtCoords(point);
+      if (at === undefined && pointed !== null && pointed >= range.from && pointed <= range.to)
+        satellite.view.dispatch({ selection: { anchor: pointed } });
+      else if (at !== undefined && at >= range.from && at <= range.to)
         satellite.view.dispatch({ selection: { anchor: at } });
       else if (first !== undefined && first.from >= range.from && first.to <= range.to)
         satellite.view.dispatch({ selection: { anchor: first.from, head: first.to } });

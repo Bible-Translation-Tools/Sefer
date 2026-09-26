@@ -13,7 +13,17 @@
 import { createEffect, createSignal, untrack } from "solid-js";
 
 import type { Analysis } from "#core/galley";
-import { mountReader, type Funnel, type MarkedRange, type ReaderMount } from "#editor/index";
+import {
+  mountReader,
+  mountStamp,
+  type Funnel,
+  type MarkedRange,
+  type ReaderMount,
+  type StampMount,
+} from "#editor/index";
+
+import { useShell } from "../../ProjectContext";
+import { shellKeys } from "../../settings";
 
 import "#editor/editor.css";
 
@@ -29,8 +39,12 @@ export interface ExcerptReaderProps {
    * published changes, so it shows another card's typing as it happens.
    */
   readonly follow?: Funnel | undefined;
-  /** Double-click: edit, with the caret at this source offset. Absent: read-only for good. */
-  readonly onEdit?: (at: number | undefined) => void;
+  /**
+   * Double-click: edit. `at` is the source offset under the pointer when the
+   * body is a live view; a stamp has no view to ask, so it hands the point,
+   * and the satellite — laid out identically — answers it.
+   */
+  readonly onEdit?: (at: number | undefined, point?: { x: number; y: number }) => void;
 }
 
 const projectionOf = (mode: "regular" | "usfm") => (mode === "usfm" ? "usfm" : "default");
@@ -39,9 +53,13 @@ export function ExcerptReader(props: ExcerptReaderProps) {
   const [host, setHost] = createSignal<HTMLDivElement | undefined>(undefined, {
     name: "readerHost",
   });
-  const [live, setLive] = createSignal<ReaderMount | undefined>(undefined, {
+  const [live, setLive] = createSignal<ReaderMount | StampMount | undefined>(undefined, {
     name: "readerMount",
   });
+  const shell = useShell();
+  /** Read once per card, like every setting a list reads when it opens. */
+  const stamped =
+    shell.services.settings.get(shellKeys(shell.services.settings).excerptRenderer) === "stamp";
 
   // Rebuilt only for a different parse — a different text. Everything else a
   // card changes (its range, its marks, the mode) moves the live view.
@@ -49,7 +67,7 @@ export function ExcerptReader(props: ExcerptReaderProps) {
     () => ({ parent: host(), analysis: props.analysis }),
     ({ parent, analysis }) => {
       if (parent === undefined) return;
-      const mount = mountReader({
+      const mount = (stamped ? mountStamp : mountReader)({
         parent,
         analysis,
         range: untrack(() => props.span),
@@ -100,8 +118,10 @@ export function ExcerptReader(props: ExcerptReaderProps) {
       onDblClick={(event) => {
         const edit = props.onEdit;
         if (edit === undefined) return;
-        const at = live()?.view.posAtCoords({ x: event.clientX, y: event.clientY });
-        edit(at ?? undefined);
+        const mount = live();
+        const point = { x: event.clientX, y: event.clientY };
+        const at = mount !== undefined && "view" in mount ? mount.view.posAtCoords(point) : null;
+        edit(at ?? undefined, point);
       }}
     />
   );

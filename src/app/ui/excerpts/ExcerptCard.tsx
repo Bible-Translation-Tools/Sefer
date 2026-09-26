@@ -244,6 +244,9 @@ export function ExcerptCard(props: ExcerptCardProps) {
   const [refused, setRefused] = createSignal(false, { name: "excerptRefused" });
   /** Where a double-click asked the caret to start. */
   const [at, setAt] = createSignal<number | undefined>(undefined, { name: "excerptCaret" });
+  const [point, setPoint] = createSignal<{ x: number; y: number } | undefined>(undefined, {
+    name: "excerptPoint",
+  });
   const [body, setBody] = createSignal<HTMLDivElement | undefined>(undefined, {
     name: "excerptBody",
   });
@@ -288,8 +291,9 @@ export function ExcerptCard(props: ExcerptCardProps) {
   const current = (): boolean =>
     props.active !== undefined && props.excerpt.hits.some((hit) => hit.from === props.active);
 
-  const edit = (caret?: number): void => {
+  const edit = (caret?: number, where?: { x: number; y: number }): void => {
     setAt(caret);
+    setPoint(where);
     props.onEdit();
     void props.seat().then((seated) => {
       setBook(seated);
@@ -333,6 +337,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
             mode={mode()}
             marks={marks()}
             at={at()}
+            point={point()}
             analyze={props.analyze}
             onDone={done}
           />
