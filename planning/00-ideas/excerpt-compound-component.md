@@ -65,25 +65,25 @@ Terms (glossary): **Target** is the heart-language text being written or revised
 
 ## Measured (2026-09-26)
 
-en_ulb, "the" over the whole Bible (86,556 hits), Chrome through the CDP rig, dev server, the project's background analysis settled first. Interactions are Event Timing durations (what INP reads), the worst of each group; two runs per renderer agreed within a frame.
+en_ulb, "the" over the whole Bible (86,556 hits), Chrome through the CDP rig, dev server, the project's background analysis settled first. Interactions are Event Timing durations (what INP reads), the worst of each group. Ranges are over four runs with editor views and two with stamped HTML, each run's renderer checked on the page (`[data-stamp]`) — an earlier table here compared the stamp with itself because the settings switch had silently not applied.
 
-| Operation                                  | Editor views (default) |    Stamped HTML |
-| ------------------------------------------ | ---------------------: | --------------: |
-| Search to first cards                      |             335–336 ms |      274–288 ms |
-| of which the search itself (one long task) |             190–204 ms |          182 ms |
-| Next match                                 |                  16 ms |           16 ms |
-| Context step                               |                  32 ms |           32 ms |
-| Chapter on / off                           |             32 / 40 ms |      32 / 32 ms |
-| Double-click to edit                       |             104–112 ms |       96–104 ms |
-| Keystroke while editing                    |                  32 ms |           32 ms |
-| Done                                       |                  72 ms |           72 ms |
-| Outline jump to a far book                 |                  96 ms |           96 ms |
-| Scope: This book                           |                 104 ms |          104 ms |
-| Scope: Whole project                       |             152–176 ms |      144–152 ms |
-| Scroll, per frame p50 / p95 / max          |        17 / 19 / 20 ms | 17 / 19 / 21 ms |
-| JS heap after the run                      |             151–181 MB |          214 MB |
+| Operation                                  | Editor views (default) |       Stamped HTML |
+| ------------------------------------------ | ---------------------: | -----------------: |
+| Search to first cards                      |             292–386 ms |         250–318 ms |
+| of which the search itself (one long task) |             199–206 ms |         172–173 ms |
+| Next match                                 |                  16 ms |              16 ms |
+| Context step                               |                  32 ms |              32 ms |
+| Chapter on / off                           |       32–40 / 56–64 ms |         24 / 32 ms |
+| Double-click to edit                       |             104–112 ms |          96–104 ms |
+| Keystroke while editing                    |                  24 ms |              32 ms |
+| Done                                       |               72–80 ms |              72 ms |
+| Outline jump to a far book                 |             112–120 ms |           88–96 ms |
+| Scope: This book                           |                 136 ms |         104–112 ms |
+| Scope: Whole project                       |             144–152 ms |         144–152 ms |
+| Scroll, per frame p50 / p95 / max          |  17 / 22–23 / 25–27 ms | 17 / 19 / 21–26 ms |
+| JS heap after the run                      |             194–272 MB |         151–244 MB |
 
-What is over 50 ms is not the card renderer: the search is one long task (~190 ms, stream it per book), double-click is seating the book (plus an 86k-hit regroup the seat swap causes and a whole-text compare per following card), Done re-runs the search and regroups, and a scope change is a new search. The stamp's win is first cards (~50–60 ms) and a little on scope changes; it holds more heap (the press's per-book states).
+The stamp is ahead wherever cards are mounted in numbers — chapter toggle, outline jump, a scope change, scrolling — by 20–30 ms, and never behind by more than a frame. What is over 50 ms either way is not the card renderer: the search is one long task (~200 ms; stream it per book), double-click is seating the book (plus an 86k-hit regroup the seat swap causes and a whole-text compare per following card), Done re-runs the search and regroups, and a scope change is a new search.
 
 ## Next
 
