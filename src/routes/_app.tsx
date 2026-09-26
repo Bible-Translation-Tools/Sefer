@@ -10,6 +10,7 @@ import { Kbd, Resizable, Toaster } from "#app/ui/primitives";
 import { BackToEditor } from "#app/ui/workspace/BackToEditor";
 import { IconRail } from "#app/ui/workspace/IconRail";
 import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
+import { sidebarClaim } from "#app/ui/workspace/sidebarSlot";
 
 /**
  * The application shell, as a PATHLESS layout: the icon rail, the project
@@ -82,7 +83,11 @@ function Workspace() {
         maxSize={maxWidth}
         class={showing() ? undefined : "hidden"}
       >
-        <ProjectSidebar />
+        {/* A screen of results may claim the panel for its own outline
+            (`sidebarSlot.ts`); otherwise it is the project's contents. */}
+        <Show when={sidebarClaim()} fallback={<ProjectSidebar />}>
+          {(render) => render()()}
+        </Show>
       </Resizable.Panel>
       <Resizable.Handle
         label={t("Resize the project panel")}

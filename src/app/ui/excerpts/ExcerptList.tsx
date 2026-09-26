@@ -13,7 +13,7 @@
  */
 
 import type { JSX } from "@solidjs/web";
-import { For, createMemo, createSignal } from "solid-js";
+import { For, createMemo, createSignal, onCleanup } from "solid-js";
 
 import type { BookId } from "#core/book/book";
 import type { BookExcerpts, Excerpt, OutlineRow } from "#core/excerpts/excerpts";
@@ -21,8 +21,11 @@ import type { Analysis } from "#core/galley";
 import type { EditorBook } from "#editor/index";
 
 import { t } from "../../i18n";
+import { useShell } from "../../ProjectContext";
 import { cx, VirtualList, type VirtualSection } from "../primitives";
+import { claimSidebar } from "../workspace/sidebarSlot";
 import { ExcerptCard, type ContextStep, type MarkTone, type Paired } from "./ExcerptCard";
+import { ResultsOutline } from "./ResultsOutline";
 
 export interface ExcerptListProps {
   readonly groups: readonly BookExcerpts[];
@@ -134,13 +137,14 @@ const estimate = (excerpt: Excerpt): number => {
 };
 
 export function ExcerptList(props: ExcerptListProps) {
+  const shell = useShell();
   const [editing, setEditing] = createSignal<string | undefined>(undefined, {
     name: "excerptEditing",
   });
   const [active, setActive] = createSignal<string | undefined>(undefined, {
     name: "excerptActiveBook",
   });
-  let goTo: ((bookId: string) => void) | undefined;
+  let goTo: ((key: string) => void) | undefined;
 
   const keyOf = (group: BookExcerpts, excerpt: Excerpt): string =>
     props.decor?.rowKey?.(group, excerpt) ?? excerpt.sid;
@@ -183,11 +187,32 @@ export function ExcerptList(props: ExcerptListProps) {
 
   const current = () => active() ?? props.groups[0]?.bookId;
 
+  // The outline goes where the project's contents normally are: on a screen
+  // of results the sidebar navigates the results (`workspace/sidebarSlot.ts`).
+  // Claimed for as long as this list is mounted; the column below is only for
+  // a reader who has hidden the sidebar.
+  onCleanup(
+    claimSidebar(() => (
+      <ResultsOutline
+        title={props.decor?.outlineTitle ?? t("Results")}
+        groups={props.groups}
+        outline={props.outline}
+        active={current()}
+        label={(row) => props.decor?.outlineLabel?.(row) ?? row.name}
+        keyOf={keyOf}
+        onGo={(key) => goTo?.(key)}
+      />
+    )),
+  );
+
   return (
     <div class="flex min-h-0 flex-1 gap-4">
       <nav
         aria-label={props.decor?.outlineTitle ?? t("Books with results")}
-        class="hidden w-40 shrink-0 flex-col gap-0.5 overflow-y-auto md:flex"
+        class={cx(
+          "hidden w-40 shrink-0 flex-col gap-0.5 overflow-y-auto",
+          !shell.sidebarShowing() && "md:flex",
+        )}
       >
         <For each={props.outline}>
           {(row) => (

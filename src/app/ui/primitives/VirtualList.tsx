@@ -147,8 +147,11 @@ export interface VirtualListProps<T> {
    */
   readonly role?: "rowgroup" | "list";
   readonly empty?: JSX.Element;
-  /** Handed a `goTo`, so a caller can drive the list from an outline. */
-  readonly ref?: (scrollTo: (sectionKey: string) => void) => void;
+  /**
+   * Handed a `goTo`, so a caller can drive the list from an outline: a
+   * section key scrolls to its header, a row key to that row.
+   */
+  readonly ref?: (scrollTo: (key: string) => void) => void;
 }
 
 export function VirtualList<T>(props: VirtualListProps<T>) {
@@ -368,8 +371,10 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     },
   );
 
-  const goTo = (sectionKey: string): void => {
-    const at = untrack(flat).indexOfKey.get(`header:${sectionKey}`);
+  /** A section's header, or — for a key that names no section — that row. */
+  const goTo = (key: string): void => {
+    const keys = untrack(flat).indexOfKey;
+    const at = keys.get(`header:${key}`) ?? keys.get(key);
     if (at !== undefined) virtualizer.scrollToIndex(at, { align: "start" });
   };
 

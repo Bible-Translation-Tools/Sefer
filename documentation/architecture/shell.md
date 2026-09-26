@@ -171,6 +171,16 @@ the application's Mod-K for an application it is not part of.
   nothing to show, so `shell.sidebarShowing()` is false and the panel is off
   screen. That is separate from `shell.sidebarOpen()`, which stays exactly as
   the reader left it.
+- **The sidebar is a slot.** A screen whose job is a list of places claims it
+  for as long as it is mounted (`claimSidebar` in
+  `src/app/ui/workspace/sidebarSlot.ts`; the last claim wins and releasing
+  restores the one before), and `ProjectSidebar` is what shows when nobody
+  has. Find, Key terms and Findings claim it through `ExcerptList` for their
+  results outline (`ResultsOutline`): one row per section with its count, and
+  under a book its hits reduced to chapter tiles. On those screens the reader
+  is navigating the results, not the project, and an outline column inside the
+  page beside a book list outside it was the same answer in two columns. With
+  the sidebar hidden, the list draws its own narrow column instead.
 - **`Toolbar`** names the book — "Philemon (small-nt)" whole, "Philemon 1
   (small-nt)" clipped, "Philemon front (small-nt)" in the front matter — and
   every action on it is a `runCommand`. Its kebab holds Save, Save & Review,
