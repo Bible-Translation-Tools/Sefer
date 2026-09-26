@@ -227,6 +227,9 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
    * onto it, so this is one function and the effect below hands back the whole
    * thing each time.
    */
+  /** A window read is already queued for this microtask. */
+  let publishing = false;
+
   const optionsOf = (): VirtualizerOptions<HTMLDivElement, HTMLElement> => ({
     count: untrack(flat).entries.length,
     // `untrack`, like every read in this bag: these callbacks are invoked by
@@ -262,10 +265,34 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     scrollToFn: elementScroll,
     // Called by the library's own scroll and resize observers, which run
     // outside any owner — so these writes are ordinary event-handler writes.
+    //
+    // Coalesced to one read per microtask: the library notifies once per
+    // resized row, and reading the window and the total rebuilds its
+    // measurements from that row on — twenty rows arriving together cost
+    // twenty passes over a list that can hold eighty thousand rows.
     onChange: (instance) => {
       instance._willUpdate();
-      remember(instance.getVirtualItems());
-      setTotal(instance.getTotalSize());
+      if (publishing) return;
+      publishing = true;
+      queueMicrotask(() => {
+        publishing = false;
+        remember(instance.getVirtualItems());
+        setTotal(instance.getTotalSize());
+      });
+    },
+    // A size is only ever READ from the resize observer's entry. The
+    // library's own fallback reads `offsetHeight` synchronously the moment a
+    // row is handed over, which forces a layout per row while the others are
+    // still being built; the observer reports every row after one layout.
+    // Until it has, a row is the size it was, or its estimate.
+    measureElement: (element, entry, instance) => {
+      const box = entry?.borderBoxSize[0];
+      if (box !== undefined) return Math.round(box.blockSize);
+      const index = instance.indexFromElement(element);
+      return (
+        instance.itemSizeCache.get(instance.options.getItemKey(index)) ??
+        instance.options.estimateSize(index)
+      );
     },
   });
 
