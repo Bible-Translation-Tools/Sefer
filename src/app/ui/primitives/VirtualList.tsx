@@ -161,13 +161,35 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   const [offset, setOffset] = createSignal(0, { name: "virtualOffset" });
 
   /** The sections as one list, plus the two lookups the rest of the file needs. */
+  /**
+   * The last flattening and the sections it came from. A caller that hands
+   * back the same section objects (the excerpt list does, for every book that
+   * did not change) gets the same entries — and the virtualizer the same
+   * measurements — instead of an O(rows) rebuild of an 86,000-row list.
+   */
+  let lastSections: readonly VirtualSection<T>[] | undefined;
+  let lastFlat:
+    | {
+        readonly entries: readonly Entry<T>[];
+        readonly headers: readonly number[];
+        readonly indexOfKey: ReadonlyMap<string, number>;
+      }
+    | undefined;
   const flat = createMemo(
     () => {
+      const sections = props.sections;
+      if (
+        lastFlat !== undefined &&
+        lastSections !== undefined &&
+        lastSections.length === sections.length &&
+        lastSections.every((section, at) => section === sections[at])
+      )
+        return lastFlat;
       const entries: Entry<T>[] = [];
       /** Every header's index, ascending — what the sticky search walks. */
       const headers: number[] = [];
       const indexOfKey = new Map<string, number>();
-      for (const section of props.sections) {
+      for (const section of sections) {
         headers.push(entries.length);
         indexOfKey.set(`header:${section.key}`, entries.length);
         entries.push({ kind: "header", key: `header:${section.key}`, section });
@@ -176,7 +198,9 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
           entries.push({ kind: "row", key: row.key, row });
         }
       }
-      return { entries, headers, indexOfKey };
+      lastSections = sections;
+      lastFlat = { entries, headers, indexOfKey };
+      return lastFlat;
     },
     { name: "virtualFlat" },
   );

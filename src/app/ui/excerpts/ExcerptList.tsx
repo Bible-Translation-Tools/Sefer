@@ -158,24 +158,37 @@ export function ExcerptList(props: ExcerptListProps) {
   const keyOf = (group: BookExcerpts, excerpt: Excerpt): string =>
     props.decor?.rowKey?.(group, excerpt) ?? excerpt.sid;
 
+  /**
+   * One section per group, built once per group OBJECT: the feed hands back a
+   * book's groups unchanged when that book did not change, so a seat swap or
+   * an edit in one book re-describes that book's rows and not the other
+   * eighty thousand.
+   */
+  const built = new WeakMap<BookExcerpts, VirtualSection<Excerpt>>();
+  const sectionOf = (group: BookExcerpts): VirtualSection<Excerpt> => {
+    const held = built.get(group);
+    if (held !== undefined) return held;
+    const made: VirtualSection<Excerpt> = {
+      key: group.bookId,
+      rows: group.excerpts.map((excerpt) => {
+        // `static`: the memo is the tracking scope, and the key is read here
+        // rather than by a function that outlives it.
+        const staticKey = keyOf(group, excerpt);
+        return {
+          key: staticKey,
+          item: excerpt,
+          estimate:
+            estimate(excerpt) +
+            (props.onExpand === undefined ? 0 : FOOTER) +
+            (props.decor?.extraHeight?.(excerpt, staticKey) ?? 0),
+        };
+      }),
+    };
+    built.set(group, made);
+    return made;
+  };
   const sections = createMemo(
-    (): readonly VirtualSection<Excerpt>[] =>
-      props.groups.map((group) => ({
-        key: group.bookId,
-        rows: group.excerpts.map((excerpt) => {
-          // `static`: the memo is the tracking scope, and the key is read here
-          // rather than by a function that outlives it.
-          const staticKey = keyOf(group, excerpt);
-          return {
-            key: staticKey,
-            item: excerpt,
-            estimate:
-              estimate(excerpt) +
-              (props.onExpand === undefined ? 0 : FOOTER) +
-              (props.decor?.extraHeight?.(excerpt, staticKey) ?? 0),
-          };
-        }),
-      })),
+    (): readonly VirtualSection<Excerpt>[] => props.groups.map(sectionOf),
     { name: "excerptSections" },
   );
 

@@ -185,17 +185,95 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
    * extent is applied where the card is drawn (`shownOf`), to the twenty the
    * list is showing.
    */
+  /**
+   * The last grouping of each book, and what it was built from.
+   *
+   * Reused whenever the book's text, its parse and its hits are the same
+   * values: a seat swap (Edit on a card, the editor opening the book) rewrites
+   * the book's row in the shell store, and the stamp that comes back is a new
+   * object with the same revision. Rebuilt from scratch, that regrouped every
+   * hit of every book — 86,556 on "the" over en_ulb — for a click on one card,
+   * and every card downstream saw a new excerpt. Now it regroups the books
+   * that changed and hands every other book's groups back as they were.
+   */
+  const held = new Map<
+    BookId,
+    {
+      readonly revision: number;
+      readonly length: number;
+      readonly analysis: Analysis;
+      readonly hits: readonly Occurrence[];
+      readonly book: BookText;
+      readonly groups: readonly BookExcerpts[];
+      readonly outline: readonly OutlineRow[];
+    }
+  >();
+
+  /** Two hit lists that are the same hits, by identity: a search that did not re-run. */
+  const sameHits = (a: readonly Occurrence[], b: readonly Occurrence[]): boolean =>
+    a.length === b.length && a.every((hit, at) => hit === b[at]);
+
   const model = createMemo(
     () => {
       const project = shell.project();
       if (project === undefined)
         return { groups: [], outline: [], books: new Map<BookId, BookText>() };
       const hits = options.hits();
-      const books = readBooks(shell, new Set(hits.map((hit) => hit.bookId)), analyze);
-      return {
-        ...group(books, hits, initial),
-        books: new Map(books.map((book) => [book.bookId, book] as const)),
-      };
+      // A span, so a seat swap or an edit shows in the ring how much it
+      // regrouped: `excerpts.group` with the books reused and rebuilt.
+      const done = shell.services.composition.observability.span(`${options.name}.group`);
+      let reused = 0;
+      let rebuilt = 0;
+      const byBook = new Map<BookId, Occurrence[]>();
+      for (const hit of hits) {
+        const list = byBook.get(hit.bookId);
+        if (list === undefined) byBook.set(hit.bookId, [hit]);
+        else list.push(hit);
+      }
+      const books = readBooks(shell, new Set(byBook.keys()), analyze);
+      const groups: BookExcerpts[] = [];
+      const outline: OutlineRow[] = [];
+      const texts = new Map<BookId, BookText>();
+      for (const book of books) {
+        const own = byBook.get(book.bookId) ?? [];
+        const stamp = shell.stampOf(book.bookId);
+        const before = held.get(book.bookId);
+        const reuse =
+          before !== undefined &&
+          stamp !== undefined &&
+          before.revision === stamp.revision &&
+          before.length === stamp.length &&
+          before.analysis === book.analysis &&
+          sameHits(before.hits, own);
+        if (reuse) {
+          reused += 1;
+          groups.push(...before.groups);
+          outline.push(...before.outline);
+          texts.set(book.bookId, before.book);
+          continue;
+        }
+        rebuilt += 1;
+        const built = group([book], own, initial);
+        groups.push(...built.groups);
+        outline.push(...built.outline);
+        texts.set(book.bookId, book);
+        held.set(book.bookId, {
+          revision: stamp?.revision ?? -1,
+          length: stamp?.length ?? -1,
+          analysis: book.analysis,
+          hits: own,
+          book,
+          groups: built.groups,
+          outline: built.outline,
+        });
+      }
+      for (const id of held.keys()) if (!byBook.has(id)) held.delete(id);
+      done({
+        "excerpts.hits": hits.length,
+        "excerpts.books_reused": reused,
+        "excerpts.books_rebuilt": rebuilt,
+      });
+      return { groups, outline, books: texts };
     },
     { name: "excerptModel" },
   );
