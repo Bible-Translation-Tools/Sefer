@@ -35,10 +35,22 @@ import {
   gutter,
 } from "@codemirror/view";
 
+import type { Analysis } from "#core/galley";
+
 import { type Analyze, analyzer } from "../core/analyzer";
 import { readingLayer, viewLayer } from "../core/compose";
+import { borrowedStructure, structureAt, type DocStructure } from "../core/docStructure";
+import { renderRangeField } from "../core/render";
 import { span } from "../core/timing";
 import { modeView, type ProjectionName } from "../views";
+import { clipped, wholeLinesOf } from "./satellite";
+import { giveBack, takeView } from "./viewPool";
+
+/**
+ * The editor structure first built over each parse, lent to every later diff
+ * view of it: forty cards over one book build it once, not forty times.
+ */
+const lent = new WeakMap<Analysis, DocStructure>();
 
 export interface DiffWidget {
   readonly at: number;
@@ -69,6 +81,14 @@ export interface DiffViewOptions {
   readonly analyze: Analyze;
   readonly mode: ProjectionName;
   readonly paint: DiffPaint;
+  /**
+   * Show only this range, in source offsets — a change and its context, as a
+   * card in a list of them. The satellite's own clip (`clipped`), so the card
+   * reads and scrolls like every other excerpt; absent, the whole text.
+   */
+  readonly clip?: { readonly from: number; readonly to: number } | undefined;
+  /** The stylesheet's name for the surface; `cm-diff` unless a card asks for its own. */
+  readonly surface?: string;
 }
 
 export interface DiffViewMount {
@@ -226,14 +246,18 @@ const controlGutter = (): Extension =>
 export function mountDiffView(options: DiffViewOptions): DiffViewMount {
   const done = span("diff-mount", `${(options.text.length / 1024) | 0}KB`);
   const projection = new Compartment();
+  const surface = options.surface ?? "cm-diff";
+  const clip = options.clip === undefined ? undefined : wholeLinesOf(options.text, options.clip);
 
   const state = EditorState.create({
     doc: options.text,
     extensions: [
       analyzer.of(options.analyze),
+      borrowedStructure.of(() => lent.get(options.analyze(options.text)) ?? null),
       readingLayer,
       viewLayer(),
-      projection.of(modeView(options.mode, "cm-diff")),
+      projection.of(modeView(options.mode, surface)),
+      ...(clip === undefined ? [] : [clipped(clip), renderRangeField.init(() => clip)]),
       // Seeded with the first paint, so the gutter's first pass has markers.
       paintField.init((state) => ({ paint: options.paint, set: decorate(state, options.paint) })),
       tints,
@@ -242,19 +266,26 @@ export function mountDiffView(options: DiffViewOptions): DiffViewMount {
       EditorView.editable.of(false),
     ],
   });
-  const view = new EditorView({ state, parent: options.parent });
+  const parsed = options.analyze(options.text);
+  if (!lent.has(parsed)) lent.set(parsed, structureAt(state));
+  // Clipped cards come and go as a list scrolls; they take a pooled view.
+  const view =
+    clip === undefined ? new EditorView({ state, parent: options.parent }) : takeView(state);
+  if (clip !== undefined) options.parent.appendChild(view.dom);
   done();
 
   return {
     view,
     repaint: (paint) => view.dispatch({ effects: setPaint.of(paint) }),
-    setMode: (mode) =>
-      view.dispatch({ effects: projection.reconfigure(modeView(mode, "cm-diff")) }),
+    setMode: (mode) => view.dispatch({ effects: projection.reconfigure(modeView(mode, surface)) }),
     showAt: (at) => {
       view.dispatch({
         effects: EditorView.scrollIntoView(Math.min(at, view.state.doc.length), { y: "start" }),
       });
     },
-    destroy: () => view.destroy(),
+    destroy: () => {
+      if (clip === undefined) view.destroy();
+      else giveBack(view);
+    },
   };
 }

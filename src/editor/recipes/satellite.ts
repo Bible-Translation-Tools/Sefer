@@ -239,6 +239,24 @@ export const wholeLines = (
 };
 
 /**
+ * `wholeLines` over a string, before there is a document to ask: the start of
+ * the line `from` is on, to the end of the line before `to`.
+ */
+export const wholeLinesOf = (
+  text: string,
+  range: { readonly from: number; readonly to: number },
+): { from: number; to: number } => {
+  const start = Math.max(0, Math.min(range.from, text.length));
+  const end = Math.max(start, Math.min(range.to, text.length));
+  const last = Math.max(start, end - 1);
+  const close = text.indexOf("\n", last);
+  return {
+    from: start === 0 ? 0 : text.lastIndexOf("\n", start - 1) + 1,
+    to: close < 0 ? text.length : close,
+  };
+};
+
+/**
  * A range a view was asked to highlight. `class` says what the mark means —
  * the current match, a finding's severity, the context around the own unit —
  * and defaults to the plain hit.

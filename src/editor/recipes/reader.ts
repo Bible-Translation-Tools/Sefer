@@ -46,8 +46,13 @@ import {
   remark,
   satelliteRange,
   wholeLines,
+  wholeLinesOf,
   type MarkedRange,
 } from "./satellite";
+import { giveBack, takeView } from "./viewPool";
+
+/** How long typing must pause before a card the typing did not touch catches up. */
+const CATCH_UP_MS = 400;
 
 export interface ReaderOptions {
   readonly parent: HTMLElement;
@@ -80,24 +85,6 @@ export interface ReaderMount {
   destroy(): void;
 }
 
-/**
- * `wholeLines` over a string, before there is a document to ask: the start of
- * the line `from` is on, to the end of the line before `to`.
- */
-const linesOf = (
-  text: string,
-  range: { readonly from: number; readonly to: number },
-): { from: number; to: number } => {
-  const start = Math.max(0, Math.min(range.from, text.length));
-  const end = Math.max(start, Math.min(range.to, text.length));
-  const last = Math.max(start, end - 1);
-  const close = text.indexOf("\n", last);
-  return {
-    from: start === 0 ? 0 : text.lastIndexOf("\n", start - 1) + 1,
-    to: close < 0 ? text.length : close,
-  };
-};
-
 const sameMarks = (a: readonly MarkedRange[], b: readonly MarkedRange[]): boolean =>
   a.length === b.length &&
   a.every((mark, at) => {
@@ -109,40 +96,6 @@ const sameMarks = (a: readonly MarkedRange[], b: readonly MarkedRange[]): boolea
       mark.class === other.class
     );
   });
-
-/**
- * Retired reader views, kept to be handed the next card's state.
- *
- * A windowed list mounts a card and unmounts another on nearly every frame it
- * scrolls, and constructing an `EditorView` was most of a card's cost: the
- * constructor reads `document.fonts.ready`, which forces a style recalculation
- * of the whole page (~3.5 ms a card on en_ulb Psalms), and it sets
- * `contenteditable` on a connected element, which Chrome answers with editing-
- * state work of its own. A view given a new state with `setState` pays
- * neither. Every reader has the same shape — read-only, no plugins that hold
- * anything outside their state — so any retired view can take any card.
- *
- * Bounded: a list shows twenty or so cards, and more than that retired at
- * once is a list that went away, not one that is scrolling.
- */
-const POOL_LIMIT = 32;
-
-/** How long typing must pause before a card the typing did not touch catches up. */
-const CATCH_UP_MS = 400;
-const pool: EditorView[] = [];
-
-const takeView = (state: EditorState): EditorView => {
-  const held = pool.pop();
-  if (held === undefined) return new EditorView({ state });
-  held.setState(state);
-  return held;
-};
-
-const giveBack = (view: EditorView): void => {
-  view.dom.remove();
-  if (pool.length < POOL_LIMIT) pool.push(view);
-  else view.destroy();
-};
 
 /** The structure first built over each parse, lent to every later reader of it. */
 const lent = new WeakMap<Analysis, DocStructure>();
@@ -168,12 +121,12 @@ export function mountReader(options: ReaderOptions): ReaderMount {
       readingLayer,
       viewLayer(),
       projection.of(modeView(options.mode, options.surface)),
-      clipped(linesOf(text, options.range)),
+      clipped(wholeLinesOf(text, options.range)),
       // The render window starts as the clip. Left to itself it starts as
       // nothing, which the decorator reads as "the whole document" — every
       // card decorated its whole book, and then again once the view reported
       // its viewport. Seeded, a card decorates the lines it shows.
-      renderRangeField.init(() => linesOf(text, options.range)),
+      renderRangeField.init(() => wholeLinesOf(text, options.range)),
       markedRanges(options.marks),
       EditorState.readOnly.of(true),
       EditorView.editable.of(false),
@@ -190,7 +143,7 @@ export function mountReader(options: ReaderOptions): ReaderMount {
   // costs nothing. A reconfigure rebuilds every decoration, and on a list that
   // mounts a card per frame while scrolling that was the largest single cost.
   let mode = options.mode;
-  let clip = linesOf(text, options.range);
+  let clip = wholeLinesOf(text, options.range);
   let marks = options.marks;
   let detach: (() => void) | undefined;
   /**

@@ -1102,3 +1102,12 @@
   color: var(--brand);
   border-color: var(--brand);
 }
+
+/* A diff card in "Changes as excerpts": the diff view clipped to one change,
+   at a card's measure rather than a page's. */
+.cm-diff-card .cm-content {
+  padding: 8px 12px;
+}
+.cm-diff-card .cm-scroller {
+  overflow: hidden;
+}
