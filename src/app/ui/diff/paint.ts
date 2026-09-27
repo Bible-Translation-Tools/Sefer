@@ -30,18 +30,27 @@ export const ordered = (skeleton: DiffSkeleton): readonly DecisionUnit[] => {
 
 export const changed = (unit: DecisionUnit): boolean => unit.status !== "unchanged";
 
-const tint = (unit: DecisionUnit, decision: MergeSide | undefined): string =>
-  decision === "current"
-    ? "cm-diff-kept"
-    : decision === "baseline"
-      ? "cm-diff-taken"
-      : unit.status === "added"
-        ? "cm-diff-added-unit"
-        : unit.status === "deleted"
-          ? "cm-diff-deleted-unit"
-          : unit.isUsfmStructureChange
-            ? "cm-diff-markup-unit"
-            : "cm-diff-modified-unit";
+const tint = (unit: DecisionUnit, decision: MergeSide | undefined, live: boolean): string =>
+  // When decisions are WRITTEN (Result mode), the diff is the truth: a taken
+  // unit that was edited afterwards differs again and is drawn as a change,
+  // red and green like any other. The decision tint marks only a unit that
+  // reads exactly as the side it was decided for.
+  live && changed(unit)
+    ? statusTint(unit)
+    : decision === "current"
+      ? "cm-diff-kept"
+      : decision === "baseline"
+        ? "cm-diff-taken"
+        : statusTint(unit);
+
+const statusTint = (unit: DecisionUnit): string =>
+  unit.status === "added"
+    ? "cm-diff-added-unit"
+    : unit.status === "deleted"
+      ? "cm-diff-deleted-unit"
+      : unit.isUsfmStructureChange
+        ? "cm-diff-markup-unit"
+        : "cm-diff-modified-unit";
 
 /** Word runs worth marking in this projection: markup only when markup is shown. */
 const visibleRun = (what: string, usfm: boolean): boolean =>
@@ -69,6 +78,8 @@ export interface Controls {
   /** What the two buttons say on hover: "Keep the editor's", "Take the file's". */
   readonly keepTitle: string;
   readonly takeTitle: string;
+  /** Decisions are written as they are made, so the diff, not the decision, names the tint. */
+  readonly live?: boolean;
 }
 
 const button = (
@@ -136,7 +147,7 @@ export const sidePaint = (
       lines.push({
         from: span.from,
         to: Math.max(span.from + 1, end),
-        class: tint(unit, decision),
+        class: tint(unit, decision, controls?.live === true),
       });
       // Word marks only where there is something to compare: a unit only one
       // side has is ALL change, and marking each of its words says nothing

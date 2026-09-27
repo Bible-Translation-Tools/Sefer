@@ -16,11 +16,25 @@
  * unit at the top of the current pane, so a counter can say where you are.
  */
 
-import { Show, createEffect, createSignal, untrack } from "solid-js";
+import { EditorView } from "@codemirror/view";
+import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
+import type { Analysis } from "#core/galley";
 import type { DecisionUnit } from "#core/galley/diff";
 import type { ObservabilityService } from "#core/observability";
-import { mountDiffView, watchLocation, type DiffPaint, type DiffViewMount } from "#editor/index";
+import {
+  analyzer,
+  liveDiff,
+  modeView,
+  mountDiffView,
+  mountSatellite,
+  readingLayer,
+  repaintDiff,
+  watchLocation,
+  type DiffPaint,
+  type DiffViewMount,
+  type EditorBook,
+} from "#editor/index";
 
 import "#editor/editor.css";
 
@@ -31,6 +45,9 @@ import { sidePaint, unifiedPaint, type Controls, type Side } from "./paint";
 export interface BookDiffApi {
   readonly showUnit: (unit: DecisionUnit) => void;
 }
+
+const sameFields = (a: Readonly<Record<string, unknown>>, b: Readonly<Record<string, unknown>>) =>
+  Object.keys(a).every((key) => a[key] === b[key]);
 
 /** The unit whose span on `side` holds `at`, or the last one before it. */
 const unitAt = (
@@ -64,13 +81,27 @@ export function BookDiff(props: {
   readonly ref?: (api: BookDiffApi) => void;
   readonly onPlace?: (unit: DecisionUnit | undefined) => void;
   readonly class?: string;
+  /**
+   * The current side, EDITABLE: the Book itself, as a satellite with the diff
+   * as a plugin on it (Review's Result mode). An edit goes through the Book's
+   * funnel like any other; the review compares again and repaints. Absent,
+   * the current side is a read-only view of the text in `sides`.
+   */
+  readonly live?:
+    | { readonly book: EditorBook; readonly analyze: (text: string) => Analysis }
+    | undefined;
 }) {
   const [left, setLeft] = createSignal<HTMLDivElement | undefined>(undefined, { name: "bookLeft" });
   const [right, setRight] = createSignal<HTMLDivElement | undefined>(undefined, {
     name: "bookRight",
   });
 
-  let mounts: { side: Side | "unified"; mount: DiffViewMount; paint: () => DiffPaint }[] = [];
+  let mounts: {
+    side: Side | "unified";
+    mount: DiffViewMount;
+    paint: () => DiffPaint;
+    live: boolean;
+  }[] = [];
 
   const showUnit = (unit: DecisionUnit): void => {
     // A pane the unit is not in stays where it is: in a split it is the
@@ -87,18 +118,37 @@ export function BookDiff(props: {
     },
   );
 
-  createEffect(
+  /**
+   * What the views are built from, compared FIELD BY FIELD. A new comparison
+   * hands over a new `sides` object every time; without this the effect below
+   * would see a new dependency object and rebuild every view — including a
+   * live pane, under the caret of the person typing in it.
+   */
+  const built = createMemo(
     () => ({
-      sides: props.sides,
-      units: props.units,
+      bookId: props.sides.bookId,
+      baselineText: props.sides.baselineText,
+      // A live pane follows the Book itself: a new comparison of the same book
+      // REPAINTS it (below) rather than rebuilding the view under the caret.
+      currentText: props.live === undefined ? props.sides.currentText : undefined,
+      live: props.live,
       split: props.split,
       markup: props.usfm,
       decidable: props.controls !== undefined,
       l: left(),
       r: right(),
     }),
-    ({ sides, units, split, markup, l, r }) => {
+    { name: "bookDiffBuilt", equals: sameFields },
+  );
+
+  createEffect(
+    () => built(),
+    ({ split, markup, live, l, r }) => {
       if (r === undefined || (split && l === undefined)) return;
+      // The latest comparison, read when painting: in a live pane it moves on
+      // every accepted edit while the view stays.
+      const now = () => untrack(() => ({ sides: props.sides, units: props.units }));
+      const { sides } = now();
       const observability = untrack(() => props.observability);
       const op = observability.operation("review.diff.book", {
         "diff.book": sides.bookId,
@@ -121,7 +171,7 @@ export function BookDiff(props: {
             // regular mode opens with the bare `\q1` that belongs to the unit
             // BEFORE, and following that would show the verse above.
             const probe = Math.max(where.top, mount.view.lineBlockAt(where.top).to - 1);
-            const unit = unitAt(units, side, probe);
+            const unit = unitAt(now().units, side, probe);
             if (side === "current" || !split) report(unit);
             if (!split || side !== leader) return;
             const target = held.find((entry) => entry.side !== side)?.mount;
@@ -150,6 +200,40 @@ export function BookDiff(props: {
         text: string,
         paint: () => DiffPaint,
       ): DiffViewMount => {
+        if (side !== "baseline" && live !== undefined) {
+          const release = live.book.hold();
+          const satellite = mountSatellite({
+            parent,
+            host: live.book.funnel(),
+            range: { from: 0, to: live.book.state.doc.length },
+            editable: true,
+            label: `review:${sides.bookId}`,
+            extensions: [
+              modeView(mode, "cm-diff"),
+              analyzer.of(live.analyze),
+              readingLayer,
+              ...liveDiff(paint()),
+            ],
+          });
+          const mount: DiffViewMount = {
+            view: satellite.view,
+            repaint: (next) => repaintDiff(satellite.view, next),
+            setMode: () => {},
+            showAt: (at) => {
+              satellite.view.dispatch({
+                effects: EditorView.scrollIntoView(Math.min(at, satellite.view.state.doc.length), {
+                  y: "start",
+                }),
+              });
+            },
+            destroy: () => {
+              satellite.destroy();
+              release();
+            },
+          };
+          held.push({ side, mount, paint, live: true });
+          return mount;
+        }
         const analysis = side === "baseline" ? sides.baseline : sides.current;
         const mount = mountDiffView({
           parent,
@@ -158,28 +242,34 @@ export function BookDiff(props: {
           mode,
           paint: paint(),
         });
-        held.push({ side, mount, paint });
+        held.push({ side, mount, paint, live: false });
         return mount;
       };
 
       const painted = op.span("review.diff.mount");
       if (split && l !== undefined) {
         const was = add("baseline", l, sides.baselineText, () =>
-          sidePaint(units, "baseline", markup, undefined, sides.baseline),
+          sidePaint(now().units, "baseline", markup, undefined, now().sides.baseline),
         );
-        const now = add("current", r, sides.currentText, () =>
-          sidePaint(units, "current", markup, controls(), sides.current),
+        const current = add("current", r, sides.currentText, () =>
+          sidePaint(now().units, "current", markup, controls(), now().sides.current),
         );
         follow("baseline", was);
-        follow("current", now);
+        follow("current", current);
       } else {
-        const now = add("unified", r, sides.currentText, () =>
-          unifiedPaint(units, markup, controls(), goneBlock(sides.baseline, mode), sides.current),
+        const current = add("unified", r, sides.currentText, () =>
+          unifiedPaint(
+            now().units,
+            markup,
+            controls(),
+            goneBlock(now().sides.baseline, mode),
+            now().sides.current,
+          ),
         );
-        follow("current", now);
+        follow("current", current);
       }
       painted();
-      op.end("passed", { "diff.units": units.length });
+      op.end("passed", { "diff.units": now().units.length, "diff.live": live !== undefined });
       mounts = held;
       const first = untrack(() => props.initial);
       if (first !== undefined) requestAnimationFrame(() => showUnit(first));
@@ -192,15 +282,20 @@ export function BookDiff(props: {
     },
   );
 
-  // A decision repaints in place: the text did not move, only its tint.
+  // A decision, or a new comparison of a live pane, repaints in place. A live
+  // pane whose text has moved past the comparison (the next keystroke landed
+  // first) keeps its mapped decorations until the comparison catches up.
   createEffect(
-    () =>
-      props.units
-        .filter((unit) => unit.status !== "unchanged")
-        .map((unit) => props.controls?.decision(unit) ?? "-")
-        .join(","),
-    () => {
-      for (const entry of mounts) entry.mount.repaint(entry.paint());
+    () => ({
+      units: props.units,
+      text: props.sides.currentText,
+      decided: props.units.map((unit) => props.controls?.decision(unit) ?? "-").join(","),
+    }),
+    ({ text }) => {
+      for (const entry of mounts) {
+        if (entry.live && entry.mount.view.state.doc.length !== text.length) continue;
+        entry.mount.repaint(entry.paint());
+      }
     },
   );
 

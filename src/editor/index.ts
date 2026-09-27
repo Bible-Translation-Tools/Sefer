@@ -44,7 +44,9 @@ export {
 export { mountReader, type ReaderMount } from "./recipes/reader";
 export { mountStamp, type StampMount } from "./recipes/stamp";
 export {
+  liveDiff,
   mountDiffView,
+  repaintDiff,
   type DiffPaint,
   type DiffViewMount,
   type DiffWidget,

@@ -244,7 +244,14 @@ The file is still written only by Record a version. Switching mode clears the
 decisions, because the two modes mean different things by one. Two read-only
 sides (two zips, two folders) have no result to edit, so the mode is not
 offered; a remote into the working text will be, when a remote is a source.
-Decide-then-apply stays the default; an N-way review is not designed.
+In Whole book the current pane is the Book itself, editable everywhere, with the
+diff as a plugin on it (`liveDiff` in `src/editor/recipes/diffView.ts`): each
+accepted edit is announced (debounced 150 ms), the review compares again
+(15–25 ms) and the pane repaints in place, so typing never rebuilds the view.
+In this mode the DIFF names the tint, not the decision: a taken verse edited
+afterwards differs again and is red and green like any change, and the
+decided wash marks only a verse that reads exactly as the side it was decided
+for. Decide-then-apply stays the default; an N-way review is not designed.
 
 **Tints are marks, not line classes.** In the reading a paragraph is one visual
 line, so a line class tinted every verse in it; a mark is exactly the unit.

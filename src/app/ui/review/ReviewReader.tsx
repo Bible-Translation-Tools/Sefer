@@ -323,6 +323,7 @@ export function ReviewReader(props: {
           decide: (unit, side) => props.decide(bookId, [unit], side),
           keepTitle: t("Keep {source}'s", { source: props.currentShort }),
           takeTitle: t("Take {source}'s", { source: props.baselineShort }),
+          live: props.mode === "result",
         }
       : undefined;
 
@@ -669,6 +670,78 @@ export function ReviewReader(props: {
   };
   const analyzeLive = services.galley.memoize();
 
+  /**
+   * The whole book's current pane, live: in Result mode with the working text
+   * on the left, the Book itself is seated and edited in place, the diff drawn
+   * on it as a plugin. The same parse the reading prepared is lent to it.
+   */
+  const [liveBook, setLiveBook] = createSignal<
+    { readonly bookId: BookId; readonly book: EditorBook } | undefined
+  >(undefined, { name: "reviewLiveBook" });
+  createEffect(
+    () => (scope() === "book" && editable() ? selectedBook()?.book.bookId : undefined),
+    (bookId) => {
+      if (bookId === undefined) {
+        setLiveBook(undefined);
+        return;
+      }
+      // Already seated: seating again would hand the pane a new object, and a
+      // new object is a rebuilt view — under the caret of somebody typing.
+      if (untrack(liveBook)?.bookId === bookId) return;
+      let current = true;
+      void props.seat(bookId).then((book) => {
+        if (current) setLiveBook(book === undefined ? undefined : { bookId, book });
+      });
+      return () => {
+        current = false;
+      };
+    },
+  );
+  /**
+   * An edit in the live pane, announced. A satellite's edit lands in the Book
+   * but does not move the shell's stamp for it, so the review — which re-takes
+   * its comparison when a stamp moves — would never see it. Debounced: a burst
+   * of typing is one comparison after the burst, as everywhere on this screen.
+   */
+  createEffect(
+    () => liveBook(),
+    (held) => {
+      if (held === undefined) return;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const stop = held.book.changes(() => {
+        if (timer !== undefined) clearTimeout(timer);
+        timer = setTimeout(() => props.onEdited(held.bookId), 150);
+      });
+      return () => {
+        if (timer !== undefined) clearTimeout(timer);
+        stop();
+      };
+    },
+  );
+
+  /** One object per seated book: a new one would rebuild the live pane. */
+  const live = createMemo(
+    () => {
+      const seated = liveBook();
+      if (seated === undefined) return undefined;
+      const staticBookId = seated.bookId;
+      return {
+        bookId: staticBookId,
+        book: seated.book,
+        analyze: (text: string) => analysisOf(staticBookId, "current", text),
+      };
+    },
+    {
+      name: "reviewLive",
+      // The same seated Book is the same live pane.
+      equals: (a, b) => a?.book === b?.book && a?.bookId === b?.bookId,
+    },
+  );
+  const liveFor = (bookId: BookId) => {
+    const held = live();
+    return held !== undefined && held.bookId === bookId ? held : undefined;
+  };
+
   let observer: ResizeObserver | undefined;
   const measure = (element: HTMLDivElement): void => {
     observer?.disconnect();
@@ -825,6 +898,7 @@ export function ReviewReader(props: {
                   currentFirst
                   observability={observability}
                   initial={opened()?.unit}
+                  live={liveFor(held().book.bookId)}
                   ref={(api) => {
                     book = api;
                   }}

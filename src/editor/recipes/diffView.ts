@@ -159,15 +159,17 @@ const decorate = (state: EditorState, paint: DiffPaint): DecorationSet => {
   // tinted every verse in it when one had changed; and a card clipped
   // mid-paragraph starts that line inside the hidden text, where a line class
   // is never drawn at all. A mark is exactly the unit, wherever it sits.
+  // Clamped to the text: over a live document, a paint can be one comparison
+  // behind the keystroke that just landed.
   for (const line of paint.lines)
-    if (line.to > line.from)
+    if (line.to > line.from && line.from < doc.length)
       ranges.push({
         from: line.from,
         to: Math.min(line.to, doc.length),
         deco: Decoration.mark({ class: line.class }),
       });
   for (const mark of paint.marks)
-    if (mark.to > mark.from)
+    if (mark.to > mark.from && mark.to <= doc.length)
       ranges.push({ from: mark.from, to: mark.to, deco: Decoration.mark({ class: mark.class }) });
   for (const widget of paint.widgets) {
     const at = Math.min(widget.at, doc.length);
@@ -228,6 +230,21 @@ const controlGutter = (): Extension =>
       return builder.finish();
     },
   });
+
+/**
+ * The diff as a plugin on ANY editor — the book's own satellite, in Review's
+ * Result mode, where the text being compared is the text being edited. Its
+ * decorations map through every edit until the next comparison repaints them
+ * (`repaintDiff`).
+ */
+export const liveDiff = (paint: DiffPaint): Extension[] => [
+  paintField.init((state) => ({ paint, set: decorate(state, paint) })),
+  controlGutter(),
+];
+
+export const repaintDiff = (view: EditorView, paint: DiffPaint): void => {
+  view.dispatch({ effects: setPaint.of(paint) });
+};
 
 export function mountDiffView(options: DiffViewOptions): DiffViewMount {
   const done = span("diff-mount", `${(options.text.length / 1024) | 0}KB`);
