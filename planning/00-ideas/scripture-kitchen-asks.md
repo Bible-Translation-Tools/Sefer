@@ -67,12 +67,20 @@ Rarity's denominator today is the corpus total, so `Glyph.sites` has to take Rar
 
 **Sefer side:** nothing to change; the paragraph then flows through it as it does through `\s5`.
 
-## 8. `diff` skips chapters that did not change
+## 8. `diff` ships only what changed
 
-**Asked 2026-09-26.** `galley.diff` aligns two whole books every call. On en_ulb, Psalms takes ~18 ms, and a review across every book (the playground's "Changes as excerpts") compares 66 books in ~3 s. When changes are few and spread out, most chapters are byte-identical on both sides.
+**Asked 2026-09-26, rewritten 2026-09-27 after measuring.** The first version of this ask was to skip unchanged chapters inside `diff`. The measurement says alignment is not the cost. Timed in Node against the 0.1.7 web build, on en_ulb with one verse in forty edited:
 
-**Change:** inside `diff`, pair chapters by their `\c` number from each side's TOC, hash each chapter slice (the engine already has xxh3), and treat a pair with equal hashes as unchanged without aligning it. Chapters that differ, and chapters one side lacks, are aligned exactly as they are now. The result must be the same skeleton as today: the same units, addresses and word runs, with spans into each whole document, and a move across chapters still reported as a move. Done in the engine, this keeps one implementation. Sefer slicing books would need offset shifting, `\id` stitching, and would turn cross-chapter moves into a delete plus an add.
+|                       | Psalms     | All 66 books |
+| --------------------- | ---------- | ------------ |
+| `diff` with `"words"` | 9.0 ms     | 105 ms       |
+| `diff` with `"none"`  | 6.6 ms     | 74 ms        |
+| The JSON it returns   | 1,364 KB   | 18,137 KB    |
+| `JSON.parse` of it    | 3.5 ms     | 48 ms        |
+| Units / units changed | 2,612 / 61 | 32,357 / 743 |
 
-**Measure first:** how much of a book's `diff` is parsing and how much is alignment. If parsing dominates, this helps less, and running the comparisons in a worker is Sefer's lever.
+Diffing a book against itself still takes 8.6 ms and returns 992 KB. With identical sides the alignment short-circuits, so that is lexing, the TOC and the serialization. In Psalms the 2,551 unchanged units are 799 KB of the JSON (about 320 bytes each, most of it repeated sids and false flags), and the slots add another 173 KB. Sefer then parses the JSON and walks every unit again (`decodeSkeleton`, one `parseAddr` per side). A whole-book diff is cheap. Shipping every unchanged unit, and decoding it again, is where the time goes.
 
-**Sefer side:** nothing to change; the playground's all-books diff gets faster.
+**Change:** add an option on `diff` (its options object from 0.1.7) that leaves `unchanged` units out of `units`, with slots and `afterUnit` renumbered or anchored so the order is still recoverable. Nothing reads an unchanged unit: a decision is only ever made on a changed one, `merge` re-diffs on its own side, and a view shows the unchanged text from the document itself. Keep the default as it is, so nothing that relies on the full skeleton breaks. A compact binary wire (spans in a `Uint32Array`) would be the next step if the JSON of the changed units ever matters. It doesn't yet.
+
+**Sefer side:** ask for changed-only, and skip calling `diff` at all when both sides have the same `sameSource` stamp (hash and length). That second check is Sefer's alone, and it removes every untouched book from an all-books review.
