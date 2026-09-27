@@ -137,10 +137,9 @@ must not be; the key is the pair of texts, so there is nothing to invalidate.
 ### There is no second diff on this screen
 
 Review's alignment is the engine's and nothing else — Will, 2026-09-15: "the
-engine is the only diff". The line diff in `src/core/diff/diff.ts` still serves
-History and `projectSource` and is being retired toward the
-same decision units ([diff and multibook](diff-and-multibook.md)); it has no
-part in `/review`.
+engine is the only diff". Since 2026-09-27 it is the only diff in Sefer: History
+and the project's writes use the same decision units
+([diff and multibook](diff-and-multibook.md)).
 
 The badge still says **engine diff**, because a reviewer deciding what to keep
 is entitled to know what aligned it. What it no longer does is choose between

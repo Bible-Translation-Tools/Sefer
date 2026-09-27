@@ -8,7 +8,7 @@ One section per service: what it is in plain words, what is wrong or constrained
 
 1. **Location** — done: every place question goes through Citation, Address and Location over the engine's TOC, and no regex reads a designator. Anchors (for comments) are the next piece, when comments start. See [Location](#location-and-reference) and [the Location chapter](architecture/location.md).
 2. **Git, top to bottom** — history time travel is next, and the pull/push/lifecycle flow needs one careful pass before anything else is added to it. See [Git](#git).
-3. **One diff and sync model** — after the primitives settle: retire the line diff, stop reading and diffing every book, one change classification for History, Review and Cloud. See [Diff](#diff) and `planning/01-discussing/diff-and-sync-model-2026-09-23.md`.
+3. **One diff and sync model** — after the primitives settle: stop reading every book (the line diff is retired, 2026-09-27), one change classification for History, Review and Cloud. See [Diff](#diff) and `planning/01-discussing/diff-and-sync-model-2026-09-23.md`.
 4. **Data safety in Recovery** — a journal must know what text it started from. See [Recovery](#recovery).
 
 ## The graph
@@ -389,16 +389,15 @@ The multibuffer shared by Find, Key terms and Findings: occurrences grouped by T
 
 ### Overview
 
-There are two diffs today. The engine skeleton (decision units addressed by sid, `core/diff/skeleton.ts` + `core/galley/diff.ts`) feeds `/review`, and both its views mark words from the engine's located runs over the engine's reader text. A legacy line diff (`core/diff/diff.ts`) still feeds History hunks and Revert, and `projectSource.apply` (the minimal change list a write lands as; the engine's `mergeSplices` door is the replacement). `compareBooks` no longer diffs at all: identical is string equality. → [review](architecture/review.md), [diff and multibook](architecture/diff-and-multibook.md)
+There is one diff: the engine's decision units, addressed by sid (`core/diff/skeleton.ts` + `core/galley/diff.ts`). It feeds `/review`, History's change list and Revert (`core/diff/units.ts`), and every minimal write (`galley.mergeSplices`, as `projectSource.apply`'s `edits`). The line diff is gone (2026-09-27). `compareBooks` does not diff at all: identical is string equality. → [review](architecture/review.md), [diff and multibook](architecture/diff-and-multibook.md)
 
 ### Constraints and known bugs
 
-- The line diff breaks the sid-aligned-only rule.
 - `compareBooks` still READS every book on both sides to decide "identical" (string equality, no diff since 2026-09-27). Skipping the read by a stored hash per revision is the next step.
 
 ### Ideas / future
 
-- The plan: `planning/01-discussing/diff-and-sync-model-2026-09-23.md`. Skip by stamp, read only changed books, one change classification shared by History, Review and Cloud, then move History and `projectSource` onto decision units and delete `core/diff/diff.ts`.
+- The plan: `planning/01-discussing/diff-and-sync-model-2026-09-23.md`. Skip by stamp, read only changed books, one change classification shared by History, Review and Cloud, — History and `projectSource` are on decision units and `core/diff/diff.ts` is deleted (2026-09-27); what remains is skipping the read by stamp.
 - The diff UI redesign is paused on `/project/$slug/playground`.
 - **Default baseline: the file on disk against the working session, not the last commit.**
 

@@ -2,22 +2,16 @@
 
 Two small, pure, synchronous modules that sit above `Book` and below anything with a lifetime. Neither takes an Effect, a service, or a host capability.
 
-## Diff — what changed since the last save
+## Diff — what changed since a baseline, and putting it back
 
-`src/core/diff/diff.ts`. Diff answers "what have I changed since this was written to disk?" and puts pieces of it back.
+`src/core/diff/units.ts`, over the engine. Diff answers "what have I changed since this text?" and puts pieces of it back — in the engine's **decision units** (a verse, a bridge, a chapter's opening matter), the same alignment `/review` uses, so no two screens in Sefer can disagree about which verses moved. There is no line diff anywhere in Sefer since 2026-09-27; `core/diff/diff.ts` is gone.
 
-It is a LINE diff, and it is being retired: comparisons are meant to go through the engine's sid-aligned decision units, which is what `/review` already uses ([review](review.md)). Its remaining users are the History panel and its `src/app/ui/panels/changes.ts`, and `src/core/compare/projectSource.ts` (`compareBooks` stopped using it on 2026-09-27). Do not add a new one.
+Its input is a **value**, not a service: `BaselineLike { bookId, stamp, text }`. Save's `Baseline` and a decoded recorded blob both satisfy it structurally, so nothing here points at Save. The engine arrives as the `GalleyService` argument.
 
-Its input is a **value**, not a service: `BaselineLike { bookId, stamp, text }`. Save produces the full `Baseline` (adding `path`, `hash`, `savedAt`); Diff only names the three fields it reads, structurally, so nothing in Diff points at Save — Save points at FileSystem and Observability, and Diff must stay below both. That direction is the DAG's rule, not a style preference.
+- `unitChanges(galley, book, baseline): Result<UnitChanges, Refusal>` — the changed units between the baseline and the book's current text (`diffSkeleton`, the cached engine diff), with both texts and the working stamp. Identical texts answer by string equality with no engine call.
+- `revertUnits(galley, book, changes, units): Result<Receipt, Refusal>` — puts the baseline's text back for those units as **one** `book.apply(..., "revert", trustedBy("diff.revert"))`, so one Undo takes the revert back whether it is one verse or the whole book. The edits are the engine's `mergeSplices` with the book's text as the text being edited: only the chosen units move, and everything else keeps its offsets. Unit ids are the same whichever way round two texts are diffed, which is what lets the ids `unitChanges` reported drive the merge. Refuses `Stale` (the book moved since the changes were computed), `Empty`, and `Engine` (a build without the door).
 
-- `compare(book, baseline): readonly Hunk[]` — line-based (LF lines, the only newline canonical text has), ascending, non-overlapping. USFM edits are line-shaped, a line is a hunk a translator can read, and line granularity keeps a revert one range splice.
-- `revert(hunk, book)` / `revertAll(hunks, book)` — `Result<Receipt, Refusal>`, through `book.apply(..., "revert", trustedBy("diff.revert"))`. Refuses `Stale` — checked by an internal `stale(hunk, book)`: the book moved (different id, revision, or length) since the hunk was measured — rather than splicing at offsets that have moved, and `Empty` rather than stamping a no-op revision.
-
-A `Hunk` carries `from`/`to` in **working-text** UTF-16 offsets — already `book.apply`'s before-text coordinates — plus `baselineFrom`/`baselineTo` for the old side, `kind` (`insert` = absent from the baseline, `delete` = a zero-width working range where lines were removed, `replace` = both), and both slices of text. It is stamped with the working text's stamp, so a revert can tell it has gone stale.
-
-`revertAll` is one `apply` with the whole change list, so "discard my changes" is **one** history event rather than one per hunk.
-
-The diff itself is a dynamic-programming LCS over lines, with common prefix and suffix trimmed first and a guard (`MAX_LCS_CELLS`) above which the differing region collapses into a single coarse `replace` hunk. Myers would be asymptotically nicer; at a book's size, after trimming, it is not the slow part, and the guarded table is a page of obvious code.
+The same door is how a write lands minimally: `projectSource.apply` takes an `edits(before, after)` function, and the app passes `galley.mergeSplices(before, after, {}, "current")` — the edits that turn one text into the other, one per differing unit.
 
 ## MultiBook — one operation across many books
 

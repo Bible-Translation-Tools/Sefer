@@ -20,16 +20,18 @@
  * make the answer reactive, which is the single-subscription rule the shell
  * documents.
  *
- * The `+`/`−` counts are line counts over the hunks, not a second diff: a
- * summary that disagreed with the diff beneath it would be worse than no
- * summary.
+ * What changed is the ENGINE's answer, in decision units (`core/diff/units`):
+ * the same alignment Review uses, so the two screens cannot disagree about
+ * which verses moved. The counts are counts of those units, not a second
+ * diff: a summary that disagreed with the list beneath it would be worse than
+ * no summary.
  */
 
-import { Option } from "effect";
+import { Option, Result } from "effect";
 
 import type { Book, BookId } from "#core/book/book";
-import { compare, type Hunk } from "#core/diff/diff";
-import type { Baseline } from "#core/save/baseline";
+import { unitChanges, type BaselineLike, type UnitChanges } from "#core/diff/units";
+import type { GalleyService } from "#core/galley";
 
 import type { Shell } from "../../ProjectContext";
 import { lines } from "./format";
@@ -39,37 +41,48 @@ export interface BookChanges {
   readonly bookId: BookId;
   readonly path: string;
   readonly book: Book;
-  readonly hunks: readonly Hunk[];
-  /** Lines the working text has that the baseline did not. */
+  /** The changed units, and the two texts and the stamp they were computed over. */
+  readonly changes: UnitChanges | undefined;
+  /** Units only the working text has. */
   readonly added: number;
-  /** Lines the baseline had that the working text does not. */
+  /** Units only the baseline had. */
   readonly removed: number;
+  /** Units both have, in different words or markup. */
+  readonly modified: number;
   /**
    * Set when there is no baseline at all — a book the recorded version has
-   * never seen. `hunks` is empty on purpose: a diff against nothing is the
+   * never seen. `changes` is absent on purpose: a diff against nothing is the
    * whole file, which nobody reads as a review, so the panel says "first time"
-   * and gives the line count instead.
+   * and gives the line count instead (`added`).
    */
   readonly firstTime?: boolean;
 }
 
-const countsOf = (hunks: readonly Hunk[]): { readonly added: number; readonly removed: number } => {
-  let added = 0;
-  let removed = 0;
-  for (const hunk of hunks) {
-    added += lines(hunk.working).length;
-    removed += lines(hunk.baseline).length;
-  }
-  return { added, removed };
-};
+/** How many units changed, of each kind. */
+export const changeCount = (changes: BookChanges): number => changes.changes?.units.length ?? 0;
 
-/** One book against one baseline-shaped value. Empty hunks are dropped upstream. */
+/**
+ * One book against one baseline-shaped value. A book the engine refused to
+ * diff is reported with no units, which drops it upstream — there is no
+ * second opinion about what changed.
+ */
 export const changesOf = (
+  galley: GalleyService,
   book: Book,
-  baseline: { readonly bookId: BookId; readonly stamp: Baseline["stamp"]; readonly text: string },
+  baseline: BaselineLike,
 ): BookChanges => {
-  const hunks = compare(book, baseline);
-  return { bookId: book.id, path: book.path, book, hunks, ...countsOf(hunks) };
+  const found = unitChanges(galley, book, baseline);
+  const changes = Result.isSuccess(found) ? found.success : undefined;
+  const units = changes?.units ?? [];
+  return {
+    bookId: book.id,
+    path: book.path,
+    book,
+    changes,
+    added: units.filter((unit) => unit.status === "added").length,
+    removed: units.filter((unit) => unit.status === "deleted").length,
+    modified: units.filter((unit) => unit.status !== "added" && unit.status !== "deleted").length,
+  };
 };
 
 /**
@@ -96,15 +109,20 @@ export const recordedChanges = (shell: Shell, recorded: Recorded): readonly Book
         bookId: book.id,
         path: book.path,
         book,
-        hunks: [],
+        changes: undefined,
         added: lines(book.source().text).length,
         removed: 0,
+        modified: 0,
         firstTime: true,
       });
       continue;
     }
-    const changed = changesOf(book, { bookId: book.id, stamp: at.stamp, text: at.text });
-    if (changed.hunks.length > 0) out.push(changed);
+    const changed = changesOf(shell.services.galley, book, {
+      bookId: book.id,
+      stamp: at.stamp,
+      text: at.text,
+    });
+    if (changeCount(changed) > 0) out.push(changed);
   }
   return out;
 };
@@ -135,8 +153,11 @@ export const unsavedChanges = (shell: Shell): readonly BookChanges[] => {
     shell.stampOf(book.id);
     const baseline = shell.services.save.baseline(book);
     if (Option.isNone(baseline)) continue;
-    const changed = changesOf(book, baseline.value);
-    if (changed.hunks.length > 0) out.push(changed);
+    // The file's text and the book's, compared before anything is diffed:
+    // an untouched book costs one string comparison.
+    if (baseline.value.text === book.source().text) continue;
+    const changed = changesOf(shell.services.galley, book, baseline.value);
+    if (changeCount(changed) > 0) out.push(changed);
   }
   return out;
 };

@@ -32,7 +32,8 @@ import Undo2 from "lucide-solid/icons/undo-2";
 import { For, Show, createEffect, createSignal, untrack } from "solid-js";
 
 import type { BookId } from "#core/book/book";
-import * as Diff from "#core/diff/diff";
+import { revertUnits } from "#core/diff/units";
+import { unitReference, type DecisionUnit } from "#core/galley";
 import type { Commit, Version } from "#core/git/git";
 import { Git, repositoryPath } from "#core/git/git";
 import { decode } from "#core/source/source";
@@ -42,7 +43,13 @@ import { useShell } from "../../ProjectContext";
 import { Badge, Button, Card, Dialog, EmptyState, PanelHeader, toasts } from "../primitives";
 import { bookName } from "../workspace/books";
 import { metadataOf } from "../workspace/project";
-import { changesOf, recordedChanges, unsavedChanges, type BookChanges } from "./changes";
+import {
+  changeCount,
+  changesOf,
+  recordedChanges,
+  unsavedChanges,
+  type BookChanges,
+} from "./changes";
 import { DiffView } from "./DiffView";
 import { ago, exact } from "./format";
 import { createRecordedVersion } from "./recorded";
@@ -171,7 +178,7 @@ export function HistoryPanel() {
       if (Result.isFailure(bytes)) continue;
       const decoded = decode(bytes.success);
       if (Result.isFailure(decoded)) continue;
-      const changes = changesOf(book, {
+      const changes = changesOf(shell.services.galley, book, {
         bookId,
         stamp: decoded.success.stamp,
         text: decoded.success.text,
@@ -179,7 +186,7 @@ export function HistoryPanel() {
       // A commit touches a file; it does not follow that the file still
       // differs from the text in hand. A book that matches is dropped rather
       // than shown as an empty diff.
-      if (changes.hunks.length > 0) out.push(changes);
+      if (changeCount(changes) > 0) out.push(changes);
     }
     setShown(out);
   };
@@ -228,24 +235,30 @@ export function HistoryPanel() {
     shell.changed({ kind: "book.apply", books: [bookId] });
   };
 
-  const revertHunk = (changes: BookChanges, hunk: Diff.Hunk): void => {
+  /** One unit, or a whole book's: the engine's edits, one apply, one Undo. */
+  const revertSome = (changes: BookChanges, units: readonly DecisionUnit[]) =>
+    changes.changes === undefined
+      ? Result.fail({ reason: "nothing to revert" })
+      : revertUnits(shell.services.galley, changes.book, changes.changes, units);
+
+  const revertUnit = (changes: BookChanges, unit: DecisionUnit): void => {
     setConfirming({
-      title: t("Revert this change?"),
+      title: t("Revert {verse}?", { verse: unitReference(unit) }),
       label: t("Revert"),
       description: t(
-        "{book} goes back to the selected version for this one hunk. Undo takes it back.",
+        "{book} goes back to the selected version for this one change. Undo takes it back.",
         { book: nameOf(changes.bookId) },
       ),
-      run: () => announce(changes.bookId, Diff.revert(hunk, changes.book)),
+      run: () => announce(changes.bookId, revertSome(changes, [unit])),
     });
   };
 
   const revertFile = (changes: BookChanges): void => {
     setConfirming({
       title: t("Revert every change in {book}?", { book: nameOf(changes.bookId) }),
-      label: t("Revert {count} change(s)", { count: changes.hunks.length }),
+      label: t("Revert {count} change(s)", { count: changeCount(changes) }),
       description: t("One edit, so one Undo takes the whole thing back."),
-      run: () => announce(changes.bookId, Diff.revertAll(changes.hunks, changes.book)),
+      run: () => announce(changes.bookId, revertSome(changes, changes.changes?.units ?? [])),
     });
   };
 
@@ -459,8 +472,19 @@ export function HistoryPanel() {
                         when={changes.firstTime === true}
                         fallback={
                           <>
-                            <Badge tone="success">+{changes.added}</Badge>
-                            <Badge tone="error">−{changes.removed}</Badge>
+                            <Badge tone="warning">
+                              {t("{count} change(s)", { count: changeCount(changes) })}
+                            </Badge>
+                            <Show when={changes.added > 0}>
+                              <Badge tone="success">
+                                {t("+{count} added", { count: changes.added })}
+                              </Badge>
+                            </Show>
+                            <Show when={changes.removed > 0}>
+                              <Badge tone="error">
+                                {t("−{count} removed", { count: changes.removed })}
+                              </Badge>
+                            </Show>
                           </>
                         }
                       >
@@ -483,8 +507,8 @@ export function HistoryPanel() {
                     </div>
                     <Show when={changes.firstTime !== true}>
                       <DiffView
-                        hunks={changes.hunks}
-                        onRevert={(hunk) => revertHunk(changes, hunk)}
+                        changes={changes.changes}
+                        onRevert={(unit) => revertUnit(changes, unit)}
                       />
                     </Show>
                   </section>

@@ -1121,7 +1121,13 @@ export function ReviewPanel() {
               side="bottom"
               align="end"
               class="w-60"
-              trigger={<IconButton size="sm" label={t("More")} icon={<MoreVertical size={16} />} />}
+              trigger={
+                <IconButton
+                  size="sm"
+                  label={t("More review actions")}
+                  icon={<MoreVertical size={16} />}
+                />
+              }
             >
               <MenuItem
                 icon={<Eraser size={14} aria-hidden="true" />}

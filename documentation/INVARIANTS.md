@@ -7,7 +7,7 @@ The rules every module keeps. Each one is short on purpose; the chapter that own
 - **Text flows one way.** bytes → `Source` → `Book` → (EditorBook when mounted) → Galley `analyze` → findings, fixes, search, project analysis. Nothing below Book re-parses USFM; USFM knowledge lives in the engine. → [source](architecture/source.md), [galley](architecture/galley.md)
 - **Every edit goes through one funnel.** Typing, paste, satellites, fixes, format, replace, revert, recovery and multi-book operations all end in `Book.apply(changes, origin, trust)` and get a Receipt or a Refusal. There is no second write path and no second editable copy of a book. → [editor](architecture/editor.md)
 - **Every derived product is stamped,** and every consumer checks the stamp before acting. No module trusts a length. → [source](architecture/source.md), [findings](architecture/findings.md)
-- **Diffs are sid-aligned.** Comparison goes through the engine's decision units, never a line diff. (The legacy line diff in `core/diff/diff.ts` is the known exception being retired; see [services](services.md#diff).)
+- **Diffs are sid-aligned.** Comparison goes through the engine's decision units, never a line diff. There is no line diff left in Sefer (removed 2026-09-27).
 
 ## Disk
 

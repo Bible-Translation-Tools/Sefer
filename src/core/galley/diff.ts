@@ -558,8 +558,20 @@ const encodeDecisions = (decisions: DecisionMap): string => {
  * so the checks below are a `typeof` on an export that may be missing rather
  * than a version number Sefer would have to keep in step with the artifact.
  */
+interface WasmSplices {
+  readonly spans: Uint32Array;
+  readonly inserts: Uint32Array;
+  free?(): void;
+}
+
 interface DiffCapableModule {
   readonly diff?: (baseline: string, current: string, textMode: string) => string;
+  readonly mergeSplices?: (
+    baseline: string,
+    current: string,
+    decisions: string,
+    fallback: string,
+  ) => WasmSplices;
   readonly merge?: (
     baseline: string,
     current: string,
@@ -570,6 +582,52 @@ interface DiffCapableModule {
 
 const hasDiff = (module: unknown): module is Required<Pick<DiffCapableModule, "diff">> =>
   isRecord(module) && typeof module.diff === "function";
+
+const hasSplices = (module: unknown): module is Required<Pick<DiffCapableModule, "mergeSplices">> =>
+  isRecord(module) && typeof module.mergeSplices === "function";
+
+/**
+ * One edit over the BASELINE text: replace `[from, to)` (UTF-16) with
+ * `insert`, the text the merge takes there. Non-overlapping and ascending,
+ * so a list of them is exactly a `book.apply` change list when the baseline
+ * is the book's text.
+ */
+export interface MergeSplice {
+  readonly from: number;
+  readonly to: number;
+  readonly insert: string;
+}
+
+/**
+ * The merge as EDITS over the baseline rather than a merged document — the
+ * engine's `mergeSplices`. What a writer wants: the untouched units keep their
+ * offsets, so a cursor, a finding or a search hit outside what changed
+ * survives the write. With an empty decision map and `current` as the
+ * fallback, it is simply "the edits that turn `baseline` into `current`", at
+ * decision-unit grain — the replacement for a line diff.
+ */
+export const engineMergeSplices = (
+  module: unknown,
+  baseline: string,
+  current: string,
+  decisions: DecisionMap,
+  fallback: MergeSide,
+): Result.Result<readonly MergeSplice[], EngineDoorMissing> => {
+  if (!hasSplices(module)) return Result.fail(doorMissing("mergeSplices"));
+  const splices = module.mergeSplices(baseline, current, encodeDecisions(decisions), fallback);
+  try {
+    const out: MergeSplice[] = [];
+    for (let at = 0; at + 1 < splices.spans.length; at += 2)
+      out.push({
+        from: splices.spans[at] ?? 0,
+        to: splices.spans[at + 1] ?? 0,
+        insert: current.slice(splices.inserts[at] ?? 0, splices.inserts[at + 1] ?? 0),
+      });
+    return Result.succeed(out);
+  } finally {
+    splices.free?.();
+  }
+};
 
 const hasMerge = (module: unknown): module is Required<Pick<DiffCapableModule, "merge">> =>
   isRecord(module) && typeof module.merge === "function";

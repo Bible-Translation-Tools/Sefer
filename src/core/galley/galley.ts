@@ -54,7 +54,9 @@ import type { Analysis, DiagnosticView } from "./analysis";
 import {
   engineDiff,
   engineMerge,
+  engineMergeSplices,
   type DecisionMap,
+  type MergeSplice,
   type DiffSkeleton,
   type EngineDoorMissing,
   type MergeSide,
@@ -597,6 +599,18 @@ export interface GalleyService {
   ) => Result.Result<string, EngineDoorMissing>;
 
   /**
+   * The same merge as EDITS over `baseline` (`MergeSplice`, UTF-16), so a
+   * writer changes only what the merge changes. With an empty map and
+   * `current` as the fallback: the edits that turn `baseline` into `current`.
+   */
+  readonly mergeSplices: (
+    baseline: string,
+    current: string,
+    decisions: DecisionMap,
+    fallback: MergeSide,
+  ) => Result.Result<readonly MergeSplice[], EngineDoorMissing>;
+
+  /**
    * The engine's formatter, as EDITS rather than a rewritten document.
    *
    * Edits, so the whole normalisation goes through `book.apply` as ONE
@@ -997,6 +1011,8 @@ const makeService = (
     diff: (baseline, current, textMode) => engineDiff(wasmModule, baseline, current, textMode),
     merge: (baseline, current, decisions, fallback) =>
       engineMerge(wasmModule, baseline, current, decisions, fallback),
+    mergeSplices: (baseline, current, decisions, fallback) =>
+      engineMergeSplices(wasmModule, baseline, current, decisions, fallback),
     formatEdits: (text, opts) => engineFormatEdits(wasmModule, text, opts),
     skeleton: (id, opts) => decodeBlockSkeleton(handle.skeleton(id, overlayOptions(opts))),
     overlay: overlayEdits,

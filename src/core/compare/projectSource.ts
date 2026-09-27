@@ -15,16 +15,16 @@
 //    there, and none of them needs to know Compare exists.
 //
 // Apply writes the MINIMAL change list rather than one whole-book splice: the
-// line diff between the book's current text and the plan's text. One apply is
-// still one revision and one Undo step, but the untouched lines keep their
-// offsets, so a cursor, a finding and a search hit outside the changed region
-// survive the write.
+// engine's edits from the book's current text to the plan's text, one per
+// decision unit that differs (`GalleyService.mergeSplices`, handed in as
+// `edits` because core/compare holds no engine). One apply is still one
+// revision and one Undo step, but the untouched units keep their offsets, so a
+// cursor, a finding and a search hit outside what changed survive the write.
 
 import { Effect, Result } from "effect";
 
 import type { BookId } from "../book/book";
 import { trustedBy } from "../book/book";
-import { diffTexts } from "../diff/diff";
 import type { Project } from "../project/project";
 import { nameOfRoot } from "../project/slug";
 import type { Change } from "../source/source";
@@ -36,9 +36,19 @@ import { failCompare, type CompareSource } from "./source";
  * `label` defaults to "This project (<folder>)" because on the screen it sits
  * beside a zip's file name and the reader has to tell them apart at a glance.
  */
-export const currentProjectSource = (project: Project, label?: string): CompareSource => ({
+/**
+ * The edits that turn `before` into `after`, in `before`'s UTF-16 offsets,
+ * ascending and non-overlapping — a `book.apply` change list. `undefined` when
+ * they cannot be had (an engine without the door), which refuses the write.
+ */
+export type EditsBetween = (before: string, after: string) => readonly Change[] | undefined;
+
+export const currentProjectSource = (
+  project: Project,
+  options: { readonly label?: string; readonly edits: EditsBetween },
+): CompareSource => ({
   id: `project:${project.id}`,
-  label: label ?? `This project (${nameOfRoot(project.root)})`,
+  label: options.label ?? `This project (${nameOfRoot(project.root)})`,
   kind: "project",
   canApply: true,
 
@@ -75,14 +85,12 @@ export const currentProjectSource = (project: Project, label?: string): CompareS
       if (current.text === text)
         return yield* failCompare("Refused", `${bookId} already holds exactly this text`);
 
-      // `diffTexts(current, next)`: the baseline side is the book's text, so
-      // the baseline offsets ARE the before-text coordinates `apply` wants,
-      // and the working slice is what should stand there instead.
-      const changes: readonly Change[] = diffTexts(current.text, text).map((hunk) => ({
-        from: hunk.baselineFrom,
-        to: hunk.baselineTo,
-        insert: hunk.working,
-      }));
+      const changes = options.edits(current.text, text);
+      if (changes === undefined)
+        return yield* failCompare(
+          "Refused",
+          `${bookId}: this build's engine cannot say what changed, so nothing was written`,
+        );
 
       const receipt = book.apply(changes, "compare", trustedBy("compare"));
       return Result.isFailure(receipt)

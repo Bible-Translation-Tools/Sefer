@@ -16,7 +16,7 @@
  * one entry here plus one file in `src/core/compare`.
  */
 
-import { Option } from "effect";
+import { Option, Result } from "effect";
 
 import type { Book } from "#core/book/book";
 import {
@@ -99,7 +99,15 @@ export const sourceChoices = (context: ChoiceContext): readonly SourceChoice[] =
           : t("The books as they are right now, including unsaved edits."),
       available: project !== undefined,
       immediate: () =>
-        project === undefined ? undefined : currentProjectSource(project, t("In the editor")),
+        project === undefined
+          ? undefined
+          : currentProjectSource(project, {
+              label: t("In the editor"),
+              edits: (before, after) => {
+                const found = services.galley.mergeSplices(before, after, new Map(), "current");
+                return Result.isSuccess(found) ? found.success : undefined;
+              },
+            }),
     },
     {
       id: "disk",
