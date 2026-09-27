@@ -15,11 +15,25 @@
  */
 
 import type { JSX } from "@solidjs/web";
-import { Show, createEffect, createSignal, untrack } from "solid-js";
+import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
 import type { Analysis } from "#core/galley";
 import type { DecisionUnit } from "#core/galley/diff";
-import { mountDiffView, mountStamp, type DiffViewMount } from "#editor/index";
+import {
+  analyzer,
+  clippedToScope,
+  liveDiff,
+  modeView,
+  mountDiffView,
+  mountSatellite,
+  mountStamp,
+  readingLayer,
+  repaintDiff,
+  wholeLines,
+  type DiffPaint,
+  type DiffViewMount,
+  type EditorBook,
+} from "#editor/index";
 
 import "#editor/editor.css";
 
@@ -58,6 +72,18 @@ export const goneBlock =
     return block;
   };
 
+interface Pane {
+  readonly mount: DiffViewMount;
+  readonly paint: () => DiffPaint;
+  readonly live: boolean;
+}
+
+/** A memo's `equals` for a record of dependencies: the same fields, the same run. */
+export const sameFields = (
+  a: Readonly<Record<string, unknown>>,
+  b: Readonly<Record<string, unknown>>,
+) => Object.keys(a).every((key) => a[key] === b[key]);
+
 export function DiffCard(props: {
   readonly hunk: Hunk;
   readonly sides: DiffSides;
@@ -73,6 +99,15 @@ export function DiffCard(props: {
    */
   readonly currentFirst?: boolean;
   readonly actions?: JSX.Element;
+  /**
+   * The current side, EDITABLE: the Book itself (Review's Result mode). The
+   * card's lines are a satellite over it, with the diff as a plugin; an edit
+   * goes through the Book's funnel, the review compares again, the card
+   * repaints. Absent, the current side is a read-only clip of `sides`.
+   */
+  readonly live?:
+    | { readonly book: EditorBook; readonly analyze: (text: string) => Analysis }
+    | undefined;
   readonly onOpen?: () => void;
   readonly onMounted?: (ms: number) => void;
 }) {
@@ -84,87 +119,157 @@ export function DiffCard(props: {
   const formatting = (): boolean => props.hunk.units.every(isFormatting);
   const usfm = (): boolean => props.usfm || formatting();
 
-  /** The views of this card, and how to paint them — for a repaint in place. */
-  let painted: { mount: DiffViewMount; paint: () => ReturnType<typeof sidePaint> }[] = [];
+  /**
+   * The latest hunk and sides, read when painting. A new comparison hands
+   * over new objects every time; a pane that did not change must not be
+   * rebuilt for it, least of all a live one somebody is typing in.
+   */
+  const now = () => untrack(() => ({ hunk: props.hunk, sides: props.sides }));
+  const controls = (): Controls | undefined => untrack(() => props.controls);
 
-  createEffect(
+  const currentPaint = (markup: boolean, split: boolean) => (): DiffPaint => {
+    const { hunk, sides } = now();
+    const mode = markup ? "usfm" : "default";
+    return split
+      ? sidePaint(hunk.units, "current", markup, controls(), sides.current, hunk.currentStart)
+      : unifiedPaint(
+          hunk.units,
+          markup,
+          controls(),
+          goneBlock(sides.baseline, mode),
+          sides.current,
+          hunk.currentStart,
+        );
+  };
+  const baselinePaint = (markup: boolean) => (): DiffPaint => {
+    const { hunk, sides } = now();
+    return sidePaint(hunk.units, "baseline", markup, undefined, sides.baseline, hunk.baselineStart);
+  };
+
+  /** The panes of this card, and how to paint them — for a repaint in place. */
+  const panes = new Map<"baseline" | "current", Pane>();
+
+  // The baseline pane: a read-only clip of the other side, rebuilt when its
+  // text or its stretch does.
+  const baselineBuilt = createMemo(
     () => ({
       l: left(),
-      r: right(),
-      // A new text (a take landed, an edit) is a new document to clip.
-      hunk: props.hunk,
-      sides: props.sides,
       split: props.split,
       markup: usfm(),
-      decidable: props.controls !== undefined,
+      text: props.sides.baselineText,
+      from: props.hunk.baseline?.from,
+      to: props.hunk.baseline?.to,
     }),
-    ({ l, r, hunk, sides, split, markup }) => {
-      if (r === undefined) return;
-      const started = performance.now();
-      const controls = (): Controls | undefined => untrack(() => props.controls);
-      const mode = markup ? "usfm" : "default";
-      const views: typeof painted = [];
-      const mount = (
-        parent: HTMLElement,
-        text: string,
-        analysis: Analysis,
-        clip: { from: number; to: number },
-        paint: () => ReturnType<typeof sidePaint>,
-      ): void => {
-        views.push({
-          mount: mountDiffView({
-            parent,
-            text,
-            analyze: () => analysis,
-            mode,
-            clip,
-            surface: "cm-diff cm-diff-card",
-            paint: paint(),
-          }),
-          paint,
-        });
-      };
-      if (split) {
-        if (l !== undefined && hunk.baseline !== undefined)
-          mount(l, sides.baselineText, sides.baseline, hunk.baseline, () =>
-            sidePaint(
-              hunk.units,
-              "baseline",
-              markup,
-              undefined,
-              sides.baseline,
-              hunk.baselineStart,
-            ),
-          );
-        mount(r, sides.currentText, sides.current, hunk.current, () =>
-          sidePaint(hunk.units, "current", markup, controls(), sides.current, hunk.currentStart),
-        );
-      } else {
-        mount(r, sides.currentText, sides.current, hunk.current, () =>
-          unifiedPaint(
-            hunk.units,
-            markup,
-            controls(),
-            goneBlock(sides.baseline, mode),
-            sides.current,
-            hunk.currentStart,
-          ),
-        );
-      }
-      painted = views;
-      props.onMounted?.(performance.now() - started);
+    { name: "cardBaselineBuilt", equals: sameFields },
+  );
+  createEffect(
+    () => baselineBuilt(),
+    ({ l, split, markup, text, from, to }) => {
+      if (!split || l === undefined || from === undefined || to === undefined) return;
+      const { sides } = now();
+      const paint = baselinePaint(markup);
+      const mount = mountDiffView({
+        parent: l,
+        text,
+        analyze: () => sides.baseline,
+        mode: markup ? "usfm" : "default",
+        clip: { from, to },
+        surface: "cm-diff cm-diff-card",
+        paint: paint(),
+      });
+      panes.set("baseline", { mount, paint, live: false });
       return () => {
-        painted = [];
-        for (const view of views) view.mount.destroy();
+        panes.delete("baseline");
+        mount.destroy();
       };
     },
   );
 
-  // A decision repaints the card in place: the text did not move, only its tint.
+  // The current pane: a read-only clip, or — given `live` — the Book itself,
+  // an editor clipped to the card's lines with the diff as a plugin on it. A
+  // live pane is rebuilt only when the card or the seat is a different one.
+  const currentBuilt = createMemo(
+    () => ({
+      r: right(),
+      split: props.split,
+      markup: usfm(),
+      decidable: props.controls !== undefined,
+      key: props.hunk.key,
+      live: props.live,
+      text: props.live === undefined ? props.sides.currentText : undefined,
+      from: props.live === undefined ? props.hunk.current.from : undefined,
+      to: props.live === undefined ? props.hunk.current.to : undefined,
+    }),
+    { name: "cardCurrentBuilt", equals: sameFields },
+  );
   createEffect(
-    () => props.hunk.units.map((unit) => props.controls?.decision(unit) ?? "-").join(","),
-    () => {
-      for (const view of painted) view.mount.repaint(view.paint());
+    () => currentBuilt(),
+    ({ r, split, markup, key, live }) => {
+      if (r === undefined) return;
+      const started = performance.now();
+      const { hunk, sides } = now();
+      const paint = currentPaint(markup, split);
+      const mode = markup ? "usfm" : "default";
+      let mount: DiffViewMount;
+      if (live !== undefined) {
+        const release = live.book.hold();
+        const satellite = mountSatellite({
+          parent: r,
+          host: live.book.funnel(),
+          range: wholeLines(live.book.state.doc, hunk.current),
+          editable: true,
+          label: `review:${key}`,
+          extensions: [
+            modeView(mode, "cm-diff cm-diff-card"),
+            analyzer.of(live.analyze),
+            readingLayer,
+            clippedToScope(),
+            ...liveDiff(paint()),
+          ],
+        });
+        mount = {
+          view: satellite.view,
+          repaint: (next) => repaintDiff(satellite.view, next),
+          setMode: () => {},
+          showAt: () => {},
+          destroy: () => {
+            satellite.destroy();
+            release();
+          },
+        };
+      } else
+        mount = mountDiffView({
+          parent: r,
+          text: sides.currentText,
+          analyze: () => sides.current,
+          mode,
+          clip: hunk.current,
+          surface: "cm-diff cm-diff-card",
+          paint: paint(),
+        });
+      panes.set("current", { mount, paint, live: live !== undefined });
+      props.onMounted?.(performance.now() - started);
+      return () => {
+        panes.delete("current");
+        mount.destroy();
+      };
+    },
+  );
+
+  // A decision, or a new comparison, repaints in place. A live pane whose text
+  // has moved past the comparison (the next keystroke landed first) keeps its
+  // mapped decorations until the comparison catches up.
+  createEffect(
+    () => ({
+      hunk: props.hunk,
+      text: props.sides.currentText,
+      decided: props.hunk.units.map((unit) => props.controls?.decision(unit) ?? "-").join(","),
+    }),
+    ({ text }) => {
+      for (const pane of panes.values()) {
+        if (pane.live && pane.mount.view.state.doc.length !== text.length) continue;
+        pane.mount.repaint(pane.paint());
+      }
     },
   );
 

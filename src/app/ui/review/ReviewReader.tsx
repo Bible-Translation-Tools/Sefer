@@ -39,7 +39,6 @@ import BookOpen from "lucide-solid/icons/book-open";
 import CheckIcon from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import Columns2 from "lucide-solid/icons/columns-2";
-import Pencil from "lucide-solid/icons/pencil";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
 import type { BookId } from "#core/book/book";
@@ -55,7 +54,6 @@ import {
   DiffCard,
   changed,
   estimate,
-  hunkLabel,
   hunksOf,
   isFormatting,
   ordered,
@@ -80,7 +78,6 @@ import {
   type VirtualSection,
 } from "../primitives";
 import { claimSidebar } from "../workspace/sidebarSlot";
-import { ResultEditor } from "./ResultEditor";
 
 /** One book that differs: both texts and the engine's units over them. */
 export interface ReviewBook {
@@ -653,93 +650,85 @@ export function ReviewReader(props: {
     )),
   );
 
-  /** The card being edited in the result pane, and its book, once seated. */
-  const [editing, setEditing] = createSignal<
-    { readonly key: string; readonly book: EditorBook | undefined } | undefined
-  >(undefined, { name: "reviewEditing" });
   const editable = (): boolean => props.mode === "result" && props.resultAvailable;
-  const startEdit = (hunk: Hunk): void => {
-    setEditing({ key: hunk.key, book: undefined });
-    void props.seat(hunk.bookId).then((book) => {
-      if (untrack(editing)?.key === hunk.key) setEditing({ key: hunk.key, book });
-    });
-  };
-  const finishEdit = (bookId: BookId): void => {
-    setEditing(undefined);
-    props.onEdited(bookId);
-  };
-  const analyzeLive = services.galley.memoize();
 
   /**
-   * The whole book's current pane, live: in Result mode with the working text
-   * on the left, the Book itself is seated and edited in place, the diff drawn
-   * on it as a plugin. The same parse the reading prepared is lent to it.
+   * Result mode's working text, live: every book in the review, seated once,
+   * so each card and the whole book can be the Book itself — an editor with
+   * the diff as a plugin on it — rather than a view of a copy. A seated book is
+   * held by identity: a new object would rebuild every live pane of it.
    */
-  const [liveBook, setLiveBook] = createSignal<
-    { readonly bookId: BookId; readonly book: EditorBook } | undefined
-  >(undefined, { name: "reviewLiveBook" });
+  const [seats, setSeats] = createSignal<ReadonlyMap<BookId, EditorBook>>(new Map(), {
+    name: "reviewSeats",
+  });
   createEffect(
-    () => (scope() === "book" && editable() ? selectedBook()?.book.bookId : undefined),
-    (bookId) => {
-      if (bookId === undefined) {
-        setLiveBook(undefined);
+    () => (editable() ? prepared().map((held) => held.book.bookId) : []),
+    (bookIds) => {
+      if (bookIds.length === 0) {
+        if (untrack(seats).size > 0) setSeats(new Map());
         return;
       }
-      // Already seated: seating again would hand the pane a new object, and a
-      // new object is a rebuilt view — under the caret of somebody typing.
-      if (untrack(liveBook)?.bookId === bookId) return;
       let current = true;
-      void props.seat(bookId).then((book) => {
-        if (current) setLiveBook(book === undefined ? undefined : { bookId, book });
-      });
+      for (const bookId of bookIds) {
+        if (untrack(seats).has(bookId)) continue;
+        void props.seat(bookId).then((book) => {
+          if (!current || book === undefined) return;
+          setSeats((held) =>
+            held.get(bookId) === book ? held : new Map([...held, [bookId, book]]),
+          );
+        });
+      }
       return () => {
         current = false;
       };
     },
+    // One array per run, compared by content: a new comparison of the same
+    // books is not a reason to look at the seats again.
   );
+
   /**
-   * An edit in the live pane, announced. A satellite's edit lands in the Book
+   * An edit in a live pane, announced. A satellite's edit lands in the Book
    * but does not move the shell's stamp for it, so the review — which re-takes
-   * its comparison when a stamp moves — would never see it. Debounced: a burst
-   * of typing is one comparison after the burst, as everywhere on this screen.
+   * its comparison when a stamp moves — would never see it. Debounced per
+   * book: a burst of typing is one comparison after the burst.
    */
   createEffect(
-    () => liveBook(),
+    () => seats(),
     (held) => {
-      if (held === undefined) return;
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const stop = held.book.changes(() => {
-        if (timer !== undefined) clearTimeout(timer);
-        timer = setTimeout(() => props.onEdited(held.bookId), 150);
-      });
+      const stops: (() => void)[] = [];
+      const timers = new Map<BookId, ReturnType<typeof setTimeout>>();
+      for (const [bookId, book] of held)
+        stops.push(
+          book.changes(() => {
+            const waiting = timers.get(bookId);
+            if (waiting !== undefined) clearTimeout(waiting);
+            timers.set(
+              bookId,
+              setTimeout(() => props.onEdited(bookId), 150),
+            );
+          }),
+        );
       return () => {
-        if (timer !== undefined) clearTimeout(timer);
-        stop();
+        for (const timer of timers.values()) clearTimeout(timer);
+        for (const stop of stops) stop();
       };
     },
   );
 
-  /** One object per seated book: a new one would rebuild the live pane. */
-  const live = createMemo(
-    () => {
-      const seated = liveBook();
-      if (seated === undefined) return undefined;
-      const staticBookId = seated.bookId;
-      return {
-        bookId: staticBookId,
-        book: seated.book,
-        analyze: (text: string) => analysisOf(staticBookId, "current", text),
-      };
-    },
-    {
-      name: "reviewLive",
-      // The same seated Book is the same live pane.
-      equals: (a, b) => a?.book === b?.book && a?.bookId === b?.bookId,
-    },
-  );
+  /** One live handle per seated book, the same object for as long as the seat. */
+  const handles = new WeakMap<
+    EditorBook,
+    { readonly book: EditorBook; readonly analyze: (text: string) => Analysis }
+  >();
   const liveFor = (bookId: BookId) => {
-    const held = live();
-    return held !== undefined && held.bookId === bookId ? held : undefined;
+    const book = seats().get(bookId);
+    if (book === undefined) return undefined;
+    let handle = handles.get(book);
+    if (handle === undefined) {
+      handle = { book, analyze: (text: string) => analysisOf(bookId, "current", text) };
+      handles.set(book, handle);
+    }
+    return handle;
   };
 
   let observer: ResizeObserver | undefined;
@@ -950,81 +939,29 @@ export function ReviewReader(props: {
             }}
             row={(item) => (
               <div class="pt-3">
-                <Show
-                  when={editing()?.key === item().hunk.key}
-                  fallback={
-                    <DiffCard
-                      hunk={item().hunk}
-                      sides={item().held.sides}
-                      split={split()}
-                      usfm={props.usfm}
-                      controls={controls().get(item().hunk.bookId)}
-                      currentLabel={props.currentLabel}
-                      baselineLabel={props.baselineLabel}
-                      currentFirst
-                      onOpen={() => openInBook(item().hunk)}
-                      actions={
-                        <>
-                          <CardDecision hunk={item().hunk} />
-                          <Show when={editable()}>
-                            <IconButton
-                              size="sm"
-                              label={t("Edit the result here")}
-                              icon={<Pencil size={14} />}
-                              data-review-edit
-                              onClick={() => startEdit(item().hunk)}
-                            />
-                          </Show>
-                          <IconButton
-                            size="sm"
-                            label={t("Open in the book")}
-                            icon={<BookOpen size={14} />}
-                            onClick={() => openInBook(item().hunk)}
-                          />
-                        </>
-                      }
-                    />
-                  }
-                >
-                  <div
-                    class="overflow-hidden rounded-lg border border-brand bg-surface-primary"
-                    data-review-editing={item().hunk.key}
-                  >
-                    <header class="flex items-center gap-2 border-b border-surface-border px-3 py-1.5">
-                      <strong class="text-small font-medium tabular-nums">
-                        {hunkLabel(item().hunk)}
-                      </strong>
-                      <span class="text-smallest text-on-surface-tertiary">
-                        {t("Editing {source}", { source: props.currentLabel })}
-                      </span>
-                      <Button
+                <DiffCard
+                  hunk={item().hunk}
+                  sides={item().held.sides}
+                  split={split()}
+                  usfm={props.usfm}
+                  controls={controls().get(item().hunk.bookId)}
+                  currentLabel={props.currentLabel}
+                  baselineLabel={props.baselineLabel}
+                  currentFirst
+                  live={liveFor(item().hunk.bookId)}
+                  onOpen={() => openInBook(item().hunk)}
+                  actions={
+                    <>
+                      <CardDecision hunk={item().hunk} />
+                      <IconButton
                         size="sm"
-                        variant="secondary"
-                        class="ms-auto"
-                        onClick={() => finishEdit(item().hunk.bookId)}
-                      >
-                        {t("Done")}
-                      </Button>
-                    </header>
-                    <Show
-                      when={editing()?.book}
-                      fallback={
-                        <p class="px-3 py-2 text-small text-on-surface-tertiary">{t("Opening…")}</p>
-                      }
-                    >
-                      {(book) => (
-                        <ResultEditor
-                          book={book()}
-                          range={item().hunk.current}
-                          usfm={props.usfm}
-                          analyze={analyzeLive}
-                          label={`review:${item().hunk.key}`}
-                          onDone={() => finishEdit(item().hunk.bookId)}
-                        />
-                      )}
-                    </Show>
-                  </div>
-                </Show>
+                        label={t("Open in the book")}
+                        icon={<BookOpen size={14} />}
+                        onClick={() => openInBook(item().hunk)}
+                      />
+                    </>
+                  }
+                />
               </div>
             )}
             empty={

@@ -39,15 +39,12 @@ import {
 import "#editor/editor.css";
 
 import { cx } from "../primitives";
-import { goneBlock, type DiffSides } from "./DiffCard";
+import { goneBlock, sameFields, type DiffSides } from "./DiffCard";
 import { sidePaint, unifiedPaint, type Controls, type Side } from "./paint";
 
 export interface BookDiffApi {
   readonly showUnit: (unit: DecisionUnit) => void;
 }
-
-const sameFields = (a: Readonly<Record<string, unknown>>, b: Readonly<Record<string, unknown>>) =>
-  Object.keys(a).every((key) => a[key] === b[key]);
 
 /** The unit whose span on `side` holds `at`, or the last one before it. */
 const unitAt = (

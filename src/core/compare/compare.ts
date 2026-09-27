@@ -142,7 +142,12 @@ export const compareBooks = (
       const rightText = onRight ? yield* right.read(bookId) : undefined;
 
       if (leftText !== undefined && rightText !== undefined) {
-        const hunks = toHunks(bookId, leftText.text, rightText.text);
+        // Identical texts are the common case — most books of a review are
+        // untouched — and string equality answers it at memory speed, length
+        // first. Nothing is split into lines or diffed for them, and the
+        // engine's diff is skipped for them further up (`identical`).
+        const hunks =
+          leftText.text === rightText.text ? [] : toHunks(bookId, leftText.text, rightText.text);
         books.push({
           bookId,
           presence: "both",

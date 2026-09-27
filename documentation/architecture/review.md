@@ -234,20 +234,21 @@ is not.
 side is this project in the editor, the one side that can be written and
 edited. A take is written into the editor at once (`review.diff.take`: the
 engine's merge of that unit, through the target source's `apply`, one Undo
-step), and the current pane IS the working text: a card's pencil opens its
-lines as a satellite over the real Book (`ResultEditor.tsx`, the excerpt
-card's Edit), so "take theirs, then fix the comma" is two clicks and some
-typing. A taken unit keeps its card, washed, with "Taken from the file — put
+step), and the current pane IS the working text: every card's current side,
+and the whole book's, is a satellite over the real Book with the diff as a
+plugin on it (`liveDiff` in `src/editor/recipes/diffView.ts`), so "take theirs,
+then fix the comma" is a click and some typing. A taken unit keeps its card, washed, with "Taken from the file — put
 back"; put back merges the ORIGINAL's unit into the live text, whatever else
 was written since. There is no Apply in this mode, because nothing is waiting.
 The file is still written only by Record a version. Switching mode clears the
 decisions, because the two modes mean different things by one. Two read-only
 sides (two zips, two folders) have no result to edit, so the mode is not
 offered; a remote into the working text will be, when a remote is a source.
-In Whole book the current pane is the Book itself, editable everywhere, with the
-diff as a plugin on it (`liveDiff` in `src/editor/recipes/diffView.ts`): each
-accepted edit is announced (debounced 150 ms), the review compares again
-(15–25 ms) and the pane repaints in place, so typing never rebuilds the view.
+Every book in the review is seated once for this; each accepted edit is
+announced (debounced 150 ms per book), the review compares again (7–13 ms
+with identical books bailed on string equality) and the panes repaint in
+place — a pane's dependencies are compared field by field, so typing never
+rebuilds the view under the caret.
 In this mode the DIFF names the tint, not the decision: a taken verse edited
 afterwards differs again and is red and green like any change, and the
 decided wash marks only a verse that reads exactly as the side it was decided
