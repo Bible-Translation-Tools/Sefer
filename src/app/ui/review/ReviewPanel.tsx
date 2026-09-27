@@ -36,9 +36,11 @@
 import { useNavigate } from "@tanstack/solid-router";
 import { Effect, Option, Result } from "effect";
 import Check from "lucide-solid/icons/check";
-import Code from "lucide-solid/icons/code";
+import ChevronDown from "lucide-solid/icons/chevron-down";
+import Eraser from "lucide-solid/icons/eraser";
 import History from "lucide-solid/icons/history";
 import LifeBuoy from "lucide-solid/icons/life-buoy";
+import MoreVertical from "lucide-solid/icons/more-vertical";
 import Save from "lucide-solid/icons/save";
 import Scale from "lucide-solid/icons/scale";
 import { For, Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
@@ -70,13 +72,15 @@ import { createRecordedVersion } from "../panels/recorded";
 import {
   Badge,
   Button,
-  Card,
   Dialog,
   EmptyState,
+  IconButton,
   Input,
-  PanelHeader,
+  Menu,
+  MenuItem,
+  MenuSeparator,
+  Popover,
   Select,
-  Switch,
   toasts,
 } from "../primitives";
 import { bookName } from "../workspace/books";
@@ -131,6 +135,8 @@ export function ReviewPanel() {
   const [receipt, setReceipt] = createSignal("", { name: "reviewReceipt" });
   const [confirming, setConfirming] = createSignal(false, { name: "reviewConfirming" });
   const [recording, setRecording] = createSignal(false, { name: "reviewRecording" });
+  const [recordOpen, setRecordOpen] = createSignal(false, { name: "reviewRecordOpen" });
+  const [sourcesOpen, setSourcesOpen] = createSignal(false, { name: "reviewSourcesOpen" });
   const [journals, setJournals] = createSignal<readonly Restorable[]>([], {
     name: "reviewJournals",
   });
@@ -885,297 +891,316 @@ export function ReviewPanel() {
     );
   }
 
-  return (
-    <main class="min-w-0 space-y-4 p-6" data-review>
-      <PanelHeader
-        title={t("Review")}
-        subtitle={t(
-          "Two copies, a decision per difference, one write. Taking the other side's version and applying it is exactly what Revert means.",
-        )}
-        actions={
-          <>
-            <Code size={13} class="text-on-surface-tertiary" aria-hidden="true" />
-            <Switch
-              id="review-markup"
-              checked={markup()}
-              onChange={setMarkup}
-              label={t("Show USFM markup")}
-            />
-            <Button
-              icon={<History size={14} />}
-              onClick={() =>
-                void navigate({
-                  to: "/project/$slug/history",
-                  params: { slug: shell.slug() },
-                  search: {},
-                })
-              }
-            >
-              {t("History")}
-            </Button>
-          </>
-        }
-      />
+  /** The sources, said once: "In the editor ⇄ On disk". */
+  const sourcesLabel = (): string => `${leftLabel()} ⇄ ${rightLabel()}`;
 
+  return (
+    <main class="flex h-full min-w-0 flex-col gap-2 px-4 pt-3 pb-2" data-review>
       <Show
         when={shell.project()}
         fallback={<EmptyState icon={<Scale size={22} />} title={t("Open a project first.")} />}
       >
-        <Show when={recovered().length > 0}>
-          <Card class="space-y-3 border-brand/40" aria-label={t("Recovered work")}>
-            <PanelHeader
-              level={3}
-              title={
-                <span class="flex items-center gap-2">
-                  <LifeBuoy size={16} class="text-brand" aria-hidden="true" />
-                  {t("Recovered work")}
-                </span>
-              }
-              subtitle={t(
-                "Sefer found a working-state backup from an earlier session that was never recorded. Restoring puts it back in the editor, where it stays unsaved until you record a version.",
-              )}
-            />
-            <ul class="divide-y divide-surface-border">
-              <For each={recovered()}>
-                {(journal) => (
-                  <li class="flex flex-wrap items-center gap-2 py-2">
-                    <strong class="text-small font-semibold">{journal.bookId}</strong>
-                    <code class="min-w-0 truncate font-mono text-smallest text-on-surface-tertiary">
-                      {journal.path}
-                    </code>
-                    <Badge>{t("{count} edit(s)", { count: journal.entries.length })}</Badge>
-                    <Button
-                      size="sm"
-                      variant="tertiary"
-                      class="ms-auto"
-                      onClick={() => discard(journal)}
-                    >
-                      {t("Discard")}
-                    </Button>
-                    <Button size="sm" variant="primary" onClick={() => restore(journal)}>
-                      {t("Restore")}
-                    </Button>
-                  </li>
-                )}
-              </For>
-            </ul>
-          </Card>
-        </Show>
-
-        <Card class="space-y-3">
-          <div class="grid gap-3 sm:grid-cols-2">
-            <Picker side="left" />
-            <Picker side="right" />
-          </div>
-          <div class="flex flex-wrap items-center gap-3">
-            <Show when={busy() !== ""}>
-              <span class="text-smallest text-on-surface-tertiary">{busy()}</span>
-            </Show>
-            <Show when={note() !== ""}>
-              <span class="text-smallest text-on-surface-secondary" data-review-note>
-                {note()}
-              </span>
-            </Show>
-            <Show when={target() === undefined}>
-              <p class="text-smallest text-on-surface-secondary" data-review-readonly>
-                {t("Neither side is this project — reading only.")}
-              </p>
-            </Show>
-            <Show when={leftId() === rightId()}>
-              <p class="text-smallest text-on-surface-secondary">
-                {t("Pick two different sides: a text is not a review of itself.")}
-              </p>
-            </Show>
-            <Show when={skeleton()}>
-              <Badge tone="brand" data-review-engine="engine">
-                {t("engine diff")}
-              </Badge>
-            </Show>
-            <Show when={diffRefusal()}>
-              {(reason) => (
-                <p
-                  class="text-smallest text-on-surface-error"
-                  data-review-engine="missing"
-                  title={reason()}
-                >
-                  {t("This build's engine has no diff door, so nothing can be compared.")}
+        {/* ONE row of chrome. What is compared is a chip that opens the two
+            pickers; how far along the review is, is a count; the one write is
+            the primary button. Everything else is in the menu — the reading
+            below is what this screen is for. */}
+        <header class="flex min-w-0 flex-wrap items-center gap-2 pe-12" data-review-header>
+          <h1 class="text-h3 font-semibold text-on-surface-primary">{t("Review")}</h1>
+          <Popover
+            label={t("What is compared")}
+            align="start"
+            class="w-[min(560px,90vw)]"
+            open={sourcesOpen()}
+            onOpenChange={setSourcesOpen}
+            trigger={
+              <Button size="sm" variant="secondary" data-review-sources title={sourcesLabel()}>
+                <span class="max-w-[40ch] truncate">{sourcesLabel()}</span>
+                <ChevronDown size={14} aria-hidden="true" />
+              </Button>
+            }
+          >
+            <div class="space-y-3">
+              <div class="grid gap-3 sm:grid-cols-2">
+                <Picker side="left" />
+                <Picker side="right" />
+              </div>
+              <Show when={leftId() === rightId()}>
+                <p class="text-smallest text-on-surface-secondary">
+                  {t("Pick two different sides: a text is not a review of itself.")}
                 </p>
-              )}
-            </Show>
-          </div>
-        </Card>
-
-        <Show
-          when={result()}
-          fallback={
-            <Card>
-              <EmptyState title={t("Nothing to review yet.")} />
-            </Card>
-          }
-        >
-          {(found) => (
-            <>
-              <Card class="flex flex-wrap items-center gap-2" data-review-summary>
-                <Badge tone="brand" data-review-changed={found().changedBooks}>
+              </Show>
+              <p class="text-smallest text-on-surface-tertiary">
+                {t(
+                  "A decision per difference, one write. Taking the other side's version and applying it is exactly what Revert means.",
+                )}
+              </p>
+            </div>
+          </Popover>
+          <Show when={result()}>
+            {(found) => (
+              <span class="text-small text-on-surface-secondary tabular-nums" data-review-decided>
+                <span data-review-changed={found().changedBooks}>
                   {t("{count} book(s) differ", { count: found().changedBooks })}
-                </Badge>
-                <span class="text-small text-on-surface-secondary" data-review-decided>
-                  {t("{decided} decided of {total}", {
+                </span>
+                <Show when={totals().total > 0}>
+                  {" · "}
+                  {t("{decided} of {total} decided", {
                     decided: totals().decided,
                     total: totals().total,
                   })}
-                </span>
-                <Show when={target() !== undefined && totals().total > 0}>
-                  <div class="ms-auto flex flex-wrap items-center gap-1">
-                    <Button
-                      size="sm"
-                      variant="tertiary"
-                      disabled={decisions().size === 0}
-                      onClick={() => setDecisions(new Map())}
-                    >
-                      {t("Clear every decision")}
-                    </Button>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      data-review-apply
-                      disabled={
-                        (currentPlan()?.writes.length ?? 0) === 0 ||
-                        busy() !== "" ||
-                        (!againstPast() && currentPlan()?.complete !== true)
-                      }
-                      onClick={() => setConfirming(true)}
-                    >
-                      {t("Apply to this project")}
-                    </Button>
-                  </div>
                 </Show>
-              </Card>
+              </span>
+            )}
+          </Show>
+          <Show when={target() === undefined && result() !== undefined}>
+            <Badge tone="muted" data-review-readonly>
+              {t("Reading only")}
+            </Badge>
+          </Show>
+          <Show when={busy() !== ""}>
+            <span class="text-smallest text-on-surface-tertiary">{busy()}</span>
+          </Show>
+          <Show when={note() !== ""}>
+            <span class="min-w-0 truncate text-smallest text-on-surface-error" data-review-note>
+              {note()}
+            </span>
+          </Show>
+          <Show when={diffRefusal()}>
+            {(reason) => (
+              <span
+                class="text-smallest text-on-surface-error"
+                data-review-engine="missing"
+                title={reason()}
+              >
+                {t("This build's engine has no diff door, so nothing can be compared.")}
+              </span>
+            )}
+          </Show>
 
-              <Show when={receipt() !== ""}>
-                <p class="text-small text-on-surface-success" data-review-receipt>
-                  {receipt()}
-                </p>
-              </Show>
-
-              <Show when={target() !== undefined}>
-                <Card class="flex flex-wrap items-end gap-3" aria-label={t("Record a version")}>
-                  <div class="min-w-0 flex-1 space-y-1">
-                    <label
-                      class="block text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase"
-                      for="commit-message"
-                    >
-                      {t("Message")}
-                    </label>
-                    <Input
-                      id="commit-message"
-                      wrapperClass="w-full"
-                      placeholder={defaultMessage()}
-                      value={message()}
-                      onInput={(event) => setMessage(event.currentTarget.value)}
-                      onKeyDown={(event: KeyboardEvent) => {
-                        if (event.key !== "Enter" || event.isComposing) return;
-                        event.preventDefault();
-                        if (unsaved().length > 0) void record();
-                      }}
-                    />
-                  </div>
-                  <Button
-                    variant="primary"
-                    icon={<Save size={14} />}
-                    data-review-record
-                    loading={recording()}
-                    disabled={unsaved().length === 0}
-                    onClick={() => void record()}
-                  >
-                    {t("Record a version")}
-                  </Button>
-                  <p class="w-full text-smallest text-on-surface-tertiary">
-                    {t(
-                      "{count} book(s) are not in their files yet. Nothing is written on a timer: this button writes the files and records the version together.",
-                      { count: unsaved().length },
-                    )}
-                    <Show when={lastBackup()}>
-                      {(at) => (
-                        <span title={exact(at())} data-backup="last">
-                          {" "}
-                          {t("Working-state backup: {when}", { when: ago(at()) })}
-                        </span>
-                      )}
-                    </Show>
-                  </p>
-                </Card>
-              </Show>
-
-              <div class="min-w-0 space-y-2" data-review-units={totals().total}>
-                <Show
-                  when={changed().length > 0}
-                  fallback={
-                    <Card>
-                      <EmptyState
-                        icon={<Check size={20} />}
-                        title={t("No differences.")}
-                        description={t("Both sides hold exactly the same books and text.")}
-                      />
-                    </Card>
-                  }
-                >
-                  <Show when={oneSided().length > 0}>
-                    <p class="text-smallest text-on-surface-secondary" data-review-one-sided>
-                      {t(
-                        "Only one side holds {books}. A project's book set is fixed when it opens, so Review cannot add or remove a book yet.",
-                        { books: oneSided().map(bookLabel).join(", ") },
-                      )}
-                    </p>
-                  </Show>
-                  <ReviewReader
-                    books={reviewBooks()}
-                    decision={decisionFor}
-                    decide={decide}
-                    decidable={target() !== undefined}
-                    usfm={markup()}
-                    currentLabel={leftLabel()}
-                    baselineLabel={rightLabel()}
-                    currentShort={leftShort()}
-                    baselineShort={rightShort()}
-                    selected={selected()}
-                    onSelect={setSelected}
-                  />
-                </Show>
-              </div>
-
-              <Dialog
-                open={confirming()}
-                onOpenChange={setConfirming}
-                title={t("Apply to this project")}
-                description={t("These books will be written. Each one is a single Undo step.")}
-                footer={
-                  <>
-                    <Button variant="tertiary" onClick={() => setConfirming(false)}>
-                      {t("Cancel")}
-                    </Button>
-                    <Button variant="primary" onClick={apply} data-review-confirm>
-                      {t("Apply")}
-                    </Button>
-                  </>
+          <div class="ms-auto flex items-center gap-1.5">
+            <Show when={receipt() !== ""}>
+              <span class="text-smallest text-on-surface-success" data-review-receipt>
+                {receipt()}
+              </span>
+            </Show>
+            <Show when={target() !== undefined}>
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<Save size={14} />}
+                data-review-record
+                disabled={unsaved().length === 0}
+                title={t("{count} book(s) are not in their files yet.", {
+                  count: unsaved().length,
+                })}
+                onClick={() => setRecordOpen(true)}
+              >
+                {t("Record a version…")}
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                data-review-apply
+                disabled={
+                  (currentPlan()?.writes.length ?? 0) === 0 ||
+                  busy() !== "" ||
+                  (!againstPast() && currentPlan()?.complete !== true)
+                }
+                onClick={() => setConfirming(true)}
+              >
+                {t("Apply to this project")}
+              </Button>
+            </Show>
+            <Menu
+              label={t("Review actions")}
+              side="bottom"
+              align="end"
+              class="w-60"
+              trigger={<IconButton size="sm" label={t("More")} icon={<MoreVertical size={16} />} />}
+            >
+              <MenuItem
+                icon={<Eraser size={14} aria-hidden="true" />}
+                disabled={decisions().size === 0}
+                onSelect={() => setDecisions(new Map())}
+              >
+                {t("Clear every decision")}
+              </MenuItem>
+              <MenuItem
+                icon={<History size={14} aria-hidden="true" />}
+                onSelect={() =>
+                  void navigate({
+                    to: "/project/$slug/history",
+                    params: { slug: shell.slug() },
+                    search: {},
+                  })
                 }
               >
-                <ul class="space-y-1">
-                  <For each={currentPlan()?.writes ?? []}>
-                    {(book) => (
-                      <li class="flex items-center gap-2 text-small">
-                        <Badge tone="warning" size="sm">
-                          {t("rewritten")}
-                        </Badge>
-                        <span class="font-medium">{nameOf(book.bookId)}</span>
-                      </li>
+                {t("History")}
+              </MenuItem>
+              <Show when={skeleton()}>
+                <MenuSeparator />
+                <p
+                  class="px-3 pb-2 text-smallest text-on-surface-tertiary"
+                  data-review-engine="engine"
+                >
+                  {t("Differences are the engine's: by verse, then by word.")}
+                  <Show when={lastBackup()}>
+                    {(at) => (
+                      <span title={exact(at())} data-backup="last">
+                        {" "}
+                        {t("Working-state backup: {when}", { when: ago(at()) })}
+                      </span>
                     )}
-                  </For>
-                </ul>
-              </Dialog>
-            </>
-          )}
+                  </Show>
+                </p>
+              </Show>
+            </Menu>
+          </div>
+        </header>
+
+        {/* Only when there is some: a backup nobody reopened, one line each. */}
+        <Show when={recovered().length > 0}>
+          <div
+            class="flex flex-wrap items-center gap-2 rounded-md border border-brand/40 bg-brand-light/40 px-3 py-1.5"
+            aria-label={t("Recovered work")}
+          >
+            <LifeBuoy size={14} class="text-brand" aria-hidden="true" />
+            <span class="text-small font-medium">{t("Recovered work")}</span>
+            <span class="text-smallest text-on-surface-secondary">
+              {t("from an earlier session, never recorded:")}
+            </span>
+            <For each={recovered()}>
+              {(journal) => (
+                <span class="flex items-center gap-1" title={journal.path}>
+                  <strong class="text-small">{journal.bookId}</strong>
+                  <span class="text-smallest text-on-surface-tertiary">
+                    {t("{count} edit(s)", { count: journal.entries.length })}
+                  </span>
+                  <Button size="sm" variant="primary" onClick={() => restore(journal)}>
+                    {t("Restore")}
+                  </Button>
+                  <Button size="sm" variant="tertiary" onClick={() => discard(journal)}>
+                    {t("Discard")}
+                  </Button>
+                </span>
+              )}
+            </For>
+          </div>
         </Show>
+
+        <Show when={result()} fallback={<EmptyState title={t("Nothing to review yet.")} />}>
+          <Show
+            when={changed().length > 0}
+            fallback={
+              <EmptyState
+                icon={<Check size={20} />}
+                title={t("No differences.")}
+                description={t("Both sides hold exactly the same books and text.")}
+              />
+            }
+          >
+            <Show when={oneSided().length > 0}>
+              <p class="text-smallest text-on-surface-secondary" data-review-one-sided>
+                {t(
+                  "Only one side holds {books}. A project's book set is fixed when it opens, so Review cannot add or remove a book yet.",
+                  { books: oneSided().map(bookLabel).join(", ") },
+                )}
+              </p>
+            </Show>
+            <div class="flex min-h-0 flex-1 flex-col" data-review-units={totals().total}>
+              <ReviewReader
+                books={reviewBooks()}
+                decision={decisionFor}
+                decide={decide}
+                decidable={target() !== undefined}
+                usfm={markup()}
+                onUsfm={setMarkup}
+                currentLabel={leftLabel()}
+                baselineLabel={rightLabel()}
+                currentShort={leftShort()}
+                baselineShort={rightShort()}
+                selected={selected()}
+                onSelect={setSelected}
+              />
+            </div>
+          </Show>
+        </Show>
+
+        <Dialog
+          open={recordOpen()}
+          onOpenChange={setRecordOpen}
+          title={t("Record a version")}
+          description={t(
+            "{count} book(s) are not in their files yet. Nothing is written on a timer: this writes the files and records the version together.",
+            { count: unsaved().length },
+          )}
+          footer={
+            <>
+              <Button variant="tertiary" onClick={() => setRecordOpen(false)}>
+                {t("Cancel")}
+              </Button>
+              <Button
+                variant="primary"
+                icon={<Save size={14} />}
+                loading={recording()}
+                disabled={unsaved().length === 0}
+                data-review-record-confirm
+                onClick={() => void record().then(() => setRecordOpen(false))}
+              >
+                {t("Record a version")}
+              </Button>
+            </>
+          }
+        >
+          <label
+            class="block pb-1 text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase"
+            for="commit-message"
+          >
+            {t("Message")}
+          </label>
+          <Input
+            id="commit-message"
+            wrapperClass="w-full"
+            placeholder={defaultMessage()}
+            value={message()}
+            onInput={(event) => setMessage(event.currentTarget.value)}
+            onKeyDown={(event: KeyboardEvent) => {
+              if (event.key !== "Enter" || event.isComposing) return;
+              event.preventDefault();
+              if (unsaved().length > 0) void record().then(() => setRecordOpen(false));
+            }}
+          />
+        </Dialog>
+
+        <Dialog
+          open={confirming()}
+          onOpenChange={setConfirming}
+          title={t("Apply to this project")}
+          description={t("These books will be written. Each one is a single Undo step.")}
+          footer={
+            <>
+              <Button variant="tertiary" onClick={() => setConfirming(false)}>
+                {t("Cancel")}
+              </Button>
+              <Button variant="primary" onClick={apply} data-review-confirm>
+                {t("Apply")}
+              </Button>
+            </>
+          }
+        >
+          <ul class="space-y-1">
+            <For each={currentPlan()?.writes ?? []}>
+              {(book) => (
+                <li class="flex items-center gap-2 text-small">
+                  <Badge tone="warning" size="sm">
+                    {t("rewritten")}
+                  </Badge>
+                  <span class="font-medium">{nameOf(book.bookId)}</span>
+                </li>
+              )}
+            </For>
+          </ul>
+        </Dialog>
       </Show>
     </main>
   );

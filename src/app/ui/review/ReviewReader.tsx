@@ -34,7 +34,11 @@
 import { Effect } from "effect";
 import ArrowDown from "lucide-solid/icons/arrow-down";
 import ArrowUp from "lucide-solid/icons/arrow-up";
+import BookIcon from "lucide-solid/icons/book";
 import BookOpen from "lucide-solid/icons/book-open";
+import CheckIcon from "lucide-solid/icons/check";
+import ChevronDown from "lucide-solid/icons/chevron-down";
+import Columns2 from "lucide-solid/icons/columns-2";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
 import type { BookId } from "#core/book/book";
@@ -62,11 +66,17 @@ import {
   Button,
   EmptyState,
   IconButton,
+  Menu,
+  MenuCheckbox,
+  MenuLabel,
+  MenuRadio,
+  MenuSeparator,
   SegmentedControl,
   Select,
   VirtualList,
   type VirtualSection,
 } from "../primitives";
+import { claimSidebar } from "../workspace/sidebarSlot";
 
 /** One book that differs: both texts and the engine's units over them. */
 export interface ReviewBook {
@@ -113,6 +123,7 @@ export function ReviewReader(props: {
   /** False when neither side can be written: the review is reading only. */
   readonly decidable: boolean;
   readonly usfm: boolean;
+  readonly onUsfm: (on: boolean) => void;
   readonly currentLabel: string;
   readonly baselineLabel: string;
   readonly currentShort: string;
@@ -448,6 +459,57 @@ export function ReviewReader(props: {
     );
   }
 
+  /**
+   * A card's decision, said in words in its header: most cards hold one
+   * change, and a reader deciding it should not have to learn what a gutter
+   * glyph means. Pressed when every change in the card has that side; pressing
+   * it again clears them.
+   */
+  function CardDecision(cardProps: { readonly hunk: Hunk }) {
+    const sideOf = (): MergeSide | "mixed" | undefined => {
+      const sides = new Set(
+        cardProps.hunk.units.map((unit) => props.decision(cardProps.hunk.bookId, unit.id)),
+      );
+      if (sides.size !== 1) return "mixed";
+      return [...sides][0];
+    };
+    const one = (): boolean => cardProps.hunk.units.length === 1;
+    const choose = (side: MergeSide): void =>
+      props.decide(
+        cardProps.hunk.bookId,
+        cardProps.hunk.units,
+        sideOf() === side ? undefined : side,
+      );
+    return (
+      <Show when={props.decidable}>
+        <Button
+          size="sm"
+          variant={sideOf() === "current" ? "secondary" : "tertiary"}
+          class={sideOf() === "current" ? "text-brand ring-1 ring-brand" : undefined}
+          aria-pressed={sideOf() === "current" ? "true" : "false"}
+          data-card-decision="current"
+          onClick={() => choose("current")}
+        >
+          {one()
+            ? t("Keep {source}'s", { source: props.currentShort })
+            : t("Keep all of {source}'s", { source: props.currentShort })}
+        </Button>
+        <Button
+          size="sm"
+          variant={sideOf() === "baseline" ? "secondary" : "tertiary"}
+          class={sideOf() === "baseline" ? "text-brand ring-1 ring-brand" : undefined}
+          aria-pressed={sideOf() === "baseline" ? "true" : "false"}
+          data-card-decision="baseline"
+          onClick={() => choose("baseline")}
+        >
+          {one()
+            ? t("Take {source}'s", { source: props.baselineShort })
+            : t("Take all of {source}'s", { source: props.baselineShort })}
+        </Button>
+      </Show>
+    );
+  }
+
   const sections = createMemo(
     (): readonly VirtualSection<{ hunk: Hunk; held: Prepared }>[] =>
       prepared()
@@ -463,6 +525,72 @@ export function ReviewReader(props: {
     { name: "reviewSections" },
   );
 
+  /**
+   * The sidebar navigates the CHANGES, as Find's does its results: one row per
+   * book that differs, with how many of its changes are decided. A row goes to
+   * the book — its section in Changes, the book itself in Whole book.
+   */
+  const [activeBook, setActiveBook] = createSignal<BookId | undefined>(undefined, {
+    name: "reviewActiveBook",
+  });
+  onCleanup(
+    claimSidebar(() => (
+      <div
+        class="flex h-full flex-col border-e border-sidebar-border bg-sidebar-surface"
+        data-testid="sidebar"
+        data-sidebar="changes"
+      >
+        <div class="px-4 pt-4 pb-2">
+          <p class="px-2 text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase">
+            {t("Changes")}
+          </p>
+          <p class="px-2 text-small text-on-surface-secondary">
+            {t("{count} in {books} book(s)", {
+              count: prepared().reduce((sum, held) => sum + held.shown.length, 0),
+              books: prepared().length,
+            })}
+          </p>
+        </div>
+        <nav aria-label={t("Changes")} class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+          <ul>
+            <For each={prepared()}>
+              {(held) => {
+                const here = (): boolean =>
+                  (scope() === "book" ? selectedBook()?.book.bookId : activeBook()) ===
+                  held.book.bookId;
+                const done = (): boolean =>
+                  held.shown.length > 0 && decidedOf(held) === held.shown.length;
+                return (
+                  <li>
+                    <button
+                      type="button"
+                      data-outline={held.book.bookId}
+                      data-focused={here() ? "" : undefined}
+                      aria-current={here() ? "true" : undefined}
+                      class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start text-small transition-colors data-focused:bg-sidebar-surface-active data-focused:font-medium data-focused:text-brand not-data-focused:text-sidebar-on-surface not-data-focused:hover:bg-sidebar-surface-hover"
+                      onClick={() => pickBook(held.book.bookId)}
+                    >
+                      <Show
+                        when={done()}
+                        fallback={<BookIcon size={15} aria-hidden="true" class="shrink-0" />}
+                      >
+                        <CheckIcon size={15} aria-hidden="true" class="shrink-0 text-brand" />
+                      </Show>
+                      <span class="min-w-0 flex-1 truncate">{held.book.name}</span>
+                      <span class="shrink-0 text-smallest tabular-nums text-on-surface-tertiary">
+                        {`${decidedOf(held)}/${held.shown.length}`}
+                      </span>
+                    </button>
+                  </li>
+                );
+              }}
+            </For>
+          </ul>
+        </nav>
+      </div>
+    )),
+  );
+
   let observer: ResizeObserver | undefined;
   const measure = (element: HTMLDivElement): void => {
     observer?.disconnect();
@@ -475,7 +603,7 @@ export function ReviewReader(props: {
   onCleanup(() => observer?.disconnect());
 
   return (
-    <div class="flex min-w-0 flex-col gap-2" data-review-reader ref={measure}>
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-2" data-review-reader ref={measure}>
       <div class="flex flex-wrap items-center gap-2" data-review-toolbar>
         <SegmentedControl<Scope>
           size="sm"
@@ -495,53 +623,49 @@ export function ReviewReader(props: {
             },
           ]}
         />
-        <SegmentedControl<Layout>
+        <Select
           size="sm"
-          label={t("Layout")}
-          value={layout()}
-          onChange={setLayout}
-          items={[
-            { value: "auto", label: t("Auto"), title: t("Side by side when there is room") },
-            { value: "split", label: t("Side by side") },
-            { value: "unified", label: t("Unified") },
-          ]}
-        />
-        <SegmentedControl<Filter>
-          size="sm"
-          label={t("Which changes")}
+          wrapperClass="min-w-0"
+          aria-label={t("Which changes")}
+          data-review-filter
           value={filter()}
-          onChange={(value) => {
-            setFilter(value);
+          onChange={(event) => {
+            setFilter(toFilter(event.currentTarget.value));
             setPlace(undefined);
           }}
-          items={[
-            { value: "all", label: t("All") },
-            { value: "words", label: t("Words"), title: t("Changes to what a reader reads") },
-            {
-              value: "formatting",
-              label: t("Markup and spacing"),
-              title: t("The words are the same on both sides"),
-            },
-          ]}
-        />
-        <Show when={scope() === "book"}>
-          <Select
-            size="sm"
-            wrapperClass="min-w-0"
-            aria-label={t("Which book to review")}
-            data-review-reader-book
-            value={selectedBook()?.book.bookId ?? ""}
-            onChange={(event) => pickBook(event.currentTarget.value)}
-          >
-            <For each={prepared()}>
-              {(held) => (
-                <option value={held.book.bookId}>
-                  {`${held.book.name} (${held.shown.length})`}
-                </option>
-              )}
-            </For>
-          </Select>
-        </Show>
+        >
+          <option value="all">{t("All changes")}</option>
+          <option value="words">{t("Changes to the words")}</option>
+          <option value="formatting">{t("Markup and spacing only")}</option>
+        </Select>
+        <Menu
+          label={t("View")}
+          side="bottom"
+          align="start"
+          class="w-64"
+          trigger={
+            <Button size="sm" variant="tertiary" data-review-view>
+              <Columns2 size={14} aria-hidden="true" />
+              {t("View")}
+              <ChevronDown size={14} aria-hidden="true" />
+            </Button>
+          }
+        >
+          <MenuLabel>{t("Layout")}</MenuLabel>
+          <MenuRadio checked={layout() === "auto"} onSelect={() => setLayout("auto")}>
+            {t("Side by side when there is room")}
+          </MenuRadio>
+          <MenuRadio checked={layout() === "split"} onSelect={() => setLayout("split")}>
+            {t("Side by side")}
+          </MenuRadio>
+          <MenuRadio checked={layout() === "unified"} onSelect={() => setLayout("unified")}>
+            {t("One text, changes marked")}
+          </MenuRadio>
+          <MenuSeparator />
+          <MenuCheckbox checked={props.usfm} onChange={props.onUsfm}>
+            {t("Show USFM markup")}
+          </MenuCheckbox>
+        </Menu>
         <div class="ms-auto flex items-center gap-1">
           <span class="text-smallest text-on-surface-tertiary tabular-nums" data-review-counter>
             {counter()}
@@ -566,9 +690,24 @@ export function ReviewReader(props: {
         fallback={
           <Show when={selectedBook()} fallback={<EmptyState title={t("Preparing…")} />}>
             {(held) => (
-              <div class="flex min-h-0 flex-col gap-2">
-                <div class="flex flex-wrap items-center gap-2">
-                  <strong class="text-small font-semibold">{held().book.name}</strong>
+              <div class="flex min-h-0 flex-1 flex-col gap-2">
+                <div class="flex flex-wrap items-center gap-2 border-b border-surface-border pb-1.5">
+                  <Select
+                    size="sm"
+                    wrapperClass="min-w-0"
+                    aria-label={t("Which book to review")}
+                    data-review-reader-book
+                    value={held().book.bookId}
+                    onChange={(event) => pickBook(event.currentTarget.value)}
+                  >
+                    <For each={prepared()}>
+                      {(entry) => (
+                        <option value={entry.book.bookId}>
+                          {`${entry.book.name} (${entry.shown.length})`}
+                        </option>
+                      )}
+                    </For>
+                  </Select>
                   <Badge tone="muted">
                     {t("{decided} decided of {total}", {
                       decided: decidedOf(held()),
@@ -580,7 +719,7 @@ export function ReviewReader(props: {
                   </div>
                 </div>
                 <BookDiff
-                  class="h-[calc(100vh-220px)] min-h-[420px]"
+                  class="min-h-0 flex-1"
                   sides={held().sides}
                   units={held().units}
                   split={split()}
@@ -602,7 +741,7 @@ export function ReviewReader(props: {
         }
       >
         <div
-          class="flex h-[calc(100vh-220px)] min-h-[420px]"
+          class="flex min-h-0 flex-1"
           ref={(element) => {
             listRoot = element;
           }}
@@ -612,7 +751,10 @@ export function ReviewReader(props: {
             ref={(scrollTo) => {
               goTo = scrollTo;
             }}
-            onActive={(bookId) => props.onSelect(bookId)}
+            onActive={(bookId) => {
+              setActiveBook(bookId);
+              props.onSelect(bookId);
+            }}
             header={(section, ref) => {
               const held = () => prepared().find((entry) => entry.book.bookId === section().key);
               return (
@@ -651,26 +793,7 @@ export function ReviewReader(props: {
                   onOpen={() => openInBook(item().hunk)}
                   actions={
                     <>
-                      <Show when={props.decidable && item().hunk.units.length > 1}>
-                        <Button
-                          size="sm"
-                          variant="tertiary"
-                          onClick={() =>
-                            props.decide(item().hunk.bookId, item().hunk.units, "current")
-                          }
-                        >
-                          {t("Keep all here")}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="tertiary"
-                          onClick={() =>
-                            props.decide(item().hunk.bookId, item().hunk.units, "baseline")
-                          }
-                        >
-                          {t("Take all here")}
-                        </Button>
-                      </Show>
+                      <CardDecision hunk={item().hunk} />
                       <IconButton
                         size="sm"
                         label={t("Open in the book")}
@@ -697,6 +820,9 @@ export function ReviewReader(props: {
     </div>
   );
 }
+
+const toFilter = (value: string): Filter =>
+  value === "words" || value === "formatting" ? value : "all";
 
 const toLayout = (value: string): Layout =>
   value === "split" || value === "unified" ? value : "auto";

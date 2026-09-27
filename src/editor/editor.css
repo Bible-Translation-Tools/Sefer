@@ -1096,7 +1096,8 @@
   margin: 2px 0;
 }
 .cm-diff-controls {
-  min-width: 44px;
+  min-width: 60px;
+  padding-inline-start: 4px;
 }
 .cm-diff-control {
   display: inline-flex;
@@ -1106,10 +1107,15 @@
   cursor: pointer;
   border: 1px solid var(--surface-border);
   border-radius: 4px;
-  padding: 0 4px;
-  font: 11px/16px var(--font-sans, system-ui);
+  padding: 1px 6px;
+  font: 13px/18px var(--font-sans, system-ui);
   color: var(--on-surface-secondary);
   background: var(--surface-primary);
+}
+.cm-diff-control button[data-on="true"][data-side="baseline"] {
+  color: var(--on-surface-primary);
+  border-color: var(--on-surface-tertiary);
+  background: var(--surface-secondary);
 }
 .cm-diff-control button[data-on="true"] {
   color: var(--brand);

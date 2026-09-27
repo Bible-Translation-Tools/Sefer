@@ -172,6 +172,16 @@ sid-aligned rule exists to prevent.
 
 ### The reading: three layers
 
+**The chrome is one row**, so the reading has the screen. What is compared is
+a chip ("In the editor ⇄ On disk") that opens the two pickers; the count says
+how far the review is; Apply is the one primary button; Record a version opens
+a dialog for its message; the ⋯ menu holds Clear every decision, History and
+what aligned the diff. Recovered work is a one-line banner, and only when
+there is some. The reading's own toolbar is the second row: scope, the kind
+filter, a View menu (layout, USFM markup), next and previous. The project
+sidebar becomes the review's outline — each book that differs, decided of
+total — as Find's becomes its results.
+
 The differences are drawn ON the two texts, as the editor reads them — the
 diff view recipe (`#editor` `mountDiffView`) paints units and word runs on each
 side's own document, in regular mode or USFM (the header's **Show USFM
