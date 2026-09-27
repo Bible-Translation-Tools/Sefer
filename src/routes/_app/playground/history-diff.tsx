@@ -14,7 +14,7 @@ const loadHistoryDiff = async () => {
  * the origin it came from, so a recipient without the project knows what to
  * clone. Anything malformed is dropped: a stale link opens the page.
  */
-export interface HistoryDiffSearch {
+interface HistoryDiffSearch {
   readonly project?: string;
   readonly book?: string;
   readonly at?: string;

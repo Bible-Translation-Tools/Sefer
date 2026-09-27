@@ -58,20 +58,3 @@ export class BoundedLru<K, V> {
     return this.held.values();
   }
 }
-
-/** Inclusive frame indexes around a selected after-version, newest first. */
-export const nearbyFrameIndexes = (
-  length: number,
-  selected: number,
-  radius = 2,
-): readonly number[] => {
-  if (length < 0 || radius < 0) return [];
-  const center = Math.max(0, Math.min(Math.trunc(selected), length - 1));
-  const from = Math.max(0, center - Math.trunc(radius));
-  const to = Math.min(length, center + Math.trunc(radius) + 1);
-  return Array.from({ length: Math.max(0, to - from) }, (_, offset) => from + offset);
-};
-
-/** Ordered older/newer pair identity; commit IDs stand in for blob OIDs here. */
-export const historyPairKey = (path: string, olderCommit: string, newerCommit: string): string =>
-  JSON.stringify([path, olderCommit, newerCommit]);

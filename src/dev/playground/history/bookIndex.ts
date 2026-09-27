@@ -45,7 +45,7 @@ export interface IndexedCommit {
   readonly shallow?: true;
 }
 
-export const INDEX_VERSION = 1;
+const INDEX_VERSION = 1;
 
 export interface BookIndex {
   readonly version: typeof INDEX_VERSION;

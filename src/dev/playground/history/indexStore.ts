@@ -21,7 +21,7 @@ import type { ObservabilityService } from "#core/observability";
 import { decodeIndex, encodeIndex, type BookIndex } from "./bookIndex";
 import type { BuildRequest, WorkerMessage } from "./indexWorker";
 
-export const INDEX_DIR = "/sefer/history";
+const INDEX_DIR = "/sefer/history";
 
 const pathOf = (root: string): string => `${INDEX_DIR}/${encodeURIComponent(root)}.json`;
 

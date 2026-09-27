@@ -1,13 +1,11 @@
 # Test drive: excerpt cards, the diff playground, the history index (2026-09-26)
 
-**Status:** three prototypes to drive, tune and then decide on. Nothing here is pushed. Measurements are one machine (macOS arm64), Chrome through the CDP rig, the dev server — not a build — on `WycliffeAssociates/en_ulb` (66 books, 11,998 commits).
+**Status:** three prototypes to drive, tune and then decide on, all on ONE branch, `review/2026-09-26`, checked out at `.claude/worktrees/review-2026-09-26` (master plus the history work replayed on top). Nothing here is pushed. Measurements are one machine (macOS arm64), Chrome through the CDP rig, the dev server — not a build — on `WycliffeAssociates/en_ulb` (66 books, 11,998 commits).
 
 ## Before you start
 
 - **Where en_ulb lives.** The imported en_ulb project and its Git history are in the CDP Chrome profile's OPFS (`~/.sefer-cdp-profile`), under the origin `http://127.0.0.1:3001`. In another browser, import it once from the Projects page (WACS → `en_ulb`, full history).
-- **Which dev server.** Features 1 and 2 are on `master` in the main checkout; feature 3 is on the `history-spike` branch in `~/.codex/worktrees/history-metadata-spike/Sefer`. Only one can be on port 3001 at a time:
-  - `pnpm dev --host 127.0.0.1 --port 3001` in the main checkout (features 1 and 2), or
-  - the same in the worktree (feature 3).
+- **One dev server for all three.** In the review worktree: `cd .claude/worktrees/review-2026-09-26 && pnpm dev --host 127.0.0.1 --port 3001`. Port 3001 matters only because that is the origin en_ulb was imported under.
 - **Reading what it did.** Every step below is traced in the app's ring. In DevTools: `__sefer.observability.traces.recent()` for operations with their spans, `__sefer.observability.logs.recent()` for loose spans, `__sefer.observability.errors()` for anything that failed. The names to look for are given per feature.
 - **Driving it from an agent.** `pnpm verify:chrome` starts the CDP Chrome; Playwright's `chromium.connectOverCDP("http://[::1]:9222")` attaches. Interaction cost is best read with the Event Timing API (`PerformanceObserver` on `event`, what INP reads), not a stopwatch around Playwright calls, which adds ~60 ms of round trips.
 
@@ -15,7 +13,7 @@
 
 **What it is.** One card for every list of places: the editor's own reading of a TOC unit and its context, read-only; double-click or Edit turns it into the satellite (caret where you clicked); ↑ / Chapter / ↓ step through the TOC; a paired resource beside it (Find's Reference scope, Key terms' guide text); the results outline in the sidebar's place; cards follow the seat live while any card or the editor edits the book. Plan: `planning/00-ideas/excerpt-compound-component.md` (decisions, what was built, the measurement table).
 
-**Drive it** (main checkout on 3001):
+**Drive it:**
 
 1. Open `http://127.0.0.1:3001/project/en-ulb/book/PSA` and wait a few seconds for the project's background analysis (a search straight after opening is slow because of it, not the cards).
 2. Type `the` in the toolbar search and press Enter: 86,556 hits. Scroll the list; use the sidebar outline (book rows, chapter tiles) to jump.
@@ -66,7 +64,7 @@ Still over 50 ms: the search itself (stream it per book), a scope change (a new 
 
 Both: regular or USFM mode; per-unit gutter controls — ↶ takes the earlier text for that unit (through `galley.merge`, then re-diffed), ✓ marks it reviewed. The working text is a copy: nothing is written to the book.
 
-**Drive it** (main checkout on 3001; the baseline is a synthetic earlier draft — reworded, shortened, absent and markup-only verses — so every kind of change is on screen):
+**Drive it** (the baseline is a synthetic earlier draft — reworded, shortened, absent and markup-only verses — so every kind of change is on screen):
 
 - In the editor: `http://127.0.0.1:3001/project/en-ulb/playground?experiment=editor-diff&book=PSA&density=normal` — dials _Layout_ (split / unified), _Mode_ (regular / usfm), _Unit controls_.
 - As excerpts: `…/playground?experiment=excerpt-diff&book=PSA&density=normal` — dials _Layout_, _Mode_, _Books_ (this book / all books), _Context_ (0–2 steps), _Unit controls_. All books fills book by book (~3 s for 66).
@@ -89,11 +87,11 @@ Both: regular or USFM mode; per-unit gutter controls — ↶ takes the earlier t
 | The bench (synthetic draft, disk baseline) and the frame                            | `src/dev/playground/bench.ts`, `PlaygroundPage.tsx`, `registry.ts` |
 | Styles                                                                              | `src/editor/editor.css` (`.cm-diff-*`)                             |
 
-## 3. History: the book-change index (worktree)
+## 3. History: the book-change index
 
-**What it is.** The plan's primitives 1, 3, 5a and 6a–6c, driving the history timeline: a pack-cached Git view; an all-books change index built in a worker under a shared Web Lock, stored outside the project and extended incrementally; a book's history from it in milliseconds; each commit's other changed books; a merge's common ancestor and changed-on-both-sides facts. Plan: `planning/01-discussing/local-review-and-history-plan.md` ("Prototype on the spike branch"); numbers and links in the worktree's `planning/scratch/history-metadata-spike.md`.
+**What it is.** The plan's primitives 1, 3, 5a and 6a–6c, driving the history timeline: a pack-cached Git view; an all-books change index built in a worker under a shared Web Lock, stored outside the project and extended incrementally; a book's history from it in milliseconds; each commit's other changed books; a merge's common ancestor and changed-on-both-sides facts. Plan: `planning/01-discussing/local-review-and-history-plan.md` ("Prototype on the spike branch"); numbers and links in `planning/scratch/history-metadata-spike.md`.
 
-**Drive it** (serve the WORKTREE on 3001: `cd ~/.codex/worktrees/history-metadata-spike/Sefer && pnpm dev --host 127.0.0.1 --port 3001`):
+**Drive it:**
 
 1. `http://127.0.0.1:3001/playground/history-diff?project=en_ulb&book=01-GEN.usfm` — the first open builds the index in the background (~5 s; progress beside the book picker) while the timeline walks; the next open is from the stored index ("history index stored").
 2. Scroll left through the slides; each header says which other books that commit changed.
@@ -104,9 +102,9 @@ Both: regular or USFM mode; per-unit gutter controls — ↶ takes the earlier t
 
 **Measured:** index build 4.9 s cold (was 30.6 s before the `.git` stat was remembered — isomorphic-git stats `.git` on every command), 10 filesystem calls; extend by 49 commits 391 ms; stored open ~35 ms (2.76 MB); a book's history 19 ms; first slide with no index 1.4 s; merge facts ~0.5 s.
 
-**Not built:** shallow clone then deepen in the worker; the exclusive lock on the app's own writers; remote branches in the index; a two-points picker. The branch sits on old master (`9df745f`) and needs a rebase before any of it moves; the spike's four test files are deliberately not committed.
+**Not built:** shallow clone then deepen in the worker; the exclusive lock on the app's own writers; remote branches in the index; a two-points picker. The spike's four test files and its OPFS fixture were left behind in the old spike worktree (no-tests rule).
 
-**Code** (in the worktree):
+**Code:**
 
 | Piece                                               | Where                                                                                                                          |
 | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
@@ -117,4 +115,4 @@ Both: regular or USFM mode; per-unit gutter controls — ↶ takes the earlier t
 
 ## Commits
 
-Main checkout, `master`, unpushed: `69a2366` card, `3a9f14b` sidebar slot, `e2b5196` spacing, `cc5c100` perf and live follow, `13b023b` per-card widening, `3e3625b` virtual list measuring, `ab20549` stamp variant, `c844d4d` diff in the editor, `54d42cd` changes as excerpts, `dfdba85` no regroup on edit, plus planning notes. Worktree, `history-spike`: `54f176b`.
+`review/2026-09-26`, on top of the day's master commits (`69a2366` card … `07de31a` follow check, all unpushed): `fa599e2` the history index, pack view and timeline, then this note's update and the dead-code tidy. The old spike worktree (`~/.codex/worktrees/history-metadata-spike`, branch `history-spike`) is superseded and can be removed once this is reviewed.

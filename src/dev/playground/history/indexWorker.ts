@@ -47,7 +47,7 @@ export type WorkerMessage =
     }
   | { readonly kind: "failed"; readonly error: string };
 
-export const lockName = (root: string): string => `sefer.git:${root}`;
+const lockName = (root: string): string => `sefer.git:${root}`;
 
 const post = (message: WorkerMessage): void => {
   self.postMessage(message);
