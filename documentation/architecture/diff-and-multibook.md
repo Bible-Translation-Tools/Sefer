@@ -6,7 +6,7 @@ Two small, pure, synchronous modules that sit above `Book` and below anything wi
 
 `src/core/diff/diff.ts`. Diff answers "what have I changed since this was written to disk?" and puts pieces of it back.
 
-It is a LINE diff, and it is being retired: comparisons are meant to go through the engine's sid-aligned decision units, which is what `/review` already uses ([review](review.md)). Its remaining users are the History panel and its `src/app/ui/panels/changes.ts`, `compareBooks` in `src/core/compare/compare.ts`, and `src/core/compare/projectSource.ts`. Do not add a new one.
+It is a LINE diff, and it is being retired: comparisons are meant to go through the engine's sid-aligned decision units, which is what `/review` already uses ([review](review.md)). Its remaining users are the History panel and its `src/app/ui/panels/changes.ts`, and `src/core/compare/projectSource.ts` (`compareBooks` stopped using it on 2026-09-27). Do not add a new one.
 
 Its input is a **value**, not a service: `BaselineLike { bookId, stamp, text }`. Save produces the full `Baseline` (adding `path`, `hash`, `savedAt`); Diff only names the three fields it reads, structurally, so nothing in Diff points at Save — Save points at FileSystem and Observability, and Diff must stay below both. That direction is the DAG's rule, not a style preference.
 

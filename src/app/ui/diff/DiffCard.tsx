@@ -14,6 +14,8 @@
  * badge as the only clue is the card telling you nothing.
  */
 
+import { Prec } from "@codemirror/state";
+import { keymap } from "@codemirror/view";
 import type { JSX } from "@solidjs/web";
 import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
@@ -108,6 +110,10 @@ export function DiffCard(props: {
   readonly live?:
     | { readonly book: EditorBook; readonly analyze: (text: string) => Analysis }
     | undefined;
+  /** A live pane was focused: the card is being edited. */
+  readonly onEditing?: () => void;
+  /** Escape in a live pane. */
+  readonly onDoneEditing?: () => void;
   readonly onOpen?: () => void;
   readonly onMounted?: (ms: number) => void;
 }) {
@@ -225,14 +231,29 @@ export function DiffCard(props: {
             readingLayer,
             clippedToScope(),
             ...liveDiff(paint()),
+            Prec.high(
+              keymap.of([
+                {
+                  key: "Escape",
+                  run: (view) => {
+                    view.contentDOM.blur();
+                    untrack(() => props.onDoneEditing)?.();
+                    return true;
+                  },
+                },
+              ]),
+            ),
           ],
         });
+        const editing = (): void => untrack(() => props.onEditing)?.();
+        satellite.view.contentDOM.addEventListener("focus", editing);
         mount = {
           view: satellite.view,
           repaint: (next) => repaintDiff(satellite.view, next),
           setMode: () => {},
           showAt: () => {},
           destroy: () => {
+            satellite.view.contentDOM.removeEventListener("focus", editing);
             satellite.destroy();
             release();
           },

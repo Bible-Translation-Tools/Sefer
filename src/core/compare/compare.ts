@@ -8,44 +8,18 @@
 // of them differ, and the texts to decide over. The unit a reader decides on
 // inside a book is the engine's decision unit, merged by `mergeWithDecisions`
 // in `core/diff/skeleton.ts` and written by `applyPlan` in decisions.ts — see
-// `documentation/architecture/review.md`. The hunks here come from
-// `core/diff`'s line diff and only count differences.
+// `documentation/architecture/review.md`. There is no diff here at all: two
+// texts are identical or they are not, and what differs inside a book is the
+// engine's to say (the review asks it only for books that differ).
 //
-// A book present on only one side is its own kind of difference, not a hunk:
-// there is nothing to line up. It carries ONE decision for the whole book.
+// A book present on only one side is its own kind of difference: there is
+// nothing to line up.
 
 import { Effect } from "effect";
 
 import type { BookId } from "../book/book";
-import { diffTexts, type TextHunk } from "../diff/diff";
 import type { SourceStamp } from "../source/source";
 import { sourceRef, type CompareSource, type CompareError, type SourceRef } from "./source";
-
-/** Stable within one comparison; the key of the decision map. */
-export type HunkId = string;
-
-/**
- * One difference inside a book that both sides hold.
- *
- * The two sides are named `left` and `right` rather than diff's
- * `baseline`/`working`, because neither side of a compare is older than the
- * other — that asymmetry belongs to Save's baseline, not here.
- *
- * `leftFrom`/`leftTo` index the left text and `rightFrom`/`rightTo` the right;
- * both are half-open line ranges, so a pure insertion is a zero-width range on
- * the side that lacks it.
- */
-export interface CompareHunk {
-  readonly id: HunkId;
-  readonly bookId: BookId;
-  readonly kind: TextHunk["kind"];
-  readonly leftFrom: number;
-  readonly leftTo: number;
-  readonly rightFrom: number;
-  readonly rightTo: number;
-  readonly left: string;
-  readonly right: string;
-}
 
 /** Which sides hold this book at all. */
 export type Presence = "both" | "left" | "right";
@@ -53,8 +27,6 @@ export type Presence = "both" | "left" | "right";
 /**
  * One book's comparison.
  *
- * `decisions` is how many choices this book asks for: one per hunk when both
- * sides hold it, and exactly one — the whole book — when only one side does.
  * `stamp` is the LEFT side's stamp when it has one, and it is what Apply
  * checks before writing: a target that has moved since the comparison was
  * taken is refused, not re-diffed.
@@ -62,13 +34,11 @@ export type Presence = "both" | "left" | "right";
 export interface BookComparison {
   readonly bookId: BookId;
   readonly presence: Presence;
-  readonly hunks: readonly CompareHunk[];
   readonly leftText: string | undefined;
   readonly rightText: string | undefined;
   readonly leftStamp: SourceStamp | undefined;
   readonly rightStamp: SourceStamp | undefined;
-  readonly decisions: number;
-  /** Both sides hold it and the texts are byte-identical. */
+  /** Both sides hold it and the texts are identical. */
   readonly identical: boolean;
 }
 
@@ -79,13 +49,9 @@ export interface CompareResult {
   readonly books: readonly BookComparison[];
   /** Books that differ at all — changed, left-only or right-only. */
   readonly changedBooks: number;
-  /** Every decision the reader is being asked for, across every book. */
-  readonly decisions: number;
   readonly leftOnly: number;
   readonly rightOnly: number;
 }
-
-const hunkId = (bookId: BookId, index: number): HunkId => `${bookId}:${index}`;
 
 /**
  * The union of both sides' books, in left's order with right-only books
@@ -97,21 +63,6 @@ const unionOrder = (left: readonly BookId[], right: readonly BookId[]): readonly
   const seen = new Set(left);
   return [...left, ...right.filter((bookId) => !seen.has(bookId))];
 };
-
-const toHunks = (bookId: BookId, leftText: string, rightText: string): readonly CompareHunk[] =>
-  // `diffTexts(baseline, working)` with left as the baseline: its
-  // `baselineFrom/To` index the left text and `from/to` the right.
-  diffTexts(leftText, rightText).map((hunk, index) => ({
-    id: hunkId(bookId, index),
-    bookId,
-    kind: hunk.kind,
-    leftFrom: hunk.baselineFrom,
-    leftTo: hunk.baselineTo,
-    rightFrom: hunk.from,
-    rightTo: hunk.to,
-    left: hunk.baseline,
-    right: hunk.working,
-  }));
 
 /**
  * Compares every book either side holds.
@@ -144,20 +95,15 @@ export const compareBooks = (
       if (leftText !== undefined && rightText !== undefined) {
         // Identical texts are the common case — most books of a review are
         // untouched — and string equality answers it at memory speed, length
-        // first. Nothing is split into lines or diffed for them, and the
-        // engine's diff is skipped for them further up (`identical`).
-        const hunks =
-          leftText.text === rightText.text ? [] : toHunks(bookId, leftText.text, rightText.text);
+        // first. The engine's diff is asked only for the books that differ.
         books.push({
           bookId,
           presence: "both",
-          hunks,
           leftText: leftText.text,
           rightText: rightText.text,
           leftStamp: leftText.stamp,
           rightStamp: rightText.stamp,
-          decisions: hunks.length,
-          identical: hunks.length === 0,
+          identical: leftText.text === rightText.text,
         });
         continue;
       }
@@ -165,14 +111,10 @@ export const compareBooks = (
       books.push({
         bookId,
         presence: onLeft ? "left" : "right",
-        hunks: [],
         leftText: leftText?.text,
         rightText: rightText?.text,
         leftStamp: leftText?.stamp,
         rightStamp: rightText?.stamp,
-        // A one-sided book is one question: which side is right about whether
-        // this book should exist.
-        decisions: 1,
         identical: false,
       });
     }
@@ -182,7 +124,6 @@ export const compareBooks = (
       right: sourceRef(right),
       books,
       changedBooks: books.filter((book) => !book.identical).length,
-      decisions: books.reduce((total, book) => total + book.decisions, 0),
       leftOnly: books.filter((book) => book.presence === "left").length,
       rightOnly: books.filter((book) => book.presence === "right").length,
     } satisfies CompareResult;

@@ -389,16 +389,16 @@ The multibuffer shared by Find, Key terms and Findings: occurrences grouped by T
 
 ### Overview
 
-There are two diffs today. The engine skeleton (decision units addressed by sid, `core/diff/skeleton.ts` + `core/galley/diff.ts`) feeds `/review`, and both its views mark words from the engine's located runs over the engine's reader text. A legacy line diff (`core/diff/diff.ts`) still feeds History hunks and Revert, `compareBooks`, and `projectSource.apply`. → [review](architecture/review.md), [diff and multibook](architecture/diff-and-multibook.md)
+There are two diffs today. The engine skeleton (decision units addressed by sid, `core/diff/skeleton.ts` + `core/galley/diff.ts`) feeds `/review`, and both its views mark words from the engine's located runs over the engine's reader text. A legacy line diff (`core/diff/diff.ts`) still feeds History hunks and Revert, and `projectSource.apply` (the minimal change list a write lands as; the engine's `mergeSplices` door is the replacement). `compareBooks` no longer diffs at all: identical is string equality. → [review](architecture/review.md), [diff and multibook](architecture/diff-and-multibook.md)
 
 ### Constraints and known bugs
 
 - The line diff breaks the sid-aligned-only rule.
-- `compareBooks` reads and line-diffs every book on both sides, untouched ones included, only to decide "identical" and count hunks, which Review no longer shows. Nothing is skipped by stamp.
+- `compareBooks` still READS every book on both sides to decide "identical" (string equality, no diff since 2026-09-27). Skipping the read by a stored hash per revision is the next step.
 
 ### Ideas / future
 
-- The plan: `planning/01-discussing/diff-and-sync-model-2026-09-23.md`. Skip by stamp, read only changed books, one change classification shared by History, Review and Cloud, then move History, `compareBooks` and `projectSource` onto decision units and delete `core/diff/diff.ts`.
+- The plan: `planning/01-discussing/diff-and-sync-model-2026-09-23.md`. Skip by stamp, read only changed books, one change classification shared by History, Review and Cloud, then move History and `projectSource` onto decision units and delete `core/diff/diff.ts`.
 - The diff UI redesign is paused on `/project/$slug/playground`.
 - **Default baseline: the file on disk against the working session, not the last commit.**
 

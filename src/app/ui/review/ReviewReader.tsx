@@ -202,6 +202,20 @@ export function ReviewReader(props: {
     return analyze(text);
   };
 
+  /**
+   * The card being edited, and the units it pins. Editing a card pins its
+   * changes so the card stays while you type — even an undo back to exactly
+   * the other side's text, which leaves nothing to show, does not take the
+   * card out from under the caret. Done (or Escape) releases them.
+   */
+  const [editingCard, setEditingCard] = createSignal<
+    { readonly key: string; readonly bookId: BookId; readonly units: readonly string[] } | undefined
+  >(undefined, { name: "reviewEditingCard" });
+  const pinned = (bookId: BookId, unitId: string): boolean => {
+    const held = untrack(editingCard);
+    return held !== undefined && held.bookId === bookId && held.units.includes(unitId);
+  };
+
   const prepare = (book: ReviewBook, steps: number, show: Filter, result: boolean): Prepared => {
     const sides: DiffSides = {
       bookId: book.bookId,
@@ -215,7 +229,9 @@ export function ReviewReader(props: {
     // In Result mode a taken unit is unchanged now — it IS the other side's
     // text — and still keeps its card, to say so and to put it back.
     const keep = (unit: DecisionUnit): boolean =>
-      result && untrack(() => props.decision(book.bookId, unit.id)) !== undefined;
+      result &&
+      (untrack(() => props.decision(book.bookId, unit.id)) !== undefined ||
+        pinned(book.bookId, unit.id));
     return {
       book,
       sides,
@@ -243,12 +259,18 @@ export function ReviewReader(props: {
    */
   let held = new Map<BookId, { readonly key: string; readonly prepared: Prepared }>();
   const keyOf = (book: ReviewBook, show: Filter, result: boolean): string =>
-    `${show}\0${result ? "r" : "c"}\0${book.currentText.length}\0${book.baselineText.length}`;
+    `${untrack(editingCard)?.bookId === book.bookId ? untrack(editingCard)?.key : ""}\0${show}\0${result ? "r" : "c"}\0${book.currentText.length}\0${book.baselineText.length}`;
   const same = (was: Prepared, book: ReviewBook): boolean =>
     was.book.currentText === book.currentText && was.book.baselineText === book.baselineText;
 
   createEffect(
-    () => ({ books: props.books, show: filter(), result: props.mode === "result" }),
+    () => ({
+      books: props.books,
+      show: filter(),
+      result: props.mode === "result",
+      // A pin taken or released changes which cards its book keeps.
+      editing: editingCard()?.key,
+    }),
     ({ books, show, result }) => {
       const steps = services.settings.get(keys.excerptContext);
       const op = observability.operation("review.diff.prepare", {
@@ -949,9 +971,30 @@ export function ReviewReader(props: {
                   baselineLabel={props.baselineLabel}
                   currentFirst
                   live={liveFor(item().hunk.bookId)}
+                  onEditing={() => {
+                    const hunk = item().hunk;
+                    if (untrack(editingCard)?.key === hunk.key) return;
+                    setEditingCard({
+                      key: hunk.key,
+                      bookId: hunk.bookId,
+                      units: hunk.units.map((unit) => unit.id),
+                    });
+                  }}
+                  onDoneEditing={() => setEditingCard(undefined)}
                   onOpen={() => openInBook(item().hunk)}
                   actions={
                     <>
+                      <Show when={editingCard()?.key === item().hunk.key}>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          data-review-done
+                          title={t("Stop editing (Escape)")}
+                          onClick={() => setEditingCard(undefined)}
+                        >
+                          {t("Done")}
+                        </Button>
+                      </Show>
                       <CardDecision hunk={item().hunk} />
                       <IconButton
                         size="sm"

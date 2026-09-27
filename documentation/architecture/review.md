@@ -92,7 +92,7 @@ is on a side. A comparison is still a snapshot — this simply takes a new one.
 
 ### The screen never says "left" or "right"
 
-`left` and `right` are the model's words — `CompareHunk` and the screen's
+`left` and `right` are the model's words — `BookComparison` and the screen's
 decision map keep them, and should, because the model has two sides and no opinion about
 them. `baseline` and `current` are the ENGINE's words for the same two sides
 (right and left respectively), and the decision wire uses them verbatim. The
@@ -138,7 +138,7 @@ must not be; the key is the pair of texts, so there is nothing to invalidate.
 
 Review's alignment is the engine's and nothing else — Will, 2026-09-15: "the
 engine is the only diff". The line diff in `src/core/diff/diff.ts` still serves
-History, `compareBooks` and `projectSource` and is being retired toward the
+History and `projectSource` and is being retired toward the
 same decision units ([diff and multibook](diff-and-multibook.md)); it has no
 part in `/review`.
 
@@ -244,7 +244,11 @@ The file is still written only by Record a version. Switching mode clears the
 decisions, because the two modes mean different things by one. Two read-only
 sides (two zips, two folders) have no result to edit, so the mode is not
 offered; a remote into the working text will be, when a remote is a source.
-Every book in the review is seated once for this; each accepted edit is
+Clicking into a card's text starts EDITING it: the card shows Done, and its
+changes are pinned, so the card stays while you type even when an edit (an
+undo, say) makes the verse identical to the other side again and there is
+nothing left to show. Done or Escape releases the pin, and only then does a
+card with no difference go. Every book in the review is seated once for this; each accepted edit is
 announced (debounced 150 ms per book), the review compares again (7–13 ms
 with identical books bailed on string equality) and the panes repaint in
 place — a pane's dependencies are compared field by field, so typing never

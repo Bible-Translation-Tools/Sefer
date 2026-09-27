@@ -286,7 +286,6 @@ export function ReviewPanel() {
         comparing.end(refusedBooks > 0 ? "refused" : "passed", {
           "review.books": found.books.length,
           "review.changed": found.changedBooks,
-          "review.hunks": found.decisions,
           "review.left_only": found.leftOnly,
           "review.right_only": found.rightOnly,
           "review.unit_books": held.size,
