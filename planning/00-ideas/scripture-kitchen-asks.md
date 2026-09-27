@@ -66,3 +66,13 @@ Rarity's denominator today is the corpus total, so `Glyph.sites` has to take Rar
 **Change:** an unknown marker does not end its paragraph — the recovery a registered standalone gets, applied to a marker nobody registered. Findings still report it as unknown.
 
 **Sefer side:** nothing to change; the paragraph then flows through it as it does through `\s5`.
+
+## 8. `diff` skips chapters that did not change
+
+**Asked 2026-09-26.** `galley.diff` aligns two whole books every call. On en_ulb, Psalms takes ~18 ms, and a review across every book (the playground's "Changes as excerpts") compares 66 books in ~3 s. When changes are few and spread out, most chapters are byte-identical on both sides.
+
+**Change:** inside `diff`, pair chapters by their `\c` number from each side's TOC, hash each chapter slice (the engine already has xxh3), and treat a pair with equal hashes as unchanged without aligning it. Chapters that differ, and chapters one side lacks, are aligned exactly as they are now. The result must be the same skeleton as today: the same units, addresses and word runs, with spans into each whole document, and a move across chapters still reported as a move. Done in the engine, this keeps one implementation. Sefer slicing books would need offset shifting, `\id` stitching, and would turn cross-chapter moves into a delete plus an add.
+
+**Measure first:** how much of a book's `diff` is parsing and how much is alignment. If parsing dominates, this helps less, and running the comparisons in a worker is Sefer's lever.
+
+**Sefer side:** nothing to change; the playground's all-books diff gets faster.
