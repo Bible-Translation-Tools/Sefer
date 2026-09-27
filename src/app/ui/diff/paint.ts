@@ -122,8 +122,11 @@ export const sidePaint = (
   for (const unit of units) {
     const span = side === "baseline" ? unit.baseline : unit.current;
     if (span !== undefined) lastEnd = span.to;
-    if (!changed(unit)) continue;
     const decision = controls?.decision(unit);
+    // An unchanged unit is painted only when it carries a decision: in the
+    // review's Result mode a taken unit IS the other side's text now, and
+    // still has to say so — and keep its control, to put it back.
+    if (!changed(unit) && decision === undefined) continue;
     if (span !== undefined) {
       // To where the reading ends, not the structural end: a unit's span runs
       // to the next unit's marker, so it owns the bare `\q1` before the next

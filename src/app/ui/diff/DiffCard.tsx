@@ -91,14 +91,16 @@ export function DiffCard(props: {
     () => ({
       l: left(),
       r: right(),
+      // A new text (a take landed, an edit) is a new document to clip.
+      hunk: props.hunk,
+      sides: props.sides,
       split: props.split,
       markup: usfm(),
       decidable: props.controls !== undefined,
     }),
-    ({ l, r, split, markup }) => {
+    ({ l, r, hunk, sides, split, markup }) => {
       if (r === undefined) return;
       const started = performance.now();
-      const { hunk, sides } = untrack(() => ({ hunk: props.hunk, sides: props.sides }));
       const controls = (): Controls | undefined => untrack(() => props.controls);
       const mode = markup ? "usfm" : "default";
       const views: typeof painted = [];

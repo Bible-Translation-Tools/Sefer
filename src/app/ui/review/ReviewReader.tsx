@@ -39,10 +39,12 @@ import BookOpen from "lucide-solid/icons/book-open";
 import CheckIcon from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import Columns2 from "lucide-solid/icons/columns-2";
+import Pencil from "lucide-solid/icons/pencil";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
 import type { BookId } from "#core/book/book";
 import type { Analysis, DecisionUnit, DiffSkeleton, MergeSide } from "#core/galley";
+import type { EditorBook } from "#editor/index";
 
 import { registerCommand } from "../../commands";
 import { t } from "../../i18n";
@@ -53,6 +55,7 @@ import {
   DiffCard,
   changed,
   estimate,
+  hunkLabel,
   hunksOf,
   isFormatting,
   ordered,
@@ -77,6 +80,7 @@ import {
   type VirtualSection,
 } from "../primitives";
 import { claimSidebar } from "../workspace/sidebarSlot";
+import { ResultEditor } from "./ResultEditor";
 
 /** One book that differs: both texts and the engine's units over them. */
 export interface ReviewBook {
@@ -90,6 +94,7 @@ export interface ReviewBook {
 }
 
 type Layout = "auto" | "split" | "unified";
+export type ReviewMode = "compare" | "result";
 type Scope = "changes" | "book";
 type Filter = "all" | "words" | "formatting";
 
@@ -130,6 +135,18 @@ export function ReviewReader(props: {
   readonly baselineShort: string;
   readonly selected: BookId | undefined;
   readonly onSelect: (bookId: BookId) => void;
+  /**
+   * `compare` decides, then Apply writes. `result` writes each decision into
+   * the target as it is made, and the current pane IS the target — editable
+   * when the target is the working text. Offered only when it is.
+   */
+  readonly mode: ReviewMode;
+  readonly onMode: (mode: ReviewMode) => void;
+  readonly resultAvailable: boolean;
+  /** The book, seated for editing: the result pane's Edit. */
+  readonly seat: (bookId: BookId) => Promise<EditorBook | undefined>;
+  /** An edit made in the result pane was accepted. */
+  readonly onEdited: (bookId: BookId) => void;
 }) {
   const shell = useShell();
   const { services } = shell;
@@ -188,7 +205,7 @@ export function ReviewReader(props: {
     return analyze(text);
   };
 
-  const prepare = (book: ReviewBook, steps: number, show: Filter): Prepared => {
+  const prepare = (book: ReviewBook, steps: number, show: Filter, result: boolean): Prepared => {
     const sides: DiffSides = {
       bookId: book.bookId,
       currentText: book.currentText,
@@ -198,11 +215,15 @@ export function ReviewReader(props: {
     };
     const units = ordered(book.skeleton);
     const include = FILTERS[show];
+    // In Result mode a taken unit is unchanged now — it IS the other side's
+    // text — and still keeps its card, to say so and to put it back.
+    const keep = (unit: DecisionUnit): boolean =>
+      result && untrack(() => props.decision(book.bookId, unit.id)) !== undefined;
     return {
       book,
       sides,
       units,
-      shown: units.filter((unit) => changed(unit) && include(unit)),
+      shown: units.filter((unit) => (changed(unit) && include(unit)) || keep(unit)),
       hunks: hunksOf({
         bookId: book.bookId,
         units,
@@ -210,41 +231,79 @@ export function ReviewReader(props: {
         current: sides.current,
         steps,
         include,
+        keep,
       }),
     };
   };
 
-  // Books are prepared one per tick, so the first cards are on screen while
-  // the rest are still being parsed; a new comparison or filter restarts it.
+  /**
+   * Books are prepared one per tick, so the first cards are on screen while
+   * the rest are still being parsed. A book whose two texts are the ones it was
+   * prepared from is REUSED, and a book being re-prepared keeps its old entry
+   * until the new one is ready: a keystroke in the result pane re-compares the
+   * review, and must neither re-parse every other book nor empty the list
+   * under the card being edited.
+   */
+  let held = new Map<BookId, { readonly key: string; readonly prepared: Prepared }>();
+  const keyOf = (book: ReviewBook, show: Filter, result: boolean): string =>
+    `${show}\0${result ? "r" : "c"}\0${book.currentText.length}\0${book.baselineText.length}`;
+  const same = (was: Prepared, book: ReviewBook): boolean =>
+    was.book.currentText === book.currentText && was.book.baselineText === book.baselineText;
+
   createEffect(
-    () => ({ books: props.books, show: filter() }),
-    ({ books, show }) => {
+    () => ({ books: props.books, show: filter(), result: props.mode === "result" }),
+    ({ books, show, result }) => {
       const steps = services.settings.get(keys.excerptContext);
       const op = observability.operation("review.diff.prepare", {
         "review.books": books.length,
         "review.filter": show,
+        "review.mode": result ? "result" : "compare",
       });
-      const out: Prepared[] = [];
+      const before = held;
+      const kept = new Map<BookId, { readonly key: string; readonly prepared: Prepared }>();
+      const queue: ReviewBook[] = [];
+      let reused = 0;
+      for (const book of books) {
+        const key = keyOf(book, show, result);
+        const was = before.get(book.bookId);
+        if (was !== undefined && was.key === key && same(was.prepared, book)) {
+          kept.set(book.bookId, was);
+          reused += 1;
+        } else queue.push(book);
+      }
+      held = kept;
+      /** The list in the books' order: fresh where ready, the old entry until then. */
+      const list = (): Prepared[] => {
+        const out: Prepared[] = [];
+        for (const book of books) {
+          const entry = held.get(book.bookId)?.prepared ?? before.get(book.bookId)?.prepared;
+          if (entry !== undefined) out.push(entry);
+        }
+        return out;
+      };
+      setPrepared(list());
       let stopped = false;
       let at = 0;
       const next = (): void => {
         if (stopped) return;
-        const book = books[at];
+        const book = queue[at];
         if (book === undefined) {
           op.end("passed", {
-            "review.cards": out.reduce((sum, held) => sum + held.hunks.length, 0),
+            "review.reused": reused,
+            "review.prepared": queue.length,
+            "review.cards": list().reduce((sum, entry) => sum + entry.hunks.length, 0),
           });
           return;
         }
         at += 1;
         const done = op.span("review.diff.book", book.bookId);
-        const held = prepare(book, steps, show);
-        done({ "review.units": held.shown.length, "review.cards": held.hunks.length });
-        out.push(held);
-        setPrepared([...out]);
-        setTimeout(next, 0);
+        const prepared = prepare(book, steps, show, result);
+        done({ "review.units": prepared.shown.length, "review.cards": prepared.hunks.length });
+        held.set(book.bookId, { key: keyOf(book, show, result), prepared });
+        setPrepared(list());
+        if (at < queue.length) setTimeout(next, 0);
+        else next();
       };
-      setPrepared([]);
       next();
       return () => {
         stopped = true;
@@ -502,9 +561,11 @@ export function ReviewReader(props: {
           data-card-decision="baseline"
           onClick={() => choose("baseline")}
         >
-          {one()
-            ? t("Take {source}'s", { source: props.baselineShort })
-            : t("Take all of {source}'s", { source: props.baselineShort })}
+          {props.mode === "result" && sideOf() === "baseline"
+            ? t("Taken from {source} — put back", { source: props.baselineShort })
+            : one()
+              ? t("Take {source}'s", { source: props.baselineShort })
+              : t("Take all of {source}'s", { source: props.baselineShort })}
         </Button>
       </Show>
     );
@@ -591,6 +652,23 @@ export function ReviewReader(props: {
     )),
   );
 
+  /** The card being edited in the result pane, and its book, once seated. */
+  const [editing, setEditing] = createSignal<
+    { readonly key: string; readonly book: EditorBook | undefined } | undefined
+  >(undefined, { name: "reviewEditing" });
+  const editable = (): boolean => props.mode === "result" && props.resultAvailable;
+  const startEdit = (hunk: Hunk): void => {
+    setEditing({ key: hunk.key, book: undefined });
+    void props.seat(hunk.bookId).then((book) => {
+      if (untrack(editing)?.key === hunk.key) setEditing({ key: hunk.key, book });
+    });
+  };
+  const finishEdit = (bookId: BookId): void => {
+    setEditing(undefined);
+    props.onEdited(bookId);
+  };
+  const analyzeLive = services.galley.memoize();
+
   let observer: ResizeObserver | undefined;
   const measure = (element: HTMLDivElement): void => {
     observer?.disconnect();
@@ -660,6 +738,23 @@ export function ReviewReader(props: {
           </MenuRadio>
           <MenuRadio checked={layout() === "unified"} onSelect={() => setLayout("unified")}>
             {t("One text, changes marked")}
+          </MenuRadio>
+          <MenuSeparator />
+          <MenuLabel>{t("Decisions")}</MenuLabel>
+          <MenuRadio checked={props.mode === "compare"} onSelect={() => props.onMode("compare")}>
+            {t("Decide, then apply")}
+          </MenuRadio>
+          <MenuRadio
+            checked={props.mode === "result"}
+            disabled={!props.resultAvailable}
+            title={
+              props.resultAvailable
+                ? undefined
+                : t("Only when this project, in the editor, is the left side")
+            }
+            onSelect={() => props.onMode("result")}
+          >
+            {t("Write each into the editor (editable result)")}
           </MenuRadio>
           <MenuSeparator />
           <MenuCheckbox checked={props.usfm} onChange={props.onUsfm}>
@@ -781,28 +876,81 @@ export function ReviewReader(props: {
             }}
             row={(item) => (
               <div class="pt-3">
-                <DiffCard
-                  hunk={item().hunk}
-                  sides={item().held.sides}
-                  split={split()}
-                  usfm={props.usfm}
-                  controls={controls().get(item().hunk.bookId)}
-                  currentLabel={props.currentLabel}
-                  baselineLabel={props.baselineLabel}
-                  currentFirst
-                  onOpen={() => openInBook(item().hunk)}
-                  actions={
-                    <>
-                      <CardDecision hunk={item().hunk} />
-                      <IconButton
-                        size="sm"
-                        label={t("Open in the book")}
-                        icon={<BookOpen size={14} />}
-                        onClick={() => openInBook(item().hunk)}
-                      />
-                    </>
+                <Show
+                  when={editing()?.key === item().hunk.key}
+                  fallback={
+                    <DiffCard
+                      hunk={item().hunk}
+                      sides={item().held.sides}
+                      split={split()}
+                      usfm={props.usfm}
+                      controls={controls().get(item().hunk.bookId)}
+                      currentLabel={props.currentLabel}
+                      baselineLabel={props.baselineLabel}
+                      currentFirst
+                      onOpen={() => openInBook(item().hunk)}
+                      actions={
+                        <>
+                          <CardDecision hunk={item().hunk} />
+                          <Show when={editable()}>
+                            <IconButton
+                              size="sm"
+                              label={t("Edit the result here")}
+                              icon={<Pencil size={14} />}
+                              data-review-edit
+                              onClick={() => startEdit(item().hunk)}
+                            />
+                          </Show>
+                          <IconButton
+                            size="sm"
+                            label={t("Open in the book")}
+                            icon={<BookOpen size={14} />}
+                            onClick={() => openInBook(item().hunk)}
+                          />
+                        </>
+                      }
+                    />
                   }
-                />
+                >
+                  <div
+                    class="overflow-hidden rounded-lg border border-brand bg-surface-primary"
+                    data-review-editing={item().hunk.key}
+                  >
+                    <header class="flex items-center gap-2 border-b border-surface-border px-3 py-1.5">
+                      <strong class="text-small font-medium tabular-nums">
+                        {hunkLabel(item().hunk)}
+                      </strong>
+                      <span class="text-smallest text-on-surface-tertiary">
+                        {t("Editing {source}", { source: props.currentLabel })}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        class="ms-auto"
+                        onClick={() => finishEdit(item().hunk.bookId)}
+                      >
+                        {t("Done")}
+                      </Button>
+                    </header>
+                    <Show
+                      when={editing()?.book}
+                      fallback={
+                        <p class="px-3 py-2 text-small text-on-surface-tertiary">{t("Opening…")}</p>
+                      }
+                    >
+                      {(book) => (
+                        <ResultEditor
+                          book={book()}
+                          range={item().hunk.current}
+                          usfm={props.usfm}
+                          analyze={analyzeLive}
+                          label={`review:${item().hunk.key}`}
+                          onDone={() => finishEdit(item().hunk.bookId)}
+                        />
+                      )}
+                    </Show>
+                  </div>
+                </Show>
               </div>
             )}
             empty={

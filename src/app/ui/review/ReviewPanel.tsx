@@ -62,6 +62,7 @@ import type { DecisionUnit, DiffSkeleton, MergeSide } from "#core/galley";
 import { Observability } from "#core/observability";
 import type { Restorable } from "#core/recovery/recovery";
 import type { SourceStamp } from "#core/source/source";
+import type { EditorBook } from "#editor/index";
 
 import { describe, reasonOf } from "../../describe";
 import { t } from "../../i18n";
@@ -85,7 +86,7 @@ import {
 } from "../primitives";
 import { bookName } from "../workspace/books";
 import { metadataOf } from "../workspace/project";
-import { ReviewReader, type ReviewBook } from "./ReviewReader";
+import { ReviewReader, type ReviewBook, type ReviewMode } from "./ReviewReader";
 import { sourceChoices, type SourceChoice } from "./sources";
 
 /** The author every Sefer commit carries until accounts reach this screen. */
@@ -492,11 +493,107 @@ export function ReviewPanel() {
     let decided = 0;
     for (const book of reviewBooks())
       for (const unit of book.skeleton.units) {
-        if (unit.status === "unchanged") continue;
+        const held = decisionFor(book.bookId, unit.id);
+        // A taken unit in Result mode is unchanged now, and still counts.
+        if (unit.status === "unchanged" && held === undefined) continue;
         total += 1;
-        if (decisionFor(book.bookId, unit.id) !== undefined) decided += 1;
+        if (held !== undefined) decided += 1;
       }
     return { total, decided };
+  };
+
+  // --- result mode -------------------------------------------------------------
+
+  /**
+   * `result` writes each decision into the target as it is made, and the
+   * current pane is the target itself: editable, because it is the working
+   * text. Only when that is what the left side is — the project, in the
+   * editor. Everything else about the review stays: the file is still written
+   * only by Record a version, and each take is one Undo step.
+   */
+  const [mode, setMode] = createSignal<ReviewMode>("compare", { name: "reviewMode" });
+  const resultAvailable = (): boolean => target() === "left" && leftId() === "project";
+  const resultMode = (): boolean => mode() === "result" && resultAvailable();
+
+  /**
+   * The target's text for a book when the review first wrote into it, so a
+   * take can be put back: merging the ORIGINAL's unit into the live text is
+   * exactly "undo that one", whatever else was written since.
+   */
+  const originals = new Map<BookId, string>();
+
+  const writeNow = (
+    bookId: BookId,
+    staticUnits: readonly DecisionUnit[],
+    side: MergeSide | undefined,
+  ): void => {
+    const project = shell.project();
+    const into = left();
+    const other = reviewBooks().find((book) => book.bookId === bookId);
+    const live = project?.book(bookId)?.source().text;
+    if (into?.apply === undefined || other === undefined || live === undefined) return;
+    const taking = side === "baseline";
+    const putBack = staticUnits.filter((unit) => decisionFor(bookId, unit.id) === "baseline");
+    const op = services.composition.observability.operation("review.diff.take", {
+      "review.book": bookId,
+      "review.units": staticUnits.length,
+      "review.side": side ?? "clear",
+    });
+    let merged: Result.Result<string, unknown> | undefined;
+    if (taking) {
+      if (!originals.has(bookId)) originals.set(bookId, live);
+      merged = mergeWithDecisions(
+        services.galley,
+        other.baselineText,
+        live,
+        new Map(staticUnits.map((unit) => [unit.id, "baseline" as const])),
+        "current",
+      );
+    } else if (putBack.length > 0) {
+      const original = originals.get(bookId);
+      if (original !== undefined)
+        merged = mergeWithDecisions(
+          services.galley,
+          original,
+          live,
+          new Map(putBack.map((unit) => [unit.id, "baseline" as const])),
+          "current",
+        );
+    }
+    decide(bookId, staticUnits, side);
+    if (merged === undefined) {
+      op.end("passed", { "review.wrote": false });
+      return;
+    }
+    if (Result.isFailure(merged)) {
+      op.end("refused", { "review.reason": "merge" });
+      return;
+    }
+    const text = merged.success;
+    void services
+      .run(Effect.result(Effect.provideService(into.apply(bookId, text), Observability, op)))
+      .then((done) => {
+        op.end(Result.isSuccess(done) ? "passed" : "refused", { "review.wrote": true });
+        if (Result.isFailure(done)) setNote(describe(done.failure));
+        shell.changed({ kind: "book.apply", books: [bookId] });
+      });
+  };
+
+  const decideAny = (
+    bookId: BookId,
+    staticUnits: readonly DecisionUnit[],
+    side: MergeSide | undefined,
+  ): void => {
+    if (resultMode()) writeNow(bookId, staticUnits, side);
+    else decide(bookId, staticUnits, side);
+  };
+
+  const seatBook = async (bookId: BookId): Promise<EditorBook | undefined> => {
+    const project = shell.project();
+    if (project === undefined) return undefined;
+    const opened = await services.run(Effect.result(project.instantiate(bookId)));
+    if (Result.isFailure(opened)) return undefined;
+    return services.seated(bookId);
   };
 
   /** Books only one side holds: Review cannot add or remove a book yet. */
@@ -997,19 +1094,28 @@ export function ReviewPanel() {
               >
                 {t("Record a version…")}
               </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                data-review-apply
-                disabled={
-                  (currentPlan()?.writes.length ?? 0) === 0 ||
-                  busy() !== "" ||
-                  (!againstPast() && currentPlan()?.complete !== true)
+              <Show
+                when={!resultMode()}
+                fallback={
+                  <Badge tone="brand" data-review-result>
+                    {t("Each decision is written into the editor, one Undo step each")}
+                  </Badge>
                 }
-                onClick={() => setConfirming(true)}
               >
-                {t("Apply to this project")}
-              </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  data-review-apply
+                  disabled={
+                    (currentPlan()?.writes.length ?? 0) === 0 ||
+                    busy() !== "" ||
+                    (!againstPast() && currentPlan()?.complete !== true)
+                  }
+                  onClick={() => setConfirming(true)}
+                >
+                  {t("Apply to this project")}
+                </Button>
+              </Show>
             </Show>
             <Menu
               label={t("Review actions")}
@@ -1111,7 +1217,7 @@ export function ReviewPanel() {
               <ReviewReader
                 books={reviewBooks()}
                 decision={decisionFor}
-                decide={decide}
+                decide={decideAny}
                 decidable={target() !== undefined}
                 usfm={markup()}
                 onUsfm={setMarkup}
@@ -1121,6 +1227,18 @@ export function ReviewPanel() {
                 baselineShort={rightShort()}
                 selected={selected()}
                 onSelect={setSelected}
+                mode={resultMode() ? "result" : "compare"}
+                onMode={(next) => {
+                  setMode(next);
+                  // The two modes mean different things by a decision: in
+                  // Result a take is already written. Starting clean keeps a
+                  // map from one being read as the other.
+                  setDecisions(new Map());
+                  originals.clear();
+                }}
+                resultAvailable={resultAvailable()}
+                seat={seatBook}
+                onEdited={(bookId) => shell.changed({ kind: "book.apply", books: [bookId] })}
               />
             </div>
           </Show>

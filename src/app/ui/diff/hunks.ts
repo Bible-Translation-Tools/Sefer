@@ -56,6 +56,12 @@ export const hunksOf = (options: {
   readonly current: Analysis;
   readonly steps: number;
   readonly include?: (unit: DecisionUnit) => boolean;
+  /**
+   * An UNCHANGED unit that still gets a card: one already decided and written
+   * (the review's Result mode), whose card must not vanish the moment it is
+   * taken.
+   */
+  readonly keep?: (unit: DecisionUnit) => boolean;
 }): Hunk[] => {
   const { baseline, current, steps } = options;
   const out: Hunk[] = [];
@@ -66,19 +72,20 @@ export const hunksOf = (options: {
     const beforeBaseline = baselineEnd;
     if (unit.current !== undefined) currentEnd = unit.current.to;
     if (unit.baseline !== undefined) baselineEnd = unit.baseline.to;
-    if (!changed(unit) || options.include?.(unit) === false) continue;
+    const shown = changed(unit) ? options.include?.(unit) !== false : options.keep?.(unit) === true;
+    if (!shown) continue;
     const here = unit.current ?? { from: beforeCurrent, to: beforeCurrent };
-    const shown = withContext(current, here.from, Math.max(here.from + 1, here.to), steps);
+    const stretch = withContext(current, here.from, Math.max(here.from + 1, here.to), steps);
     const was =
       unit.baseline === undefined
         ? undefined
         : withContext(baseline, unit.baseline.from, unit.baseline.to, steps);
     const last = out.at(-1);
-    if (last !== undefined && shown.from <= last.current.to) {
+    if (last !== undefined && stretch.from <= last.current.to) {
       out[out.length - 1] = {
         ...last,
         units: [...last.units, unit],
-        current: { from: last.current.from, to: Math.max(last.current.to, shown.to) },
+        current: { from: last.current.from, to: Math.max(last.current.to, stretch.to) },
         baseline:
           was === undefined
             ? last.baseline
@@ -92,7 +99,7 @@ export const hunksOf = (options: {
       bookId: options.bookId,
       key: `${options.bookId} ${unit.id}`,
       units: [unit],
-      current: shown,
+      current: stretch,
       currentStart: beforeCurrent,
       baseline: was,
       baselineStart: beforeBaseline,

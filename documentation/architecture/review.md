@@ -230,6 +230,22 @@ decision beyond Clear: "keep every markup-only change in Genesis" is a
 question somebody can answer, and one click over every change in the project
 is not.
 
+**Result mode** (View → "Write each into the editor"). Offered when the left
+side is this project in the editor, the one side that can be written and
+edited. A take is written into the editor at once (`review.diff.take`: the
+engine's merge of that unit, through the target source's `apply`, one Undo
+step), and the current pane IS the working text: a card's pencil opens its
+lines as a satellite over the real Book (`ResultEditor.tsx`, the excerpt
+card's Edit), so "take theirs, then fix the comma" is two clicks and some
+typing. A taken unit keeps its card, washed, with "Taken from the file — put
+back"; put back merges the ORIGINAL's unit into the live text, whatever else
+was written since. There is no Apply in this mode, because nothing is waiting.
+The file is still written only by Record a version. Switching mode clears the
+decisions, because the two modes mean different things by one. Two read-only
+sides (two zips, two folders) have no result to edit, so the mode is not
+offered; a remote into the working text will be, when a remote is a source.
+Decide-then-apply stays the default; an N-way review is not designed.
+
 **Tints are marks, not line classes.** In the reading a paragraph is one visual
 line, so a line class tinted every verse in it; a mark is exactly the unit.
 
