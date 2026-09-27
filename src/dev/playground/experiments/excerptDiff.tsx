@@ -21,278 +21,28 @@
  */
 
 import { Result } from "effect";
-import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, untrack } from "solid-js";
 
 import { useShell } from "#app/ProjectContext";
-import { Badge, Card, VirtualList, type VirtualSection } from "#app/ui/primitives";
-import { tocViewOf, type Analysis } from "#core/galley";
-import { unitReference, type DecisionUnit } from "#core/galley/diff";
-import { tocUnits, unitIndexAt } from "#core/location/locate";
-import { mountDiffView, mountStamp, type DiffViewMount } from "#editor/index";
-
-import "#editor/editor.css";
+import {
+  DiffCard,
+  estimate,
+  hunksOf,
+  ordered,
+  type Controls,
+  type DiffSides,
+  type Hunk,
+} from "#app/ui/diff";
+import { Badge, VirtualList, type VirtualSection } from "#app/ui/primitives";
+import type { DecisionUnit, MergeSide } from "#core/galley/diff";
 
 import { benchFor } from "../bench";
-import { changed, ordered, sidePaint, unifiedPaint, type Controls } from "../diffPaint";
 import type { Bench, Experiment, ExperimentProps } from "../experiment";
-
-/** One card: the changes it holds, and the stretch of each text it shows. */
-interface Hunk {
-  readonly bookId: string;
-  readonly key: string;
-  readonly units: readonly DecisionUnit[];
-  /** What the working text shows, and where it stands before the first unit. */
-  readonly current: { readonly from: number; readonly to: number };
-  readonly currentStart: number;
-  /** What the earlier text shows; absent when every unit here is new. */
-  readonly baseline: { readonly from: number; readonly to: number } | undefined;
-  readonly baselineStart: number;
-}
 
 interface Diffed {
   readonly bench: Bench;
-  readonly baseline: Analysis;
-  readonly current: Analysis;
+  readonly sides: DiffSides;
   readonly hunks: readonly Hunk[];
-}
-
-/** `[from, to)` widened by `steps` TOC units either side, in one text. */
-const withContext = (
-  analysis: Analysis,
-  from: number,
-  to: number,
-  steps: number,
-): { from: number; to: number } => {
-  const units = tocUnits(tocViewOf(analysis));
-  const low = Math.max(0, unitIndexAt(units, from) - steps);
-  const high = Math.min(units.length - 1, unitIndexAt(units, Math.max(from, to - 1)) + steps);
-  return { from: units[low]?.from ?? from, to: units[high]?.to ?? to };
-};
-
-/**
- * The changed units of one book as cards: each change with its context, and
- * neighbours whose context would overlap joined into one card.
- */
-const hunksOf = (
-  bench: Bench,
-  units: readonly DecisionUnit[],
-  baseline: Analysis,
-  current: Analysis,
-  steps: number,
-): Hunk[] => {
-  const out: Hunk[] = [];
-  let currentEnd = 0;
-  let baselineEnd = 0;
-  for (const unit of units) {
-    const beforeCurrent = currentEnd;
-    const beforeBaseline = baselineEnd;
-    if (unit.current !== undefined) currentEnd = unit.current.to;
-    if (unit.baseline !== undefined) baselineEnd = unit.baseline.to;
-    if (!changed(unit)) continue;
-    const here = unit.current ?? { from: beforeCurrent, to: beforeCurrent };
-    const shown = withContext(current, here.from, Math.max(here.from + 1, here.to), steps);
-    const was =
-      unit.baseline === undefined
-        ? undefined
-        : withContext(baseline, unit.baseline.from, unit.baseline.to, steps);
-    const last = out[out.length - 1];
-    if (last !== undefined && shown.from <= last.current.to) {
-      out[out.length - 1] = {
-        ...last,
-        units: [...last.units, unit],
-        current: { from: last.current.from, to: Math.max(last.current.to, shown.to) },
-        baseline:
-          was === undefined
-            ? last.baseline
-            : last.baseline === undefined
-              ? was
-              : { from: last.baseline.from, to: Math.max(last.baseline.to, was.to) },
-      };
-      continue;
-    }
-    out.push({
-      bookId: bench.bookId,
-      key: `${bench.bookId} ${unit.id}`,
-      units: [unit],
-      current: shown,
-      currentStart: beforeCurrent,
-      baseline: was,
-      baselineStart: beforeBaseline,
-    });
-  }
-  return out;
-};
-
-/** Roughly one line of the scripture serif per this many characters of source. */
-const CHARS_PER_LINE = 70;
-
-const estimate = (hunk: Hunk): number =>
-  60 + Math.ceil((hunk.current.to - hunk.current.from) / CHARS_PER_LINE) * 30;
-
-function HunkCard(props: {
-  readonly hunk: Hunk;
-  readonly diffed: Diffed;
-  readonly split: boolean;
-  readonly usfm: boolean;
-  readonly controls: Controls | undefined;
-  readonly onMounted: (ms: number) => void;
-}) {
-  const [left, setLeft] = createSignal<HTMLDivElement | undefined>(undefined, { name: "hunkLeft" });
-  const [right, setRight] = createSignal<HTMLDivElement | undefined>(undefined, {
-    name: "hunkRight",
-  });
-
-  createEffect(
-    () => ({
-      l: left(),
-      r: right(),
-      split: props.split,
-      usfm: props.usfm,
-      controls: props.controls,
-    }),
-    ({ l, r, split, usfm, controls }) => {
-      if (r === undefined) return;
-      const started = performance.now();
-      const { hunk, diffed } = untrack(() => ({ hunk: props.hunk, diffed: props.diffed }));
-      const mode = usfm ? "usfm" : "default";
-      const mounts: DiffViewMount[] = [];
-      const removedBlock = (unit: DecisionUnit): HTMLElement => {
-        const block = document.createElement("div");
-        block.className = "cm-diff-gone";
-        if (unit.baseline !== undefined)
-          mountStamp({
-            parent: block,
-            analysis: diffed.baseline,
-            range: unit.baseline,
-            mode,
-            marks: [],
-            surface: "cm-excerpt",
-            label: `gone:${unit.id}`,
-          });
-        return block;
-      };
-      if (split) {
-        if (l !== undefined && hunk.baseline !== undefined)
-          mounts.push(
-            mountDiffView({
-              parent: l,
-              text: diffed.bench.baselineText,
-              analyze: () => diffed.baseline,
-              mode,
-              clip: hunk.baseline,
-              surface: "cm-diff cm-diff-card",
-              paint: sidePaint(
-                hunk.units,
-                "baseline",
-                usfm,
-                undefined,
-                diffed.baseline,
-                hunk.baselineStart,
-              ),
-            }),
-          );
-        mounts.push(
-          mountDiffView({
-            parent: r,
-            text: diffed.bench.currentText,
-            analyze: () => diffed.current,
-            mode,
-            clip: hunk.current,
-            surface: "cm-diff cm-diff-card",
-            paint: sidePaint(
-              hunk.units,
-              "current",
-              usfm,
-              controls,
-              diffed.current,
-              hunk.currentStart,
-            ),
-          }),
-        );
-      } else {
-        mounts.push(
-          mountDiffView({
-            parent: r,
-            text: diffed.bench.currentText,
-            analyze: () => diffed.current,
-            mode,
-            clip: hunk.current,
-            surface: "cm-diff cm-diff-card",
-            paint: unifiedPaint(
-              hunk.units,
-              usfm,
-              controls,
-              removedBlock,
-              diffed.current,
-              hunk.currentStart,
-            ),
-          }),
-        );
-      }
-      props.onMounted(performance.now() - started);
-      return () => {
-        for (const mount of mounts) mount.destroy();
-      };
-    },
-  );
-
-  /**
-   * What KIND of change the card holds, when that is not the words: the
-   * engine's own classification (`isWhitespaceChange`, `isUsfmStructureChange`
-   * — reader-visible text unchanged). A card whose every change is one of those
-   * says so; a card with some says how many, since the rest are the words.
-   */
-  const kind = (): string | undefined => {
-    const units = props.hunk.units;
-    const spaces = units.filter((unit) => unit.isWhitespaceChange).length;
-    const markup = units.filter(
-      (unit) => !unit.isWhitespaceChange && unit.isUsfmStructureChange,
-    ).length;
-    if (spaces === units.length) return "whitespace only";
-    if (markup === units.length) return "markup only";
-    if (spaces + markup === units.length) return "markup and whitespace only";
-    const parts = [
-      markup > 0 ? `${markup} markup only` : "",
-      spaces > 0 ? `${spaces} whitespace only` : "",
-    ].filter((part) => part !== "");
-    return parts.length === 0 ? undefined : parts.join(" · ");
-  };
-  const first = () => props.hunk.units[0];
-  const last = () => props.hunk.units[props.hunk.units.length - 1];
-  const label = (): string => {
-    const a = first();
-    const b = last();
-    if (a === undefined || b === undefined) return "";
-    return a === b ? unitReference(a) : `${unitReference(a)} – ${unitReference(b)}`;
-  };
-
-  return (
-    <div class="pt-3">
-      <Card padded={false} class="overflow-hidden" data-hunk={props.hunk.key}>
-        <header class="flex items-center gap-2 border-b border-surface-border px-3 py-1.5">
-          <strong class="text-small font-medium text-on-surface-primary">
-            {props.hunk.bookId} {label()}
-          </strong>
-          <span class="text-smallest text-on-surface-tertiary">
-            {props.hunk.units.length === 1 ? first()?.status : `${props.hunk.units.length} changes`}
-          </span>
-          <Show when={kind()}>{(label) => <Badge tone="muted">{label()}</Badge>}</Show>
-        </header>
-        <div class={props.split ? "grid grid-cols-2 gap-0 divide-x divide-surface-border" : ""}>
-          <Show when={props.split}>
-            <div class="min-w-0" ref={setLeft}>
-              <Show when={props.hunk.baseline === undefined}>
-                <p class="px-3 py-2 text-small text-on-surface-tertiary italic">
-                  Not in the earlier text.
-                </p>
-              </Show>
-            </div>
-          </Show>
-          <div class="min-w-0" ref={setRight} />
-        </div>
-      </Card>
-    </div>
-  );
 }
 
 function ExcerptDiff(props: ExperimentProps) {
@@ -331,12 +81,23 @@ function ExcerptDiff(props: ExperimentProps) {
       done({ "diff.failed": true });
       return undefined;
     }
-    const baseline = analyzeBaseline(bench.baselineText);
-    const current = analyzeCurrent(text);
+    const sides: DiffSides = {
+      bookId: bench.bookId,
+      baselineText: bench.baselineText,
+      currentText: text,
+      baseline: analyzeBaseline(bench.baselineText),
+      current: analyzeCurrent(text),
+    };
     const live = { ...bench, currentText: text, skeleton: found.success };
-    const hunks = hunksOf(live, ordered(found.success), baseline, current, untrack(steps));
+    const hunks = hunksOf({
+      bookId: bench.bookId,
+      units: ordered(found.success),
+      baseline: sides.baseline,
+      current: sides.current,
+      steps: untrack(steps),
+    });
     done({ "diff.units": found.success.units.length, "diff.hunks": hunks.length });
-    return { bench: live, baseline, current, hunks };
+    return { bench: live, sides, hunks };
   };
 
   // The books, diffed one per tick so the list fills while the rest are compared.
@@ -412,16 +173,28 @@ function ExcerptDiff(props: ExperimentProps) {
     if (Result.isSuccess(merged))
       setWorking((held) => new Map([...held, [bookId, merged.success]]));
   };
-  const keep = (unit: DecisionUnit): void => {
+  const mark = (unit: DecisionUnit, on: boolean): void => {
     setReviewed((held) => {
       const next = new Set(held);
-      if (next.has(unit.id)) next.delete(unit.id);
-      else next.add(unit.id);
+      if (on) next.add(unit.id);
+      else next.delete(unit.id);
       return next;
     });
   };
+  /** Taking the earlier text merges at once; keeping marks the unit reviewed. */
   const controlsFor = (bookId: string): Controls | undefined =>
-    withControls() ? { reviewed: reviewed(), take: (unit) => take(unit, bookId), keep } : undefined;
+    withControls()
+      ? {
+          decision: (unit): MergeSide | undefined =>
+            reviewed().has(unit.id) ? "current" : undefined,
+          decide: (unit, side) => {
+            if (side === "baseline") take(unit, bookId);
+            else mark(unit, side === "current");
+          },
+          keepTitle: "Keep the working text",
+          takeTitle: "Take the earlier text for this unit",
+        }
+      : undefined;
 
   const sections = createMemo(
     (): readonly VirtualSection<{ hunk: Hunk; diffed: Diffed }>[] =>
@@ -470,14 +243,18 @@ function ExcerptDiff(props: ExperimentProps) {
             </header>
           )}
           row={(item) => (
-            <HunkCard
-              hunk={item().hunk}
-              diffed={item().diffed}
-              split={split()}
-              usfm={usfm()}
-              controls={controlsFor(item().hunk.bookId)}
-              onMounted={onMounted}
-            />
+            <div class="pt-3">
+              <DiffCard
+                hunk={item().hunk}
+                sides={item().diffed.sides}
+                split={split()}
+                usfm={usfm()}
+                controls={controlsFor(item().hunk.bookId)}
+                baselineLabel={item().diffed.bench.baselineLabel}
+                currentLabel={item().diffed.bench.currentLabel}
+                onMounted={onMounted}
+              />
+            </div>
           )}
           empty={<p class="text-small text-on-surface-tertiary">No changes yet.</p>}
         />

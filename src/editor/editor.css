@@ -1057,7 +1057,20 @@
 .cm-diff-markup-unit {
   background-color: color-mix(in srgb, var(--on-surface-tertiary) 8%, transparent);
 }
-.cm-diff-reviewed {
+/* A decided unit stops shouting: kept reads as settled (a quiet underline),
+   taken reads as going (struck, because the other side's text replaces it). */
+.cm-diff-kept {
+  background-color: transparent;
+  text-decoration: underline dotted color-mix(in srgb, var(--brand) 60%, transparent);
+  text-underline-offset: 4px;
+}
+.cm-diff-taken {
+  background-color: color-mix(in srgb, var(--on-surface-tertiary) 8%, transparent);
+  text-decoration: line-through color-mix(in srgb, var(--on-surface-tertiary) 70%, transparent);
+  opacity: 0.65;
+}
+.cm-diff-kept .cm-diff-added,
+.cm-diff-taken .cm-diff-added {
   background-color: transparent;
 }
 .cm-diff-added {

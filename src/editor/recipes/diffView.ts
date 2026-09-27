@@ -13,7 +13,8 @@
  * The caller describes what to paint (`DiffPaint`) in plain offsets; this file
  * turns it into decorations and never reads the diff itself. Three kinds:
  *
- *  - `lines`: a class on every line a range touches — the unit's tint.
+ *  - `lines`: a unit's tint, a class over its text (a mark, not a line
+ *    class: see `decorate`).
  *  - `marks`: a class on a range — a changed word.
  *  - `widgets`: something drawn at a position that is not in this text — a
  *    removed word inline, or a removed unit as a block (the caller builds its
@@ -25,12 +26,11 @@
 import { type Extension, RangeSetBuilder, StateEffect, StateField } from "@codemirror/state";
 import { Compartment, EditorState } from "@codemirror/state";
 import {
+  BlockType,
   Decoration,
   type DecorationSet,
   EditorView,
   GutterMarker,
-  ViewPlugin,
-  type ViewUpdate,
   WidgetType,
   gutter,
 } from "@codemirror/view";
@@ -136,50 +136,36 @@ class Control extends GutterMarker {
 const setPaint = StateEffect.define<DiffPaint>();
 
 /**
- * The unit tints, as line decorations on VISUAL lines.
- *
- * A view plugin and not part of the state field, because where a visual line
- * starts is the view's answer: in regular mode the bare `\q1` a verse opens
- * with is drawn as the start of that verse's line, and it belongs to the unit
- * BEFORE (a unit's extent runs to the next unit's marker). A line class placed
- * on the verse's own source line is dropped — it does not start a line on
- * screen — so each source line of a range is lifted to the block it is drawn in.
+ * Where the line holding `at` starts ON SCREEN. Usually its line block's
+ * start; but in a clipped card the text before the clip is a replaced range,
+ * and a verse that starts mid-paragraph shares one block with it — so the
+ * block's start is inside what is hidden, and a line class or a gutter marker
+ * placed there is never drawn. The text piece of the block is what is shown.
  */
-const tints = ViewPlugin.fromClass(
-  class {
-    decorations: DecorationSet;
-    constructor(view: EditorView) {
-      this.decorations = this.build(view);
-    }
-    update(update: ViewUpdate) {
-      const repainted = update.transactions.some(
-        (tr) => tr.reconfigured || tr.effects.some((effect) => effect.is(setPaint)),
-      );
-      if (update.docChanged || repainted) this.decorations = this.build(update.view);
-    }
-    build(view: EditorView): DecorationSet {
-      const doc = view.state.doc;
-      const starts = new Map<number, string>();
-      for (const line of view.state.field(paintField).paint.lines) {
-        const first = doc.lineAt(Math.min(line.from, doc.length)).number;
-        const last = doc.lineAt(Math.min(Math.max(line.from, line.to - 1), doc.length)).number;
-        for (let at = first; at <= last; at += 1) {
-          const from = view.lineBlockAt(doc.line(at).from).from;
-          if (!starts.has(from)) starts.set(from, line.class);
-        }
-      }
-      const builder = new RangeSetBuilder<Decoration>();
-      for (const from of [...starts.keys()].sort((a, b) => a - b))
-        builder.add(from, from, Decoration.line({ class: starts.get(from) ?? "" }));
-      return builder.finish();
-    }
-  },
-  { decorations: (plugin) => plugin.decorations },
-);
+const visualStart = (view: EditorView, at: number): number => {
+  const block = view.lineBlockAt(at);
+  if (!Array.isArray(block.type)) return block.from;
+  let from = block.from;
+  for (const piece of block.type)
+    if (piece.type === BlockType.Text && piece.from <= at) from = piece.from;
+  return from;
+};
 
 const decorate = (state: EditorState, paint: DiffPaint): DecorationSet => {
   const doc = state.doc;
   const ranges: { from: number; to: number; deco: Decoration }[] = [];
+  // The unit tints, as marks over the unit's own text rather than classes on
+  // lines. In the reading a paragraph is ONE visual line, so a line class
+  // tinted every verse in it when one had changed; and a card clipped
+  // mid-paragraph starts that line inside the hidden text, where a line class
+  // is never drawn at all. A mark is exactly the unit, wherever it sits.
+  for (const line of paint.lines)
+    if (line.to > line.from)
+      ranges.push({
+        from: line.from,
+        to: Math.min(line.to, doc.length),
+        deco: Decoration.mark({ class: line.class }),
+      });
   for (const mark of paint.marks)
     if (mark.to > mark.from)
       ranges.push({ from: mark.from, to: mark.to, deco: Decoration.mark({ class: mark.class }) });
@@ -234,7 +220,7 @@ const controlGutter = (): Extension =>
         // At the VISUAL line's start: the gutter draws a marker only where a
         // line block begins, and in regular mode a unit's first source line
         // (a bare `\q1`) is folded into the line it introduces.
-        const from = view.lineBlockAt(Math.min(control.at, doc.length)).from;
+        const from = visualStart(view, Math.min(control.at, doc.length));
         if (seen.has(from)) continue;
         seen.add(from);
         builder.add(from, from, new Control(control.key, control.render));
@@ -260,7 +246,6 @@ export function mountDiffView(options: DiffViewOptions): DiffViewMount {
       ...(clip === undefined ? [] : [clipped(clip), renderRangeField.init(() => clip)]),
       // Seeded with the first paint, so the gutter's first pass has markers.
       paintField.init((state) => ({ paint: options.paint, set: decorate(state, options.paint) })),
-      tints,
       controlGutter(),
       EditorState.readOnly.of(true),
       EditorView.editable.of(false),

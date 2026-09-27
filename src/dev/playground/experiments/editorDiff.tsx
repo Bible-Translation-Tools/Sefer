@@ -29,8 +29,9 @@ import { Result } from "effect";
 import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
 import { useShell } from "#app/ProjectContext";
+import { changed, ordered, sidePaint, unifiedPaint, type Controls, type Side } from "#app/ui/diff";
 import { Badge, Button } from "#app/ui/primitives";
-import type { DecisionUnit } from "#core/galley/diff";
+import type { DecisionUnit, MergeSide } from "#core/galley/diff";
 import {
   mountDiffView,
   mountStamp,
@@ -41,7 +42,6 @@ import {
 
 import "#editor/editor.css";
 
-import { changed, ordered, sidePaint, unifiedPaint, type Controls, type Side } from "../diffPaint";
 import type { Experiment, ExperimentProps } from "../experiment";
 
 function EditorDiff(props: ExperimentProps) {
@@ -118,11 +118,11 @@ function EditorDiff(props: ExperimentProps) {
     op.end(Result.isSuccess(merged) ? "passed" : "failed");
     if (Result.isSuccess(merged)) setWorking(merged.success);
   };
-  const keep = (unit: DecisionUnit): void => {
+  const mark = (unit: DecisionUnit, on: boolean): void => {
     setReviewed((held) => {
       const next = new Set(held);
-      if (next.has(unit.id)) next.delete(unit.id);
-      else next.add(unit.id);
+      if (on) next.add(unit.id);
+      else next.delete(unit.id);
       return next;
     });
   };
@@ -155,7 +155,18 @@ function EditorDiff(props: ExperimentProps) {
       const baselineAnalyze = held.galley.memoize("diff.baseline");
       const currentAnalyze = held.galley.memoize("diff.current");
       const controls = (): Controls | undefined =>
-        untrack(withControls) ? { reviewed: untrack(reviewed), take, keep } : undefined;
+        untrack(withControls)
+          ? {
+              decision: (unit): MergeSide | undefined =>
+                untrack(reviewed).has(unit.id) ? "current" : undefined,
+              decide: (unit, side) => {
+                if (side === "baseline") take(unit);
+                else mark(unit, side === "current");
+              },
+              keepTitle: "Keep the working text",
+              takeTitle: "Take the earlier text for this unit",
+            }
+          : undefined;
       const removedBlock = (unit: DecisionUnit): HTMLElement => {
         const block = document.createElement("div");
         block.className = "cm-diff-gone";

@@ -1,7 +1,7 @@
 /**
  * The engine's diff as paint: what `#editor` `mountDiffView` draws on a text,
- * worked out from decision units. Shared by the playground's diff experiments
- * ("In the editor", "Changes as excerpts") so both paint a change the same way.
+ * worked out from decision units. Shared by `/review` and the playground's diff
+ * experiments, so every surface paints a change the same way.
  *
  * Nothing here reads USFM: units and word runs are `galley.diff`'s, with spans
  * into each side's own document; `readingEnd` (core/excerpts) trims a tint to
@@ -10,7 +10,7 @@
 
 import { readingEnd } from "#core/excerpts/excerpts";
 import type { Analysis } from "#core/galley";
-import type { DecisionUnit, DiffSkeleton } from "#core/galley/diff";
+import type { DecisionUnit, DiffSkeleton, MergeSide } from "#core/galley/diff";
 import type { DiffPaint, DiffWidget } from "#editor/index";
 
 export type Side = "baseline" | "current";
@@ -30,16 +30,18 @@ export const ordered = (skeleton: DiffSkeleton): readonly DecisionUnit[] => {
 
 export const changed = (unit: DecisionUnit): boolean => unit.status !== "unchanged";
 
-const tint = (unit: DecisionUnit, reviewed: boolean): string =>
-  reviewed
-    ? "cm-diff-reviewed"
-    : unit.status === "added"
-      ? "cm-diff-added-unit"
-      : unit.status === "deleted"
-        ? "cm-diff-deleted-unit"
-        : unit.isUsfmStructureChange
-          ? "cm-diff-markup-unit"
-          : "cm-diff-modified-unit";
+const tint = (unit: DecisionUnit, decision: MergeSide | undefined): string =>
+  decision === "current"
+    ? "cm-diff-kept"
+    : decision === "baseline"
+      ? "cm-diff-taken"
+      : unit.status === "added"
+        ? "cm-diff-added-unit"
+        : unit.status === "deleted"
+          ? "cm-diff-deleted-unit"
+          : unit.isUsfmStructureChange
+            ? "cm-diff-markup-unit"
+            : "cm-diff-modified-unit";
 
 /** Word runs worth marking in this projection: markup only when markup is shown. */
 const visibleRun = (what: string, usfm: boolean): boolean =>
@@ -52,31 +54,53 @@ const inline = (text: string, name: string): HTMLElement => {
   return span;
 };
 
+/**
+ * A unit's decision, in the gutter: keep the `current` side's text, or take the
+ * `baseline` side's. Pressing the chosen one again clears it, so there are
+ * three states and two buttons, as on every decision in Sefer.
+ *
+ * `decision` is read while painting and names the tint: a decided unit stops
+ * shouting. What a decision DOES is the caller's — `/review` edits its map and
+ * writes nothing until Apply; the playground merges at once.
+ */
 export interface Controls {
-  readonly reviewed: ReadonlySet<string>;
-  readonly take: (unit: DecisionUnit) => void;
-  readonly keep: (unit: DecisionUnit) => void;
+  readonly decision: (unit: DecisionUnit) => MergeSide | undefined;
+  readonly decide: (unit: DecisionUnit, side: MergeSide | undefined) => void;
+  /** What the two buttons say on hover: "Keep the editor's", "Take the file's". */
+  readonly keepTitle: string;
+  readonly takeTitle: string;
 }
+
+const button = (
+  unit: DecisionUnit,
+  controls: Controls,
+  side: MergeSide,
+  glyph: string,
+  title: string,
+): HTMLButtonElement => {
+  const on = controls.decision(unit) === side;
+  const element = document.createElement("button");
+  element.type = "button";
+  element.title = title;
+  element.textContent = glyph;
+  element.dataset["on"] = on ? "true" : "false";
+  element.dataset["side"] = side;
+  element.setAttribute("aria-pressed", on ? "true" : "false");
+  element.setAttribute("aria-label", title);
+  element.onclick = () => controls.decide(unit, on ? undefined : side);
+  return element;
+};
 
 const controlFor =
   (unit: DecisionUnit, controls: Controls): (() => HTMLElement) =>
   () => {
     const box = document.createElement("span");
     box.className = "cm-diff-control";
-    const take = document.createElement("button");
-    take.type = "button";
-    take.title = "Take the earlier text for this unit";
-    take.textContent = "↶";
-    take.onclick = () => controls.take(unit);
-    const keep = document.createElement("button");
-    keep.type = "button";
-    keep.title = controls.reviewed.has(unit.id)
-      ? "Reviewed — click to undo"
-      : "Keep the working text";
-    keep.textContent = "✓";
-    keep.dataset["on"] = controls.reviewed.has(unit.id) ? "true" : "false";
-    keep.onclick = () => controls.keep(unit);
-    box.append(take, keep);
+    box.dataset["unit"] = unit.id;
+    box.append(
+      button(unit, controls, "current", "✓", controls.keepTitle),
+      button(unit, controls, "baseline", "↶", controls.takeTitle),
+    );
     return box;
   };
 
@@ -99,7 +123,7 @@ export const sidePaint = (
     const span = side === "baseline" ? unit.baseline : unit.current;
     if (span !== undefined) lastEnd = span.to;
     if (!changed(unit)) continue;
-    const reviewed = controls?.reviewed.has(unit.id) === true;
+    const decision = controls?.decision(unit);
     if (span !== undefined) {
       // To where the reading ends, not the structural end: a unit's span runs
       // to the next unit's marker, so it owns the bare `\q1` before the next
@@ -109,7 +133,7 @@ export const sidePaint = (
       lines.push({
         from: span.from,
         to: Math.max(span.from + 1, end),
-        class: tint(unit, reviewed),
+        class: tint(unit, decision),
       });
       // Word marks only where there is something to compare: a unit only one
       // side has is ALL change, and marking each of its words says nothing
@@ -131,7 +155,7 @@ export const sidePaint = (
     if (controls !== undefined && side === "current")
       buttons.push({
         at: span?.from ?? lastEnd,
-        key: `${unit.id} ${reviewed ? 1 : 0}`,
+        key: `${unit.id} ${decision ?? "-"}`,
         render: controlFor(unit, controls),
       });
   }
