@@ -269,6 +269,17 @@ export interface ShellKeys {
    */
   readonly excerptRenderer: SettingKey<string>;
   /**
+   * How `/review` draws a difference: `split` (the two texts side by side),
+   * `unified` (one text, the other's words struck through where they were),
+   * or `auto`, split when the reading is wide enough for two columns.
+   */
+  readonly reviewLayout: SettingKey<string>;
+  /**
+   * How much of the text `/review` shows: `changes` (each change a card with
+   * context, across every book) or `book` (the whole book, changes in place).
+   */
+  readonly reviewScope: SettingKey<string>;
+  /**
    * The content host, overriding the one this build was released with — the
    * Gitea itself, never a proxy (the Web's transport is not a preference).
    *
@@ -393,6 +404,8 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     enableReplaceAll: settings.register("find.enableReplaceAll", Schema.Boolean, false),
     excerptContext: settings.register("excerpts.context", Schema.Number, 1),
     excerptRenderer: settings.register("excerpts.renderer", Schema.String, "editor"),
+    reviewLayout: settings.register("review.layout", Schema.String, "auto"),
+    reviewScope: settings.register("review.scope", Schema.String, "changes"),
     contentHost: settings.register("network.contentHost", Schema.String, ""),
     catalogueUrl: settings.register("network.catalogueUrl", Schema.String, ""),
     webTransport: settings.register("network.webTransport", Schema.String, ""),
@@ -482,6 +495,31 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
       min: 0,
       max: 10,
       step: 1,
+    },
+    {
+      key: keys.reviewLayout,
+      label: "Review layout",
+      description:
+        "How Review draws a difference: side by side, as one text with the other's words struck through, or side by side only when there is room.",
+      kind: "choice",
+      group: "editor",
+      options: [
+        { value: "auto", label: "Side by side when there is room" },
+        { value: "split", label: "Side by side" },
+        { value: "unified", label: "Unified" },
+      ],
+    },
+    {
+      key: keys.reviewScope,
+      label: "Review shows",
+      description:
+        "Each change as a card with its context, across every book, or the whole book with its changes drawn in place.",
+      kind: "choice",
+      group: "editor",
+      options: [
+        { value: "changes", label: "Changes" },
+        { value: "book", label: "The whole book" },
+      ],
     },
     {
       key: keys.startInUsfmMode,

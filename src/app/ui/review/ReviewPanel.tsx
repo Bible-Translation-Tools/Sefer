@@ -81,9 +81,8 @@ import {
 } from "../primitives";
 import { bookName } from "../workspace/books";
 import { metadataOf } from "../workspace/project";
-import { textOf } from "./reading";
+import { ReviewReader, type ReviewBook } from "./ReviewReader";
 import { sourceChoices, type SourceChoice } from "./sources";
-import { UnitCard } from "./UnitCard";
 
 /** The author every Sefer commit carries until accounts reach this screen. */
 const AUTHOR = { name: "Sefer", email: "sefer@localhost" } as const;
@@ -433,33 +432,23 @@ export function ReviewPanel() {
     return found !== undefined && Result.isFailure(found) ? found.failure.description : undefined;
   };
 
-  const units = (): readonly DecisionUnit[] =>
-    skeleton()?.units.filter((unit) => unit.status !== "unchanged") ?? [];
-
   const decisionFor = (bookId: BookId, unitId: string): MergeSide | undefined =>
     decisions().get(keyOf(bookId, unitId));
 
-  const decide = (bookId: BookId, unitId: string, side: MergeSide | undefined): void => {
-    setDecisions((held) => {
-      const next = new Map(held);
-      if (side === undefined) next.delete(keyOf(bookId, unitId));
-      else next.set(keyOf(bookId, unitId), side);
-      return next;
-    });
-  };
-
   /**
-   * The bulk stamp, over the book on screen. A snapshot on purpose: the stamp
-   * is about the units as they were when the button was pressed.
+   * One decision, or many at once — a card's or a book's. A snapshot on
+   * purpose: a bulk decision is about the units as they were when the button
+   * was pressed.
    */
-  const stamp = (side: MergeSide | undefined): void => {
-    const staticBook = current();
-    const staticUnits = units();
-    if (staticBook === undefined) return;
+  const decide = (
+    bookId: BookId,
+    staticUnits: readonly DecisionUnit[],
+    side: MergeSide | undefined,
+  ): void => {
     setDecisions((held) => {
       const next = new Map(held);
       for (const unit of staticUnits) {
-        const key = keyOf(staticBook.bookId, unit.id);
+        const key = keyOf(bookId, unit.id);
         if (side === undefined) next.delete(key);
         else next.set(key, side);
       }
@@ -467,20 +456,46 @@ export function ReviewPanel() {
     });
   };
 
-  /** How many of this book's units have been ruled on, and how many there are. */
+  /**
+   * Every book both sides hold and the engine diffed, as the reading draws
+   * it. A book the engine refused is not here; `diffRefusal` says why.
+   */
+  const reviewBooks = createMemo(
+    (): readonly ReviewBook[] => {
+      const out: ReviewBook[] = [];
+      for (const book of changed()) {
+        if (book.leftText === undefined || book.rightText === undefined) continue;
+        const found = skeletons().get(book.bookId);
+        if (found === undefined || Result.isFailure(found)) continue;
+        out.push({
+          bookId: book.bookId,
+          name: nameOf(book.bookId),
+          currentText: book.leftText,
+          baselineText: book.rightText,
+          skeleton: found.success,
+        });
+      }
+      return out;
+    },
+    { name: "reviewBooks" },
+  );
+
+  /** How many units have been ruled on across the whole review, of how many. */
   const totals = () => {
-    const book = current();
-    if (book === undefined) return { total: 0, decided: 0, taken: 0 };
+    let total = 0;
     let decided = 0;
-    let taken = 0;
-    for (const unit of units()) {
-      const held = decisionFor(book.bookId, unit.id);
-      if (held === undefined) continue;
-      decided += 1;
-      if (held === (target() === "left" ? "baseline" : "current")) taken += 1;
-    }
-    return { total: units().length, decided, taken };
+    for (const book of reviewBooks())
+      for (const unit of book.skeleton.units) {
+        if (unit.status === "unchanged") continue;
+        total += 1;
+        if (decisionFor(book.bookId, unit.id) !== undefined) decided += 1;
+      }
+    return { total, decided };
   };
+
+  /** Books only one side holds: Review cannot add or remove a book yet. */
+  const oneSided = (): readonly BookComparison[] =>
+    changed().filter((book) => book.presence !== "both");
 
   /** Every book with at least one decision, across the whole review. */
   const decidedBooks = (): readonly BookId[] => {
@@ -1005,21 +1020,20 @@ export function ReviewPanel() {
                   {t("{count} book(s) differ", { count: found().changedBooks })}
                 </Badge>
                 <span class="text-small text-on-surface-secondary" data-review-decided>
-                  {t("{decided} decided of {total} in this book", {
+                  {t("{decided} decided of {total}", {
                     decided: totals().decided,
                     total: totals().total,
                   })}
                 </span>
-                <Show when={target() !== undefined && units().length > 0}>
+                <Show when={target() !== undefined && totals().total > 0}>
                   <div class="ms-auto flex flex-wrap items-center gap-1">
-                    <Button size="sm" variant="tertiary" onClick={() => stamp("current")}>
-                      {t("Keep all of {source}'s", { source: leftShort() })}
-                    </Button>
-                    <Button size="sm" variant="tertiary" onClick={() => stamp("baseline")}>
-                      {t("Take all of {source}'s", { source: rightShort() })}
-                    </Button>
-                    <Button size="sm" variant="tertiary" onClick={() => stamp(undefined)}>
-                      {t("Clear")}
+                    <Button
+                      size="sm"
+                      variant="tertiary"
+                      disabled={decisions().size === 0}
+                      onClick={() => setDecisions(new Map())}
+                    >
+                      {t("Clear every decision")}
                     </Button>
                     <Button
                       variant="primary"
@@ -1093,31 +1107,9 @@ export function ReviewPanel() {
                 </Card>
               </Show>
 
-              <div class="min-w-0 space-y-2" data-review-units={units().length}>
-                <label class="flex flex-wrap items-center gap-2">
-                  <span class="text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase">
-                    {t("Book")}
-                  </span>
-                  <Select
-                    size="sm"
-                    wrapperClass="min-w-0"
-                    data-review-books={changed().length}
-                    aria-label={t("Which book to review")}
-                    value={selected() ?? ""}
-                    onChange={(event) => setSelected(event.currentTarget.value)}
-                  >
-                    <For each={changed()}>
-                      {(book) => <option value={book.bookId}>{bookLabel(book)}</option>}
-                    </For>
-                  </Select>
-                </label>
-
-                {/* `changed()` and not `current()`: the book picker offers
-                    only the books that differ, so when none does there is
-                    nothing selected and the clean answer is the whole screen's
-                    answer, not one book's. */}
+              <div class="min-w-0 space-y-2" data-review-units={totals().total}>
                 <Show
-                  when={changed().length > 0 ? current() : undefined}
+                  when={changed().length > 0}
                   fallback={
                     <Card>
                       <EmptyState
@@ -1128,71 +1120,27 @@ export function ReviewPanel() {
                     </Card>
                   }
                 >
-                  {(book) => (
-                    <Show
-                      when={book().presence === "both"}
-                      fallback={
-                        <Card>
-                          <EmptyState
-                            title={t("{book} is on one side only.", {
-                              book: nameOf(book().bookId),
-                            })}
-                            description={t(
-                              "A project's book set is fixed when it opens, so Review cannot add or remove a book yet.",
-                            )}
-                          />
-                        </Card>
-                      }
-                    >
-                      <ul class="space-y-2">
-                        {/* A markup-only unit is shown as SOURCE whatever the
-                            toggle says: its two readings are identical by
-                            definition, so the reading would be the same
-                            paragraph twice with the badge as the only clue
-                            that anything changed. The one view in which the
-                            change exists is the one it is shown in. */}
-                        <For each={units()}>
-                          {(unit) => (
-                            <li>
-                              <UnitCard
-                                unit={unit}
-                                decision={decisionFor(book().bookId, unit.id)}
-                                currentText={textOf(
-                                  services.galley,
-                                  book().leftText ?? "",
-                                  unit.current,
-                                  markup() || unit.isUsfmStructureChange,
-                                )}
-                                baselineText={textOf(
-                                  services.galley,
-                                  book().rightText ?? "",
-                                  unit.baseline,
-                                  markup() || unit.isUsfmStructureChange,
-                                )}
-                                currentLabel={leftLabel()}
-                                baselineLabel={rightLabel()}
-                                currentShort={leftShort()}
-                                baselineShort={rightShort()}
-                                decidable={target() !== undefined}
-                                markup={markup() || unit.isUsfmStructureChange}
-                                onDecide={(side) => decide(book().bookId, unit.id, side)}
-                              />
-                            </li>
-                          )}
-                        </For>
-                        <Show when={units().length === 0}>
-                          <Card>
-                            <EmptyState
-                              icon={<Check size={20} />}
-                              title={t("Nothing differs in {book}.", {
-                                book: nameOf(book().bookId),
-                              })}
-                            />
-                          </Card>
-                        </Show>
-                      </ul>
-                    </Show>
-                  )}
+                  <Show when={oneSided().length > 0}>
+                    <p class="text-smallest text-on-surface-secondary" data-review-one-sided>
+                      {t(
+                        "Only one side holds {books}. A project's book set is fixed when it opens, so Review cannot add or remove a book yet.",
+                        { books: oneSided().map(bookLabel).join(", ") },
+                      )}
+                    </p>
+                  </Show>
+                  <ReviewReader
+                    books={reviewBooks()}
+                    decision={decisionFor}
+                    decide={decide}
+                    decidable={target() !== undefined}
+                    usfm={markup()}
+                    currentLabel={leftLabel()}
+                    baselineLabel={rightLabel()}
+                    currentShort={leftShort()}
+                    baselineShort={rightShort()}
+                    selected={selected()}
+                    onSelect={setSelected}
+                  />
                 </Show>
               </div>
 

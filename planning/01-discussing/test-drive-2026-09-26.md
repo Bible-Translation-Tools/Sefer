@@ -81,11 +81,23 @@ Both: regular or USFM mode; per-unit gutter controls — ↶ takes the earlier t
 | Piece                                                                               | Where                                                              |
 | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | The diff view recipe (paint, tints on visual lines, gutter controls, optional clip) | `src/editor/recipes/diffView.ts`                                   |
-| Shared paint from decision units                                                    | `src/dev/playground/diffPaint.ts`                                  |
+| Shared paint, cards, the whole-book view (also `/review`'s)                         | `src/app/ui/diff/`                                                 |
 | In the editor                                                                       | `src/dev/playground/experiments/editorDiff.tsx`                    |
 | Changes as excerpts                                                                 | `src/dev/playground/experiments/excerptDiff.tsx`                   |
 | The bench (synthetic draft, disk baseline) and the frame                            | `src/dev/playground/bench.ts`, `PlaygroundPage.tsx`, `registry.ts` |
 | Styles                                                                              | `src/editor/editor.css` (`.cm-diff-*`)                             |
+
+## 2b. `/review`: the diff surface for the PO (2026-09-27)
+
+**What it is.** The two playground experiments made one screen, in the real `/review` with real sources and decide-then-apply. Three layers: the engine (units, the decision map), layout (split / unified / auto), scope (changes as cards across every book / the whole book). Kind filter (All / Words / Markup and spacing); next/previous change; decisions per unit, card and book. `documentation/architecture/review.md`, "The reading: three layers".
+
+**Drive it:** edit a few verses in two or three books, then open `http://127.0.0.1:3001/project/en-ulb/review` (editor against disk is the default). Flip Changes / Whole book, Auto / Side by side / Unified, the filter; press `Alt-F5`; double-click a card; decide with ✓ / ↶ in the gutter; Apply. On the dev channel this is the deployed `/review`, so the PO can drive it there once it is on master.
+
+**Traces:** `review.compare` (as before), `review.diff.prepare` with a `review.diff.book` span per book, `review.diff.book` operation per whole-book mount with `review.diff.mount`, spans `review.diff.step` and `review.diff.follow`.
+
+**Measured (3 books, 7 units):** compare 15–33 ms, prepare 33–128 ms (the parses), a step 0.1–3 ms, a follow 0.1–2.8 ms.
+
+**Code:** `src/app/ui/review/ReviewReader.tsx` (toolbar, scope, nav, bulk), `src/app/ui/diff/` (`paint.ts`, `hunks.ts`, `DiffCard.tsx`, `BookDiff.tsx`), `src/editor/recipes/diffView.ts`; settings `review.layout`, `review.scope`.
 
 ## 3. History: the book-change index
 

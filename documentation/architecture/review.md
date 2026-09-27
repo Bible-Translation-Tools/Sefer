@@ -170,23 +170,64 @@ Sefer-side word LCS any more. It decides nothing the engine had not already
 decided, and a second opinion about which words changed is the thing the
 sid-aligned rule exists to prevent.
 
-### Two readings, and the "markup only" badge
+### The reading: three layers
 
-The header's **Show USFM markup** switch changes what both columns show:
+The differences are drawn ON the two texts, as the editor reads them — the
+diff view recipe (`#editor` `mountDiffView`) paints units and word runs on each
+side's own document, in regular mode or USFM (the header's **Show USFM
+markup** switch). `src/app/ui/review/ReviewReader.tsx` holds it together, over
+`src/app/ui/diff/`. Three layers, and each can change without the others:
 
-- the **reading** (default) — the engine's `"text"` mask (reader text: note
-  prose kept), cut to the unit's span through `GalleyService.readerMask`
-  (`src/app/ui/review/reading.ts`). It is the same reading the engine's runs are
-  over, so changed and unchanged rows agree about footnotes, and a change
-  inside a note alone is visible.
-- the **source** — the exact USFM bytes of the unit's span. The only reading in
-  which `\p` becoming `\m` is visible at all.
+- **The engine** — decision units and word runs, and the decision map above.
+  Every view reads and writes the same map, keyed by book and unit, so
+  switching view never loses a decision.
+- **Layout** (`review.layout`: `auto` | `split` | `unified`) — side by side,
+  each text its own; or unified, the current text with the other's words struck
+  through where they were and a unit only the other has drawn as a block where
+  it stood. `auto` splits when the reading is at least 960 px wide.
+- **Scope** (`review.scope`: `changes` | `book`) — each change as a CARD
+  clipped to it and its context (TOC steps, `excerpts.context`), neighbours
+  sharing a card, across every book that differs, with a sticky header per
+  book; or the WHOLE BOOK with its changes drawn in place, the other pane of a
+  split following your place by unit (the reference pane's `watchLocation`
+  pattern). A card's book icon, or a double-click, opens it in the book at the
+  same change, and Changes returns to that card.
 
-A unit whose two readings are the same string and whose two sources are not is
-a **markup-only** change, and carries a badge. Such a unit is shown as SOURCE
-whatever the switch says: its reading is identical by definition, so the
-reading would be the same paragraph twice with the badge as the only clue that
-anything changed.
+Both preferences are in Settings and on the reading's toolbar, which remembers
+them. Scattered edits read better as cards and a rewrite reads better as the
+book, so the scope is a toggle a reader flips, not a setting they visit.
+
+**The kind filter** — All, Words, Markup and spacing — narrows the cards, the
+navigation and the bulk actions to one kind, using the engine's own
+classification (`isUsfmStructureChange`, `isWhitespaceChange`). A card whose
+changes are all formatting is drawn in USFM whatever the switch says: in the
+reading those changes are invisible. Cards carry a "markup only" /
+"whitespace only" badge.
+
+**Next and previous change** — the arrows, `Alt-F5` / `Alt-Shift-F5` (VS
+Code's own, as `Alt-F8` is for findings), or the palette (`review.change.next`,
+`review.change.previous`). Cards step from the one at the top of the list; the
+book steps unit by unit and crosses into the next book at the end of one. The
+counter says where you are.
+
+**Decisions in three sizes.** A unit, in the gutter: ✓ keeps the current
+side's text, ↶ takes the other's, pressing the chosen one again clears it. A
+card, in its header ("Keep all here", "Take all here"). A book, in its header,
+over the changes the filter shows. A decided unit stops shouting: kept is
+underlined quietly, taken is struck through. There is no project-wide bulk
+decision beyond Clear: "keep every markup-only change in Genesis" is a
+question somebody can answer, and one click over every change in the project
+is not.
+
+**Tints are marks, not line classes.** In the reading a paragraph is one visual
+line, so a line class tinted every verse in it; a mark is exactly the unit.
+
+**The colours are was/now**, red for the other side's words and green for the
+current side's, which is right for a review against your own past (the
+default: editor against disk) and says more than it should when both sides are
+somebody's work. The side tint this chapter argued for above belonged to the
+column cards; whether the reading needs it too is open, and is the
+`compare.colours` setting below.
 
 ---
 
@@ -390,10 +431,10 @@ Recovery never writes the project file, and Save never writes the journal.
 ## Not yet
 
 - Adding or removing a book (`Unsupported`, above).
-- A chapter view — the units rendered in place in the chapter's projected text.
-  The card list is what exists.
-- `compare.colours: "sideTint" | "redGreen"`, a setting for readers who prefer
-  the old scheme. Named, not registered; the side tint is unconditional.
+- A project-wide bulk decision, behind Advanced and a confirmation, if the
+  per-book ones prove too slow for a formatting pass over 66 books.
+- `compare.colours: "sideTint" | "redGreen"`. Named, not registered; the
+  reading is red/green today (above).
 - More sources: a git checkpoint, another local project, remote latest. The
   port is the point; each is a new file.
 - The incoming-remote reconciliation narrative ([sync.md](sync.md)). The

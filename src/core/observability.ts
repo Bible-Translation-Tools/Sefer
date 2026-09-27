@@ -101,6 +101,7 @@ export type OperationName =
   /** One comparison on /review: the book diff and the engine's decision units. */
   | "review.compare"
   | "review.apply"
+  | `review.diff.${string}`
   /** One reading of the repository against the cloud; ends with the state. */
   | "sync.survey"
   /** What a pull would change, worked out after a survey found the device behind. */
