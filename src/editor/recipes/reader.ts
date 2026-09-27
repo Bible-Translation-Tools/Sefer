@@ -30,7 +30,7 @@
 import { type ChangeSet, Compartment, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
-import type { Analysis } from "#core/galley";
+import { sameSource, type Analysis } from "#core/galley";
 
 import { analyzer } from "../core/analyzer";
 import { readingLayer, viewLayer } from "../core/compose";
@@ -202,7 +202,10 @@ export function mountReader(options: ReaderOptions): ReaderMount {
     follow: (host) => {
       stop();
       if (host === undefined) return true;
-      if (!host.doc().eq(view.state.doc)) return false;
+      // The engine's hash and length, not a compare of the two texts: a whole
+      // book per card, for every card, each time a book is seated.
+      const seated = host.structure().analysis;
+      if (seated === undefined || seated === null || !sameSource(seated, analysis)) return false;
       followed = host;
       const detachHost = host.attach((changes) => {
         // Where this card's clip is, in the coordinates the change is in:

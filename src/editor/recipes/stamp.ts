@@ -32,7 +32,7 @@ import type { ChangeSet } from "@codemirror/state";
 import { EditorState, type Text } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
-import type { Analysis } from "#core/galley";
+import { sameSource, type Analysis } from "#core/galley";
 
 import { analyzer } from "../core/analyzer";
 import { readingLayer, viewLayer } from "../core/compose";
@@ -281,7 +281,9 @@ export function mountStamp(options: StampOptions): StampMount {
     follow: (host) => {
       stop();
       if (host === undefined) return true;
-      if (!current().state.doc.eq(host.doc())) return false;
+      // The engine's hash and length, not a compare of the two texts.
+      const seated = host.structure().analysis;
+      if (seated === undefined || seated === null || !sameSource(seated, analysis)) return false;
       followed = host;
       detach = host.attach((changes) => {
         const touched = changes.touchesRange(range.from, range.to) !== false;
