@@ -224,7 +224,8 @@ counter says where you are.
 side's text, ↶ takes the other's, pressing the chosen one again clears it. A
 card, in its header ("Keep all here", "Take all here"). A book, in its header,
 over the changes the filter shows. A decided unit stops shouting: kept is
-underlined quietly, taken is struck through. There is no project-wide bulk
+underlined quietly, taken gets a neutral wash. Strikeout means removed words and
+nothing else. There is no project-wide bulk
 decision beyond Clear: "keep every markup-only change in Genesis" is a
 question somebody can answer, and one click over every change in the project
 is not.
