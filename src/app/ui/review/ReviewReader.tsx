@@ -64,7 +64,7 @@ import {
   type Hunk,
 } from "../diff";
 import { CardList } from "../multibuffer/CardList";
-import type { ContextStep } from "../multibuffer/ContextControl";
+import { stepExtent, type ContextStep } from "../multibuffer/ContextControl";
 import {
   Badge,
   Button,
@@ -220,15 +220,7 @@ export function ReviewReader(props: {
     const steps = services.settings.get(keys.excerptContext);
     setExtents((held) => {
       const next = new Map(held);
-      const now = next.get(key) ?? { up: steps, down: steps };
-      next.set(
-        key,
-        step === "chapter"
-          ? { up: now.up, down: now.down, chapter: now.chapter !== true }
-          : step === "up"
-            ? { up: now.up + 1, down: now.down }
-            : { up: now.up, down: now.down + 1 },
-      );
+      next.set(key, stepExtent(next.get(key) ?? { up: steps, down: steps }, step));
       return next;
     });
   };

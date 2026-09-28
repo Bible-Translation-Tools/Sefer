@@ -38,7 +38,7 @@ import "#editor/editor.css";
 import { t } from "../../i18n";
 import { CardEditor } from "../multibuffer/CardEditor";
 import { CardFrame } from "../multibuffer/CardFrame";
-import { ContextControl, type ContextStep } from "../multibuffer/ContextControl";
+import { ContextControl, widened, type ContextStep } from "../multibuffer/ContextControl";
 import { Badge, Button, cx } from "../primitives";
 import { hunkKind, hunkLabel, type Hunk } from "./hunks";
 import { hunkPaint, sidePaint, type Controls } from "./paint";
@@ -365,6 +365,7 @@ export function DiffCard(props: {
               chapter={props.hunk.extent.chapter === true}
               canUp={props.hunk.more.up}
               canDown={props.hunk.more.down}
+              widened={widened(props.hunk.extent)}
               onStep={step()}
             />
           )}

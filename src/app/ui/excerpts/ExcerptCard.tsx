@@ -54,7 +54,7 @@ import type { EditorBook, Funnel, MarkedRange } from "#editor/index";
 import { t } from "../../i18n";
 import { CardEditor } from "../multibuffer/CardEditor";
 import { CardFrame } from "../multibuffer/CardFrame";
-import { ContextControl, type ContextStep } from "../multibuffer/ContextControl";
+import { ContextControl, widened, type ContextStep } from "../multibuffer/ContextControl";
 import { cx, IconButton } from "../primitives";
 import { ExcerptReader } from "./ExcerptReader";
 
@@ -422,6 +422,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
               chapter={props.excerpt.extent.chapter === true}
               canUp={props.excerpt.more.up}
               canDown={props.excerpt.more.down}
+              widened={widened(props.excerpt.extent)}
               onStep={step()}
             />
           )}

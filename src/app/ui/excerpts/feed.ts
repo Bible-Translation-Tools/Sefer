@@ -36,6 +36,7 @@ import type { EditorBook, Funnel } from "#editor/index";
 import { t } from "../../i18n";
 import { useShell, type Shell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
+import { stepExtent } from "../multibuffer/ContextControl";
 import type { ContextStep } from "./ExcerptCard";
 
 export interface ExcerptFeed {
@@ -164,15 +165,7 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
   const expand = (sid: string, step: ContextStep): void => {
     setExtents((held) => {
       const next = new Map(held);
-      const now = next.get(sid) ?? initial;
-      next.set(
-        sid,
-        step === "chapter"
-          ? { up: now.up, down: now.down, chapter: now.chapter !== true }
-          : step === "up"
-            ? { up: now.up + 1, down: now.down }
-            : { up: now.up, down: now.down + 1 },
-      );
+      next.set(sid, stepExtent(next.get(sid) ?? initial, step));
       return next;
     });
   };
