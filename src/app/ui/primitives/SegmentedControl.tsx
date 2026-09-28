@@ -42,10 +42,11 @@ export interface SegmentedControlProps<T extends string> {
   /** Names the group for a screen reader. */
   readonly label: string;
   /**
-   * `lg` is 48px tall: a 3px track around 42px segments that share the
-   * control's width evenly, with body text — the app bar's modes and the
-   * sidebar's testaments. Narrow, labels truncate; below `md` a control whose
-   * segments all have icons drops to them, the labels kept for screen readers.
+   * `md` (the default) and `lg` are 48px tall: a 3px track around 42px
+   * segments that share the control's width evenly — 14px medium at `md`,
+   * body text at `lg` (the app bar's modes). Narrow, labels truncate; below
+   * `md` an `lg` control whose segments all have icons drops to them, the
+   * labels kept for screen readers. `sm` is the compact 24px one.
    */
   readonly size?: "sm" | "md" | "lg";
   /** `invert` is for a dark bar: a raised track and the chosen segment dark. */
@@ -66,7 +67,11 @@ const sizeClass = (size: SegmentedControlProps<string>["size"], collapse: boolea
       "h-10.5 min-w-0 flex-1 justify-center gap-3 rounded-xl px-4 text-body",
       collapse && "max-md:w-10.5 max-md:flex-none max-md:px-0",
     );
-  return "h-7 gap-1.5 rounded-md px-2.5 text-small";
+  // The default: 42px segments in the 48px track, 12px sides and radius,
+  // 14px medium, a 24px icon 6px from its label. `flex-auto`, not `flex-1`:
+  // each starts from its own label's width, so a control sized to its content
+  // fits its words, and one given a width (the sidebar's) shares the rest.
+  return "h-10.5 min-w-0 flex-auto justify-center gap-1.5 rounded-lg px-3 text-small [&_svg]:size-6";
 };
 
 const toneClass = (tone: SegmentedControlProps<string>["tone"], chosen: boolean): string => {
@@ -96,9 +101,10 @@ export function SegmentedControl<T extends string>(props: SegmentedControlProps<
       class={cx(
         "inline-flex items-center",
         props.items.some((item) => item.shortLabel !== undefined) && "@container",
-        props.size === "lg"
-          ? "h-12 min-w-0 gap-0.75 rounded-2xl p-0.75"
-          : "gap-0.5 rounded-lg p-0.5",
+        // `md` (the default) and `lg` share the 48px track with 3px inside it.
+        props.size === "sm"
+          ? "gap-0.5 rounded-lg p-0.5"
+          : "h-12 min-w-0 gap-0.75 rounded-2xl p-0.75",
         props.tone === "invert"
           ? "bg-surface-invert-raised"
           : "border border-surface-border bg-surface-secondary",
@@ -143,9 +149,9 @@ export function SegmentedControl<T extends string>(props: SegmentedControlProps<
               fallback={
                 <span
                   class={
-                    props.size === "lg"
-                      ? cx("truncate", collapses() && "max-md:sr-only")
-                      : undefined
+                    props.size === "sm"
+                      ? undefined
+                      : cx("truncate", collapses() && "max-md:sr-only")
                   }
                 >
                   {item.label}

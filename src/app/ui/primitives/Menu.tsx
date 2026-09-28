@@ -50,7 +50,9 @@ const row = variants({
   ].join(" "),
   variants: {
     size: {
-      md: "gap-2 px-3 py-1.5 text-small",
+      // The default: 12px all round, a 12px icon-to-label gap, 14px medium,
+      // a 24px icon — at least the 48px touch target.
+      md: "min-h-12 gap-3 p-3 text-small font-medium [&_svg]:size-6",
       lg: "gap-4 p-4 text-body font-medium",
     },
   },

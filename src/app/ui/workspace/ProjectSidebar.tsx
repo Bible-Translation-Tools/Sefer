@@ -186,10 +186,10 @@ export function ProjectSidebar() {
           data-book={rowProps.row.id}
           data-focused={focused() ? "" : undefined}
           aria-expanded={open() ? "true" : "false"}
-          class="flex w-full cursor-pointer items-center gap-4 rounded-md p-4 text-start text-small transition-colors data-focused:bg-sidebar-surface-active data-focused:font-medium data-focused:text-brand not-data-focused:text-sidebar-on-surface not-data-focused:hover:bg-sidebar-surface-hover"
+          class="flex w-full cursor-pointer items-center gap-3 rounded-lg p-3 text-start text-small font-medium transition-colors data-focused:bg-sidebar-surface-active data-focused:font-medium data-focused:text-brand not-data-focused:text-sidebar-on-surface not-data-focused:hover:bg-sidebar-surface-hover"
           onClick={() => setOpened(open() ? null : rowProps.row.id)}
         >
-          <BookIcon size={15} aria-hidden="true" class="shrink-0" />
+          <BookIcon size={24} aria-hidden="true" class="shrink-0" />
           <span class="min-w-0 flex-1 truncate">{rowProps.row.name}</span>
           <Show when={rowProps.row.attention > 0}>
             <span
@@ -209,11 +209,11 @@ export function ProjectSidebar() {
 
         <Show when={open() && chapters().length > 0}>
           <ol
-            // Indented to the book's icon (the row's 16px padding). At most
-            // four columns, fewer when a 3.75rem tile — 16px padding round a
-            // label as wide as "Intro" — would not fit, so it follows the
+            // Indented to the book's icon (the row's 12px padding). At most
+            // four columns, fewer when a 3.75rem tile — 12px padding round a
+            // 14px label as wide as "Intro" — would not fit, so it follows the
             // panel's width. Tiles sit 1px apart.
-            class="mt-1 mb-2 grid grid-cols-[repeat(auto-fill,minmax(max(3.75rem,calc((100%-3px)/4)),1fr))] gap-px px-4"
+            class="mt-1 mb-2 grid grid-cols-[repeat(auto-fill,minmax(max(3.75rem,calc((100%-3px)/4)),1fr))] gap-px px-3"
           >
             <For each={chapters()}>
               {(chapter) => (
@@ -223,7 +223,7 @@ export function ProjectSidebar() {
                     data-chapter={chapter.index}
                     data-testid={`chapter-tile-${chapter.intro ? "intro" : chapter.label}`}
                     data-current={focused() && shell.chapter() === chapter.index ? "" : undefined}
-                    class="w-full cursor-pointer truncate rounded-md border p-4 text-center text-smallest tabular-nums transition-colors data-current:border-brand data-current:bg-brand-light data-current:font-semibold data-current:text-brand not-data-current:border-surface-border not-data-current:bg-surface-primary not-data-current:text-on-surface-secondary not-data-current:hover:bg-sidebar-surface-hover"
+                    class="h-12 w-full cursor-pointer truncate rounded-lg border px-3 text-center text-small font-medium tabular-nums transition-colors data-current:border-brand data-current:bg-brand-light data-current:font-semibold data-current:text-brand not-data-current:border-surface-border not-data-current:bg-surface-primary not-data-current:text-on-surface-secondary not-data-current:hover:bg-sidebar-surface-hover"
                     onClick={() => openChapter(rowProps.row.id, chapter)}
                   >
                     {chapter.label}
@@ -312,11 +312,9 @@ export function ProjectSidebar() {
       >
         <div class="flex flex-col gap-2 px-4 pb-2">
           <Input
-            size="lg"
-            inset="tight"
             type="search"
             data-testid="sidebar-search"
-            icon={<SearchIcon size={20} />}
+            icon={<SearchIcon />}
             aria-label={t("Search for book and chapter")}
             // An example, not a description: it fits the narrow panel and
             // shows what the search understands. The label keeps the words.
@@ -326,7 +324,6 @@ export function ProjectSidebar() {
           />
           <SegmentedControl
             label={t("Testament")}
-            size="lg"
             class="w-full"
             items={[
               { value: "ot", label: t("Old Testament"), shortLabel: t("Old") },

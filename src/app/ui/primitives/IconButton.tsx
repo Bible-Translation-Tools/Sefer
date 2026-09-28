@@ -35,7 +35,8 @@ const classes = variants({
       // Radius lives with the size, as in `Button`: the 56px one matches
       // `Button size="lg"` beside it.
       sm: "size-7 rounded-md",
-      md: "size-9 rounded-md",
+      // The default: 48px, a 24px icon with 12px round it, 12px radius.
+      md: "size-12 rounded-lg [&_svg]:size-6",
       lg: "size-14 rounded-xl",
     },
   },
