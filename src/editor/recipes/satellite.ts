@@ -418,14 +418,6 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
     ],
   });
 
-  /**
-   * The user event of the edit being submitted right now. The Book publishes
-   * synchronously, so the canonical text comes back INSIDE `submit`, and that
-   * echo is labelled as the reader's own typing — what a plugin on this view
-   * (the live diff's instant marks) needs to tell a keystroke from a take or
-   * another surface's edit, which arrive unlabelled.
-   */
-  let submitting: string | undefined;
   const view = new EditorView({
     state,
     parent: opts.parent,
@@ -435,14 +427,7 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
         return;
       }
       const done2 = span("satellite-reconcile", opts.label);
-      submitting = tr.annotation(Transaction.userEvent);
-      const outcome = (() => {
-        try {
-          return opts.host.submit(changesOf(tr.changes), opts.label, termsOf(tr));
-        } finally {
-          submitting = undefined;
-        }
-      })();
+      const outcome = opts.host.submit(changesOf(tr.changes), opts.label, termsOf(tr));
       // The caret follows an ACCEPTED edit. A refused one left the text as it
       // was, and `tr.selection` is in the coordinates of a text that never
       // came to be — past the end of it, for a refused deletion — so the
@@ -466,11 +451,7 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
   detach = opts.host.attach((changes) => {
     view.dispatch({
       changes,
-      annotations: [
-        fromCanonical.of(true),
-        trusted.of("canonical"),
-        ...(submitting === undefined ? [] : [Transaction.userEvent.of(submitting)]),
-      ],
+      annotations: [fromCanonical.of(true), trusted.of("canonical")],
       filter: false,
     });
   });
