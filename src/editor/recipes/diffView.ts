@@ -479,8 +479,14 @@ const hunkClicks = ViewPlugin.define((view) => {
     if (key === undefined) {
       const number = event.target.closest(".usfm-num-v");
       if (number === null || !view.contentDOM.contains(number)) return;
+      // A verse's number sits where ITS unit starts — which is also where the
+      // unit before ends, and where a deleted unit's point may be. So the
+      // unit that starts here wins; failing that, one this number is inside.
       const at = view.posAtDOM(number);
-      key = hunks.find((hunk) => hunk.from <= at && at <= Math.max(hunk.to, hunk.from + 1))?.key;
+      key = (
+        hunks.find((hunk) => hunk.from === at && hunk.to > hunk.from) ??
+        hunks.find((hunk) => hunk.from < at && at < hunk.to)
+      )?.key;
     }
     if (key === undefined) return;
     event.preventDefault();

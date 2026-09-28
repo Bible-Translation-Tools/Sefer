@@ -175,9 +175,12 @@ sid-aligned rule exists to prevent.
 **The chrome is one row**, so the reading has the screen. What is compared is
 a chip ("In the editor ⇄ On disk") that opens the two pickers; the count says
 how far the review is; Record a version opens
-a dialog for its message; the ⋯ menu holds Clear every decision, History and
-what aligned the diff. Recovered work is a one-line banner, and only when
-there is some. The reading's own toolbar is the second row: scope, the kind
+a dialog for its message; the ⋯ menu holds Clear every decision (in an
+editable review it takes every take back out of the text, one Undo step per
+book, as each book's own Clear does), History and what aligned the diff.
+Choosing another source starts over: no decisions, and the takes already
+written stay as ordinary edits. Recovered work is the one recovery banner every
+project screen shows, and only when there is some. The reading's own toolbar is the second row: scope, the kind
 filter, a View menu (layout, USFM markup), next and previous. The project
 sidebar becomes the review's outline — each book that differs, decided of
 total — as Find's becomes its results.

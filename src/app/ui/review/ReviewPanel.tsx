@@ -363,6 +363,18 @@ export function ReviewPanel() {
     },
   );
 
+  /**
+   * A new comparison starts with no decisions. Takes already written stay in
+   * the text — they are edits now, like any other, one Undo each — and the
+   * texts recorded to put them back go too: they described the review that
+   * ended, and a put back after the switch restored text from it.
+   */
+  const startOver = (): void => {
+    setDecisions(new Map());
+    originals.clear();
+    setReceipt("");
+  };
+
   const pick = (side: "left" | "right", id: string): void => {
     const choice = choiceOf(id);
     // The working text is the side that edits, and it sits on the left.
@@ -373,8 +385,7 @@ export function ReviewPanel() {
       setLeftPicked(undefined);
       setRightId(wasId);
       setRightPicked(wasPicked);
-      setDecisions(new Map());
-      setReceipt("");
+      startOver();
       return;
     }
     if (side === "left") {
@@ -384,8 +395,7 @@ export function ReviewPanel() {
       setRightId(id);
       setRightPicked(undefined);
     }
-    setDecisions(new Map());
-    setReceipt("");
+    startOver();
     if (choice?.pick === undefined) return;
     setBusy(t("Reading…"));
     void choice
@@ -565,11 +575,8 @@ export function ReviewPanel() {
 
   /**
    * A decision written into the working text at once, as the engine's EDITS
-   * over the live text (`mergeSplices`, the live text as the side being
-   * edited): only the chosen units move, everything else keeps its offsets,
-   * and it is one apply — one Undo step — through the one write path. Not a
-   * merged whole book handed to the source, which then had to diff the book a
-   * second time to find what had changed.
+   * over the live text: only the chosen units move, everything else keeps its
+   * offsets, and it is one apply — one Undo step — through the one write path.
    */
   const writeNow = (
     bookId: BookId,
@@ -597,12 +604,25 @@ export function ReviewPanel() {
       op.end("passed", { "review.wrote": false });
       return;
     }
-    const splices = services.galley.mergeSplices(
-      live,
+    // The unit ids are the review's, and the engine names a unit by its
+    // CURRENT side's address — so the merge is taken with the live text as
+    // the current side, exactly as the review's diff took it. (Diffed the
+    // other way round, a verse bridged on one side — `\v 5` against
+    // `\v 5-6` — got another id, and the take failed or found a different
+    // unit.) Then the edits from the live text to that result, a diff that
+    // names no unit.
+    const merged = services.galley.merge(
       from,
-      new Map(chosen.map((unit) => [unit.id, "current" as const])),
-      "baseline",
+      live,
+      new Map(chosen.map((unit) => [unit.id, "baseline" as const])),
+      "current",
     );
+    if (Result.isFailure(merged)) {
+      op.end("refused", { "review.reason": "merge" });
+      setNote(merged.failure.description);
+      return;
+    }
+    const splices = services.galley.mergeSplices(live, merged.success, new Map(), "current");
     if (Result.isFailure(splices)) {
       op.end("refused", { "review.reason": "merge" });
       setNote(splices.failure.description);
@@ -627,6 +647,25 @@ export function ReviewPanel() {
     side: MergeSide | undefined,
   ): void => {
     if (editable()) writeNow(bookId, staticUnits, side);
+  };
+
+  /**
+   * "Clear every decision": in an editable review that means taking the takes
+   * back, as each book's own Clear does — through `writeNow`, one Undo step
+   * per book. Resetting the map alone left the takes written, their cards
+   * gone, and only Undo to reach them.
+   */
+  const clearEverything = (): void => {
+    if (!editable()) {
+      setDecisions(new Map());
+      return;
+    }
+    for (const book of reviewBooks()) {
+      const decided = book.skeleton.units.filter(
+        (unit) => decisionFor(book.bookId, unit.id) !== undefined,
+      );
+      if (decided.length > 0) writeNow(book.bookId, decided, undefined);
+    }
   };
 
   const seatBook = async (bookId: BookId): Promise<EditorBook | undefined> => {
@@ -936,7 +975,7 @@ export function ReviewPanel() {
               <MenuItem
                 icon={<Eraser size={14} aria-hidden="true" />}
                 disabled={decisions().size === 0}
-                onSelect={() => setDecisions(new Map())}
+                onSelect={clearEverything}
               >
                 {t("Clear every decision")}
               </MenuItem>

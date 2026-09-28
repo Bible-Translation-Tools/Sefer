@@ -926,14 +926,9 @@ export function ReviewReader(props: {
             bookOf={(item) => item.hunk.bookId}
             seat={props.seat}
             lineLabel={(item) => `${item.held.book.name} ${hunkLabel(item.hunk)}`}
-            // A card is keyed by its first change, and typing into its
-            // context makes a new first change: the card whose stretch
-            // overlaps the one being edited, in the same book, is the same card.
-            successor={(pinned, candidate) =>
-              pinned.hunk.bookId === candidate.hunk.bookId &&
-              candidate.hunk.current.from < pinned.hunk.current.to &&
-              candidate.hunk.current.to > pinned.hunk.current.from
-            }
+            // A card is keyed by its verse's address, so typing into it never
+            // moves its key; an edit that ends its change leaves it held as
+            // "No longer a change" — never handed to a neighbour.
             goneLabel={t("No longer a change")}
             // Held by the edit that ended it: nothing left to paint or decide.
             whenGone={(item) => ({ ...item, hunk: { ...item.hunk, units: [], all: [] } })}

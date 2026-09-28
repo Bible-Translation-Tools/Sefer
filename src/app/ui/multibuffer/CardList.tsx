@@ -69,14 +69,6 @@ export interface CardListProps<T> {
    * and when an edit ends. That book only — every other book's results stand.
    */
   readonly onRetake?: (bookId: BookId) => void;
-  /**
-   * Is `candidate` the same card as the one being edited, under a new key?
-   * For a screen whose keys can move while a card is edited — a Review card is
-   * keyed by its first change, and typing into its context makes a new first
-   * change. The successor is drawn UNDER THE PINNED KEY, so the editor in it
-   * is not rebuilt; with no successor the card is gone.
-   */
-  readonly successor?: (pinned: T, candidate: T) => boolean;
   /** A card held by the pin after its result ended — its stale marks cleared. */
   readonly whenGone?: (item: T) => T;
   /** The one-line row's title. */
@@ -122,23 +114,9 @@ export function CardList<T>(props: CardListProps<T>) {
     () => new Set(props.sections.flatMap((section) => section.rows.map((row) => row.key))),
     { name: "cardKeys" },
   );
-  /** Where the pinned card's successor stands, when its own key went. */
-  const successorOf = createMemo(
-    (): { readonly section: number; readonly row: number } | undefined => {
-      const held = pin();
-      const same = props.successor;
-      if (held === undefined || same === undefined || keys().has(held.key)) return undefined;
-      for (const [section, entry] of props.sections.entries()) {
-        const row = entry.rows.findIndex((candidate) => same(held.item, candidate.item));
-        if (row >= 0) return { section, row };
-      }
-      return undefined;
-    },
-    { name: "cardSuccessor" },
-  );
   const pinGone = (): boolean => {
     const held = pin();
-    return held !== undefined && !keys().has(held.key) && successorOf() === undefined;
+    return held !== undefined && !keys().has(held.key);
   };
   const goneLabel = (): string => props.goneLabel ?? t("No longer in the results");
 
@@ -166,20 +144,8 @@ export function CardList<T>(props: CardListProps<T>) {
       const held = pin();
       const left = lines();
       const gone = held !== undefined && pinGone();
-      const next = successorOf();
-      if (!gone && next === undefined && left.length === 0) return props.sections;
+      if (!gone && left.length === 0) return props.sections;
       const list = [...props.sections];
-      // The successor takes the pinned key, so the row — and the editor in it —
-      // carries on.
-      if (held !== undefined && next !== undefined) {
-        const section = list[next.section];
-        if (section !== undefined) {
-          const rows = [...section.rows];
-          const row = rows[next.row];
-          if (row !== undefined) rows[next.row] = { ...row, key: held.key };
-          list[next.section] = { key: section.key, rows };
-        }
-      }
       const present = keys();
       for (const line of left)
         if (!present.has(line.key))
