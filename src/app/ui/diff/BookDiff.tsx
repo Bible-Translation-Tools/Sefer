@@ -5,15 +5,13 @@
  * baseline's words struck through where they were and a baseline-only unit
  * drawn as a block where it stood.
  *
- * In a split, the pane you are not reading follows your PLACE — the reference
- * pane's `watchLocation` pattern: the pane being read reports the offset at
- * its top, the unit there is found, and the other pane shows that unit's pair
- * at its own top. Units are places both texts share, so following needs no
- * height bookkeeping. The pane last touched leads, and the follower's own
- * scroll reports are ignored, which is what keeps the two from chasing.
- *
- * `showUnit` is how next / previous change moves it; `onPlace` reports the
- * unit at the top of the current pane, so a counter can say where you are.
+ * In a split the two panes scroll on their own. They used to follow each
+ * other by place, and that was too eager: once the texts' heights differ (a
+ * reviewer deleted a run of `\p` and `\q` lines, say), a small scroll in one
+ * moved the other by a screen. What puts them side by side is next / previous
+ * change (`showUnit`): each pane brings that unit to its MIDDLE — where it
+ * stands, or where it would stand in a text that lacks it. `onPlace` reports
+ * the unit at the top of the current pane, so a counter can say where you are.
  */
 
 import { EditorView } from "@codemirror/view";
@@ -101,12 +99,26 @@ export function BookDiff(props: {
     live: boolean;
   }[] = [];
 
+  /**
+   * Where `unit` is in one side's text: its start, or, in a text that lacks
+   * it, the end of the nearest unit before it that the text has.
+   */
+  const placeIn = (side: Side, unit: DecisionUnit): number | undefined => {
+    const own = side === "baseline" ? unit.baseline : unit.current;
+    if (own !== undefined) return own.from;
+    const units = untrack(() => props.units);
+    for (let index = units.indexOf(unit) - 1; index >= 0; index--) {
+      const before = units[index];
+      const span =
+        before === undefined ? undefined : side === "baseline" ? before.baseline : before.current;
+      if (span !== undefined) return span.to;
+    }
+    return 0;
+  };
   const showUnit = (unit: DecisionUnit): void => {
-    // A pane the unit is not in stays where it is: in a split it is the
-    // follower, and follows the pane that moved.
     for (const entry of mounts) {
-      const span = entry.side === "baseline" ? unit.baseline : unit.current;
-      if (span !== undefined) entry.mount.showAt(span.from);
+      const at = placeIn(entry.side === "baseline" ? "baseline" : "current", unit);
+      if (at !== undefined) entry.mount.showAt(at, "center");
     }
   };
   createEffect(
@@ -160,36 +172,20 @@ export function BookDiff(props: {
       const held: typeof mounts = [];
       const releases: (() => void)[] = [];
 
-      let leader: Side = "current";
+      // Each pane only REPORTS its place: the counter follows the current
+      // pane. Neither pane moves the other.
       const follow = (side: Side, mount: DiffViewMount): void => {
+        if (split && side !== "current") return;
         releases.push(
           watchLocation(mount.view, (where) => {
             if (where === null) return;
             // The END of the line at the top, not its start: a visual line in
             // regular mode opens with the bare `\q1` that belongs to the unit
-            // BEFORE, and following that would show the verse above.
+            // BEFORE, and reporting that would name the verse above.
             const probe = Math.max(where.top, mount.view.lineBlockAt(where.top).to - 1);
-            const unit = unitAt(now().units, side, probe);
-            if (side === "current" || !split) report(unit);
-            if (!split || side !== leader) return;
-            const target = held.find((entry) => entry.side !== side)?.mount;
-            const at = side === "baseline" ? unit?.current?.from : unit?.baseline?.from;
-            if (target === undefined || at === undefined) return;
-            // A span, not an operation: it fires once a frame while scrolling.
-            const done = observability.span("review.diff.follow", side);
-            target.showAt(at);
-            done();
+            report(unitAt(now().units, side, probe));
           }),
         );
-        const lead = (): void => {
-          leader = side;
-        };
-        const events = ["wheel", "pointerdown", "keydown", "touchstart"] as const;
-        const host = mount.view.dom;
-        for (const name of events) host.addEventListener(name, lead, { passive: true });
-        releases.push(() => {
-          for (const name of events) host.removeEventListener(name, lead);
-        });
       };
 
       const add = (
@@ -217,10 +213,10 @@ export function BookDiff(props: {
             view: satellite.view,
             repaint: (next) => repaintDiff(satellite.view, next),
             setMode: () => {},
-            showAt: (at) => {
+            showAt: (at, y = "start") => {
               satellite.view.dispatch({
                 effects: EditorView.scrollIntoView(Math.min(at, satellite.view.state.doc.length), {
-                  y: "start",
+                  y,
                 }),
               });
             },

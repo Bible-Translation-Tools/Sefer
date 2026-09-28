@@ -10,7 +10,12 @@
 
 import { readingEnd } from "#core/excerpts/excerpts";
 import type { Analysis } from "#core/galley";
-import type { DecisionUnit, DiffSkeleton, MergeSide } from "#core/galley/diff";
+import {
+  unitReference,
+  type DecisionUnit,
+  type DiffSkeleton,
+  type MergeSide,
+} from "#core/galley/diff";
 import type { DiffHunk, DiffPaint, DiffWidget } from "#editor/index";
 
 export type Side = "baseline" | "current";
@@ -287,6 +292,7 @@ export const hunkPaint = (
         tint: "",
         marks: [],
         old: () => was(unit),
+        label: `Removed ${unitReference(unit)}`,
       });
       continue;
     }
@@ -303,6 +309,7 @@ export const hunkPaint = (
         .filter((run) => run.kind !== "unchanged" && visibleRun(run.what, usfm))
         .map((run) => ({ from: run.from, to: run.to, class: "cm-diff-added" })),
       old: unit.baseline === undefined || !changed(unit) ? undefined : () => was(unit),
+      label: `${!changed(unit) ? "Decided" : unit.status === "added" ? "Added" : "Changed"} ${unitReference(unit)}`,
     });
   }
   return { lines: [], marks: [], widgets: [], controls: base.controls, hunks };

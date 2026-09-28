@@ -192,10 +192,14 @@ markup** switch). `src/app/ui/review/ReviewReader.tsx` holds it together, over
   Every view reads and writes the same map, keyed by book and unit, so
   switching view never loses a decision.
 - **Layout** (`review.layout`: `auto` | `split` | `unified`) — side by side,
-  each text its own, the other side's words red on ITS side only; or unified,
+  each text its own, the other side's words red on ITS side only, and the two
+  panes scrolling on their own (next / previous change brings the unit to the
+  middle of both: following each other by place was too eager once the
+  heights differ); or unified,
   drawn the way Zed draws hunks (`DiffHunk`, `hunkPaint`). The final text is
   what is reviewed: nothing is drawn on it but a bar beside each changed
-  unit's own rows. Clicking the bar, or the verse's number, opens the other
+  unit's own rows, whose tooltip names it ("Changed 3:5"). Clicking the bar,
+  or the verse's number, opens the other
   side's wording at that verse, read-only, with its removed words red, and
   tints the current verse with its added words green. It is a block INSIDE the
   paragraph, so the paragraph breaks at the verse, not above a `\p` of thirty

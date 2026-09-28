@@ -92,6 +92,8 @@ export interface DiffHunk {
   readonly marks: readonly { readonly from: number; readonly to: number; readonly class: string }[];
   /** While open: the other side's wording, drawn at `from`. */
   readonly old?: () => HTMLElement;
+  /** What the bar's tooltip says of it: "Changed 3:5". */
+  readonly label?: string;
 }
 
 export interface DiffPaint {
@@ -123,8 +125,11 @@ export interface DiffViewMount {
   readonly view: EditorView;
   repaint(paint: DiffPaint): void;
   setMode(mode: ProjectionName): void;
-  /** Brings the line holding `at` to the top — how a split's other pane follows. */
-  showAt(at: number): void;
+  /**
+   * Brings the line holding `at` into view: to the top, or to the middle — how
+   * next / previous change puts the same unit before the reader in each pane.
+   */
+  showAt(at: number, y?: "start" | "center"): void;
   destroy(): void;
 }
 
@@ -336,6 +341,7 @@ class Bar implements LayerMarker {
   constructor(
     readonly key: string,
     readonly kind: DiffHunk["kind"],
+    readonly label: string,
     readonly open: boolean,
     readonly left: number,
     readonly top: number,
@@ -357,6 +363,7 @@ class Bar implements LayerMarker {
       other instanceof Bar &&
       other.key === this.key &&
       other.kind === this.kind &&
+      other.label === this.label &&
       other.open === this.open &&
       other.left === this.left &&
       other.top === this.top &&
@@ -365,7 +372,8 @@ class Bar implements LayerMarker {
   }
   private adjust(bar: HTMLElement): void {
     bar.className = `cm-diff-bar cm-diff-bar-${this.kind}`;
-    bar.title = this.open ? "Hide the other side's wording" : "Show the other side's wording";
+    const what = this.open ? "hide the other side's wording" : "show the other side's wording";
+    bar.title = this.label === "" ? what : `${this.label} — click to ${what}`;
     if (this.open) bar.dataset["open"] = "";
     else delete bar.dataset["open"];
     bar.style.left = `${this.left}px`;
@@ -437,6 +445,7 @@ const barLayer = layer({
         new Bar(
           hunk.key,
           hunk.kind,
+          hunk.label ?? "",
           open.has(hunk.key),
           left,
           (top - baseTop) / view.scaleY,
@@ -553,9 +562,9 @@ export function mountDiffView(options: DiffViewOptions): DiffViewMount {
     view,
     repaint: (paint) => view.dispatch({ effects: setPaint.of(paint) }),
     setMode: (mode) => view.dispatch({ effects: projection.reconfigure(modeView(mode, surface)) }),
-    showAt: (at) => {
+    showAt: (at, y = "start") => {
       view.dispatch({
-        effects: EditorView.scrollIntoView(Math.min(at, view.state.doc.length), { y: "start" }),
+        effects: EditorView.scrollIntoView(Math.min(at, view.state.doc.length), { y }),
       });
     },
     destroy: () => {
