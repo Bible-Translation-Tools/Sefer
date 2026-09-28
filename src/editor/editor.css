@@ -1116,29 +1116,25 @@
 }
 .cm-diff-bar {
   --bar: #d97706;
-  width: 8px;
+  width: 9px;
   cursor: pointer;
   pointer-events: auto;
-  border-radius: 2px;
-  background: linear-gradient(
-    to right,
-    transparent 2px,
-    var(--bar) 2px,
-    var(--bar) 5px,
-    transparent 5px
-  );
-  opacity: 0.75;
 }
-.cm-diff-bar:hover,
-.cm-diff-bar[data-open] {
+/* The stroke, inset from the hit area, and ringed in the surface colour so
+   two bars that meet still read as two. */
+.cm-diff-bar::before {
+  content: "";
+  position: absolute;
+  inset: 1px 3px 1px 2px;
+  border-radius: 2px;
+  background: var(--bar);
+  box-shadow: 0 0 0 1px var(--surface-primary, #fff);
+  opacity: 0.8;
+}
+.cm-diff-bar:hover::before,
+.cm-diff-bar[data-open]::before {
+  inset: 1px 2px 1px 1px;
   opacity: 1;
-  background: linear-gradient(
-    to right,
-    transparent 1px,
-    var(--bar) 1px,
-    var(--bar) 6px,
-    transparent 6px
-  );
 }
 .cm-diff-bar-added {
   --bar: #16a34a;
@@ -1154,17 +1150,27 @@
 .cm-diff-was-box {
   display: block;
   text-indent: 0;
-  margin: 4px 0;
   user-select: none;
 }
+/* Before the wording, a line can hold only the join that runs this verse on
+   from the last (a space) and CodeMirror's caret buffers: an empty row, which
+   moved the text by a line on opening. With nothing visible to break after,
+   they go; mid-paragraph the earlier verse's text keeps the row. */
+.cm-line > .usfm-join:has(~ .cm-diff-was-box),
+.cm-line > .cm-widgetBuffer:has(~ .cm-diff-was-box) {
+  display: none;
+}
+/* Zed's colours: what it was on red, what it is on green, the words deeper.
+   No margin, border or padding: opening a verse inserts its old wording and
+   moves nothing else. */
 .cm-diff-was {
-  border-inline-start: 3px solid color-mix(in srgb, #dc2626 55%, transparent);
-  background-color: color-mix(in srgb, #dc2626 8%, transparent);
-  border-radius: 6px;
-  padding: 2px 8px;
+  background-color: color-mix(in srgb, #dc2626 12%, transparent);
 }
 .cm-diff-was .cm-content {
-  padding: 2px 0;
+  padding: 0;
+}
+.cm-diff-now {
+  background-color: color-mix(in srgb, #16a34a 12%, transparent);
 }
 /* The stamp brings the page's paper with it; the block's own tint shows. */
 .cm-diff-was .cm-editor,

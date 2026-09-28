@@ -86,8 +86,9 @@ export interface DiffHunk {
   /** The unit's text here, or a point (`from === to`) for one this text lacks. */
   readonly from: number;
   readonly to: number;
-  /** While open: the class over the unit's text, and its changed words. */
+  /** While open: the class over the unit's text. */
   readonly tint: string;
+  /** Its changed words — drawn open or closed: what the text gained is part of the text. */
   readonly marks: readonly { readonly from: number; readonly to: number; readonly class: string }[];
   /** While open: the other side's wording, drawn at `from`. */
   readonly old?: () => HTMLElement;
@@ -224,8 +225,8 @@ const decorate = (state: EditorState, paint: DiffPaint): DecorationSet => {
   );
 };
 
-/** What an open hunk draws: its tint, its words, and the other side's wording. */
-const decorateOpen = (
+/** What the hunks draw: every hunk's changed words; an open one's tint and the other side's wording. */
+const decorateHunks = (
   state: EditorState,
   hunks: readonly DiffHunk[],
   open: ReadonlySet<string>,
@@ -234,6 +235,7 @@ const decorateOpen = (
   const ranges: ReturnType<Decoration["range"]>[] = [];
   for (const hunk of hunks) {
     if (!open.has(hunk.key) || hunk.from > doc) continue;
+    // Open: the other side's wording at the unit, and the unit tinted.
     if (hunk.old !== undefined) {
       const render = hunk.old;
       // Inline at the unit, drawn as a block: the paragraph breaks at this
@@ -254,10 +256,11 @@ const decorateOpen = (
     }
     if (hunk.to > hunk.from && hunk.tint !== "")
       ranges.push(Decoration.mark({ class: hunk.tint }).range(hunk.from, Math.min(hunk.to, doc)));
+  }
+  for (const hunk of hunks)
     for (const mark of hunk.marks)
       if (mark.to > mark.from && mark.to <= doc)
         ranges.push(Decoration.mark({ class: mark.class }).range(mark.from, mark.to));
-  }
   return Decoration.set(ranges, true);
 };
 
@@ -280,7 +283,7 @@ const painted = (state: EditorState, paint: DiffPaint, open: ReadonlySet<string>
     set: decorate(state, paint),
     hunks,
     open: kept,
-    opened: decorateOpen(state, hunks, kept),
+    opened: decorateHunks(state, hunks, kept),
   };
 };
 
@@ -295,7 +298,7 @@ const paintField = StateField.define<Painted>({
         const open = new Set(next.open);
         if (open.has(effect.value)) open.delete(effect.value);
         else open.add(effect.value);
-        next = { ...next, open, opened: decorateOpen(tr.state, next.hunks, open) };
+        next = { ...next, open, opened: decorateHunks(tr.state, next.hunks, open) };
       }
     }
     if (next !== held || !tr.docChanged) return next;
@@ -401,26 +404,45 @@ const barLayer = layer({
     const pad = Number.parseFloat(getComputedStyle(view.contentDOM).paddingLeft) || 0;
     const left = Math.max(0, (content.left - baseLeft) / view.scaleX + pad - BAR_OFFSET);
     const { from: shownFrom, to: shownTo } = view.viewport;
-    const out: Bar[] = [];
+    const spans: { hunk: DiffHunk; top: number; bottom: number }[] = [];
     for (const hunk of hunks) {
       if (hunk.to < shownFrom || hunk.from > shownTo) continue;
       const start = view.coordsAtPos(Math.min(hunk.from, view.state.doc.length), 1);
       if (start === null) continue;
       const end =
         hunk.to > hunk.from ? view.coordsAtPos(Math.min(hunk.to, view.state.doc.length), -1) : null;
-      const top = (start.top - baseTop) / view.scaleY;
-      const bottom = ((end ?? start).bottom - baseTop) / view.scaleY;
+      // Open, the bar spans the other side's wording too, as Zed's spans the
+      // old lines and the new.
+      const was = open.has(hunk.key)
+        ? view.contentDOM.querySelector(`[data-diff-was="${CSS.escape(hunk.key)}"]`)
+        : null;
+      const top = Math.min(start.top, was?.getBoundingClientRect().top ?? start.top);
+      const bottom = Math.max((end ?? start).bottom, was?.getBoundingClientRect().bottom ?? 0);
+      spans.push({ hunk, top, bottom: Math.max(bottom, top + (hunk.from === hunk.to ? 8 : 4)) });
+    }
+    // Two verses can share a row (one ends where the next begins): each takes
+    // its half of it, so the bars never run together.
+    spans.sort((a, b) => a.top - b.top);
+    for (let index = 1; index < spans.length; index++) {
+      const before = spans[index - 1];
+      const after = spans[index];
+      if (before === undefined || after === undefined || after.top >= before.bottom) continue;
+      const middle = (after.top + Math.min(before.bottom, after.bottom)) / 2;
+      before.bottom = middle;
+      after.top = middle;
+    }
+    const out: Bar[] = [];
+    for (const { hunk, top, bottom } of spans)
       out.push(
         new Bar(
           hunk.key,
           hunk.kind,
           open.has(hunk.key),
           left,
-          top,
-          Math.max(hunk.from === hunk.to ? 8 : 4, bottom - top),
+          (top - baseTop) / view.scaleY,
+          (bottom - top) / view.scaleY,
         ),
       );
-    }
     return out;
   },
 });

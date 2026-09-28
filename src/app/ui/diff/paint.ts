@@ -297,7 +297,8 @@ export const hunkPaint = (
       kind: !changed(unit) ? "decided" : unit.status === "added" ? "added" : "modified",
       from: span.from,
       to: Math.max(span.from + 1, end),
-      tint: tint(unit, decision, controls?.live === true),
+      // Open: the verse as it reads now, green beside the red of what it was.
+      tint: changed(unit) ? "cm-diff-now" : tint(unit, decision, controls?.live === true),
       marks: runs
         .filter((run) => run.kind !== "unchanged" && visibleRun(run.what, usfm))
         .map((run) => ({ from: run.from, to: run.to, class: "cm-diff-added" })),
