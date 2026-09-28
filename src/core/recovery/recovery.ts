@@ -31,6 +31,7 @@ import { trustedBy, type Book, type BookId, type Origin, type Receipt } from "..
 import { writeFileStringAtomic } from "../fileSystem/atomic";
 import { joinPath, normalisePath } from "../fileSystem/path";
 import { Observability } from "../observability";
+import type { Project } from "../project/project";
 import type { Baseline } from "../save/baseline";
 import { debounced, type DebouncePolicy } from "../schedule/debounce";
 import type { Change, SourceStamp } from "../source/source";
@@ -46,7 +47,7 @@ export interface JournalEntry {
 
 /** A journal that holds unsaved work, as `pending()` reports it. */
 export interface Restorable {
-  /** `<projectId>/<bookId>` — the journal's identity and its path stem. */
+  /** `<projectId>/<book path in the project>` — the journal's identity and its path stem. */
   readonly id: string;
   readonly projectId: string;
   readonly bookId: BookId;
@@ -61,6 +62,19 @@ export interface Restorable {
    * session's.
    */
   readonly thisSession: boolean;
+  /**
+   * The engine hash (xxh3) of the text the first entry applies to, and of the
+   * text the last flush left — decimal strings, absent in a journal written
+   * before hashes were kept. What `pendingOnOpen` and `restore` compare.
+   */
+  readonly base: string | undefined;
+  readonly end: string | undefined;
+  /**
+   * Set by `pendingOnOpen`: the file no longer holds the text this journal
+   * started from, nor the text it reached (changed by another tool, or
+   * another machine). Its work cannot be replayed; it can be discarded.
+   */
+  readonly stale?: boolean;
 }
 
 type RecoveryFailure =
@@ -82,25 +96,20 @@ class RecoveryError extends Data.TaggedError("RecoveryError")<{
 
 export interface RecoveryService {
   /**
-   * Records one accepted apply. `attach` is the ordinary entry point; call
-   * this directly only when you already own the `book.changes` subscription,
-   * and then pass `projectId` — a book this service has never seen attached
-   * has no journal to append to, and a journal with the wrong project
-   * identity would be un-restorable, so the misuse dies rather than writes.
+   * Journals every edit to the project's books, from the Project's one
+   * canonical edit feed (`Project.edits`): seated or not, whichever surface
+   * made it, each edit once. Mounted ONCE per open project; the returned
+   * function unmounts it when the project closes.
    *
-   * Never fails and never touches the filesystem: the write is debounced.
+   * `diskHash` is the engine hash of what the file holds now — Save's
+   * baseline, which follows every save. A new journal records it as its
+   * `base`; a flush that finds the book's text hashing to it again clears the
+   * journal instead of writing it, because there is nothing left unsaved.
    */
-  readonly journal: (
-    book: Book,
-    receipt: Receipt,
-    changes: readonly Change[],
-    projectId?: string,
-  ) => Effect.Effect<void>;
-  /**
-   * Subscribes to `book.changes` and journals every accepted apply until the
-   * Scope closes.
-   */
-  readonly attach: (book: Book, projectId: string) => Effect.Effect<void, never, Scope.Scope>;
+  readonly mount: (
+    project: Project,
+    diskHash: (bookId: BookId) => bigint | undefined,
+  ) => () => void;
   /**
    * The journals that hold work Save never wrote, newest entry last. A
    * journal counts as pending when `baselineOf(bookId)` is absent (nothing
@@ -138,11 +147,17 @@ export interface RecoveryService {
    */
   readonly setAside: (id: string) => Effect.Effect<string, RecoveryError>;
   /**
-   * Drops the entries a successful save made obsolete — everything whose
-   * `after` revision is at or before the saved stamp. An emptied journal file
-   * is removed. Save calls this in step 7 of `save`.
+   * What a successful save does to a book's journals: drops the entries it
+   * wrote (every `after` revision at or before the saved stamp), records the
+   * saved text's `hash` as the journal's new `base`, and clears the earlier
+   * sessions' journals set aside for the book. An emptied journal file is
+   * removed. Save calls this in step 7 of `save`.
    */
-  readonly compact: (bookId: BookId, stamp: SourceStamp) => Effect.Effect<void, RecoveryError>;
+  readonly compact: (
+    bookId: BookId,
+    stamp: SourceStamp,
+    hash?: bigint,
+  ) => Effect.Effect<void, RecoveryError>;
   /**
    * Re-times the backup. The shell calls it with the reader's "Back up work
    * after" preference once settings are readable and again whenever it moves.
@@ -172,6 +187,12 @@ export interface RecoveryOptions {
    * may not name; omitted, a flush is simply background work with no cause.
    */
   readonly cause?: () => string | undefined;
+  /**
+   * The engine's content hash (xxh3 of the canonical LF text). Core computes
+   * no hash; without it a journal records none and falls back to the stamp
+   * checks it was written with.
+   */
+  readonly hasher?: (text: string) => bigint;
 }
 
 export const DEFAULT_JOURNAL_POLICY: DebouncePolicy = { idleMs: 500, maxIntervalMs: 5000 };
@@ -180,12 +201,18 @@ const JOURNAL_VERSION = 1;
 
 const JOURNAL_SUFFIX = ".jsonl";
 
-/** The first line of every journal, so a file found on disk is self-describing. */
+/**
+ * The first line of every journal, so a file found on disk is self-describing.
+ * `base` and `end` are engine hashes as decimal strings (see `Restorable`),
+ * rewritten with the file.
+ */
 interface JournalHeader {
   readonly v: number;
   readonly projectId: string;
   readonly bookId: BookId;
   readonly path: string;
+  base?: string;
+  end?: string;
 }
 
 interface Journal {
@@ -207,9 +234,22 @@ interface Journal {
  */
 const journalId = (path: string): string => normalisePath(path).replace(/^\/+/, "");
 
-const idOf = (projectId: string, bookId: BookId): string => journalId(`${projectId}/${bookId}`);
+/**
+ * A book's journal id: the project, and the book's PATH in it. The journal's
+ * claim is "these edits apply to this file", and a book id — read from the
+ * `\id` line — can disagree with the file it is in.
+ */
+const idOf = (projectId: string, root: string, path: string): string => {
+  const file = normalisePath(path);
+  const base = normalisePath(root);
+  const inProject = file.startsWith(`${base}/`) ? file.slice(base.length + 1) : file;
+  return journalId(`${projectId}/${inProject}`);
+};
 
-/** Marks an id set aside by `setAside`: `<projectId>/<bookId>@<last entry's time>`. */
+/** The live journal a set-aside id was moved from. */
+const liveOf = (id: string): string => (isAside(id) ? id.slice(0, id.lastIndexOf(ASIDE)) : id);
+
+/** Marks an id set aside: `<projectId>/<book path>@<last entry's time>`. */
 const ASIDE = "@";
 const isAside = (id: string): boolean => id.slice(id.lastIndexOf("/") + 1).includes(ASIDE);
 
@@ -283,12 +323,28 @@ const make = (
     const observability = Option.getOrUndefined(yield* Effect.serviceOption(Observability));
     const root = options.journalRoot;
 
-    /** Open journals, by `<projectId>/<bookId>`. */
+    const hasher = options.hasher;
+    /** Open journals, by id. */
     const journals = new Map<string, Journal>();
-    /** Which project a Book belongs to, learned from `attach`. */
-    const projects = new Map<BookId, string>();
+    /**
+     * The mounted project's books, by book id: the journal each one's edits
+     * go to, the Book that holds its text now, and what the file hashes to.
+     * What a flush compares and a save compacts; cleared on unmount.
+     */
+    const books = new Map<
+      BookId,
+      { readonly id: string; book: Book; readonly disk: () => bigint | undefined }
+    >();
     /** Journals whose in-memory entries the flush has not written yet. */
     const unwritten = new Set<string>();
+    /**
+     * Journals this session has written, or holds as the file on disk (a
+     * restore of a live journal). The FIRST write of any other id moves an
+     * earlier session's file at that path aside before it writes — the only
+     * place a file is overwritten, so no edit, however early, can overwrite
+     * work nobody has been asked about.
+     */
+    const owned = new Set<string>();
 
     const fileFor = (id: string): string => joinPath(root, `${id}${JOURNAL_SUFFIX}`);
 
@@ -306,6 +362,33 @@ const make = (
       Effect.mapError(fileSystem.remove(fileFor(id), { force: true }), (error) =>
         ioError(id, error.message),
       );
+
+    /**
+     * An earlier session's journal at `id`'s path, moved to `<id>@<its last
+     * entry's time>`; nothing to do when there is none. Returns the new id.
+     * Written before removed, so a crash between leaves two copies, never none.
+     */
+    const moveAside = (id: string): Effect.Effect<string | undefined, RecoveryError> =>
+      Effect.gen(function* () {
+        const found = yield* Effect.result(read(id));
+        if (Result.isFailure(found)) {
+          if (found.failure.reason === "NotFound") return undefined;
+          return yield* Effect.fail(found.failure);
+        }
+        const last = found.success.entries.at(-1);
+        if (last === undefined) {
+          yield* remove(id);
+          return undefined;
+        }
+        const aside = `${id}${ASIDE}${last.at}`;
+        yield* write(aside, found.success);
+        yield* remove(id);
+        observability?.note("journal.aside", "rewrote", undefined, {
+          "journal.write": aside,
+          "journal.entries": found.success.entries.length,
+        });
+        return aside;
+      });
 
     // The flush is the only writer. It rewrites each dirty journal whole:
     // `writeFileAtomic` on the complete file is append-by-rewrite, which at
@@ -331,9 +414,35 @@ const make = (
       const into = writing ?? observability;
       let failed = 0;
       let entries = 0;
+      let cleared = 0;
       for (const id of ids) {
         const journal = journals.get(id);
         if (journal === undefined) continue;
+        // Back to what the file holds — typing undone, a take put back —
+        // there is nothing unsaved: the journal is cleared, not written.
+        const held = [...books.values()].find((entry) => entry.id === id);
+        if (hasher !== undefined && held !== undefined && journal.entries.length > 0) {
+          const now = hasher(held.book.source().text);
+          const disk = held.disk();
+          if (disk !== undefined && now === disk) {
+            journal.entries = [];
+            delete journal.header.end;
+            cleared += 1;
+            into?.note("journal.clear", "consumed", "matches disk", { "journal.write": id });
+          } else journal.header.end = String(now);
+        }
+        if (!owned.has(id)) {
+          const moved = yield* Effect.result(moveAside(id));
+          if (Result.isFailure(moved)) {
+            // Keep it dirty and write nothing: overwriting the earlier file
+            // is the one thing this must not do.
+            failed += 1;
+            into?.note("journal.write", "failed", moved.failure.reason, { "journal.write": id });
+            unwritten.add(id);
+            continue;
+          }
+          owned.add(id);
+        }
         const written = yield* Effect.result(
           journal.entries.length === 0 ? remove(id) : write(id, journal),
         );
@@ -347,15 +456,19 @@ const make = (
           unwritten.add(id);
         } else {
           entries += journal.entries.length;
-          into?.note("journal.write", "rewrote", undefined, {
-            "journal.write": id,
-            "journal.entries": journal.entries.length,
-          });
+          // An empty journal is REMOVED, not written: say which.
+          into?.note(
+            "journal.write",
+            journal.entries.length === 0 ? "consumed" : "rewrote",
+            journal.entries.length === 0 ? "removed" : undefined,
+            { "journal.write": id, "journal.entries": journal.entries.length },
+          );
         }
       }
       writing?.end(failed > 0 ? "failed" : "passed", {
         "journal.failed": failed,
         "journal.entries": entries,
+        "journal.cleared": cleared,
       });
     });
 
@@ -374,17 +487,24 @@ const make = (
       flush,
     );
 
-    /** Synchronous half of `journal`: what a `book.changes` listener may do. */
+    /** One edit, into its book's journal: memory only, never the filesystem. */
     const record = (
+      id: string,
+      projectId: string,
       book: Book,
       receipt: Receipt,
       changes: readonly Change[],
-      projectId: string,
+      disk: bigint | undefined,
     ): void => {
-      const id = idOf(projectId, book.id);
       const existing = journals.get(id);
-      const journal = existing ?? {
-        header: { v: JOURNAL_VERSION, projectId, bookId: book.id, path: book.path },
+      const journal: Journal = existing ?? {
+        header: {
+          v: JOURNAL_VERSION,
+          projectId,
+          bookId: book.id,
+          path: book.path,
+          ...(disk === undefined ? {} : { base: String(disk) }),
+        },
         entries: [],
       };
       if (existing === undefined) journals.set(id, journal);
@@ -433,10 +553,17 @@ const make = (
       id: string,
       journal: Journal,
       stamp: SourceStamp,
+      hash: bigint | undefined,
     ): Effect.Effect<void, RecoveryError> => {
       const kept = journal.entries.filter((entry) => entry.after.revision > stamp.revision);
-      if (kept.length === journal.entries.length) return Effect.void;
-      const compacted: Journal = { header: journal.header, entries: kept };
+      const base = hash === undefined ? journal.header.base : String(hash);
+      if (kept.length === journal.entries.length && base === journal.header.base)
+        return Effect.void;
+      // What is kept starts at the text just saved: that is its base now.
+      const compacted: Journal = {
+        header: { ...journal.header, ...(base === undefined ? {} : { base }) },
+        entries: kept,
+      };
       journals.set(id, compacted);
       unwritten.delete(id);
       observability?.note("journal.compact", "rewrote", undefined, {
@@ -447,33 +574,31 @@ const make = (
     };
 
     return {
-      journal: (book, receipt, changes, projectId) =>
-        Effect.suspend(() => {
-          const project = projectId ?? projects.get(book.id);
-          // A journal needs a project identity to be findable on the next
-          // boot. Guessing one would produce a journal nothing can restore, so
-          // the misuse is a defect rather than a quiet no-op.
-          if (project === undefined)
-            return Effect.die(
-              new Error(`recovery.journal: book ${book.id} was never attached to a project`),
-            );
-          record(book, receipt, changes, project);
-          return Effect.void;
-        }),
-
-      attach: (book, projectId) =>
-        Effect.gen(function* () {
-          projects.set(book.id, projectId);
-          const unsubscribe = book.changes((receipt, changes) => {
-            record(book, receipt, changes, projectId);
+      mount: (project, diskHash) => {
+        const note = (bookId: BookId, book: Book): void => {
+          books.set(bookId, {
+            id: idOf(project.id, project.root, book.path),
+            book,
+            disk: () => diskHash(bookId),
           });
-          yield* Effect.addFinalizer(() =>
-            Effect.sync(() => {
-              unsubscribe();
-              projects.delete(book.id);
-            }),
-          );
-        }),
+        };
+        for (const book of project.books) note(book.id, book);
+        const stop = project.edits(({ bookId, book, receipt, changes }) => {
+          const known = books.get(bookId);
+          if (known === undefined) note(bookId, book);
+          else known.book = book;
+          const entry = books.get(bookId);
+          if (entry !== undefined)
+            record(entry.id, project.id, book, receipt, changes, diskHash(bookId));
+        });
+        observability?.note("journal.mount", "ready", undefined, {
+          "project.books": project.books.length,
+        });
+        return () => {
+          stop();
+          books.clear();
+        };
+      },
 
       pending: (baselineOf) =>
         Effect.gen(function* () {
@@ -501,6 +626,8 @@ const make = (
               lastStamp: last.after,
               entries,
               thisSession: journals.has(id),
+              base: journal.success.header.base,
+              end: journal.success.header.end,
             });
           }
           observability?.note("journal.pending", "ready", undefined, {
@@ -522,19 +649,42 @@ const make = (
                 description: `no open Book for ${journal.header.bookId}`,
               }),
             );
-          // The entries are offsets into the text the journal started from. A
-          // book edited since it opened is some other text, and a replay would
-          // land every change in the wrong place — so it is refused whole.
-          const base = journal.entries[0]?.before;
-          const now = book.source().stamp;
-          if (base !== undefined && (base.revision !== now.revision || base.length !== now.length))
+          // The entries are offsets into the text the journal started from:
+          // the file as it was read, which is also the file after a save (a
+          // save trims the entries it wrote, so the first kept entry starts
+          // at the saved text — and at a revision past 0, which is why the
+          // revision is NOT compared). So the book must be as it was read —
+          // unedited this session — and the length its first entry started
+          // at. A book edited since it opened is some other text, and a
+          // replay would land every change in the wrong place.
+          //
+          // With a hash kept, that is one comparison: the book's text now
+          // against the text the journal started from. Without one (a journal
+          // from before hashes), the stamp: unedited, and the same length.
+          const text = book.source();
+          const lines =
+            hasher !== undefined && journal.header.base !== undefined
+              ? String(hasher(text.text)) === journal.header.base
+              : (() => {
+                  const base = journal.entries[0]?.before;
+                  return (
+                    base === undefined ||
+                    (text.stamp.revision === 0 && base.length === text.stamp.length)
+                  );
+                })();
+          if (!lines) {
+            observability?.note("journal.restore", "refused", "text moved", {
+              "journal.write": id,
+              "book.id": book.id,
+            });
             return yield* Effect.fail(
               new RecoveryError({
                 reason: "Refused",
                 id,
-                description: `${journal.header.bookId} was edited after it opened, so the backup no longer lines up with it`,
+                description: `${journal.header.bookId} is not the text this backup started from (edited since it opened, or the file changed)`,
               }),
             );
+          }
           const trust = trustedBy("recovery");
           for (const [index, entry] of journal.entries.entries()) {
             const applied = book.apply(entry.changes, "recovery", trust);
@@ -554,9 +704,24 @@ const make = (
             }
           }
           // The replay went through the Book, so this session's own journal
-          // recorded every entry again: a journal set aside has done its job.
-          if (isAside(id)) yield* remove(id);
-          else journals.set(id, journal);
+          // recorded every entry again — IF the book is journalled. Only then
+          // has a set-aside journal done its job; otherwise it stays, and is
+          // offered again, rather than the only copy being deleted.
+          const live = liveOf(id);
+          if (isAside(id)) {
+            if ((journals.get(live)?.entries.length ?? 0) >= journal.entries.length)
+              yield* remove(id);
+            else
+              observability?.note("journal.restore", "declined", "not journalled", {
+                "journal.write": id,
+                "book.id": book.id,
+              });
+          } else {
+            journals.set(id, journal);
+            // The file on disk IS this journal: the next flush rewrites it
+            // rather than moving it aside as an earlier session's.
+            owned.add(id);
+          }
           observability?.note("journal.restore", "rewrote", undefined, {
             "journal.write": id,
             "journal.entries": journal.entries.length,
@@ -579,18 +744,8 @@ const make = (
       setAside: (given) =>
         Effect.gen(function* () {
           const id = journalId(given);
-          if (isAside(id) || journals.has(id)) return id;
-          const journal = yield* read(id);
-          const last = journal.entries.at(-1);
-          if (last === undefined) return id;
-          const aside = `${id}${ASIDE}${last.at}`;
-          yield* write(aside, journal);
-          yield* remove(id);
-          observability?.note("journal.aside", "rewrote", undefined, {
-            "journal.write": aside,
-            "journal.entries": journal.entries.length,
-          });
-          return aside;
+          if (isAside(id) || owned.has(id)) return id;
+          return (yield* moveAside(id)) ?? id;
         }),
 
       setPolicy: (next) =>
@@ -598,23 +753,32 @@ const make = (
           policy = next;
         }),
 
-      compact: (bookId, stamp) =>
+      compact: (bookId, stamp, hash) =>
         Effect.gen(function* () {
-          const known = projects.get(bookId);
-          // The book's own journal when we know its project, plus any journal
-          // on disk for this book id — a journal restored from a previous boot
-          // is not in memory, and leaving it would offer the same work twice.
-          const candidates = new Set<string>(known === undefined ? [] : [idOf(known, bookId)]);
-          for (const id of yield* listIds) if (id.endsWith(`/${bookId}`)) candidates.add(id);
-          for (const id of candidates) {
-            const inMemory = journals.get(id);
-            if (inMemory !== undefined) {
-              yield* prune(id, inMemory, stamp);
-              continue;
-            }
-            const onDisk = yield* Effect.result(read(id));
-            if (Result.isSuccess(onDisk)) yield* prune(id, onDisk.success, stamp);
+          // THIS project's journal for the book — the mounted project's, by
+          // the book's path. A book id alone is `MAT` in every project, and
+          // trimming another project's MAT by this one's revision cut work
+          // out of it.
+          const known = books.get(bookId);
+          if (known === undefined) return;
+          const live = known.id;
+          const inMemory = journals.get(live);
+          if (inMemory !== undefined) yield* prune(live, inMemory, stamp, hash);
+          else {
+            const onDisk = yield* Effect.result(read(live));
+            if (Result.isSuccess(onDisk)) yield* prune(live, onDisk.success, stamp, hash);
           }
+          // A save is a decision about the book: what is written is the work.
+          // Earlier sessions' journals set aside for it are cleared with it,
+          // as Discard clears them — never left to be offered again, or to be
+          // replayed later onto a text they no longer describe.
+          for (const id of yield* listIds)
+            if (id.startsWith(`${live}${ASIDE}`)) {
+              yield* remove(id);
+              observability?.note("journal.compact", "consumed", "set aside", {
+                "journal.write": id,
+              });
+            }
         }),
     };
   });

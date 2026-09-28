@@ -372,7 +372,7 @@ const make = (
         // 7 the journal up to this stamp is obsolete. A Recovery that cannot
         // compact is noted, never fatal: the bytes are already on disk.
         if (recovery !== undefined) {
-          const compacted = yield* Effect.result(recovery.compact(book.id, stamp));
+          const compacted = yield* Effect.result(recovery.compact(book.id, stamp, hash));
           if (Result.isFailure(compacted))
             observability?.note("save", "declined", compacted.failure.reason, {
               "book.id": book.id,

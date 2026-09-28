@@ -50,7 +50,7 @@ import { resolve } from "#core/location/locate";
 import { Observability } from "#core/observability";
 import { openProject as openProjectEffect, type Project } from "#core/project/project";
 import { mintSlug } from "#core/project/slug";
-import { DEFAULT_JOURNAL_POLICY, Recovery } from "#core/recovery/recovery";
+import { DEFAULT_JOURNAL_POLICY } from "#core/recovery/recovery";
 import { SaveCoordinator } from "#core/save/saveCoordinator";
 import type { SourceStamp } from "#core/source/source";
 import {
@@ -521,7 +521,8 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
 
   /**
    * Every seated book's edits, reported to the shell — whichever surface made
-   * them. The main editor reports its own book (`BookEditor`, with the
+   * them. (Journalling is not here: Recovery is mounted once on the Project's
+   * own edit feed, which hears unseated books too.) The main editor reports its own book (`BookEditor`, with the
    * gesture's trace); a card editing a book the editor does NOT show — a Find
    * result, a finding, a Review card — edits the same Book through its
    * satellite, and without this the stamp, the corpus and every screen that
@@ -900,6 +901,15 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     // to be re-taken. One subscription for the whole project, not one per
     // book, and it is the Project's own announcement rather than a guess.
     const unwatchEdits = watchSeatedEdits();
+    // The backup: mounted ONCE, on the Project's canonical edit feed, so every
+    // edit to every book is journalled once — seated or not, focused or not.
+    // The disk hash is Save's baseline, which follows every save.
+    const unmountRecovery = services.recovery.mount(ready, (bookId) => {
+      const book = ready.book(bookId);
+      return book === undefined
+        ? undefined
+        : Option.getOrUndefined(services.save.baseline(book))?.hash;
+    });
     const unwatchSwaps = ready.changed((bookId) => {
       edits.follow(bookId);
       changed({
@@ -910,6 +920,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     unwatchSeats = () => {
       unwatchSwaps();
       unwatchEdits();
+      unmountRecovery();
     };
     changed({ kind: "project.open" });
     report(t("opened {name} ({count} books)", { name: ready.root, count: ready.books.length }));
@@ -953,10 +964,8 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
         // dirty. `adopt` refuses on a second visit and on a book whose text
         // has already moved, so calling it on every focus is safe.
         yield* coordinator.adopt(book.success);
-        // Journalling starts here, not at open: a book nobody is editing has
-        // nothing to recover, and the journal fiber belongs to the app scope.
-        const recovery = yield* Recovery;
-        yield* recovery.attach(book.success, staticProject.id);
+        // Journalling is not started here: it follows the SEAT
+        // (`edits.follow`), once per book, whichever surface opened it.
         return book.success;
       }),
     );

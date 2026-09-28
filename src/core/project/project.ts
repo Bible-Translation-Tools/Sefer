@@ -43,11 +43,11 @@ import {
   Stream,
 } from "effect";
 
-import { makeBook, openBook, type Book, type BookId } from "../book/book";
+import { makeBook, openBook, type Book, type BookId, type Receipt } from "../book/book";
 import { normalisePath } from "../fileSystem/path";
 import { Observability, type ObservabilityService, type Operation } from "../observability";
 import type { ProjectMetadata } from "../resources/projectMetadata";
-import type { SourceDecodeError } from "../source/source";
+import type { Change, SourceDecodeError } from "../source/source";
 import { discoverBooks, readProjectMetadata } from "./discovery";
 
 /**
@@ -130,6 +130,17 @@ export interface OpenProjectOptions {
 /** Told which book's seat changed; re-resolve through `project.book(id)`. */
 export type ProjectListener = (id: BookId) => void;
 
+/** One accepted edit to a book's canonical text, whichever object holds it. */
+export interface ProjectEdit {
+  readonly bookId: BookId;
+  /** The book that took it: the seated one, or the plain one. */
+  readonly book: Book;
+  readonly receipt: Receipt;
+  readonly changes: readonly Change[];
+}
+
+export type EditListener = (edit: ProjectEdit) => void;
+
 export interface Project {
   readonly id: ProjectId;
   readonly root: string;
@@ -145,6 +156,15 @@ export interface Project {
   release(id: BookId): Effect.Effect<void, ProjectError>;
   /** Synchronous listener set, published after a seat swap. */
   changed(fn: ProjectListener): () => void;
+  /**
+   * Every accepted edit to any book's canonical text, seated or not —
+   * synchronously, as `book.changes` delivers it. The Project is the one
+   * place that knows which object holds a book's text (the plain Book, then
+   * the seated one, then the plain one again after `release`), so this feed
+   * moves itself across every swap: a listener hears each edit exactly once
+   * and never has to follow seats. What Recovery journals from.
+   */
+  edits(fn: EditListener): () => void;
   /** Disk changes to book files. Empty when the host cannot watch. */
   externalChanges(): Stream.Stream<ExternalChange>;
   close(): Effect.Effect<void>;
@@ -212,6 +232,27 @@ const makeProject = (parts: ProjectParts): Project => {
   const listeners = new Set<ProjectListener>();
   let closed = false;
 
+  // The edit feed: one `changes` subscription per book, on whichever object
+  // holds its text, taken while anybody listens and moved at every swap.
+  const editListeners = new Set<EditListener>();
+  const following = new Map<BookId, () => void>();
+  const follow = (bookId: BookId, entry: Entry): void => {
+    following.get(bookId)?.();
+    following.delete(bookId);
+    if (editListeners.size === 0) return;
+    const book = current(entry);
+    following.set(
+      bookId,
+      book.changes((receipt, changes) => {
+        for (const fn of Array.from(editListeners)) fn({ bookId, book, receipt, changes });
+      }),
+    );
+  };
+  const unfollowAll = (): void => {
+    for (const stop of following.values()) stop();
+    following.clear();
+  };
+
   const publish = (bookId: BookId): void => {
     // Snapshot first so a listener may unsubscribe itself, matching
     // `makeListeners` in book.ts.
@@ -260,6 +301,7 @@ const makeProject = (parts: ProjectParts): Project => {
         // and from here the seat holds it.
         const seated = seat(entry.plain);
         entry.seated = seated;
+        follow(bookId, entry);
         observability?.note("seat.open", "ready", undefined, { "book.id": bookId });
         publish(bookId);
         return Effect.succeed<Book>(seated);
@@ -283,6 +325,7 @@ const makeProject = (parts: ProjectParts): Project => {
         // seat must not lose edits that were accepted but not yet saved.
         entry.plain = makeBook(seated.path, seated.source(), observability);
         entry.seated = undefined;
+        follow(bookId, entry);
         seated.close?.();
         observability?.note("seat.close", "ready", undefined, { "book.id": bookId });
         publish(bookId);
@@ -293,6 +336,16 @@ const makeProject = (parts: ProjectParts): Project => {
       listeners.add(fn);
       return () => {
         listeners.delete(fn);
+      };
+    },
+
+    edits: (fn) => {
+      const first = editListeners.size === 0;
+      editListeners.add(fn);
+      if (first) for (const [bookId, entry] of entries) follow(bookId, entry);
+      return () => {
+        editListeners.delete(fn);
+        if (editListeners.size === 0) unfollowAll();
       };
     },
 
@@ -329,6 +382,8 @@ const makeProject = (parts: ProjectParts): Project => {
             entry.seated?.close?.();
           }
           listeners.clear();
+          editListeners.clear();
+          unfollowAll();
           into?.note("project.close", "consumed", `${order.length} books`, {
             "project.books": order.length,
             "project.seats": seats,

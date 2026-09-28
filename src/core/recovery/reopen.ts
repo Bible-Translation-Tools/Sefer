@@ -24,7 +24,8 @@ import { decode } from "../source/source";
 import type { RecoveryService, Restorable } from "./recovery";
 
 /**
- * Did the journal's work reach this text?
+ * Did the journal's work reach this text? — for a journal written before
+ * hashes were kept. With a hash, `pendingOnOpen` compares hashes instead.
  *
  * Two facts are compared, and both are cheap:
  *
@@ -79,6 +80,8 @@ const setAside = (recovery: RecoveryService, journal: Restorable): Effect.Effect
 export const pendingOnOpen = (
   recovery: RecoveryService,
   projectId: string,
+  /** The engine hash; with it, each journal is one comparison against its file. */
+  hasher?: (text: string) => bigint,
 ): Effect.Effect<readonly Restorable[], never, FileSystem.FileSystem> =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -91,6 +94,7 @@ export const pendingOnOpen = (
     // This session's own journal is the live backup of what is on screen.
     const mine = all.filter((journal) => journal.projectId === projectId && !journal.thisSession);
     let refused = 0;
+    let stale = 0;
 
     const offered: Restorable[] = [];
     for (const journal of mine) {
@@ -100,7 +104,24 @@ export const pendingOnOpen = (
         offered.push(yield* setAside(recovery, journal));
         continue;
       }
-      if (!reachedDisk(decoded.success.text, journal)) {
+      // One hash of the file, three answers: it is the text the journal
+      // started from (offer it), the text it reached (already saved: drop
+      // it), or neither (the file changed underneath: offer it as stale, to
+      // be discarded, never replayed).
+      const disk =
+        hasher !== undefined && journal.base !== undefined
+          ? String(hasher(decoded.success.text))
+          : undefined;
+      if (disk !== undefined && disk === journal.base) {
+        offered.push(yield* setAside(recovery, journal));
+        continue;
+      }
+      if (disk !== undefined && disk !== journal.end) {
+        stale += 1;
+        offered.push({ ...(yield* setAside(recovery, journal)), stale: true });
+        continue;
+      }
+      if (disk === undefined && !reachedDisk(decoded.success.text, journal)) {
         offered.push(yield* setAside(recovery, journal));
         continue;
       }
@@ -119,6 +140,7 @@ export const pendingOnOpen = (
     operation?.end("ready", {
       "journal.candidates": mine.length,
       "journal.offered": offered.length,
+      "journal.stale": stale,
       "journal.refused": refused,
     });
     // Newest first. Two sessions that each left unsaved work in one book left

@@ -85,7 +85,7 @@ export function RecoveryBanner() {
         return;
       }
       void shell.services
-        .run(pendingOnOpen(shell.services.recovery, id))
+        .run(pendingOnOpen(shell.services.recovery, id, (text) => shell.services.galley.hash(text)))
         .then((found) => setOffered(found));
     },
   );
@@ -102,7 +102,9 @@ export function RecoveryBanner() {
    */
   const restoreAll = (): void => {
     const project = shell.project();
-    const journals = offered();
+    // A stale journal started from a text the file no longer holds: it can
+    // be discarded, never replayed.
+    const journals = offered().filter((journal) => journal.stale !== true);
     if (project === undefined || journals.length === 0 || busy()) return;
     setBusy(true);
     const operation = shell.services.composition.observability.operation("journal.restore", {
@@ -138,7 +140,8 @@ export function RecoveryBanner() {
       )
       .then((results) => {
         setBusy(false);
-        setOffered([]);
+        // What could not be put back stays, to be discarded.
+        setOffered((was) => was.filter((journal) => journal.stale === true));
         const refused = results.filter(Result.isFailure);
         const restored = results.length - refused.length;
         operation.end(refused.length === 0 ? "ready" : "refused", {
@@ -271,6 +274,16 @@ export function RecoveryBanner() {
             "These edits were never recorded. Restore all puts them back in the editor, unsaved — Save & Review then shows every changed book beside the file on disk, where you can keep or revert any of it. Discard all throws them away.",
           )}
         </p>
+        <Show when={offered().filter((journal) => journal.stale === true).length}>
+          {(count) => (
+            <p class="text-small text-on-surface-warning" data-recovery-stale={count()}>
+              {t(
+                "{count} of them no longer match their file — it changed after this work was backed up — so they cannot be put back, only discarded.",
+                { count: count() },
+              )}
+            </p>
+          )}
+        </Show>
       </Card>
     </Show>
   );

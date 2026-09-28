@@ -401,7 +401,14 @@ const domainLayer = (
     // `cause` is the editor's open gesture, so a journal flush names the
     // keystroke that armed it; core cannot ask the editor itself.
     Layer.merge(
-      RecoveryLive({ journalRoot: paths.appData, cause: gestureTrace }),
+      // With the engine's content hash, as Save has it: a journal records the
+      // hash of the text it starts from, so open, flush and restore compare
+      // text, not revision counts.
+      Layer.unwrap(
+        Effect.map(Galley, (galley) =>
+          RecoveryLive({ journalRoot: paths.appData, cause: gestureTrace, hasher: hashOf(galley) }),
+        ),
+      ),
       ProjectAdminLive,
     ),
   );

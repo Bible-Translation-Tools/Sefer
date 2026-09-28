@@ -9,7 +9,7 @@ One section per service: what it is in plain words, what is wrong or constrained
 1. **Location** — done: every place question goes through Citation, Address and Location over the engine's TOC, and no regex reads a designator. Anchors (for comments) are the next piece, when comments start. See [Location](#location-and-reference) and [the Location chapter](architecture/location.md).
 2. **Git, top to bottom** — history time travel is next, and the pull/push/lifecycle flow needs one careful pass before anything else is added to it. See [Git](#git).
 3. **One diff and sync model** — after the primitives settle: stop reading every book (the line diff is retired, 2026-09-27), one change classification for History, Review and Cloud. See [Diff](#diff) and `planning/01-discussing/diff-and-sync-model-2026-09-23.md`.
-4. **Data safety in Recovery** — a journal must know what text it started from. See [Recovery](#recovery).
+4. **Data safety in Recovery** — done on the review branch (2026-09-28): a journal knows the text it started from by hash, and one subscriber on the canonical edit feed backs up every book. What is left is a damaged journal's valid prefix, and a recovery unit test (a candidate in the testing chapter). See [Recovery](#recovery).
 
 ## The graph
 
@@ -445,15 +445,14 @@ A JSONL journal of edits to the dirty buffer, debounced and compacted. On open, 
 ### Constraints and known bugs
 
 - **Data safety:**
-  - `restore` checks the journal's base by STAMP only (the book's revision and length now against the first entry's `before`). That is enough to refuse a book edited since it opened, but not a disk file that changed to the same length between sessions. A content hash at the journal's head is the real check (below).
-  - Fixed 2026-09-28: an earlier session's journal for the book a session lands on was hidden (the banner hid every journal whose book was open) and then overwritten by the first keystroke. Offered journals are now set aside under `<bookId>@<time>`, and only this session's own journal is hidden.
+  - Fixed 2026-09-28 (review branch): journalling followed the editor's focus, so a book edited only through a card, a Review take or a trusted apply was never backed up, and a book visited twice was journalled twice. Recovery is now mounted once on `Project.edits`, the canonical edit feed, keyed by the book's path, and checks text by hash: a journal records the hash it started from, a flush that finds the text back at the file clears it, a save trims it and clears the set-aside ones, and restore compares hashes, not revisions.
   - One bad or truncated line marks the whole journal `Corrupt`, and it is skipped silently. So is an unknown version.
-- `recovery.attach` runs on every window focus and adds a subscription each time, in the application scope.
+  - A journal written before hashes (no `base`) still uses the old length and last-insert check at open and the stamp check at restore.
 - No retention cap, no quota response, and no flush on `pagehide` (up to 500 ms of edits lost on a tab close).
 
 ### Ideas / future
 
-- Record the starting text's hash (`GalleyService.hash`) at the head of each journal. On load, replay the `[from, to)` changes forward only when the base matches. Recover the valid prefix of a damaged journal and say so.
+- Recover the valid prefix of a damaged journal and say so. (The hash at the head of each journal is done.)
 
 ## Git
 
