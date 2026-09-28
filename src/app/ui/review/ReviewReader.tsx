@@ -94,7 +94,6 @@ export interface ReviewBook {
 }
 
 type Layout = "auto" | "split" | "unified";
-export type ReviewMode = "compare" | "result";
 type Scope = "changes" | "book";
 type Filter = "all" | "words" | "formatting";
 
@@ -125,7 +124,12 @@ export function ReviewReader(props: {
     units: readonly DecisionUnit[],
     side: MergeSide | undefined,
   ) => void;
-  /** False when neither side can be written: the review is reading only. */
+  /**
+   * The left side is the working text: every card edits the Book on a
+   * double-click, and a decision is written into it as it is made. False when
+   * neither side can be written — the review is for reading, with no Edit, no
+   * double-click and no decisions.
+   */
   readonly decidable: boolean;
   readonly usfm: boolean;
   readonly onUsfm: (on: boolean) => void;
@@ -135,14 +139,6 @@ export function ReviewReader(props: {
   readonly baselineShort: string;
   readonly selected: BookId | undefined;
   readonly onSelect: (bookId: BookId) => void;
-  /**
-   * `compare` decides, then Apply writes. `result` writes each decision into
-   * the target as it is made, and the current pane IS the target — editable
-   * when the target is the working text. Offered only when it is.
-   */
-  readonly mode: ReviewMode;
-  readonly onMode: (mode: ReviewMode) => void;
-  readonly resultAvailable: boolean;
   /** The book, seated for editing: the result pane's Edit. */
   readonly seat: (bookId: BookId) => Promise<EditorBook | undefined>;
   /** An edit made in the result pane was accepted. */
@@ -256,7 +252,7 @@ export function ReviewReader(props: {
     };
     const units = ordered(book.skeleton);
     const include = FILTERS[show];
-    // In Result mode a taken unit is unchanged now — it IS the other side's
+    // In an editable review a taken unit is unchanged now — it IS the other side's
     // text — and still keeps its card, to say so and to put it back.
     const keep = (unit: DecisionUnit): boolean =>
       result && untrack(() => props.decision(book.bookId, unit.id)) !== undefined;
@@ -296,7 +292,7 @@ export function ReviewReader(props: {
     () => ({
       books: props.books,
       show: filter(),
-      result: props.mode === "result",
+      result: props.decidable,
       // A card widened re-prepares its book (and only it: the key says which).
       widened: extents(),
     }),
@@ -371,7 +367,7 @@ export function ReviewReader(props: {
           decide: (unit, side) => props.decide(bookId, [unit], side),
           keepTitle: t("Keep {source}'s", { source: props.currentShort }),
           takeTitle: t("Take {source}'s", { source: props.baselineShort }),
-          live: props.mode === "result",
+          live: props.decidable,
         }
       : undefined;
 
@@ -621,7 +617,7 @@ export function ReviewReader(props: {
           data-card-decision="baseline"
           onClick={() => choose("baseline")}
         >
-          {props.mode === "result" && sideOf() === "baseline"
+          {props.decidable && sideOf() === "baseline"
             ? t("Taken from {source} — put back", { source: props.baselineShort })
             : one()
               ? t("Take {source}'s", { source: props.baselineShort })
@@ -719,10 +715,10 @@ export function ReviewReader(props: {
    * project, in the editor — in either mode: the modes differ in what a
    * decision does, not in whether the text is yours. Two zips are read only.
    */
-  const editable = (): boolean => props.resultAvailable;
+  const editable = (): boolean => props.decidable;
 
   /**
-   * Result mode's working text, live: every book in the review, seated once,
+   * An editable review's working text, live: every book in the review, seated once,
    * so each card and the whole book can be the Book itself — an editor with
    * the diff as a plugin on it — rather than a view of a copy. A seated book is
    * held by identity: a new object would rebuild every live pane of it.
@@ -845,23 +841,6 @@ export function ReviewReader(props: {
           </MenuRadio>
           <MenuRadio checked={layout() === "unified"} onSelect={() => setLayout("unified")}>
             {t("One text, changes marked")}
-          </MenuRadio>
-          <MenuSeparator />
-          <MenuLabel>{t("Decisions")}</MenuLabel>
-          <MenuRadio checked={props.mode === "compare"} onSelect={() => props.onMode("compare")}>
-            {t("Decide, then apply")}
-          </MenuRadio>
-          <MenuRadio
-            checked={props.mode === "result"}
-            disabled={!props.resultAvailable}
-            title={
-              props.resultAvailable
-                ? undefined
-                : t("Only when this project, in the editor, is the left side")
-            }
-            onSelect={() => props.onMode("result")}
-          >
-            {t("Write each into the editor (editable result)")}
           </MenuRadio>
           <MenuSeparator />
           <MenuCheckbox checked={props.usfm} onChange={props.onUsfm}>

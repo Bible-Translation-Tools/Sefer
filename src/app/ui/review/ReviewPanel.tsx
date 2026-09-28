@@ -9,17 +9,16 @@
  * times in ten — not because the screen knows anything about them. The same
  * source on both sides is refused, because a text is never a review of itself.
  *
- * **The TARGET is whichever side can be written** (`CompareSource.canApply`).
- * When neither side can be, the screen says so in one line and offers no
- * Apply: offering a write with nowhere to put it would be pretending.
- *
- * **Decide, then apply.** A click on "Keep the editor's" or "Take the file's"
- * edits a `Map` and nothing else. Apply projects that map once, names the
- * books it is about to write, and writes them through `book.apply` — one apply
- * per book, so Undo takes back a book at a time. Revert is that, exactly; the
- * only concession the past sources get is that an undecided unit is not a
- * refusal (`applyPlan`'s `allowUndecided`), because reverting one verse must
- * not mean ruling on every other verse in the book first.
+ * **Editability is a property of what is loaded.** The one side that can be
+ * written is the working text (`CompareSource.canApply`: only the open
+ * project says yes), and it always sits on the left — picking it on the right
+ * swaps the sides. Then the review is the editor: every card edits the Book
+ * itself on a double-click, as every card in Sefer does, and "Keep" / "Take"
+ * writes into it at once, one Undo step each. When neither side can be
+ * written (two folders, two versions) the review is for reading: no Edit, no
+ * double-click, no decisions. There is no "decide, then apply" mode: a
+ * decision somebody has to remember to apply later is a decision that gets
+ * lost.
  *
  * **The unit is the engine's decision unit**, addressed by reference.
  * `diffSkeleton` is the engine's own diff and there is no second one. The
@@ -39,7 +38,6 @@ import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import Eraser from "lucide-solid/icons/eraser";
 import History from "lucide-solid/icons/history";
-import LifeBuoy from "lucide-solid/icons/life-buoy";
 import MoreVertical from "lucide-solid/icons/more-vertical";
 import Save from "lucide-solid/icons/save";
 import Scale from "lucide-solid/icons/scale";
@@ -47,15 +45,11 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack }
 
 import type { BookId } from "#core/book/book";
 import {
-  applyPlan,
   bookComparison,
   compareBooks,
-  sourceRef,
   type BookComparison,
-  type BookPlan,
   type CompareResult,
   type CompareSource,
-  type Plan,
 } from "#core/compare";
 import { diffSkeleton, mergeWithDecisions, type SkeletonResult } from "#core/diff/skeleton";
 import type { DecisionUnit, DiffSkeleton, MergeSide } from "#core/galley";
@@ -84,9 +78,10 @@ import {
   Select,
   toasts,
 } from "../primitives";
+import { RecoveryBanner } from "../recovery/RecoveryBanner";
 import { bookName } from "../workspace/books";
 import { metadataOf } from "../workspace/project";
-import { ReviewReader, type ReviewBook, type ReviewMode } from "./ReviewReader";
+import { ReviewReader, type ReviewBook } from "./ReviewReader";
 import { sourceChoices, type SourceChoice } from "./sources";
 
 /** The author every Sefer commit carries until accounts reach this screen. */
@@ -137,7 +132,6 @@ export function ReviewPanel() {
   const [busy, setBusy] = createSignal("", { name: "reviewBusy" });
   const [note, setNote] = createSignal("", { name: "reviewNote" });
   const [receipt, setReceipt] = createSignal("", { name: "reviewReceipt" });
-  const [confirming, setConfirming] = createSignal(false, { name: "reviewConfirming" });
   const [recording, setRecording] = createSignal(false, { name: "reviewRecording" });
   const [recordOpen, setRecordOpen] = createSignal(false, { name: "reviewRecordOpen" });
   const [sourcesOpen, setSourcesOpen] = createSignal(false, { name: "reviewSourcesOpen" });
@@ -183,15 +177,6 @@ export function ReviewPanel() {
   const target = (): "left" | "right" | undefined =>
     left()?.canApply === true ? "left" : right()?.canApply === true ? "right" : undefined;
 
-  /**
-   * Whether an undecided unit is a refusal. It is not, for a review against the
-   * reader's own past — see the header.
-   */
-  const againstPast = (): boolean => {
-    const other = target() === "left" ? rightId() : leftId();
-    return other === "disk" || other === "recorded";
-  };
-
   const live = (): boolean => LIVE.has(leftId()) || LIVE.has(rightId());
 
   /**
@@ -222,10 +207,21 @@ export function ReviewPanel() {
   let again = false;
 
   /** Every changed book's decision units, one engine diff each. */
+  /**
+   * A book somebody decided in stays in the review though it now reads the
+   * same on both sides: a take that made it identical keeps its card, with
+   * "put back", rather than vanishing under the click.
+   */
+  const decidedIn = (bookId: BookId): boolean => {
+    for (const key of untrack(decisions).keys()) if (key.startsWith(`${bookId}\0`)) return true;
+    return false;
+  };
+  const inReview = (book: BookComparison): boolean => !book.identical || decidedIn(book.bookId);
+
   const skeletonsOf = (found: CompareResult): ReadonlyMap<BookId, SkeletonResult> => {
     const held = new Map<BookId, SkeletonResult>();
     for (const book of found.books) {
-      if (book.identical || book.leftText === undefined || book.rightText === undefined) continue;
+      if (!inReview(book) || book.leftText === undefined || book.rightText === undefined) continue;
       held.set(
         book.bookId,
         diffSkeleton(services.galley, book.bookId, book.rightText, book.leftText),
@@ -364,6 +360,18 @@ export function ReviewPanel() {
 
   const pick = (side: "left" | "right", id: string): void => {
     const choice = choiceOf(id);
+    // The working text is the side that edits, and it sits on the left.
+    if (side === "right" && id === "project") {
+      const wasId = leftId();
+      const wasPicked = leftPicked();
+      setLeftId(id);
+      setLeftPicked(undefined);
+      setRightId(wasId);
+      setRightPicked(wasPicked);
+      setDecisions(new Map());
+      setReceipt("");
+      return;
+    }
     if (side === "left") {
       setLeftId(id);
       setLeftPicked(undefined);
@@ -391,8 +399,11 @@ export function ReviewPanel() {
 
   // --- the units -----------------------------------------------------------
 
-  const changed = (): readonly BookComparison[] =>
-    result()?.books.filter((book) => !book.identical) ?? [];
+  const changed = (): readonly BookComparison[] => {
+    // Tracked here: a decision cleared lets an identical book go.
+    decisions();
+    return result()?.books.filter(inReview) ?? [];
+  };
   /**
    * A card is being edited. The edit that makes the last book identical is
    * still under way in its card, so the reader stays until Done — the card
@@ -521,7 +532,7 @@ export function ReviewPanel() {
     for (const book of reviewBooks())
       for (const unit of book.skeleton.units) {
         const held = decisionFor(book.bookId, unit.id);
-        // A taken unit in Result mode is unchanged now, and still counts.
+        // A taken unit in an editable review is unchanged now, and still counts.
         if (unit.status === "unchanged" && held === undefined) continue;
         total += 1;
         if (held !== undefined) decided += 1;
@@ -529,18 +540,14 @@ export function ReviewPanel() {
     return { total, decided };
   };
 
-  // --- result mode -------------------------------------------------------------
+  // --- writing into the working text ------------------------------------------
 
   /**
-   * `result` writes each decision into the target as it is made, and the
-   * current pane is the target itself: editable, because it is the working
-   * text. Only when that is what the left side is — the project, in the
-   * editor. Everything else about the review stays: the file is still written
-   * only by Record a version, and each take is one Undo step.
+   * Whether this review edits: the left side is the working text. Each
+   * decision is then written into it as it is made, and the current pane is
+   * the Book itself. The file is still written only by Record a version.
    */
-  const [mode, setMode] = createSignal<ReviewMode>("compare", { name: "reviewMode" });
-  const resultAvailable = (): boolean => target() === "left" && leftId() === "project";
-  const resultMode = (): boolean => mode() === "result" && resultAvailable();
+  const editable = (): boolean => target() === "left" && leftId() === "project";
 
   /**
    * The target's text for a book when the review first wrote into it, so a
@@ -611,8 +618,7 @@ export function ReviewPanel() {
     staticUnits: readonly DecisionUnit[],
     side: MergeSide | undefined,
   ): void => {
-    if (resultMode()) writeNow(bookId, staticUnits, side);
-    else decide(bookId, staticUnits, side);
+    if (editable()) writeNow(bookId, staticUnits, side);
   };
 
   const seatBook = async (bookId: BookId): Promise<EditorBook | undefined> => {
@@ -626,168 +632,6 @@ export function ReviewPanel() {
   /** Books only one side holds: Review cannot add or remove a book yet. */
   const oneSided = (): readonly BookComparison[] =>
     changed().filter((book) => book.presence !== "both");
-
-  /** Every book with at least one decision, across the whole review. */
-  const decidedBooks = (): readonly BookId[] => {
-    const seen = new Set<BookId>();
-    for (const key of decisions().keys()) {
-      const bookId = key.split("\0")[0];
-      if (bookId !== undefined) seen.add(bookId);
-    }
-    return [...seen];
-  };
-
-  // --- apply ---------------------------------------------------------------
-
-  /**
-   * The decision map as what would be written.
-   *
-   * A memo: the Apply button, its confirmation and Apply itself all read it,
-   * and it changes only when the comparison, the target or a decision does.
-   * The unit is the engine's, not a line hunk: the merged text comes from
-   * `mergeWithDecisions`, which prefers the engine's own merge. `applyPlan`
-   * does the writing and owns every refusal — `ReadOnly`, `Incomplete`, `Unsupported` and
-   * `Stale` — so the screen cannot disagree with what the write will do.
-   */
-  const currentPlan = createMemo(
-    (): Plan | undefined => {
-      const found = result();
-      const side = target();
-      if (found === undefined || side === undefined) return undefined;
-      const fallback: MergeSide = side === "left" ? "current" : "baseline";
-      const touched = new Set(decidedBooks());
-      const books: BookPlan[] = [];
-      let undecided = 0;
-
-      for (const book of found.books) {
-        const targetText = side === "left" ? book.leftText : book.rightText;
-        if (book.identical || book.leftText === undefined || book.rightText === undefined) {
-          books.push({
-            bookId: book.bookId,
-            operation: targetText === undefined ? "keep" : "keep",
-            text: targetText,
-            targetText,
-            undecided: 0,
-          });
-          continue;
-        }
-        // A book whose diff the engine will not produce is a book this screen
-        // cannot plan a write for. The whole plan goes, rather than that book
-        // quietly becoming a "keep": a partial plan is a write nobody asked for.
-        const found = skeletons().get(book.bookId);
-        if (found === undefined || Result.isFailure(found)) return undefined;
-        const skeletonOf = found.success;
-        if (!touched.has(book.bookId)) {
-          // Nothing was said about this book, so nothing happens to it. Its
-          // units still count as undecided for the completeness rule.
-          const open = skeletonOf.units.filter((unit) => unit.status !== "unchanged").length;
-          undecided += open;
-          books.push({
-            bookId: book.bookId,
-            operation: "keep",
-            text: targetText,
-            targetText,
-            undecided: open,
-          });
-          continue;
-        }
-        const map = new Map<string, MergeSide>();
-        for (const unit of skeletonOf.units) {
-          const held = decisionFor(book.bookId, unit.id);
-          if (held !== undefined) map.set(unit.id, held);
-        }
-        const open = skeletonOf.units.filter(
-          (unit) => unit.status !== "unchanged" && !map.has(unit.id),
-        ).length;
-        undecided += open;
-        const merged = mergeWithDecisions(
-          services.galley,
-          book.rightText,
-          book.leftText,
-          map,
-          fallback,
-        );
-        if (Result.isFailure(merged)) return undefined;
-        books.push({
-          bookId: book.bookId,
-          operation: merged.success === targetText ? "keep" : "write",
-          text: merged.success,
-          targetText,
-          undecided: open,
-        });
-      }
-
-      const targetSource = side === "left" ? left() : right();
-      return {
-        target: targetSource === undefined ? found.left : sourceRef(targetSource),
-        books,
-        writes: books.filter((book) => book.operation !== "keep"),
-        undecided,
-        complete: undecided === 0,
-      };
-    },
-    { name: "reviewPlan" },
-  );
-
-  const apply = (): void => {
-    const side = target();
-    const projected = currentPlan();
-    const into = side === "left" ? left() : right();
-    if (into === undefined || projected === undefined) return;
-    setConfirming(false);
-    setBusy(t("Applying…"));
-    const toast = toasts.progress({ title: t("Applying") });
-    const operation = services.composition.observability.operation("review.apply", {
-      "review.writes": projected.writes.length,
-      "review.undecided": projected.undecided,
-      "review.target": side ?? "unknown",
-    });
-    const close = operation.span("review.apply.work", undefined, {
-      "review.writes": projected.writes.length,
-    });
-    let settled = false;
-    const finish = (
-      verdict: "passed" | "refused",
-      attrs: Readonly<Record<string, string | number | boolean>>,
-    ): void => {
-      if (settled) return;
-      settled = true;
-      close(attrs);
-      operation.end(verdict, attrs);
-    };
-    void services
-      .run(
-        Effect.provideService(
-          applyPlan(projected, into, { allowUndecided: againstPast() }),
-          Observability,
-          operation,
-        ),
-      )
-      // oxlint-disable-next-line solid/reactivity -- a promise continuation: runs once, when Apply settles
-      .then((report) => {
-        finish("passed", {
-          "review.written": report.written.length,
-          "review.unchanged": report.unchanged,
-        });
-        setBusy("");
-        setDecisions(new Map());
-        shell.changed({ kind: "book.apply", books: report.written });
-        const written =
-          report.written.length === 0
-            ? t("Nothing needed writing")
-            : t("Written: {books}", { books: report.written.join(", ") });
-        toasts.update(toast, { title: t("Applied"), message: written, tone: "success" });
-        setReceipt(written);
-        runCompare();
-      })
-      .catch((cause: unknown) => {
-        setBusy("");
-        const described = describe(cause);
-        finish("refused", { "review.reason": reasonOf(cause) ?? "unknown" });
-        setNote(described);
-        toasts.update(toast, { title: t("Apply refused"), message: described, tone: "error" });
-      });
-  };
 
   // --- record a version ----------------------------------------------------
 
@@ -907,63 +751,6 @@ export function ReviewPanel() {
       for (const entry of journal.entries)
         if (latest === undefined || entry.at > latest) latest = entry.at;
     return latest;
-  };
-
-  /**
-   * The journals worth OFFERING back: an earlier session's, whether or not its
-   * book is open now. This session's own journal is the live backup of what is
-   * on screen, and restoring it would replay edits the editor already shows.
-   * (Not "a book nobody reopened": the book a session lands on is always
-   * reopened, and its unsaved work was hidden, then overwritten by the first
-   * keystroke.)
-   */
-  const recovered = (): readonly Restorable[] =>
-    journals().filter((journal) => !journal.thisSession);
-
-  const restore = (journal: Restorable): void => {
-    const project = shell.project();
-    if (project === undefined) return;
-    void services
-      .run(
-        Effect.result(
-          Effect.gen(function* () {
-            const book = yield* project.instantiate(journal.bookId);
-            yield* services.save.adopt(book);
-            return yield* services.recovery.restore(journal.id, (bookId) =>
-              services.seated(bookId),
-            );
-          }),
-        ),
-      )
-      .then((done) => {
-        if (Result.isFailure(done)) {
-          toasts.error({
-            title: t("Could not restore {book}", { book: journal.bookId }),
-            message: describe(done.failure),
-          });
-          return;
-        }
-        toasts.success({
-          title: t("Restored {book}", { book: journal.bookId }),
-          message: t(
-            "The work is in the editor. It is not a recorded version until you record one.",
-          ),
-        });
-        shell.changed({ kind: "journal.restore", books: [journal.bookId] });
-      });
-  };
-
-  const discard = (journal: Restorable): void => {
-    void services.run(Effect.result(services.recovery.discard(journal.id))).then((done) => {
-      if (Result.isFailure(done)) {
-        toasts.error({ title: t("Could not discard"), message: describe(done.failure) });
-        return;
-      }
-      toasts.info({ title: t("Discarded the backup for {book}", { book: journal.bookId }) });
-      // Nothing about any BOOK changed, so there is no event to report: the
-      // only thing that moved is the list this screen just took an item off.
-      reload();
-    });
   };
 
   // --- render --------------------------------------------------------------
@@ -1124,28 +911,6 @@ export function ReviewPanel() {
               >
                 {t("Record a version…")}
               </Button>
-              <Show
-                when={!resultMode()}
-                fallback={
-                  <Badge tone="brand" data-review-result>
-                    {t("Each decision is written into the editor, one Undo step each")}
-                  </Badge>
-                }
-              >
-                <Button
-                  variant="primary"
-                  size="sm"
-                  data-review-apply
-                  disabled={
-                    (currentPlan()?.writes.length ?? 0) === 0 ||
-                    busy() !== "" ||
-                    (!againstPast() && currentPlan()?.complete !== true)
-                  }
-                  onClick={() => setConfirming(true)}
-                >
-                  {t("Apply to this project")}
-                </Button>
-              </Show>
             </Show>
             <Menu
               label={t("Review actions")}
@@ -1200,35 +965,9 @@ export function ReviewPanel() {
           </div>
         </header>
 
-        {/* Only when there is some: a backup nobody reopened, one line each. */}
-        <Show when={recovered().length > 0}>
-          <div
-            class="flex flex-wrap items-center gap-2 rounded-md border border-brand/40 bg-brand-light/40 px-3 py-1.5"
-            aria-label={t("Recovered work")}
-          >
-            <LifeBuoy size={14} class="text-brand" aria-hidden="true" />
-            <span class="text-small font-medium">{t("Recovered work")}</span>
-            <span class="text-smallest text-on-surface-secondary">
-              {t("from an earlier session, never recorded:")}
-            </span>
-            <For each={recovered()}>
-              {(journal) => (
-                <span class="flex items-center gap-1" title={journal.path}>
-                  <strong class="text-small">{journal.bookId}</strong>
-                  <span class="text-smallest text-on-surface-tertiary">
-                    {t("{count} edit(s)", { count: journal.entries.length })}
-                  </span>
-                  <Button size="sm" variant="primary" onClick={() => restore(journal)}>
-                    {t("Restore")}
-                  </Button>
-                  <Button size="sm" variant="tertiary" onClick={() => discard(journal)}>
-                    {t("Discard")}
-                  </Button>
-                </span>
-              )}
-            </For>
-          </div>
-        </Show>
+        {/* An earlier session's unsaved work: the one prompt every project
+            screen shows, answered once. Review keeps no list of its own. */}
+        <RecoveryBanner />
 
         <Show when={result()} fallback={<EmptyState title={t("Nothing to review yet.")} />}>
           <Show
@@ -1254,7 +993,7 @@ export function ReviewPanel() {
                 books={reviewBooks()}
                 decision={decisionFor}
                 decide={decideAny}
-                decidable={target() !== undefined}
+                decidable={editable()}
                 usfm={markup()}
                 onUsfm={setMarkup}
                 currentLabel={leftLabel()}
@@ -1263,16 +1002,6 @@ export function ReviewPanel() {
                 baselineShort={rightShort()}
                 selected={selected()}
                 onSelect={setSelected}
-                mode={resultMode() ? "result" : "compare"}
-                onMode={(next) => {
-                  setMode(next);
-                  // The two modes mean different things by a decision: in
-                  // Result a take is already written. Starting clean keeps a
-                  // map from one being read as the other.
-                  setDecisions(new Map());
-                  originals.clear();
-                }}
-                resultAvailable={resultAvailable()}
                 seat={seatBook}
                 onEdited={(bookId) => shell.changed({ kind: "book.apply", books: [bookId] })}
                 onEditing={setCardEditing}
@@ -1325,36 +1054,6 @@ export function ReviewPanel() {
               if (unsaved().length > 0) void record().then(() => setRecordOpen(false));
             }}
           />
-        </Dialog>
-
-        <Dialog
-          open={confirming()}
-          onOpenChange={setConfirming}
-          title={t("Apply to this project")}
-          description={t("These books will be written. Each one is a single Undo step.")}
-          footer={
-            <>
-              <Button variant="tertiary" onClick={() => setConfirming(false)}>
-                {t("Cancel")}
-              </Button>
-              <Button variant="primary" onClick={apply} data-review-confirm>
-                {t("Apply")}
-              </Button>
-            </>
-          }
-        >
-          <ul class="space-y-1">
-            <For each={currentPlan()?.writes ?? []}>
-              {(book) => (
-                <li class="flex items-center gap-2 text-small">
-                  <Badge tone="warning" size="sm">
-                    {t("rewritten")}
-                  </Badge>
-                  <span class="font-medium">{nameOf(book.bookId)}</span>
-                </li>
-              )}
-            </For>
-          </ul>
         </Dialog>
       </Show>
     </main>

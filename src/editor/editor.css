@@ -1080,8 +1080,8 @@
   background-color: color-mix(in srgb, var(--on-surface-tertiary) 14%, transparent);
   border-radius: 2px;
 }
-/* Kept words are settled. Under a TAKE they stay marked: in the review's
-   Result mode, what differs there now is the reader's own fix. */
+/* Kept words are settled. Under a TAKE they stay marked: in
+   an editable review, what differs there now is the reader's own fix. */
 .cm-diff-kept .cm-diff-added {
   background-color: transparent;
 }
@@ -1134,7 +1134,7 @@
   border-color: var(--brand-base);
 }
 
-/* The editable side of a review in Result mode: it reads like the page, and
+/* The editable side of a review: it reads like the page, and
    says it is a page you can type on — a text cursor, and a ring while the
    caret is in it. */
 .cm-diff-live .cm-content {

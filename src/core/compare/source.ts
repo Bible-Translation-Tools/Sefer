@@ -83,7 +83,7 @@ export interface CompareSource {
   /** What the reader sees: "This project (small-nt)", "shared.zip". */
   readonly label: string;
   readonly kind: CompareSourceKind;
-  /** Only a writable side may be the target of `applyPlan`. */
+  /** Whether this side may be written: only the open project says yes. */
   readonly canApply: boolean;
   /** Every book this side holds, in the side's own canonical order. */
   books(): Effect.Effect<readonly BookId[], CompareError>;
@@ -91,7 +91,7 @@ export interface CompareSource {
   read(bookId: BookId): Effect.Effect<SourceText, CompareError>;
   /**
    * Replaces one book's text, as ONE edit — one Undo step for the reader.
-   * Present only when `canApply`; `applyPlan` checks both.
+   * Present only when `canApply`.
    */
   apply?(bookId: BookId, text: string): Effect.Effect<Receipt, CompareError>;
 }

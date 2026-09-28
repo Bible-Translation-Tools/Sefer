@@ -81,7 +81,7 @@ export function BookDiff(props: {
   readonly class?: string;
   /**
    * The current side, EDITABLE: the Book itself, as a satellite with the diff
-   * as a plugin on it (Review's Result mode). An edit goes through the Book's
+   * as a plugin on it (an editable Review). An edit goes through the Book's
    * funnel like any other; the review compares again and repaints. Absent,
    * the current side is a read-only view of the text in `sides`.
    */

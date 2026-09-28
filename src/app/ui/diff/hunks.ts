@@ -94,7 +94,7 @@ const stretchOf = (
  * `units` is the whole book in reading order (`ordered`), unchanged units
  * included: they are what tells a one-sided unit where it stands in the text
  * that lacks it. `include` narrows which changes get a card — the kind filter;
- * `keep` gives an unchanged unit a card anyway (Review's Result mode, a taken
+ * `keep` gives an unchanged unit a card anyway (an editable Review, a taken
  * unit that must not vanish the moment it is taken).
  */
 export const hunksOf = (options: {

@@ -1107,9 +1107,6 @@ function ReadyHistoryDiffPage() {
                     baselineShort="the version before"
                     selected={readerBooks()[0]?.bookId}
                     onSelect={() => {}}
-                    mode="compare"
-                    onMode={() => {}}
-                    resultAvailable={false}
                     seat={() => Promise.resolve(undefined)}
                     onEdited={() => {}}
                     currentFirst={false}

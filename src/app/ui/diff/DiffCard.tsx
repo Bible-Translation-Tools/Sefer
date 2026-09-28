@@ -100,7 +100,7 @@ export function DiffCard(props: {
    * picker is (left); the conventional was-then-now puts the baseline first.
    */
   readonly currentFirst?: boolean;
-  /** Whether the current side may be edited (Review's Result mode). */
+  /** Whether the current side may be edited (an editable Review). */
   readonly editable?: boolean;
   /** The edit session, from the list (`CardList`). */
   readonly editing?: boolean;

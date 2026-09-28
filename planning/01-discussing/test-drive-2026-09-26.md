@@ -91,25 +91,24 @@ Both: regular or USFM mode; per-unit gutter controls — ↶ takes the earlier t
 
 **What it is.** The playground experiments made one screen, in the real `/review` with real sources. Three layers: the engine (units, the decision map), layout (split / unified / auto), scope (changes as cards across every book / the whole book). One row of chrome (sources chip, progress, Apply, Record a version…, ⋯), a View menu, the sidebar as the changes outline. Two ways to decide:
 
-- **Decide, then apply** (the default): ✓ / ↶ in the gutter or the card's "Keep the editor's" / "Take the file's" edit a map; Apply writes it.
-- **Result mode** (View → "Write each into the editor"): each take is written into the editor at once (one Undo step each), and every card's current side — and the whole book's — is the Book itself, editable, with the diff redrawn as you type. Clicking into a card's text shows Done and pins the card until Done or Escape.
+- **The review is the editor** when the left side is this project: ✓ / ↶ in the gutter or the card's "Keep the editor's" / "Take the file's" write into the editor at once (one Undo step each), and every card's current side — and the whole book's — is the Book itself, editable on a double-click, with the diff redrawn as you type. Done or Escape ends an edit; the card is pinned until then. Two read-only sides (a folder, a version) are for reading only. (Decide-then-apply was removed on 2026-09-28.)
 
-`documentation/architecture/review.md`, "The reading: three layers" and "Result mode".
+`documentation/architecture/review.md`, "The reading: three layers" and "Editability is a property of what is loaded".
 
 **Drive it:**
 
 1. Edit a few verses in two or three books (open a book, type), then go to Review from the rail — editor against disk is the default. If a reload left a "Recovered work" banner, Restore puts the edits back.
 2. Flip Changes / Whole book; View → layout (side by side when there is room / side by side / one text); the "All changes" filter; `Alt-F5` / `Alt-Shift-F5` or the arrows for next/previous; the sidebar's books.
 3. Decide a few, Apply, and watch the editor change (Undo takes a book back).
-4. View → "Write each into the editor". Take the file's version of a verse, click into that card and fix a word: the green/red diff updates as you type. Undo back to the file's text — the card stays until Done.
-5. Whole book in Result mode: type anywhere in the editor pane; the diff follows.
+4. Take the file's version of a verse, click into that card and fix a word: the green/red diff updates as you type. Undo back to the file's text — the card stays until Done.
+5. Whole book: type anywhere in the editor pane; the diff follows.
 6. History (⋯ → History): the same changes as verses, with Revert per verse or per file.
 
 **Traces:** `review.compare`, `review.diff.prepare` (with `review.reused` / `review.prepared`) and a `review.diff.book` span per book, `review.diff.book` per whole-book mount, `review.diff.take` per Result-mode write, spans `review.diff.step` and `review.diff.follow`.
 
 **Measured (3 books, 7 units):** compare 7–13 ms (identical books bail on string equality), a take 13–18 ms, prepare 0–3 ms when only one book moved, a step 0.1–3 ms, a follow 0.1–2.8 ms.
 
-**Code:** `src/app/ui/review/ReviewPanel.tsx` (chrome, Result-mode writes), `ReviewReader.tsx` (toolbar, scope, nav, bulk, seats, pins), `src/app/ui/diff/` (`paint.ts`, `hunks.ts`, `DiffCard.tsx`, `BookDiff.tsx`), `src/editor/recipes/diffView.ts` (`liveDiff`); History on units: `src/core/diff/units.ts`, `src/app/ui/panels/DiffView.tsx`; settings `review.layout`, `review.scope`. The version before Result mode is branch `review/compare-only`.
+**Code:** `src/app/ui/review/ReviewPanel.tsx` (chrome, writes into the working text), `ReviewReader.tsx` (toolbar, scope, nav, bulk, seats, pins), `src/app/ui/diff/` (`paint.ts`, `hunks.ts`, `DiffCard.tsx`, `BookDiff.tsx`), `src/editor/recipes/diffView.ts` (`liveDiff`); History on units: `src/core/diff/units.ts`, `src/app/ui/panels/DiffView.tsx`; settings `review.layout`, `review.scope`. The version before Result mode is branch `review/compare-only`.
 
 ## 3. History: the book-change index
 

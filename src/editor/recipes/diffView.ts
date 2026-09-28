@@ -253,7 +253,7 @@ const controlGutter = (): Extension =>
 
 /**
  * The diff as a plugin on ANY editor — the book's own satellite, in Review's
- * Result mode, where the text being compared is the text being edited. Its
+ * an editable review, where the text being compared is the text being edited. Its
  * decorations map through every edit until the next comparison repaints them
  * (`repaintDiff`).
  */

@@ -63,11 +63,12 @@ option is disabled on the other side's picker rather than silently ignored.
 
 `canApply` decides, and only the open project says `true`. So:
 
-- project on either side → that side is the target, and Apply is offered.
-- neither side is the project → the screen says **"Neither side is this
-  project — reading only"** in one line and offers no Apply. A review between
-  two copies neither of which is this project is a reading, and offering a
-  write with nowhere to put it would be worse than saying so.
+- project on either side → the review edits it. The working text always sits
+  on the left: picking it on the right swaps the two sides.
+- neither side is the project → the review is **for reading**: a "Reading
+  only" badge, no Edit, no double-click, no Keep / Take. A review between two
+  copies neither of which is this project is a reading, and offering a write
+  with nowhere to put it would be worse than saying so.
 
 ### What a new source needs
 
@@ -173,7 +174,7 @@ sid-aligned rule exists to prevent.
 
 **The chrome is one row**, so the reading has the screen. What is compared is
 a chip ("In the editor ⇄ On disk") that opens the two pickers; the count says
-how far the review is; Apply is the one primary button; Record a version opens
+how far the review is; Record a version opens
 a dialog for its message; the ⋯ menu holds Clear every decision, History and
 what aligned the diff. Recovered work is a one-line banner, and only when
 there is some. The reading's own toolbar is the second row: scope, the kind
@@ -236,33 +237,27 @@ decision beyond Clear: "keep every markup-only change in Genesis" is a
 question somebody can answer, and one click over every change in the project
 is not.
 
-**Result mode** (View → "Write each into the editor"). Offered when the left
-side is this project in the editor, the one side that can be written and
-edited. A take is written into the editor at once (`review.diff.take`: the
-engine's merge of that unit, through the target source's `apply`, one Undo
-step), and the current pane IS the working text: every card's current side,
-and the whole book's, is a satellite over the real Book with the diff as a
-plugin on it (`liveDiff` in `src/editor/recipes/diffView.ts`), so "take theirs,
-then fix the comma" is a click and some typing. A taken unit keeps its card, washed, with "Taken from the file — put
-back"; put back merges the ORIGINAL's unit into the live text, whatever else
-was written since. There is no Apply in this mode, because nothing is waiting.
-The file is still written only by Record a version. Switching mode clears the
-decisions, because the two modes mean different things by one. Two read-only
-sides (two zips, two folders) have no result to edit, so the mode is not
-offered; a remote into the working text will be, when a remote is a source.
-Clicking into a card's text starts EDITING it: the card shows Done, and its
-changes are pinned, so the card stays while you type even when an edit (an
-undo, say) makes the verse identical to the other side again and there is
-nothing left to show. Done or Escape releases the pin, and only then does a
-card with no difference go. Every book in the review is seated once for this; each accepted edit is
-announced (debounced 150 ms per book), the review compares again (7–13 ms
-with identical books bailed on string equality) and the panes repaint in
-place — a pane's dependencies are compared field by field, so typing never
-rebuilds the view under the caret.
-In this mode the DIFF names the tint, not the decision: a taken verse edited
-afterwards differs again and is red and green like any change, and the
-decided wash marks only a verse that reads exactly as the side it was decided
-for. Decide-then-apply stays the default; an N-way review is not designed.
+**Editability is a property of what is loaded.** When the left side is this
+project in the editor, the review IS the editor. There is no mode to pick.
+A take is written into the editor at once (`review.diff.take`: the engine's
+merge of that unit, through the source's `apply`, one Undo step). Every
+card's current side, and the whole book's, edits the real Book on a
+double-click or Edit, with the diff as a plugin on it (`liveDiff` in
+`src/editor/recipes/diffView.ts`). So "take theirs, then fix the comma" is a
+click and some typing, the way a Find card is. A taken unit keeps its card,
+washed, with "Taken from the file — put back". Put back merges the
+ORIGINAL's unit into the live text, whatever else was written since. The
+file is still written only by Record a version.
+
+The DIFF names the tint, not the decision. A taken verse edited afterwards
+differs again, and is red and green like any change. The decided wash marks
+only a verse that reads exactly as the side it was decided for.
+
+There was a "decide, then apply" mode, removed 2026-09-28. Decisions sat in a
+map until an Apply wrote them (`applyPlan`, deleted with it). A decision
+somebody has to remember to apply later is a decision that gets lost, and it
+made Review the one list of places in Sefer that did not edit like the
+others. An N-way review is not designed.
 
 **Editing a card follows Find's lifecycle.** Edit (or a double-click) opens
 the card's current side as the Book; the diff decorations map through the
@@ -287,54 +282,20 @@ column cards; whether the reading needs it too is open, and is the
 
 ---
 
-## 3. One mental model: decide, then apply
+## 3. One mental model: the review is the editor
 
-Clicking "Keep the editor's" or "Take the file's" edits a `Map` and **nothing
-else**. No text moves, nothing is written, and a reader may change their mind
-up to the moment they press Apply. `aria-pressed` rather than a radio group,
-because there are three states and two buttons: undecided is neither pressed.
+Clicking "Keep the editor's" or "Take the file's" writes at once, one Undo
+step each. `aria-pressed` rather than a radio group, because there are three
+states and two buttons: undecided is neither pressed. Clicking the pressed
+one again clears it, and a take cleared is put back.
 
-Apply projects the map once — `ReviewPanel` builds the plan per book with
-`mergeWithDecisions` (`src/core/diff/skeleton.ts`), which prefers the engine's
-own merge — names the books it is about to write in a confirmation, and writes
-through `applyPlan` → `book.apply` — one apply per
-book, so one revision and one Undo step each.
+**Revert is that, exactly.** Taking the file's version of a unit is what
+"revert this verse" has always meant, and the screen says so rather than
+offering a second button that does the same thing under a different name.
 
-**Revert is that, exactly.** Taking the file's version of a unit and applying it
-is what "revert this verse" has always meant, and the screen says so rather
-than offering a second button that does the same thing under a different name.
-
-The one concession the past sources get is `applyPlan`'s `allowUndecided`: for
-a review against the reader's own past (`disk`, `recorded`), an undecided unit
-is not an unanswered question but the ordinary state of the ninety-nine units
-they are content with, and reverting one verse must not mean ruling on every
-other verse in the book first. The plan already makes that safe — an undecided
-difference keeps the TARGET's own text, so a plan full of them writes nothing.
-For a foreign copy the old rule stands: half a decision map is not a text
-anybody asked for.
-
-### What Apply refuses
-
-`applyPlan(plan, target, options)` is the only function in `core/compare` that
-writes. It checks everything BEFORE the first write, so a plan that will be
-refused writes nothing at all, and then writes sequentially. It refuses, by
-name:
-
-- **`ReadOnly`** — the target cannot be written. A folder is a snapshot, not a
-  working copy: Sefer does not write into the zip somebody shared.
-- **`Incomplete`** — a difference is still undecided, and `allowUndecided` was
-  not passed.
-- **`Unsupported`** — the plan would add or remove a whole book. A project's
-  book set is fixed when it opens (`discoverBooks` is a snapshot), so writing a
-  new file would produce a book nothing can reach until the project is
-  reopened.
-- **`Stale`** — the target moved after the comparison was taken. Its offsets
-  and its text describe something else now, and silently re-diffing is how a
-  merge tool loses somebody's paragraph. Freshness is judged on the TEXT the
-  comparison read, which is stricter than the stamp and works for a side that
-  has no stamp.
-
-A book whose result equals what the target already holds is not written at all.
+A book only one side holds is not written: a project's book set is fixed
+when it opens (`discoverBooks` is a snapshot), so Review cannot add or remove
+a book yet, and it says so in one line.
 
 ---
 

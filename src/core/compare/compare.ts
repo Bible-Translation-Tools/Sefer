@@ -7,7 +7,7 @@
 // What this module owns is the BOOK level: which books each side holds, which
 // of them differ, and the texts to decide over. The unit a reader decides on
 // inside a book is the engine's decision unit, merged by `mergeWithDecisions`
-// in `core/diff/skeleton.ts` and written by `applyPlan` in decisions.ts — see
+// in `core/diff/skeleton.ts` and written into the working text by Review as it is decided — see
 // `documentation/architecture/review.md`. There is no diff here at all: two
 // texts are identical or they are not, and what differs inside a book is the
 // engine's to say (the review asks it only for books that differ).

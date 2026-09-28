@@ -31,7 +31,7 @@ export const ordered = (skeleton: DiffSkeleton): readonly DecisionUnit[] => {
 export const changed = (unit: DecisionUnit): boolean => unit.status !== "unchanged";
 
 const tint = (unit: DecisionUnit, decision: MergeSide | undefined, live: boolean): string =>
-  // When decisions are WRITTEN (Result mode), the diff is the truth: a taken
+  // When decisions are WRITTEN (an editable review), the diff is the truth: a taken
   // unit that was edited afterwards differs again and is drawn as a change,
   // red and green like any other. The decision tint marks only a unit that
   // reads exactly as the side it was decided for.
@@ -135,7 +135,7 @@ export const sidePaint = (
     if (span !== undefined) lastEnd = span.to;
     const decision = controls?.decision(unit);
     // An unchanged unit is painted only when it carries a decision: in the
-    // review's Result mode a taken unit IS the other side's text now, and
+    // an editable review a taken unit IS the other side's text now, and
     // still has to say so — and keep its control, to put it back.
     if (!changed(unit) && decision === undefined) continue;
     if (span !== undefined) {
