@@ -39,6 +39,7 @@ import {
 
 import "#editor/editor.css";
 
+import { t } from "../../i18n";
 import { Badge, Card, cx } from "../primitives";
 import { hunkKind, hunkLabel, isFormatting, type Hunk } from "./hunks";
 import { sidePaint, unifiedPaint, type Controls } from "./paint";
@@ -304,7 +305,12 @@ export function DiffCard(props: {
       padded={false}
       class="overflow-hidden"
       data-diff-card={props.hunk.key}
-      onDblClick={() => props.onOpen?.()}
+      // Double-click opens the book only where the card cannot be edited. On a
+      // live card it is the editor's own gesture — select a word — and taking
+      // the reader to another view mid-edit is the card refusing to be edited.
+      onDblClick={() => {
+        if (props.live === undefined) props.onOpen?.();
+      }}
     >
       <header class="flex flex-wrap items-center gap-2 border-b border-surface-border px-3 py-1.5">
         <strong class="text-small font-medium text-on-surface-primary tabular-nums">
@@ -327,7 +333,15 @@ export function DiffCard(props: {
           <span class={cx("truncate px-3 py-0.5", props.currentFirst === true && "order-last")}>
             {props.baselineLabel}
           </span>
-          <span class="truncate px-3 py-0.5">{props.currentLabel}</span>
+          <span
+            class="truncate px-3 py-0.5"
+            data-diff-editable={props.live !== undefined ? "" : undefined}
+          >
+            {props.currentLabel}
+            <Show when={props.live !== undefined}>
+              <span class="text-brand"> · {t("editable")}</span>
+            </Show>
+          </span>
         </div>
       </Show>
       <div class={props.split ? "grid grid-cols-2 divide-x divide-surface-border" : ""}>
@@ -340,7 +354,7 @@ export function DiffCard(props: {
             </Show>
           </div>
         </Show>
-        <div class="min-w-0" ref={setRight} />
+        <div class={cx("min-w-0", props.live !== undefined && "cm-diff-live")} ref={setRight} />
       </div>
     </Card>
   );

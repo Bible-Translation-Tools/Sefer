@@ -199,7 +199,7 @@ markup** switch). `src/app/ui/review/ReviewReader.tsx` holds it together, over
   sharing a card, across every book that differs, with a sticky header per
   book; or the WHOLE BOOK with its changes drawn in place, the other pane of a
   split following your place by unit (the reference pane's `watchLocation`
-  pattern). A card's book icon, or a double-click, opens it in the book at the
+  pattern). A card's book icon (or a double-click on a read-only card; on an editable one a double-click selects a word) opens it in the book at the
   same change, and Changes returns to that card.
 
 Both preferences are in Settings and on the reading's toolbar, which remembers

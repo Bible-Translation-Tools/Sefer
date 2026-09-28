@@ -1123,6 +1123,17 @@
   border-color: var(--brand);
 }
 
+/* The editable side of a review in Result mode: it reads like the page, and
+   says it is a page you can type on — a text cursor, and a ring while the
+   caret is in it. */
+.cm-diff-live .cm-content {
+  cursor: text;
+}
+.cm-diff-live:focus-within {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--brand) 55%, transparent);
+  border-radius: 4px;
+}
+
 /* A diff card in "Changes as excerpts": the diff view clipped to one change,
    at a card's measure rather than a page's. */
 .cm-diff-card .cm-content {

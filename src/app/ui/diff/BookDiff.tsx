@@ -38,6 +38,7 @@ import {
 
 import "#editor/editor.css";
 
+import { t } from "../../i18n";
 import { cx } from "../primitives";
 import { goneBlock, sameFields, type DiffSides } from "./DiffCard";
 import { sidePaint, unifiedPaint, type Controls, type Side } from "./paint";
@@ -311,8 +312,16 @@ export function BookDiff(props: {
         </div>
       </Show>
       <div class="flex min-h-0 flex-col">
-        <p class="truncate pb-1 text-smallest text-on-surface-tertiary">{props.currentLabel}</p>
-        <div class="cm-diff-pane min-h-0 flex-1" ref={setRight} />
+        <p class="truncate pb-1 text-smallest text-on-surface-tertiary">
+          {props.currentLabel}
+          <Show when={props.live !== undefined}>
+            <span class="text-brand"> · {t("editable")}</span>
+          </Show>
+        </p>
+        <div
+          class={cx("cm-diff-pane min-h-0 flex-1", props.live !== undefined && "cm-diff-live")}
+          ref={setRight}
+        />
       </div>
     </div>
   );
