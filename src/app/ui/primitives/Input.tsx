@@ -38,7 +38,9 @@ const field = variants({
  * Side padding, and room for the icon: at `lg` the icon sits 32px in and the
  * text starts 16px after a 20px icon, so 32 + 20 + 16 = 68px.
  */
-const padding = (size: InputSize, icon: boolean): string => {
+const padding = (size: InputSize, icon: boolean, tight: boolean): string => {
+  // `tight`: 16px sides, the icon 16px in, the text 16px after it (16+20+16).
+  if (size === "lg" && tight) return icon ? "ps-13 pe-4" : "px-4";
   if (size === "lg") return icon ? "ps-[4.25rem] pe-8" : "px-8";
   return icon ? "pe-2.5 ps-8" : "px-2.5";
 };
@@ -49,15 +51,20 @@ export interface InputProps extends Omit<ComponentProps<"input">, "size"> {
   readonly icon?: JSX.Element;
   /** Classes for the wrapper, which is what carries the field's width. */
   readonly wrapperClass?: ClassValue;
+  /**
+   * For `lg` only: `tight` is 16px all round (a panel's search) instead of the
+   * page search's 32px sides.
+   */
+  readonly inset?: "wide" | "tight";
 }
 
 export function Input(props: InputProps) {
-  const rest = omit(props, "size", "icon", "class", "wrapperClass");
+  const rest = omit(props, "size", "icon", "class", "wrapperClass", "inset");
   const merged = merge(rest, {
     get class() {
       return cx(
         field({ size: props.size }),
-        padding(props.size ?? "md", props.icon !== undefined),
+        padding(props.size ?? "md", props.icon !== undefined, props.inset === "tight"),
         props.class,
       );
     },
@@ -70,7 +77,7 @@ export function Input(props: InputProps) {
           aria-hidden="true"
           class={cx(
             "pointer-events-none absolute flex text-on-surface-tertiary",
-            props.size === "lg" ? "start-8" : "start-2.5",
+            props.size === "lg" ? (props.inset === "tight" ? "start-4" : "start-8") : "start-2.5",
           )}
         >
           {props.icon}

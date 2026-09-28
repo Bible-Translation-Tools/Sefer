@@ -11,13 +11,19 @@
  */
 
 import type { JSX } from "@solidjs/web";
-import { For } from "solid-js";
+import { For, Show } from "solid-js";
 
 import { cx, type ClassValue } from "./cx";
 
 export interface Segment<T extends string> {
   readonly value: T;
   readonly label: string;
+  /**
+   * Shown instead of `label` when the control is too narrow for it ("Old" for
+   * "Old Testament"); the full label stays the segment's accessible name.
+   * Decided by the control's own width (a container query), not the window's.
+   */
+  readonly shortLabel?: string;
   readonly icon?: JSX.Element;
   readonly disabled?: boolean;
   /**
@@ -36,10 +42,10 @@ export interface SegmentedControlProps<T extends string> {
   /** Names the group for a screen reader. */
   readonly label: string;
   /**
-   * `lg` is the app bar's mode switcher: 48px tall, a 3px track around 42px
-   * segments that share the width, each at most 10rem, with body text. Narrow,
-   * the segments shrink and their labels truncate; only below `md` do the
-   * labels collapse to screen-reader text and the segments become icons.
+   * `lg` is 48px tall: a 3px track around 42px segments that share the
+   * control's width evenly, with body text — the app bar's modes and the
+   * sidebar's testaments. Narrow, labels truncate; below `md` a control whose
+   * segments all have icons drops to them, the labels kept for screen readers.
    */
   readonly size?: "sm" | "md" | "lg";
   /** `invert` is for a dark bar: a raised track and the chosen segment dark. */
@@ -47,11 +53,19 @@ export interface SegmentedControlProps<T extends string> {
   readonly class?: ClassValue;
 }
 
-const sizeClass = (size: SegmentedControlProps<string>["size"]): string => {
+/**
+ * `collapse` is whether this `lg` control may drop to icons below `md` — only
+ * when every segment HAS an icon, or a narrow window would show blank tabs.
+ */
+const sizeClass = (size: SegmentedControlProps<string>["size"], collapse: boolean): string => {
   if (size === "sm") return "h-6 gap-1.5 rounded-md px-2.5 text-smallest";
-  // 42px segments inside the 3px track, sharing the width evenly up to 10rem.
+  // 42px segments inside the 3px track, sharing the control's width evenly;
+  // the caller caps the control, so a segment is never wider than its share.
   if (size === "lg")
-    return "h-10.5 min-w-0 max-w-40 flex-1 justify-center gap-3 rounded-xl px-4 text-body max-md:w-10.5 max-md:flex-none max-md:px-0";
+    return cx(
+      "h-10.5 min-w-0 flex-1 justify-center gap-3 rounded-xl px-4 text-body",
+      collapse && "max-md:w-10.5 max-md:flex-none max-md:px-0",
+    );
   return "h-7 gap-1.5 rounded-md px-2.5 text-small";
 };
 
@@ -66,6 +80,8 @@ const toneClass = (tone: SegmentedControlProps<string>["tone"], chosen: boolean)
 };
 
 export function SegmentedControl<T extends string>(props: SegmentedControlProps<T>) {
+  const collapses = (): boolean =>
+    props.size === "lg" && props.items.every((item) => item.icon !== undefined);
   const step = (delta: 1 | -1): void => {
     const items = props.items.filter((item) => item.disabled !== true);
     const at = items.findIndex((item) => item.value === props.value);
@@ -79,6 +95,7 @@ export function SegmentedControl<T extends string>(props: SegmentedControlProps<
       aria-label={props.label}
       class={cx(
         "inline-flex items-center",
+        props.items.some((item) => item.shortLabel !== undefined) && "@container",
         props.size === "lg"
           ? "h-12 min-w-0 gap-0.75 rounded-2xl p-0.75"
           : "gap-0.5 rounded-lg p-0.5",
@@ -102,6 +119,7 @@ export function SegmentedControl<T extends string>(props: SegmentedControlProps<
             aria-checked={item.value === props.value ? "true" : "false"}
             disabled={item.disabled}
             title={item.title}
+            aria-label={item.shortLabel === undefined ? undefined : item.label}
             // The first segment takes the tab stop when none is chosen, so the
             // group can still be reached from the keyboard.
             tabindex={
@@ -112,15 +130,40 @@ export function SegmentedControl<T extends string>(props: SegmentedControlProps<
             class={cx(
               "inline-flex items-center font-medium transition-colors",
               "cursor-pointer disabled:cursor-not-allowed disabled:opacity-60",
-              sizeClass(props.size),
+              sizeClass(props.size, collapses()),
+              // In a very narrow control the padding gives way to the words.
+              item.shortLabel !== undefined && "@max-[8rem]:px-1",
               toneClass(props.tone, item.value === props.value),
             )}
             onClick={() => props.onChange(item.value)}
           >
             {item.icon}
-            <span class={props.size === "lg" ? "truncate max-md:sr-only" : undefined}>
-              {item.label}
-            </span>
+            <Show
+              when={item.shortLabel}
+              fallback={
+                <span
+                  class={
+                    props.size === "lg"
+                      ? cx("truncate", collapses() && "max-md:sr-only")
+                      : undefined
+                  }
+                >
+                  {item.label}
+                </span>
+              }
+            >
+              {(short) => (
+                <>
+                  {/* Full words while the control is at least 18rem wide. */}
+                  <span aria-hidden="true" class="truncate @max-2xs:hidden">
+                    {item.label}
+                  </span>
+                  <span aria-hidden="true" class="hidden truncate @max-2xs:inline">
+                    {short()}
+                  </span>
+                </>
+              )}
+            </Show>
           </button>
         )}
       </For>
