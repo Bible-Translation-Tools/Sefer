@@ -240,7 +240,8 @@ is not.
 **Editability is a property of what is loaded.** When the left side is this
 project in the editor, the review IS the editor. There is no mode to pick.
 A take is written into the editor at once (`review.diff.take`: the engine's
-merge of that unit, through the source's `apply`, one Undo step). Every
+edits for that unit over the live text, `galley.mergeSplices`, applied
+through `book.apply` as one Undo step; nothing else moves). Every
 card's current side, and the whole book's, edits the real Book on a
 double-click or Edit, with the diff as a plugin on it (`liveDiff` in
 `src/editor/recipes/diffView.ts`). So "take theirs, then fix the comma" is a

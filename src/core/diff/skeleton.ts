@@ -7,7 +7,7 @@
 // cold one, because a second implementation that nothing runs is a second
 // implementation that rots and then gets switched on by accident.
 //
-// So this module is a CACHE and two calls. The cache is not an optimisation
+// So this module is a CACHE and one call. The cache is not an optimisation
 // detail: the review screen re-derives its units whenever the shell ticks, and
 // an engine diff of two whole books per tick is exactly the cold path a
 // translator feels. Keyed on each text's hash (`galley.hash`, xxh3), so there
@@ -25,13 +25,7 @@
 
 import { Result } from "effect";
 
-import type {
-  DecisionMap,
-  DiffSkeleton,
-  EngineDoorMissing,
-  GalleyService,
-  MergeSide,
-} from "../galley";
+import type { DiffSkeleton, EngineDoorMissing, GalleyService } from "../galley";
 
 /** What the screen holds: the diff, or the reason there is none. */
 export type SkeletonResult = Result.Result<DiffSkeleton, EngineDoorMissing>;
@@ -77,25 +71,3 @@ export const diffSkeleton = (
     skeleton: galley.diff(baselineText, currentText),
   });
 };
-
-/**
- * One book's text under a decision map.
- *
- * The engine walks its own interleave, which is what makes a moved or coalesced
- * unit land where it belongs — the reason Sefer never tried to do this by
- * concatenating the chosen side of each unit in reading order, which is right
- * for the ordinary case and wrong for exactly the cases the decision unit
- * exists to describe.
- *
- * `fallback` is what an UNDECIDED unit takes. It is required, because "what
- * happens to the units nobody chose" is the whole safety question of a merge
- * and a default here would be Sefer answering it quietly for the caller.
- */
-export const mergeWithDecisions = (
-  galley: GalleyService,
-  baselineText: string,
-  currentText: string,
-  decisions: DecisionMap,
-  fallback: MergeSide,
-): Result.Result<string, EngineDoorMissing> =>
-  galley.merge(baselineText, currentText, decisions, fallback);

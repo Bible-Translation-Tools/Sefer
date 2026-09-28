@@ -30,7 +30,7 @@
  * beside it rather than as a stack of forms, but it also means the decision is
  * no longer the most prominent thing on the row. There is no keyboard path
  * through the units yet, and nothing here writes — the decisions are local
- * state, and the door they would go out of is `mergeWithDecisions`.
+ * state, and the door they would go out of is `galley.mergeSplices`.
  *
  * The honest cost of this layout is that it renders the whole book. At Genesis
  * that is ~1,500 rows and it is fine; at a Bible it is not, and the answer is

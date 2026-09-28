@@ -43,7 +43,7 @@ import Save from "lucide-solid/icons/save";
 import Scale from "lucide-solid/icons/scale";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
-import type { BookId } from "#core/book/book";
+import { trustedBy, type BookId } from "#core/book/book";
 import {
   bookComparison,
   compareBooks,
@@ -51,7 +51,7 @@ import {
   type CompareResult,
   type CompareSource,
 } from "#core/compare";
-import { diffSkeleton, mergeWithDecisions, type SkeletonResult } from "#core/diff/skeleton";
+import { diffSkeleton, type SkeletonResult } from "#core/diff/skeleton";
 import type { DecisionUnit, DiffSkeleton, MergeSide } from "#core/galley";
 import { Observability } from "#core/observability";
 import type { Restorable } from "#core/recovery/recovery";
@@ -556,16 +556,23 @@ export function ReviewPanel() {
    */
   const originals = new Map<BookId, string>();
 
+  /**
+   * A decision written into the working text at once, as the engine's EDITS
+   * over the live text (`mergeSplices`, the live text as the side being
+   * edited): only the chosen units move, everything else keeps its offsets,
+   * and it is one apply — one Undo step — through the one write path. Not a
+   * merged whole book handed to the source, which then had to diff the book a
+   * second time to find what had changed.
+   */
   const writeNow = (
     bookId: BookId,
     staticUnits: readonly DecisionUnit[],
     side: MergeSide | undefined,
   ): void => {
-    const project = shell.project();
-    const into = left();
-    const other = reviewBooks().find((book) => book.bookId === bookId);
-    const live = project?.book(bookId)?.source().text;
-    if (into?.apply === undefined || other === undefined || live === undefined) return;
+    const book = shell.project()?.book(bookId);
+    const other = reviewBooks().find((entry) => entry.bookId === bookId);
+    const live = book?.source().text;
+    if (book === undefined || other === undefined || live === undefined) return;
     const taking = side === "baseline";
     const putBack = staticUnits.filter((unit) => decisionFor(bookId, unit.id) === "baseline");
     const op = services.composition.observability.operation("review.diff.take", {
@@ -573,44 +580,38 @@ export function ReviewPanel() {
       "review.units": staticUnits.length,
       "review.side": side ?? "clear",
     });
-    let merged: Result.Result<string, unknown> | undefined;
-    if (taking) {
-      if (!originals.has(bookId)) originals.set(bookId, live);
-      merged = mergeWithDecisions(
-        services.galley,
-        other.baselineText,
-        live,
-        new Map(staticUnits.map((unit) => [unit.id, "baseline" as const])),
-        "current",
-      );
-    } else if (putBack.length > 0) {
-      const original = originals.get(bookId);
-      if (original !== undefined)
-        merged = mergeWithDecisions(
-          services.galley,
-          original,
-          live,
-          new Map(putBack.map((unit) => [unit.id, "baseline" as const])),
-          "current",
-        );
-    }
+    // Where the chosen units come from: the other side for a take, the text
+    // as the review first found it for a put back.
+    const from = taking ? other.baselineText : originals.get(bookId);
+    const chosen = taking ? staticUnits : putBack;
+    if (taking && !originals.has(bookId)) originals.set(bookId, live);
     decide(bookId, staticUnits, side);
-    if (merged === undefined) {
+    if (from === undefined || chosen.length === 0) {
       op.end("passed", { "review.wrote": false });
       return;
     }
-    if (Result.isFailure(merged)) {
+    const splices = services.galley.mergeSplices(
+      live,
+      from,
+      new Map(chosen.map((unit) => [unit.id, "current" as const])),
+      "baseline",
+    );
+    if (Result.isFailure(splices)) {
       op.end("refused", { "review.reason": "merge" });
+      setNote(splices.failure.description);
       return;
     }
-    const text = merged.success;
-    void services
-      .run(Effect.result(Effect.provideService(into.apply(bookId, text), Observability, op)))
-      .then((done) => {
-        op.end(Result.isSuccess(done) ? "passed" : "refused", { "review.wrote": true });
-        if (Result.isFailure(done)) setNote(describe(done.failure));
-        shell.changed({ kind: "book.apply", books: [bookId] });
-      });
+    if (splices.success.length === 0) {
+      op.end("passed", { "review.wrote": false });
+      return;
+    }
+    const applied = book.apply(splices.success, "compare", trustedBy("compare"));
+    op.end(Result.isSuccess(applied) ? "passed" : "refused", {
+      "review.wrote": Result.isSuccess(applied),
+      "review.splices": splices.success.length,
+    });
+    if (Result.isFailure(applied)) setNote(describe(applied.failure));
+    shell.changed({ kind: "book.apply", books: [bookId] });
   };
 
   const decideAny = (
