@@ -62,6 +62,7 @@ import {
   watchLocation,
 } from "#editor/index";
 
+import { reportEdits } from "../editReports";
 import { textDirection } from "../language";
 import { useShell } from "../ProjectContext";
 import { shellKeys } from "../settings";
@@ -339,6 +340,8 @@ export function BookEditor(props: BookEditorProps) {
       };
       supply();
 
+      // This editor reports this book's edits; the shell stands aside for it.
+      const releaseReports = reportEdits(book.id);
       const unsubscribe = book.changes((receipt) => {
         setStamp(receipt.after);
         supply();
@@ -480,6 +483,7 @@ export function BookEditor(props: BookEditorProps) {
         unname();
         Effect.runFork(Fiber.interrupt(watching));
         unsubscribe();
+        releaseReports();
         unbind();
         created.destroy();
         setBound(undefined);

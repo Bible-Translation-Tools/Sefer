@@ -64,6 +64,7 @@ import { detectHost } from "#platform/host";
 
 import { registerShellCommands, type ShellBridge } from "./commands";
 import { useComposition } from "./CompositionContext";
+import { editsReported } from "./editReports";
 import { t } from "./i18n";
 import { registerLegacyMarkers } from "./legacyMarkers";
 import { createLocation, type Location } from "./location";
@@ -538,8 +539,8 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       edits.held.set(
         bookId,
         book.changes(() => {
-          // The main editor's book is reported by the editor itself.
-          if (untrack(focused)?.id === bookId) return;
+          // A book the main editor is showing is reported by the editor itself.
+          if (editsReported(bookId)) return;
           const analysis = structureAt(book.state).analysis;
           if (analysis !== null) services.projectAnalysis.supply(bookId, analysis);
           changed({ kind: "book.apply", books: [bookId] });
