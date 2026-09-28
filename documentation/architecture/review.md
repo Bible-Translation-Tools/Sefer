@@ -214,10 +214,11 @@ book, so the scope is a toggle a reader flips, not a setting they visit.
 
 **The kind filter** — All, Words, Markup and spacing — narrows the cards, the
 navigation and the bulk actions to one kind, using the engine's own
-classification (`isUsfmStructureChange`, `isWhitespaceChange`). A card whose
-changes are all formatting is drawn in USFM whatever the switch says: in the
-reading those changes are invisible. Cards carry a "markup only" /
-"whitespace only" badge.
+classification (`isUsfmStructureChange`, `isWhitespaceChange`). A card with
+formatting changes carries a "markup only" / "whitespace only" badge and a
+**Show markup** toggle for that card alone. In the reading those changes are
+invisible, but a card never switches mode by itself; it once did, and a
+view that changes under the reader unasked reads as a bug.
 
 **Next and previous change** — the arrows, `Alt-F5` / `Alt-Shift-F5` (VS
 Code's own, as `Alt-F8` is for findings), or the palette (`review.change.next`,

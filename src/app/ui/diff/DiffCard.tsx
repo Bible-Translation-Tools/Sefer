@@ -11,9 +11,10 @@
  * Escape ends it. The list it sits in owns the edit session and the pin
  * (`multibuffer/CardList`).
  *
- * A card whose every change is formatting — markup or spacing, the words
- * identical — is drawn in USFM whatever the mode says: in the reading those
- * changes are invisible.
+ * A card with markup or spacing changes says so (a badge) and offers "Show
+ * markup", one card at a time: in the reading those changes are invisible,
+ * but the card does not switch mode on its own. What the reader sees changes
+ * only when they ask for it.
  */
 
 import type { EditorView } from "@codemirror/view";
@@ -38,8 +39,8 @@ import { t } from "../../i18n";
 import { CardEditor } from "../multibuffer/CardEditor";
 import { CardFrame } from "../multibuffer/CardFrame";
 import { ContextControl, type ContextStep } from "../multibuffer/ContextControl";
-import { Badge, cx } from "../primitives";
-import { hunkKind, hunkLabel, isFormatting, type Hunk } from "./hunks";
+import { Badge, Button, cx } from "../primitives";
+import { hunkKind, hunkLabel, type Hunk } from "./hunks";
 import { sidePaint, unifiedPaint, type Controls } from "./paint";
 
 /** Both texts of one book, and their parses — what every card of that book reads. */
@@ -124,9 +125,9 @@ export function DiffCard(props: {
     name: "cardRight",
   });
 
-  const formatting = (): boolean =>
-    props.hunk.units.length > 0 && props.hunk.units.every(isFormatting);
-  const usfm = (): boolean => props.usfm || formatting();
+  /** This card's own "Show markup", over the screen's mode. */
+  const [markup, setMarkup] = createSignal(false, { name: "cardMarkup" });
+  const usfm = (): boolean => props.usfm || markup();
 
   /**
    * The latest hunk and sides, read when painting. A new comparison hands
@@ -332,9 +333,22 @@ export function DiffCard(props: {
           <span class="text-smallest text-on-surface-tertiary">{status()}</span>
           <Show when={hunkKind(props.hunk.units)}>
             {(kind) => (
-              <Badge tone="muted" data-diff-kind={kind()}>
-                {kind()}
-              </Badge>
+              <>
+                <Badge tone="muted" data-diff-kind={kind()}>
+                  {kind()}
+                </Badge>
+                <Show when={!props.usfm}>
+                  <Button
+                    size="sm"
+                    variant="tertiary"
+                    aria-pressed={markup() ? "true" : "false"}
+                    data-card-markup=""
+                    onClick={() => setMarkup((was) => !was)}
+                  >
+                    {markup() ? t("Hide markup") : t("Show markup")}
+                  </Button>
+                </Show>
+              </>
             )}
           </Show>
         </>
