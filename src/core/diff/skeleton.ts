@@ -10,8 +10,12 @@
 // So this module is a CACHE and two calls. The cache is not an optimisation
 // detail: the review screen re-derives its units whenever the shell ticks, and
 // an engine diff of two whole books per tick is exactly the cold path a
-// translator feels. Keyed on the texts themselves, so there is nothing to
-// invalidate — a text that has changed is a different key.
+// translator feels. Keyed on each text's hash (`galley.hash`, xxh3), so there
+// is nothing to invalidate — a text that has changed is a different key — and
+// the key is a few dozen characters rather than both whole books glued into
+// one new string on every call. The entry keeps the two texts it was made of
+// (the same strings, not copies) and a hit is confirmed against them, so a
+// hash collision can never hand back another text's diff.
 //
 // Both doors answer `Result`, and the failure is `EngineDoorMissing`. That is
 // not hedging: the doors are free functions probed by name off the wasm module,
@@ -33,16 +37,21 @@ import type {
 export type SkeletonResult = Result.Result<DiffSkeleton, EngineDoorMissing>;
 
 const CACHE_LIMIT = 4;
-const cache = new Map<string, SkeletonResult>();
+interface Held {
+  readonly baselineText: string;
+  readonly currentText: string;
+  readonly skeleton: SkeletonResult;
+}
+const cache = new Map<string, Held>();
 
-const remember = (key: string, skeleton: SkeletonResult): SkeletonResult => {
-  cache.set(key, skeleton);
+const remember = (key: string, held: Held): SkeletonResult => {
+  cache.set(key, held);
   while (cache.size > CACHE_LIMIT) {
     const oldest = cache.keys().next();
     if (oldest.done === true) break;
     cache.delete(oldest.value);
   }
-  return skeleton;
+  return held.skeleton;
 };
 
 /**
@@ -58,10 +67,15 @@ export const diffSkeleton = (
   baselineText: string,
   currentText: string,
 ): SkeletonResult => {
-  const key = `${book} ${baselineText} ${currentText}`;
+  const key = `${book} ${galley.hash(baselineText)}:${baselineText.length} ${galley.hash(currentText)}:${currentText.length}`;
   const held = cache.get(key);
-  if (held !== undefined) return held;
-  return remember(key, galley.diff(baselineText, currentText));
+  if (held !== undefined && held.baselineText === baselineText && held.currentText === currentText)
+    return held.skeleton;
+  return remember(key, {
+    baselineText,
+    currentText,
+    skeleton: galley.diff(baselineText, currentText),
+  });
 };
 
 /**
