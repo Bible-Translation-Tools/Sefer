@@ -31,8 +31,11 @@ import {
   type DecorationSet,
   EditorView,
   GutterMarker,
+  type LayerMarker,
+  ViewPlugin,
   WidgetType,
   gutter,
+  layer,
 } from "@codemirror/view";
 
 import type { Analysis } from "#core/galley";
@@ -68,11 +71,35 @@ export interface DiffControl {
   readonly render: () => HTMLElement;
 }
 
+/**
+ * One changed unit in a one-text view drawn the way Zed draws a hunk: the text
+ * as it reads now, a bar beside the unit's own rows, and nothing else until
+ * the reader opens it — then the unit is tinted, its changed words marked,
+ * and the other side's wording (`old`) opens at the unit, read-only. The
+ * final text is what is reviewed; the change is there when asked for.
+ */
+export interface DiffHunk {
+  /** Stable while the unit is (its id): what stays open across a repaint. */
+  readonly key: string;
+  /** The bar's colour. `decided` is a unit that reads as a side it was decided for. */
+  readonly kind: "added" | "deleted" | "modified" | "decided";
+  /** The unit's text here, or a point (`from === to`) for one this text lacks. */
+  readonly from: number;
+  readonly to: number;
+  /** While open: the class over the unit's text, and its changed words. */
+  readonly tint: string;
+  readonly marks: readonly { readonly from: number; readonly to: number; readonly class: string }[];
+  /** While open: the other side's wording, drawn at `from`. */
+  readonly old?: () => HTMLElement;
+}
+
 export interface DiffPaint {
   readonly lines: readonly { readonly from: number; readonly to: number; readonly class: string }[];
   readonly marks: readonly { readonly from: number; readonly to: number; readonly class: string }[];
   readonly widgets: readonly DiffWidget[];
   readonly controls: readonly DiffControl[];
+  /** Units drawn as Zed hunks (bars, opened on request), for a one-text view. */
+  readonly hunks?: readonly DiffHunk[];
 }
 
 export interface DiffViewOptions {
@@ -134,6 +161,8 @@ class Control extends GutterMarker {
 }
 
 const setPaint = StateEffect.define<DiffPaint>();
+/** Opens or closes one hunk, by key. */
+const toggleHunk = StateEffect.define<string>();
 
 /** The marks on changed WORDS, as `paint.ts` names them — the ones an edit can end. */
 const WORD_MARKS = new Set(["cm-diff-added", "cm-diff-removed"]);
@@ -195,16 +224,81 @@ const decorate = (state: EditorState, paint: DiffPaint): DecorationSet => {
   );
 };
 
-const paintField = StateField.define<{ paint: DiffPaint; set: DecorationSet }>({
-  create: () => ({
-    paint: { lines: [], marks: [], widgets: [], controls: [] },
-    set: Decoration.none,
-  }),
+/** What an open hunk draws: its tint, its words, and the other side's wording. */
+const decorateOpen = (
+  state: EditorState,
+  hunks: readonly DiffHunk[],
+  open: ReadonlySet<string>,
+): DecorationSet => {
+  const doc = state.doc.length;
+  const ranges: ReturnType<Decoration["range"]>[] = [];
+  for (const hunk of hunks) {
+    if (!open.has(hunk.key) || hunk.from > doc) continue;
+    if (hunk.old !== undefined) {
+      const render = hunk.old;
+      // Inline at the unit, drawn as a block: the paragraph breaks at this
+      // verse rather than above the whole paragraph (a `\p` can hold thirty
+      // verses), and it moves the text only when somebody asks for it.
+      ranges.push(
+        Decoration.widget({
+          widget: new Built(`was ${hunk.key}`, () => {
+            const box = document.createElement("div");
+            box.className = "cm-diff-was-box";
+            box.dataset["diffWas"] = hunk.key;
+            box.append(render());
+            return box;
+          }),
+          side: -1,
+        }).range(hunk.from),
+      );
+    }
+    if (hunk.to > hunk.from && hunk.tint !== "")
+      ranges.push(Decoration.mark({ class: hunk.tint }).range(hunk.from, Math.min(hunk.to, doc)));
+    for (const mark of hunk.marks)
+      if (mark.to > mark.from && mark.to <= doc)
+        ranges.push(Decoration.mark({ class: mark.class }).range(mark.from, mark.to));
+  }
+  return Decoration.set(ranges, true);
+};
+
+interface Painted {
+  readonly paint: DiffPaint;
+  /** The paint's own decorations, mapped through any typing since. */
+  readonly set: DecorationSet;
+  /** The paint's hunks, their offsets mapped through any typing since. */
+  readonly hunks: readonly DiffHunk[];
+  readonly open: ReadonlySet<string>;
+  readonly opened: DecorationSet;
+}
+
+const painted = (state: EditorState, paint: DiffPaint, open: ReadonlySet<string>): Painted => {
+  const hunks = paint.hunks ?? [];
+  // A repaint keeps what the reader had open, while that unit is still there.
+  const kept = new Set(hunks.filter((hunk) => open.has(hunk.key)).map((hunk) => hunk.key));
+  return {
+    paint,
+    set: decorate(state, paint),
+    hunks,
+    open: kept,
+    opened: decorateOpen(state, hunks, kept),
+  };
+};
+
+const paintField = StateField.define<Painted>({
+  create: (state) =>
+    painted(state, { lines: [], marks: [], widgets: [], controls: [] }, new Set<string>()),
   update(held, tr) {
-    for (const effect of tr.effects)
-      if (effect.is(setPaint))
-        return { paint: effect.value, set: decorate(tr.state, effect.value) };
-    if (!tr.docChanged) return held;
+    let next = held;
+    for (const effect of tr.effects) {
+      if (effect.is(setPaint)) next = painted(tr.state, effect.value, next.open);
+      if (effect.is(toggleHunk)) {
+        const open = new Set(next.open);
+        if (open.has(effect.value)) open.delete(effect.value);
+        else open.add(effect.value);
+        next = { ...next, open, opened: decorateOpen(tr.state, next.hunks, open) };
+      }
+    }
+    if (next !== held || !tr.docChanged) return next;
     // Mapped through the edit, and a WORD mark whose own text the edit touched
     // is dropped at once — the change it described is what the reader is now
     // rewriting. The next comparison paints what is true. A unit's tint maps
@@ -214,16 +308,149 @@ const paintField = StateField.define<{ paint: DiffPaint; set: DecorationSet }>({
     tr.changes.iterChangedRanges((_fromA, _toA, fromB, toB) =>
       touched.push({ from: fromB, to: toB }),
     );
+    const keep = (from: number, to: number, value: Decoration): boolean =>
+      !WORD_MARKS.has(String(value.spec.class)) ||
+      !touched.some((range) => range.from <= to && range.to >= from);
     return {
       ...held,
-      set: held.set.map(tr.changes).update({
-        filter: (from, to, value) =>
-          !WORD_MARKS.has(String(value.spec.class)) ||
-          !touched.some((range) => range.from <= to && range.to >= from),
-      }),
+      set: held.set.map(tr.changes).update({ filter: keep }),
+      hunks: held.hunks.map((hunk) => ({
+        ...hunk,
+        from: tr.changes.mapPos(hunk.from, -1),
+        to: tr.changes.mapPos(hunk.to, 1),
+      })),
+      opened: held.opened.map(tr.changes).update({ filter: keep }),
     };
   },
-  provide: (field) => EditorView.decorations.from(field, (held) => held.set),
+  provide: (field) => [
+    EditorView.decorations.from(field, (held) => held.set),
+    EditorView.decorations.from(field, (held) => held.opened),
+  ],
+});
+
+/** A hunk's bar, beside its own rows; its key names what a click opens. */
+class Bar implements LayerMarker {
+  constructor(
+    readonly key: string,
+    readonly kind: DiffHunk["kind"],
+    readonly open: boolean,
+    readonly left: number,
+    readonly top: number,
+    readonly height: number,
+  ) {}
+  draw(): HTMLElement {
+    const bar = document.createElement("div");
+    bar.dataset["diffBar"] = this.key;
+    this.adjust(bar);
+    return bar;
+  }
+  update(dom: HTMLElement, previous: LayerMarker): boolean {
+    if (!(previous instanceof Bar) || previous.key !== this.key) return false;
+    this.adjust(dom);
+    return true;
+  }
+  eq(other: LayerMarker): boolean {
+    return (
+      other instanceof Bar &&
+      other.key === this.key &&
+      other.kind === this.kind &&
+      other.open === this.open &&
+      other.left === this.left &&
+      other.top === this.top &&
+      other.height === this.height
+    );
+  }
+  private adjust(bar: HTMLElement): void {
+    bar.className = `cm-diff-bar cm-diff-bar-${this.kind}`;
+    bar.title = this.open ? "Hide the other side's wording" : "Show the other side's wording";
+    if (this.open) bar.dataset["open"] = "";
+    else delete bar.dataset["open"];
+    bar.style.left = `${this.left}px`;
+    bar.style.top = `${this.top}px`;
+    bar.style.height = `${this.height}px`;
+  }
+}
+
+/** How far left of the text a bar's hit area starts, and how wide it is. */
+const BAR_OFFSET = 11;
+
+/**
+ * The bars: drawn per UNIT, from the row its first character is on to the
+ * row its last is on. Not gutter markers, which mark whole lines — in the
+ * reading a paragraph is one line, and in USFM verses may share a line too, so
+ * a line cannot say which verse changed. Measured the way CodeMirror measures
+ * the selection, again whenever the text re-wraps.
+ */
+const barLayer = layer({
+  above: true,
+  class: "cm-diff-bars",
+  update: (update) =>
+    update.docChanged ||
+    update.viewportChanged ||
+    update.geometryChanged ||
+    update.transactions.some((tr) =>
+      tr.effects.some((effect) => effect.is(setPaint) || effect.is(toggleHunk)),
+    ),
+  markers: (view) => {
+    const { hunks, open } = view.state.field(paintField);
+    if (hunks.length === 0) return [];
+    const scroller = view.scrollDOM.getBoundingClientRect();
+    const baseLeft = scroller.left - view.scrollDOM.scrollLeft * view.scaleX;
+    const baseTop = scroller.top - view.scrollDOM.scrollTop * view.scaleY;
+    const content = view.contentDOM.getBoundingClientRect();
+    const pad = Number.parseFloat(getComputedStyle(view.contentDOM).paddingLeft) || 0;
+    const left = Math.max(0, (content.left - baseLeft) / view.scaleX + pad - BAR_OFFSET);
+    const { from: shownFrom, to: shownTo } = view.viewport;
+    const out: Bar[] = [];
+    for (const hunk of hunks) {
+      if (hunk.to < shownFrom || hunk.from > shownTo) continue;
+      const start = view.coordsAtPos(Math.min(hunk.from, view.state.doc.length), 1);
+      if (start === null) continue;
+      const end =
+        hunk.to > hunk.from ? view.coordsAtPos(Math.min(hunk.to, view.state.doc.length), -1) : null;
+      const top = (start.top - baseTop) / view.scaleY;
+      const bottom = ((end ?? start).bottom - baseTop) / view.scaleY;
+      out.push(
+        new Bar(
+          hunk.key,
+          hunk.kind,
+          open.has(hunk.key),
+          left,
+          top,
+          Math.max(hunk.from === hunk.to ? 8 : 4, bottom - top),
+        ),
+      );
+    }
+    return out;
+  },
+});
+
+/**
+ * A click on a bar, or on a changed verse's number, opens or closes it. In
+ * the capture phase on the scroller: the bars are outside the content, and a
+ * click on a verse number must not also put the caret there.
+ */
+const hunkClicks = ViewPlugin.define((view) => {
+  const onDown = (event: MouseEvent): void => {
+    if (event.button !== 0 || !(event.target instanceof Element)) return;
+    const { hunks } = view.state.field(paintField);
+    if (hunks.length === 0) return;
+    let key = event.target.closest<HTMLElement>("[data-diff-bar]")?.dataset["diffBar"];
+    if (key === undefined) {
+      const number = event.target.closest(".usfm-num-v");
+      if (number === null || !view.contentDOM.contains(number)) return;
+      const at = view.posAtDOM(number);
+      key = hunks.find((hunk) => hunk.from <= at && at <= Math.max(hunk.to, hunk.from + 1))?.key;
+    }
+    if (key === undefined) return;
+    event.preventDefault();
+    event.stopPropagation();
+    view.dispatch({ effects: toggleHunk.of(key) });
+  };
+  view.scrollDOM.addEventListener("mousedown", onDown, true);
+  return {
+    destroy: () => view.scrollDOM.removeEventListener("mousedown", onDown, true),
+  };
 });
 
 const controlGutter = (): Extension =>
@@ -258,8 +485,10 @@ const controlGutter = (): Extension =>
  * (`repaintDiff`).
  */
 export const liveDiff = (paint: DiffPaint): Extension[] => [
-  paintField.init((state) => ({ paint, set: decorate(state, paint) })),
+  paintField.init((state) => painted(state, paint, new Set<string>())),
   controlGutter(),
+  barLayer,
+  hunkClicks,
 ];
 
 export const repaintDiff = (view: EditorView, paint: DiffPaint): void => {
@@ -282,8 +511,10 @@ export function mountDiffView(options: DiffViewOptions): DiffViewMount {
       projection.of(modeView(options.mode, surface)),
       ...(clip === undefined ? [] : [clipped(clip), renderRangeField.init(() => clip)]),
       // Seeded with the first paint, so the gutter's first pass has markers.
-      paintField.init((state) => ({ paint: options.paint, set: decorate(state, options.paint) })),
+      paintField.init((state) => painted(state, options.paint, new Set<string>())),
       controlGutter(),
+      barLayer,
+      hunkClicks,
       EditorState.readOnly.of(true),
       EditorView.editable.of(false),
     ],

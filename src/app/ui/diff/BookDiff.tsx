@@ -40,8 +40,8 @@ import "#editor/editor.css";
 
 import { t } from "../../i18n";
 import { cx } from "../primitives";
-import { goneBlock, sameFields, type DiffSides } from "./DiffCard";
-import { sidePaint, unifiedPaint, type Controls, type Side } from "./paint";
+import { sameFields, wasBlock, type DiffSides } from "./DiffCard";
+import { hunkPaint, sidePaint, type Controls, type Side } from "./paint";
 
 export interface BookDiffApi {
   readonly showUnit: (unit: DecisionUnit) => void;
@@ -256,11 +256,11 @@ export function BookDiff(props: {
         follow("current", current);
       } else {
         const current = add("unified", r, sides.currentText, () =>
-          unifiedPaint(
+          hunkPaint(
             now().units,
             markup,
             controls(),
-            goneBlock(now().sides.baseline, mode),
+            wasBlock(now().sides.baseline, mode),
             now().sides.current,
           ),
         );

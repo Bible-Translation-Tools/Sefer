@@ -47,6 +47,7 @@ export {
   liveDiff,
   mountDiffView,
   repaintDiff,
+  type DiffHunk,
   type DiffPaint,
   type DiffViewMount,
   type DiffWidget,

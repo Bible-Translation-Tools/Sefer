@@ -11,7 +11,7 @@
 import { readingEnd } from "#core/excerpts/excerpts";
 import type { Analysis } from "#core/galley";
 import type { DecisionUnit, DiffSkeleton, MergeSide } from "#core/galley/diff";
-import type { DiffPaint, DiffWidget } from "#editor/index";
+import type { DiffHunk, DiffPaint, DiffWidget } from "#editor/index";
 
 export type Side = "baseline" | "current";
 
@@ -252,4 +252,57 @@ export const unifiedPaint = (
     flush();
   }
   return { ...base, widgets: [...base.widgets, ...widgets] };
+};
+
+/**
+ * The working text as a Zed diff: nothing on the text until a unit is opened;
+ * a bar per changed unit beside its own rows. Opening one tints it, marks the
+ * words it added, and opens the other side's wording at it (`was`) with the
+ * words it removed marked there. What is reviewed is the final text; the
+ * change is there when asked for, and the text being edited carries no struck
+ * words.
+ */
+export const hunkPaint = (
+  units: readonly DecisionUnit[],
+  usfm: boolean,
+  controls: Controls | undefined,
+  was: (unit: DecisionUnit) => HTMLElement,
+  analysis: Analysis,
+  startAt = 0,
+): DiffPaint => {
+  const base = sidePaint(units, "current", usfm, controls, analysis, startAt);
+  const hunks: DiffHunk[] = [];
+  let lastEnd = startAt;
+  for (const unit of units) {
+    const span = unit.current;
+    if (span !== undefined) lastEnd = span.to;
+    const decision = controls?.decision(unit);
+    if (!changed(unit) && decision === undefined) continue;
+    if (span === undefined) {
+      hunks.push({
+        key: unit.id,
+        kind: "deleted",
+        from: lastEnd,
+        to: lastEnd,
+        tint: "",
+        marks: [],
+        old: () => was(unit),
+      });
+      continue;
+    }
+    const end = usfm ? span.to : readingEnd(analysis, span.from, span.to);
+    const runs = unit.status === "modified" ? (unit.text?.current ?? []) : [];
+    hunks.push({
+      key: unit.id,
+      kind: !changed(unit) ? "decided" : unit.status === "added" ? "added" : "modified",
+      from: span.from,
+      to: Math.max(span.from + 1, end),
+      tint: tint(unit, decision, controls?.live === true),
+      marks: runs
+        .filter((run) => run.kind !== "unchanged" && visibleRun(run.what, usfm))
+        .map((run) => ({ from: run.from, to: run.to, class: "cm-diff-added" })),
+      old: unit.baseline === undefined || !changed(unit) ? undefined : () => was(unit),
+    });
+  }
+  return { lines: [], marks: [], widgets: [], controls: base.controls, hunks };
 };

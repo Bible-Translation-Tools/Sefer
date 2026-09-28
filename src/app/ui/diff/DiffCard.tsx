@@ -41,7 +41,7 @@ import { CardFrame } from "../multibuffer/CardFrame";
 import { ContextControl, type ContextStep } from "../multibuffer/ContextControl";
 import { Badge, Button, cx } from "../primitives";
 import { hunkKind, hunkLabel, type Hunk } from "./hunks";
-import { sidePaint, unifiedPaint, type Controls } from "./paint";
+import { hunkPaint, sidePaint, type Controls } from "./paint";
 
 /** Both texts of one book, and their parses — what every card of that book reads. */
 export interface DiffSides {
@@ -53,23 +53,28 @@ export interface DiffSides {
 }
 
 /**
- * A unit that only the baseline has, drawn as a block where it stood: a stamp
- * of the baseline's own rendering, so it reads like the page too.
+ * The other side's wording of a unit, as an opened Zed hunk shows it — or a
+ * unit only the other side has: a stamp of the baseline's own rendering, so it
+ * reads like the page, read-only, with the words the current side no longer
+ * has marked.
  */
-export const goneBlock =
+export const wasBlock =
   (baseline: Analysis, mode: "usfm" | "default") =>
   (unit: DecisionUnit): HTMLElement => {
     const block = document.createElement("div");
-    block.className = "cm-diff-gone";
+    block.className = "cm-diff-was";
     if (unit.baseline !== undefined)
       mountStamp({
         parent: block,
         analysis: baseline,
         range: unit.baseline,
         mode,
-        marks: [],
-        surface: "cm-excerpt",
-        label: `gone:${unit.id}`,
+        marks: (unit.status === "modified" ? (unit.text?.baseline ?? []) : [])
+          .filter((run) => run.kind !== "unchanged" && (run.what === "text" || mode === "usfm"))
+          .map((run) => ({ from: run.from, to: run.to, class: "cm-diff-removed" })),
+        // The diff's own surface, so it reads at the size of the text below it.
+        surface: "cm-diff",
+        label: `was:${unit.id}`,
       });
     return block;
   };
@@ -142,11 +147,11 @@ export function DiffCard(props: {
     const mode = markup ? "usfm" : "default";
     return split
       ? sidePaint(hunk.all, "current", markup, controls(), sides.current, hunk.currentStart)
-      : unifiedPaint(
+      : hunkPaint(
           hunk.all,
           markup,
           controls(),
-          goneBlock(sides.baseline, mode),
+          wasBlock(sides.baseline, mode),
           sides.current,
           hunk.currentStart,
         );

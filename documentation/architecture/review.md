@@ -192,9 +192,20 @@ markup** switch). `src/app/ui/review/ReviewReader.tsx` holds it together, over
   Every view reads and writes the same map, keyed by book and unit, so
   switching view never loses a decision.
 - **Layout** (`review.layout`: `auto` | `split` | `unified`) — side by side,
-  each text its own; or unified, the current text with the other's words struck
-  through where they were and a unit only the other has drawn as a block where
-  it stood. `auto` splits when the reading is at least 960 px wide.
+  each text its own, the other side's words red on ITS side only; or unified,
+  drawn the way Zed draws hunks (`DiffHunk`, `hunkPaint`). The final text is
+  what is reviewed: nothing is drawn on it but a bar beside each changed
+  unit's own rows. Clicking the bar, or the verse's number, opens the other
+  side's wording at that verse, read-only, with its removed words red, and
+  tints the current verse with its added words green. It is a block INSIDE the
+  paragraph, so the paragraph breaks at the verse, not above a `\p` of thirty
+  verses. The bars are a CodeMirror layer measured per unit, not gutter
+  markers: in the reading a paragraph is one line, and in USFM verses can share
+  a line, so a line cannot say which verse changed. Nothing struck ever sits
+  in the text being edited. `auto` splits when the reading is at least 960 px
+  wide. (Inline strike-through, and a "guess" drawn before the comparison
+  while typing, were both tried on 2026-09-28 and dropped as noise:
+  matklad's "unified vs split diff" is the argument.)
 - **Scope** (`review.scope`: `changes` | `book`) — one CARD per TOC unit that
   changed (a verse, a bridge, a chapter's head), as Find has one card per verse
   with a hit: every change the engine reports inside that unit is on it, and

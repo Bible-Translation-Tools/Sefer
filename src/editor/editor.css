@@ -1107,6 +1107,72 @@
   text-decoration-color: color-mix(in srgb, #dc2626 50%, transparent);
   margin: 2px 0;
 }
+/* A one-text review drawn as Zed draws hunks (`DiffHunk` in
+   recipes/diffView.ts): the final text, and a bar beside each changed unit's
+   own rows. The hit area is wider than the stroke. Click the bar, or the
+   verse number, to open the other side's wording at the verse. */
+.cm-diff-bars {
+  pointer-events: none;
+}
+.cm-diff-bar {
+  --bar: #d97706;
+  width: 8px;
+  cursor: pointer;
+  pointer-events: auto;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    transparent 2px,
+    var(--bar) 2px,
+    var(--bar) 5px,
+    transparent 5px
+  );
+  opacity: 0.75;
+}
+.cm-diff-bar:hover,
+.cm-diff-bar[data-open] {
+  opacity: 1;
+  background: linear-gradient(
+    to right,
+    transparent 1px,
+    var(--bar) 1px,
+    var(--bar) 6px,
+    transparent 6px
+  );
+}
+.cm-diff-bar-added {
+  --bar: #16a34a;
+}
+.cm-diff-bar-deleted {
+  --bar: #dc2626;
+}
+.cm-diff-bar-decided {
+  --bar: var(--brand-base);
+}
+/* The other side's wording, opened at the verse: a block inside the line, so
+   the paragraph breaks at this verse and not above the whole paragraph. */
+.cm-diff-was-box {
+  display: block;
+  text-indent: 0;
+  margin: 4px 0;
+  user-select: none;
+}
+.cm-diff-was {
+  border-inline-start: 3px solid color-mix(in srgb, #dc2626 55%, transparent);
+  background-color: color-mix(in srgb, #dc2626 8%, transparent);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+.cm-diff-was .cm-content {
+  padding: 2px 0;
+}
+/* The stamp brings the page's paper with it; the block's own tint shows. */
+.cm-diff-was .cm-editor,
+.cm-diff-was .cm-mode-regular,
+.cm-diff-was .cm-scroller,
+.cm-diff-was .cm-content {
+  background: transparent;
+}
 .cm-diff-controls {
   min-width: 60px;
   padding-inline-start: 4px;
