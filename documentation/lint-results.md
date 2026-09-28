@@ -48,7 +48,7 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
 | fallow dead code (`pnpm deadcode`) | 0 issue(s) | every deploy; advisory on branches |
 | fallow duplication | 1.9% in 50 clone group(s) | none — advisory |
-| suppression comments | 11 | each listed below with its reason |
+| suppression comments | 12 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file
 
@@ -58,6 +58,7 @@ None.
 
 | file | suppresses | says |
 | --- | --- | --- |
+| `src/App.tsx` | `oxlint-disable-next-line` | no-debugger -- temporary screenshot aid |
 | `src/app/composition.ts` | `oxlint-disable-next-line` | no-console -- the telemetry bridge itself failed; the ring cannot report on its own exporter |
 | `src/app/ProjectContext.tsx` | `oxlint-disable-next-line` | solid/reactivity -- runs once, when composition settles, under the component's owner |
 | `src/app/ui/cloud/CloudScreen.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: reads the query once, when the transfer settles |

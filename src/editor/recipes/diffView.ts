@@ -278,6 +278,26 @@ const paintField = StateField.define<Painted>({
         !touched.some((range) => range.from <= to && range.to >= from),
     });
 
+    // Only the reader's own typing and deleting in THIS view. A take, a put
+    // back, an undo or an edit from another surface replaces whole stretches
+    // (a take is the other side's verse, markup and all), and drawing that as
+    // typing struck the entire verse, raw USFM included, for the moment
+    // before the comparison. Those just map, and wait for it.
+    const typed = tr.isUserEvent("input") || tr.isUserEvent("delete");
+    if (!typed) {
+      const pending: Pending = {
+        removed: held.pending.removed.map((cut) => ({
+          at: tr.changes.mapPos(cut.at, -1),
+          text: cut.text,
+        })),
+        added: held.pending.added.map((range) => ({
+          from: tr.changes.mapPos(range.from, -1),
+          to: tr.changes.mapPos(range.to, 1),
+        })),
+      };
+      return { ...held, set, pending, shown: showing(tr.state, set, pending) };
+    }
+
     // What this edit adds to the reader's own pending changes, in the OLD
     // document's positions until the end, where it is all mapped at once.
     const removed = [...held.pending.removed];
