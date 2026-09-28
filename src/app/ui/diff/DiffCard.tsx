@@ -124,7 +124,8 @@ export function DiffCard(props: {
     name: "cardRight",
   });
 
-  const formatting = (): boolean => props.hunk.units.every(isFormatting);
+  const formatting = (): boolean =>
+    props.hunk.units.length > 0 && props.hunk.units.every(isFormatting);
   const usfm = (): boolean => props.usfm || formatting();
 
   /**
@@ -315,9 +316,11 @@ export function DiffCard(props: {
   );
 
   const status = (): string =>
-    props.hunk.units.length === 1
-      ? (props.hunk.units[0]?.status ?? "")
-      : `${props.hunk.units.length} changes`;
+    props.hunk.units.length === 0
+      ? ""
+      : props.hunk.units.length === 1
+        ? (props.hunk.units[0]?.status ?? "")
+        : `${props.hunk.units.length} changes`;
 
   return (
     <CardFrame

@@ -41,6 +41,8 @@ export interface Hunk {
   readonly bookId: string;
   /** `"<book> <address>"` — stable while the unit is: the list's row key. */
   readonly key: string;
+  /** Its own unit's reference ("1:4"): the card's title, kept when its changes go. */
+  readonly reference: string;
   /** The engine's changes inside this unit: what the card decides. */
   readonly units: readonly DecisionUnit[];
   /**
@@ -181,6 +183,7 @@ export const hunksOf = (options: {
     out.push({
       bookId: options.bookId,
       key,
+      reference: own[0] === undefined ? "" : unitReference(own[0]),
       units: own,
       all: options.units.slice(low, Math.max(low, high)),
       currentStart: beforeCurrent[low] ?? 0,
@@ -205,10 +208,7 @@ export const estimate = (hunk: Hunk): number =>
   60 + Math.ceil((hunk.current.to - hunk.current.from) / CHARS_PER_LINE) * 30;
 
 /** The card's place: its own unit's reference ("1:4"). */
-export const hunkLabel = (hunk: Hunk): string => {
-  const first = hunk.units[0];
-  return first === undefined ? "" : unitReference(first);
-};
+export const hunkLabel = (hunk: Hunk): string => hunk.reference;
 
 /** A change whose words are the same on both sides: markup, or spacing. */
 export const isFormatting = (unit: DecisionUnit): boolean =>
@@ -220,6 +220,7 @@ export const isFormatting = (unit: DecisionUnit): boolean =>
  * card says how many, since the rest are the words.
  */
 export const hunkKind = (units: readonly DecisionUnit[]): string | undefined => {
+  if (units.length === 0) return undefined;
   const spaces = units.filter((unit) => unit.isWhitespaceChange).length;
   const markup = units.filter(
     (unit) => !unit.isWhitespaceChange && unit.isUsfmStructureChange,

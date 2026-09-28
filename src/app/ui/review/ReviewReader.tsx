@@ -147,6 +147,8 @@ export function ReviewReader(props: {
   readonly seat: (bookId: BookId) => Promise<EditorBook | undefined>;
   /** An edit made in the result pane was accepted. */
   readonly onEdited: (bookId: BookId) => void;
+  /** Whether a card is being edited: while it is, the reader must stay mounted. */
+  readonly onEditing?: (editing: boolean) => void;
   /**
    * Which text a split puts on the left. Review puts the current side where
    * its picker is (the default); History reads was-then-now, before on the
@@ -598,7 +600,7 @@ export function ReviewReader(props: {
         sideOf() === side ? undefined : side,
       );
     return (
-      <Show when={props.decidable}>
+      <Show when={props.decidable && cardProps.hunk.units.length > 0}>
         <Button
           size="sm"
           variant={sideOf() === "current" ? "secondary" : "tertiary"}
@@ -963,6 +965,9 @@ export function ReviewReader(props: {
               candidate.hunk.current.to > pinned.hunk.current.from
             }
             goneLabel={t("No longer a change")}
+            // Held by the edit that ended it: nothing left to paint or decide.
+            whenGone={(item) => ({ ...item, hunk: { ...item.hunk, units: [], all: [] } })}
+            onEditing={(now) => props.onEditing?.(now)}
             ref={(scrollTo) => {
               goTo = scrollTo;
             }}

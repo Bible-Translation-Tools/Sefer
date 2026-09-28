@@ -85,6 +85,12 @@ export interface CardListProps<T> {
   readonly goneLabel?: string;
   /** What the results are OF; when it changes, the one-line rows go. */
   readonly resultsKey?: string;
+  /**
+   * Whether a card is being edited. A screen that swaps the list for an empty
+   * state when the results run out must not while this is true: the edit that
+   * ended the last result is still under way in the card it ended.
+   */
+  readonly onEditing?: (editing: boolean) => void;
   readonly focus?: string;
   readonly onActive?: (section: string) => void;
   readonly ref?: (goTo: (key: string) => void) => void;
@@ -193,6 +199,13 @@ export function CardList<T>(props: CardListProps<T>) {
     () => props.resultsKey,
     () => {
       if (untrack(lines).length > 0) setLines([]);
+    },
+  );
+
+  createEffect(
+    () => editing() !== undefined,
+    (now) => {
+      props.onEditing?.(now);
     },
   );
 

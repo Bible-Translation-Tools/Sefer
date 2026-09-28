@@ -393,6 +393,12 @@ export function ReviewPanel() {
 
   const changed = (): readonly BookComparison[] =>
     result()?.books.filter((book) => !book.identical) ?? [];
+  /**
+   * A card is being edited. The edit that makes the last book identical is
+   * still under way in its card, so the reader stays until Done — the card
+   * held there as "No longer a change" — and only then says "No differences."
+   */
+  const [cardEditing, setCardEditing] = createSignal(false, { name: "reviewCardEditing" });
 
   const current = (): BookComparison | undefined => {
     const found = result();
@@ -1223,7 +1229,7 @@ export function ReviewPanel() {
 
         <Show when={result()} fallback={<EmptyState title={t("Nothing to review yet.")} />}>
           <Show
-            when={changed().length > 0}
+            when={changed().length > 0 || cardEditing()}
             fallback={
               <EmptyState
                 icon={<Check size={20} />}
@@ -1266,6 +1272,7 @@ export function ReviewPanel() {
                 resultAvailable={resultAvailable()}
                 seat={seatBook}
                 onEdited={(bookId) => shell.changed({ kind: "book.apply", books: [bookId] })}
+                onEditing={setCardEditing}
               />
             </div>
           </Show>
