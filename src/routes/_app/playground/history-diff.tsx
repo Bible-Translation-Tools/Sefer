@@ -21,8 +21,15 @@ interface HistoryDiffSearch {
   readonly remote?: string;
 }
 
+// A commit prefix that happens to be all digits arrives as a NUMBER when a
+// link was typed by hand (the router reads search values as JSON, and quotes
+// its own); it is still the prefix it spells.
 const stringOr = (value: unknown): string | undefined =>
-  typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
+  typeof value === "number" && Number.isSafeInteger(value)
+    ? String(value)
+    : typeof value === "string" && value.trim() !== ""
+      ? value.trim()
+      : undefined;
 
 export const Route = createFileRoute("/_app/playground/history-diff")({
   beforeLoad: () => {

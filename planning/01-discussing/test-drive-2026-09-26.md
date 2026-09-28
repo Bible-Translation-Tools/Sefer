@@ -115,6 +115,8 @@ Both: regular or USFM mode; per-unit gutter controls — ↶ takes the earlier t
 
 **What it is.** The plan's primitives 1, 3, 5a and 6a–6c, driving the history timeline: a pack-cached Git view; an all-books change index built in a worker under a shared Web Lock, stored outside the project and extended incrementally; a book's history from it in milliseconds; each commit's other changed books; a merge's common ancestor and changed-on-both-sides facts. Plan: `planning/01-discussing/local-review-and-history-plan.md` ("Prototype on the spike branch"); numbers and links in `planning/scratch/history-metadata-spike.md`.
 
+**The reading (2026-09-28):** the change in the middle of the commit strip is shown with Review's own reader, reading only: cards or the whole book (landing on the first change), side by side when there is room — before on the left, after on the right — or one text from View, the kind filter, next/previous. The strip above is the timeline: Earlier / Later, or scroll it.
+
 **Drive it:**
 
 1. `http://127.0.0.1:3001/playground/history-diff?project=en_ulb&book=01-GEN.usfm` — the first open builds the index in the background (~5 s; progress beside the book picker) while the timeline walks; the next open is from the stored index ("history index stored").

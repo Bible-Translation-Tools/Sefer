@@ -6,6 +6,7 @@ import { For, Show, createEffect, createMemo, createSignal, flush, untrack } fro
 import { describe } from "#app/describe";
 import { useShell } from "#app/ProjectContext";
 import { Badge, Card, Select } from "#app/ui/primitives";
+import { ReviewReader, type ReviewBook } from "#app/ui/review/ReviewReader";
 import { ShellGate } from "#app/ui/ShellGate";
 import { nodeFsView } from "#core/fileSystem/nodeView";
 import { joinPath, lastSegment } from "#core/fileSystem/path";
@@ -29,7 +30,7 @@ import {
 } from "./history/bookIndex";
 import { ensureIndex } from "./history/indexStore";
 import { packView, type PackView } from "./history/packView";
-import { inOrder, UnitBody } from "./units";
+import { inOrder } from "./units";
 
 /** Decoded book texts by blob id; neighbouring slides share one string. */
 const TEXT_CACHE_LIMIT = 8;
@@ -79,18 +80,6 @@ const labelPath = (path: string): string => {
 const dateLabel = (at: number): string =>
   new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(at);
 const firstLine = (message: string): string => message.split("\n", 1)[0] ?? "(no commit message)";
-const chapterLabel = (chapter: ChapterChangeScope): string => {
-  const base =
-    chapter.kind === "frontMatter"
-      ? "Front matter"
-      : chapter.chapter === 0
-        ? "Book opening"
-        : chapter.kind === "chapterOpen"
-          ? `Chapter ${chapter.chapter} opening`
-          : `Chapter ${chapter.chapter}`;
-  return chapter.occurrence > 0 ? `${base} · occurrence ${chapter.occurrence + 1}` : base;
-};
-
 // By id, not by importing the route module: that module lazy-loads this page.
 const Route = getRouteApi("/_app/playground/history-diff");
 
@@ -802,6 +791,35 @@ function ReadyHistoryDiffPage() {
       ?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   };
   const more = (): string => (historyEnd() === undefined && historyFailure() === "" ? "+" : "");
+
+  /** The change in the middle of the strip, and it as the reader's one book. */
+  const shownFrame = (): Frame | undefined => {
+    const commit = commits()[shown()];
+    return commit === undefined ? undefined : frameOf(commit);
+  };
+  const [usfm, setUsfm] = createSignal(false, { name: "historyUsfm" });
+  const readerBooks = createMemo(
+    (): readonly ReviewBook[] => {
+      const held = ready(shownFrame());
+      if (held === undefined) return [];
+      return [
+        {
+          bookId: held.bench.bookId,
+          name: held.bench.bookId,
+          currentText: held.bench.currentText,
+          baselineText: held.bench.baselineText,
+          skeleton: held.bench.skeleton ?? {
+            units: [],
+            slots: [],
+            baselineLen: 0,
+            currentLen: 0,
+            engine: true,
+          },
+        },
+      ];
+    },
+    { name: "historyReaderBooks" },
+  );
   const ready = (frame: Frame | undefined): ReadyFrame | undefined =>
     frame?.kind === "ready" ? frame : undefined;
   const failed = (frame: Frame | undefined): string =>
@@ -952,9 +970,14 @@ function ReadyHistoryDiffPage() {
                 return (
                   <article
                     data-slide={index}
-                    class="flex h-[70vh] w-[min(46rem,calc(100vw-4rem))] shrink-0 snap-center flex-col overflow-hidden rounded-md border border-surface-border bg-surface-primary"
+                    aria-current={shown() === index ? "true" : undefined}
+                    class={
+                      shown() === index
+                        ? "w-80 shrink-0 snap-center overflow-hidden rounded-md border border-brand bg-surface-primary ring-1 ring-brand"
+                        : "w-80 shrink-0 snap-center overflow-hidden rounded-md border border-surface-border bg-surface-primary opacity-80"
+                    }
                   >
-                    <header class="border-b border-surface-border bg-surface-secondary px-4 py-3">
+                    <header class="px-4 py-3">
                       <p class="text-smallest text-on-surface-tertiary">
                         {dateLabel(newer()?.at ?? 0)} · {older()?.id.slice(0, 8)} →{" "}
                         {newer()?.id.slice(0, 8)}
@@ -1007,69 +1030,9 @@ function ReadyHistoryDiffPage() {
                         </Show>
                       </p>
                     </header>
-                    <div class="min-h-0 flex-1 overflow-y-auto">
-                      <Show when={frame() === undefined}>
-                        <p class="p-4 text-smallest text-on-surface-tertiary">
-                          Comparing with the previous version…
-                        </p>
-                      </Show>
-                      <Show when={failed(frame())}>
-                        <p class="p-4 text-small text-on-surface-error">{failed(frame())}</p>
-                      </Show>
-                      <Show when={ready(frame())}>
-                        {(held) => (
-                          <>
-                            <Show when={held().chapters.length === 0}>
-                              <p class="p-4 text-small text-on-surface-secondary">
-                                No changed units: this commit changed the file without changing any
-                                decision unit.
-                              </p>
-                            </Show>
-                            <For each={held().chapters}>
-                              {(group) => (
-                                <section
-                                  data-history-chapter={`${group.chapter.chapter}:${group.chapter.occurrence}`}
-                                >
-                                  <h3 class="sticky top-0 border-y border-surface-border bg-surface-secondary px-4 py-1.5 text-smallest font-medium">
-                                    {chapterLabel(group.chapter)}
-                                  </h3>
-                                  <div class="divide-y divide-surface-border">
-                                    <For each={group.units}>
-                                      {(unit) => (
-                                        <div
-                                          class="grid gap-2 px-4 py-3 md:grid-cols-[4.5rem_minmax(0,1fr)]"
-                                          data-status={unit.status}
-                                        >
-                                          <span class="pt-0.5 font-mono text-smallest text-on-surface-tertiary">
-                                            {unitReference(unit)}
-                                          </span>
-                                          <div class="min-w-0">
-                                            <UnitBody
-                                              bench={held().bench}
-                                              unit={unit}
-                                              split={false}
-                                              tone="wasNow"
-                                            />
-                                            <Show
-                                              when={unit.relabeled || unit.isUsfmStructureChange}
-                                            >
-                                              <p class="mt-1 text-[10px] text-on-surface-tertiary">
-                                                {unit.relabeled ? "address changed " : ""}
-                                                {unit.isUsfmStructureChange ? "markup change" : ""}
-                                              </p>
-                                            </Show>
-                                          </div>
-                                        </div>
-                                      )}
-                                    </For>
-                                  </div>
-                                </section>
-                              )}
-                            </For>
-                          </>
-                        )}
-                      </Show>
-                    </div>
+                    <Show when={failed(frame())}>
+                      <p class="px-4 pb-3 text-smallest text-on-surface-error">{failed(frame())}</p>
+                    </Show>
                   </article>
                 );
               }}
@@ -1110,6 +1073,51 @@ function ReadyHistoryDiffPage() {
               </Show>
             </div>
           </div>
+          {/* The change in the middle of the strip, read as Review reads a
+              difference: cards or the whole book, side by side when there is
+              room (before on the left), or one text. Reading only. */}
+          <Show
+            when={ready(shownFrame())}
+            fallback={
+              <p class="p-4 text-smallest text-on-surface-tertiary">
+                Comparing with the previous version…
+              </p>
+            }
+          >
+            {/* Keyed by the change: each commit is its own comparison, so the
+                reader starts at its first change rather than carrying the last
+                commit's place over. Layout and scope are preferences and stay. */}
+            <Show when={commits()[shown()]?.id} keyed>
+              {(commitId) => (
+                <div
+                  class="flex h-[75vh] min-h-[480px] flex-col"
+                  data-history-reader
+                  data-commit={commitId}
+                >
+                  <ReviewReader
+                    books={readerBooks()}
+                    decision={() => undefined}
+                    decide={() => {}}
+                    decidable={false}
+                    usfm={usfm()}
+                    onUsfm={setUsfm}
+                    currentLabel="After this change"
+                    baselineLabel="Before this change"
+                    currentShort="this change"
+                    baselineShort="the version before"
+                    selected={readerBooks()[0]?.bookId}
+                    onSelect={() => {}}
+                    mode="compare"
+                    onMode={() => {}}
+                    resultAvailable={false}
+                    seat={() => Promise.resolve(undefined)}
+                    onEdited={() => {}}
+                    currentFirst={false}
+                  />
+                </div>
+              )}
+            </Show>
+          </Show>
           <p class="text-smallest text-on-surface-tertiary">
             Held: at most {FRAME_LIMIT} comparisons and {TEXT_CACHE_LIMIT} decoded book texts (
             {TEXT_CACHE_CODE_UNIT_LIMIT / (1024 * 1024)}M UTF-16 code units), keyed by blob id. A

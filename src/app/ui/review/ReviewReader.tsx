@@ -144,6 +144,12 @@ export function ReviewReader(props: {
   readonly seat: (bookId: BookId) => Promise<EditorBook | undefined>;
   /** An edit made in the result pane was accepted. */
   readonly onEdited: (bookId: BookId) => void;
+  /**
+   * Which text a split puts on the left. Review puts the current side where
+   * its picker is (the default); History reads was-then-now, before on the
+   * left.
+   */
+  readonly currentFirst?: boolean;
 }) {
   const shell = useShell();
   const { services } = shell;
@@ -491,6 +497,17 @@ export function ReviewReader(props: {
     setPlace(held?.shown.indexOf(first));
   };
 
+  /** Into the whole book at its first change — not at the title page. */
+  const enterBook = (): void => {
+    const first = untrack(selectedBook)?.shown[0];
+    if (untrack(opened) === undefined && first !== undefined) {
+      steeredAt = performance.now();
+      setOpened({ unit: first, card: "" });
+      setPlace(0);
+    }
+    setScope("book");
+  };
+
   const backToCards = (): void => {
     const card = untrack(opened)?.card;
     setScope("changes");
@@ -659,7 +676,9 @@ export function ReviewReader(props: {
                       </Show>
                       <span class="min-w-0 flex-1 truncate">{held.book.name}</span>
                       <span class="shrink-0 text-smallest tabular-nums text-on-surface-tertiary">
-                        {`${decidedOf(held)}/${held.shown.length}`}
+                        {props.decidable
+                          ? `${decidedOf(held)}/${held.shown.length}`
+                          : String(held.shown.length)}
                       </span>
                     </button>
                   </li>
@@ -771,7 +790,7 @@ export function ReviewReader(props: {
           size="sm"
           label={t("How much to show")}
           value={scope()}
-          onChange={(value) => (value === "book" ? setScope("book") : backToCards())}
+          onChange={(value) => (value === "book" ? enterBook() : backToCards())}
           items={[
             {
               value: "changes",
@@ -888,10 +907,12 @@ export function ReviewReader(props: {
                     </For>
                   </Select>
                   <Badge tone="muted">
-                    {t("{decided} decided of {total}", {
-                      decided: decidedOf(held()),
-                      total: held().shown.length,
-                    })}
+                    {props.decidable
+                      ? t("{decided} decided of {total}", {
+                          decided: decidedOf(held()),
+                          total: held().shown.length,
+                        })
+                      : t("{total} changes", { total: held().shown.length })}
                   </Badge>
                   <div class="ms-auto">
                     <BookActions held={held()} />
@@ -906,7 +927,7 @@ export function ReviewReader(props: {
                   controls={controls().get(held().book.bookId)}
                   currentLabel={props.currentLabel}
                   baselineLabel={props.baselineLabel}
-                  currentFirst
+                  currentFirst={props.currentFirst !== false}
                   observability={observability}
                   initial={opened()?.unit}
                   live={liveFor(held().book.bookId)}
@@ -947,11 +968,16 @@ export function ReviewReader(props: {
                     {held()?.book.name ?? section().key}
                   </strong>
                   <span class="text-smallest text-on-surface-tertiary">
-                    {t("{cards} cards · {decided} of {total} decided", {
-                      cards: section().rows.length,
-                      decided: decidedOf(held()),
-                      total: held()?.shown.length ?? 0,
-                    })}
+                    {props.decidable
+                      ? t("{cards} cards · {decided} of {total} decided", {
+                          cards: section().rows.length,
+                          decided: decidedOf(held()),
+                          total: held()?.shown.length ?? 0,
+                        })
+                      : t("{cards} cards · {total} changes", {
+                          cards: section().rows.length,
+                          total: held()?.shown.length ?? 0,
+                        })}
                   </span>
                   <div class="ms-auto">
                     <Show when={held()}>{(found) => <BookActions held={found()} />}</Show>
@@ -969,7 +995,7 @@ export function ReviewReader(props: {
                   controls={controls().get(item().hunk.bookId)}
                   currentLabel={props.currentLabel}
                   baselineLabel={props.baselineLabel}
-                  currentFirst
+                  currentFirst={props.currentFirst !== false}
                   live={liveFor(item().hunk.bookId)}
                   onEditing={() => {
                     const hunk = item().hunk;
