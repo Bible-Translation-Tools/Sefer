@@ -291,8 +291,13 @@ export function BookDiff(props: {
     }),
     ({ text }) => {
       for (const entry of mounts) {
-        if (entry.live && entry.mount.view.state.doc.length !== text.length) continue;
-        entry.mount.repaint(entry.paint());
+        if (entry.live) {
+          // Painted only over EXACTLY the text compared, as a card is.
+          const doc = entry.mount.view.state.doc;
+          if (doc.length !== text.length || doc.toString() !== text) continue;
+        }
+        // A snapshot of the decisions: the compute above is what tracks them.
+        entry.mount.repaint(untrack(entry.paint));
       }
     },
   );

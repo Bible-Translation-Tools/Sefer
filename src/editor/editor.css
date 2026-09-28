@@ -1143,14 +1143,24 @@
 
 /* Editing in a card — Find, Key terms, Findings, Review's editable side: a
    thin accent outline around the text, the same everywhere, so "you are typing
-   in the book here" reads the same on every screen. An outline, not a border,
+   in the book here" reads the same on every screen. An overlay, not a border,
    so starting to edit never shifts the layout; inset, so a card's rounded
-   clipping never cuts it. */
+   clipping never cuts it. Not an `outline` on the host: that paints UNDER the
+   editor's own layers, and a card with a gutter (Review's, which CodeMirror
+   stacks above the text) covered it. */
 .cm-editing,
-.cm-diff-live:focus-within {
-  outline: 1.5px solid var(--brand-base);
-  outline-offset: -3px;
-  border-radius: 12px;
+.cm-diff-live {
+  position: relative;
+}
+.cm-editing::after,
+.cm-diff-live:focus-within::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border: 1.5px solid var(--brand-base);
+  border-radius: 10px;
+  pointer-events: none;
+  z-index: 300;
 }
 
 /* A diff card in "Changes as excerpts": the diff view clipped to one change,

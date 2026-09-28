@@ -311,7 +311,8 @@ export function DiffCard(props: {
           const doc = pane.mount.view.state.doc;
           if (doc.length !== text.length || doc.toString() !== text) continue;
         }
-        pane.mount.repaint(pane.paint());
+        // A snapshot of the decisions: the compute above is what tracks them.
+        pane.mount.repaint(untrack(pane.paint));
       }
     },
   );
