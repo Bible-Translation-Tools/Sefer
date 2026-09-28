@@ -20,6 +20,7 @@ import {
   withoutHits,
   type BookExcerpts,
   type Excerpt,
+  type Occurrence,
   type OutlineRow,
 } from "#core/excerpts/excerpts";
 import type { Analysis } from "#core/galley";
@@ -208,6 +209,48 @@ export function ExcerptList(props: ExcerptListProps) {
     (): readonly VirtualSection<Excerpt>[] => props.groups.map(sectionOf),
     { name: "excerptSections" },
   );
+  /**
+   * Every result of each book, sorted by where it starts — so a card can paint
+   * the ones that fall in its context, not only its own. By BOOK, not by
+   * section: Findings sections by code, and a finding of another code in the
+   * same verses is still in the text the card shows.
+   */
+  const hitsByBook = createMemo(
+    () => {
+      const held = new Map<BookId, Occurrence[]>();
+      for (const group of props.groups)
+        for (const excerpt of group.excerpts)
+          for (const hit of excerpt.hits) {
+            const list = held.get(excerpt.bookId);
+            if (list === undefined) held.set(excerpt.bookId, [hit]);
+            else list.push(hit);
+          }
+      for (const list of held.values()) list.sort((a, b) => a.from - b.from);
+      return held;
+    },
+    { name: "excerptHitsByBook" },
+  );
+  /** The book's other results inside `excerpt`'s stretch. */
+  const nearbyOf = (excerpt: Excerpt): readonly Occurrence[] => {
+    const all = hitsByBook().get(excerpt.bookId);
+    if (all === undefined) return [];
+    let lo = 0;
+    let hi = all.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if ((all[mid]?.from ?? 0) < excerpt.span.from) lo = mid + 1;
+      else hi = mid;
+    }
+    const own = new Set(excerpt.hits.map((hit) => hit.from));
+    const out: Occurrence[] = [];
+    for (let at = lo; at < all.length; at += 1) {
+      const hit = all[at];
+      if (hit === undefined || hit.from >= excerpt.span.to) break;
+      if (hit.to <= excerpt.span.to && !own.has(hit.from)) out.push(hit);
+    }
+    return out;
+  };
+
   const nameOf = (bookId: string): BookExcerpts | undefined =>
     props.groups.find((group) => group.bookId === bookId);
 
@@ -344,6 +387,7 @@ export function ExcerptList(props: ExcerptListProps) {
             notes={props.decor?.notes?.(excerpt(), key)}
             actions={props.decor?.actions?.(excerpt(), key)}
             markTone={props.decor?.markTone}
+            nearby={session.gone ? [] : nearbyOf(props.shownOf?.(excerpt()) ?? excerpt())}
           />
         )}
       />

@@ -674,7 +674,12 @@ export function ReviewReader(props: {
     )),
   );
 
-  const editable = (): boolean => props.mode === "result" && props.resultAvailable;
+  /**
+   * A card can be edited whenever its current side IS the working text — this
+   * project, in the editor — in either mode: the modes differ in what a
+   * decision does, not in whether the text is yours. Two zips are read only.
+   */
+  const editable = (): boolean => props.resultAvailable;
 
   /**
    * Result mode's working text, live: every book in the review, seated once,

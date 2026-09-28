@@ -322,12 +322,11 @@ export function DiffCard(props: {
       onEdit={() => props.onEdit?.()}
       onDone={() => props.onDone?.()}
       open={props.open}
-      // Double-click: into the editor where the card can be edited, the way
-      // every card opens; where it cannot, to the whole book.
+      // Double-click edits, as on every card; a card that cannot be edited
+      // does nothing — the book icon is the one way into the whole book, so a
+      // gesture never takes the reader somewhere else.
       onDblClick={() => {
-        if (props.editing === true) return;
-        if (props.editable === true) props.onEdit?.();
-        else props.onOpen?.();
+        if (props.editing !== true && props.editable === true) props.onEdit?.();
       }}
     >
       <Show when={props.split}>

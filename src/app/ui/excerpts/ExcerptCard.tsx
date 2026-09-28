@@ -131,6 +131,12 @@ export interface ExcerptCardProps {
    * marks an error and a warning differently.
    */
   readonly markTone?: (source: number | undefined, excerpt: Excerpt) => MarkTone | undefined;
+  /**
+   * The book's OTHER results inside this card's stretch — a match in the verse
+   * before, a finding in the context. Painted like the card's own: the text
+   * says the same thing wherever the card happens to begin.
+   */
+  readonly nearby?: readonly Occurrence[];
 }
 
 /**
@@ -275,7 +281,15 @@ export function ExcerptCard(props: ExcerptCardProps) {
   );
 
   const marks = createMemo(
-    () => marksOf(props.excerpt, props.excerpt.hits, props.active, props.markTone),
+    () =>
+      marksOf(
+        props.excerpt,
+        props.nearby === undefined || props.nearby.length === 0
+          ? props.excerpt.hits
+          : [...props.excerpt.hits, ...props.nearby],
+        props.active,
+        props.markTone,
+      ),
     { name: "excerptMarks" },
   );
 
