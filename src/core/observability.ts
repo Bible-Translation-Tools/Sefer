@@ -94,6 +94,8 @@ export type OperationName =
   /** The Find Project table's one read of the catalogue. */
   | "catalogue.browse"
   | "find.run"
+  /** One book's hits again, after an edit in one of its cards. */
+  | "find.retake"
   /** Jumping from the Findings panel to a finding's span in the editor. */
   | "findings.navigate"
   /** One bound reference read and measured against the open book. */

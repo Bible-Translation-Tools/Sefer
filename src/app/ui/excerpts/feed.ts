@@ -64,8 +64,8 @@ export interface ExcerptFeed {
     to?: number,
     into?: ObservabilityService,
   ) => void;
-  /** An excerpt's edit session ended: rebuild, then tell the caller. */
-  readonly edited: () => void;
+  /** An edit in a card, at a pause or when it ends: rebuild, then tell the caller. */
+  readonly edited: (bookId: BookId) => void;
 }
 
 export interface ExcerptFeedOptions {
@@ -76,6 +76,12 @@ export interface ExcerptFeedOptions {
    * needs nothing, because the model already re-read the books.
    */
   readonly onEdited?: () => void;
+  /**
+   * Re-takes ONE book's results against its text as it stands now, when the
+   * screen can (Find: a fresh reading of that book). Called at once — there is
+   * nothing to wait for — in place of `onEdited`'s wait for the corpus.
+   */
+  readonly retake?: (bookId: BookId) => void;
   /** Names this screen's `openInEditor` span — "find", "terms". */
   readonly name: string;
   /**
@@ -238,13 +244,14 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
         const own = byBook.get(book.bookId) ?? [];
         const stamp = shell.stampOf(book.bookId);
         const before = held.get(book.bookId);
-        const reuse =
-          before !== undefined &&
-          stamp !== undefined &&
-          before.revision === stamp.revision &&
-          before.length === stamp.length &&
-          before.analysis === book.analysis &&
-          sameHits(before.hits, own);
+        // Reused whenever the HITS are the same. When the book's text moved
+        // and its hits did not — an edit, before the screen re-takes them —
+        // those hits are at offsets the edit has moved, and regrouping from
+        // them would paint every card of the book in the wrong place. The
+        // cards already on screen follow the book live and map their marks
+        // through the edit; new hits (a re-take, a new search, a new pass)
+        // are what regroup the book, over its text as it then stands.
+        const reuse = before !== undefined && sameHits(before.hits, own);
         if (reuse) {
           reused += 1;
           groups.push(...before.groups);
@@ -294,15 +301,6 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
   };
 
   /**
-   * The book the open excerpt editor is editing.
-   *
-   * `seat` is the feed's only door to an editable excerpt, and an excerpt
-   * editor is a satellite on that one seat — so the book seated last is the
-   * book `edited()` is about. Remembered here rather than threaded back
-   * through `ExcerptList.onEdited`, which carries a card key and not a book.
-   */
-  let seated: BookId | undefined;
-  /**
    * Moves whenever this screen seats a book. `services.seated` is a plain map,
    * so without this a card mounted before the seat would never learn of it —
    * and the one card that asked to edit would be the only one to change.
@@ -328,7 +326,6 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
       shell.report(t("could not open book {book}", { book: bookId }));
       return undefined;
     }
-    seated = bookId;
     setSeats((held) => held + 1);
     return shell.services.seated(bookId);
   };
@@ -369,9 +366,13 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
    * behind. The next republish is the honest cue; the timeout is there because
    * an edit that was REFUSED republishes nothing at all.
    */
-  const edited = (): void => {
-    // Nothing seated means no excerpt was editable, so no edit was accepted.
-    shell.changed({ kind: "book.apply", books: seated === undefined ? [] : [seated] });
+  const edited = (bookId: BookId): void => {
+    shell.changed({ kind: "book.apply", books: [bookId] });
+    const now = options.retake;
+    if (now !== undefined) {
+      now(bookId);
+      return;
+    }
     const after = options.onEdited;
     if (after === undefined) return;
     void shell.services

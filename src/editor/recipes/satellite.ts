@@ -295,10 +295,26 @@ const markField = StateField.define<DecorationSet>({
   create: (state) => decorationsOf(state.facet(initialMarks)),
   update(marks, tr) {
     for (const effect of tr.effects) if (effect.is(setMarks)) return decorationsOf(effect.value);
-    return tr.docChanged ? marks.map(tr.changes) : marks;
+    if (!tr.docChanged) return marks;
+    // A mark whose own text an edit touched no longer describes it — the word
+    // it matched, the finding it flagged, is what the reader just changed. It
+    // goes at once rather than riding along until the screen's next results
+    // arrive; those paint whatever is true. Context shading is not a claim
+    // about the text, and stays.
+    const touched: { from: number; to: number }[] = [];
+    tr.changes.iterChangedRanges((_fromA, _toA, fromB, toB) =>
+      touched.push({ from: fromB, to: toB }),
+    );
+    return marks.map(tr.changes).update({
+      filter: (from, to, value) =>
+        value.spec.class === CONTEXT_CLASS ||
+        !touched.some((range) => range.from <= to && range.to >= from),
+    });
   },
   provide: (field) => EditorView.decorations.from(field),
 });
+
+const CONTEXT_CLASS = "cm-excerpt-context";
 
 /**
  * Paints `ranges` — the matches this excerpt was opened for — inside a

@@ -58,7 +58,7 @@ export interface StetViewProps {
   readonly seatedOf?: (bookId: BookId) => Funnel | undefined;
   readonly shownOf?: (excerpt: Excerpt) => Excerpt;
   readonly analyze: (text: string) => Analysis;
-  readonly onEdited?: () => void;
+  readonly onEdited?: (bookId: BookId) => void;
   readonly onExpand?: (sid: string, step: ContextStep) => void;
   /** The shell's mode, handed to the excerpt cards. */
   readonly mode?: "regular" | "usfm";

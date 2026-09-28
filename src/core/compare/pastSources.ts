@@ -47,13 +47,12 @@ export interface SavedText {
  * service so this stays `R = never` like every other source — a side captures
  * what it needs when it is CONSTRUCTED.
  *
- * A book with NO baseline reads as the book's own current text, and that is the
- * save model rather than a shortcut. Save `adopt`s a baseline wherever the
- * shell opens a book, so "no baseline" means nothing in this session has
- * touched the book at all — its text IS the bytes on disk. Reporting such a
- * book as absent would put all sixty-six books of a project somebody merely
- * opened on the "only in the editor" side, which is the exact bug the review's
- * baseline rule exists to prevent (documentation/architecture/review.md).
+ * A book with NO baseline reads as the book's own current text. That is no
+ * longer the ordinary case: the shell `adopt`s every book's baseline when the
+ * project opens (and Recovery before a replay), so every book has one. The
+ * fallback is kept for a book that somehow reaches here without — failing
+ * instead would refuse the whole comparison, since one unreadable side refuses
+ * all of it.
  */
 export const savedSource = (
   project: Project,

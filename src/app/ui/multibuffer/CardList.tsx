@@ -64,8 +64,11 @@ export interface CardListProps<T> {
   readonly bookOf: (item: T) => BookId;
   /** Plain → Instantiated, for the book being edited. */
   readonly seat: (bookId: BookId) => Promise<EditorBook | undefined>;
-  /** Re-take the results: at each pause in typing, and when an edit ends. */
-  readonly onRetake?: () => void;
+  /**
+   * Re-take the results for the book being edited: at each pause in typing,
+   * and when an edit ends. That book only — every other book's results stand.
+   */
+  readonly onRetake?: (bookId: BookId) => void;
   /** A card held by the pin after its result ended — its stale marks cleared. */
   readonly whenGone?: (item: T) => T;
   /** The one-line row's title. */
@@ -171,7 +174,7 @@ export function CardList<T>(props: CardListProps<T>) {
       if (!live || book === undefined) return;
       stop = book.changes(() => {
         if (timer !== undefined) clearTimeout(timer);
-        timer = setTimeout(() => props.onRetake?.(), PAUSE_MS);
+        timer = setTimeout(() => props.onRetake?.(bookId), PAUSE_MS);
       });
     });
     stopWatching = () => {
@@ -211,7 +214,7 @@ export function CardList<T>(props: CardListProps<T>) {
     stopWatching?.();
     setPin(undefined);
     setEditing(undefined);
-    props.onRetake?.();
+    if (held !== undefined) props.onRetake?.(props.bookOf(held.item));
   };
 
   return (

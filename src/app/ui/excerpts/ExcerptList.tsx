@@ -48,8 +48,11 @@ export interface ExcerptListProps {
   /** A book's seat while one is open, for every card of it to follow. */
   readonly seatedOf?: (bookId: BookId) => Funnel | undefined;
   readonly analyze: (text: string) => Analysis;
-  /** Told when an edit session ended, so the feed can re-read the books. */
-  readonly onEdited?: () => void;
+  /**
+   * Told the book an edit is in — at each pause, and when the edit ends — so
+   * the screen re-takes that book's results.
+   */
+  readonly onEdited?: (bookId: BookId) => void;
   /**
    * The verse sid the match cursor is on. Changing it scrolls that excerpt
    * into view — this is what the find bar's "1/62" and its arrows drive.
@@ -271,7 +274,7 @@ export function ExcerptList(props: ExcerptListProps) {
         sections={sections()}
         bookOf={(excerpt) => excerpt.bookId}
         seat={props.seat}
-        onRetake={() => props.onEdited?.()}
+        onRetake={(bookId) => props.onEdited?.(bookId)}
         // Gone from the results, so its highlights are stale: the text they
         // marked no longer matches, or no longer has the finding.
         whenGone={withoutHits}

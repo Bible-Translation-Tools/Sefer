@@ -40,7 +40,7 @@
 // instead. Those two are unreachable through `findAll` at any price.
 
 import type { BookId } from "../book/book";
-import type { GalleyService } from "../galley/galley";
+import type { GalleyService, MaskMap } from "../galley/galley";
 import type { SourceStamp } from "../source/source";
 
 /** A half-open range, in UTF-16 units, into a book's canonical text. */
@@ -185,7 +185,24 @@ const readingOf = (held: Held, text: string): string => {
   return parts.join("");
 };
 
-export const createReadings = (galley: GalleyService): Readings => {
+/**
+ * The readings over the engine's CORPUS: each book's mask as its registration
+ * holds it. Cheap for a whole-project search, and a scheduler pass behind a
+ * book that was just edited — a lagging book answers nothing, below.
+ */
+export const createReadings = (galley: GalleyService): Readings =>
+  readingsOver((subject) => galley.mask(subject.id));
+
+/**
+ * The readings over each subject's OWN text: a mask cut from the text in hand
+ * (`readerMask`, the loose-text door), so never behind it. For the one book a
+ * reader is editing, re-searched at a pause in typing — a mask of one book is
+ * a few milliseconds, and the corpus copy would be a pass behind.
+ */
+export const createFreshReadings = (galley: GalleyService): Readings =>
+  readingsOver((subject) => galley.readerMask(subject.text));
+
+const readingsOver = (maskOf: (subject: Subject) => MaskMap | undefined): Readings => {
   const held = new Map<BookId, Held>();
 
   const mapFor = (subject: Subject): Held | undefined => {
@@ -198,7 +215,7 @@ export const createReadings = (galley: GalleyService): Readings => {
     ) {
       return standing;
     }
-    const map = galley.mask(subject.id);
+    const map = maskOf(subject);
     if (map === undefined) {
       held.delete(subject.id);
       return undefined;

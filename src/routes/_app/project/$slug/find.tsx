@@ -33,7 +33,7 @@ import {
 } from "#core/excerpts/excerpts";
 import { bookHeading, type Analysis } from "#core/galley";
 import type { Address } from "#core/location/address";
-import { createReadings } from "#core/search/reading";
+import { createFreshReadings, createReadings } from "#core/search/reading";
 import * as Search from "#core/search/search";
 
 /**
@@ -335,6 +335,9 @@ function Find() {
    * here registers anything.
    */
   const run = async (over?: Over): Promise<void> => {
+    // What was searched before this run: the same search again is a re-take,
+    // and a re-take keeps the reader's place in the results.
+    const previous = untrack(searched);
     setPreview(undefined);
     setSearched("");
     const project = shell.project();
@@ -426,13 +429,55 @@ function Find() {
       return;
     }
     setProblem("");
-    setCursor(0);
+    if (previous !== signature(staticQuery, want)) setCursor(0);
     setHits(found.success);
     setSearched(signature(staticQuery, want));
     search.end("ready", {
       "find.hits": found.success.length,
       "find.hit_books": new Set(found.success.map((hit) => hit.bookId)).size,
     });
+  };
+
+  /**
+   * One book's hits again, after an edit in one of its cards — at a pause in
+   * typing, or on Done. Only that book is searched, against a reading cut from
+   * its text as it stands NOW (`createFreshReadings`), so it is never a pass
+   * behind; its hits are spliced in where the book's were and every other
+   * book's results stand, so the feed reuses their cards untouched.
+   */
+  const fresh = createFreshReadings(shell.services.galley);
+  const retake = (bookId: BookId): void => {
+    const project = shell.project();
+    const book = project?.book(bookId);
+    const staticQuery = query();
+    const want = scope();
+    if (project === undefined || book === undefined) return;
+    // Not a book search, or not one this list holds: the whole search again.
+    if (want === "reference" || staticQuery.text.length < Search.MINIMUM_QUERY) return;
+    if (want === "book" && focusedBook() !== bookId) return;
+    const op = shell.services.composition.observability.operation("find.retake", {
+      "find.book": bookId,
+      "find.markup": markup(),
+    });
+    const found = markup()
+      ? Search.find([book], staticQuery, { books: [bookId], analysisOf })
+      : Search.findInReading(fresh, [book], staticQuery, { books: [bookId], analysisOf });
+    if (Result.isFailure(found)) {
+      op.end("refused", { "find.reason": found.failure.reason });
+      return;
+    }
+    // In project order: the other books' hits as they were, this book's where
+    // its turn comes.
+    const order = new Map(project.books.map((entry, at) => [entry.id, at]));
+    const turn = order.get(bookId) ?? 0;
+    const others = untrack(hits).filter((hit) => hit.bookId !== bookId);
+    const at = others.findIndex((hit) => (order.get(hit.bookId) ?? 0) > turn);
+    const next =
+      at < 0
+        ? [...others, ...found.success]
+        : [...others.slice(0, at), ...found.success, ...others.slice(at)];
+    setHits(next);
+    op.end("ready", { "find.hits": found.success.length, "find.total": next.length });
   };
 
   const previewReplace = (): void => {
@@ -557,6 +602,8 @@ function Find() {
     onEdited: () => {
       void run();
     },
+    // An edit in a card re-takes that one book, against its text as it stands.
+    retake: (bookId) => retake(bookId),
   });
 
   /**

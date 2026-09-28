@@ -871,6 +871,16 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     await services.run(
       Effect.provideService(
         Effect.gen(function* () {
+          // Every book's text as read IS what disk holds, so Save is told so
+          // for every book, now — not only for books the main editor opens. A
+          // book first opened through a card (a Find result, a finding) had no
+          // baseline, and "no baseline" read as the book's current text, so an
+          // edit made there looked saved. The text is the same string, not a
+          // copy; `adopt` refuses a book already recorded or already edited.
+          const coordinator = yield* SaveCoordinator;
+          yield* Effect.forEach(ready.books, (book) => coordinator.adopt(book), {
+            discard: true,
+          });
           const analysis = yield* ProjectAnalysis;
           // The remembered book first. `attach` parses the whole project
           // serially either way; naming the landing book decides which parse
