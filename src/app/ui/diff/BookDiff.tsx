@@ -210,7 +210,7 @@ export function BookDiff(props: {
               modeView(mode, "cm-diff"),
               analyzer.of(live.analyze),
               readingLayer,
-              ...liveDiff(paint(), { strike: side === "unified" }),
+              ...liveDiff(paint()),
             ],
           });
           const mount: DiffViewMount = {

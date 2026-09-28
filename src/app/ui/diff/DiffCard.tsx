@@ -419,8 +419,6 @@ export function DiffCard(props: {
                       untrack(usfm),
                       untrack(() => props.split),
                     )(),
-                    // One text: what you delete is struck where it stood, at once.
-                    { strike: !untrack(() => props.split) },
                   )}
                   label={`review:${props.hunk.key}`}
                   reclip={false}

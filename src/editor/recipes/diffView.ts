@@ -195,73 +195,15 @@ const decorate = (state: EditorState, paint: DiffPaint): DecorationSet => {
   );
 };
 
-/**
- * What the reader's own typing has changed since the last comparison, drawn at
- * once rather than at the next one: a deleted stretch struck through where it
- * stood, typed text marked added. The comparison runs at a pause in typing;
- * until then a word deleted in a unified pane just vanished, and came back
- * struck through a moment later, which reads as the editor undoing you.
- * Only an approximation — deleting a word the other side has too shows it
- * struck, which the comparison confirms, and deleting your own addition shows
- * nothing, which it confirms too; anything subtler waits for the comparison,
- * which replaces all of it.
- */
-interface Pending {
-  /** Deleted text, where it stood: in the current document's positions. */
-  readonly removed: readonly { readonly at: number; readonly text: string }[];
-  readonly added: readonly { readonly from: number; readonly to: number }[];
-}
-
-interface Painted {
-  readonly paint: DiffPaint;
-  /** The comparison's decorations, mapped through the typing since. */
-  readonly set: DecorationSet;
-  readonly pending: Pending;
-  /** Strike what is deleted (a unified pane); a split pane shows it opposite. */
-  readonly strike: boolean;
-  readonly shown: DecorationSet;
-}
-
-const NO_PENDING: Pending = { removed: [], added: [] };
-
-const showing = (state: EditorState, set: DecorationSet, pending: Pending): DecorationSet => {
-  if (pending.removed.length === 0 && pending.added.length === 0) return set;
-  const doc = state.doc.length;
-  const extra = [
-    ...pending.added
-      .filter((range) => range.to > range.from && range.to <= doc)
-      .map((range) => Decoration.mark({ class: "cm-diff-added" }).range(range.from, range.to)),
-    ...pending.removed
-      .filter((cut) => cut.at <= doc && cut.text.trim() !== "")
-      .map((cut) =>
-        Decoration.widget({
-          widget: new Built(`typed-cut ${cut.at} ${cut.text}`, () => {
-            const span = document.createElement("span");
-            span.className = "cm-diff-struck";
-            span.textContent = cut.text.replace(/\s+/g, " ");
-            return span;
-          }),
-          side: -1,
-        }).range(cut.at),
-      ),
-  ];
-  return set.update({ add: extra, sort: true });
-};
-
-const paintField = StateField.define<Painted>({
+const paintField = StateField.define<{ paint: DiffPaint; set: DecorationSet }>({
   create: () => ({
     paint: { lines: [], marks: [], widgets: [], controls: [] },
     set: Decoration.none,
-    pending: NO_PENDING,
-    strike: false,
-    shown: Decoration.none,
   }),
   update(held, tr) {
     for (const effect of tr.effects)
-      if (effect.is(setPaint)) {
-        const set = decorate(tr.state, effect.value);
-        return { ...held, paint: effect.value, set, pending: NO_PENDING, shown: set };
-      }
+      if (effect.is(setPaint))
+        return { paint: effect.value, set: decorate(tr.state, effect.value) };
     if (!tr.docChanged) return held;
     // Mapped through the edit, and a WORD mark whose own text the edit touched
     // is dropped at once — the change it described is what the reader is now
@@ -272,53 +214,16 @@ const paintField = StateField.define<Painted>({
     tr.changes.iterChangedRanges((_fromA, _toA, fromB, toB) =>
       touched.push({ from: fromB, to: toB }),
     );
-    const set = held.set.map(tr.changes).update({
-      filter: (from, to, value) =>
-        !WORD_MARKS.has(String(value.spec.class)) ||
-        !touched.some((range) => range.from <= to && range.to >= from),
-    });
-
-    // What this edit adds to the reader's own pending changes, in the OLD
-    // document's positions until the end, where it is all mapped at once.
-    const removed = [...held.pending.removed];
-    const addedBefore = held.pending.added;
-    /** Was `[from, to)` itself an addition? Then deleting it is no change. */
-    const wasAdded = (from: number, to: number): boolean => {
-      if (addedBefore.some((range) => range.from <= from && range.to >= to)) return true;
-      let covered = false;
-      held.set.between(from, to, (start, end, value) => {
-        if (value.spec.class === "cm-diff-added" && start <= from && end >= to) covered = true;
-      });
-      return covered;
+    return {
+      ...held,
+      set: held.set.map(tr.changes).update({
+        filter: (from, to, value) =>
+          !WORD_MARKS.has(String(value.spec.class)) ||
+          !touched.some((range) => range.from <= to && range.to >= from),
+      }),
     };
-    const addedNow: { from: number; to: number }[] = [];
-    tr.changes.iterChanges((fromA, toA, fromB, toB) => {
-      if (held.strike && toA > fromA && !wasAdded(fromA, toA)) {
-        const text = tr.startState.doc.sliceString(fromA, toA);
-        // One struck stretch per run of deleting, not one per keystroke:
-        // Backspace deletes just before what it struck last, Delete just after.
-        const back = removed.findIndex((cut) => cut.at === toA);
-        const ahead = removed.findIndex((cut) => cut.at === fromA);
-        if (back >= 0) removed[back] = { at: fromA, text: text + (removed[back]?.text ?? "") };
-        else if (ahead >= 0)
-          removed[ahead] = { at: fromA, text: (removed[ahead]?.text ?? "") + text };
-        else removed.push({ at: fromA, text });
-      }
-      if (toB > fromB) addedNow.push({ from: fromB, to: toB });
-    });
-    const pending: Pending = {
-      removed: removed.map((cut) => ({ at: tr.changes.mapPos(cut.at, -1), text: cut.text })),
-      added: [
-        ...addedBefore.map((range) => ({
-          from: tr.changes.mapPos(range.from, -1),
-          to: tr.changes.mapPos(range.to, 1),
-        })),
-        ...addedNow,
-      ],
-    };
-    return { ...held, set, pending, shown: showing(tr.state, set, pending) };
   },
-  provide: (field) => EditorView.decorations.from(field, (held) => held.shown),
+  provide: (field) => EditorView.decorations.from(field, (held) => held.set),
 });
 
 const controlGutter = (): Extension =>
@@ -352,14 +257,8 @@ const controlGutter = (): Extension =>
  * decorations map through every edit until the next comparison repaints them
  * (`repaintDiff`).
  */
-export const liveDiff = (
-  paint: DiffPaint,
-  options: { readonly strike?: boolean } = {},
-): Extension[] => [
-  paintField.init((state) => {
-    const set = decorate(state, paint);
-    return { paint, set, pending: NO_PENDING, strike: options.strike === true, shown: set };
-  }),
+export const liveDiff = (paint: DiffPaint): Extension[] => [
+  paintField.init((state) => ({ paint, set: decorate(state, paint) })),
   controlGutter(),
 ];
 
@@ -383,10 +282,7 @@ export function mountDiffView(options: DiffViewOptions): DiffViewMount {
       projection.of(modeView(options.mode, surface)),
       ...(clip === undefined ? [] : [clipped(clip), renderRangeField.init(() => clip)]),
       // Seeded with the first paint, so the gutter's first pass has markers.
-      paintField.init((state) => {
-        const set = decorate(state, options.paint);
-        return { paint: options.paint, set, pending: NO_PENDING, strike: false, shown: set };
-      }),
+      paintField.init((state) => ({ paint: options.paint, set: decorate(state, options.paint) })),
       controlGutter(),
       EditorState.readOnly.of(true),
       EditorView.editable.of(false),
