@@ -229,6 +229,21 @@ export const commitsById = (index: BookIndex): ReadonlyMap<string, IndexedCommit
   return made;
 };
 
+/** Each parent not yet seen, queued once: the step both history walks share. */
+const enqueue = (
+  parents: readonly string[],
+  seen: Set<string>,
+  byId: ReadonlyMap<string, IndexedCommit>,
+  queue: IndexedCommit[],
+): void => {
+  for (const parent of parents) {
+    if (seen.has(parent)) continue;
+    seen.add(parent);
+    const next = byId.get(parent);
+    if (next !== undefined) queue.push(next);
+  }
+};
+
 /**
  * One book's history, newest first, with git's default simplification: a
  * merge in which the book is unchanged against some parent follows only that
@@ -255,12 +270,7 @@ export const bookHistoryFrom = (index: BookIndex, book: string): readonly Indexe
       if (same >= 0) follow = [commit.parents[same] ?? ""];
     }
     if (changed) out.push(commit);
-    for (const parent of follow) {
-      if (seen.has(parent)) continue;
-      seen.add(parent);
-      const next = byId.get(parent);
-      if (next !== undefined) queue.push(next);
-    }
+    enqueue(follow, seen, byId, queue);
   }
   return out;
 };
@@ -293,12 +303,7 @@ export const mergeBase = (index: BookIndex, a: string, b: string): IndexedCommit
     const commit = queue.pop();
     if (commit === undefined) break;
     if (reach.has(commit.id)) return commit;
-    for (const parent of commit.parents) {
-      if (seen.has(parent)) continue;
-      seen.add(parent);
-      const next = byId.get(parent);
-      if (next !== undefined) queue.push(next);
-    }
+    enqueue(commit.parents, seen, byId, queue);
   }
   return undefined;
 };
