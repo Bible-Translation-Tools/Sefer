@@ -41,8 +41,8 @@ const field = variants({
  */
 const padding = (size: InputSize, icon: boolean): string => {
   if (size === "lg") return icon ? "ps-[4.25rem] pe-8" : "px-8";
-  // `md`: the 24px icon 12px in, the text 6px after it (12 + 24 + 6 = 42px).
-  if (size === "md") return icon ? "ps-[2.625rem] pe-3" : "px-3";
+  // `md`: the 20px icon 12px in, the text 6px after it (12 + 20 + 6 = 38px).
+  if (size === "md") return icon ? "ps-[2.375rem] pe-3" : "px-3";
   return icon ? "pe-2.5 ps-8" : "px-2.5";
 };
 
@@ -76,7 +76,7 @@ export function Input(props: InputProps) {
             props.size === "lg"
               ? "start-8"
               : (props.size ?? "md") === "md"
-                ? "start-3 [&_svg]:size-6"
+                ? "start-3 [&_svg]:size-5"
                 : "start-2.5",
           )}
         >

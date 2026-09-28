@@ -186,10 +186,10 @@ export function ProjectSidebar() {
           data-book={rowProps.row.id}
           data-focused={focused() ? "" : undefined}
           aria-expanded={open() ? "true" : "false"}
-          class="flex w-full cursor-pointer items-center gap-3 rounded-lg p-3 text-start text-small font-medium transition-colors data-focused:bg-sidebar-surface-active data-focused:font-medium data-focused:text-brand not-data-focused:text-sidebar-on-surface not-data-focused:hover:bg-sidebar-surface-hover"
+          class="flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-lg p-3 text-start text-small font-medium transition-colors data-focused:bg-sidebar-surface-active data-focused:font-medium data-focused:text-brand not-data-focused:text-sidebar-on-surface not-data-focused:hover:bg-sidebar-surface-hover"
           onClick={() => setOpened(open() ? null : rowProps.row.id)}
         >
-          <BookIcon size={24} aria-hidden="true" class="shrink-0" />
+          <BookIcon size={20} aria-hidden="true" class="shrink-0" />
           <span class="min-w-0 flex-1 truncate">{rowProps.row.name}</span>
           <Show when={rowProps.row.attention > 0}>
             <span

@@ -68,10 +68,10 @@ const sizeClass = (size: SegmentedControlProps<string>["size"], collapse: boolea
       collapse && "max-md:w-10.5 max-md:flex-none max-md:px-0",
     );
   // The default: 42px segments in the 48px track, 12px sides and radius,
-  // 14px medium, a 24px icon 6px from its label. `flex-auto`, not `flex-1`:
+  // 14px medium, a 20px icon 6px from its label. `flex-auto`, not `flex-1`:
   // each starts from its own label's width, so a control sized to its content
   // fits its words, and one given a width (the sidebar's) shares the rest.
-  return "h-10.5 min-w-0 flex-auto justify-center gap-1.5 rounded-lg px-3 text-small [&_svg]:size-6";
+  return "h-10.5 min-w-0 flex-auto justify-center gap-1.5 rounded-lg px-3 text-small [&_svg]:size-5";
 };
 
 const toneClass = (tone: SegmentedControlProps<string>["tone"], chosen: boolean): string => {

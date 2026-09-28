@@ -62,9 +62,9 @@ const classes = variants({
     },
     size: {
       sm: "h-7 gap-1.5 rounded-md px-2.5 text-smallest",
-      // The default, and the app's control size: 48px tall (12px padding
-      // round a 24px icon), 12px radius, 14px medium, 6px icon-to-label.
-      md: "h-12 gap-1.5 rounded-lg px-3 text-small [&_svg]:size-6",
+      // The default, and the app's control size: 48px tall, 12px sides and
+      // radius, 14px medium, a 20px icon 6px from its label.
+      md: "h-12 gap-1.5 rounded-lg px-3 text-small [&_svg]:size-5",
       lg: "h-14 gap-2 rounded-xl px-4 text-body",
       flush: "gap-1.5 text-body",
     },
