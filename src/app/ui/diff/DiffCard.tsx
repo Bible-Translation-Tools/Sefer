@@ -253,6 +253,17 @@ export function DiffCard(props: {
     },
   );
 
+  // Edited back to exactly the other side's text: no change is left, so the
+  // live pane shows none.
+  createEffect(
+    () => props.gone !== undefined,
+    (gone) => {
+      const pane = panes.get("current");
+      if (gone && pane?.live === true)
+        pane.mount.repaint({ lines: [], marks: [], widgets: [], controls: [] });
+    },
+  );
+
   /** The editor, registered as the live current pane so a comparison repaints it. */
   const editorView = (view: EditorView | undefined): void => {
     if (view === undefined) {
@@ -288,7 +299,13 @@ export function DiffCard(props: {
     }),
     ({ text }) => {
       for (const pane of panes.values()) {
-        if (pane.live && pane.mount.view.state.doc.length !== text.length) continue;
+        // A live pane is painted only by a comparison of EXACTLY the text it
+        // holds: one taken a keystroke earlier puts marks at offsets the typing
+        // has moved. Length alone is not enough — a same-length edit passes it.
+        if (pane.live) {
+          const doc = pane.mount.view.state.doc;
+          if (doc.length !== text.length || doc.toString() !== text) continue;
+        }
         pane.mount.repaint(pane.paint());
       }
     },
@@ -371,6 +388,7 @@ export function DiffCard(props: {
                     )(),
                   )}
                   label={`review:${props.hunk.key}`}
+                  reclip={false}
                   onView={editorView}
                   onDone={() => props.onDone?.()}
                 />

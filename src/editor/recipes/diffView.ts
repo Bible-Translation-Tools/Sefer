@@ -135,6 +135,9 @@ class Control extends GutterMarker {
 
 const setPaint = StateEffect.define<DiffPaint>();
 
+/** The marks on changed WORDS, as `paint.ts` names them — the ones an edit can end. */
+const WORD_MARKS = new Set(["cm-diff-added", "cm-diff-removed"]);
+
 /**
  * Where the line holding `at` starts ON SCREEN. Usually its line block's
  * start; but in a clipped card the text before the clip is a replaced range,
@@ -201,7 +204,24 @@ const paintField = StateField.define<{ paint: DiffPaint; set: DecorationSet }>({
     for (const effect of tr.effects)
       if (effect.is(setPaint))
         return { paint: effect.value, set: decorate(tr.state, effect.value) };
-    return tr.docChanged ? { ...held, set: held.set.map(tr.changes) } : held;
+    if (!tr.docChanged) return held;
+    // Mapped through the edit, and a WORD mark whose own text the edit touched
+    // is dropped at once — the change it described is what the reader is now
+    // rewriting. The next comparison paints what is true. A unit's tint maps
+    // with the edit (dropping it would flash the verse on every keystroke),
+    // and widgets are anchored between texts and stay.
+    const touched: { from: number; to: number }[] = [];
+    tr.changes.iterChangedRanges((_fromA, _toA, fromB, toB) =>
+      touched.push({ from: fromB, to: toB }),
+    );
+    return {
+      ...held,
+      set: held.set.map(tr.changes).update({
+        filter: (from, to, value) =>
+          !WORD_MARKS.has(String(value.spec.class)) ||
+          !touched.some((range) => range.from <= to && range.to >= from),
+      }),
+    };
   },
   provide: (field) => EditorView.decorations.from(field, (held) => held.set),
 });

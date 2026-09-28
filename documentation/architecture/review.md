@@ -257,6 +257,17 @@ afterwards differs again and is red and green like any change, and the
 decided wash marks only a verse that reads exactly as the side it was decided
 for. Decide-then-apply stays the default; an N-way review is not designed.
 
+**Editing a card follows Find's lifecycle.** Edit (or a double-click) opens
+the card's current side as the Book; the diff decorations map through the
+typing, and a WORD mark the edit touches drops at once (a unit's tint maps, so
+the verse does not flash); the comparison runs at a pause in typing, batched
+(`TYPING_PAUSE_MS`), and the engine's cached diff means only the touched book
+is diffed again; the new diff is painted only if it was taken of exactly the
+text in the editor. The editor keeps its own range while it is edited rather
+than re-clipping to each comparison's hunk. A card edited back to the other
+side's text says "No longer a change", clears its marks, and leaves as one line
+after Done.
+
 **Tints are marks, not line classes.** In the reading a paragraph is one visual
 line, so a line class tinted every verse in it; a mark is exactly the unit.
 

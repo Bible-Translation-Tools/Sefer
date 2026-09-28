@@ -43,7 +43,7 @@ import LifeBuoy from "lucide-solid/icons/life-buoy";
 import MoreVertical from "lucide-solid/icons/more-vertical";
 import Save from "lucide-solid/icons/save";
 import Scale from "lucide-solid/icons/scale";
-import { For, Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
 import type { BookId } from "#core/book/book";
 import {
@@ -91,6 +91,9 @@ import { sourceChoices, type SourceChoice } from "./sources";
 
 /** The author every Sefer commit carries until accounts reach this screen. */
 const AUTHOR = { name: "Sefer", email: "sefer@localhost" } as const;
+
+/** How long typing pauses before the review compares again: the cards' pause. */
+const TYPING_PAUSE_MS = 400;
 
 /** The sources that read live, so a keystroke moves the review under itself. */
 const LIVE = new Set(["project", "disk"]);
@@ -325,18 +328,37 @@ export function ReviewPanel() {
    * without a button. A comparison is still a snapshot; this simply takes a
    * new one.
    */
+  let lastSides: string | undefined;
+  let typing: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => {
+    if (typing !== undefined) clearTimeout(typing);
+  });
   createEffect(
-    () =>
-      `${leftId()}:${rightId()}:${leftPicked()?.id ?? ""}:${rightPicked()?.id ?? ""}:${
-        live() ? revisions() : ""
-      }:${version.recorded().head ?? ""}`,
-    () => {
-      // The compute above IS the dependency list. Everything this reads is a
-      // one-time snapshot of the state that key already describes, so
-      // `untrack` says so — a read in an effect's effect-phase that is not a
-      // dependency is what STRICT_READ_UNTRACKED exists to catch, and it
-      // cannot tell a deliberate snapshot from a mistake without being told.
-      untrack(runCompare);
+    () => ({
+      sides: `${leftId()}:${rightId()}:${leftPicked()?.id ?? ""}:${rightPicked()?.id ?? ""}:${
+        version.recorded().head ?? ""
+      }`,
+      text: live() ? revisions() : "",
+    }),
+    ({ sides }) => {
+      // The compute above IS the dependency list; what this reads is a
+      // one-time snapshot of the state that key describes, so `untrack` says so.
+      //
+      // New SIDES compare at once. A book's text moving — typing, in a card or
+      // the editor — compares at a pause, batched: one comparison per burst
+      // rather than per keystroke, the way every card re-takes its results.
+      // The engine's diff is cached by text, so that one comparison re-diffs
+      // only the book that moved.
+      if (typing !== undefined) clearTimeout(typing);
+      if (sides !== lastSides) {
+        lastSides = sides;
+        untrack(runCompare);
+        return;
+      }
+      typing = setTimeout(() => {
+        typing = undefined;
+        untrack(runCompare);
+      }, TYPING_PAUSE_MS);
     },
   );
 

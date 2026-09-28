@@ -64,6 +64,12 @@ export interface CardEditorProps {
   /** Selected when neither of the above says where: the first match, say. */
   readonly select?: { readonly from: number; readonly to: number } | undefined;
   readonly extensions?: readonly Extension[];
+  /**
+   * Re-clip when `range` changes (default). A card whose range is recomputed
+   * on every comparison (Review) passes false: while it is edited, the editor's
+   * own range, mapped through the typing, is the truth.
+   */
+  readonly reclip?: boolean;
   /** Names the surface in the origin of its edits and in the trace. */
   readonly label: string;
   /** Handed the live view, for a caller that repaints on it. */
@@ -177,7 +183,7 @@ export function CardEditor(props: CardEditorProps) {
   createEffect(
     () => ({ held: live(), range: props.range }),
     ({ held, range }) => {
-      if (held === undefined) return;
+      if (held === undefined || untrack(() => props.reclip) === false) return;
       reclip(held.satellite.view, wholeLines(held.satellite.view.state.doc, range));
     },
   );
