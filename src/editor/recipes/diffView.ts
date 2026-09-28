@@ -307,10 +307,24 @@ const paintField = StateField.define<Painted>({
     return {
       ...held,
       set: held.set.map(tr.changes).update({ filter: keep }),
+      // The hunks' own word marks move with them, and the ones the edit
+      // touched go, by the same rule as the painted marks — or the next open
+      // or close redrew them at the old offsets and brought back the dropped.
       hunks: held.hunks.map((hunk) => ({
         ...hunk,
         from: tr.changes.mapPos(hunk.from, -1),
         to: tr.changes.mapPos(hunk.to, 1),
+        marks: hunk.marks
+          .map((mark) => ({
+            ...mark,
+            from: tr.changes.mapPos(mark.from, 1),
+            to: tr.changes.mapPos(mark.to, -1),
+          }))
+          .filter(
+            (mark) =>
+              mark.to > mark.from &&
+              !touched.some((range) => range.from <= mark.to && range.to >= mark.from),
+          ),
       })),
       opened: held.opened.map(tr.changes).update({ filter: keep }),
     };
