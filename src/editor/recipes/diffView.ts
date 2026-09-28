@@ -11,16 +11,16 @@
  * paragraphs, poetry stays indented, a changed word is marked where it sits.
  *
  * The caller describes what to paint (`DiffPaint`) in plain offsets; this file
- * turns it into decorations and never reads the diff itself. Three kinds:
+ * turns it into decorations and never reads the diff itself:
  *
  *  - `lines`: a unit's tint, a class over its text (a mark, not a line
  *    class: see `decorate`).
  *  - `marks`: a class on a range — a changed word.
- *  - `widgets`: something drawn at a position that is not in this text — a
- *    removed word inline, or a removed unit as a block (the caller builds its
- *    DOM; a stamp of the other text is the usual answer).
+ *  - `hunks`: a one-text view's units, drawn as Zed draws hunks (`DiffHunk`).
  *
- * Plus a gutter of per-unit controls, whose DOM is the caller's too.
+ * Plus a gutter of per-unit controls, whose DOM is the caller's too. (Words
+ * struck inline where they were, and a removed unit as a block between lines,
+ * were tried and dropped on 2026-09-28: noise in the text being edited.)
  */
 
 import { type Extension, RangeSetBuilder, StateEffect, StateField } from "@codemirror/state";
@@ -54,15 +54,6 @@ import { giveBack, takeView } from "./viewPool";
  * view of it: forty cards over one book build it once, not forty times.
  */
 const lent = new WeakMap<Analysis, DocStructure>();
-
-export interface DiffWidget {
-  readonly at: number;
-  /** A whole block between lines, rather than inline at `at`. */
-  readonly block: boolean;
-  /** Stable while the widget means the same thing, so a repaint keeps the DOM. */
-  readonly key: string;
-  readonly render: () => HTMLElement;
-}
 
 export interface DiffControl {
   /** Where the unit starts, in this text. The gutter marker sits on that line. */
@@ -99,7 +90,6 @@ export interface DiffHunk {
 export interface DiffPaint {
   readonly lines: readonly { readonly from: number; readonly to: number; readonly class: string }[];
   readonly marks: readonly { readonly from: number; readonly to: number; readonly class: string }[];
-  readonly widgets: readonly DiffWidget[];
   readonly controls: readonly DiffControl[];
   /** Units drawn as Zed hunks (bars, opened on request), for a one-text view. */
   readonly hunks?: readonly DiffHunk[];
@@ -209,21 +199,6 @@ const decorate = (state: EditorState, paint: DiffPaint): DecorationSet => {
   for (const mark of paint.marks)
     if (mark.to > mark.from && mark.to <= doc.length)
       ranges.push({ from: mark.from, to: mark.to, deco: Decoration.mark({ class: mark.class }) });
-  for (const widget of paint.widgets) {
-    const at = Math.min(widget.at, doc.length);
-    // A block goes AFTER the line holding `at` — the caller names the end of
-    // what the block follows — except at the very start of the text.
-    const place = widget.block ? (at === 0 ? 0 : doc.lineAt(at).to) : at;
-    ranges.push({
-      from: place,
-      to: place,
-      deco: Decoration.widget({
-        widget: new Built(widget.key, widget.render),
-        block: widget.block,
-        side: widget.block && at === 0 ? -1 : 1,
-      }),
-    });
-  }
   return Decoration.set(
     ranges.map((range) => range.deco.range(range.from, range.to)),
     true,
@@ -304,8 +279,7 @@ const painted = (state: EditorState, paint: DiffPaint, open: ReadonlySet<string>
 };
 
 const paintField = StateField.define<Painted>({
-  create: (state) =>
-    painted(state, { lines: [], marks: [], widgets: [], controls: [] }, new Set<string>()),
+  create: (state) => painted(state, { lines: [], marks: [], controls: [] }, new Set<string>()),
   update(held, tr) {
     let next = held;
     for (const effect of tr.effects) {
@@ -322,7 +296,7 @@ const paintField = StateField.define<Painted>({
     // is dropped at once — the change it described is what the reader is now
     // rewriting. The next comparison paints what is true. A unit's tint maps
     // with the edit (dropping it would flash the verse on every keystroke),
-    // and widgets are anchored between texts and stay.
+    // and an opened hunk's wording is anchored at its unit and stays.
     const touched: { from: number; to: number }[] = [];
     tr.changes.iterChangedRanges((_fromA, _toA, fromB, toB) =>
       touched.push({ from: fromB, to: toB }),

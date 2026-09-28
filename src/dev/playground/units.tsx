@@ -3,9 +3,11 @@
  * word marks, and the gutter the decision lives in.
  *
  * Shared rather than copied because the experiments are meant to differ in
- * LAYOUT and nothing else — if "continuous" and "excerpts" drew their rows two
- * different ways, comparing them would tell you about the drawing rather than
- * about the layout, which is the one thing a playground must not do.
+ * LAYOUT and nothing else — two experiments drawing their rows two different
+ * ways would tell you about the drawing rather than about the layout, which is
+ * the one thing a playground must not do. (Of the row experiments only
+ * "excerpts" is left; "continuous", the in-editor diff and the excerpt bench
+ * grew into `/review` and were removed on 2026-09-28.)
  *
  * Outside `experiments/`, so the registry's glob does not pick it up.
  */
@@ -234,8 +236,7 @@ const Absent = () => (
  * One unit's body, in whichever of the two readings the layout asked for.
  *
  * `merged` is the tracked-changes paragraph; `split` is the two columns, whose
- * rows line up by construction because a row IS a reference — see the note in
- * `experiments/continuous.tsx`.
+ * rows line up by construction because a row IS a reference.
  *
  * Three cases, and the third is the one that is easy to forget: a unit with
  * runs is marked word by word, an unchanged unit is plain reading text, and a

@@ -262,8 +262,7 @@ export function DiffCard(props: {
     () => props.gone !== undefined,
     (gone) => {
       const pane = panes.get("current");
-      if (gone && pane?.live === true)
-        pane.mount.repaint({ lines: [], marks: [], widgets: [], controls: [] });
+      if (gone && pane?.live === true) pane.mount.repaint({ lines: [], marks: [], controls: [] });
     },
   );
 

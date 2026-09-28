@@ -66,6 +66,13 @@ Flows a real user broke that a Playwright journey would have caught. Written dow
 - **Type into a fresh footnote** (2026-09-25). A settlement change briefly put the note editor's caret before `\ft `, and "hello" went in as "olleh". Guard: Insert footnote, type a word, and the note's body reads the word.
 - **Undo a word typed in an excerpt** (2026-09-25). Every character typed in a Find excerpt was its own undo step. Guard: type a word in an excerpt, one Undo removes it.
 - **Open a menu twice** (2026-09-25). A change to `Popover` left every popover and menu refusing to open after its first close. Guard: the rail's Import menu opens, closes with `Esc`, and opens again.
+- **Delete a whole verse in the editor** (2026-09-28). Deleting exactly `\v 9 …` up to `\v 10` in Matthew 3 also removed the `\v 10` marker, so verse 10's words ran on into verse 8. Not fixed yet: an editor rule widens the deletion. Guard: select from a verse's marker to the next verse's marker, delete, and the next verse keeps its marker and number.
+
+### Unit test candidates
+
+Pure core behaviour that a Node test over the in-memory `FileSystem` would pin, written down under the build-out rule (no new tests until behaviour is locked). The first one is data safety, which is where the rule costs most, so it goes first when the rule lifts or an exception is made.
+
+- **Recovery keeps an earlier session's work** (2026-09-28, `src/core/recovery`). Three bugs, all fixed, none tested: the backup of the book a session lands on was hidden and then overwritten by the first keystroke; a journal id was spelled two ways, so Discard removed the file but not the in-memory journal, whose next flush wrote every entry back; and a restore replayed onto a book edited since it opened. Guard, with two `RecoveryLive` layers over one in-memory root standing in for two sessions: session 1 journals an edit; session 2's `pendingOnOpen` offers it and sets it aside (`@<time>`); session 2's own first edit leaves the set-aside file intact; `discard` of the set-aside id removes it and the next flush does not bring it back; `thisSession` is true for session 2's own journal and false for the earlier one; `restore` refuses when the book's stamp is not the first entry's `before`.
 
 Colocate Node and focused browser tests with their owner; Web journeys live in `e2e/`.
 

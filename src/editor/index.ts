@@ -50,7 +50,6 @@ export {
   type DiffHunk,
   type DiffPaint,
   type DiffViewMount,
-  type DiffWidget,
 } from "./recipes/diffView";
 
 // Doing something to the book without moving the page (core/scroll.ts).

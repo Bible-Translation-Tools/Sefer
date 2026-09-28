@@ -11,7 +11,7 @@
 import { readingEnd } from "#core/excerpts/excerpts";
 import type { Analysis } from "#core/galley";
 import { unitReference, type DecisionUnit, type MergeSide } from "#core/galley/diff";
-import type { DiffHunk, DiffPaint, DiffWidget } from "#editor/index";
+import type { DiffHunk, DiffPaint } from "#editor/index";
 
 export type Side = "baseline" | "current";
 
@@ -42,13 +42,6 @@ const statusTint = (unit: DecisionUnit): string =>
 /** Word runs worth marking in this projection: markup only when markup is shown. */
 const visibleRun = (what: string, usfm: boolean): boolean =>
   what === "text" || (usfm && what === "markup");
-
-const inline = (text: string, name: string): HTMLElement => {
-  const span = document.createElement("span");
-  span.className = name;
-  span.textContent = text.replace(/\s+/g, " ");
-  return span;
-};
 
 /**
  * A unit's decision, in the gutter: keep the `current` side's text, or take the
@@ -112,7 +105,6 @@ export const sidePaint = (
 ): DiffPaint => {
   const lines: DiffPaint["lines"][number][] = [];
   const marks: DiffPaint["marks"][number][] = [];
-  const widgets: DiffWidget[] = [];
   const buttons: DiffPaint["controls"][number][] = [];
   for (const unit of units) {
     const span = side === "baseline" ? unit.baseline : unit.current;
@@ -156,82 +148,7 @@ export const sidePaint = (
         render: controlFor(unit, controls),
       });
   }
-  return { lines, marks, widgets, controls: buttons };
-};
-
-/**
- * The working text with the earlier one folded into it: removed words where
- * they were, a removed unit where it stood.
- */
-export const unifiedPaint = (
-  units: readonly DecisionUnit[],
-  usfm: boolean,
-  controls: Controls | undefined,
-  removedBlock: (unit: DecisionUnit) => HTMLElement,
-  analysis: Analysis,
-): DiffPaint => {
-  const base = sidePaint(units, "current", usfm, controls, analysis);
-  const widgets: DiffWidget[] = [];
-  for (const unit of units) {
-    if (!changed(unit)) continue;
-    if (unit.current === undefined) {
-      widgets.push({
-        at: unit.place.current,
-        block: true,
-        key: `gone ${unit.id}`,
-        render: () => removedBlock(unit),
-      });
-      continue;
-    }
-    const was = unit.text?.baseline ?? [];
-    const now = unit.text?.current ?? [];
-    // Both sides list their unchanged runs in the same order, so walking them
-    // together places each stretch of removed runs just before what replaced
-    // it, or just after the last WORD the two share — not after a shared
-    // newline or bare `\q1`, which in regular mode is the next verse's line.
-    let at = 0;
-    let wordEnd = unit.current.from;
-    let held: { text: string; from: number } | undefined;
-    const flush = (): void => {
-      if (held === undefined || held.text.trim() === "") {
-        held = undefined;
-        return;
-      }
-      const next = now[at];
-      const place = next !== undefined && next.kind === "added" ? next.from : wordEnd;
-      const stretch = held;
-      widgets.push({
-        at: place,
-        block: false,
-        key: `was ${unit.id} ${stretch.from}`,
-        render: () => inline(stretch.text, "cm-diff-struck"),
-      });
-      held = undefined;
-    };
-    for (const run of was) {
-      if (run.kind === "unchanged") {
-        flush();
-        while (at < now.length && now[at]?.kind !== "unchanged") {
-          const skipped = now[at];
-          if (skipped?.what === "text") wordEnd = skipped.to;
-          at += 1;
-        }
-        const shared = now[at];
-        if (shared?.what === "text") wordEnd = shared.to;
-        at += 1;
-        continue;
-      }
-      // Whitespace joins a stretch (so struck words keep their spaces);
-      // markup joins it only where markup is shown.
-      if (run.what === "markup" && !usfm) continue;
-      held =
-        held === undefined
-          ? { text: run.text, from: run.from }
-          : { ...held, text: held.text + run.text };
-    }
-    flush();
-  }
-  return { ...base, widgets: [...base.widgets, ...widgets] };
+  return { lines, marks, controls: buttons };
 };
 
 /**
@@ -284,5 +201,5 @@ export const hunkPaint = (
       label: `${!changed(unit) ? "Decided" : unit.status === "added" ? "Added" : "Changed"} ${unitReference(unit)}`,
     });
   }
-  return { lines: [], marks: [], widgets: [], controls: base.controls, hunks };
+  return { lines: [], marks: [], controls: base.controls, hunks };
 };
