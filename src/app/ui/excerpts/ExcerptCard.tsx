@@ -40,7 +40,6 @@ import type { JSX } from "@solidjs/web";
 import ChevronDownIcon from "lucide-solid/icons/chevron-down";
 import ChevronUpIcon from "lucide-solid/icons/chevron-up";
 import FoldVerticalIcon from "lucide-solid/icons/fold-vertical";
-import PencilIcon from "lucide-solid/icons/pencil";
 import SquareArrowOutUpRightIcon from "lucide-solid/icons/square-arrow-out-up-right";
 import UnfoldVerticalIcon from "lucide-solid/icons/unfold-vertical";
 import { Show, createEffect, createMemo, createSignal } from "solid-js";
@@ -55,8 +54,9 @@ import type { Analysis } from "#core/galley";
 import type { EditorBook, Funnel, MarkedRange } from "#editor/index";
 
 import { t } from "../../i18n";
-import { Badge, Button, Card, cx, IconButton } from "../primitives";
-import { ExcerptEditor } from "./ExcerptEditor";
+import { CardEditor } from "../multibuffer/CardEditor";
+import { CardFrame } from "../multibuffer/CardFrame";
+import { cx, IconButton } from "../primitives";
 import { ExcerptReader } from "./ExcerptReader";
 
 /** One press of the context control. */
@@ -337,14 +337,16 @@ export function ExcerptCard(props: ExcerptCardProps) {
         }
       >
         {(seated) => (
-          <ExcerptEditor
+          <CardEditor
             book={seated()}
-            excerpt={props.excerpt}
+            range={props.excerpt.span}
             mode={mode()}
             marks={marks()}
             at={at()}
             point={point()}
+            select={props.excerpt.hits[0]}
             analyze={props.analyze}
+            label={`excerpt:${props.excerpt.sid}`}
             onDone={done}
           />
         )}
@@ -415,73 +417,47 @@ export function ExcerptCard(props: ExcerptCardProps) {
   );
 
   return (
-    <Card
-      padded={false}
-      data-sid={props.excerpt.sid}
-      data-current={current() ? "true" : undefined}
-      data-mode={mode()}
-      data-editing={props.editing ? "true" : undefined}
-      class={cx("overflow-hidden", current() && "ring-1 ring-brand")}
-    >
-      <header class="flex items-center gap-2 border-b border-surface-border px-3 py-1.5">
-        <strong class="text-small font-medium text-on-surface-primary">
-          {props.label ?? props.excerpt.label}
-        </strong>
-        <Show when={props.gone}>
-          {(said) => (
-            <Badge tone="success" data-excerpt-gone>
-              {said()}
-            </Badge>
-          )}
-        </Show>
-        {/* Not when the card carries notes: findings list themselves line by
-            line under this header, and "2 matches" above them would be the
-            same count said twice in another vocabulary. */}
+    <CardFrame
+      data={{ "data-sid": props.excerpt.sid, "data-mode": mode() }}
+      current={current()}
+      label={props.label ?? props.excerpt.label}
+      gone={props.gone}
+      badges={
+        // Not when the card carries notes: findings list themselves line by
+        // line under the header, and "2 matches" above them would be the same
+        // count said twice in another vocabulary.
         <Show when={props.notes === undefined && props.excerpt.hits.length > 1}>
           <span class="text-smallest text-on-surface-tertiary">
             {t("{count} matches", { count: props.excerpt.hits.length })}
           </span>
         </Show>
-        <div class="ms-auto flex items-center gap-1">
-          <Show
-            when={props.editing}
-            fallback={
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={<PencilIcon size={13} />}
-                onClick={() => edit()}
-              >
-                {t("Edit")}
-              </Button>
-            }
-          >
-            <Button size="sm" variant="primary" onClick={done}>
-              {t("Done")}
-            </Button>
-          </Show>
-          <IconButton
-            size="sm"
-            label={t("Open in editor")}
-            icon={<SquareArrowOutUpRightIcon size={14} />}
-            aria-pressed={opening() ? "true" : undefined}
-            onClick={() => {
-              setOpening(true);
-              props.onOpen();
-              // The card may still be here — the same book, already focused —
-              // so the pressed state is released rather than left on.
-              setTimeout(() => setOpening(false), 600);
-            }}
-          />
-        </div>
-      </header>
-
-      <Show when={props.notes}>
-        <div data-excerpt-notes class="border-b border-surface-border px-3 py-1.5">
-          {props.notes}
-        </div>
-      </Show>
-
+      }
+      editing={props.editing}
+      onEdit={() => edit()}
+      onDone={done}
+      open={
+        <IconButton
+          size="sm"
+          label={t("Open in editor")}
+          icon={<SquareArrowOutUpRightIcon size={14} />}
+          aria-pressed={opening() ? "true" : undefined}
+          onClick={() => {
+            setOpening(true);
+            props.onOpen();
+            // The card may still be here — the same book, already focused —
+            // so the pressed state is released rather than left on.
+            setTimeout(() => setOpening(false), 600);
+          }}
+        />
+      }
+      notes={props.notes}
+      control={
+        <Show when={props.onExpand}>
+          {(step) => <ContextControl excerpt={props.excerpt} onStep={step()} />}
+        </Show>
+      }
+      actions={props.actions}
+    >
       <div
         ref={setBody}
         data-layout={props.paired === undefined ? "single" : wide() ? "side" : "stacked"}
@@ -493,19 +469,6 @@ export function ExcerptCard(props: ExcerptCardProps) {
         <Show when={props.paired !== undefined}>{pairedSide}</Show>
         <div class="min-w-0">{target}</div>
       </div>
-
-      <Show when={props.onExpand !== undefined || props.actions !== undefined}>
-        <footer class="flex items-center gap-2 border-t border-surface-border px-3 py-1.5">
-          <Show when={props.onExpand}>
-            {(step) => <ContextControl excerpt={props.excerpt} onStep={step()} />}
-          </Show>
-          <Show when={props.actions}>
-            <div data-excerpt-actions class="ms-auto flex items-center gap-1">
-              {props.actions}
-            </div>
-          </Show>
-        </footer>
-      </Show>
-    </Card>
+    </CardFrame>
   );
 }

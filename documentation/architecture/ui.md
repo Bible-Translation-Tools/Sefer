@@ -166,6 +166,28 @@ keeps corvu's `Root`/`Panel`/`Handle` shape so that swapping back later is one
 import. Collapsing is deliberately not implemented: a collapsed sidebar is a
 different tree (an icon rail), not a zero-width panel.
 
+### Cards: one frame, one editor, one list (`src/app/ui/multibuffer/`)
+
+Every list of places in Sefer — Find, Key terms, Findings, Review — is cards
+built from three pieces, so a card looks and behaves the same on every screen:
+
+- **`CardFrame`** — the header (the place, a `gone` badge, the screen's
+  badges, header actions, Edit/Done, open), notes, body, and a footer (a
+  control on the left, actions on the right).
+- **`CardEditor`** — a card opened for editing: a satellite over the real Book,
+  clipped to the card's lines, with the accent outline and context at full
+  strength; Escape ends it. `extensions` carries what a screen draws while you
+  type (Review's live diff).
+- **`CardList`** — the list and the edit session: one card edited at a time,
+  pinned where it stood while the results are re-taken at each pause in
+  typing; a card whose result ended says so ("Resolved", "No longer matches",
+  "No longer a change") and leaves as one dismissable line after Done.
+
+The gesture is the same everywhere: a card reads until Edit or a double-click,
+then it is the Book with the caret in it. `ExcerptCard`/`ExcerptList` and
+`DiffCard`/`ReviewReader` are the two users; what differs is what the body
+draws (a reading and a paired resource, or a diff) and what the header decides.
+
 ### The multibuffer: `virtual-core`, and why not `solid-virtual`
 
 `VirtualList` is the one windowed list in the product. Find, Key terms

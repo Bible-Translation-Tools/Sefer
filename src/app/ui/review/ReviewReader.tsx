@@ -54,6 +54,7 @@ import {
   DiffCard,
   changed,
   estimate,
+  hunkLabel,
   hunksOf,
   isFormatting,
   ordered,
@@ -62,6 +63,7 @@ import {
   type DiffSides,
   type Hunk,
 } from "../diff";
+import { CardList } from "../multibuffer/CardList";
 import {
   Badge,
   Button,
@@ -74,7 +76,6 @@ import {
   MenuSeparator,
   SegmentedControl,
   Select,
-  VirtualList,
   type VirtualSection,
 } from "../primitives";
 import { claimSidebar } from "../workspace/sidebarSlot";
@@ -208,20 +209,6 @@ export function ReviewReader(props: {
     return analyze(text);
   };
 
-  /**
-   * The card being edited, and the units it pins. Editing a card pins its
-   * changes so the card stays while you type — even an undo back to exactly
-   * the other side's text, which leaves nothing to show, does not take the
-   * card out from under the caret. Done (or Escape) releases them.
-   */
-  const [editingCard, setEditingCard] = createSignal<
-    { readonly key: string; readonly bookId: BookId; readonly units: readonly string[] } | undefined
-  >(undefined, { name: "reviewEditingCard" });
-  const pinned = (bookId: BookId, unitId: string): boolean => {
-    const held = untrack(editingCard);
-    return held !== undefined && held.bookId === bookId && held.units.includes(unitId);
-  };
-
   const prepare = (book: ReviewBook, steps: number, show: Filter, result: boolean): Prepared => {
     const sides: DiffSides = {
       bookId: book.bookId,
@@ -235,9 +222,7 @@ export function ReviewReader(props: {
     // In Result mode a taken unit is unchanged now — it IS the other side's
     // text — and still keeps its card, to say so and to put it back.
     const keep = (unit: DecisionUnit): boolean =>
-      result &&
-      (untrack(() => props.decision(book.bookId, unit.id)) !== undefined ||
-        pinned(book.bookId, unit.id));
+      result && untrack(() => props.decision(book.bookId, unit.id)) !== undefined;
     return {
       book,
       sides,
@@ -265,7 +250,7 @@ export function ReviewReader(props: {
    */
   let held = new Map<BookId, { readonly key: string; readonly prepared: Prepared }>();
   const keyOf = (book: ReviewBook, show: Filter, result: boolean): string =>
-    `${untrack(editingCard)?.bookId === book.bookId ? untrack(editingCard)?.key : ""}\0${show}\0${result ? "r" : "c"}\0${book.currentText.length}\0${book.baselineText.length}`;
+    `${show}\0${result ? "r" : "c"}\0${book.currentText.length}\0${book.baselineText.length}`;
   const same = (was: Prepared, book: ReviewBook): boolean =>
     was.book.currentText === book.currentText && was.book.baselineText === book.baselineText;
 
@@ -274,8 +259,6 @@ export function ReviewReader(props: {
       books: props.books,
       show: filter(),
       result: props.mode === "result",
-      // A pin taken or released changes which cards its book keeps.
-      editing: editingCard()?.key,
     }),
     ({ books, show, result }) => {
       const steps = services.settings.get(keys.excerptContext);
@@ -703,7 +686,12 @@ export function ReviewReader(props: {
     name: "reviewSeats",
   });
   createEffect(
-    () => (editable() ? prepared().map((held) => held.book.bookId) : []),
+    // Only the whole book's current pane is always live; a card seats its own
+    // book when an edit starts (`DiffCard`, `CardList`).
+    () => {
+      const bookId = scope() === "book" && editable() ? selectedBook()?.book.bookId : undefined;
+      return bookId === undefined ? [] : [bookId];
+    },
     (bookIds) => {
       if (bookIds.length === 0) {
         if (untrack(seats).size > 0) setSeats(new Map());
@@ -918,8 +906,12 @@ export function ReviewReader(props: {
             listRoot = element;
           }}
         >
-          <VirtualList<{ hunk: Hunk; held: Prepared }>
+          <CardList<{ hunk: Hunk; held: Prepared }>
             sections={sections()}
+            bookOf={(item) => item.hunk.bookId}
+            seat={props.seat}
+            lineLabel={(item) => `${item.held.book.name} ${hunkLabel(item.hunk)}`}
+            goneLabel={t("No longer a change")}
             ref={(scrollTo) => {
               goTo = scrollTo;
             }}
@@ -956,67 +948,34 @@ export function ReviewReader(props: {
                 </header>
               );
             }}
-            row={(item) => (
-              <div class="pt-3">
-                <DiffCard
-                  hunk={item().hunk}
-                  sides={item().held.sides}
-                  split={split()}
-                  usfm={props.usfm}
-                  controls={controls().get(item().hunk.bookId)}
-                  currentLabel={props.currentLabel}
-                  baselineLabel={props.baselineLabel}
-                  currentFirst={props.currentFirst !== false}
-                  live={liveFor(item().hunk.bookId)}
-                  onEditing={() => {
-                    const hunk = item().hunk;
-                    if (untrack(editingCard)?.key === hunk.key) return;
-                    setEditingCard({
-                      key: hunk.key,
-                      bookId: hunk.bookId,
-                      units: hunk.units.map((unit) => unit.id),
-                    });
-                  }}
-                  onDoneEditing={() => setEditingCard(undefined)}
-                  onOpen={() => openInBook(item().hunk)}
-                  actions={
-                    <>
-                      <Show
-                        when={
-                          editingCard()?.key === item().hunk.key &&
-                          item().hunk.units.every(
-                            (unit) =>
-                              !changed(unit) &&
-                              props.decision(item().hunk.bookId, unit.id) === undefined,
-                          )
-                        }
-                      >
-                        {/* Edited back to exactly the other side's text: held
-                            here by the pin until Done, and saying why it will go. */}
-                        <Badge tone="success">{t("No longer a change")}</Badge>
-                      </Show>
-                      <Show when={editingCard()?.key === item().hunk.key}>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          data-review-done
-                          title={t("Stop editing (Escape)")}
-                          onClick={() => setEditingCard(undefined)}
-                        >
-                          {t("Done")}
-                        </Button>
-                      </Show>
-                      <CardDecision hunk={item().hunk} />
-                      <IconButton
-                        size="sm"
-                        label={t("Open in the book")}
-                        icon={<BookOpen size={14} />}
-                        onClick={() => openInBook(item().hunk)}
-                      />
-                    </>
-                  }
-                />
-              </div>
+            card={(item, _key, session) => (
+              <DiffCard
+                hunk={item().hunk}
+                sides={item().held.sides}
+                split={split()}
+                usfm={props.usfm}
+                controls={controls().get(item().hunk.bookId)}
+                currentLabel={props.currentLabel}
+                baselineLabel={props.baselineLabel}
+                currentFirst={props.currentFirst !== false}
+                editable={editable()}
+                editing={session.editing}
+                gone={session.gone ? session.goneLabel : undefined}
+                onEdit={session.start}
+                onDone={session.done}
+                seat={() => props.seat(item().hunk.bookId)}
+                analyze={(text) => analysisOf(item().hunk.bookId, "current", text)}
+                onOpen={() => openInBook(item().hunk)}
+                headerActions={<CardDecision hunk={item().hunk} />}
+                open={
+                  <IconButton
+                    size="sm"
+                    label={t("Open in the book")}
+                    icon={<BookOpen size={14} />}
+                    onClick={() => openInBook(item().hunk)}
+                  />
+                }
+              />
             )}
             empty={
               <EmptyState

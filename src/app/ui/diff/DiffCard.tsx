@@ -4,34 +4,29 @@
  * regular mode or USFM, split (baseline beside current) or unified (the
  * current text with the baseline's words struck through where they were).
  *
- * The gutter holds each unit's decision; the header's `actions` slot is the
- * caller's (a card's "keep all here"), and a double-click asks the caller to
- * open the change in the whole book.
+ * It wears the frame every card wears (`multibuffer/CardFrame`) and edits the
+ * way every card edits: read-only until Edit or a double-click, then the
+ * current side is the Book itself (`multibuffer/CardEditor`) with the diff as
+ * a plugin on it (`liveDiff`), repainted as the review compares again; Done or
+ * Escape ends it. The list it sits in owns the edit session and the pin
+ * (`multibuffer/CardList`).
  *
  * A card whose every change is formatting — markup or spacing, the words
  * identical — is drawn in USFM whatever the mode says: in the reading those
- * changes are invisible, and a card showing the same words twice with a
- * badge as the only clue is the card telling you nothing.
+ * changes are invisible.
  */
 
-import { Prec } from "@codemirror/state";
-import { keymap } from "@codemirror/view";
+import type { EditorView } from "@codemirror/view";
 import type { JSX } from "@solidjs/web";
 import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
 import type { Analysis } from "#core/galley";
 import type { DecisionUnit } from "#core/galley/diff";
 import {
-  analyzer,
-  clippedToScope,
   liveDiff,
-  modeView,
   mountDiffView,
-  mountSatellite,
   mountStamp,
-  readingLayer,
   repaintDiff,
-  wholeLines,
   type DiffPaint,
   type DiffViewMount,
   type EditorBook,
@@ -40,7 +35,9 @@ import {
 import "#editor/editor.css";
 
 import { t } from "../../i18n";
-import { Badge, Card, cx } from "../primitives";
+import { CardEditor } from "../multibuffer/CardEditor";
+import { CardFrame } from "../multibuffer/CardFrame";
+import { Badge, cx } from "../primitives";
 import { hunkKind, hunkLabel, isFormatting, type Hunk } from "./hunks";
 import { sidePaint, unifiedPaint, type Controls } from "./paint";
 
@@ -101,20 +98,21 @@ export function DiffCard(props: {
    * picker is (left); the conventional was-then-now puts the baseline first.
    */
   readonly currentFirst?: boolean;
-  readonly actions?: JSX.Element;
-  /**
-   * The current side, EDITABLE: the Book itself (Review's Result mode). The
-   * card's lines are a satellite over it, with the diff as a plugin; an edit
-   * goes through the Book's funnel, the review compares again, the card
-   * repaints. Absent, the current side is a read-only clip of `sides`.
-   */
-  readonly live?:
-    | { readonly book: EditorBook; readonly analyze: (text: string) => Analysis }
-    | undefined;
-  /** A live pane was focused: the card is being edited. */
-  readonly onEditing?: () => void;
-  /** Escape in a live pane. */
-  readonly onDoneEditing?: () => void;
+  /** Whether the current side may be edited (Review's Result mode). */
+  readonly editable?: boolean;
+  /** The edit session, from the list (`CardList`). */
+  readonly editing?: boolean;
+  readonly gone?: string | undefined;
+  readonly onEdit?: () => void;
+  readonly onDone?: () => void;
+  /** Plain → Instantiated for this card's book, when editing starts. */
+  readonly seat?: () => Promise<EditorBook | undefined>;
+  /** The current side's parse, for the editor (the review's own memo). */
+  readonly analyze?: (text: string) => Analysis;
+  /** Header actions, before Edit/Done: the card's decisions. */
+  readonly headerActions?: JSX.Element;
+  /** The open control (to the whole book). */
+  readonly open?: JSX.Element;
   readonly onOpen?: () => void;
   readonly onMounted?: (ms: number) => void;
 }) {
@@ -192,84 +190,61 @@ export function DiffCard(props: {
     },
   );
 
-  // The current pane: a read-only clip, or — given `live` — the Book itself,
-  // an editor clipped to the card's lines with the diff as a plugin on it. A
-  // live pane is rebuilt only when the card or the seat is a different one.
+  // The edit session's book: seated when editing starts, let go when it ends.
+  const [book, setBook] = createSignal<EditorBook | undefined>(undefined, { name: "cardBook" });
+  const [refused, setRefused] = createSignal(false, { name: "cardRefused" });
+  createEffect(
+    () => props.editing === true,
+    (editing) => {
+      if (!editing) {
+        setBook(undefined);
+        return;
+      }
+      let current = true;
+      void untrack(() => props.seat)?.().then((seated) => {
+        if (!current) return;
+        setBook(seated);
+        setRefused(seated === undefined);
+      });
+      return () => {
+        current = false;
+      };
+    },
+  );
+  const editingBook = (): EditorBook | undefined => (props.editing === true ? book() : undefined);
+
+  // The current pane, read-only: rebuilt when its own text or stretch does,
+  // and not at all while the card is being edited — then the pane is the Book.
   const currentBuilt = createMemo(
     () => ({
       r: right(),
       split: props.split,
       markup: usfm(),
       decidable: props.controls !== undefined,
-      key: props.hunk.key,
-      live: props.live,
-      text: props.live === undefined ? props.sides.currentText : undefined,
-      from: props.live === undefined ? props.hunk.current.from : undefined,
-      to: props.live === undefined ? props.hunk.current.to : undefined,
+      text: props.sides.currentText,
+      from: props.hunk.current.from,
+      to: props.hunk.current.to,
+      editing: props.editing === true,
     }),
     { name: "cardCurrentBuilt", equals: sameFields },
   );
   createEffect(
     () => currentBuilt(),
-    ({ r, split, markup, key, live }) => {
-      if (r === undefined) return;
+    ({ r, split, markup, editing }) => {
+      if (r === undefined || editing) return;
       const started = performance.now();
       const { hunk, sides } = now();
       const paint = currentPaint(markup, split);
-      const mode = markup ? "usfm" : "default";
-      let mount: DiffViewMount;
-      if (live !== undefined) {
-        const release = live.book.hold();
-        const satellite = mountSatellite({
-          parent: r,
-          host: live.book.funnel(),
-          range: wholeLines(live.book.state.doc, hunk.current),
-          editable: true,
-          label: `review:${key}`,
-          extensions: [
-            modeView(mode, "cm-diff cm-diff-card"),
-            analyzer.of(live.analyze),
-            readingLayer,
-            clippedToScope(),
-            ...liveDiff(paint()),
-            Prec.high(
-              keymap.of([
-                {
-                  key: "Escape",
-                  run: (view) => {
-                    view.contentDOM.blur();
-                    untrack(() => props.onDoneEditing)?.();
-                    return true;
-                  },
-                },
-              ]),
-            ),
-          ],
-        });
-        const editing = (): void => untrack(() => props.onEditing)?.();
-        satellite.view.contentDOM.addEventListener("focus", editing);
-        mount = {
-          view: satellite.view,
-          repaint: (next) => repaintDiff(satellite.view, next),
-          setMode: () => {},
-          showAt: () => {},
-          destroy: () => {
-            satellite.view.contentDOM.removeEventListener("focus", editing);
-            satellite.destroy();
-            release();
-          },
-        };
-      } else
-        mount = mountDiffView({
-          parent: r,
-          text: sides.currentText,
-          analyze: () => sides.current,
-          mode,
-          clip: hunk.current,
-          surface: "cm-diff cm-diff-card",
-          paint: paint(),
-        });
-      panes.set("current", { mount, paint, live: live !== undefined });
+      const mount = mountDiffView({
+        parent: r,
+        text: sides.currentText,
+        analyze: () => sides.current,
+        mode: markup ? "usfm" : "default",
+        clip: hunk.current,
+        surface: "cm-diff cm-diff-card",
+        paint: paint(),
+      });
+      panes.set("current", { mount, paint, live: false });
       props.onMounted?.(performance.now() - started);
       return () => {
         panes.delete("current");
@@ -277,6 +252,30 @@ export function DiffCard(props: {
       };
     },
   );
+
+  /** The editor, registered as the live current pane so a comparison repaints it. */
+  const editorView = (view: EditorView | undefined): void => {
+    if (view === undefined) {
+      panes.delete("current");
+      return;
+    }
+    const paint = currentPaint(
+      untrack(usfm),
+      untrack(() => props.split),
+    );
+    panes.set("current", {
+      mount: {
+        view,
+        repaint: (next) => repaintDiff(view, next),
+        setMode: () => {},
+        showAt: () => {},
+        destroy: () => {},
+      },
+      paint,
+      live: true,
+    });
+    repaintDiff(view, paint());
+  };
 
   // A decision, or a new comparison, repaints in place. A live pane whose text
   // has moved past the comparison (the next keystroke landed first) keeps its
@@ -301,47 +300,42 @@ export function DiffCard(props: {
       : `${props.hunk.units.length} changes`;
 
   return (
-    <Card
-      padded={false}
-      class="overflow-hidden"
-      data-diff-card={props.hunk.key}
-      // Double-click opens the book only where the card cannot be edited. On a
-      // live card it is the editor's own gesture — select a word — and taking
-      // the reader to another view mid-edit is the card refusing to be edited.
+    <CardFrame
+      data={{ "data-diff-card": props.hunk.key }}
+      label={hunkLabel(props.hunk)}
+      gone={props.gone}
+      badges={
+        <>
+          <span class="text-smallest text-on-surface-tertiary">{status()}</span>
+          <Show when={hunkKind(props.hunk.units)}>
+            {(kind) => (
+              <Badge tone="muted" data-diff-kind={kind()}>
+                {kind()}
+              </Badge>
+            )}
+          </Show>
+        </>
+      }
+      headerActions={props.headerActions}
+      editable={props.editable === true}
+      editing={props.editing === true}
+      onEdit={() => props.onEdit?.()}
+      onDone={() => props.onDone?.()}
+      open={props.open}
+      // Double-click: into the editor where the card can be edited, the way
+      // every card opens; where it cannot, to the whole book.
       onDblClick={() => {
-        if (props.live === undefined) props.onOpen?.();
+        if (props.editing === true) return;
+        if (props.editable === true) props.onEdit?.();
+        else props.onOpen?.();
       }}
     >
-      <header class="flex flex-wrap items-center gap-2 border-b border-surface-border px-3 py-1.5">
-        <strong class="text-small font-medium text-on-surface-primary tabular-nums">
-          {hunkLabel(props.hunk)}
-        </strong>
-        <span class="text-smallest text-on-surface-tertiary">{status()}</span>
-        <Show when={hunkKind(props.hunk.units)}>
-          {(kind) => (
-            <Badge tone="muted" data-diff-kind={kind()}>
-              {kind()}
-            </Badge>
-          )}
-        </Show>
-        <Show when={props.actions}>
-          <div class="ms-auto flex shrink-0 items-center gap-1">{props.actions}</div>
-        </Show>
-      </header>
       <Show when={props.split}>
         <div class="grid grid-cols-2 divide-x divide-surface-border border-b border-surface-border text-smallest text-on-surface-tertiary">
           <span class={cx("truncate px-3 py-0.5", props.currentFirst === true && "order-last")}>
             {props.baselineLabel}
           </span>
-          <span
-            class="truncate px-3 py-0.5"
-            data-diff-editable={props.live !== undefined ? "" : undefined}
-          >
-            {props.currentLabel}
-            <Show when={props.live !== undefined}>
-              <span class="text-brand"> · {t("editable")}</span>
-            </Show>
-          </span>
+          <span class="truncate px-3 py-0.5">{props.currentLabel}</span>
         </div>
       </Show>
       <div class={props.split ? "grid grid-cols-2 divide-x divide-surface-border" : ""}>
@@ -354,8 +348,38 @@ export function DiffCard(props: {
             </Show>
           </div>
         </Show>
-        <div class={cx("min-w-0", props.live !== undefined && "cm-diff-live")} ref={setRight} />
+        <Show when={props.editing === true} fallback={<div class="min-w-0" ref={setRight} />}>
+          <div class="min-w-0">
+            <Show
+              when={editingBook()}
+              fallback={
+                <p class="px-3 py-2 text-small text-on-surface-tertiary">
+                  {refused() ? t("That book could not be opened for editing.") : t("Opening…")}
+                </p>
+              }
+            >
+              {(seated) => (
+                <CardEditor
+                  book={seated()}
+                  range={props.hunk.current}
+                  mode={usfm() ? "usfm" : "regular"}
+                  surface="cm-diff cm-diff-card"
+                  analyze={props.analyze ?? (() => props.sides.current)}
+                  extensions={liveDiff(
+                    currentPaint(
+                      untrack(usfm),
+                      untrack(() => props.split),
+                    )(),
+                  )}
+                  label={`review:${props.hunk.key}`}
+                  onView={editorView}
+                  onDone={() => props.onDone?.()}
+                />
+              )}
+            </Show>
+          </div>
+        </Show>
       </div>
-    </Card>
+    </CardFrame>
   );
 }

@@ -13,7 +13,7 @@
  */
 
 import type { JSX } from "@solidjs/web";
-import { For, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
+import { For, createMemo, createSignal, onCleanup } from "solid-js";
 
 import type { BookId } from "#core/book/book";
 import {
@@ -27,7 +27,8 @@ import type { EditorBook, Funnel } from "#editor/index";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { cx, VirtualList, type VirtualSection } from "../primitives";
+import { CardList } from "../multibuffer/CardList";
+import { cx, type VirtualSection } from "../primitives";
 import { claimSidebar } from "../workspace/sidebarSlot";
 import { ExcerptCard, type ContextStep, type MarkTone, type Paired } from "./ExcerptCard";
 import { ResultsOutline } from "./ResultsOutline";
@@ -160,41 +161,8 @@ const estimate = (excerpt: Excerpt): number => {
   return ROW_GAP + CARD_CHROME + lines * LINE + 16;
 };
 
-/**
- * The card being edited, held where it stood.
- *
- * A card is a view of a RESULT, and an edit can end the result: fix the error
- * and the finding is gone, delete the word and the hit is gone. The list is
- * rebuilt on the next parse, and without this the card would leave from under
- * the caret. So starting an edit takes a snapshot — the card's key, its
- * section, the row before it, and its excerpt — and while the edit lasts a
- * card missing from the new results is put back at that place. The editor in
- * it is the real Book, so it keeps the caret and shows the live parse; Done
- * (or Escape, or editing another card) releases it.
- */
-interface Pin {
-  readonly key: string;
-  readonly section: string;
-  readonly sectionIndex: number;
-  readonly after: string | undefined;
-  readonly excerpt: Excerpt;
-}
-
-/** A card released after its result ended: one line where it stood. */
-interface Ghost {
-  readonly key: string;
-  readonly section: string;
-  readonly after: string | undefined;
-  readonly excerpt: Excerpt;
-}
-
-const GHOST = "ghost:";
-
 export function ExcerptList(props: ExcerptListProps) {
   const shell = useShell();
-  const [editing, setEditing] = createSignal<string | undefined>(undefined, {
-    name: "excerptEditing",
-  });
   const [active, setActive] = createSignal<string | undefined>(undefined, {
     name: "excerptActiveBook",
   });
@@ -232,128 +200,11 @@ export function ExcerptList(props: ExcerptListProps) {
     built.set(group, made);
     return made;
   };
-  const base = createMemo((): readonly VirtualSection<Excerpt>[] => props.groups.map(sectionOf), {
-    name: "excerptBase",
-  });
-  const baseKeys = createMemo(
-    () => new Set(base().flatMap((section) => section.rows.map((row) => row.key))),
-    { name: "excerptBaseKeys" },
-  );
-
-  const [pin, setPin] = createSignal<Pin | undefined>(undefined, { name: "excerptPin" });
-  const [ghosts, setGhosts] = createSignal<readonly Ghost[]>([], { name: "excerptGhosts" });
-
-  /** The pinned card, when the results have let it go. */
-  const pinGone = (): boolean => {
-    const held = pin();
-    return held !== undefined && !baseKeys().has(held.key);
-  };
-
-  /** Puts one row back after `after` in section `key`, making the section if it went. */
-  const insert = (
-    list: VirtualSection<Excerpt>[],
-    key: string,
-    sectionIndex: number,
-    after: string | undefined,
-    row: VirtualSection<Excerpt>["rows"][number],
-  ): void => {
-    const at = list.findIndex((section) => section.key === key);
-    if (at < 0) {
-      list.splice(Math.min(sectionIndex, list.length), 0, { key, rows: [row] });
-      return;
-    }
-    const section = list[at];
-    if (section === undefined) return;
-    const rows = [...section.rows];
-    const before = after === undefined ? -1 : rows.findIndex((entry) => entry.key === after);
-    rows.splice(before + 1, 0, row);
-    list[at] = { key: section.key, rows };
-  };
 
   const sections = createMemo(
-    (): readonly VirtualSection<Excerpt>[] => {
-      const held = pin();
-      const left = ghosts();
-      if ((held === undefined || !pinGone()) && left.length === 0) return base();
-      const list = [...base()];
-      const keys = baseKeys();
-      for (const ghost of left)
-        if (!keys.has(ghost.key))
-          insert(list, ghost.section, list.length, ghost.after, {
-            key: `${GHOST}${ghost.key}`,
-            item: ghost.excerpt,
-            estimate: 40,
-          });
-      if (held !== undefined && pinGone())
-        insert(list, held.section, held.sectionIndex, held.after, {
-          key: held.key,
-          // Gone from the results, so its highlights are stale: the text they
-          // marked no longer matches, or no longer has the finding.
-          item: withoutHits(held.excerpt),
-          estimate: estimate(held.excerpt),
-        });
-      return list;
-    },
+    (): readonly VirtualSection<Excerpt>[] => props.groups.map(sectionOf),
     { name: "excerptSections" },
   );
-
-  createEffect(
-    () => props.resultsKey,
-    () => {
-      if (untrack(ghosts).length > 0) setGhosts([]);
-    },
-  );
-
-  /** Start editing `key`: pin it, and let any earlier one-line rows go. */
-  const startEdit = (key: string, excerpt: Excerpt): void => {
-    const list = base();
-    for (const [sectionIndex, section] of list.entries()) {
-      const at = section.rows.findIndex((row) => row.key === key);
-      if (at < 0) continue;
-      setPin({
-        key,
-        section: section.key,
-        sectionIndex,
-        after: section.rows[at - 1]?.key,
-        excerpt,
-      });
-      break;
-    }
-    setGhosts([]);
-    setEditing(key);
-    watchEdits(excerpt.bookId);
-  };
-
-  /**
-   * The results, re-taken while a card is being edited — at each pause in
-   * typing, as Done would. Without it a screen that re-reads on Done (Find
-   * searches again then) would go on marking a word the edit had already
-   * changed; with it, a card whose result ended says so while you are still in
-   * it, held in place by the pin.
-   */
-  let stopWatching: (() => void) | undefined;
-  const PAUSE_MS = 400;
-  const watchEdits = (bookId: BookId): void => {
-    stopWatching?.();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let stop: (() => void) | undefined;
-    let live = true;
-    void props.seat(bookId).then((book) => {
-      if (!live || book === undefined) return;
-      stop = book.changes(() => {
-        if (timer !== undefined) clearTimeout(timer);
-        timer = setTimeout(() => props.onEdited?.(), PAUSE_MS);
-      });
-    });
-    stopWatching = () => {
-      live = false;
-      if (timer !== undefined) clearTimeout(timer);
-      stop?.();
-      stopWatching = undefined;
-    };
-  };
-  onCleanup(() => stopWatching?.());
-
   const nameOf = (bookId: string): BookExcerpts | undefined =>
     props.groups.find((group) => group.bookId === bookId);
 
@@ -362,28 +213,6 @@ export function ExcerptList(props: ExcerptListProps) {
     const draw = props.decor?.header;
     const group = nameOf(key);
     return draw === undefined || group === undefined ? undefined : draw(group);
-  };
-
-  const done = (): void => {
-    const held = pin();
-    // A card whose result ends leaves as one line where it stood, so the cards
-    // below move up by a line, not by a card. Left for EVERY released card, and
-    // drawn only while its key is missing from the results: Find re-runs its
-    // search on Done, so "gone" is often only known after this.
-    if (held !== undefined)
-      setGhosts((was) => [
-        ...was,
-        {
-          key: held.key,
-          section: held.section,
-          after: held.after,
-          excerpt: held.excerpt,
-        },
-      ]);
-    stopWatching?.();
-    setPin(undefined);
-    setEditing(undefined);
-    props.onEdited?.();
   };
 
   const current = () => active() ?? props.groups[0]?.bookId;
@@ -438,9 +267,17 @@ export function ExcerptList(props: ExcerptListProps) {
         </For>
       </nav>
 
-      <VirtualList<Excerpt>
+      <CardList<Excerpt>
         sections={sections()}
-        pinned={editing()}
+        bookOf={(excerpt) => excerpt.bookId}
+        seat={props.seat}
+        onRetake={() => props.onEdited?.()}
+        // Gone from the results, so its highlights are stale: the text they
+        // marked no longer matches, or no longer has the finding.
+        whenGone={withoutHits}
+        lineLabel={(excerpt) => excerpt.label}
+        goneLabel={props.goneLabel}
+        resultsKey={props.resultsKey}
         focus={props.focus}
         onActive={setActive}
         ref={(scrollTo) => {
@@ -468,75 +305,44 @@ export function ExcerptList(props: ExcerptListProps) {
             )}
           </header>
         )}
-        row={(excerpt, key) =>
-          key.startsWith(GHOST) ? (
-            <div class="pt-3" data-excerpt-ghost={key.slice(GHOST.length)}>
-              <div class="flex items-center gap-2 rounded-md border border-dashed border-surface-border px-3 py-1.5 text-small text-on-surface-tertiary">
-                <strong class="font-medium text-on-surface-secondary">{excerpt().label}</strong>
-                <span>{props.goneLabel ?? t("No longer in the results")}</span>
-                <button
-                  type="button"
-                  class="ms-auto cursor-pointer text-smallest hover:text-on-surface-primary"
-                  aria-label={t("Dismiss")}
-                  onClick={() =>
-                    setGhosts((was) => was.filter((ghost) => `${GHOST}${ghost.key}` !== key))
-                  }
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-          ) : (
-            // The gap is padding INSIDE the measured row, not a margin between
-            // rows: the virtualizer positions rows by their measured height, and
-            // a margin would be outside what it measures.
-            <div class="pt-3">
-              <ExcerptCard
-                excerpt={
-                  // A pinned card gone from the results is drawn from its own
-                  // snapshot: there is no result left to widen, and the feed's
-                  // per-card state for it went with the result.
-                  editing() === key && pinGone()
-                    ? excerpt()
-                    : (props.shownOf?.(excerpt()) ?? excerpt())
-                }
-                editing={editing() === key}
-                gone={
-                  editing() === key && pinGone()
-                    ? (props.goneLabel ?? t("No longer in the results"))
-                    : undefined
-                }
-                onEdit={() => startEdit(key, excerpt())}
-                onDone={done}
-                onOpen={() =>
-                  props.onOpen(
-                    excerpt().bookId,
-                    excerpt().hits[0]?.from ?? excerpt().span.from,
-                    excerpt().hits[0]?.to,
-                  )
-                }
-                seat={() => props.seat(excerpt().bookId)}
-                analyze={props.analyze}
-                follow={props.seatedOf?.(excerpt().bookId)}
-                paired={props.pairedOf?.(excerpt())}
-                onExpand={
-                  props.onExpand === undefined
-                    ? undefined
-                    : // The EXTENT is keyed by sid, which is the verse — a section
-                      // key in front of it is about where the card is on screen,
-                      // and an expansion is about the verse wherever it is shown.
-                      (step) => props.onExpand?.(excerpt().sid, step)
-                }
-                active={props.focus === key ? props.activeHit : undefined}
-                mode={props.mode ?? "regular"}
-                label={props.decor?.label?.(excerpt(), key)}
-                notes={props.decor?.notes?.(excerpt(), key)}
-                actions={props.decor?.actions?.(excerpt(), key)}
-                markTone={props.decor?.markTone}
-              />
-            </div>
-          )
-        }
+        card={(excerpt, key, session) => (
+          <ExcerptCard
+            excerpt={
+              // A pinned card gone from the results is drawn from its own
+              // snapshot: there is no result left to widen.
+              session.gone ? excerpt() : (props.shownOf?.(excerpt()) ?? excerpt())
+            }
+            editing={session.editing}
+            gone={session.gone ? session.goneLabel : undefined}
+            onEdit={session.start}
+            onDone={session.done}
+            onOpen={() =>
+              props.onOpen(
+                excerpt().bookId,
+                excerpt().hits[0]?.from ?? excerpt().span.from,
+                excerpt().hits[0]?.to,
+              )
+            }
+            seat={() => props.seat(excerpt().bookId)}
+            analyze={props.analyze}
+            follow={props.seatedOf?.(excerpt().bookId)}
+            paired={props.pairedOf?.(excerpt())}
+            onExpand={
+              props.onExpand === undefined
+                ? undefined
+                : // The EXTENT is keyed by sid, which is the verse — a section
+                  // key in front of it is about where the card is on screen,
+                  // and an expansion is about the verse wherever it is shown.
+                  (step) => props.onExpand?.(excerpt().sid, step)
+            }
+            active={props.focus === key ? props.activeHit : undefined}
+            mode={props.mode ?? "regular"}
+            label={props.decor?.label?.(excerpt(), key)}
+            notes={props.decor?.notes?.(excerpt(), key)}
+            actions={props.decor?.actions?.(excerpt(), key)}
+            markTone={props.decor?.markTone}
+          />
+        )}
       />
     </div>
   );
