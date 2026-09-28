@@ -242,6 +242,8 @@ export function StetView(props: StetViewProps) {
       </aside>
 
       <ExcerptList
+        goneLabel={t("No longer an occurrence")}
+        resultsKey={props.selected}
         groups={props.groups}
         outline={props.outline}
         onExpand={props.onExpand}

@@ -710,6 +710,8 @@ export function FindingsPanel() {
         >
           <Show when={body()} fallback={<div class="min-h-0 flex-1" aria-busy="true" />}>
             <ExcerptList
+              goneLabel={t("Resolved")}
+              resultsKey={JSON.stringify(filters.filter())}
               groups={feed.groups()}
               outline={feed.outline()}
               onOpen={openCard}

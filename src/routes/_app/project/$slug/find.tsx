@@ -847,6 +847,8 @@ function Find() {
             which is the shape STET uses for a source verse. The editable side
             is always this project's own text. */}
         <ExcerptList
+          goneLabel={t("No longer matches")}
+          resultsKey={asked()}
           groups={feed.groups()}
           outline={feed.outline()}
           onOpen={feed.openInEditor}

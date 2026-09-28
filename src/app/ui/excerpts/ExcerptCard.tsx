@@ -55,7 +55,7 @@ import type { Analysis } from "#core/galley";
 import type { EditorBook, Funnel, MarkedRange } from "#editor/index";
 
 import { t } from "../../i18n";
-import { Button, Card, cx, IconButton } from "../primitives";
+import { Badge, Button, Card, cx, IconButton } from "../primitives";
 import { ExcerptEditor } from "./ExcerptEditor";
 import { ExcerptReader } from "./ExcerptReader";
 
@@ -115,6 +115,12 @@ export interface ExcerptCardProps {
   readonly mode?: "regular" | "usfm";
   /** Replaces the reference in the header. */
   readonly label?: JSX.Element;
+  /**
+   * Set while the card is held on screen for editing though the results no
+   * longer include it — the finding resolved, the term no longer matches.
+   * What to call that is the screen's ("Resolved", "No longer matches").
+   */
+  readonly gone?: string | undefined;
   /** A block between the header and the text — Findings' one line per finding. */
   readonly notes?: JSX.Element;
   /** The footer's slot: whatever this screen lets a reader do about this place. */
@@ -421,6 +427,13 @@ export function ExcerptCard(props: ExcerptCardProps) {
         <strong class="text-small font-medium text-on-surface-primary">
           {props.label ?? props.excerpt.label}
         </strong>
+        <Show when={props.gone}>
+          {(said) => (
+            <Badge tone="success" data-excerpt-gone>
+              {said()}
+            </Badge>
+          )}
+        </Show>
         {/* Not when the card carries notes: findings list themselves line by
             line under this header, and "2 matches" above them would be the
             same count said twice in another vocabulary. */}
