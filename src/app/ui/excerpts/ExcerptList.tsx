@@ -16,7 +16,12 @@ import type { JSX } from "@solidjs/web";
 import { For, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
 import type { BookId } from "#core/book/book";
-import type { BookExcerpts, Excerpt, OutlineRow } from "#core/excerpts/excerpts";
+import {
+  withoutHits,
+  type BookExcerpts,
+  type Excerpt,
+  type OutlineRow,
+} from "#core/excerpts/excerpts";
 import type { Analysis } from "#core/galley";
 import type { EditorBook, Funnel } from "#editor/index";
 
@@ -282,7 +287,9 @@ export function ExcerptList(props: ExcerptListProps) {
       if (held !== undefined && pinGone())
         insert(list, held.section, held.sectionIndex, held.after, {
           key: held.key,
-          item: held.excerpt,
+          // Gone from the results, so its highlights are stale: the text they
+          // marked no longer matches, or no longer has the finding.
+          item: withoutHits(held.excerpt),
           estimate: estimate(held.excerpt),
         });
       return list;
@@ -314,7 +321,38 @@ export function ExcerptList(props: ExcerptListProps) {
     }
     setGhosts([]);
     setEditing(key);
+    watchEdits(excerpt.bookId);
   };
+
+  /**
+   * The results, re-taken while a card is being edited — at each pause in
+   * typing, as Done would. Without it a screen that re-reads on Done (Find
+   * searches again then) would go on marking a word the edit had already
+   * changed; with it, a card whose result ended says so while you are still in
+   * it, held in place by the pin.
+   */
+  let stopWatching: (() => void) | undefined;
+  const PAUSE_MS = 400;
+  const watchEdits = (bookId: BookId): void => {
+    stopWatching?.();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let stop: (() => void) | undefined;
+    let live = true;
+    void props.seat(bookId).then((book) => {
+      if (!live || book === undefined) return;
+      stop = book.changes(() => {
+        if (timer !== undefined) clearTimeout(timer);
+        timer = setTimeout(() => props.onEdited?.(), PAUSE_MS);
+      });
+    });
+    stopWatching = () => {
+      live = false;
+      if (timer !== undefined) clearTimeout(timer);
+      stop?.();
+      stopWatching = undefined;
+    };
+  };
+  onCleanup(() => stopWatching?.());
 
   const nameOf = (bookId: string): BookExcerpts | undefined =>
     props.groups.find((group) => group.bookId === bookId);
@@ -342,6 +380,7 @@ export function ExcerptList(props: ExcerptListProps) {
           excerpt: held.excerpt,
         },
       ]);
+    stopWatching?.();
     setPin(undefined);
     setEditing(undefined);
     props.onEdited?.();
@@ -453,7 +492,14 @@ export function ExcerptList(props: ExcerptListProps) {
             // a margin would be outside what it measures.
             <div class="pt-3">
               <ExcerptCard
-                excerpt={props.shownOf?.(excerpt()) ?? excerpt()}
+                excerpt={
+                  // A pinned card gone from the results is drawn from its own
+                  // snapshot: there is no result left to widen, and the feed's
+                  // per-card state for it went with the result.
+                  editing() === key && pinGone()
+                    ? excerpt()
+                    : (props.shownOf?.(excerpt()) ?? excerpt())
+                }
                 editing={editing() === key}
                 gone={
                   editing() === key && pinGone()

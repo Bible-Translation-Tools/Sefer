@@ -365,7 +365,7 @@ Project find over the reading text, in JavaScript over the engine's mask map (`f
 
 ### Overview
 
-The multibuffer shared by Find, Key terms and Findings: occurrences grouped by TOC unit into cards, each a read-only view of the book in the editor's own projection that becomes a satellite on Edit or double-click. `src/core/excerpts`, `src/app/ui/excerpts`, `src/editor/recipes/reader.ts`. → [search](architecture/search.md#excerpts)
+The multibuffer shared by Find, Key terms and Findings: occurrences grouped by TOC unit into cards, each a read-only view of the book in the editor's own projection that becomes a satellite on Edit or double-click. `src/core/excerpts`, `src/app/ui/excerpts`, `src/editor/recipes/reader.ts`. → [search](architecture/search.md#excerpts) The card being edited is PINNED where it stood (`ExcerptList`): the screen re-takes its results at each pause in typing, a card whose result ended stays with "Resolved" / "No longer matches" until Done, and then leaves as one dismissable line. Review's cards pin the same way ("No longer a change").
 
 ### Constraints and known bugs
 
@@ -586,7 +586,7 @@ Rename, delete, archive, export, metadata and checksum refresh. `src/core/admin/
 
 ### Overview
 
-Composed exactly once (`composeApplication`), with services reached through `useComposition()`. It covers the command registry with `when()`, the routes under `/project/$slug/…`, ProjectContext, and event → core → stores. `src/app`, `src/routes`. → [shell](architecture/shell.md), [composition](architecture/composition.md)
+Composed exactly once (`composeApplication`), with services reached through `useComposition()`. It covers the command registry with `when()`, the routes under `/project/$slug/…`, ProjectContext, and event → core → stores. `src/app`, `src/routes`. → [shell](architecture/shell.md), [composition](architecture/composition.md) Every seated book's edits reach the shell, whichever surface made them: ProjectContext subscribes to each seat the Project announces and reports `book.apply` (and supplies the parse to ProjectAnalysis), except for the book the main editor shows, which `BookEditor` reports with its gesture trace. Before 2026-09-28 an edit made in a card (Find, Findings, Review) was invisible to the stamp and the corpus until the card released the book.
 
 ### Constraints and known bugs
 

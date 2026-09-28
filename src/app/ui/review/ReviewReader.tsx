@@ -727,35 +727,6 @@ export function ReviewReader(props: {
     // books is not a reason to look at the seats again.
   );
 
-  /**
-   * An edit in a live pane, announced. A satellite's edit lands in the Book
-   * but does not move the shell's stamp for it, so the review — which re-takes
-   * its comparison when a stamp moves — would never see it. Debounced per
-   * book: a burst of typing is one comparison after the burst.
-   */
-  createEffect(
-    () => seats(),
-    (held) => {
-      const stops: (() => void)[] = [];
-      const timers = new Map<BookId, ReturnType<typeof setTimeout>>();
-      for (const [bookId, book] of held)
-        stops.push(
-          book.changes(() => {
-            const waiting = timers.get(bookId);
-            if (waiting !== undefined) clearTimeout(waiting);
-            timers.set(
-              bookId,
-              setTimeout(() => props.onEdited(bookId), 150),
-            );
-          }),
-        );
-      return () => {
-        for (const timer of timers.values()) clearTimeout(timer);
-        for (const stop of stops) stop();
-      };
-    },
-  );
-
   /** One live handle per seated book, the same object for as long as the seat. */
   const handles = new WeakMap<
     EditorBook,
@@ -1010,6 +981,20 @@ export function ReviewReader(props: {
                   onOpen={() => openInBook(item().hunk)}
                   actions={
                     <>
+                      <Show
+                        when={
+                          editingCard()?.key === item().hunk.key &&
+                          item().hunk.units.every(
+                            (unit) =>
+                              !changed(unit) &&
+                              props.decision(item().hunk.bookId, unit.id) === undefined,
+                          )
+                        }
+                      >
+                        {/* Edited back to exactly the other side's text: held
+                            here by the pin until Done, and saying why it will go. */}
+                        <Badge tone="success">{t("No longer a change")}</Badge>
+                      </Show>
                       <Show when={editingCard()?.key === item().hunk.key}>
                         <Button
                           size="sm"

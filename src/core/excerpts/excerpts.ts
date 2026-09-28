@@ -463,6 +463,18 @@ const rangesOf = (hit: Occurrence): readonly { from: number; to: number; source:
  * still read like values, and the ones that need the projection still cost
  * nothing until something reads them.
  */
+/**
+ * The same excerpt with no hits: its text, span and context kept, nothing
+ * marked. For a card whose result has ended — the words it matched are gone —
+ * but which is still on screen. Delegates rather than copies, because an
+ * excerpt's projected fields are getters on its prototype (below), and a
+ * spread would copy the plain fields and lose them.
+ */
+export const withoutHits = (excerpt: Excerpt): Excerpt =>
+  // SAFETY: `Object.create(excerpt)` inherits every field and getter of
+  // `excerpt`; the one own property it defines, `hits`, has Excerpt's type.
+  Object.create(excerpt, { hits: { value: [], enumerable: true } }) as Excerpt;
+
 class LazyExcerpt implements Excerpt {
   readonly bookId: BookId;
   readonly sid: string;

@@ -53,7 +53,13 @@ import { mintSlug } from "#core/project/slug";
 import { DEFAULT_JOURNAL_POLICY, Recovery } from "#core/recovery/recovery";
 import { SaveCoordinator } from "#core/save/saveCoordinator";
 import type { SourceStamp } from "#core/source/source";
-import { anchorFrom, type ChapterRow, type EditorBook, type ProjectionName } from "#editor/index";
+import {
+  anchorFrom,
+  structureAt,
+  type ChapterRow,
+  type EditorBook,
+  type ProjectionName,
+} from "#editor/index";
 import { detectHost } from "#platform/host";
 
 import { registerShellCommands, type ShellBridge } from "./commands";
@@ -511,6 +517,40 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   /** Drops the seat-swap subscription of the project being closed. */
   let unwatchSeats: (() => void) | undefined;
   onCleanup(() => unwatchSeats?.());
+
+  /**
+   * Every seated book's edits, reported to the shell — whichever surface made
+   * them. The main editor reports its own book (`BookEditor`, with the
+   * gesture's trace); a card editing a book the editor does NOT show — a Find
+   * result, a finding, a Review card — edits the same Book through its
+   * satellite, and without this the stamp, the corpus and every screen that
+   * reads them stood still until the card let the book go. One subscription
+   * per seat, taken when the Project announces the seat and dropped when it
+   * announces the release.
+   */
+  const edits = {
+    held: new Map<BookId, () => void>(),
+    follow(bookId: BookId): void {
+      edits.held.get(bookId)?.();
+      edits.held.delete(bookId);
+      const book = services.seated(bookId);
+      if (book === undefined) return;
+      edits.held.set(
+        bookId,
+        book.changes(() => {
+          // The main editor's book is reported by the editor itself.
+          if (untrack(focused)?.id === bookId) return;
+          const analysis = structureAt(book.state).analysis;
+          if (analysis !== null) services.projectAnalysis.supply(bookId, analysis);
+          changed({ kind: "book.apply", books: [bookId] });
+        }),
+      );
+    },
+  };
+  const watchSeatedEdits = (): (() => void) => () => {
+    for (const stop of edits.held.values()) stop();
+    edits.held.clear();
+  };
   const [status, setStatus] = createSignal("", { name: "status" });
   const [paletteOpen, setPaletteOpen] = createSignal(false, { name: "paletteOpen" });
   const [cursor, setCursor] = createSignal(0, { name: "findingCursor" });
@@ -848,12 +888,18 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     // A seat swap replaces the Book object, so every row derived from one has
     // to be re-taken. One subscription for the whole project, not one per
     // book, and it is the Project's own announcement rather than a guess.
-    unwatchSeats = ready.changed((bookId) => {
+    const unwatchEdits = watchSeatedEdits();
+    const unwatchSwaps = ready.changed((bookId) => {
+      edits.follow(bookId);
       changed({
         kind: services.seated(bookId) === undefined ? "seat.close" : "seat.open",
         books: [bookId],
       });
     });
+    unwatchSeats = () => {
+      unwatchSwaps();
+      unwatchEdits();
+    };
     changed({ kind: "project.open" });
     report(t("opened {name} ({count} books)", { name: ready.root, count: ready.books.length }));
   };
