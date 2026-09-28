@@ -20,6 +20,7 @@ import {
 
 import { FLAG, NOTE_PART, TOKEN, TOKEN_SPELLING_BIT, classWordOf } from "#core/galley";
 
+import { blockHost } from "./blockHost";
 import { lineIndexAt, type DocStructure, type NoteRange } from "./docStructure";
 import type { DocPlan, PlanSpan, ResolvedSlot } from "./plan";
 import type { WidgetKey } from "./registry";
@@ -228,7 +229,7 @@ class NotesWidget extends WidgetType {
       row.append(slot);
       box.append(row);
     }
-    return box;
+    return blockHost(box);
   }
 
   updateDOM(dom: HTMLElement): boolean {

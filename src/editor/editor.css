@@ -973,6 +973,11 @@
    tokens and the same locked-key discipline as the attribute popover above,
    because it is the same idea at book scale.
    --------------------------------------------------------------------------- */
+/* Around every block widget's own element: its margins are inside the box
+   CodeMirror measures (`core/blockHost.ts`). */
+.cm-block-host {
+  display: flow-root;
+}
 .cm-mode-regular .usfm-frontcard {
   display: grid;
   grid-template-columns: max-content 1fr;

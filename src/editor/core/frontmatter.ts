@@ -38,6 +38,7 @@ import {
   type ViewUpdate,
 } from "@codemirror/view";
 
+import { blockHost } from "./blockHost";
 import { structureField, type DocStructure } from "./docStructure";
 import { isVisual, modeFacet, trusted } from "./kernel";
 
@@ -166,12 +167,12 @@ class FrontMatterWidget extends WidgetType {
   }
 
   toDOM(view: EditorView): HTMLElement {
-    const dom = document.createElement("div");
-    dom.className = "usfm-frontcard";
-    dom.setAttribute("role", "group");
-    dom.setAttribute("aria-label", "Book front matter");
-    for (let i = 0; i < this.rows.length; i++) dom.append(this.#field(view, i));
-    return dom;
+    const card = document.createElement("div");
+    card.className = "usfm-frontcard";
+    card.setAttribute("role", "group");
+    card.setAttribute("aria-label", "Book front matter");
+    for (let i = 0; i < this.rows.length; i++) card.append(this.#field(view, i));
+    return blockHost(card);
   }
 
   updateDOM(dom: HTMLElement, _view: EditorView): boolean {
