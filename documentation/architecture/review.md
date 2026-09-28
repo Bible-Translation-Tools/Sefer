@@ -194,13 +194,19 @@ markup** switch). `src/app/ui/review/ReviewReader.tsx` holds it together, over
   each text its own; or unified, the current text with the other's words struck
   through where they were and a unit only the other has drawn as a block where
   it stood. `auto` splits when the reading is at least 960 px wide.
-- **Scope** (`review.scope`: `changes` | `book`) — each change as a CARD
-  clipped to it and its context (TOC steps, `excerpts.context`), neighbours
-  sharing a card, across every book that differs, with a sticky header per
-  book; or the WHOLE BOOK with its changes drawn in place, the other pane of a
-  split following your place by unit (the reference pane's `watchLocation`
-  pattern). A card's book icon (or a double-click on a read-only card; on an editable one a double-click selects a word) opens it in the book at the
-  same change, and Changes returns to that card.
+- **Scope** (`review.scope`: `changes` | `book`) — one CARD per TOC unit that
+  changed (a verse, a bridge, a chapter's head), as Find has one card per verse
+  with a hit: every change the engine reports inside that unit is on it, and
+  its key is the unit's address, so it does not move when a change appears or
+  goes around it. Context is the excerpt setting (`excerpts.context`, 0 by
+  default: the verse alone) and each card's own arrows (one more above, the
+  chapter, one more below); changes that fall in a card's context are painted
+  there too, and neighbouring cards may show the same context, as Find's do.
+  Across every book that differs, with a sticky header per book. Or the WHOLE
+  BOOK with its changes drawn in place, the other pane of a split following
+  your place by unit (the reference pane's `watchLocation` pattern). A card's
+  book icon opens it in the book at the same change, and Changes returns to
+  that card; a double-click edits, as on every card.
 
 Both preferences are in Settings and on the reading's toolbar, which remembers
 them. Scattered edits read better as cards and a rewrite reads better as the

@@ -37,6 +37,7 @@ import "#editor/editor.css";
 import { t } from "../../i18n";
 import { CardEditor } from "../multibuffer/CardEditor";
 import { CardFrame } from "../multibuffer/CardFrame";
+import { ContextControl, type ContextStep } from "../multibuffer/ContextControl";
 import { Badge, cx } from "../primitives";
 import { hunkKind, hunkLabel, isFormatting, type Hunk } from "./hunks";
 import { sidePaint, unifiedPaint, type Controls } from "./paint";
@@ -113,6 +114,8 @@ export function DiffCard(props: {
   readonly headerActions?: JSX.Element;
   /** The open control (to the whole book). */
   readonly open?: JSX.Element;
+  /** One context step for this card: absent, the card offers no widening. */
+  readonly onStep?: (step: ContextStep) => void;
   readonly onOpen?: () => void;
   readonly onMounted?: (ms: number) => void;
 }) {
@@ -136,9 +139,9 @@ export function DiffCard(props: {
     const { hunk, sides } = now();
     const mode = markup ? "usfm" : "default";
     return split
-      ? sidePaint(hunk.units, "current", markup, controls(), sides.current, hunk.currentStart)
+      ? sidePaint(hunk.all, "current", markup, controls(), sides.current, hunk.currentStart)
       : unifiedPaint(
-          hunk.units,
+          hunk.all,
           markup,
           controls(),
           goneBlock(sides.baseline, mode),
@@ -148,7 +151,7 @@ export function DiffCard(props: {
   };
   const baselinePaint = (markup: boolean) => (): DiffPaint => {
     const { hunk, sides } = now();
-    return sidePaint(hunk.units, "baseline", markup, undefined, sides.baseline, hunk.baselineStart);
+    return sidePaint(hunk.all, "baseline", markup, undefined, sides.baseline, hunk.baselineStart);
   };
 
   /** The panes of this card, and how to paint them — for a repaint in place. */
@@ -339,6 +342,18 @@ export function DiffCard(props: {
       onEdit={() => props.onEdit?.()}
       onDone={() => props.onDone?.()}
       open={props.open}
+      control={
+        <Show when={props.onStep}>
+          {(step) => (
+            <ContextControl
+              chapter={props.hunk.extent.chapter === true}
+              canUp={props.hunk.more.up}
+              canDown={props.hunk.more.down}
+              onStep={step()}
+            />
+          )}
+        </Show>
+      }
       // Double-click edits, as on every card; a card that cannot be edited
       // does nothing — the book icon is the one way into the whole book, so a
       // gesture never takes the reader somewhere else.

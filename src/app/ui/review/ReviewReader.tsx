@@ -61,9 +61,11 @@ import {
   type BookDiffApi,
   type Controls,
   type DiffSides,
+  type Extent,
   type Hunk,
 } from "../diff";
 import { CardList } from "../multibuffer/CardList";
+import type { ContextStep } from "../multibuffer/ContextControl";
 import {
   Badge,
   Button,
@@ -209,6 +211,39 @@ export function ReviewReader(props: {
     return analyze(text);
   };
 
+  /**
+   * Each card's own widening, by its key — the verse's address — as Find's
+   * feed keeps them: the extent is the card's, and a card that scrolls out of
+   * the window and back must keep what the reader asked to see.
+   */
+  const [extents, setExtents] = createSignal<ReadonlyMap<string, Extent>>(new Map(), {
+    name: "reviewExtents",
+  });
+  const expand = (key: string, step: ContextStep): void => {
+    const steps = services.settings.get(keys.excerptContext);
+    setExtents((held) => {
+      const next = new Map(held);
+      const now = next.get(key) ?? { up: steps, down: steps };
+      next.set(
+        key,
+        step === "chapter"
+          ? { up: now.up, down: now.down, chapter: now.chapter !== true }
+          : step === "up"
+            ? { up: now.up + 1, down: now.down }
+            : { up: now.up, down: now.down + 1 },
+      );
+      return next;
+    });
+  };
+  /** The widenings of one book's cards, as a value: what re-prepares that book. */
+  const extentsOf = (bookId: BookId): string =>
+    [...untrack(extents).entries()]
+      .filter(([key]) => key.startsWith(`${bookId} `))
+      .map(
+        ([key, extent]) => `${key}=${extent.up}/${extent.down}/${extent.chapter === true ? 1 : 0}`,
+      )
+      .join(",");
+
   const prepare = (book: ReviewBook, steps: number, show: Filter, result: boolean): Prepared => {
     const sides: DiffSides = {
       bookId: book.bookId,
@@ -234,6 +269,7 @@ export function ReviewReader(props: {
         baseline: sides.baseline,
         current: sides.current,
         steps,
+        extentOf: (key) => untrack(extents).get(key),
         include,
         keep,
       }),
@@ -250,7 +286,7 @@ export function ReviewReader(props: {
    */
   let held = new Map<BookId, { readonly key: string; readonly prepared: Prepared }>();
   const keyOf = (book: ReviewBook, show: Filter, result: boolean): string =>
-    `${show}\0${result ? "r" : "c"}\0${book.currentText.length}\0${book.baselineText.length}`;
+    `${show}\0${result ? "r" : "c"}\0${book.currentText.length}\0${book.baselineText.length}\0${extentsOf(book.bookId)}`;
   const same = (was: Prepared, book: ReviewBook): boolean =>
     was.book.currentText === book.currentText && was.book.baselineText === book.baselineText;
 
@@ -259,6 +295,8 @@ export function ReviewReader(props: {
       books: props.books,
       show: filter(),
       result: props.mode === "result",
+      // A card widened re-prepares its book (and only it: the key says which).
+      widened: extents(),
     }),
     ({ books, show, result }) => {
       const steps = services.settings.get(keys.excerptContext);
@@ -980,6 +1018,7 @@ export function ReviewReader(props: {
                 analyze={(text) => analysisOf(item().hunk.bookId, "current", text)}
                 onOpen={() => openInBook(item().hunk)}
                 headerActions={<CardDecision hunk={item().hunk} />}
+                onStep={(step) => expand(item().hunk.key, step)}
                 open={
                   <IconButton
                     size="sm"

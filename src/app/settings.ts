@@ -402,7 +402,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
       true,
     ),
     enableReplaceAll: settings.register("find.enableReplaceAll", Schema.Boolean, false),
-    excerptContext: settings.register("excerpts.context", Schema.Number, 1),
+    excerptContext: settings.register("excerpts.context", Schema.Number, 0),
     excerptRenderer: settings.register("excerpts.renderer", Schema.String, "editor"),
     reviewLayout: settings.register("review.layout", Schema.String, "auto"),
     reviewScope: settings.register("review.scope", Schema.String, "changes"),
@@ -489,7 +489,7 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
       key: keys.excerptContext,
       label: "Context around a result",
       description:
-        "How many verses or headings a result card in Find, Key terms and Findings shows either side of its match.",
+        "How many verses or headings a card in Find, Key terms, Findings and Review shows either side of its own verse. Each card's arrows widen it from there.",
       kind: "number",
       group: "editor",
       min: 0,

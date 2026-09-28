@@ -37,8 +37,6 @@
  */
 
 import type { JSX } from "@solidjs/web";
-import ChevronDownIcon from "lucide-solid/icons/chevron-down";
-import ChevronUpIcon from "lucide-solid/icons/chevron-up";
 import FoldVerticalIcon from "lucide-solid/icons/fold-vertical";
 import SquareArrowOutUpRightIcon from "lucide-solid/icons/square-arrow-out-up-right";
 import UnfoldVerticalIcon from "lucide-solid/icons/unfold-vertical";
@@ -56,11 +54,11 @@ import type { EditorBook, Funnel, MarkedRange } from "#editor/index";
 import { t } from "../../i18n";
 import { CardEditor } from "../multibuffer/CardEditor";
 import { CardFrame } from "../multibuffer/CardFrame";
+import { ContextControl, type ContextStep } from "../multibuffer/ContextControl";
 import { cx, IconButton } from "../primitives";
 import { ExcerptReader } from "./ExcerptReader";
 
-/** One press of the context control. */
-export type ContextStep = "up" | "down" | "chapter";
+export type { ContextStep } from "../multibuffer/ContextControl";
 
 /**
  * The text read beside the target.
@@ -196,54 +194,6 @@ const highlighted = (
   if (at < text.length) out.push(text.slice(at));
   return out;
 };
-
-/** The joined three-part control: step up, whole chapter, step down. */
-function ContextControl(props: {
-  readonly excerpt: Excerpt;
-  readonly onStep: (step: ContextStep) => void;
-}) {
-  const chapter = (): boolean => props.excerpt.extent.chapter === true;
-  const part =
-    "inline-flex h-6 cursor-pointer items-center gap-1 px-2 text-smallest font-medium text-on-surface-secondary transition-colors hover:not-disabled:bg-surface-secondary hover:not-disabled:text-on-surface-primary disabled:cursor-not-allowed disabled:opacity-40";
-  return (
-    <div
-      role="group"
-      aria-label={t("Context")}
-      data-context
-      class="inline-flex items-stretch divide-x divide-surface-border overflow-hidden rounded-md border border-surface-border"
-    >
-      <button
-        type="button"
-        data-step="up"
-        class={part}
-        aria-label={t("Show one more above")}
-        disabled={chapter() || !props.excerpt.more.up}
-        onClick={() => props.onStep("up")}
-      >
-        <ChevronUpIcon size={13} aria-hidden="true" />
-      </button>
-      <button
-        type="button"
-        data-step="chapter"
-        class={cx(part, chapter() && "bg-surface-secondary text-brand")}
-        aria-pressed={chapter() ? "true" : "false"}
-        onClick={() => props.onStep("chapter")}
-      >
-        {t("Chapter")}
-      </button>
-      <button
-        type="button"
-        data-step="down"
-        class={part}
-        aria-label={t("Show one more below")}
-        disabled={chapter() || !props.excerpt.more.down}
-        onClick={() => props.onStep("down")}
-      >
-        <ChevronDownIcon size={13} aria-hidden="true" />
-      </button>
-    </div>
-  );
-}
 
 export function ExcerptCard(props: ExcerptCardProps) {
   const [book, setBook] = createSignal<EditorBook | undefined>(undefined, {
@@ -467,7 +417,14 @@ export function ExcerptCard(props: ExcerptCardProps) {
       notes={props.notes}
       control={
         <Show when={props.onExpand}>
-          {(step) => <ContextControl excerpt={props.excerpt} onStep={step()} />}
+          {(step) => (
+            <ContextControl
+              chapter={props.excerpt.extent.chapter === true}
+              canUp={props.excerpt.more.up}
+              canDown={props.excerpt.more.down}
+              onStep={step()}
+            />
+          )}
         </Show>
       }
       actions={props.actions}
