@@ -38,7 +38,7 @@ import "#editor/editor.css";
 import { t } from "../../i18n";
 import { CardEditor } from "../multibuffer/CardEditor";
 import { CardFrame } from "../multibuffer/CardFrame";
-import { ContextControl, widened, type ContextStep } from "../multibuffer/ContextControl";
+import { ContextControl, type ContextStep } from "../multibuffer/ContextControl";
 import { Badge, Button, cx } from "../primitives";
 import { hunkKind, hunkLabel, type Hunk } from "./hunks";
 import { hunkPaint, sidePaint, type Controls } from "./paint";
@@ -362,10 +362,10 @@ export function DiffCard(props: {
         <Show when={props.onStep}>
           {(step) => (
             <ContextControl
-              chapter={props.hunk.extent.chapter === true}
+              extent={props.hunk.extent}
               canUp={props.hunk.more.up}
               canDown={props.hunk.more.down}
-              widened={widened(props.hunk.extent)}
+              only={t("Show only the change")}
               onStep={step()}
             />
           )}

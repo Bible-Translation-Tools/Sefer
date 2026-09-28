@@ -1,103 +1,114 @@
 /**
- * The joined context control every card wears: one TOC step up, the whole
- * chapter, one TOC step down, and collapse — back to the card's own unit
- * alone. A card starts from the setting's steps (`excerpts.context`) and this
- * widens that one card, or takes it back down.
+ * The context control every card wears: the joined group — one TOC step up,
+ * the whole chapter, one TOC step down — and beside it the fold toggle the
+ * paired reference card has ("Show only the match"): folded, the card is its
+ * own unit alone; unfolded, the reach it had comes back. A card starts from
+ * the setting's steps (`excerpts.context`).
  */
 
+import type { JSX } from "@solidjs/web";
 import ChevronDownIcon from "lucide-solid/icons/chevron-down";
 import ChevronUpIcon from "lucide-solid/icons/chevron-up";
-import ChevronsDownUpIcon from "lucide-solid/icons/chevrons-down-up";
+import FoldVerticalIcon from "lucide-solid/icons/fold-vertical";
+import UnfoldVerticalIcon from "lucide-solid/icons/unfold-vertical";
+
+import type { Extent } from "#core/excerpts/excerpts";
 
 import { t } from "../../i18n";
-import { cx } from "../primitives";
+import { cx, IconButton } from "../primitives";
 
 /** One press of the context control. */
-export type ContextStep = "up" | "down" | "chapter" | "collapse";
-
-/** How far a card reaches beyond its own unit, in TOC steps; or its chapter. */
-interface Reach {
-  readonly up: number;
-  readonly down: number;
-  readonly chapter?: boolean;
-}
+export type ContextStep = "up" | "down" | "chapter" | "fold";
 
 /**
  * A card's reach after one press — the ONE rule every list applies (Find's
- * feed, Review's cards). Collapse is the unit alone, whatever the setting
- * started it at: what the reader asked for is "just the hit" or "just the
- * change".
+ * feed, Review's cards). Fold is the unit alone, whatever the setting started
+ * it at, and remembers the reach it folded, so pressing it again unfolds to
+ * exactly that; any other step starts from where the card is and forgets it.
  */
-export const stepExtent = (now: Reach, step: ContextStep): Reach =>
-  step === "collapse"
-    ? { up: 0, down: 0 }
-    : step === "chapter"
-      ? { up: now.up, down: now.down, chapter: now.chapter !== true }
-      : step === "up"
-        ? { up: now.up + 1, down: now.down }
-        : { up: now.up, down: now.down + 1 };
+export const stepExtent = (now: Extent, step: ContextStep): Extent => {
+  if (step === "fold") {
+    if (now.folded !== undefined) return now.folded;
+    return widened(now) ? { up: 0, down: 0, folded: now } : now;
+  }
+  const at: Extent = {
+    up: now.up,
+    down: now.down,
+    ...(now.chapter === true ? { chapter: true } : {}),
+  };
+  return step === "chapter"
+    ? { up: at.up, down: at.down, chapter: at.chapter !== true }
+    : step === "up"
+      ? { up: at.up + 1, down: at.down }
+      : { up: at.up, down: at.down + 1 };
+};
 
-/** Whether a card shows anything beyond its own unit: what Collapse is offered for. */
-export const widened = (now: Reach): boolean => now.chapter === true || now.up > 0 || now.down > 0;
+/** Whether a card shows anything beyond its own unit. */
+const widened = (now: Extent): boolean => now.chapter === true || now.up > 0 || now.down > 0;
 
 export function ContextControl(props: {
-  /** Showing the whole chapter: the steps are off, Chapter is pressed. */
-  readonly chapter: boolean;
+  /** The card's reach: what the steps and the fold read. */
+  readonly extent: Extent;
   readonly canUp: boolean;
   readonly canDown: boolean;
-  /** Showing more than its own unit: Collapse takes it back down. */
-  readonly widened: boolean;
   readonly onStep: (step: ContextStep) => void;
+  /** What folding shows, for its label: "Show only the match", "Show only the change". */
+  readonly only?: string;
 }) {
+  const chapter = (): boolean => props.extent.chapter === true;
+  const folded = (): boolean => props.extent.folded !== undefined;
   const part =
     "inline-flex h-6 cursor-pointer items-center gap-1 px-2 text-smallest font-medium text-on-surface-secondary transition-colors hover:not-disabled:bg-surface-secondary hover:not-disabled:text-on-surface-primary disabled:cursor-not-allowed disabled:opacity-40";
+  const fold = (): JSX.Element => (
+    <IconButton
+      size="sm"
+      data-step="fold"
+      label={folded() ? t("Show the context again") : (props.only ?? t("Show only the match"))}
+      icon={folded() ? <UnfoldVerticalIcon size={13} /> : <FoldVerticalIcon size={13} />}
+      aria-pressed={folded() ? "true" : "false"}
+      disabled={!folded() && !widened(props.extent)}
+      onClick={() => props.onStep("fold")}
+    />
+  );
   return (
-    <div
-      role="group"
-      aria-label={t("Context")}
-      data-context
-      class="inline-flex items-stretch divide-x divide-surface-border overflow-hidden rounded-md border border-surface-border"
-    >
-      <button
-        type="button"
-        data-step="up"
-        class={part}
-        aria-label={t("Show one more above")}
-        disabled={props.chapter || !props.canUp}
-        onClick={() => props.onStep("up")}
+    <div class="inline-flex items-center gap-1">
+      <div
+        role="group"
+        aria-label={t("Context")}
+        data-context
+        class="inline-flex items-stretch divide-x divide-surface-border overflow-hidden rounded-md border border-surface-border"
       >
-        <ChevronUpIcon size={13} aria-hidden="true" />
-      </button>
-      <button
-        type="button"
-        data-step="chapter"
-        class={cx(part, props.chapter && "bg-surface-secondary text-brand")}
-        aria-pressed={props.chapter ? "true" : "false"}
-        onClick={() => props.onStep("chapter")}
-      >
-        {t("Chapter")}
-      </button>
-      <button
-        type="button"
-        data-step="down"
-        class={part}
-        aria-label={t("Show one more below")}
-        disabled={props.chapter || !props.canDown}
-        onClick={() => props.onStep("down")}
-      >
-        <ChevronDownIcon size={13} aria-hidden="true" />
-      </button>
-      <button
-        type="button"
-        data-step="collapse"
-        class={part}
-        aria-label={t("Back to just this one")}
-        title={t("Back to just this one")}
-        disabled={!props.widened}
-        onClick={() => props.onStep("collapse")}
-      >
-        <ChevronsDownUpIcon size={13} aria-hidden="true" />
-      </button>
+        <button
+          type="button"
+          data-step="up"
+          class={part}
+          aria-label={t("Show one more above")}
+          disabled={chapter() || !props.canUp}
+          onClick={() => props.onStep("up")}
+        >
+          <ChevronUpIcon size={13} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          data-step="chapter"
+          class={cx(part, chapter() && "bg-surface-secondary text-brand")}
+          aria-pressed={chapter() ? "true" : "false"}
+          onClick={() => props.onStep("chapter")}
+        >
+          {t("Chapter")}
+        </button>
+        <button
+          type="button"
+          data-step="down"
+          class={part}
+          aria-label={t("Show one more below")}
+          disabled={chapter() || !props.canDown}
+          onClick={() => props.onStep("down")}
+        >
+          <ChevronDownIcon size={13} aria-hidden="true" />
+        </button>
+      </div>
+      {fold()}
     </div>
   );
 }

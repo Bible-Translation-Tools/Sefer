@@ -216,8 +216,10 @@ markup** switch). `src/app/ui/review/ReviewReader.tsx` holds it together, over
   its key is the unit's address, so it does not move when a change appears or
   goes around it. Context is the excerpt setting (`excerpts.context`, 0 by
   default: the verse alone) and each card's own control (one more above, the
-  chapter, one more below, and Collapse — back to the verse alone; the one
-  control and one rule, `stepExtent`, on every card in Sefer); changes that fall in a card's context are painted
+  chapter, one more below, and beside them the fold toggle the paired
+  reference card has — "Show only the change", and again to bring the context
+  back; the one control and one rule, `stepExtent`, on every card in Sefer);
+  changes that fall in a card's context are painted
   there too, and neighbouring cards may show the same context, as Find's do.
   Across every book that differs, with a sticky header per book. Or the WHOLE
   BOOK with its changes drawn in place, the other pane of a split following

@@ -406,6 +406,11 @@ export interface Extent {
   readonly up: number;
   readonly down: number;
   readonly chapter?: boolean;
+  /**
+   * Folded to the unit alone, and the reach it had before — what unfolding
+   * brings back. Absent when the card is not folded.
+   */
+  readonly folded?: Extent;
 }
 
 /** One step either side: what a card shows before the reader asks for more. */

@@ -17,6 +17,7 @@
  * is painted, and the card's OWN changes are the ones it decides.
  */
 
+import type { Extent } from "#core/excerpts/excerpts";
 import { tocViewOf, type Analysis } from "#core/galley";
 import { unitReference, type DecisionUnit } from "#core/galley/diff";
 import { addressCode } from "#core/location/address";
@@ -29,12 +30,8 @@ export interface Range {
   readonly to: number;
 }
 
-/** How far a card reaches beyond its own unit, in TOC steps; or its chapter. */
-export interface Extent {
-  readonly up: number;
-  readonly down: number;
-  readonly chapter?: boolean;
-}
+/** How far a card reaches beyond its own unit — the excerpt's own extent, one type for every card. */
+export type { Extent } from "#core/excerpts/excerpts";
 
 /** One card: a TOC unit that changed, and the stretch of each text it shows. */
 export interface Hunk {
