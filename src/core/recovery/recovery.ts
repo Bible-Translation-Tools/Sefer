@@ -193,7 +193,16 @@ interface Journal {
   entries: JournalEntry[];
 }
 
-const idOf = (projectId: string, bookId: BookId): string => `${projectId}/${bookId}`;
+/**
+ * `<projectId>/<bookId>`, with no leading slash — the same spelling the disk
+ * listing gives back (`listIds`: paths relative to the root). A `ProjectId` is
+ * an absolute path, and when the two spellings differed, the in-memory
+ * journal and the file were two ids for one journal: Discard removed the file
+ * but not the journal, whose next flush wrote every entry back, and a
+ * session's own journal was offered back to it as an earlier session's.
+ */
+const idOf = (projectId: string, bookId: BookId): string =>
+  `${projectId}/${bookId}`.replace(/^\/+/, "");
 
 /** Marks an id set aside by `setAside`: `<projectId>/<bookId>@<last entry's time>`. */
 const ASIDE = "@";
