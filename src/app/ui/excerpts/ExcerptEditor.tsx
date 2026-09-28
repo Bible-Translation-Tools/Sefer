@@ -197,5 +197,5 @@ export function ExcerptEditor(props: ExcerptEditorProps) {
     },
   );
 
-  return <div class="cm-host" ref={setHost} />;
+  return <div class="cm-host cm-editing" data-excerpt-editor ref={setHost} />;
 }

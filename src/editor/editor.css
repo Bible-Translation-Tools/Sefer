@@ -929,14 +929,20 @@
   border-radius: 2px;
 }
 .cm-excerpt-current {
-  box-shadow: 0 0 0 1px var(--brand);
+  box-shadow: 0 0 0 1px var(--brand-base);
 }
 .cm-excerpt-hit.cm-excerpt-current {
   background-color: var(--brand-light);
-  color: var(--brand);
+  color: var(--brand-base);
 }
 .cm-excerpt-context {
   opacity: 0.55;
+}
+/* Dimmed while READING results, so the match stands out; full strength once
+   the card is being edited, because then it is the book, and it should look
+   like the editor. */
+.cm-editing .cm-excerpt-context {
+  opacity: 1;
 }
 
 /* A satellite inside an excerpt card (`src/app/ui/excerpts/`).
@@ -1046,7 +1052,7 @@
   padding: 12px 16px;
 }
 .cm-diff-modified-unit {
-  background-color: color-mix(in srgb, var(--brand) 6%, transparent);
+  background-color: color-mix(in srgb, var(--brand-base) 6%, transparent);
 }
 .cm-diff-added-unit {
   background-color: color-mix(in srgb, #16a34a 9%, transparent);
@@ -1062,7 +1068,7 @@
    a neutral wash (the other side's text will stand here). */
 .cm-diff-kept {
   background-color: transparent;
-  text-decoration: underline dotted color-mix(in srgb, var(--brand) 60%, transparent);
+  text-decoration: underline dotted color-mix(in srgb, var(--brand-base) 60%, transparent);
   text-underline-offset: 4px;
 }
 .cm-diff-taken {
@@ -1119,8 +1125,8 @@
   background: var(--surface-secondary);
 }
 .cm-diff-control button[data-on="true"] {
-  color: var(--brand);
-  border-color: var(--brand);
+  color: var(--brand-base);
+  border-color: var(--brand-base);
 }
 
 /* The editable side of a review in Result mode: it reads like the page, and
@@ -1129,9 +1135,17 @@
 .cm-diff-live .cm-content {
   cursor: text;
 }
+
+/* Editing in a card — Find, Key terms, Findings, Review's editable side: a
+   thin accent outline around the text, the same everywhere, so "you are typing
+   in the book here" reads the same on every screen. An outline, not a border,
+   so starting to edit never shifts the layout; inset, so a card's rounded
+   clipping never cuts it. */
+.cm-editing,
 .cm-diff-live:focus-within {
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--brand) 55%, transparent);
-  border-radius: 4px;
+  outline: 1.5px solid var(--brand-base);
+  outline-offset: -3px;
+  border-radius: 12px;
 }
 
 /* A diff card in "Changes as excerpts": the diff view clipped to one change,
