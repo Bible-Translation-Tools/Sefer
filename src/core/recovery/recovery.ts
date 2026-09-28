@@ -55,6 +55,12 @@ export interface Restorable {
   /** The `after` stamp of the last entry: the revision the work reached. */
   readonly lastStamp: SourceStamp;
   readonly entries: readonly JournalEntry[];
+  /**
+   * The journal THIS session is writing — the live backup of what is on
+   * screen, never something to offer back. Every other journal is an earlier
+   * session's.
+   */
+  readonly thisSession: boolean;
 }
 
 type RecoveryFailure =
@@ -120,6 +126,18 @@ export interface RecoveryService {
   /** Forgets a journal: the user chose not to restore it. */
   readonly discard: (id: string) => Effect.Effect<void, RecoveryError>;
   /**
+   * Moves an earlier session's journal out of this session's way, under an id
+   * of its own, and returns that id.
+   *
+   * A book's journal lives at one path, and this session's first edit to the
+   * book rewrites that path whole. An earlier session's unsaved work left
+   * there would be overwritten by the first keystroke — before anybody was
+   * asked about it. Set aside at open, it stays until it is restored or
+   * discarded. A journal this session is writing, or one already set aside,
+   * keeps its id.
+   */
+  readonly setAside: (id: string) => Effect.Effect<string, RecoveryError>;
+  /**
    * Drops the entries a successful save made obsolete — everything whose
    * `after` revision is at or before the saved stamp. An emptied journal file
    * is removed. Save calls this in step 7 of `save`.
@@ -176,6 +194,10 @@ interface Journal {
 }
 
 const idOf = (projectId: string, bookId: BookId): string => `${projectId}/${bookId}`;
+
+/** Marks an id set aside by `setAside`: `<projectId>/<bookId>@<last entry's time>`. */
+const ASIDE = "@";
+const isAside = (id: string): boolean => id.slice(id.lastIndexOf("/") + 1).includes(ASIDE);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -464,6 +486,7 @@ const make = (
               path: journal.success.header.path,
               lastStamp: last.after,
               entries,
+              thisSession: journals.has(id),
             });
           }
           observability?.note("journal.pending", "ready", undefined, {
@@ -484,6 +507,19 @@ const make = (
                 description: `no open Book for ${journal.header.bookId}`,
               }),
             );
+          // The entries are offsets into the text the journal started from. A
+          // book edited since it opened is some other text, and a replay would
+          // land every change in the wrong place — so it is refused whole.
+          const base = journal.entries[0]?.before;
+          const now = book.source().stamp;
+          if (base !== undefined && (base.revision !== now.revision || base.length !== now.length))
+            return yield* Effect.fail(
+              new RecoveryError({
+                reason: "Refused",
+                id,
+                description: `${journal.header.bookId} was edited after it opened, so the backup no longer lines up with it`,
+              }),
+            );
           const trust = trustedBy("recovery");
           for (const [index, entry] of journal.entries.entries()) {
             const applied = book.apply(entry.changes, "recovery", trust);
@@ -502,7 +538,10 @@ const make = (
               );
             }
           }
-          journals.set(id, journal);
+          // The replay went through the Book, so this session's own journal
+          // recorded every entry again: a journal set aside has done its job.
+          if (isAside(id)) yield* remove(id);
+          else journals.set(id, journal);
           observability?.note("journal.restore", "rewrote", undefined, {
             "journal.write": id,
             "journal.entries": journal.entries.length,
@@ -519,6 +558,22 @@ const make = (
           observability?.note("journal.discard", "consumed", undefined, {
             "journal.write": id,
           });
+        }),
+
+      setAside: (id) =>
+        Effect.gen(function* () {
+          if (isAside(id) || journals.has(id)) return id;
+          const journal = yield* read(id);
+          const last = journal.entries.at(-1);
+          if (last === undefined) return id;
+          const aside = `${id}${ASIDE}${last.at}`;
+          yield* write(aside, journal);
+          yield* remove(id);
+          observability?.note("journal.aside", "rewrote", undefined, {
+            "journal.write": aside,
+            "journal.entries": journal.entries.length,
+          });
+          return aside;
         }),
 
       setPolicy: (next) =>

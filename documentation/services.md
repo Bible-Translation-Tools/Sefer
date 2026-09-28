@@ -445,7 +445,8 @@ A JSONL journal of edits to the dirty buffer, debounced and compacted. On open, 
 ### Constraints and known bugs
 
 - **Data safety:**
-  - `restore` replays onto whatever text the book has now, with no check that it is the text the journal started from.
+  - `restore` checks the journal's base by STAMP only (the book's revision and length now against the first entry's `before`). That is enough to refuse a book edited since it opened, but not a disk file that changed to the same length between sessions. A content hash at the journal's head is the real check (below).
+  - Fixed 2026-09-28: an earlier session's journal for the book a session lands on was hidden (the banner hid every journal whose book was open) and then overwritten by the first keystroke. Offered journals are now set aside under `<bookId>@<time>`, and only this session's own journal is hidden.
   - One bad or truncated line marks the whole journal `Corrupt`, and it is skipped silently. So is an unknown version.
 - `recovery.attach` runs on every window focus and adds a subscription each time, in the application scope.
 - No retention cap, no quota response, and no flush on `pagehide` (up to 500 ms of edits lost on a tab close).

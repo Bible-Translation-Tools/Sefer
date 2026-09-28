@@ -910,12 +910,15 @@ export function ReviewPanel() {
   };
 
   /**
-   * The journals worth OFFERING back: one for a book nobody reopened. A journal
-   * for a book this session already has open is the live backup of what is on
-   * screen, and restoring it would replay edits the editor is already showing.
+   * The journals worth OFFERING back: an earlier session's, whether or not its
+   * book is open now. This session's own journal is the live backup of what is
+   * on screen, and restoring it would replay edits the editor already shows.
+   * (Not "a book nobody reopened": the book a session lands on is always
+   * reopened, and its unsaved work was hidden, then overwritten by the first
+   * keystroke.)
    */
   const recovered = (): readonly Restorable[] =>
-    journals().filter((journal) => services.seated(journal.bookId) === undefined);
+    journals().filter((journal) => !journal.thisSession);
 
   const restore = (journal: Restorable): void => {
     const project = shell.project();

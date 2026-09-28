@@ -53,6 +53,18 @@ const reachedDisk = (text: string, journal: Restorable): boolean => {
 };
 
 /**
+ * The journal moved out of this session's way (`RecoveryService.setAside`), so
+ * the first edit to its book cannot overwrite it. A journal that could not be
+ * moved is offered where it is: offering it is still right, and a failed move
+ * must not hide it.
+ */
+const setAside = (recovery: RecoveryService, journal: Restorable): Effect.Effect<Restorable> =>
+  Effect.map(
+    Effect.orElseSucceed(recovery.setAside(journal.id), () => journal.id),
+    (id) => (id === journal.id ? journal : { ...journal, id }),
+  );
+
+/**
  * The journals for one project that still hold work the files do not, with
  * every journal the files DO hold deleted on the way past.
  *
@@ -60,9 +72,9 @@ const reachedDisk = (text: string, journal: Restorable): boolean => {
  * not dropped: a file that has gone missing or become unreadable is the
  * strongest possible reason to keep the only other copy of the work.
  *
- * Callers still decide what to show. A journal for a book this session already
- * has open is the live backup of what is on screen, and the banner filters
- * those out — see `src/app/ui/recovery/RecoveryBanner.tsx`.
+ * Every journal offered is SET ASIDE on the way past, under an id of its own,
+ * so this session's first edit to that book cannot overwrite it. This session's
+ * own journal is never offered: it is the live backup of what is on screen.
  */
 export const pendingOnOpen = (
   recovery: RecoveryService,
@@ -76,7 +88,8 @@ export const pendingOnOpen = (
     // No baselines exist yet, and that is the point: ask for every journal
     // with entries and let the disk comparison below be the only filter.
     const all = yield* recovery.pending(() => Option.none());
-    const mine = all.filter((journal) => journal.projectId === projectId);
+    // This session's own journal is the live backup of what is on screen.
+    const mine = all.filter((journal) => journal.projectId === projectId && !journal.thisSession);
     let refused = 0;
 
     const offered: Restorable[] = [];
@@ -84,11 +97,11 @@ export const pendingOnOpen = (
       const bytes = yield* Effect.result(fileSystem.readFile(journal.path));
       const decoded = Result.isFailure(bytes) ? undefined : decode(bytes.success);
       if (decoded === undefined || Result.isFailure(decoded)) {
-        offered.push(journal);
+        offered.push(yield* setAside(recovery, journal));
         continue;
       }
       if (!reachedDisk(decoded.success.text, journal)) {
-        offered.push(journal);
+        offered.push(yield* setAside(recovery, journal));
         continue;
       }
       // The work is in the file. The journal is now a duplicate of the
@@ -108,5 +121,10 @@ export const pendingOnOpen = (
       "journal.offered": offered.length,
       "journal.refused": refused,
     });
-    return offered;
+    // Newest first. Two sessions that each left unsaved work in one book left
+    // two backups of the same starting text, not one sequence; the newest is
+    // the one "Restore all" should put back, and the other then refuses
+    // rather than landing on top of it.
+    const at = (journal: Restorable): number => journal.entries.at(-1)?.at ?? 0;
+    return offered.toSorted((a, b) => at(b) - at(a));
   });

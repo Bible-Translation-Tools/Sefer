@@ -131,13 +131,27 @@ last backed up, and two answers:
   journal stays, so the work exists in two places rather than none.
 - **Discard all** removes the journals.
 
-A journal for a book this session already has open is the live backup of what
-is on screen — replaying it would re-apply edits the editor is already
-showing — so it is filtered out. Review has its own per-book restore list for
-the in-session view of the same journals (`src/app/ui/review/ReviewPanel.tsx`).
+Every journal offered at open is **set aside** first (`recovery.setAside`):
+moved to `<projectId>/<bookId>@<last entry's time>.jsonl`. A book's live
+journal is one path that this session's first edit rewrites whole, so an
+earlier session's work left there was overwritten by the first keystroke. And
+it was never offered either, because the banner used to hide any journal whose
+book was open, and the book a session lands on always is. Now what is hidden
+is only **this session's own journal** (`Restorable.thisSession`), the live
+backup of what is on screen. An earlier session's journal is offered whether
+its book is open or not, and it stays set aside until it is restored or
+discarded.
 
-Known gaps — no base check before a replay, and a corrupt journal is skipped
-silently — are listed in [services](../services.md#recovery).
+A replay is checked against its base: the first entry's `before` stamp must
+be the book's stamp now. A book edited since it opened is other text, and the
+entries' offsets would land in the wrong places, so the restore is refused
+whole. Two sessions that each left unsaved work in one book leave two
+backups of the same starting text, not one sequence. They are offered newest
+first, so Restore all puts the newest back and the other refuses.
+
+Review has its own per-book restore list for the same journals
+(`src/app/ui/review/ReviewPanel.tsx`). A known gap, a corrupt journal skipped
+silently, is listed in [services](../services.md#recovery).
 
 ## Journal ids are paths
 

@@ -86,11 +86,7 @@ export function RecoveryBanner() {
       }
       void shell.services
         .run(pendingOnOpen(shell.services.recovery, id))
-        .then((found) =>
-          setOffered(
-            found.filter((journal) => shell.services.seated(journal.bookId) === undefined),
-          ),
-        );
+        .then((found) => setOffered(found));
     },
   );
 

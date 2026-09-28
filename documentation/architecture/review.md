@@ -475,7 +475,8 @@ everything unrecognised is `Io`.
 The working-state backup is Recovery's journal: one per book, outside every
 project folder, replayed through `book.apply` so today's rules re-judge it. Its
 format, timing and replay are in [recovery](recovery.md). Review has its own
-per-book restore list for a journal whose book nobody reopened; Restore
+per-book restore list for an earlier session's journal, whether or not its book
+is open; Restore
 instantiates the book, `adopt`s its disk baseline — without it the restored
 work comes back invisible to this very screen — and replays.
 
