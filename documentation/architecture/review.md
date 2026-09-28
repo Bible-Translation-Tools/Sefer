@@ -265,7 +265,10 @@ typing, and a WORD mark the edit touches drops at once (a unit's tint maps, so
 the verse does not flash); the comparison runs at a pause in typing, batched
 (`TYPING_PAUSE_MS`), and the engine's cached diff means only the touched book
 is diffed again; the new diff is painted only if it was taken of exactly the
-text in the editor. The editor keeps its own range while it is edited rather
+text in the editor. In one text (unified), what you type is marked added and what you
+delete is struck where it stood AT ONCE (`liveDiff`'s pending changes, one
+struck stretch per run of Backspace), rather than vanishing until the
+comparison put it back struck. The comparison then replaces the guess. The editor keeps its own range while it is edited rather
 than re-clipping to each comparison's hunk. A card edited back to the other
 side's text says "No longer a change", clears its marks, and leaves as one line
 after Done.
