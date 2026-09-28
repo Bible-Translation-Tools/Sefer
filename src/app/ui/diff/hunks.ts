@@ -50,9 +50,6 @@ export interface Hunk {
    * card paints — its own changes and any in its context.
    */
   readonly all: readonly DecisionUnit[];
-  /** Where each text stands before the first of `all`. */
-  readonly currentStart: number;
-  readonly baselineStart: number;
   /** What the current text shows. */
   readonly current: Range;
   /** What the baseline text shows; absent when every change here is current-only. */
@@ -91,11 +88,13 @@ const stretchOf = (
 /**
  * One book's changes as cards, one per TOC unit.
  *
- * `units` is the whole book in reading order (`ordered`), unchanged units
- * included: they are what tells a one-sided unit where it stands in the text
- * that lacks it. `include` narrows which changes get a card — the kind filter;
- * `keep` gives an unchanged unit a card anyway (an editable Review, a taken
- * unit that must not vanish the moment it is taken).
+ * `units` is the book's units in reading order, as the engine sends them:
+ * the changed ones, plus any unchanged ones it was asked for. A one-sided unit
+ * is placed by its own `place` — where the text that lacks it would have it —
+ * so nothing here walks the units around it. `include` narrows which changes
+ * get a card — the kind filter; `keep` gives an unchanged unit a card anyway
+ * (Review's editable result, a taken unit that must not vanish the moment it
+ * is taken).
  */
 export const hunksOf = (options: {
   readonly bookId: string;
@@ -113,41 +112,26 @@ export const hunksOf = (options: {
   const current = tocUnits(currentToc);
   const baseline = tocUnits(tocViewOf(options.baseline));
   const groups = new Map<number, DecisionUnit[]>();
-  // Where each text stands before each unit: what places a one-sided unit, and
-  // what a card's slice is found by.
-  const count = options.units.length;
-  const beforeCurrent = new Float64Array(count + 1);
-  const beforeBaseline = new Float64Array(count + 1);
-  let currentEnd = 0;
-  let baselineEnd = 0;
-  for (const [index, unit] of options.units.entries()) {
-    beforeCurrent[index] = currentEnd;
-    beforeBaseline[index] = baselineEnd;
-    const before = currentEnd;
-    if (unit.current !== undefined) currentEnd = unit.current.to;
-    if (unit.baseline !== undefined) baselineEnd = unit.baseline.to;
+  for (const unit of options.units) {
     const shown = changed(unit) ? options.include?.(unit) !== false : options.keep?.(unit) === true;
     if (!shown) continue;
     // A unit only the baseline has belongs where it stood: the TOC unit the
     // current text has at that point — the one it ended, not the next.
-    const anchor = unit.current?.from ?? Math.max(0, before - 1);
+    const anchor = unit.current?.from ?? Math.max(0, unit.place.current - 1);
     const at = Math.max(0, unitIndexAt(current, anchor));
     const held = groups.get(at);
     if (held === undefined) groups.set(at, [unit]);
     else held.push(unit);
   }
 
-  beforeCurrent[count] = currentEnd;
-  beforeBaseline[count] = baselineEnd;
+  const count = options.units.length;
   /** The first unit whose place in the current text is at or after `at`. */
   const firstAt = (at: number): number => {
     let lo = 0;
     let hi = count;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
-      const unit = options.units[mid];
-      const place = unit?.current?.from ?? beforeCurrent[mid] ?? 0;
-      if (place < at) lo = mid + 1;
+      if ((options.units[mid]?.place.current ?? 0) < at) lo = mid + 1;
       else hi = mid;
     }
     return lo;
@@ -179,15 +163,22 @@ export const hunksOf = (options: {
             extent,
           ).range;
     const low = firstAt(shownCurrent.range.from);
-    const high = firstAt(shownCurrent.range.to);
+    // A unit the current text lacks, placed exactly at the stretch's end, is
+    // the one the last shown unit ENDED — grouped with it above, so painted
+    // with it too.
+    let high = firstAt(shownCurrent.range.to);
+    while (
+      high < count &&
+      options.units[high]?.current === undefined &&
+      options.units[high]?.place.current === shownCurrent.range.to
+    )
+      high += 1;
     out.push({
       bookId: options.bookId,
       key,
       reference: own[0] === undefined ? "" : unitReference(own[0]),
       units: own,
       all: options.units.slice(low, Math.max(low, high)),
-      currentStart: beforeCurrent[low] ?? 0,
-      baselineStart: beforeBaseline[low] ?? 0,
       current: shownCurrent.range,
       baseline: shownBaseline,
       extent,

@@ -553,7 +553,7 @@ function ReadyHistoryDiffPage() {
             textAt(blobOf(other)),
           ]);
           const changedIn = (after: string): Set<string> => {
-            const found = services.galley.diff(was, after);
+            const found = services.galley.diff(was, after, { unchanged: true });
             if (Result.isFailure(found)) return new Set();
             return new Set(
               found.success.units
@@ -605,7 +605,7 @@ function ReadyHistoryDiffPage() {
     // gets registered as, or replaces, a project book in the shared Galley.
     // Its units cover the whole book with both sides' addresses, so the
     // chapter counts come from them rather than from two more parses.
-    const diff = services.galley.diff(olderText, newerText);
+    const diff = services.galley.diff(olderText, newerText, { unchanged: true });
     if (Result.isFailure(diff)) throw diff.failure;
     const olderChapterCount = chaptersOn(diff.success.units, "baselineAddr");
     const newerChapterCount = chaptersOn(diff.success.units, "currentAddr");
@@ -810,7 +810,7 @@ function ReadyHistoryDiffPage() {
           baselineText: held.bench.baselineText,
           skeleton: held.bench.skeleton ?? {
             units: [],
-            slots: [],
+            unchangedCount: 0,
             baselineLen: 0,
             currentLen: 0,
             engine: true,

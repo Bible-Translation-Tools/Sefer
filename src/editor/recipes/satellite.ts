@@ -192,7 +192,15 @@ function collapseOutside(state: EditorState, range: { from: number; to: number }
   const from = Math.max(0, Math.min(range.from, len));
   const to = Math.max(from, Math.min(range.to, len));
   if (from > 0) out.push(Decoration.replace({ block: true }).range(0, Math.max(0, from - 1)));
-  if (to < len) out.push(Decoration.replace({ block: true }).range(Math.min(len, to), len));
+  // Not inclusive at its start: what sits exactly at the range's end — a
+  // widget drawn after the last line (a deleted verse's wording in a diff
+  // card), or text typed at the very end of it — belongs to what is shown,
+  // not to the hidden rest. An inclusive block sorts before every widget at
+  // its position and swallows it.
+  if (to < len)
+    out.push(
+      Decoration.replace({ block: true, inclusiveStart: false }).range(Math.min(len, to), len),
+    );
   return Decoration.set(out, true);
 }
 

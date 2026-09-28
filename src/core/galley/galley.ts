@@ -60,7 +60,7 @@ import {
   type DiffSkeleton,
   type EngineDoorMissing,
   type MergeSide,
-  type TextMode,
+  type DiffOptions,
 } from "./diff";
 import { engineFormatEdits, readEdits, type FormatEdits, type FormatOptions } from "./format";
 import {
@@ -566,11 +566,12 @@ export interface GalleyService {
   readonly residentBytes: () => number;
 
   /**
-   * The engine's decision-unit diff of two whole USFM documents.
+   * The engine's decision-unit diff of two whole USFM documents: the CHANGED
+   * units, in the current document's order (`opts.unchanged` adds the rest).
    *
-   * `textMode` is the intra-unit grain a `modified` unit's word marks come
-   * back at, and it defaults to `words` because that is what the review screen
-   * shows. Spans are UTF-16 into each side's own document.
+   * `opts.text` is the intra-unit grain the word marks come back at, and it
+   * defaults to `words` because that is what the review screen shows. Spans
+   * are UTF-16 into each side's own document.
    *
    * It is still a `Result`: the door is a free function on the wasm module,
    * probed by name, so an artifact that lost it refuses by name
@@ -580,7 +581,7 @@ export interface GalleyService {
   readonly diff: (
     baseline: string,
     current: string,
-    textMode?: TextMode,
+    opts?: Partial<DiffOptions>,
   ) => Result.Result<DiffSkeleton, EngineDoorMissing>;
 
   /**
@@ -1008,7 +1009,7 @@ const makeService = (
     // functions, not handle methods, so an artifact that is not the pinned
     // build refuses by name rather than throwing a `TypeError` about
     // `undefined`.
-    diff: (baseline, current, textMode) => engineDiff(wasmModule, baseline, current, textMode),
+    diff: (baseline, current, opts) => engineDiff(wasmModule, baseline, current, opts),
     merge: (baseline, current, decisions, fallback) =>
       engineMerge(wasmModule, baseline, current, decisions, fallback),
     mergeSplices: (baseline, current, decisions, fallback) =>

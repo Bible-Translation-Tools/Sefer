@@ -29,7 +29,7 @@ import { Result } from "effect";
 import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
 import { useShell } from "#app/ProjectContext";
-import { changed, ordered, sidePaint, unifiedPaint, type Controls, type Side } from "#app/ui/diff";
+import { changed, sidePaint, unifiedPaint, type Controls, type Side } from "#app/ui/diff";
 import { Badge, Button } from "#app/ui/primitives";
 import type { DecisionUnit, MergeSide } from "#core/galley/diff";
 import {
@@ -97,7 +97,7 @@ function EditorDiff(props: ExperimentProps) {
   );
   const units = createMemo(() => {
     const held = skeleton();
-    return held === undefined ? [] : ordered(held.skeleton);
+    return held === undefined ? [] : held.skeleton.units;
   });
   const count = () => units().filter(changed).length;
 

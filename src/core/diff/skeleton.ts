@@ -60,14 +60,17 @@ export const diffSkeleton = (
   book: string,
   baselineText: string,
   currentText: string,
+  /** Unchanged units too — for a view that must keep one (a taken unit reads the same). */
+  options: { readonly unchanged?: boolean } = {},
 ): SkeletonResult => {
-  const key = `${book} ${galley.hash(baselineText)}:${baselineText.length} ${galley.hash(currentText)}:${currentText.length}`;
+  const unchanged = options.unchanged === true;
+  const key = `${book} ${unchanged ? "all" : "changed"} ${galley.hash(baselineText)}:${baselineText.length} ${galley.hash(currentText)}:${currentText.length}`;
   const held = cache.get(key);
   if (held !== undefined && held.baselineText === baselineText && held.currentText === currentText)
     return held.skeleton;
   return remember(key, {
     baselineText,
     currentText,
-    skeleton: galley.diff(baselineText, currentText),
+    skeleton: galley.diff(baselineText, currentText, { unchanged }),
   });
 };

@@ -28,7 +28,6 @@ import {
   DiffCard,
   estimate,
   hunksOf,
-  ordered,
   type Controls,
   type DiffSides,
   type Hunk,
@@ -91,7 +90,7 @@ function ExcerptDiff(props: ExperimentProps) {
     const live = { ...bench, currentText: text, skeleton: found.success };
     const hunks = hunksOf({
       bookId: bench.bookId,
-      units: ordered(found.success),
+      units: found.success.units,
       baseline: sides.baseline,
       current: sides.current,
       steps: untrack(steps),

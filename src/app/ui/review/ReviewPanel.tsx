@@ -224,7 +224,12 @@ export function ReviewPanel() {
       if (!inReview(book) || book.leftText === undefined || book.rightText === undefined) continue;
       held.set(
         book.bookId,
-        diffSkeleton(services.galley, book.bookId, book.rightText, book.leftText),
+        // The engine sends changed units only; a book somebody decided in
+        // needs its unchanged ones too, because a take makes the unit read the
+        // same on both sides and its card must stay, to put it back.
+        diffSkeleton(services.galley, book.bookId, book.rightText, book.leftText, {
+          unchanged: decidedIn(book.bookId),
+        }),
       );
     }
     return held;
@@ -455,7 +460,9 @@ export function ReviewPanel() {
         return undefined;
       return (
         skeletons().get(book.bookId) ??
-        diffSkeleton(services.galley, book.bookId, book.rightText, book.leftText)
+        diffSkeleton(services.galley, book.bookId, book.rightText, book.leftText, {
+          unchanged: decidedIn(book.bookId),
+        })
       );
     },
     { name: "reviewSkeleton" },

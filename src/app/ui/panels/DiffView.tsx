@@ -33,7 +33,6 @@ const STATUS: Record<
   added: { label: "added", tone: "success" },
   deleted: { label: "removed", tone: "error" },
   modified: { label: "changed", tone: "warning" },
-  moved: { label: "moved", tone: "muted" },
   unchanged: { label: "unchanged", tone: "muted" },
 };
 

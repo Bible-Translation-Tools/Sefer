@@ -10,28 +10,10 @@
 
 import { readingEnd } from "#core/excerpts/excerpts";
 import type { Analysis } from "#core/galley";
-import {
-  unitReference,
-  type DecisionUnit,
-  type DiffSkeleton,
-  type MergeSide,
-} from "#core/galley/diff";
+import { unitReference, type DecisionUnit, type MergeSide } from "#core/galley/diff";
 import type { DiffHunk, DiffPaint, DiffWidget } from "#editor/index";
 
 export type Side = "baseline" | "current";
-
-/** Units in the engine's own interleave order — what both panes are read in. */
-export const ordered = (skeleton: DiffSkeleton): readonly DecisionUnit[] => {
-  const rows: DecisionUnit[] = [];
-  let last = -1;
-  for (const slot of skeleton.slots) {
-    if (slot.unit === last) continue;
-    last = slot.unit;
-    const unit = skeleton.units[slot.unit];
-    if (unit !== undefined) rows.push(unit);
-  }
-  return rows.length > 0 ? rows : [...skeleton.units];
-};
 
 export const changed = (unit: DecisionUnit): boolean => unit.status !== "unchanged";
 
@@ -127,17 +109,13 @@ export const sidePaint = (
   usfm: boolean,
   controls: Controls | undefined,
   analysis: Analysis,
-  /** Where this side's text stands before the first unit — for a list that starts mid-book. */
-  startAt = 0,
 ): DiffPaint => {
   const lines: DiffPaint["lines"][number][] = [];
   const marks: DiffPaint["marks"][number][] = [];
   const widgets: DiffWidget[] = [];
   const buttons: DiffPaint["controls"][number][] = [];
-  let lastEnd = startAt;
   for (const unit of units) {
     const span = side === "baseline" ? unit.baseline : unit.current;
-    if (span !== undefined) lastEnd = span.to;
     const decision = controls?.decision(unit);
     // An unchanged unit is painted only when it carries a decision: in the
     // an editable review a taken unit IS the other side's text now, and
@@ -173,7 +151,7 @@ export const sidePaint = (
     }
     if (controls !== undefined && side === "current")
       buttons.push({
-        at: span?.from ?? lastEnd,
+        at: span?.from ?? unit.place[side],
         key: `${unit.id} ${decision ?? "-"}`,
         render: controlFor(unit, controls),
       });
@@ -191,17 +169,14 @@ export const unifiedPaint = (
   controls: Controls | undefined,
   removedBlock: (unit: DecisionUnit) => HTMLElement,
   analysis: Analysis,
-  startAt = 0,
 ): DiffPaint => {
-  const base = sidePaint(units, "current", usfm, controls, analysis, startAt);
+  const base = sidePaint(units, "current", usfm, controls, analysis);
   const widgets: DiffWidget[] = [];
-  let lastEnd = startAt;
   for (const unit of units) {
-    if (unit.current !== undefined) lastEnd = unit.current.to;
     if (!changed(unit)) continue;
     if (unit.current === undefined) {
       widgets.push({
-        at: lastEnd,
+        at: unit.place.current,
         block: true,
         key: `gone ${unit.id}`,
         render: () => removedBlock(unit),
@@ -273,22 +248,19 @@ export const hunkPaint = (
   controls: Controls | undefined,
   was: (unit: DecisionUnit) => HTMLElement,
   analysis: Analysis,
-  startAt = 0,
 ): DiffPaint => {
-  const base = sidePaint(units, "current", usfm, controls, analysis, startAt);
+  const base = sidePaint(units, "current", usfm, controls, analysis);
   const hunks: DiffHunk[] = [];
-  let lastEnd = startAt;
   for (const unit of units) {
     const span = unit.current;
-    if (span !== undefined) lastEnd = span.to;
     const decision = controls?.decision(unit);
     if (!changed(unit) && decision === undefined) continue;
     if (span === undefined) {
       hunks.push({
         key: unit.id,
         kind: "deleted",
-        from: lastEnd,
-        to: lastEnd,
+        from: unit.place.current,
+        to: unit.place.current,
         tint: "",
         marks: [],
         old: () => was(unit),

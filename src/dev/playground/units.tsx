@@ -19,27 +19,10 @@ import { readingRuns, type DecisionUnit, type MergeSide, type TextRun } from "#c
 import type { Bench } from "./experiment";
 
 /**
- * The units in READING order.
- *
- * Slots are the ordering, not the unit array: a moved unit sits where the
- * interleave put it, and a coalesced pair contributes two slots naming the same
- * unit, which collapse to one row.
+ * The units in READING order: the engine sends them in the current
+ * document's order (0.1.8), so this is the array.
  */
-export const inOrder = (bench: Bench): readonly DecisionUnit[] => {
-  const skeleton = bench.skeleton;
-  if (skeleton === undefined) return [];
-  const rows: DecisionUnit[] = [];
-  let last = -1;
-  for (const slot of skeleton.slots) {
-    if (slot.unit === last) continue;
-    last = slot.unit;
-    const unit = skeleton.units[slot.unit];
-    if (unit !== undefined) rows.push(unit);
-  }
-  // A skeleton whose slots said nothing still has its units, and showing them
-  // in array order beats showing an empty page.
-  return rows.length > 0 ? rows : [...skeleton.units];
-};
+export const inOrder = (bench: Bench): readonly DecisionUnit[] => bench.skeleton?.units ?? [];
 
 /**
  * The reader-visible text of one side of a unit, markers masked away.

@@ -243,6 +243,15 @@ const decorateHunks = (
     // Open: the other side's wording at the unit, and the unit tinted.
     if (hunk.old !== undefined) {
       const render = hunk.old;
+      // A unit this text lacks is a point, often the start of the next
+      // source line — which a clipped card hides, and in the reading is the
+      // next verse's line anyway. Drawn at the end of the line before it
+      // instead: the same place on screen, and inside what the card shows.
+      const atLineStart =
+        hunk.from === hunk.to &&
+        hunk.from > 0 &&
+        state.doc.sliceString(hunk.from - 1, hunk.from) === "\n";
+      const place = atLineStart ? hunk.from - 1 : hunk.from;
       // Inline at the unit, drawn as a block: the paragraph breaks at this
       // verse rather than above the whole paragraph (a `\p` can hold thirty
       // verses), and it moves the text only when somebody asks for it.
@@ -255,8 +264,10 @@ const decorateHunks = (
             box.append(render());
             return box;
           }),
+          // Before whatever starts here: at a line's end that is the clip's
+          // hidden rest, which would swallow a widget drawn after it.
           side: -1,
-        }).range(hunk.from),
+        }).range(place),
       );
     }
     if (hunk.to > hunk.from && hunk.tint !== "")
@@ -415,10 +426,23 @@ const barLayer = layer({
     const spans: { hunk: DiffHunk; top: number; bottom: number }[] = [];
     for (const hunk of hunks) {
       if (hunk.to < shownFrom || hunk.from > shownTo) continue;
-      const start = view.coordsAtPos(Math.min(hunk.from, view.state.doc.length), 1);
+      const at = Math.min(hunk.from, view.state.doc.length);
+      // A unit this text lacks sits at a point, and in a clipped card that
+      // point can be the clip's own end, which has no coordinates after it:
+      // then the row it ends, before it.
+      const start =
+        view.coordsAtPos(at, 1) ??
+        (hunk.from === hunk.to
+          ? (view.coordsAtPos(at, -1) ?? (at > 0 ? view.coordsAtPos(at - 1, -1) : null))
+          : null);
       if (start === null) continue;
+      // On the unit's LAST CHARACTER, not after it: another unit's opened
+      // wording can be drawn right at this unit's end, and the position after
+      // the last character would measure that block instead.
       const end =
-        hunk.to > hunk.from ? view.coordsAtPos(Math.min(hunk.to, view.state.doc.length), -1) : null;
+        hunk.to > hunk.from
+          ? view.coordsAtPos(Math.min(hunk.to, view.state.doc.length) - 1, 1)
+          : null;
       // Open, the bar spans the other side's wording too, as Zed's spans the
       // old lines and the new.
       const was = open.has(hunk.key)
@@ -429,12 +453,23 @@ const barLayer = layer({
       spans.push({ hunk, top, bottom: Math.max(bottom, top + (hunk.from === hunk.to ? 8 : 4)) });
     }
     // Two verses can share a row (one ends where the next begins): each takes
-    // its half of it, so the bars never run together.
+    // its half of it, so the bars never run together. Units this text lacks
+    // are points, and several at one place (a run of deleted verses) stack as
+    // separate ticks rather than halving each other away.
     spans.sort((a, b) => a.top - b.top);
+    // An OPENED point spans its wording, like any open hunk.
+    const point = (entry: { hunk: DiffHunk }): boolean =>
+      entry.hunk.from === entry.hunk.to && !open.has(entry.hunk.key);
     for (let index = 1; index < spans.length; index++) {
       const before = spans[index - 1];
       const after = spans[index];
       if (before === undefined || after === undefined || after.top >= before.bottom) continue;
+      if (point(after)) {
+        const height = after.bottom - after.top;
+        after.top = before.bottom + 2;
+        after.bottom = after.top + height;
+        continue;
+      }
       const middle = (after.top + Math.min(before.bottom, after.bottom)) / 2;
       before.bottom = middle;
       after.top = middle;

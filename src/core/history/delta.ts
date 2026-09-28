@@ -18,7 +18,6 @@ export interface UnitChangeFact {
   readonly whitespaceOnly: boolean;
   readonly usfmStructureOnly: boolean;
   readonly duplicate: boolean;
-  readonly displaced: boolean;
 }
 
 export interface BookChangeScope {
@@ -85,7 +84,6 @@ export const deriveDeltaScope = (
     whitespaceOnly: unit.isWhitespaceChange,
     usfmStructureOnly: unit.isUsfmStructureChange,
     duplicate: unit.isDup,
-    displaced: unit.displaced,
   }));
 
   const bookUnits = new Map<string, Set<string>>();

@@ -57,7 +57,6 @@ import {
   hunkLabel,
   hunksOf,
   isFormatting,
-  ordered,
   type BookDiffApi,
   type Controls,
   type DiffSides,
@@ -250,7 +249,7 @@ export function ReviewReader(props: {
       current: analysisOf(book.bookId, "current", book.currentText),
       baseline: analysisOf(book.bookId, "baseline", book.baselineText),
     };
-    const units = ordered(book.skeleton);
+    const units = book.skeleton.units;
     const include = FILTERS[show];
     // In an editable review a taken unit is unchanged now — it IS the other side's
     // text — and still keeps its card, to say so and to put it back.

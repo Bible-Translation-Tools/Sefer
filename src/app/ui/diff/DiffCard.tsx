@@ -146,19 +146,12 @@ export function DiffCard(props: {
     const { hunk, sides } = now();
     const mode = markup ? "usfm" : "default";
     return split
-      ? sidePaint(hunk.all, "current", markup, controls(), sides.current, hunk.currentStart)
-      : hunkPaint(
-          hunk.all,
-          markup,
-          controls(),
-          wasBlock(sides.baseline, mode),
-          sides.current,
-          hunk.currentStart,
-        );
+      ? sidePaint(hunk.all, "current", markup, controls(), sides.current)
+      : hunkPaint(hunk.all, markup, controls(), wasBlock(sides.baseline, mode), sides.current);
   };
   const baselinePaint = (markup: boolean) => (): DiffPaint => {
     const { hunk, sides } = now();
-    return sidePaint(hunk.all, "baseline", markup, undefined, sides.baseline, hunk.baselineStart);
+    return sidePaint(hunk.all, "baseline", markup, undefined, sides.baseline);
   };
 
   /** The panes of this card, and how to paint them — for a repaint in place. */

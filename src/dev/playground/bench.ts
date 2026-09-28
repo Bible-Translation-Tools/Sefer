@@ -139,7 +139,10 @@ export const benchFor = (request: BenchRequest): Bench | undefined => {
       : syntheticDraft(currentText, SPACING[request.density] ?? 9);
   if (baselineText === undefined) return undefined;
 
-  const found = diffSkeleton(request.galley, bookId, baselineText, currentText);
+  // The playground draws whole books from the skeleton, unchanged units and all.
+  const found = diffSkeleton(request.galley, bookId, baselineText, currentText, {
+    unchanged: true,
+  });
 
   return {
     bookId,

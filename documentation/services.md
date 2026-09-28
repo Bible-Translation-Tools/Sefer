@@ -167,7 +167,7 @@ A bounded ring of events, spans and verdicts, and a second ring of 200 for `fail
 
 ### Overview
 
-The pinned Scripture Kitchen WASM build (tagged git dependency, v0.1.7). Onion parses, Sous proofreads, and Galley composes both. It is one in-process synchronous handle: `analyze`, `setExtensions` (the process-wide marker table), the corpus (`update`, `updateReference`, `publish`), `find`, `lint`, `toc`, `mask`, `diff`/`merge`, `formatEdits`, `skeleton`/`overlay`, `hash`. `src/core/galley`; loading happens in `src/platform/{web,node}/galley.ts`. → [galley](architecture/galley.md)
+The pinned Scripture Kitchen WASM build (tagged git dependency, v0.1.8). Onion parses, Sous proofreads, and Galley composes both. It is one in-process synchronous handle: `analyze`, `setExtensions` (the process-wide marker table), the corpus (`update`, `updateReference`, `publish`), `find`, `lint`, `toc`, `mask`, `diff`/`merge`, `formatEdits`, `skeleton`/`overlay`, `hash`. `src/core/galley`; loading happens in `src/platform/{web,node}/galley.ts`. → [galley](architecture/galley.md)
 
 ### Constraints and known bugs
 

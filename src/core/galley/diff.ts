@@ -11,10 +11,11 @@
 // `onion/src/diff.rs` is a whole engine: it cuts each side into BLOCKS at its
 // own table-of-contents anchors (front matter, chapter open, verse), pairs them
 // by a deliberately loose key (book + chapter + verse START, so a rebridged or
-// moved verse still pairs and a renumbered one reads as a delete plus an add),
-// and hands back a `DiffSkeleton` — an interleave of slots plus a list of
-// `DecisionUnit`s, each addressed by a re-derivable sid rather than a minted
-// id. The wire carries UTF-16 spans into each side's own document, and takes
+// verse out of order reads as a delete plus an add, and a renumbered one too),
+// and hands back a `DiffSkeleton` — the CHANGED `DecisionUnit`s in the current
+// document's order, each addressed by a re-derivable sid rather than a minted
+// id (0.1.8, from Sefer's ask 8: unchanged units only on request). The wire
+// carries UTF-16 spans into each side's own document, and takes
 // `{"unitId": "baseline"|"current"}` back to `merge`.
 //
 // ## The doors are on the MODULE, not on the handle
@@ -27,13 +28,24 @@
 // keeps the things that DO hold state — the corpus, the chunk cache, the
 // settings. So the probes below are on the MODULE NAMESPACE.
 //
-// ## The third argument is a TEXT MODE, not a utf16 flag
+// ## The options
 //
-// `diff(baseline, current, textMode)` where `textMode` is `"none" | "words" |
-// "chars"`: the intra-verse grain a `modified` unit's marks come back at, at
-// UAX-29 word or grapheme level. The engine REJECTS a typo rather than falling
-// back, and `"none"` computes nothing — no CST, no mask. Sefer asks for
-// `"words"`, which is what the review screen draws.
+// `diff(baseline, current, { text, unchanged? })`. `text` is `"none" | "words" |
+// "chars"`, required: the intra-verse grain a unit's marks come back at, at
+// UAX-29 word or grapheme level; `"none"` computes nothing — no CST, no mask.
+// Sefer asks for `"words"`, which is what the review screen draws. `unchanged`
+// (default false) adds every unchanged unit in its place, for a view that
+// needs one — Review, for a book where a take has made a decided unit read the
+// same on both sides. The engine REJECTS an unknown key, a wrong type or an
+// unknown mode by name rather than falling back.
+//
+// ## Every unit has a place on both sides
+//
+// A one-sided unit's absent side is an EMPTY SPAN AT ITS INSERTION POINT on
+// the wire — where a merge that takes the unit puts it. `baseline` / `current`
+// stay `undefined` for an absent side (the sid, not the width, says which: an
+// empty block is also zero-width), and `place` carries the insertion point, so
+// a screen places a one-sided unit without walking the units around it.
 //
 // ## A run is a SPAN, and its text is sliced here
 //
@@ -67,14 +79,14 @@ import type { EngineRange } from "./galley";
  */
 export type UnitKind = "shared" | "added" | "deleted" | "coalesced";
 
-/** What happened to it. `moved` is a pure reorder and marks no characters. */
-export type UnitStatus = "unchanged" | "modified" | "added" | "deleted" | "moved";
+/**
+ * What happened to it. There is no `moved`: a verse out of relational order is
+ * a deletion here and an addition there (0.1.8).
+ */
+export type UnitStatus = "unchanged" | "modified" | "added" | "deleted";
 
 /** The two sides of a decision, spelled exactly as the merge wire spells them. */
 export type MergeSide = "baseline" | "current";
-
-/** What one slot of the interleave emits. Merge reads these; a screen need not. */
-export type SlotRole = "shared" | "baselineOnly" | "currentOnly" | "pairBaseline" | "pairCurrent";
 
 /** What cut a block open — derived from the address, not carried on the wire. */
 export type BlockKind = "frontMatter" | "chapterOpen" | "verse";
@@ -110,7 +122,6 @@ export interface Addr {
  * other side of a coalesced pair. UI only — merge never reads it.
  */
 export interface CoveredBy {
-  readonly unit: number;
   readonly sid: string;
   readonly side: MergeSide;
 }
@@ -176,8 +187,11 @@ export interface DecisionUnit {
   readonly currentAddr: Addr | undefined;
   readonly baseline: EngineRange | undefined;
   readonly current: EngineRange | undefined;
-  /** A coalesced pair whose two slots are out of relational order. */
-  readonly displaced: boolean;
+  /**
+   * Where the unit stands in each side: its start, or for an absent side the
+   * insertion point — where a merge that takes the unit puts it.
+   */
+  readonly place: { readonly baseline: number; readonly current: number };
   /** Byte-equal but differently addressed: the verse did not change, its NUMBER did. */
   readonly relabeled: boolean;
   /** How many blocks on each side share this unit's pairing key. */
@@ -196,14 +210,6 @@ export interface DecisionUnit {
   readonly text: UnitTextDiff | undefined;
 }
 
-/** One slot of the interleave. Every byte of both inputs bears exactly one. */
-export interface Slot {
-  readonly unit: number;
-  readonly role: SlotRole;
-  readonly afterUnit: number | undefined;
-  readonly afterSide: MergeSide | undefined;
-}
-
 /**
  * The whole diff of two documents.
  *
@@ -213,8 +219,10 @@ export interface Slot {
  * can check.
  */
 export interface DiffSkeleton {
+  /** The changed units — every unit, with `unchanged` — in the current document's order. */
   readonly units: readonly DecisionUnit[];
-  readonly slots: readonly Slot[];
+  /** How many units are unchanged, whether or not they were sent. */
+  readonly unchangedCount: number;
   readonly baselineLen: number;
   readonly currentLen: number;
   readonly engine: boolean;
@@ -228,6 +236,13 @@ export interface DiffSkeleton {
  * The engine rejects anything else rather than guessing.
  */
 export type TextMode = "none" | "words" | "chars";
+
+/** `diff`'s options, as the door takes them. */
+export interface DiffOptions {
+  readonly text: TextMode;
+  /** Send unchanged units too, in their places. */
+  readonly unchanged?: boolean;
+}
 
 /** `{unitId: side}` — the consumer contract, verbatim. Absent reads as the default. */
 export type DecisionMap = ReadonlyMap<string, MergeSide>;
@@ -260,7 +275,7 @@ export class EngineDoorMissing extends Data.TaggedError("EngineDoorMissing")<{
  * is not the pinned build.
  */
 const DIFF_DOOR =
-  "the module-level diff(baseline, current, textMode), " +
+  "the module-level diff(baseline, current, { text, unchanged }), " +
   "merge(baseline, current, decisions, default) and formatEdits(text, opts) " +
   "exports of the galley wasm — present since scripture-kitchen v0.1.0, so an " +
   "artifact without them is not the pinned build";
@@ -360,7 +375,6 @@ interface WireUnit {
   readonly currentSid?: unknown;
   readonly baseline?: unknown;
   readonly current?: unknown;
-  readonly displaced?: unknown;
   readonly relabeled?: unknown;
   readonly baselineCount?: unknown;
   readonly currentCount?: unknown;
@@ -372,14 +386,7 @@ interface WireUnit {
 }
 
 const KINDS: readonly UnitKind[] = ["shared", "added", "deleted", "coalesced"];
-const STATUSES: readonly UnitStatus[] = ["unchanged", "modified", "added", "deleted", "moved"];
-const ROLES: readonly SlotRole[] = [
-  "shared",
-  "baselineOnly",
-  "currentOnly",
-  "pairBaseline",
-  "pairCurrent",
-];
+const STATUSES: readonly UnitStatus[] = ["unchanged", "modified", "added", "deleted"];
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null;
@@ -412,11 +419,14 @@ const span = (value: unknown, present: boolean): EngineRange | undefined => {
   return { from, to };
 };
 
+/** Where a side's span starts, present or not: an absent side's empty span is its insertion point. */
+const startOf = (value: unknown): number => (Array.isArray(value) ? num(value[0]) : 0);
+
 const readCoveredBy = (value: unknown): CoveredBy | undefined => {
   if (!isRecord(value)) return undefined;
   const sid = str(value.sid);
   if (sid === undefined) return undefined;
-  return { unit: num(value.unit), sid, side: value.side === "baseline" ? "baseline" : "current" };
+  return { sid, side: value.side === "baseline" ? "baseline" : "current" };
 };
 
 /** One side's runs, each sliced out of `source`, the document they index. */
@@ -486,7 +496,7 @@ const readUnit = (
     currentAddr: currentSid === undefined ? undefined : parseAddr(currentSid),
     baseline: span(held.baseline, baselineSid !== undefined),
     current: span(held.current, currentSid !== undefined),
-    displaced: flag(held.displaced),
+    place: { baseline: startOf(held.baseline), current: startOf(held.current) },
     relabeled: flag(held.relabeled),
     baselineCount: num(held.baselineCount),
     currentCount: num(held.currentCount),
@@ -495,18 +505,6 @@ const readUnit = (
     isWhitespaceChange: flag(held.isWhitespaceChange),
     isUsfmStructureChange: flag(held.isUsfmStructureChange),
     text: readText(held.text, baselineText, currentText),
-  };
-};
-
-const readSlot = (value: unknown): Slot | undefined => {
-  if (!isRecord(value)) return undefined;
-  const afterUnit = typeof value.afterUnit === "number" ? value.afterUnit : undefined;
-  return {
-    unit: num(value.unit),
-    role: oneOf(ROLES, value.role, "shared"),
-    afterUnit,
-    afterSide:
-      afterUnit === undefined ? undefined : value.afterSide === "baseline" ? "baseline" : "current",
   };
 };
 
@@ -520,22 +518,16 @@ const readSlot = (value: unknown): Slot | undefined => {
 const decodeSkeleton = (json: string, baselineText: string, currentText: string): DiffSkeleton => {
   const parsed: unknown = JSON.parse(json);
   if (!isRecord(parsed))
-    return { units: [], slots: [], baselineLen: 0, currentLen: 0, engine: true };
+    return { units: [], unchangedCount: 0, baselineLen: 0, currentLen: 0, engine: true };
   const units: DecisionUnit[] = [];
   if (Array.isArray(parsed.units))
     for (const entry of parsed.units) {
       const unit = readUnit(entry, baselineText, currentText);
       if (unit !== undefined) units.push(unit);
     }
-  const slots: Slot[] = [];
-  if (Array.isArray(parsed.slots))
-    for (const entry of parsed.slots) {
-      const slot = readSlot(entry);
-      if (slot !== undefined) slots.push(slot);
-    }
   return {
     units,
-    slots,
+    unchangedCount: num(parsed.unchangedCount),
     baselineLen: num(parsed.baselineLen),
     currentLen: num(parsed.currentLen),
     engine: true,
@@ -565,7 +557,7 @@ interface WasmSplices {
 }
 
 interface DiffCapableModule {
-  readonly diff?: (baseline: string, current: string, textMode: string) => string;
+  readonly diff?: (baseline: string, current: string, opts: DiffOptions) => string;
   readonly mergeSplices?: (
     baseline: string,
     current: string,
@@ -640,18 +632,21 @@ const hasMerge = (module: unknown): module is Required<Pick<DiffCapableModule, "
  * `galley.ts` stays the one place the module is held, and this file stays the
  * one place the wire is read.
  *
- * `textMode` defaults to `"words"` — the marks the review screen draws.
+ * `text` defaults to `"words"` — the marks the review screen draws — and
+ * `unchanged` to false, the engine's own default.
  */
 export const engineDiff = (
   module: unknown,
   baseline: string,
   current: string,
-  textMode: TextMode = "words",
+  opts: Partial<DiffOptions> = {},
 ): Result.Result<DiffSkeleton, EngineDoorMissing> => {
   if (!hasDiff(module)) return Result.fail(doorMissing("diff"));
-  return Result.succeed(
-    decodeSkeleton(module.diff(baseline, current, textMode), baseline, current),
-  );
+  const wire: DiffOptions = {
+    text: opts.text ?? "words",
+    ...(opts.unchanged === true ? { unchanged: true } : {}),
+  };
+  return Result.succeed(decodeSkeleton(module.diff(baseline, current, wire), baseline, current));
 };
 
 /**
