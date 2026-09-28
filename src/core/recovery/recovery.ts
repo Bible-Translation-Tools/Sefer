@@ -29,7 +29,7 @@ import { Context, Data, Effect, FileSystem, Layer, Option, Result, Scope } from 
 
 import { trustedBy, type Book, type BookId, type Origin, type Receipt } from "../book/book";
 import { writeFileStringAtomic } from "../fileSystem/atomic";
-import { joinPath } from "../fileSystem/path";
+import { joinPath, normalisePath } from "../fileSystem/path";
 import { Observability } from "../observability";
 import type { Baseline } from "../save/baseline";
 import { debounced, type DebouncePolicy } from "../schedule/debounce";
@@ -194,15 +194,20 @@ interface Journal {
 }
 
 /**
- * `<projectId>/<bookId>`, with no leading slash — the same spelling the disk
- * listing gives back (`listIds`: paths relative to the root). A `ProjectId` is
- * an absolute path, and when the two spellings differed, the in-memory
- * journal and the file were two ids for one journal: Discard removed the file
- * but not the journal, whose next flush wrote every entry back, and a
- * session's own journal was offered back to it as an earlier session's.
+ * THE spelling of a journal id: its path under the journal root, normalised,
+ * with no leading slash. Every id is made or taken in through this — a
+ * journal made in memory (`idOf`), one found on disk (`listIds`), and every id
+ * a caller hands back — so one journal has one id.
+ *
+ * A `ProjectId` is an absolute path and the disk listing is relative to the
+ * root. When those were two spellings, the in-memory journal and its file had
+ * two ids: Discard removed the file but not the journal, whose next flush
+ * wrote every entry back, and a session's own journal was offered back to it
+ * as an earlier session's.
  */
-const idOf = (projectId: string, bookId: BookId): string =>
-  `${projectId}/${bookId}`.replace(/^\/+/, "");
+const journalId = (path: string): string => normalisePath(path).replace(/^\/+/, "");
+
+const idOf = (projectId: string, bookId: BookId): string => journalId(`${projectId}/${bookId}`);
 
 /** Marks an id set aside by `setAside`: `<projectId>/<bookId>@<last entry's time>`. */
 const ASIDE = "@";
@@ -421,7 +426,7 @@ const make = (
       (names) =>
         names
           .filter((name) => name.endsWith(JOURNAL_SUFFIX) && name.split("/").length >= 2)
-          .map((name) => name.slice(0, -JOURNAL_SUFFIX.length)),
+          .map((name) => journalId(name.slice(0, -JOURNAL_SUFFIX.length))),
     );
 
     const prune = (
@@ -504,8 +509,9 @@ const make = (
           return found;
         }),
 
-      restore: (id, resolveBook) =>
+      restore: (given, resolveBook) =>
         Effect.gen(function* () {
+          const id = journalId(given);
           const journal = yield* read(id);
           const book = resolveBook(journal.header.bookId);
           if (book === undefined)
@@ -559,8 +565,9 @@ const make = (
           return book;
         }),
 
-      discard: (id) =>
+      discard: (given) =>
         Effect.gen(function* () {
+          const id = journalId(given);
           journals.delete(id);
           unwritten.delete(id);
           yield* remove(id);
@@ -569,8 +576,9 @@ const make = (
           });
         }),
 
-      setAside: (id) =>
+      setAside: (given) =>
         Effect.gen(function* () {
+          const id = journalId(given);
           if (isAside(id) || journals.has(id)) return id;
           const journal = yield* read(id);
           const last = journal.entries.at(-1);
