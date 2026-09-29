@@ -106,7 +106,7 @@ export function CardFrame(props: CardFrameProps) {
       </header>
 
       <Show when={props.notes}>
-        <div data-card-notes class="border-b border-surface-border px-3 py-1.5">
+        <div data-card-notes class="px-3 pt-1.5">
           {props.notes}
         </div>
       </Show>

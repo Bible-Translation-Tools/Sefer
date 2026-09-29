@@ -119,8 +119,12 @@ export interface ExcerptCardProps {
    * What to call that is the screen's ("Resolved", "No longer matches").
    */
   readonly gone?: string | undefined;
+  /** Beside the reference: what this place IS — Findings' severity, "in markup". */
+  readonly badges?: JSX.Element;
   /** A block between the header and the text — Findings' one line per finding. */
   readonly notes?: JSX.Element;
+  /** Whether the header offers "Open in editor". Absent is yes. */
+  readonly openable?: boolean;
   /** The footer's slot: whatever this screen lets a reader do about this place. */
   readonly actions?: JSX.Element;
   /**
@@ -390,29 +394,34 @@ export function ExcerptCard(props: ExcerptCardProps) {
         // Not when the card carries notes: findings list themselves line by
         // line under the header, and "2 matches" above them would be the same
         // count said twice in another vocabulary.
-        <Show when={props.notes === undefined && props.excerpt.hits.length > 1}>
-          <span class="text-smallest text-on-surface-tertiary">
-            {t("{count} matches", { count: props.excerpt.hits.length })}
-          </span>
-        </Show>
+        <>
+          {props.badges}
+          <Show when={props.notes === undefined && props.excerpt.hits.length > 1}>
+            <span class="text-smallest text-on-surface-tertiary">
+              {t("{count} matches", { count: props.excerpt.hits.length })}
+            </span>
+          </Show>
+        </>
       }
       editing={props.editing}
       onEdit={() => edit()}
       onDone={done}
       open={
-        <IconButton
-          size="sm"
-          label={t("Open in editor")}
-          icon={<SquareArrowOutUpRightIcon size={14} />}
-          aria-pressed={opening() ? "true" : undefined}
-          onClick={() => {
-            setOpening(true);
-            props.onOpen();
-            // The card may still be here — the same book, already focused —
-            // so the pressed state is released rather than left on.
-            setTimeout(() => setOpening(false), 600);
-          }}
-        />
+        props.openable === false ? undefined : (
+          <IconButton
+            size="sm"
+            label={t("Open in editor")}
+            icon={<SquareArrowOutUpRightIcon size={14} />}
+            aria-pressed={opening() ? "true" : undefined}
+            onClick={() => {
+              setOpening(true);
+              props.onOpen();
+              // The card may still be here — the same book, already focused —
+              // so the pressed state is released rather than left on.
+              setTimeout(() => setOpening(false), 600);
+            }}
+          />
+        )
       }
       notes={props.notes}
       control={

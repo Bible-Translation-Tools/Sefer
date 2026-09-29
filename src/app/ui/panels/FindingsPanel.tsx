@@ -65,7 +65,6 @@ import {
   Badge,
   Button,
   Card,
-  cx,
   EmptyState,
   PanelHeader,
   SegmentedControl,
@@ -108,7 +107,7 @@ export function FindingsPanel() {
   const [opened, setOpened] = createSignal<ReadonlySet<string>>(new Set(), {
     name: "findingsOpened",
   });
-  /** The markup slices the reader has pinned open — hover shows them anyway. */
+  /** The cards whose markup slices the reader has opened, by row key. */
   const [pinned, setPinned] = createSignal<ReadonlySet<string>>(new Set(), {
     name: "findingsSlices",
   });
@@ -292,8 +291,8 @@ export function FindingsPanel() {
     setOpened((held) => flip(held, id));
   };
 
-  const toggleSlice = (id: string): void => {
-    setPinned((held) => flip(held, id));
+  const toggleSlice = (key: string): void => {
+    setPinned((held) => flip(held, key));
   };
 
   const analysisFor = (finding: Finding) =>
@@ -392,7 +391,7 @@ export function FindingsPanel() {
   };
 
   /**
-   * `j`/`k` and the arrows move, Enter opens.
+   * The arrows move, Enter opens.
    *
    * Listened for on the document because the page has no single focusable
    * body, and guarded on the target: the text filter and every other field is
@@ -408,8 +407,8 @@ export function FindingsPanel() {
         const tag = target.tagName;
         if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       }
-      if (event.key === "j" || event.key === "ArrowDown") step(1);
-      else if (event.key === "k" || event.key === "ArrowUp") step(-1);
+      if (event.key === "ArrowDown") step(1);
+      else if (event.key === "ArrowUp") step(-1);
       else if (event.key === "Enter") {
         // Enter before any movement takes the cursor rather than the reader:
         // opening a book nobody pointed at is not what that key means here.
@@ -434,8 +433,72 @@ export function FindingsPanel() {
   const focusedAt = (): number | undefined =>
     walking() ? at(cursor())?.findings[0]?.from : undefined;
 
+  /** The severities a card's findings have, most severe first. */
+  const severitiesOf = (row: FindingsRow): readonly Finding["severity"][] =>
+    Filter.SEVERITIES.filter((severity) =>
+      row.findings.some((finding) => finding.severity === severity),
+    );
+
   /**
-   * One finding, as a line in a card's header.
+   * What a card IS, in its header: its severity, and whether a finding sits in
+   * markup or is stale — the same place Review says "markup only". A card that
+   * mixes severities badges each, and its lines say which is which.
+   */
+  const badges = (_excerpt: Excerpt, key: string) => {
+    const row = feed.row(key);
+    if (row === undefined) return undefined;
+    const markup = row.findings.some((finding) => inMarkup(row.excerpt, finding));
+    return (
+      <>
+        <For each={severitiesOf(row)}>
+          {(severity) => <Badge tone={severityTone(severity)}>{severity}</Badge>}
+        </For>
+        <Show when={markup}>
+          {/* The span has no character in the reading — it is inside a
+              marker name, an attribute, a control character. The card keeps
+              showing the verse, says so here, and offers the raw slice
+              rather than quietly marking a different character. As Review's
+              "markup only" card does, and not in USFM mode, which shows it. */}
+          <Badge tone="muted">{t("in markup")}</Badge>
+          <Show when={mode() !== "usfm"}>
+            <Button
+              size="sm"
+              variant="tertiary"
+              data-markup-toggle
+              aria-pressed={pinned().has(key) ? "true" : "false"}
+              onClick={() => toggleSlice(key)}
+            >
+              {pinned().has(key) ? t("Hide markup") : t("Show markup")}
+            </Button>
+          </Show>
+        </Show>
+        <Show when={row.findings.some(isStale)}>
+          <Badge tone="muted">{t("stale")}</Badge>
+        </Show>
+      </>
+    );
+  };
+
+  /** What a reader can do about a card's findings, in its footer: fix them. */
+  const actions = (_excerpt: Excerpt, key: string) => {
+    const row = feed.row(key);
+    const fixable = foldRuns(row?.findings ?? [])
+      .map((run) => run.head)
+      .filter((finding) => finding.fix !== undefined);
+    return (
+      <For each={fixable}>
+        {(finding) => (
+          <Button size="sm" icon={<Wrench size={12} />} onClick={() => offer(finding)}>
+            {fixable.length === 1 ? t("Fix") : t("Fix {code}", { code: finding.code })}
+          </Button>
+        )}
+      </For>
+    );
+  };
+
+  /**
+   * One finding, as a line under a card's header: what it is and why. The
+   * severity is the header's; a line repeats it only when the card mixes them.
    *
    * `run` is present when this line stands for a fold; its members are drawn
    * below it once the reader opens it. Everything on the line is the run's
@@ -447,34 +510,18 @@ export function FindingsPanel() {
     const markup = inMarkup(row.excerpt, finding);
     return (
       <li
-        class="group/finding flex flex-col gap-0.5"
+        class="flex flex-col gap-0.5"
         data-finding={finding.id}
         data-code={finding.code}
         data-severity={finding.severity}
         data-markup={markup ? "true" : undefined}
       >
         <div class="flex flex-wrap items-center gap-2">
-          <Badge tone={severityTone(finding.severity)}>{finding.severity}</Badge>
+          <Show when={severitiesOf(row).length > 1}>
+            <Badge tone={severityTone(finding.severity)}>{finding.severity}</Badge>
+          </Show>
           <code class="font-mono text-smallest text-on-surface-tertiary">{finding.code}</code>
           <span class="min-w-0 flex-1 text-small text-on-surface-secondary">{finding.message}</span>
-          <Show when={markup}>
-            {/* The span has no character in the reading — it is inside a
-                marker name, an attribute, a control character. The card keeps
-                showing the verse, says so here, and offers the raw slice
-                rather than quietly marking a different character. */}
-            <button
-              type="button"
-              data-markup-toggle
-              aria-expanded={pinned().has(id) ? "true" : "false"}
-              class="cursor-pointer"
-              onClick={() => toggleSlice(id)}
-            >
-              <Badge tone="muted">{t("in markup")}</Badge>
-            </button>
-          </Show>
-          <Show when={isStale(finding)}>
-            <Badge tone="muted">{t("stale")}</Badge>
-          </Show>
           <Show when={folded}>
             <Button
               size="sm"
@@ -492,26 +539,14 @@ export function FindingsPanel() {
               × {run?.members.length ?? 1}
             </Button>
           </Show>
-          <Button size="sm" variant="tertiary" onClick={() => go(finding)}>
-            {t("Go")}
-          </Button>
-          <Show when={finding.fix !== undefined}>
-            <Button size="sm" icon={<Wrench size={12} />} onClick={() => offer(finding)}>
-              {t("Fix")}
-            </Button>
-          </Show>
         </div>
 
-        <Show when={markup}>
-          {/* Hover shows it; a click pins it open. The same rule the inventory
-              follows: raw USFM is never the card's BODY, only the answer to
-              "what is there, then". */}
+        <Show when={markup && pinned().has(row.key)}>
+          {/* Raw USFM is never the card's BODY, only the answer to "what is
+              there, then" — the header's Show markup. */}
           <p
             data-markup-slice
-            class={cx(
-              "px-0.5 font-mono text-smallest break-all text-on-surface-tertiary",
-              pinned().has(id) ? "block" : "hidden group-hover/finding:block",
-            )}
+            class="px-0.5 font-mono text-smallest break-all text-on-surface-tertiary"
           >
             <span class="opacity-70">{markupSlice(row.excerpt, finding).before}</span>
             <mark class="rounded-xs bg-surface-warning px-px font-semibold text-on-surface-warning">
@@ -561,7 +596,12 @@ export function FindingsPanel() {
       const row = feed.row(key);
       return row === undefined ? 0 : 8 + LINE_HEIGHT * foldRuns(row.findings).length;
     },
+    badges,
     notes,
+    actions,
+    // No "Open in editor": the card's own context steps widen it to the
+    // chapter, and Enter on the current card still opens the editor there.
+    openable: false,
   };
 
   /**
@@ -573,11 +613,10 @@ export function FindingsPanel() {
 
   return (
     <main class="flex h-screen min-w-0 flex-col gap-4 p-6" data-findings-panel>
+      {/* `pe-12`: the screen's close button sits in the corner above this row. */}
       <PanelHeader
+        class="pe-12"
         title={t("Findings")}
-        subtitle={t(
-          "j / k or the arrows move between cards; Enter opens one in the editor. Filters hide cards; they never delete findings.",
-        )}
         actions={
           <>
             <span class="text-small text-on-surface-tertiary" data-findings-count={summary().shown}>

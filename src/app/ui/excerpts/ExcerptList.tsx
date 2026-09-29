@@ -124,8 +124,12 @@ export interface ExcerptDecor {
   readonly outlineLabel?: (row: OutlineRow) => string;
   /** Replaces a card's reference. */
   readonly label?: (excerpt: Excerpt, key: string) => JSX.Element;
+  /** Beside a card's reference: what the place is, not what to do about it. */
+  readonly badges?: (excerpt: Excerpt, key: string) => JSX.Element;
   /** A block between a card's header and its reading. */
   readonly notes?: (excerpt: Excerpt, key: string) => JSX.Element;
+  /** False: no "Open in editor" on a card — the card's own context steps open it wider. */
+  readonly openable?: boolean;
   /** A card's footer actions — review progress, a quick filter. */
   readonly actions?: (excerpt: Excerpt, key: string) => JSX.Element;
   /** What a highlight means — see `ExcerptCardProps.markTone`. */
@@ -366,7 +370,9 @@ export function ExcerptList(props: ExcerptListProps) {
             active={props.focus === key ? props.activeHit : undefined}
             mode={props.mode ?? "regular"}
             label={props.decor?.label?.(excerpt(), key)}
+            badges={props.decor?.badges?.(excerpt(), key)}
             notes={props.decor?.notes?.(excerpt(), key)}
+            openable={props.decor?.openable}
             actions={props.decor?.actions?.(excerpt(), key)}
             markTone={props.decor?.markTone}
             nearby={session.gone ? [] : nearbyOf(props.shownOf?.(excerpt()) ?? excerpt())}
