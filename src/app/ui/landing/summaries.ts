@@ -157,7 +157,7 @@ export const listProjects = (
 /**
  * How many times this session has added a project to the index or taken one
  * out of it. The projects list re-reads on it, so a project arriving from
- * anywhere — the rail's Import while the list is on screen, the list's own
+ * anywhere — the app bar's Import while the list is on screen, the list's own
  * buttons, a WACS download — shows up without its caller knowing the list
  * exists.
  *

@@ -1,6 +1,6 @@
 /**
  * The import hub: the ways a project gets onto this device — a zip, a folder,
- * a clone — as the projects page's buttons or the rail's menu.
+ * a clone — as the projects page's buttons or the app bar's menu.
  *
  * The rule the whole component is built around: a source the host cannot serve
  * is rendered DISABLED with the reason in place of its explainer, never hidden
@@ -75,7 +75,7 @@ interface Progress {
 
 export function ImportHub(props: {
   /**
-   * After a project lands — the rail goes to the projects page. The list
+   * After a project lands — the app bar goes to the projects page. The list
    * itself needs no telling: `rememberProject` re-reads it.
    */
   readonly onImported?: () => void;
@@ -83,7 +83,7 @@ export function ImportHub(props: {
    * `buttons` (the default) is "Import zip" and "Import folder" as the
    * projects page's two large buttons, each going straight to the system
    * picker. `menu` is the same two plus "Clone from cloud", opened from
-   * `trigger` — the rail's Import. Same pipeline and progress dialog either way.
+   * `trigger` — the app bar's Import. Same pipeline and progress dialog either way.
    */
   readonly variant?: "buttons" | "menu";
   /** The menu's trigger; `menu` only. */
@@ -407,7 +407,7 @@ export function ImportHub(props: {
     else importPicked(t("Import from a folder"), "folder");
   };
 
-  // "Open project…" is importing a folder. Only the rail's menu registers it:
+  // "Open project…" is importing a folder. Only the app bar's menu registers it:
   // it is mounted on every screen, and one owner means one progress dialog.
   // `variant` is read once: an instance is one shape for its whole life.
   if (untrack(() => props.variant) === "menu")

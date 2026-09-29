@@ -1,5 +1,5 @@
 /**
- * The project sidebar's slot: what the panel beside the rail shows.
+ * The project sidebar's slot: what the panel under the app bar shows.
  *
  * Normally the project's own table of contents (`ProjectSidebar`). A screen
  * whose job is a list of places — Find, Key terms, Findings — claims it for as

@@ -300,13 +300,13 @@ export interface ShellKeys {
    */
   readonly findingsFilter: SettingKey<FindingsFilterPreference>;
   /**
-   * Is the project sidebar showing, or is the workspace down to its icon rail?
-   * Written by the rail's panel toggle, and read once when the shell is built.
+   * Is the project sidebar showing, or hidden?
+   * Written by `PanelToggle`, `Mod-b` and dragging the panel closed, and read
+   * once when the shell is built.
    */
   readonly sidebarOpen: SettingKey<boolean>;
   /**
-   * How wide the project sidebar is, as a FRACTION of the workspace row (rail
-   * excluded), because that is the unit `Resizable` speaks: a split conserves
+   * How wide the project sidebar is, as a FRACTION of the workspace row, because that is the unit `Resizable` speaks: a split conserves
    * fractions, so a pixel width would have to be converted against a root that
    * has not been measured when the panel first renders. Clamped by the panel's
    * own `minSize`/`maxSize`, so a stale value from a much wider window still

@@ -1,5 +1,5 @@
 /**
- * The icon rail: the one piece of chrome that is always on screen.
+ * The app bar: the one piece of chrome that is always on screen.
  *
  * A bar across the top of the window in the theme's own surface — white in
  * light, the dark surface in dark — with a hairline under it. (It was a
@@ -16,7 +16,7 @@
  *
  * Every enabled tile is a place: a navigation lit from the pathname, never a
  * setting. The project-wide screens that used to sit here (findings, history,
- * glyphs, compare, cloud) live in the "More" menu at the foot until the rail
+ * glyphs, compare, cloud) live in the "More" menu at the end until the bar
  * decides where they belong.
  */
 
@@ -41,12 +41,12 @@ import { ImportHub } from "../landing/ImportHub";
 import { Menu, MenuItem, SegmentedControl } from "../primitives";
 
 /**
- * A rail tile: a 48px icon button, the mode switcher's height, with the `md`
+ * A bar button: a 48px icon button, the mode switcher's height, with the `md`
  * standard 20px icon. The word is the button's name for a screen
  * reader and its native tooltip on hover; it is never drawn — the modes, the
  * one group that needs its words, are the segmented control.
  */
-function RailButton(props: {
+function BarButton(props: {
   readonly label: string;
   readonly testId: string;
   readonly icon: JSX.Element;
@@ -82,13 +82,13 @@ type ProjectScreen =
   | "/project/$slug/cloud";
 
 /**
- * The project screens the rail no longer shows, parked in one menu until
+ * The project screens the bar no longer shows, parked in one menu until
  * there is a decision about where each belongs. All need an open project.
  */
 function MoreMenu() {
   const navigate = useNavigate();
   const shell = useShell();
-  const [open, setOpen] = createSignal(false, { name: "railMoreOpen" });
+  const [open, setOpen] = createSignal(false, { name: "appBarMoreOpen" });
   const attention = () => shell.findingCounts().errors + shell.findingCounts().warnings;
 
   const items: ReadonlyArray<{ label: string; to: ProjectScreen; icon: JSX.Element }> = [
@@ -112,9 +112,9 @@ function MoreMenu() {
       onOpenChange={setOpen}
       class="w-52"
       trigger={
-        <RailButton
+        <BarButton
           label={t("More")}
-          testId="rail-more"
+          testId="app-bar-more"
           pressed={open() ? "true" : "false"}
           icon={<Ellipsis size={20} />}
         />
@@ -123,7 +123,7 @@ function MoreMenu() {
       <For each={items}>
         {(item) => (
           <MenuItem
-            data-testid={`rail-more-${item.to.split("/").pop()}`}
+            data-testid={`app-bar-more-${item.to.split("/").pop()}`}
             disabled={shell.project() === undefined}
             icon={item.icon}
             onSelect={() =>
@@ -143,7 +143,7 @@ function MoreMenu() {
   );
 }
 
-export function IconRail() {
+export function AppBar() {
   const navigate = useNavigate();
   const shell = useShell();
 
@@ -181,7 +181,7 @@ export function IconRail() {
 
   return (
     <nav
-      data-testid="rail"
+      data-testid="app-bar"
       aria-label={t("Sefer")}
       class="scrollbar-subtle flex h-18 w-full shrink-0 items-center gap-4 overflow-x-auto overflow-y-hidden border-b border-surface-border bg-surface-primary px-4 py-2"
     >
@@ -191,7 +191,7 @@ export function IconRail() {
             theme's text colour in light and dark alike. */}
         <button
           type="button"
-          data-testid="rail-home"
+          data-testid="app-bar-home"
           aria-label={t("Home")}
           title={t("Home")}
           class="flex h-12 shrink-0 cursor-pointer items-center gap-3 rounded-lg px-2 transition-colors hover:bg-surface-secondary"
@@ -252,20 +252,20 @@ export function IconRail() {
           variant="menu"
           onImported={() => void navigate({ to: "/projects" })}
           trigger={
-            <RailButton label={t("Import")} testId="rail-import" icon={<Download size={20} />} />
+            <BarButton label={t("Import")} testId="app-bar-import" icon={<Download size={20} />} />
           }
         />
-        <RailButton
+        <BarButton
           label={t("Settings")}
-          testId="rail-settings"
+          testId="app-bar-settings"
           pressed={at("/settings")}
           icon={<SettingsIcon size={20} />}
           onClick={() => void navigate({ to: "/settings" })}
         />
         {/* A placeholder until there is an account to read a name from. */}
-        <RailButton
+        <BarButton
           label={t("Account")}
-          testId="rail-account"
+          testId="app-bar-account"
           icon={<UserIcon size={20} />}
           title="TODO: WIP"
           disabled

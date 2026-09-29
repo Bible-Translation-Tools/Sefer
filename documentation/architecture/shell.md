@@ -123,7 +123,7 @@ lands.
 ## The workspace chrome
 
 Three components, in `src/app/ui/workspace/`, and one rule between them: the
-RAIL answers "where in Sefer am I", the SIDEBAR answers "where in this project
+APP BAR answers "where in Sefer am I", the SIDEBAR answers "where in this project
 am I", and the TOOLBAR answers "what am I looking at".
 
 **Where the chrome is mounted is itself the rule.** It lives in
@@ -140,16 +140,16 @@ is a structural fact rather than a query parameter somebody can mistype.
 What `__root` keeps is what every screen needs whatever its frame: the head,
 the one `<ProjectProvider>`, the theme side effect, and the design annotator.
 A prototype outside the layout still has services, a theme and the comment
-panel — but not the rail, and not `installCommandKeys`, so it does not answer
+panel — but not the app bar, and not `installCommandKeys`, so it does not answer
 the application's Mod-K for an application it is not part of.
 
-- **`IconRail`** is permanent: a 72px bar across the top of the window in the
+- **`AppBar`** (`src/app/ui/workspace/AppBar.tsx`, testids `app-bar-*`) is permanent: a 72px bar across the top of the window in the
   theme's own surface (`surface-primary`, a hairline under it). Left, the mark
-  and name — the Home button; centre, the three modes as a 48px
+  and name — the Home button; centre, the two modes (Refine, Key terms) as a 48px
   `SegmentedControl` (`md`, `iconsWhenNarrow`), which drop to icons below `md`;
-  right, 48px icon-only tiles. Everything on it is lit from the `pathname`,
-  not from a signal, and every tile but three is a plain navigation.
-- **The project panel's show/hide** is not on the rail. It is one button that
+  right, 48px icon-only buttons. Everything on it is lit from the `pathname`,
+  not from a signal, and every button but three is a plain navigation.
+- **The project panel's show/hide** is not on the app bar. It is one button that
   stays put and flips (`PanelToggle`, `panel-toggle`): left of the book's title
   in the editor toolbar, and on project screens without that toolbar in the
   same top-left spot, in a narrow column of its own (`PanelToggleColumn`).
@@ -157,7 +157,7 @@ the application's Mod-K for an application it is not part of.
   dragging the panel's edge well past its minimum closes it
   (`Resizable.Panel`'s `onCollapse`), keeping the width it had.
 
-  The mode tiles (Refine, Key terms) and the project screens (Character
+  The modes (Refine, Key terms) and the project screens (Character
   inventory, Compare — which goes to `/project/$slug/review` — and Cloud)
   appear only while a project is open: each is something you apply to a
   project, and offering one with nothing open is an affordance that answers
@@ -273,7 +273,7 @@ An Effect-returning command is run on the app runtime by the runner `registerShe
 
 ## Routes and tokens
 
-Top level: `/`, `/projects`, `/settings`, `/start/create`, the dev-only `/dev/fixture`, and `/design` (outside the `_app` chrome). Under `/project/$slug`: the census (index), `book/$book`, `find`, `findings`, `history` (`?review=1` redirects to `review`), `inventory`, `terms`, `review`, `cloud` and `playground`. A project's slug is minted by `shell.slugFor(root)` and kept in the `projectSlugs` setting, so a bookmark keeps working; slugs minted this session are also held in memory and read first by `rootForSlug`, because a setting only answers a new value once the settings file is written and a click mints and navigates in the same tick. `find` owns its search params and derives its whole state from them, so a link into it from the rail or the toolbar changes the screen that is already mounted. File routes under `src/routes`; `src/routeTree.gen.ts` is generated — never edit it.
+Top level: `/`, `/projects`, `/settings`, `/start/create`, the dev-only `/dev/fixture`, and `/design` (outside the `_app` chrome). Under `/project/$slug`: the census (index), `book/$book`, `find`, `findings`, `history` (`?review=1` redirects to `review`), `inventory`, `terms`, `review`, `cloud` and `playground`. A project's slug is minted by `shell.slugFor(root)` and kept in the `projectSlugs` setting, so a bookmark keeps working; slugs minted this session are also held in memory and read first by `rootForSlug`, because a setting only answers a new value once the settings file is written and a click mints and navigates in the same tick. `find` owns its search params and derives its whole state from them, so a link into it from the app bar or the toolbar changes the screen that is already mounted. File routes under `src/routes`; `src/routeTree.gen.ts` is generated — never edit it.
 
 `src/app/ui/tokens.css` is the design system as plain custom properties, ported from the v1 editor's vanilla-extract contract so the two read as one product, and it is also the Tailwind v4 configuration: an `@theme` block mints a utility from every semantic name. Components use the semantic names (`bg-surface-primary`), never the ramps. Dark is a token swap under `[data-theme="dark"]` and `prefers-color-scheme`, never Tailwind's `dark:` variant. The reusable components live in `src/app/ui/primitives/`, which is the only place corvu is imported. `src/app/ui/app.css` is the one global stylesheet and holds only the `<body>` ground and the CodeMirror frame. See [the UI layer](ui.md).
 

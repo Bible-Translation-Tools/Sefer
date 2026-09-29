@@ -407,7 +407,7 @@ There are two diffs today. The engine skeleton (decision units addressed by sid,
 
 ### Overview
 
-The one compare screen, `/review`. Both sides are pickers over a `CompareSource` (the working project, a folder, a zip, a recorded version, or the saved file). You decide per unit, then Apply, and Record a version (save + commit). The icon rail's Compare tile opens it. `src/core/compare`, `src/app/ui/review`. → [review](architecture/review.md)
+The one compare screen, `/review`. Both sides are pickers over a `CompareSource` (the working project, a folder, a zip, a recorded version, or the saved file). You decide per unit, then Apply, and Record a version (save + commit). The app bar's More menu opens it (Compare). `src/core/compare`, `src/app/ui/review`. → [review](architecture/review.md)
 
 ### Constraints and known bugs
 

@@ -169,8 +169,8 @@ arrow keys, focus on open) is ours either way.
 inside a signal updater, Solid 2 runs that updater lazily, and the handle then
 asks for a size at index `-1` and dies. The package is not installed; the file
 keeps corvu's `Root`/`Panel`/`Handle` shape so that swapping back later is one
-import. Collapsing is deliberately not implemented: a collapsed sidebar is a
-different tree (an icon rail), not a zero-width panel.
+import. Collapsing is the caller's: `onCollapse` asks, and the workspace hides the
+panel with a class rather than shrinking it to zero, so its width comes back.
 
 ### The multibuffer: `virtual-core`, and why not `solid-virtual`
 
@@ -273,7 +273,7 @@ by a test suite, and both need a handle that survives a reworded label and a
 retranslated one. `data-testid` is that handle.
 
 **The rule.** Kebab-case, `<area>-<thing>`, and the area is the piece of chrome
-a reader would name — e.g. `rail-home`, `sidebar-book-PHM`, `toolbar-undo`,
+a reader would name — e.g. `app-bar-home`, `sidebar-book-PHM`, `toolbar-undo`,
 `kebab-export-zip`, `chapter-tile-3`, `location-next`, `palette-input`,
 `status-commands`, `editor-host`. A book id or a chapter label keeps its own
 spelling (`sidebar-book-3JN`, `chapter-tile-intro`) — it is an identifier, not
@@ -285,7 +285,7 @@ they render, so `data-testid` is an ordinary prop with no support needed from
 the primitive. Nothing generates one: a control gets an id when something
 drives it, and an id nothing uses is a name to keep in step for no reader.
 
-**What has one today**: the rail and each of its tiles, the sidebar with its
+**What has one today**: the app bar and each of its buttons, the sidebar with its
 project button, its Go-to box, each book row and each chapter tile; the
 toolbar, its search box, Undo, Redo, Findings, the kebab and each of the
 kebab's items; the location bar with its two crumbs and its two arrows; the

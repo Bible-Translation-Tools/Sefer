@@ -11,7 +11,7 @@ Where a project comes from, and what each host can actually do about it. Everyth
 
 `/` renders rather than redirecting, because the composition reads `?fixture=1` off `location` before the router exists and a redirect that dropped the search would compose over OPFS instead of the seeded fixture. For the same reason every crumb and every tab switch passes `search: true`.
 
-The projects page has no breadcrumb or tabs any more, and the add-a-project cards are gone. `ImportHub` is the one import pipeline, in two shapes: the projects page's "Import zip" / "Import folder" buttons, and the rail's Import menu (zip, folder, and "Clone from cloud", disabled with the reason when the build has no WACS server), so a project can be brought in from any screen. `LandingHeader` survives only on `/start/create`.
+The projects page has no breadcrumb or tabs any more, and the add-a-project cards are gone. `ImportHub` is the one import pipeline, in two shapes: the projects page's "Import zip" / "Import folder" buttons, and the app bar's Import menu (zip, folder, and "Clone from cloud", disabled with the reason when the build has no WACS server), so a project can be brought in from any screen. `LandingHeader` survives only on `/start/create`.
 
 The only state on the landing page is `reload`: a counter the import hub raises and `YourProjects` reads. That is the whole subscription between them — an import that finished shows up in the list without either component knowing what the other is. `YourProjects` keeps a second counter of its own for the writes it makes itself (a rename, a delete), read in the same effect.
 
@@ -47,7 +47,7 @@ Every row carries a kebab of three `ProjectAdmin` calls. (The port also has `met
 
 ## Adding a project: what each source needs, per host
 
-**Every project is a copy in Sefer's own storage.** Importing a folder or a zip stages the files, checks them and commits them into the projects root — OPFS on the Web, the app's projects folder on desktop — and nothing points back at the original afterwards. There is no "open a folder where it sits": `Open project…` (`Mod-o`) is Import folder, registered by the rail's Import menu, which owns the pipeline and its progress dialog. One storage model on both hosts; Sefer's `.sefer/` and git history never land inside somebody's own folder; no other program edits a project underneath it. Getting work back out is Export as zip or cloud sync.
+**Every project is a copy in Sefer's own storage.** Importing a folder or a zip stages the files, checks them and commits them into the projects root — OPFS on the Web, the app's projects folder on desktop — and nothing points back at the original afterwards. There is no "open a folder where it sits": `Open project…` (`Mod-o`) is Import folder, registered by the app bar's Import menu, which owns the pipeline and its progress dialog. One storage model on both hosts; Sefer's `.sefer/` and git history never land inside somebody's own folder; no other program edits a project underneath it. Getting work back out is Export as zip or cloud sync.
 
 The rule the import hub is built around: a source this host cannot serve is rendered DISABLED with the reason in place of its explainer — never hidden, never offered-then-failed. `HostInfo.capabilities()` and `env` are asked before the button exists.
 

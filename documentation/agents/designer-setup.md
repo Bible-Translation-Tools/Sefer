@@ -114,7 +114,7 @@ this way rather than describing the element in prose:
 ## http://localhost:3000/project/small-nt/terms
 
 [4] src/app/ui/excerpts/StetView.tsx:31:7  "Key terms"
-    this heading should match the rail.
+    this heading should match the app bar.
 ```
 
 **You can keep going across pages.** The panel stays with you as you navigate,

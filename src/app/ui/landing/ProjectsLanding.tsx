@@ -4,7 +4,7 @@
  *
  * Two sections, one page. There is no separate find screen, and the
  * add-a-project cards are gone:
- * importing is `ImportHub`, as buttons under the table and as the rail's menu.
+ * importing is `ImportHub`, as buttons under the table and as the app bar's menu.
  *
  * The state here is `downloads`: every download the WACS table started, which
  * the installed row draws as a card with a progress bar until the project it

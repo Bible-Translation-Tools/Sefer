@@ -5,7 +5,7 @@
  *
  * A SKELETON of the workspace; `/` decides, once, and nothing else in the
  * chrome asks. It is built from the real pieces in their ordinary no-project
- * state rather than from look-alikes: the rail already disables what needs an
+ * state rather than from look-alikes: the app bar already disables what needs an
  * open project, and the sidebar with no project shows its empty message and
  * the way to the projects page. The main area is deliberately blank.
  *

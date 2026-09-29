@@ -242,8 +242,8 @@ export interface Shell {
    *
    * Written by `focus` and by every chapter change, read by the project route
    * (which sends an Open straight back to the work rather than to a census)
-   * and by the rail's panel toggle (which is the way back into a project from
-   * a full-page screen). Held as a preference, so it survives a restart.
+   * and by `BackToEditor` and the app bar's Home (the ways back into a
+   * project from a full-page screen). Held as a preference, so it survives a restart.
    */
   readonly lastLocation: (root: string) => LastLocation | undefined;
   /** The path an Open of `root` should land on: the remembered book, or the census. */
@@ -276,7 +276,7 @@ export interface Shell {
   /**
    * How many findings the reader is being asked to look at, by rung.
    *
-   * The rail's bell and the toolbar's bell both want one number and neither
+   * The app bar's bell and the toolbar's bell both want one number and neither
    * wants to learn the findings module's vocabulary to get it, so the count is
    * derived once here, off the findings store, so both bells read one number
    * that one publication wrote.
@@ -327,8 +327,8 @@ export interface Shell {
    * The workspace chrome: is the project sidebar showing, and how wide is it.
    *
    * Both are `workspace.*` preferences (src/app/settings.ts) and both live
-   * here for the same reason the mode and the clipped chapter do — the rail
-   * that toggles the sidebar and the sidebar itself are in different subtrees
+   * here for the same reason the mode and the clipped chapter do — the toggle
+   * that shows the sidebar and the sidebar itself are in different subtrees
    * of the root route, and a route match is not a lifetime.
    */
   readonly sidebarOpen: Accessor<boolean>;

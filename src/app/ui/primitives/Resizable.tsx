@@ -20,9 +20,10 @@
  * and moves exactly two neighbours, so the total is conserved and no panel can
  * be resized by a handle it does not touch.
  *
- * NOT implemented: collapsing. A collapsible pane is a shell decision (the
- * sidebar becomes an icon rail — a different tree, not a zero-width panel), so
- * it belongs where that tree is built.
+ * Collapsing is the caller's: a panel given `onCollapse` asks to be hidden
+ * when dragged well past its minimum, and the caller hides it (the workspace
+ * sets `hidden`, a class, not a zero-width panel), so the sizes it had are
+ * kept for when it comes back.
  */
 
 import type { JSX } from "@solidjs/web";

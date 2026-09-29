@@ -7,21 +7,21 @@ import { readyShell, useShell, useShellState } from "#app/ProjectContext";
 import { SIDEBAR_WIDTH } from "#app/settings";
 import { CommandPalette } from "#app/ui/CommandPalette";
 import { Kbd, Resizable, Toaster } from "#app/ui/primitives";
+import { AppBar } from "#app/ui/workspace/AppBar";
 import { BackToEditor } from "#app/ui/workspace/BackToEditor";
-import { IconRail } from "#app/ui/workspace/IconRail";
 import { PanelToggleColumn } from "#app/ui/workspace/PanelToggle";
 import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
 import { sidebarClaim } from "#app/ui/workspace/sidebarSlot";
 
 /**
- * The application shell, as a PATHLESS layout: the icon rail, the project
+ * The application shell, as a PATHLESS layout: the app bar, the project
  * sidebar, the palette and the status line, wrapped around every screen that
  * is part of the application.
  *
  * ## Why this is a route and not the root
  *
  * It used to live in `__root.tsx`, which meant every route in the tree
- * rendered inside the rail — `/design` included. That is right for a design
+ * rendered inside the app bar — `/design` included. That is right for a design
  * screen which genuinely sits inside the workspace and wrong for onboarding,
  * a project list, or anything full-bleed: a designer judging a screen could
  * not see its real framing, only this one.
@@ -41,8 +41,8 @@ import { sidebarClaim } from "#app/ui/workspace/sidebarSlot";
  * for an application it is not part of.
  *
  * The chrome is the mockups' workspace (`documentation/architecture/design-direction.md`,
- * "Overall layout"): a permanent icon RAIL for "where in Sefer am I", and
- * beside it a resizable project SIDEBAR for "where in this project am I",
+ * "Overall layout"): a permanent APP BAR for "where in Sefer am I", and
+ * under it a resizable project SIDEBAR for "where in this project am I",
  * which the projects page does without.
  *
  * Why the collapsed sidebar is hidden rather than unmounted: `Resizable`
@@ -140,7 +140,7 @@ function Chrome() {
         when={shell()}
         fallback={<div class="h-18 shrink-0 border-b border-surface-border bg-surface-primary" />}
       >
-        <IconRail />
+        <AppBar />
       </Show>
 
       <div class="flex min-h-0 min-w-0 flex-1 flex-col">

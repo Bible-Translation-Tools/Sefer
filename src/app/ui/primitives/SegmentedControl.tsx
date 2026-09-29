@@ -132,7 +132,7 @@ export function SegmentedControl<T extends string>(props: SegmentedControlProps<
             aria-label={item.shortLabel === undefined ? undefined : item.label}
             // The first ENABLED segment takes the tab stop when none is chosen,
             // so the group can still be reached from the keyboard — a disabled
-            // button cannot take focus, and the rail's first mode is disabled.
+            // button cannot take focus, and every segment may be.
             tabindex={
               item.value === props.value ||
               (props.value === undefined && item.value === firstEnabled()?.value)

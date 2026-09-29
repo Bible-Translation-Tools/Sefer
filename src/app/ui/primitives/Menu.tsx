@@ -16,7 +16,7 @@
  *
  * `MenuLabel` heads a group, `MenuSeparator` divides groups.
  *
- * Two densities. `md` is the compact list (the rail's More, a card's actions);
+ * Two densities. `md` is the compact list (the app bar's More, a card's actions);
  * `lg` is the roomy one with body text (a table column's Sort and Filter).
  */
 

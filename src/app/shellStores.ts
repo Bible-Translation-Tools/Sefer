@@ -133,7 +133,7 @@ export const makeShellStores = (options: {
    *
    * Both `ProjectAnalysis.findings()` and `census()` rebuild every finding in
    * every book, and `attach` invalidates their caches on every accepted edit —
-   * so read per keystroke, the bell, the rail and the sixty-six sidebar rows
+   * so read per keystroke, the bell, the app bar and the sixty-six sidebar rows
    * would each pay a whole-project rebuild.
    */
   // Signals for the three WHOLESALE products and a store for the one PARTIAL

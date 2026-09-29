@@ -154,7 +154,7 @@ export function Toolbar() {
         /* Two modes, because that is what this control IS. Key terms was a
            third segment here and it is not a mode — it is a screen, and
            picking it navigated away, which made the other two look like
-           navigations too. It is a rail tile, where the other destinations
+           navigations too. It is an app bar mode, where the other destinations
            are. Form is a SURFACE, not a projection, and will not live here. */
         items={[
           { value: "regular", label: t("Regular Mode"), icon: <BookOpen /> },

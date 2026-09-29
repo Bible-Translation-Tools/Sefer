@@ -113,7 +113,7 @@ act on and one you have to grep for. Then the element's own text (only its own
 ## http://localhost:3000/project/small-nt/terms
 
 [4] src/app/ui/excerpts/StetView.tsx:31:7  "Key terms"
-    this heading should match the rail.
+    this heading should match the app bar.
 ```
 
 Numbering runs across the whole batch, not per comment, so `[3]` in the paste

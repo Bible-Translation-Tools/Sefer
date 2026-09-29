@@ -3,7 +3,7 @@
  *
  * A full-page route — findings, history, review, compare, find, terms,
  * inventory, cloud, settings, the projects list — replaces the editor
- * entirely, and the only door back was the rail's panel tile, which reads as
+ * entirely, and the only door back was the old rail's panel tile, which reads as
  * a panel toggle and not as "close this". So the door is spelled out: one
  * button, pinned to the top-right of the routed content, that says which book
  * it returns to.

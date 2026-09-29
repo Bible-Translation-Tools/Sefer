@@ -65,7 +65,7 @@ Flows a real user broke that a Playwright journey would have caught. Written dow
 - **Delete at a passthrough join** (2026-09-25). Where a paragraph flows through a blank line and `\s5` (Philemon 1:9–10), Backspace after the space and Delete before it each removed one invisible newline, the join re-formed, and the key looked stuck. Guard: at such a join, one Backspace or one Delete joins the words (no space left on screen), the source keeps no orphan line or bare `\s5`, and one Undo restores the gap.
 - **Type into a fresh footnote** (2026-09-25). A settlement change briefly put the note editor's caret before `\ft `, and "hello" went in as "olleh". Guard: Insert footnote, type a word, and the note's body reads the word.
 - **Undo a word typed in an excerpt** (2026-09-25). Every character typed in a Find excerpt was its own undo step. Guard: type a word in an excerpt, one Undo removes it.
-- **Open a menu twice** (2026-09-25). A change to `Popover` left every popover and menu refusing to open after its first close. Guard: the rail's Import menu opens, closes with `Esc`, and opens again.
+- **Open a menu twice** (2026-09-25). A change to `Popover` left every popover and menu refusing to open after its first close. Guard: the app bar's Import menu opens, closes with `Esc`, and opens again.
 
 Colocate Node and focused browser tests with their owner; Web journeys live in `e2e/`.
 
