@@ -168,9 +168,6 @@ export function ResultsOutline(props: ResultsOutlineProps) {
                               onClick={() => props.onGo(tile.first)}
                             >
                               {tile.label}
-                              <span class="text-[0.85em] text-on-surface-tertiary">
-                                {tile.count}
-                              </span>
                             </button>
                           </li>
                         )}

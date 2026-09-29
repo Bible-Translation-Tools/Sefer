@@ -117,7 +117,7 @@ export interface ExcerptDecor {
    * positions the second one on top of the first. Defaults to `excerpt.sid`.
    */
   readonly rowKey?: (group: BookExcerpts, excerpt: Excerpt) => string;
-  /** The sticky header's contents. Defaults to the book id, name and count. */
+  /** The sticky header's contents. Defaults to the book id and name: the outline beside it has the count. */
   readonly header?: (group: BookExcerpts) => JSX.Element;
   /** The outline column's own label, when its rows are not books. */
   readonly outlineTitle?: string;
@@ -343,9 +343,6 @@ export function ExcerptList(props: ExcerptListProps) {
                 </strong>
                 <span class="text-small text-on-surface-secondary">
                   {nameOf(section().key)?.name}
-                </span>
-                <span class="ms-auto text-smallest text-on-surface-tertiary">
-                  {t("{count} hits", { count: nameOf(section().key)?.count ?? 0 })}
                 </span>
               </>
             )}
