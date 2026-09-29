@@ -84,9 +84,12 @@ function Workspace() {
         class={showing() ? undefined : "hidden"}
       >
         {/* A screen of results may claim the panel for its own outline
-            (`sidebarSlot.ts`); otherwise it is the project's contents. */}
-        <Show when={sidebarClaim()} fallback={<ProjectSidebar />}>
-          {(render) => render()()}
+            (`sidebarSlot.ts`); otherwise it is the project's contents.
+            `keyed`: the next screen claims before the last one releases, so
+            the claim goes from one render straight to another, and an
+            unkeyed Show kept drawing the first — Findings' outline on Find. */}
+        <Show when={sidebarClaim()} fallback={<ProjectSidebar />} keyed>
+          {(render) => render()}
         </Show>
       </Resizable.Panel>
       <Resizable.Handle
