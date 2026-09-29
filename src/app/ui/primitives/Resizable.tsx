@@ -258,7 +258,7 @@ function Panel(props: ResizablePanelProps) {
           <div
             data-collapse-hint=""
             role="status"
-            class="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-surface-invert/85 p-4 text-center"
+            class="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-surface-overlay p-4 text-center"
           >
             <p class="text-body font-semibold text-on-surface-invert">
               {props.collapseHint?.title}

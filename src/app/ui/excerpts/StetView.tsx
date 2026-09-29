@@ -1,9 +1,12 @@
 /**
  * Key terms (STET): the same multibuffer, fed by a term's occurrences.
  *
- * Left, the term list from the mockup — a search box over the guide, then a
- * card per term with its label in bold and a done/total count, and the open
- * term expanded to show its definition, its glosses and its references.
+ * The term list is the sidebar's navigation on this screen: each term stands
+ * where a book would, and the open one expands to its definition and the
+ * curated verses this project has, each one a link into the list. Under them,
+ * a switch adds the term's ADDITIONAL references to the list on the right —
+ * to the list only: the sidebar stays the curated set a reviewer is asked to
+ * work through. With the sidebar hidden the same list sits beside the cards.
  * Right, the excerpt list, where every card reads the PAIRED RESOURCE beside
  * the TARGET, and the target is the editable one.
  *
@@ -24,8 +27,12 @@
  * question the screen is asking.
  */
 
-import SearchIcon from "lucide-solid/icons/search";
-import { For, Show, createMemo, createSignal } from "solid-js";
+import CheckIcon from "lucide-solid/icons/check";
+import ChevronDown from "lucide-solid/icons/chevron-down";
+import ChevronRight from "lucide-solid/icons/chevron-right";
+import CircleIcon from "lucide-solid/icons/circle";
+import CircleCheckIcon from "lucide-solid/icons/circle-check";
+import { For, Show, createMemo, createSignal, onCleanup } from "solid-js";
 
 import type { BookId } from "#core/book/book";
 import type { BookExcerpts, Excerpt, OutlineRow } from "#core/excerpts/excerpts";
@@ -34,9 +41,12 @@ import type { Guide, Term } from "#core/stet/stet";
 import type { EditorBook, Funnel } from "#editor/index";
 
 import { t } from "../../i18n";
+import { useShell } from "../../ProjectContext";
 import type { SourceReading } from "../../workflows/stet";
 import type { CardViews } from "../multibuffer/cardViews";
-import { Badge, Card, Input, Select, Switch, cx } from "../primitives";
+import { Badge, Switch } from "../primitives";
+import { ProjectControl } from "../workspace/ProjectSidebar";
+import { claimSidebar } from "../workspace/sidebarSlot";
 import { excerptCard } from "./cardSpec";
 import type { ContextStep, Paired } from "./ExcerptCard";
 import { ExcerptList } from "./ExcerptList";
@@ -69,28 +79,145 @@ export interface StetViewProps {
 
   /** The source reading for one excerpt, or nothing when none is bound. */
   readonly sourceOf?: (excerpt: Excerpt) => SourceReading | undefined;
-  /** Shown once under the term list: what this screen does not yet keep. */
-  readonly note?: string;
+  /** Whether the list also shows the term's additional references. */
+  readonly additional: boolean;
+  readonly onAdditional: (on: boolean) => void;
+  /** How many additional references this project has for the open term. */
+  readonly additionalCount: number;
+  /** Is this card one of the curated verses — one the sidebar lists? */
+  readonly isCurated: (excerpt: Excerpt) => boolean;
   readonly loading?: boolean;
 }
 
-const VISIBLE_REFERENCES = 8;
+/**
+ * A term's definition. The guide has no markup: a list is an introducing line
+ * ending in ":" ("This word can describe:") with one item per line after it,
+ * and any other line break is a new paragraph.
+ */
+function Definition(props: { readonly text: string }) {
+  const lines = () =>
+    props.text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line !== "");
+  const listed = () => {
+    const held = lines();
+    return held.length > 1 && held[0]?.endsWith(":") === true;
+  };
+  return (
+    <div class="flex flex-col gap-1 text-small text-on-surface-primary">
+      <Show when={listed()} fallback={<For each={lines()}>{(line) => <p>{line}</p>}</For>}>
+        <p>{lines()[0]}</p>
+        <ul class="list-disc space-y-1 ps-5">
+          <For each={lines().slice(1)}>{(line) => <li>{line}</li>}</For>
+        </ul>
+      </Show>
+    </div>
+  );
+}
 
-/** `text`, with `spans` wrapped. Spans are sorted and non-overlapping already. */
 export function StetView(props: StetViewProps) {
-  const [showAll, setShowAll] = createSignal(false, { name: "stetShowAll" });
+  const shell = useShell();
+  let goTo: ((key: string) => void) | undefined;
 
-  const open = createMemo(() => props.terms.find((term) => term.id === props.selected), {
-    name: "stetTerm",
-  });
+  /**
+   * The one active card: whole, with its actions; every other is condensed.
+   * Held with the term it belongs to, so opening another term starts again at
+   * that term's first card rather than at a sid it does not have.
+   */
+  const [picked, setPicked] = createSignal<{ readonly term: string; readonly sid: string }>(
+    { term: "", sid: "" },
+    { name: "stetActiveCard" },
+  );
+  const allExcerpts = (): readonly Excerpt[] => props.groups.flatMap((group) => group.excerpts);
+  const activeSid = (): string | undefined => {
+    const held = picked();
+    const all = allExcerpts();
+    if (held.term === props.selected && all.some((excerpt) => excerpt.sid === held.sid))
+      return held.sid;
+    return all[0]?.sid;
+  };
+  /** The chapter shown whole on `sid`'s card, put back to the verse. */
+  const collapse = (sid: string | undefined): void => {
+    const excerpt = allExcerpts().find((held) => held.sid === sid);
+    if (excerpt?.extent.chapter === true) props.onExpand(excerpt.sid, "chapter");
+  };
+  /**
+   * Where the list goes to show `sid`: the card BEFORE it, so the one just
+   * left (or the one above) stays in view, condensed, over the active card.
+   * The first card has none, and is gone to itself.
+   */
+  const anchorOf = (sid: string): string => {
+    const all = allExcerpts();
+    const at = all.findIndex((excerpt) => excerpt.sid === sid);
+    return at > 0 ? (all[at - 1]?.sid ?? sid) : sid;
+  };
+  /** Make `sid` the active card: the last one folds back; from the sidebar, the list goes to it. */
+  const activate = (sid: string, from: "card" | "sidebar"): void => {
+    const was = activeSid();
+    if (was !== sid) collapse(was);
+    setPicked({ term: props.selected, sid });
+    // The list stays where it is: the cards open and close in place. Only a
+    // pick from the sidebar, which may be far off, goes to it.
+    if (from === "sidebar") {
+      const anchor = anchorOf(sid);
+      queueMicrotask(() => goTo?.(anchor));
+    }
+  };
 
-  /** The guide's references for the open term — the whole canon, not this project. */
-  const references = createMemo(() => open()?.occurrences.map((held) => held.sid) ?? [], {
-    name: "stetReferences",
-  });
+  /**
+   * The room an expanded card's chapter may take: the list's height, less the
+   * card's own chrome and one condensed card after it, so exactly one
+   * neighbour stays in view. Written as `--card-room` for the cards to read.
+   */
+  const [room, setRoom] = createSignal<number | undefined>(undefined, { name: "stetCardRoom" });
+  const measure = (element: HTMLElement): void => {
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry !== undefined) setRoom(entry.contentRect.height);
+    });
+    observer.observe(element);
+    onCleanup(() => observer.disconnect());
+  };
+  /** A card's heading, gaps, padding and action row, and the one condensed card above it. */
+  const CHROME = 164;
+  const NEIGHBOUR = 100;
 
-  /** Occurrences this project actually has: the denominator of the count. */
-  const inProject = (): number => props.groups.reduce((sum, entry) => sum + entry.count, 0);
+  /** Cards the list shows: the denominator of the count, as approvals are per card. */
+  const inList = (): number => props.groups.reduce((sum, entry) => sum + entry.excerpts.length, 0);
+
+  /**
+   * The verses approved, per term, by card sid. In memory only: nothing in
+   * Sefer stores a settled occurrence yet (`Term.done`), so a reload forgets.
+   */
+  const [approved, setApproved] = createSignal<ReadonlyMap<string, ReadonlySet<string>>>(
+    new Map(),
+    { name: "stetApproved" },
+  );
+  const isApproved = (sid: string): boolean => approved().get(props.selected)?.has(sid) === true;
+  const toggleApproved = (sid: string): void => {
+    const term = props.selected;
+    const next = new Map(approved());
+    const held = new Set(next.get(term) ?? []);
+    if (held.has(sid)) held.delete(sid);
+    else held.add(sid);
+    next.set(term, held);
+    setApproved(next);
+  };
+  /** The count's numerator: approved cards among those the list shows. */
+  const approvedInList = (): number => {
+    const held = approved().get(props.selected);
+    if (held === undefined) return 0;
+    let count = 0;
+    for (const group of props.groups)
+      for (const excerpt of group.excerpts) if (held.has(excerpt.sid)) count += 1;
+    return count;
+  };
+
+  /** The open term's curated verses this project has, in list order. */
+  const verses = createMemo(
+    () => props.groups.flatMap((group) => group.excerpts.filter(props.isCurated)),
+    { name: "stetVerses" },
+  );
 
   const shown = createMemo(
     () => {
@@ -122,138 +249,186 @@ export function StetView(props: StetViewProps) {
 
   /** Key terms' cards: Find's. The screen's handlers are read when a card asks. */
   const card = excerptCard(
-    { kind: "steps", step: (sid, step) => props.onExpand(sid, step) },
-    { kind: "editor", to: (bookId, from, to) => props.onOpen(bookId, from, to) },
+    {
+      kind: "chapter",
+      step: (sid, step) => {
+        props.onExpand(sid, step);
+      },
+    },
+    // No "Open in editor": the card is edited where it stands.
+    { kind: "none" },
+    {
+      edit: { kind: "direct" },
+      condensed: (excerpt) => excerpt.sid !== activeSid(),
+      onActivate: (excerpt) => activate(excerpt.sid, "card"),
+      status: (excerpt) =>
+        isApproved(excerpt.sid) ? (
+          <CheckIcon size={20} aria-label={t("Approved")} class="text-brand" />
+        ) : undefined,
+      actions: (excerpt) => [
+        {
+          kind: "button",
+          id: "approve",
+          label: isApproved(excerpt.sid) ? t("Approved") : t("Approve"),
+          icon: isApproved(excerpt.sid) ? CircleCheckIcon : CircleIcon,
+          pressed: isApproved(excerpt.sid),
+          emphasis: "tertiary",
+          onPress: () => toggleApproved(excerpt.sid),
+        },
+      ],
+    },
   );
 
-  return (
-    <div class="flex min-h-0 flex-1 gap-4">
-      {/* The guide picker, the filter and the caveat do NOT scroll with the
-          hundred terms below them: a reader who has scrolled to "mercy" and
-          wants to type a different word should not have to find the box
-          again. */}
-      <aside class="flex w-72 shrink-0 flex-col gap-2">
-        <Show when={props.guides.length > 1}>
-          <Select
-            size="sm"
-            aria-label={t("Key terms guide")}
-            value={props.locale}
-            onChange={(event) => props.onLocale(event.currentTarget.value)}
-          >
-            <For each={props.guides}>
-              {(guide) => <option value={guide.locale}>{guide.displayName}</option>}
-            </For>
-          </Select>
-        </Show>
-
-        <Input
-          type="search"
-          size="sm"
-          aria-label={t("Filter terms")}
-          icon={<SearchIcon />}
-          placeholder={t("Filter terms")}
-          value={props.filter}
-          onInput={(event) => props.onFilter(event.currentTarget.value)}
-        />
-
-        <Show when={props.note !== undefined}>
-          <p class="text-smallest text-on-surface-tertiary">{props.note}</p>
-        </Show>
-
+  /**
+   * The term list: a row per term, the open one expanded.
+   */
+  const terms = () => (
+    <>
+      <nav aria-label={t("Key terms")} class="min-h-0 flex-1 overflow-y-auto px-4 pt-4 pb-4">
         <Show
           when={!(props.loading === true && props.terms.length === 0)}
-          fallback={<p class="text-small text-on-surface-tertiary">{t("Loading key terms…")}</p>}
+          fallback={
+            <p class="px-2 py-4 text-small text-on-surface-tertiary">{t("Loading key terms…")}</p>
+          }
         >
           <Show
             when={shown().length > 0}
             fallback={
-              <p class="text-small text-on-surface-tertiary">{t("No term matches that.")}</p>
+              <p class="px-2 py-4 text-small text-on-surface-tertiary">
+                {t("No term matches that.")}
+              </p>
             }
           >
-            <div class="flex min-h-0 flex-col gap-2 overflow-y-auto pe-1">
-              <For each={shown()}>
-                {(term) => (
-                  <Card
-                    padded={false}
-                    data-term={term.id}
-                    class={cx(
-                      "cursor-pointer transition-colors",
-                      props.selected === term.id
-                        ? "border-brand"
-                        : "hover:border-surface-border-strong",
-                    )}
-                    onClick={() => props.onSelect(term.id)}
-                  >
-                    <div class="flex items-center gap-2 px-3 py-2">
-                      <strong class="text-small font-semibold text-on-surface-primary">
-                        {term.term}
-                      </strong>
-                      {/* Only the open term has a count: the others have not been
-                        mapped onto the project, and a placeholder pill would
-                        read as a zero. */}
-                      <Show when={props.selected === term.id}>
-                        <Badge tone="brand" class="ms-auto">
-                          {t("{done}/{total}", { done: term.done, total: inProject() })}
-                        </Badge>
-                      </Show>
-                    </div>
-
-                    <Show when={props.selected === term.id}>
-                      <div class="space-y-2 border-t border-surface-border px-3 py-2">
-                        <Show when={term.definition !== ""}>
-                          <p class="text-smallest whitespace-pre-line text-on-surface-secondary">
-                            {term.definition}
-                          </p>
-                        </Show>
-                        {/* The upstream definition already opens with "This word
-                          can mean:", so these are labelled for what they
-                          actually are: the surface forms the generator matched
-                          in the source, not a second list of senses. */}
-                        <Show when={term.glosses.length > 0}>
-                          <p class="text-smallest text-on-surface-tertiary">
-                            {t("Matched in the source as:")}
-                          </p>
-                          <ul class="list-disc space-y-0.5 ps-4 text-small text-on-surface-secondary">
-                            <For each={term.glosses}>{(gloss) => <li>{gloss}</li>}</For>
-                          </ul>
-                        </Show>
-                        <p class="text-smallest text-on-surface-tertiary">
-                          {t("{guide} references, {here} in this project", {
-                            guide: references().length,
-                            here: inProject(),
-                          })}
-                        </p>
-                        <ul class="space-y-0.5 text-smallest text-on-surface-tertiary">
-                          <For
-                            each={
-                              showAll() ? references() : references().slice(0, VISIBLE_REFERENCES)
-                            }
-                          >
-                            {(label) => <li class="truncate">{label}</li>}
-                          </For>
-                        </ul>
-                        <Show when={references().length > VISIBLE_REFERENCES}>
-                          <Switch
-                            checked={showAll()}
-                            onChange={setShowAll}
-                            label={t("Show all references ({count})", {
-                              count: references().length,
-                            })}
-                          />
-                        </Show>
-                      </div>
-                    </Show>
-                  </Card>
-                )}
-              </For>
-            </div>
+            <ul>
+              <For each={shown()}>{(term) => <TermRow term={term} />}</For>
+            </ul>
           </Show>
         </Show>
-      </aside>
+      </nav>
+    </>
+  );
+
+  /** One term, where a book row would be; open, its definition and verses. */
+  function TermRow(rowProps: { readonly term: Term }) {
+    const open = (): boolean => props.selected === rowProps.term.id;
+    return (
+      <li>
+        <button
+          type="button"
+          data-term={rowProps.term.id}
+          aria-expanded={open() ? "true" : "false"}
+          data-open={open() ? "" : undefined}
+          class="flex w-full cursor-pointer items-center gap-2 rounded-lg p-3 text-start text-small transition-colors data-open:font-semibold data-open:text-brand not-data-open:text-sidebar-on-surface not-data-open:hover:bg-sidebar-surface-hover"
+          onClick={() => props.onSelect(rowProps.term.id)}
+        >
+          <span class="min-w-0 flex-1 truncate">{rowProps.term.term}</span>
+          {/* Only the open term has a count: the others have not been mapped
+              onto the project, and a placeholder pill would read as a zero. */}
+          <Show when={open()}>
+            <Badge tone="brand">
+              {t("{done}/{total}", { done: approvedInList(), total: inList() })}
+            </Badge>
+          </Show>
+          <Show
+            when={open()}
+            fallback={<ChevronRight size={16} aria-hidden="true" class="shrink-0" />}
+          >
+            <ChevronDown size={16} aria-hidden="true" class="shrink-0" />
+          </Show>
+        </button>
+
+        <Show when={open()}>
+          <div class="flex flex-col gap-2 px-3 pb-3">
+            <Show when={rowProps.term.definition !== ""}>
+              <Definition text={rowProps.term.definition} />
+            </Show>
+            <Show
+              when={verses().length > 0}
+              fallback={
+                <p class="text-small text-on-surface-primary">
+                  {t("No curated verse falls in a book this project has.")}
+                </p>
+              }
+            >
+              <ul class="flex flex-col">
+                <For each={verses()}>
+                  {(excerpt) => (
+                    <li>
+                      <button
+                        type="button"
+                        data-term-verse={excerpt.sid}
+                        aria-current={activeSid() === excerpt.sid ? "true" : undefined}
+                        class="w-full cursor-pointer truncate rounded-lg px-3 py-2 text-start text-small tabular-nums transition-colors aria-current:bg-sidebar-surface-active aria-current:font-semibold aria-current:text-brand not-aria-current:text-on-surface-primary not-aria-current:hover:bg-sidebar-surface-hover"
+                        onClick={() => activate(excerpt.sid, "sidebar")}
+                      >
+                        <span class="flex items-center gap-2">
+                          <span class="min-w-0 flex-1 truncate">{excerpt.label}</span>
+                          <Show when={isApproved(excerpt.sid)}>
+                            <CheckIcon
+                              size={16}
+                              aria-label={t("Approved")}
+                              class="shrink-0 text-brand"
+                            />
+                          </Show>
+                        </span>
+                      </button>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </Show>
+            {/* The additional references join the list on the right only;
+                this list stays the curated set. */}
+            <Show when={props.additionalCount > 0}>
+              <Switch
+                checked={props.additional}
+                onChange={props.onAdditional}
+                label={t("Show additional references ({count})", {
+                  count: props.additionalCount,
+                })}
+              />
+            </Show>
+          </div>
+        </Show>
+      </li>
+    );
+  }
+
+  onCleanup(
+    claimSidebar(() => (
+      <div
+        class="flex h-full flex-col border-e border-sidebar-border bg-sidebar-surface"
+        data-testid="sidebar"
+        data-sidebar="terms"
+      >
+        <ProjectControl />
+        {terms()}
+      </div>
+    )),
+  );
+
+  return (
+    <div
+      ref={measure}
+      class="flex min-h-0 flex-1 gap-4"
+      style={
+        room() === undefined
+          ? undefined
+          : { "--card-room": `${Math.max(160, (room() ?? 0) - CHROME - NEIGHBOUR)}px` }
+      }
+    >
+      {/* The sidebar hidden, the term list sits beside the cards instead. */}
+      <Show when={!shell.sidebarShowing()}>
+        <aside class="flex w-72 shrink-0 flex-col">{terms()}</aside>
+      </Show>
 
       <ExcerptList
         goneLabel={t("No longer an occurrence")}
-        resultsKey={props.selected}
+        resultsKey={`${props.selected}:${props.additional ? "all" : "curated"}`}
+        claimsSidebar={false}
+        goTo={(go) => {
+          goTo = go;
+        }}
         groups={props.groups}
         views={props.views}
         outline={props.outline}

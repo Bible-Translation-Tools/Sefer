@@ -1238,6 +1238,26 @@
    clipping never cuts it. Not an `outline` on the host: that paints UNDER the
    editor's own layers, and a card with a gutter (Review's, which CodeMirror
    stacks above the text) covered it. */
+/* A direct card (Key terms) is drawn as a field: at rest, a grey outline in
+   exactly the place the editor's brand one (below) takes while editing, so
+   there is one box and it only changes colour. 12px inside it on every side. */
+[data-direct-target] {
+  position: relative;
+}
+[data-direct-target]:not([data-editing])::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+  pointer-events: none;
+}
+[data-direct-target] .cm-excerpt .cm-content {
+  padding: 12px;
+  /* Double spacing, as the guide's reading beside it (`ExcerptCard`). */
+  line-height: 2;
+}
+
 .cm-editing,
 .cm-diff-live {
   position: relative;

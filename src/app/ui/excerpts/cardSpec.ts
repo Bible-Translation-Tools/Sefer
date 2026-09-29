@@ -40,7 +40,12 @@ export type Marks =
       readonly tone: (source: number | undefined, excerpt: Excerpt) => MarkTone | undefined;
     };
 
-export type Edit = { readonly kind: "none" } | { readonly kind: "satellite" };
+export type Edit =
+  | { readonly kind: "none" }
+  /** Double-click, or the header's Edit, opens the satellite; Done closes it. */
+  | { readonly kind: "satellite" }
+  /** The target is plainly an input: bordered, one click edits, no Edit or Done. Key terms'. */
+  | { readonly kind: "direct" };
 
 export type UsfmSwitch =
   | { readonly kind: "never" }
@@ -50,7 +55,9 @@ export type UsfmSwitch =
 export type Context =
   | { readonly kind: "none" }
   /** The default steps — a unit up or down, the whole chapter, fold — told to `step`. */
-  | { readonly kind: "steps"; readonly step: (sid: string, step: ContextStep) => void };
+  | { readonly kind: "steps"; readonly step: (sid: string, step: ContextStep) => void }
+  /** One expand control, at the footer's end: the whole chapter, or back. Key terms'. */
+  | { readonly kind: "chapter"; readonly step: (sid: string, step: ContextStep) => void };
 
 export type Open =
   | { readonly kind: "none" }
@@ -73,6 +80,15 @@ export interface ExcerptCardSpec {
   readonly notes?: Slot<JSX.Element>;
   /** The footer's actions. */
   readonly actions?: Slot<readonly CardAction[]>;
+  /**
+   * Is this card condensed — one dimmed line of each side, no actions — while
+   * another is the active one? Key terms'. Absent, every card is whole.
+   */
+  readonly condensed?: (excerpt: Excerpt, key: string) => boolean;
+  /** A condensed card was clicked: make it the active one. */
+  readonly onActivate?: (excerpt: Excerpt, key: string) => void;
+  /** A status mark for the card's line (Key terms' approved check), drawn condensed too. */
+  readonly status?: (excerpt: Excerpt, key: string) => JSX.Element | undefined;
   /** Pixels this card carries beyond the verse, before it has been measured. */
   readonly extraHeight?: (excerpt: Excerpt, key: string) => number;
 }

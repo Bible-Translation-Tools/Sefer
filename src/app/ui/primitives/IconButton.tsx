@@ -24,12 +24,14 @@ const classes = variants({
   ].join(" "),
   variants: {
     variant: {
+      // Icons in the text colour, not a muted one: an icon button is an
+      // action, and a grey glyph reads as disabled beside black text.
       subtle:
-        "border-transparent bg-transparent text-on-surface-secondary hover:not-disabled:bg-button-tertiary-surface-hover",
+        "border-transparent bg-transparent text-on-surface-primary hover:not-disabled:bg-button-tertiary-surface-hover",
       filled:
         "border-button-primary-surface bg-button-primary-surface text-button-primary-on-surface hover:not-disabled:bg-button-primary-surface-hover",
       outlined:
-        "border-surface-border bg-surface-primary text-on-surface-secondary hover:not-disabled:bg-surface-secondary",
+        "border-surface-border bg-surface-primary text-on-surface-primary hover:not-disabled:bg-surface-secondary",
     },
     size: {
       // Radius lives with the size, as in `Button`: the 56px one matches

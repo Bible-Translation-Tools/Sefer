@@ -127,7 +127,7 @@
   /* The app background, behind every screen (the shell root in _app.tsx). */
   --surface-canvas: var(--slate-97);
   --surface-border: var(--neutral-90);
-  --surface-overlay: rgba(31, 31, 31, 0.6);
+  --surface-overlay: rgba(15, 47, 76, 0.8);
   --on-surface-primary: var(--neutral-5);
   --on-surface-secondary: var(--slate-45);
   --on-surface-tertiary: var(--neutral-60);
@@ -196,7 +196,7 @@
   --surface-tertiary: var(--neutral-5);
   --surface-canvas: color-mix(in srgb, var(--brand-40) 6%, var(--neutral-10));
   --surface-border: var(--neutral-5);
-  --surface-overlay: rgba(31, 31, 31, 0.8);
+  --surface-overlay: rgba(15, 47, 76, 0.8);
   --on-surface-primary: var(--neutral-90);
   --on-surface-secondary: var(--neutral-80);
   --on-surface-tertiary: var(--neutral-50);
@@ -239,7 +239,7 @@
     --surface-tertiary: var(--neutral-5);
     --surface-canvas: color-mix(in srgb, var(--brand-40) 6%, var(--neutral-10));
     --surface-border: var(--neutral-5);
-    --surface-overlay: rgba(31, 31, 31, 0.8);
+    --surface-overlay: rgba(15, 47, 76, 0.8);
     --on-surface-primary: var(--neutral-90);
     --on-surface-secondary: var(--neutral-80);
     --on-surface-tertiary: var(--neutral-50);

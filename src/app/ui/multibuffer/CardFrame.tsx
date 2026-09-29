@@ -54,6 +54,12 @@ export interface CardFrameProps {
   readonly children: JSX.Element;
   /** The footer's left: the context control. */
   readonly context?: JSX.Element;
+  /**
+   * The large card — 24px padding and radius — with no rule under the header,
+   * and the title a bold heading that starts where the card's text does (a
+   * reading's own 12px). Key terms'.
+   */
+  readonly flush?: boolean;
   /** The footer's right: what this screen lets a reader do about this place. */
   readonly actions?: readonly CardAction[];
   /** Is this the card the screen's cursor is on? A ring. */
@@ -84,18 +90,30 @@ export function CardFrame(props: CardFrameProps) {
     props.context !== undefined || (props.actions !== undefined && props.actions.length > 0);
   return (
     <Card
-      padded={false}
+      padded={props.flush === true}
+      size={props.flush === true ? "lg" : "md"}
       {...props.data}
       data-editing={editing() ? "true" : undefined}
       data-current={props.current === true ? "true" : undefined}
       class={cx("overflow-hidden", props.current === true && "ring-1 ring-brand")}
       onDblClick={(event: MouseEvent) => props.onDblClick?.(event)}
     >
-      <div class="border-b border-surface-border px-3 py-1.5">
+      <div
+        class={cx(
+          props.flush === true ? "px-3 pb-2" : "border-b border-surface-border px-3 py-1.5",
+        )}
+      >
         <header class="flex flex-wrap items-center gap-2">
-          <strong class="text-small font-medium text-on-surface-primary tabular-nums">
-            {props.title}
-          </strong>
+          <Show
+            when={props.flush === true}
+            fallback={
+              <strong class="text-small font-medium text-on-surface-primary tabular-nums">
+                {props.title}
+              </strong>
+            }
+          >
+            <h3 class="text-small font-bold text-on-surface-primary tabular-nums">{props.title}</h3>
+          </Show>
           <Show when={props.gone}>
             {(said) => (
               <Badge tone="success" data-card-gone="">

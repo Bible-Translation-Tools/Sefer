@@ -1,11 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/solid-router";
 import { Effect, Result } from "effect";
-import { createEffect, createMemo, createSignal, Show, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show, untrack } from "solid-js";
 
 import { t } from "#app/i18n";
 import { useShell } from "#app/ProjectContext";
 import { createExcerptFeed, readBooks, StetView } from "#app/ui/excerpts";
-import { PanelHeader } from "#app/ui/primitives";
+import { PanelHeader, Select } from "#app/ui/primitives";
 import { ShellGate } from "#app/ui/ShellGate";
 import { keyTermGuides, keyTerms, sourceReadings, type SourceReading } from "#app/workflows/stet";
 import { refOccurrences, type Occurrence } from "#core/excerpts/excerpts";
@@ -46,6 +46,19 @@ import type { Guide, Term } from "#core/stet/stet";
  * `0/n` and the term list says so in a muted line rather than showing progress
  * that is not being recorded.
  */
+
+/**
+ * A guide's language, named from its locale ("en" → "English"): the picker
+ * says which language the source reads in, not which edition the guide was
+ * cut from. The locale itself when the platform cannot name it.
+ */
+const languageOf = (locale: string): string => {
+  try {
+    return new Intl.DisplayNames(["en"], { type: "language" }).of(locale) ?? locale;
+  } catch {
+    return locale;
+  }
+};
 
 interface TermsSearch {
   readonly term?: string;
@@ -132,8 +145,33 @@ function Terms() {
     { name: "selectedTerm" },
   );
 
-  /** The guide's references for the open term, as Addresses. */
-  const addresses = createMemo(
+  /**
+   * Whether the list shows the term's additional references — every verse the
+   * guide records it in — or only the curated ones a reviewer is asked to
+   * look at. Back to curated whenever another term opens.
+   */
+  const [additional, setAdditional] = createSignal(false, { name: "termsAdditional" });
+  createEffect(
+    () => selected()?.id,
+    () => {
+      setAdditional(false);
+    },
+  );
+
+  /**
+   * The open term's curated references, as Addresses. A term the guide has
+   * curated nothing for treats every reference as curated, so it still has
+   * verses to show.
+   */
+  const curatedAddresses = createMemo(
+    (): readonly Address[] => {
+      const all = selected()?.occurrences ?? [];
+      const curated = all.filter((held) => held.curated);
+      return (curated.length > 0 ? curated : all).map((held) => held.address);
+    },
+    { name: "termCuratedAddresses" },
+  );
+  const allAddresses = createMemo(
     (): readonly Address[] => selected()?.occurrences.map((held) => held.address) ?? [],
     { name: "termAddresses" },
   );
@@ -148,14 +186,21 @@ function Terms() {
    */
   const analyze = shell.services.galley.memoize();
 
-  const hits = createMemo(
-    (): readonly Occurrence[] => {
-      const wanted = addresses();
-      if (wanted.length === 0) return [];
-      const books = readBooks(shell, new Set(wanted.map((address) => address.book)), analyze);
-      return books.flatMap((book) => refOccurrences(book, wanted));
-    },
-    { name: "termOccurrences" },
+  const mapped = (wanted: readonly Address[]): readonly Occurrence[] => {
+    if (wanted.length === 0) return [];
+    const books = readBooks(shell, new Set(wanted.map((address) => address.book)), analyze);
+    return books.flatMap((book) => refOccurrences(book, wanted));
+  };
+  const curatedHits = createMemo(() => mapped(curatedAddresses()), {
+    name: "termCuratedOccurrences",
+  });
+  const allHits = createMemo(() => mapped(allAddresses()), { name: "termAllOccurrences" });
+  const hits = (): readonly Occurrence[] => (additional() ? allHits() : curatedHits());
+
+  /** The curated occurrences, by place: what the sidebar lists. */
+  const curatedAt = createMemo(
+    () => new Set(curatedHits().map((hit) => `${hit.bookId}:${hit.from}`)),
+    { name: "termCuratedAt" },
   );
 
   const feed = createExcerptFeed({ hits, name: "terms", analyze });
@@ -200,15 +245,31 @@ function Terms() {
     },
   );
 
-  const note = (): string =>
-    t(
-      "Key terms come from the committed {locale} guide; nothing records which occurrences are settled, so every count is 0.",
-      { locale: locale() },
-    );
-
   return (
     <main class="flex h-full min-w-0 flex-col gap-4 p-6">
-      <PanelHeader title={t("Key terms")} />
+      {/* The guide picker beside the title: it decides the source reading
+          every card shows. Disabled while there is only one guide. */}
+      <PanelHeader
+        title={t("Key terms")}
+        actions={
+          <Show when={guides().length > 0}>
+            <Select
+              aria-label={t("Key terms guide")}
+              value={locale()}
+              disabled={guides().length < 2}
+              onChange={(event) => ask({ locale: event.currentTarget.value, term: undefined })}
+            >
+              <For each={guides()}>
+                {(guide) => (
+                  <option value={guide.locale}>
+                    {t("Source Language: {language}", { language: languageOf(guide.locale) })}
+                  </option>
+                )}
+              </For>
+            </Select>
+          </Show>
+        }
+      />
 
       <Show
         when={shell.project()}
@@ -230,7 +291,6 @@ function Terms() {
           locale={locale()}
           onLocale={(next) => ask({ locale: next, term: undefined })}
           loading={loading()}
-          note={note()}
           groups={feed.groups()}
           views={feed.views}
           outline={feed.outline()}
@@ -243,6 +303,12 @@ function Terms() {
           onExpand={feed.expand}
           mode={shell.mode() === "usfm" ? "usfm" : "regular"}
           sourceOf={(excerpt) => readings().get(excerpt.sid)}
+          additional={additional()}
+          onAdditional={setAdditional}
+          additionalCount={allHits().length - curatedHits().length}
+          isCurated={(excerpt) =>
+            excerpt.hits.some((hit) => curatedAt().has(`${hit.bookId}:${hit.from}`))
+          }
         />
       </Show>
     </main>

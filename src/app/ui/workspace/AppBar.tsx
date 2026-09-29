@@ -38,13 +38,12 @@ import { createSignal, For } from "solid-js";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { ImportHub } from "../landing/ImportHub";
-import { Menu, MenuItem, SegmentedControl } from "../primitives";
+import { IconButton, Menu, MenuItem, SegmentedControl } from "../primitives";
 
 /**
- * A bar button: a 48px icon button, the mode switcher's height, with the `md`
- * standard 20px icon. The word is the button's name for a screen
- * reader and its native tooltip on hover; it is never drawn — the modes, the
- * one group that needs its words, are the segmented control.
+ * A bar button: the shared `IconButton` at its default (`md`, `subtle`), so
+ * the bar's buttons look like every other icon button — the word is its
+ * name and its tooltip, never drawn.
  */
 function BarButton(props: {
   readonly label: string;
@@ -52,23 +51,21 @@ function BarButton(props: {
   readonly icon: JSX.Element;
   readonly pressed?: "true" | "false";
   readonly disabled?: boolean;
-  /** The native tooltip; for a disabled tile, the reason. Defaults to the label. */
+  /** The native tooltip; for a disabled tile, the reason. */
   readonly title?: string;
   readonly onClick?: () => void;
 }) {
   return (
-    <button
-      type="button"
+    <IconButton
+      label={props.label}
       data-testid={props.testId}
       aria-pressed={props.pressed}
       disabled={props.disabled}
-      title={props.title ?? props.label}
+      title={props.title}
+      tooltipSide="bottom"
+      icon={props.icon}
       onClick={() => props.onClick?.()}
-      class="flex size-12 shrink-0 cursor-pointer items-center justify-center rounded-xl text-on-surface-secondary transition-colors hover:not-disabled:bg-surface-secondary hover:not-disabled:text-on-surface-primary aria-pressed:bg-brand-light aria-pressed:text-brand disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      {props.icon}
-      <span class="sr-only">{props.label}</span>
-    </button>
+    />
   );
 }
 

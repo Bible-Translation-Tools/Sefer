@@ -45,6 +45,8 @@ export interface ExcerptReaderProps {
    * and the satellite — laid out identically — answers it.
    */
   readonly onEdit?: (at: number | undefined, point?: { x: number; y: number }) => void;
+  /** One click edits, and the reader is a tab stop; otherwise a double-click. */
+  readonly direct?: boolean;
 }
 
 const projectionOf = (mode: "regular" | "usfm") => (mode === "usfm" ? "usfm" : "default");
@@ -111,17 +113,31 @@ export function ExcerptReader(props: ExcerptReaderProps) {
     },
   );
 
+  const editAt = (event: MouseEvent): void => {
+    const edit = props.onEdit;
+    if (edit === undefined) return;
+    const mount = live();
+    const point = { x: event.clientX, y: event.clientY };
+    const at = mount !== undefined && "view" in mount ? mount.view.posAtCoords(point) : null;
+    edit(at ?? undefined, point);
+  };
+
   return (
     <div
       class="cm-host"
       ref={setHost}
+      tabindex={props.direct === true && props.onEdit !== undefined ? 0 : undefined}
       onDblClick={(event) => {
-        const edit = props.onEdit;
-        if (edit === undefined) return;
-        const mount = live();
-        const point = { x: event.clientX, y: event.clientY };
-        const at = mount !== undefined && "view" in mount ? mount.view.posAtCoords(point) : null;
-        edit(at ?? undefined, point);
+        if (props.direct !== true) editAt(event);
+      }}
+      onClick={(event) => {
+        if (props.direct === true) editAt(event);
+      }}
+      onKeyDown={(event) => {
+        if (props.direct === true && event.key === "Enter") {
+          event.preventDefault();
+          props.onEdit?.(undefined);
+        }
       }}
     />
   );
