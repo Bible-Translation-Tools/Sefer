@@ -5,8 +5,8 @@
  *  - **Header:** the place (one small title row), the `gone` badge while the
  *    card is held by an edit though its result ended, the screen's own badges,
  *    then on the right the screen's header actions, Edit or Done, and open.
- *  - **Notes:** an optional block under the header (Findings' one line per
- *    finding).
+ *  - **Notes:** an optional block under the title row, inside the header's
+ *    border (Findings' one line per finding).
  *  - **Body:** the text — read-only until Edit or a double-click, then the
  *    Book itself (`CardEditor`).
  *  - **Footer:** an optional control on the left (context steps) and the
@@ -61,55 +61,59 @@ export function CardFrame(props: CardFrameProps) {
       class={cx("overflow-hidden", props.current === true && "ring-1 ring-brand")}
       onDblClick={(event: MouseEvent) => props.onDblClick?.(event)}
     >
-      <header class="flex flex-wrap items-center gap-2 border-b border-surface-border px-3 py-1.5">
-        <strong class="text-small font-medium text-on-surface-primary tabular-nums">
-          {props.label}
-        </strong>
-        <Show when={props.gone}>
-          {(said) => (
-            <Badge tone="success" data-card-gone="">
-              {said()}
-            </Badge>
-          )}
-        </Show>
-        {props.badges}
-        <div class="ms-auto flex shrink-0 items-center gap-1">
-          {props.headerActions}
-          <Show when={props.editable !== false}>
-            <Show
-              when={props.editing}
-              fallback={
+      {/* The header is everything ABOUT the place — its title row and the
+          notes under it — above one border; only the text sits below it. */}
+      <div class="border-b border-surface-border px-3 py-1.5">
+        <header class="flex flex-wrap items-center gap-2">
+          <strong class="text-small font-medium text-on-surface-primary tabular-nums">
+            {props.label}
+          </strong>
+          <Show when={props.gone}>
+            {(said) => (
+              <Badge tone="success" data-card-gone="">
+                {said()}
+              </Badge>
+            )}
+          </Show>
+          {props.badges}
+          <div class="ms-auto flex shrink-0 items-center gap-1">
+            {props.headerActions}
+            <Show when={props.editable !== false}>
+              <Show
+                when={props.editing}
+                fallback={
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={<PencilIcon size={13} />}
+                    data-card-edit=""
+                    onClick={() => props.onEdit()}
+                  >
+                    {t("Edit")}
+                  </Button>
+                }
+              >
                 <Button
                   size="sm"
-                  variant="secondary"
-                  icon={<PencilIcon size={13} />}
-                  data-card-edit=""
-                  onClick={() => props.onEdit()}
+                  variant="primary"
+                  data-card-done=""
+                  title={t("Stop editing (Escape)")}
+                  onClick={() => props.onDone()}
                 >
-                  {t("Edit")}
+                  {t("Done")}
                 </Button>
-              }
-            >
-              <Button
-                size="sm"
-                variant="primary"
-                data-card-done=""
-                title={t("Stop editing (Escape)")}
-                onClick={() => props.onDone()}
-              >
-                {t("Done")}
-              </Button>
+              </Show>
             </Show>
-          </Show>
-          {props.open}
-        </div>
-      </header>
+            {props.open}
+          </div>
+        </header>
 
-      <Show when={props.notes}>
-        <div data-card-notes class="px-3 pt-1.5">
-          {props.notes}
-        </div>
-      </Show>
+        <Show when={props.notes}>
+          <div data-card-notes class="pt-1">
+            {props.notes}
+          </div>
+        </Show>
+      </div>
 
       {props.children}
 
