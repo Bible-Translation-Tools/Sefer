@@ -53,11 +53,13 @@ import type { Analysis } from "#core/galley";
 import type { EditorBook, Funnel, MarkedRange } from "#editor/index";
 
 import { t } from "../../i18n";
+import type { CardAction } from "../multibuffer/CardAction";
 import { CardEditor } from "../multibuffer/CardEditor";
 import { CardFrame } from "../multibuffer/CardFrame";
-import type { CardEvent, CardView, ContextStep } from "../multibuffer/cardState";
+import type { CardEvent, CardView } from "../multibuffer/cardState";
 import { ContextControl } from "../multibuffer/ContextControl";
 import { cx, IconButton } from "../primitives";
+import type { ExcerptCardSpec } from "./cardSpec";
 import { ExcerptReader } from "./ExcerptReader";
 
 export type { ContextStep } from "../multibuffer/cardState";
@@ -93,7 +95,10 @@ export interface ExcerptCardProps {
   readonly editing: boolean;
   readonly onEdit: () => void;
   readonly onDone: () => void;
-  readonly onOpen: () => void;
+  /** What this screen's cards do — marks, editing, the USFM switch, the steps, the way out. */
+  readonly spec: ExcerptCardSpec;
+  /** The card's row key, for the spec's slots. */
+  readonly rowKey: string;
   /**
    * Plain → Instantiated for this book, on demand. Editing needs the
    * editor-backed Book, and a results list must not seat every book it lists.
@@ -103,8 +108,6 @@ export interface ExcerptCardProps {
   /** This book's seat while one is open, which the read-only view follows live. */
   readonly follow?: Funnel | undefined;
   readonly paired?: Paired | undefined;
-  /** One context step. Absent means the feed does not offer widening. */
-  readonly onExpand?: (step: ContextStep) => void;
   /**
    * The SOURCE offset of the match the find bar's cursor is on, when it is one
    * of THIS excerpt's. That one highlight is painted stronger and the card
@@ -113,40 +116,18 @@ export interface ExcerptCardProps {
   readonly active?: number;
   /** The shell's mode. `usfm` shows the markup; anything else, the reading. */
   readonly mode?: "regular" | "usfm";
-  /** Replaces the reference in the header. */
-  readonly label?: JSX.Element;
   /**
    * Set while the card is held on screen for editing though the results no
    * longer include it — the finding resolved, the term no longer matches.
    * What to call that is the screen's ("Resolved", "No longer matches").
    */
   readonly gone?: string | undefined;
-  /** Beside the reference: what this place IS — Findings' severity, "in markup". */
-  readonly badges?: JSX.Element;
-  /** A block between the header and the text — Findings' one line per finding. */
-  readonly notes?: JSX.Element;
-  /** Whether the header offers "Open in editor". Absent is yes. */
-  readonly openable?: boolean;
-  /**
-   * Offer this card's own switch to USFM — a code icon in the header — when
-   * what it is about sits in markup, which the reading cannot show. Every card
-   * can be switched; only a card that has a reason offers it.
-   */
-  readonly offerUsfm?: boolean;
   /**
    * The reader's view of this card — its USFM switch, its paired side's
    * width — held by the screen, so it outlives the row (`cardViews.ts`).
    */
   readonly view: CardView;
   readonly onView: (event: CardEvent) => void;
-  /** The footer's slot: whatever this screen lets a reader do about this place. */
-  readonly actions?: JSX.Element;
-  /**
-   * What a highlight MEANS, by the source offset of the occurrence it came
-   * from. Find has one kind of hit and needs none of this; a findings list
-   * marks an error and a warning differently.
-   */
-  readonly markTone?: (source: number | undefined, excerpt: Excerpt) => MarkTone | undefined;
   /**
    * The book's OTHER results inside this card's stretch — a match in the verse
    * before, a finding in the context. Painted like the card's own: the text
@@ -173,7 +154,7 @@ const marksOf = (
   excerpt: Excerpt,
   hits: readonly Occurrence[],
   active: number | undefined,
-  markTone: ExcerptCardProps["markTone"],
+  markTone: ((source: number | undefined, excerpt: Excerpt) => MarkTone | undefined) | undefined,
 ): readonly MarkedRange[] => {
   const out: MarkedRange[] = [];
   const { span, own } = excerpt;
@@ -256,7 +237,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
           ? props.excerpt.hits
           : [...props.excerpt.hits, ...props.nearby],
         props.active,
-        props.markTone,
+        props.spec.marks.kind === "toned" ? props.spec.marks.tone : undefined,
       ),
     { name: "excerptMarks" },
   );
@@ -306,7 +287,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
           marks={marks()}
           label={`excerpt:${props.excerpt.sid}`}
           follow={props.follow}
-          onEdit={edit}
+          onEdit={props.spec.edit.kind === "satellite" ? edit : undefined}
         />
       }
     >
@@ -398,69 +379,96 @@ export function ExcerptCard(props: ExcerptCardProps) {
     </section>
   );
 
+  const spec = (): ExcerptCardSpec => props.spec;
+  const offerUsfm = (): boolean => {
+    const usfmSwitch = spec().usfm;
+    return (
+      usfmSwitch.kind === "when" &&
+      props.mode !== "usfm" &&
+      usfmSwitch.offer(props.excerpt, props.rowKey)
+    );
+  };
+  const notes = () => spec().notes?.(props.excerpt, props.rowKey, props.view);
+
+  /** The card's own switch to USFM, where the spec offers one. */
+  const usfmAction = (): CardAction[] =>
+    offerUsfm()
+      ? [
+          {
+            kind: "icon",
+            id: "usfm",
+            label: usfm() ? t("Show the reading") : t("Show the USFM"),
+            icon: CodeIcon,
+            pressed: usfm(),
+            onPress: () => props.onView({ kind: "usfm" }),
+          },
+        ]
+      : [];
+
+  const openAction = (): CardAction | undefined => {
+    if (spec().open.kind === "none") return undefined;
+    return {
+      kind: "icon",
+      id: "open",
+      label: t("Open in editor"),
+      icon: SquareArrowOutUpRightIcon,
+      pressed: opening() ? true : undefined,
+      onPress: () => {
+        setOpening(true);
+        const open = spec().open;
+        const hit = props.excerpt.hits[0];
+        if (open.kind === "editor")
+          open.to(props.excerpt.bookId, hit?.from ?? props.excerpt.span.from, hit?.to);
+        // The card may still be here — the same book, already focused — so
+        // the pressed state is released rather than left on.
+        setTimeout(() => setOpening(false), 600);
+      },
+    };
+  };
+
   return (
     <CardFrame
       data={{ "data-sid": props.excerpt.sid, "data-mode": mode() }}
       current={current()}
-      label={props.label ?? props.excerpt.label}
+      title={spec().title?.(props.excerpt, props.rowKey, props.view) ?? props.excerpt.label}
       gone={props.gone}
-      badges={
-        // Not when the card carries notes: findings list themselves line by
-        // line under the header, and "2 matches" above them would be the same
-        // count said twice in another vocabulary.
+      info={
         <>
-          {props.badges}
-          <Show when={props.offerUsfm === true && props.mode !== "usfm"}>
-            <IconButton
-              size="sm"
-              label={usfm() ? t("Show the reading") : t("Show the USFM")}
-              icon={<CodeIcon size={14} />}
-              aria-pressed={usfm() ? "true" : "false"}
-              data-card-usfm=""
-              onClick={() => props.onView({ kind: "usfm" })}
-            />
-          </Show>
-          <Show when={props.notes === undefined && props.excerpt.hits.length > 1}>
+          {spec().info?.(props.excerpt, props.rowKey, props.view)}
+          {/* Not when the card carries notes: findings list themselves line
+              by line under the header, and "2 matches" above them would be
+              the same count said twice in another vocabulary. */}
+          <Show when={notes() === undefined && props.excerpt.hits.length > 1}>
             <span class="text-smallest text-on-surface-tertiary">
               {t("{count} matches", { count: props.excerpt.hits.length })}
             </span>
           </Show>
         </>
       }
-      editing={props.editing}
-      onEdit={() => edit()}
-      onDone={done}
-      open={
-        props.openable === false ? undefined : (
-          <IconButton
-            size="sm"
-            label={t("Open in editor")}
-            icon={<SquareArrowOutUpRightIcon size={14} />}
-            aria-pressed={opening() ? "true" : undefined}
-            onClick={() => {
-              setOpening(true);
-              props.onOpen();
-              // The card may still be here — the same book, already focused —
-              // so the pressed state is released rather than left on.
-              setTimeout(() => setOpening(false), 600);
-            }}
-          />
-        )
+      headerActions={usfmAction()}
+      edit={
+        spec().edit.kind === "satellite"
+          ? { kind: "edit", editing: props.editing, onEdit: () => edit(), onDone: done }
+          : { kind: "none" }
       }
-      notes={props.notes}
-      control={
-        <Show when={props.onExpand}>
-          {(step) => (
+      open={openAction()}
+      notes={notes()}
+      context={
+        <Show when={spec().context.kind === "steps" ? spec().context : undefined}>
+          {(context) => (
             <ContextControl
               extent={props.excerpt.extent}
               canUp={props.excerpt.more.up}
               canDown={props.excerpt.more.down}
-              onStep={step()}
+              onStep={(step) => {
+                const held = context();
+                if (held.kind === "steps") held.step(props.excerpt.sid, step);
+              }}
             />
           )}
         </Show>
       }
-      actions={props.actions}
+      actions={spec().actions?.(props.excerpt, props.rowKey, props.view)}
     >
       <div
         ref={setBody}

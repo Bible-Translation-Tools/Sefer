@@ -1,19 +1,22 @@
 /**
  * The frame every card in Sefer wears — Find, Key terms, Findings, Review —
- * so a card looks and behaves the same wherever it is:
+ * so a card looks and behaves the same wherever it is. Named slots, in the one
+ * order every card reads in:
  *
- *  - **Header:** the place (one small title row), the `gone` badge while the
- *    card is held by an edit though its result ended, the screen's own badges,
- *    then on the right the screen's header actions, Edit or Done, and open.
- *  - **Notes:** an optional block under the title row, inside the header's
- *    border (Findings' one line per finding).
- *  - **Body:** the text — read-only until Edit or a double-click, then the
- *    Book itself (`CardEditor`).
- *  - **Footer:** an optional control on the left (context steps) and the
- *    screen's actions on the right.
+ *  - **Header**, everything ABOUT the place, above one border:
+ *    - `title` — the place ("Genesis 3:6"), then `gone` while the card is held
+ *      by an edit though its result ended, then `info` (badges: severity,
+ *      "markup only", a count);
+ *    - on the right, `headerActions`, then Edit or Done (from `edit`), then
+ *      `open`;
+ *    - `notes` under the title row (Findings' one line per finding).
+ *  - **Body** (`children`): the text — read-only until Edit or a double-click,
+ *    then the Book itself (`CardEditor`).
+ *  - **Footer**: `context` on the left (the steps), `actions` on the right.
  *
- * The frame holds no state: what "editing" means, and what Edit does, is the
- * list's edit session (`CardList`) and the card's own.
+ * Every button in a slot is a `CardAction`, drawn here; the frame holds no
+ * state. What "editing" means, and what Edit does, is the list's edit session
+ * (`CardList`) and the card's own.
  */
 
 import type { JSX } from "@solidjs/web";
@@ -21,29 +24,38 @@ import PencilIcon from "lucide-solid/icons/pencil";
 import { Show } from "solid-js";
 
 import { t } from "../../i18n";
-import { Badge, Button, Card, cx } from "../primitives";
+import { Badge, Card, cx } from "../primitives";
+import { CardActions, drawAction, type CardAction } from "./CardAction";
+
+/** Whether a card can be edited, and the session when it can. */
+export type CardEdit =
+  | { readonly kind: "none" }
+  | {
+      readonly kind: "edit";
+      readonly editing: boolean;
+      readonly onEdit: () => void;
+      readonly onDone: () => void;
+    };
 
 export interface CardFrameProps {
-  readonly label: JSX.Element;
+  readonly title: JSX.Element;
   /** Held by an edit though the result ended: what to call it ("Resolved"). */
   readonly gone?: string | undefined;
-  /** Beside the label: a count, a status, a kind. */
-  readonly badges?: JSX.Element;
-  /** The header's right-hand slot, before Edit/Done: decisions, say. */
-  readonly headerActions?: JSX.Element;
-  /** Whether this card can be edited at all. Absent is yes. */
-  readonly editable?: boolean;
-  readonly editing: boolean;
-  readonly onEdit: () => void;
-  readonly onDone: () => void;
-  /** The open control (to the editor, to the book), when the screen has one. */
-  readonly open?: JSX.Element;
+  /** Beside the title: what this place IS — a status, a kind, a count. */
+  readonly info?: JSX.Element;
+  /** Under the title row, inside the header's border. */
   readonly notes?: JSX.Element;
+  /** The header's right, before Edit/Done: decisions, a switch. */
+  readonly headerActions?: readonly CardAction[];
+  readonly edit: CardEdit;
+  /** Last in the header: the way out to the editor or the book. */
+  readonly open?: CardAction | undefined;
+  /** The body. */
   readonly children: JSX.Element;
   /** The footer's left: the context control. */
-  readonly control?: JSX.Element;
-  /** The footer's right: whatever this screen lets a reader do here. */
-  readonly actions?: JSX.Element;
+  readonly context?: JSX.Element;
+  /** The footer's right: what this screen lets a reader do about this place. */
+  readonly actions?: readonly CardAction[];
   /** Is this the card the screen's cursor is on? A ring. */
   readonly current?: boolean;
   readonly onDblClick?: (event: MouseEvent) => void;
@@ -51,22 +63,38 @@ export interface CardFrameProps {
   readonly data?: Readonly<Record<`data-${string}`, string | undefined>>;
 }
 
+/** Edit or Done, as the frame's own actions. */
+const editAction = (edit: CardEdit): CardAction | undefined =>
+  edit.kind === "none"
+    ? undefined
+    : edit.editing
+      ? {
+          kind: "button",
+          id: "done",
+          label: t("Done"),
+          emphasis: "primary",
+          title: t("Stop editing (Escape)"),
+          onPress: edit.onDone,
+        }
+      : { kind: "button", id: "edit", label: t("Edit"), icon: PencilIcon, onPress: edit.onEdit };
+
 export function CardFrame(props: CardFrameProps) {
+  const editing = (): boolean => props.edit.kind === "edit" && props.edit.editing;
+  const hasFooter = (): boolean =>
+    props.context !== undefined || (props.actions !== undefined && props.actions.length > 0);
   return (
     <Card
       padded={false}
       {...props.data}
-      data-editing={props.editing ? "true" : undefined}
+      data-editing={editing() ? "true" : undefined}
       data-current={props.current === true ? "true" : undefined}
       class={cx("overflow-hidden", props.current === true && "ring-1 ring-brand")}
       onDblClick={(event: MouseEvent) => props.onDblClick?.(event)}
     >
-      {/* The header is everything ABOUT the place — its title row and the
-          notes under it — above one border; only the text sits below it. */}
       <div class="border-b border-surface-border px-3 py-1.5">
         <header class="flex flex-wrap items-center gap-2">
           <strong class="text-small font-medium text-on-surface-primary tabular-nums">
-            {props.label}
+            {props.title}
           </strong>
           <Show when={props.gone}>
             {(said) => (
@@ -75,36 +103,15 @@ export function CardFrame(props: CardFrameProps) {
               </Badge>
             )}
           </Show>
-          {props.badges}
+          {props.info}
           <div class="ms-auto flex shrink-0 items-center gap-1">
-            {props.headerActions}
-            <Show when={props.editable !== false}>
-              <Show
-                when={props.editing}
-                fallback={
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    icon={<PencilIcon size={13} />}
-                    data-card-edit=""
-                    onClick={() => props.onEdit()}
-                  >
-                    {t("Edit")}
-                  </Button>
-                }
-              >
-                <Button
-                  size="sm"
-                  variant="primary"
-                  data-card-done=""
-                  title={t("Stop editing (Escape)")}
-                  onClick={() => props.onDone()}
-                >
-                  {t("Done")}
-                </Button>
-              </Show>
+            <CardActions actions={props.headerActions ?? []} />
+            <Show when={editAction(props.edit)} keyed>
+              {(action) => drawAction(action)}
             </Show>
-            {props.open}
+            <Show when={props.open} keyed>
+              {(action) => drawAction(action)}
+            </Show>
           </div>
         </header>
 
@@ -117,14 +124,12 @@ export function CardFrame(props: CardFrameProps) {
 
       {props.children}
 
-      <Show when={props.control !== undefined || props.actions !== undefined}>
+      <Show when={hasFooter()}>
         <footer class="flex items-center gap-2 border-t border-surface-border px-3 py-1.5">
-          {props.control}
-          <Show when={props.actions}>
-            <div data-card-actions class="ms-auto flex items-center gap-1">
-              {props.actions}
-            </div>
-          </Show>
+          {props.context}
+          <div data-card-actions class="ms-auto flex items-center gap-1">
+            <CardActions actions={props.actions ?? []} />
+          </div>
         </footer>
       </Show>
     </Card>

@@ -33,14 +33,17 @@ import { CardList } from "../multibuffer/CardList";
 import type { CardViews } from "../multibuffer/cardViews";
 import { cx, type VirtualSection } from "../primitives";
 import { claimSidebar } from "../workspace/sidebarSlot";
-import { ExcerptCard, type ContextStep, type MarkTone, type Paired } from "./ExcerptCard";
+import type { ExcerptCardSpec, OutlineSpec } from "./cardSpec";
+import { ExcerptCard, type Paired } from "./ExcerptCard";
 import { ResultsOutline } from "./ResultsOutline";
 
 export interface ExcerptListProps {
   readonly groups: readonly BookExcerpts[];
   readonly outline: readonly OutlineRow[];
-  /** Aim the main editor at this range of this book. */
-  readonly onOpen: (bookId: BookId, from: number, to?: number) => void;
+  /** What this screen's cards do (`cardSpec.ts`) — `excerptCard(...)` for Find's. */
+  readonly card: ExcerptCardSpec;
+  /** What the outline says about the sections, when they are not plain books. */
+  readonly sections?: OutlineSpec;
   /** Every card's view on this screen, by sid — the feed's (`ExcerptFeed.views`). */
   readonly views: CardViews<Excerpt>;
   /** Plain → Instantiated, for the one excerpt being edited. */
@@ -77,12 +80,6 @@ export interface ExcerptListProps {
   readonly mode?: "regular" | "usfm";
   /** The paired resource read beside one excerpt, when the screen has one. */
   readonly pairedOf?: ((excerpt: Excerpt) => Paired | undefined) | undefined;
-  /**
-   * One context step for one excerpt. The EXTENT is the feed's state, keyed by
-   * sid, not this component's: a card scrolls out of the window and its row is
-   * unmounted, and a widening the reader asked for must survive that.
-   */
-  readonly onExpand?: (sid: string, step: ContextStep) => void;
   readonly empty?: JSX.Element;
   /**
    * What a card held for editing says once the results no longer include it:
@@ -94,53 +91,6 @@ export interface ExcerptListProps {
    * one-line rows of released cards go: they belong to the old results.
    */
   readonly resultsKey?: string;
-  /**
-   * What a screen adds to the shared multibuffer. Absent — Find, STET — is the
-   * list exactly as it was.
-   */
-  readonly decor?: ExcerptDecor;
-}
-
-/**
- * The decorations a screen hangs on the multibuffer.
- *
- * Findings is the reason this exists. It shows the SAME cards Find shows, over
- * the same model, and differs in four ways that are all presentation: its
- * sections are not always books (by code, by severity, flat, and a book's
- * front matter as its own section), so a row's key has to carry the section;
- * a card's header names findings rather than matches; a mark is coloured by
- * severity rather than by being a hit; and a card is taller than the verse it
- * holds, which the height estimate has to know before the row is measured.
- *
- * Every field is optional and every default is what Find already did.
- */
-export interface ExcerptDecor {
-  /**
-   * A row's key, when the sid alone is not unique. Grouping by code puts one
-   * verse in two sections, and a virtualizer keyed on a repeated string
-   * positions the second one on top of the first. Defaults to `excerpt.sid`.
-   */
-  readonly rowKey?: (group: BookExcerpts, excerpt: Excerpt) => string;
-  /** The outline column's own label, when its rows are not books. */
-  readonly outlineTitle?: string;
-  /** One outline row's text. Defaults to the section key. */
-  readonly outlineLabel?: (row: OutlineRow) => string;
-  /** Replaces a card's reference. */
-  readonly label?: (excerpt: Excerpt, key: string) => JSX.Element;
-  /** Beside a card's reference: what the place is, not what to do about it. */
-  readonly badges?: (excerpt: Excerpt, key: string) => JSX.Element;
-  /** A block between a card's header and its reading. */
-  readonly notes?: (excerpt: Excerpt, key: string) => JSX.Element;
-  /** False: no "Open in editor" on a card — the card's own context steps open it wider. */
-  readonly openable?: boolean;
-  /** Whether a card offers its own USFM switch — see `ExcerptCardProps.offerUsfm`. */
-  readonly offerUsfm?: (excerpt: Excerpt, key: string) => boolean;
-  /** A card's footer actions — review progress, a quick filter. */
-  readonly actions?: (excerpt: Excerpt, key: string) => JSX.Element;
-  /** What a highlight means — see `ExcerptCardProps.markTone`. */
-  readonly markTone?: (source: number | undefined, excerpt: Excerpt) => MarkTone | undefined;
-  /** Pixels this card carries beyond the verse, before it has been measured. */
-  readonly extraHeight?: (excerpt: Excerpt, key: string) => number;
 }
 
 /** Roughly one line of the scripture serif at the list's width. */
@@ -197,7 +147,7 @@ export function ExcerptList(props: ExcerptListProps) {
   };
 
   const keyOf = (group: BookExcerpts, excerpt: Excerpt): string =>
-    props.decor?.rowKey?.(group, excerpt) ?? excerpt.sid;
+    props.sections?.rowKey?.(group, excerpt) ?? excerpt.sid;
 
   /**
    * One section per group, built once per group OBJECT: the feed hands back a
@@ -220,8 +170,8 @@ export function ExcerptList(props: ExcerptListProps) {
           item: excerpt,
           estimate:
             estimate(excerpt) +
-            (props.onExpand === undefined ? 0 : FOOTER) +
-            (props.decor?.extraHeight?.(excerpt, staticKey) ?? 0),
+            (props.card.context.kind === "none" ? 0 : FOOTER) +
+            (props.card.extraHeight?.(excerpt, staticKey) ?? 0),
         };
       }),
     };
@@ -290,11 +240,11 @@ export function ExcerptList(props: ExcerptListProps) {
   onCleanup(
     claimSidebar(() => (
       <ResultsOutline
-        title={props.decor?.outlineTitle ?? t("Results")}
+        title={props.sections?.title ?? t("Results")}
         groups={props.groups}
         outline={props.outline}
         active={current()}
-        label={(row) => props.decor?.outlineLabel?.(row) ?? row.name}
+        label={(row) => props.sections?.label?.(row) ?? row.name}
         keyOf={keyOf}
         onGo={go}
       />
@@ -304,7 +254,7 @@ export function ExcerptList(props: ExcerptListProps) {
   return (
     <div class="flex min-h-0 flex-1 gap-4">
       <nav
-        aria-label={props.decor?.outlineTitle ?? t("Books with results")}
+        aria-label={props.sections?.title ?? t("Books with results")}
         class={cx(
           "hidden w-40 shrink-0 flex-col gap-0.5 overflow-y-auto",
           !shell.sidebarShowing() && "md:flex",
@@ -324,7 +274,7 @@ export function ExcerptList(props: ExcerptListProps) {
                   : "text-on-surface-secondary hover:bg-surface-secondary",
               )}
             >
-              <span class="truncate">{props.decor?.outlineLabel?.(row) ?? row.bookId}</span>
+              <span class="truncate">{props.sections?.label?.(row) ?? row.bookId}</span>
               <span class="ms-auto text-smallest tabular-nums text-on-surface-tertiary">
                 {row.count}
               </span>
@@ -364,36 +314,16 @@ export function ExcerptList(props: ExcerptListProps) {
             gone={session.gone ? session.goneLabel : undefined}
             onEdit={session.start}
             onDone={session.done}
-            onOpen={() =>
-              props.onOpen(
-                excerpt().bookId,
-                excerpt().hits[0]?.from ?? excerpt().span.from,
-                excerpt().hits[0]?.to,
-              )
-            }
+            spec={props.card}
+            rowKey={key}
             seat={() => props.seat(excerpt().bookId)}
             analyze={props.analyze}
             follow={props.seatedOf?.(excerpt().bookId)}
             paired={props.pairedOf?.(excerpt())}
-            onExpand={
-              props.onExpand === undefined
-                ? undefined
-                : // The EXTENT is keyed by sid, which is the verse — a section
-                  // key in front of it is about where the card is on screen,
-                  // and an expansion is about the verse wherever it is shown.
-                  (step) => props.onExpand?.(excerpt().sid, step)
-            }
             active={props.focus === key ? props.activeHit : undefined}
             mode={props.mode ?? "regular"}
-            label={props.decor?.label?.(excerpt(), key)}
-            badges={props.decor?.badges?.(excerpt(), key)}
-            notes={props.decor?.notes?.(excerpt(), key)}
-            openable={props.decor?.openable}
-            offerUsfm={props.decor?.offerUsfm?.(excerpt(), key)}
             view={props.views.view(excerpt().sid)}
             onView={(event) => props.views.send(excerpt().sid, event)}
-            actions={props.decor?.actions?.(excerpt(), key)}
-            markTone={props.decor?.markTone}
             nearby={session.gone ? [] : nearbyOf(props.shownOf?.(excerpt()) ?? excerpt())}
           />
         )}

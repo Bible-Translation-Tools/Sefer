@@ -18,7 +18,6 @@
  */
 
 import type { EditorView } from "@codemirror/view";
-import type { JSX } from "@solidjs/web";
 import CodeIcon from "lucide-solid/icons/code";
 import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
@@ -37,11 +36,12 @@ import {
 import "#editor/editor.css";
 
 import { t } from "../../i18n";
+import type { CardAction } from "../multibuffer/CardAction";
 import { CardEditor } from "../multibuffer/CardEditor";
 import { CardFrame } from "../multibuffer/CardFrame";
 import type { CardEvent, CardView, ContextStep } from "../multibuffer/cardState";
 import { ContextControl } from "../multibuffer/ContextControl";
-import { Badge, cx, IconButton } from "../primitives";
+import { Badge, cx } from "../primitives";
 import { hunkKind, type Hunk } from "./hunks";
 import { hunkPaint, sidePaint, type Controls } from "./paint";
 
@@ -122,9 +122,9 @@ export function DiffCard(props: {
   /** The current side's parse, for the editor (the review's own memo). */
   readonly analyze?: (text: string) => Analysis;
   /** Header actions, before Edit/Done: the card's decisions. */
-  readonly headerActions?: JSX.Element;
-  /** The open control (to the whole book). */
-  readonly open?: JSX.Element;
+  readonly headerActions?: readonly CardAction[];
+  /** The way out (to the whole book). */
+  readonly open?: CardAction;
   /** One context step for this card: absent, the card offers no widening. */
   readonly onStep?: (step: ContextStep) => void;
   readonly onOpen?: () => void;
@@ -319,6 +319,24 @@ export function DiffCard(props: {
     },
   );
 
+  /**
+   * The card's own switch to USFM, on a card whose changes are markup or
+   * spacing — invisible in the reading. Not in USFM mode, which shows them.
+   */
+  const usfmAction = (): CardAction[] =>
+    hunkKind(props.hunk.units) === undefined || props.usfm
+      ? []
+      : [
+          {
+            kind: "icon",
+            id: "usfm",
+            label: markup() ? t("Show the reading") : t("Show the USFM"),
+            icon: CodeIcon,
+            pressed: markup(),
+            onPress: () => props.onView({ kind: "usfm" }),
+          },
+        ];
+
   const status = (): string =>
     props.hunk.units.length === 0
       ? ""
@@ -329,39 +347,33 @@ export function DiffCard(props: {
   return (
     <CardFrame
       data={{ "data-diff-card": props.hunk.key }}
-      label={props.hunk.label}
+      title={props.hunk.label}
       gone={props.gone}
-      badges={
+      info={
         <>
           <span class="text-smallest text-on-surface-tertiary">{status()}</span>
           <Show when={hunkKind(props.hunk.units)}>
             {(kind) => (
-              <>
-                <Badge tone="muted" data-diff-kind={kind()}>
-                  {kind()}
-                </Badge>
-                <Show when={!props.usfm}>
-                  <IconButton
-                    size="sm"
-                    label={markup() ? t("Show the reading") : t("Show the USFM")}
-                    icon={<CodeIcon size={14} />}
-                    aria-pressed={markup() ? "true" : "false"}
-                    data-card-markup=""
-                    onClick={() => props.onView({ kind: "usfm" })}
-                  />
-                </Show>
-              </>
+              <Badge tone="muted" data-diff-kind={kind()}>
+                {kind()}
+              </Badge>
             )}
           </Show>
         </>
       }
-      headerActions={props.headerActions}
-      editable={props.editable === true}
-      editing={props.editing === true}
-      onEdit={() => props.onEdit?.()}
-      onDone={() => props.onDone?.()}
+      headerActions={[...usfmAction(), ...(props.headerActions ?? [])]}
+      edit={
+        props.editable === true
+          ? {
+              kind: "edit",
+              editing: props.editing === true,
+              onEdit: () => props.onEdit?.(),
+              onDone: () => props.onDone?.(),
+            }
+          : { kind: "none" }
+      }
       open={props.open}
-      control={
+      context={
         <Show when={props.onStep}>
           {(step) => (
             <ContextControl

@@ -60,7 +60,8 @@ import * as Fixes from "#core/fixes/fixes";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { ExcerptList, type ExcerptDecor } from "../excerpts";
+import { excerptCard, ExcerptList, type ExcerptCardSpec, type OutlineSpec } from "../excerpts";
+import type { CardAction } from "../multibuffer/CardAction";
 import {
   Badge,
   Button,
@@ -333,15 +334,6 @@ export function FindingsPanel() {
     });
   };
 
-  /** A card's own "Open in editor", which names a span rather than a finding. */
-  const openCard = (bookId: BookId, from: number, to?: number): void => {
-    const finding = shown().find(
-      (held) =>
-        held.bookId === bookId && held.from === from && (to === undefined || held.to === to),
-    );
-    navigateTo(bookId, from, to, finding, "card");
-  };
-
   const offer = (finding: Finding): void => {
     const book = shell.services.seated(finding.bookId);
     const analysis = analysisFor(finding);
@@ -429,7 +421,7 @@ export function FindingsPanel() {
   /**
    * What a card IS, in its header: its severity, and whether a finding is
    * stale. A card that mixes severities badges each, and its lines say which
-   * is which. A finding in markup is the card's code icon (`offerUsfm`).
+   * is which. A finding in markup is the card's code icon (the spec's `usfm`).
    */
   const badges = (_excerpt: Excerpt, key: string) => {
     const row = feed.row(key);
@@ -447,20 +439,18 @@ export function FindingsPanel() {
   };
 
   /** What a reader can do about a card's findings, in its footer: fix them. */
-  const actions = (_excerpt: Excerpt, key: string) => {
+  const actions = (_excerpt: Excerpt, key: string): readonly CardAction[] => {
     const row = feed.row(key);
     const fixable = foldRuns(row?.findings ?? [])
       .map((run) => run.head)
       .filter((finding) => finding.fix !== undefined);
-    return (
-      <For each={fixable}>
-        {(finding) => (
-          <Button size="sm" icon={<Wrench size={12} />} onClick={() => offer(finding)}>
-            {fixable.length === 1 ? t("Fix") : t("Fix {code}", { code: finding.code })}
-          </Button>
-        )}
-      </For>
-    );
+    return fixable.map((finding) => ({
+      kind: "button",
+      id: `fix:${finding.code}`,
+      label: fixable.length === 1 ? t("Fix") : t("Fix {code}", { code: finding.code }),
+      icon: Wrench,
+      onPress: () => offer(finding),
+    }));
   };
 
   /**
@@ -527,40 +517,54 @@ export function FindingsPanel() {
     );
   };
 
-  const decor: ExcerptDecor = {
+  /** The sections are not always books: by code, by severity, and a book's front matter. */
+  const sections: OutlineSpec = {
     rowKey: (group, excerpt) => `${group.bookId}|${excerpt.sid}`,
-    outlineTitle: t("Groups with findings"),
-    outlineLabel: (row) => {
+    title: t("Groups with findings"),
+    label: (row) => {
       const head = feed.head(row.bookId);
       if (head === undefined) return row.bookId;
       return head.front ? t("{book} front", { book: head.label }) : head.label;
     },
-    // Chapter 0 is the matter before the first `\c` — an id line, a heading, a
-    // table of contents entry — and `core/excerpts` labels it "Genesis 0",
-    // which is a chapter nobody has.
-    label: (_excerpt, key) => {
-      const row = feed.row(key);
-      return row?.front === true ? t("{book} · front matter", { book: row.bookName }) : undefined;
-    },
-    markTone: (source, excerpt) => feed.toneOf(source, excerpt),
-    extraHeight: (_excerpt, key) => {
-      const row = feed.row(key);
-      return row === undefined ? 0 : 8 + LINE_HEIGHT * foldRuns(row.findings).length;
-    },
-    badges,
-    notes,
-    actions,
-    // No "Open in editor": the card's own context steps widen it to the
-    // chapter, and Enter on the current card still opens the editor there.
-    openable: false,
-    // A span with no character in the reading — inside a marker name, an
-    // attribute, a control character — is shown by switching the card to
-    // USFM, where it is marked; the reading keeps the verse as the body.
-    offerUsfm: (_excerpt, key) => {
-      const row = feed.row(key);
-      return row?.findings.some((finding) => inMarkup(row.excerpt, finding)) === true;
-    },
   };
+
+  /**
+   * Findings' cards: Find's, marked by severity, with what each finding is in
+   * the header and Fix in the footer.
+   */
+  const card: ExcerptCardSpec = excerptCard(
+    { kind: "steps", step: feed.excerpts.expand },
+    // No "Open in editor": the card's own context steps widen it to the
+    // chapter, and Enter on the current card opens the editor there.
+    { kind: "none" },
+    {
+      marks: { kind: "toned", tone: (source, excerpt) => feed.toneOf(source, excerpt) },
+      // A span with no character in the reading — inside a marker name, an
+      // attribute, a control character — is shown by switching the card to
+      // USFM, where it is marked; the reading keeps the verse as the body.
+      usfm: {
+        kind: "when",
+        offer: (_excerpt, key) => {
+          const row = feed.row(key);
+          return row?.findings.some((finding) => inMarkup(row.excerpt, finding)) === true;
+        },
+      },
+      // Chapter 0 is the matter before the first `\c` — an id line, a
+      // heading, a table of contents entry — and `core/excerpts` labels it
+      // "Genesis 0", which is a chapter nobody has.
+      title: (_excerpt, key) => {
+        const row = feed.row(key);
+        return row?.front === true ? t("{book} · front matter", { book: row.bookName }) : undefined;
+      },
+      info: badges,
+      notes,
+      actions,
+      extraHeight: (_excerpt, key) => {
+        const row = feed.row(key);
+        return row === undefined ? 0 : 8 + LINE_HEIGHT * foldRuns(row.findings).length;
+      },
+    },
+  );
 
   /**
    * The shell's mode, as the card's two-way choice — the same reduction Find
@@ -684,17 +688,16 @@ export function FindingsPanel() {
               groups={feed.groups()}
               views={feed.excerpts.views}
               outline={feed.outline()}
-              onOpen={openCard}
               seat={feed.excerpts.seat}
               seatedOf={feed.excerpts.seatedOf}
               shownOf={feed.excerpts.shownOf}
               analyze={feed.excerpts.analyze}
               onEdited={feed.excerpts.edited}
-              onExpand={feed.excerpts.expand}
               focus={focused()}
               activeHit={focusedAt()}
               mode={mode()}
-              decor={decor}
+              card={card}
+              sections={sections}
               empty={
                 <EmptyState
                   icon={<CircleCheck size={22} />}

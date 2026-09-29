@@ -171,9 +171,12 @@ different tree (an icon rail), not a zero-width panel.
 Every list of places in Sefer — Find, Key terms, Findings, Review — is cards
 built from three pieces, so a card looks and behaves the same on every screen:
 
-- **`CardFrame`** — the header (the place, a `gone` badge, the screen's
-  badges, header actions, Edit/Done, open), notes, body, and a footer (a
-  control on the left, actions on the right).
+- **`CardFrame`** — named slots in one order: `title`, `gone`, `info`
+  (badges), `headerActions`, Edit/Done (from `edit: none | edit`), `open`, and
+  `notes`, all above one border; the body; and a footer (`context` on the left,
+  `actions` on the right). Every button in a slot is a `CardAction`
+  (`CardAction.tsx`): a `button` or an `icon`, drawn by the frame, answering to
+  `data-card-action="<id>"`. Nobody hand-builds a card button.
 - **`CardEditor`** — a card opened for editing: a satellite over the real Book,
   clipped to the card's lines, with the accent outline and context at full
   strength; Escape ends it. `extensions` carries what a screen draws while you
@@ -187,6 +190,21 @@ The gesture is the same everywhere: a card reads until Edit or a double-click,
 then it is the Book with the caret in it. `ExcerptCard`/`ExcerptList` and
 `DiffCard`/`ReviewReader` are the two users; what differs is what the body
 draws (a reading and a paired resource, or a diff) and what the header decides.
+
+Two more pieces make a card's behaviour composable rather than special-cased:
+
+- **The card's view** (`cardState.ts`, pure; `cardViews.ts`, the store) — what
+  the reader has done to a card: its reach (the context steps), its own USFM
+  switch, the paired side's width, the lines unfolded in it. Held by the
+  screen by card key, not by the card, because the list unmounts a card that
+  scrolls out and the reader's choices must survive that.
+- **The card spec** (`excerpts/cardSpec.ts`) — what a screen's cards DO, each
+  behaviour a union: `marks` (hits, or toned), `edit` (none, or a satellite),
+  `usfm` (never, or when a card has a reason), `context` (none, or the steps),
+  `open` (none, or to the editor), plus the `title`, `info`, `notes` and
+  `actions` slots as functions of the card and its view. `excerptCard(...)` is
+  Find's card; Findings names only what differs. The outline's options are a
+  separate `OutlineSpec`, because they describe the list, not a card.
 
 ### The multibuffer: `virtual-core`, and why not `solid-virtual`
 

@@ -36,7 +36,7 @@ anchorOf(onScreen: readonly string[], pinned: string | undefined, has: (key: str
 
 `VirtualList` keeps only the binding to `virtual-core` and Solid. Also: holding a row does a linear search of the measurements on every rebuild. Measure it at 86k rows; if it matters, keep a key → index map.
 
-## Step 2 — one per-card view state, owned by the list (`multibuffer/cardState.ts`)
+## Step 2 — one per-card view state, held by the screen (`multibuffer/cardState.ts`, `cardViews.ts`) — done
 
 ```ts
 interface CardView {
@@ -56,11 +56,11 @@ reduce(view: CardView, event: CardEvent): CardView   // pure
 
 The store is one keyed map beside `CardList`'s edit session. Its policy lives in one place: prune on a new query, but never prune the pinned card. The feed's extent map, `lastShown` and the Findings fold set move into it. `DiffCard` and `ExcerptCard` become functions of `(item, view)` and send events. "Remember what the card being worked on was showing" then needs no special case.
 
-## Step 3 — one title (`core/location` label)
+## Step 3 — one title (`core/location` label) — done
 
 A card's title is `location.label(address)` everywhere. A `Hunk` carries its `Address` (it already builds one for its key), not a preformatted `reference`. `DiffCard` stops taking `bookName`. Ranges, intros and front matter then read the same on every screen.
 
-## Step 4 — named slots and a card spec, replacing `ExcerptDecor`
+## Step 4 — named slots and a card spec, replacing `ExcerptDecor` — done
 
 One frame with named slots. A body is a discriminated union, so an excerpt card and a diff card are the same frame with a different body:
 
@@ -143,6 +143,16 @@ One commit per step, in the order above: 1 and 3 are small and independent, 2 ne
 - a resolved card keeps its chapter;
 - the sidebar switches between screens;
 - the USFM switch survives scrolling away and back (currently fails).
+
+## As built, where it differs from the sketch
+
+- **The view is keyed by what the card is about** — a verse's sid on the excerpt screens (a widening is about the verse wherever it is shown), a hunk's key on Review — and held by the screen's feed, not by `CardList`, because the feed builds the widened excerpts from it.
+- **`drawn` is one slot, not a field of every view:** only the card being edited is ever read back, when its result ends. The old `lastShown` map grew without bound.
+- **The spec is the excerpt screens'.** `DiffCard` takes the same frame slots and the same `CardAction` contract, but not an `ExcerptCardSpec`: its body is the diff by definition, and Review has one screen. If a second diff screen arrives, its spec is the next step.
+- **`CardAction` is a union of `button` and `icon`**, so an icon without words must carry an icon and uses its label as the accessible name. Toggles are `pressed`, which `Button` already styles. Every card button answers to `data-card-action="<id>"`.
+- **The USFM switch moved to the header's actions**, on the right with Edit, rather than beside the badges: every header button is now a header action.
+- **Findings' height hint kept its name and formula** (`extraHeight`: 8px plus a line per folded run). The notes moved inside the header's border, but a line is still a line; Fix sits in the footer the context control already opens, so it adds nothing.
+- **Card titles:** `Hunk.address` and `Hunk.label`, labelled by the `label` its builder is given (`location.label`), as `BookText.label` labels an excerpt.
 
 ## Decided
 

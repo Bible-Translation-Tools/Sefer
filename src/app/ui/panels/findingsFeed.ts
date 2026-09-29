@@ -22,7 +22,7 @@
  * **A section is not always a book.** By code, by severity and flat are the
  * same cards under different headers, and a verse holding two codes appears in
  * two sections — so a row's key carries its section, which is why
- * `ExcerptDecor.rowKey` exists. Front matter is its own section above a book's
+ * `OutlineSpec.rowKey` exists. Front matter is its own section above a book's
  * chapters, because "GEN front" is a place, not chapter zero.
  *
  * **"In markup" is read off the marks, not re-derived.** A finding whose span

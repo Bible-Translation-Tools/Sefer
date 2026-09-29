@@ -62,6 +62,7 @@ import {
   type DiffSides,
   type Hunk,
 } from "../diff";
+import type { CardAction } from "../multibuffer/CardAction";
 import { CardList } from "../multibuffer/CardList";
 import type { ContextStep } from "../multibuffer/cardState";
 import { createCardViews } from "../multibuffer/cardViews";
@@ -573,52 +574,39 @@ export function ReviewReader(props: {
    * glyph means. Pressed when every change in the card has that side; pressing
    * it again clears them.
    */
-  function CardDecision(cardProps: { readonly hunk: Hunk }) {
-    const sideOf = (): MergeSide | "mixed" | undefined => {
-      const sides = new Set(
-        cardProps.hunk.units.map((unit) => props.decision(cardProps.hunk.bookId, unit.id)),
-      );
-      if (sides.size !== 1) return "mixed";
-      return [...sides][0];
-    };
-    const one = (): boolean => cardProps.hunk.units.length === 1;
-    const choose = (side: MergeSide): void =>
-      props.decide(
-        cardProps.hunk.bookId,
-        cardProps.hunk.units,
-        sideOf() === side ? undefined : side,
-      );
-    return (
-      <Show when={props.decidable && cardProps.hunk.units.length > 0}>
-        <Button
-          size="sm"
-          variant={sideOf() === "current" ? "secondary" : "tertiary"}
-          class={sideOf() === "current" ? "text-brand ring-1 ring-brand" : undefined}
-          aria-pressed={sideOf() === "current" ? "true" : "false"}
-          data-card-decision="current"
-          onClick={() => choose("current")}
-        >
-          {one()
-            ? t("Keep {source}'s", { source: props.currentShort })
-            : t("Keep all of {source}'s", { source: props.currentShort })}
-        </Button>
-        <Button
-          size="sm"
-          variant={sideOf() === "baseline" ? "secondary" : "tertiary"}
-          class={sideOf() === "baseline" ? "text-brand ring-1 ring-brand" : undefined}
-          aria-pressed={sideOf() === "baseline" ? "true" : "false"}
-          data-card-decision="baseline"
-          onClick={() => choose("baseline")}
-        >
-          {props.decidable && sideOf() === "baseline"
+  const cardDecision = (hunk: Hunk): readonly CardAction[] => {
+    if (!props.decidable || hunk.units.length === 0) return [];
+    const sides = new Set(hunk.units.map((unit) => props.decision(hunk.bookId, unit.id)));
+    const side: MergeSide | "mixed" | undefined = sides.size !== 1 ? "mixed" : [...sides][0];
+    const one = hunk.units.length === 1;
+    const choose = (chosen: MergeSide): void =>
+      props.decide(hunk.bookId, hunk.units, side === chosen ? undefined : chosen);
+    return [
+      {
+        kind: "button",
+        id: "keep",
+        emphasis: side === "current" ? "secondary" : "tertiary",
+        pressed: side === "current",
+        label: one
+          ? t("Keep {source}'s", { source: props.currentShort })
+          : t("Keep all of {source}'s", { source: props.currentShort }),
+        onPress: () => choose("current"),
+      },
+      {
+        kind: "button",
+        id: "take",
+        emphasis: side === "baseline" ? "secondary" : "tertiary",
+        pressed: side === "baseline",
+        label:
+          side === "baseline"
             ? t("Taken from {source} — put back", { source: props.baselineShort })
-            : one()
+            : one
               ? t("Take {source}'s", { source: props.baselineShort })
-              : t("Take all of {source}'s", { source: props.baselineShort })}
-        </Button>
-      </Show>
-    );
-  }
+              : t("Take all of {source}'s", { source: props.baselineShort }),
+        onPress: () => choose("baseline"),
+      },
+    ];
+  };
 
   const sections = createMemo(
     (): readonly VirtualSection<{ hunk: Hunk; held: Prepared }>[] =>
@@ -989,16 +977,15 @@ export function ReviewReader(props: {
                 seat={() => props.seat(item().hunk.bookId)}
                 analyze={(text) => analysisOf(item().hunk.bookId, "current", text)}
                 onOpen={() => openInBook(item().hunk)}
-                headerActions={<CardDecision hunk={item().hunk} />}
+                headerActions={cardDecision(item().hunk)}
                 onStep={(step) => expand(item().hunk.key, step)}
-                open={
-                  <IconButton
-                    size="sm"
-                    label={t("Open in the book")}
-                    icon={<BookOpen size={14} />}
-                    onClick={() => openInBook(item().hunk)}
-                  />
-                }
+                open={{
+                  kind: "icon",
+                  id: "open",
+                  label: t("Open in the book"),
+                  icon: BookOpen,
+                  onPress: () => openInBook(item().hunk),
+                }}
               />
             )}
             empty={

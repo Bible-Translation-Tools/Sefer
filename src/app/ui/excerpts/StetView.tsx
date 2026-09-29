@@ -37,6 +37,7 @@ import { t } from "../../i18n";
 import type { SourceReading } from "../../workflows/stet";
 import type { CardViews } from "../multibuffer/cardViews";
 import { Badge, Card, Input, Select, Switch, cx } from "../primitives";
+import { excerptCard } from "./cardSpec";
 import type { ContextStep, Paired } from "./ExcerptCard";
 import { ExcerptList } from "./ExcerptList";
 
@@ -62,7 +63,7 @@ export interface StetViewProps {
   readonly shownOf?: (excerpt: Excerpt) => Excerpt;
   readonly analyze: (text: string) => Analysis;
   readonly onEdited?: (bookId: BookId) => void;
-  readonly onExpand?: (sid: string, step: ContextStep) => void;
+  readonly onExpand: (sid: string, step: ContextStep) => void;
   /** The shell's mode, handed to the excerpt cards. */
   readonly mode?: "regular" | "usfm";
 
@@ -118,6 +119,12 @@ export function StetView(props: StetViewProps) {
       return { kind: "none", name: t("Paired resource"), message: t("No paired resource bound") };
     return { kind: "static", name, text: reading.text, spans: reading.spans ?? [] };
   };
+
+  /** Key terms' cards: Find's. The screen's handlers are read when a card asks. */
+  const card = excerptCard(
+    { kind: "steps", step: (sid, step) => props.onExpand(sid, step) },
+    { kind: "editor", to: (bookId, from, to) => props.onOpen(bookId, from, to) },
+  );
 
   return (
     <div class="flex min-h-0 flex-1 gap-4">
@@ -250,8 +257,7 @@ export function StetView(props: StetViewProps) {
         groups={props.groups}
         views={props.views}
         outline={props.outline}
-        onExpand={props.onExpand}
-        onOpen={props.onOpen}
+        card={card}
         seat={props.seat}
         seatedOf={props.seatedOf}
         shownOf={props.shownOf}

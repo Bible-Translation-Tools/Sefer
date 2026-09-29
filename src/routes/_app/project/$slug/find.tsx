@@ -12,7 +12,13 @@ import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js"
 import { t } from "#app/i18n";
 import { useShell } from "#app/ProjectContext";
 import { shellKeys } from "#app/settings";
-import { createExcerptFeed, ExcerptList, readBooks, type Paired } from "#app/ui/excerpts";
+import {
+  createExcerptFeed,
+  excerptCard,
+  ExcerptList,
+  readBooks,
+  type Paired,
+} from "#app/ui/excerpts";
 import {
   Button,
   Card,
@@ -717,6 +723,12 @@ function Find() {
     setCursor((held) => (held + delta + total) % total);
   };
 
+  /** Find's cards: the default — hits, editable, widened by steps, and the way out. */
+  const card = excerptCard(
+    { kind: "steps", step: feed.expand },
+    { kind: "editor", to: feed.openInEditor },
+  );
+
   return (
     <main class="flex h-full min-w-0 flex-col gap-4 p-6">
       <PanelHeader title={t("Find")} />
@@ -899,13 +911,12 @@ function Find() {
           groups={feed.groups()}
           views={feed.views}
           outline={feed.outline()}
-          onOpen={feed.openInEditor}
+          card={card}
           seat={feed.seat}
           seatedOf={feed.seatedOf}
           shownOf={feed.shownOf}
           analyze={feed.analyze}
           onEdited={feed.edited}
-          onExpand={feed.expand}
           focus={cursorSid()}
           activeHit={cursorAt()}
           mode={mode()}
