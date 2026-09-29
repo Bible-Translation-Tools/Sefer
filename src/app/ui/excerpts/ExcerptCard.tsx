@@ -365,7 +365,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
             size="sm"
             class="ms-auto"
             label={collapsed() ? t("Show the same range") : t("Show only the match")}
-            icon={collapsed() ? <UnfoldVerticalIcon size={13} /> : <FoldVerticalIcon size={13} />}
+            icon={collapsed() ? <UnfoldVerticalIcon /> : <FoldVerticalIcon />}
             aria-pressed={collapsed() ? "false" : "true"}
             onClick={() => setPairedFlip((held) => !held)}
           />
@@ -433,12 +433,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
           <Show
             when={props.editing}
             fallback={
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={<PencilIcon size={13} />}
-                onClick={() => edit()}
-              >
+              <Button size="sm" variant="secondary" icon={<PencilIcon />} onClick={() => edit()}>
                 {t("Edit")}
               </Button>
             }
@@ -450,7 +445,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
           <IconButton
             size="sm"
             label={t("Open in editor")}
-            icon={<SquareArrowOutUpRightIcon size={14} />}
+            icon={<SquareArrowOutUpRightIcon />}
             aria-pressed={opening() ? "true" : undefined}
             onClick={() => {
               setOpening(true);

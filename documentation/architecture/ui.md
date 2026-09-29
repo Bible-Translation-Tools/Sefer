@@ -47,9 +47,9 @@ The file has four parts, in order:
 - **Neighbouring controls are `gap-controls` apart** (12px, `--spacing-controls`),
   not a `gap-2` or `gap-3` chosen per screen. `PanelHeader`'s actions and a
   `Dialog`'s footer already use it.
-- **An `md` control sizes its own icon** (`[&>svg]:size-5`, the icon slot
-  only), so an icon handed to one takes no `size`. `sm` and `lg` still take the
-  caller's.
+- **A control sizes its own icon** — 20px at `md`, 12px at `sm`
+  (`[&>svg]:size-5` / `size-3`, the icon slot only) — so an icon handed to one
+  takes no `size`. `lg` (and `Button`'s `flush`) still take the caller's.
 - **The shadows are `@utility` rules**, not `@theme` entries. Tailwind parses a
   themed shadow so it can offer `shadow-<color>`, which bakes the light colour
   into the class and leaves the dark override unread. `shadow-small`,

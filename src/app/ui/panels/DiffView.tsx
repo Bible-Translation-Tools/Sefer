@@ -107,7 +107,7 @@ export function DiffView(props: DiffViewProps) {
                         size="sm"
                         variant="tertiary"
                         class="ms-auto"
-                        icon={<Undo2 size={12} />}
+                        icon={<Undo2 />}
                         onClick={() => revert()(hunk)}
                       >
                         {t("Revert")}

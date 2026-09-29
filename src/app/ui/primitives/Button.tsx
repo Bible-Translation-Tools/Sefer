@@ -61,7 +61,8 @@ const classes = variants({
         "bg-surface-error text-on-surface-error border-surface-error hover:not-disabled:brightness-95",
     },
     size: {
-      sm: "h-7 gap-1.5 rounded-md px-2.5 text-smallest",
+      // Compact: 28px, a 12px icon.
+      sm: "h-7 gap-1.5 rounded-md px-2.5 text-smallest [&>svg]:size-3",
       // The default, and the app's control size: 48px tall, 12px sides and
       // radius, 14px medium, a 20px icon 6px from its label.
       md: "h-12 gap-1.5 rounded-lg px-3 text-small [&>svg]:size-5",
@@ -75,7 +76,7 @@ const classes = variants({
 export interface ButtonProps extends ComponentProps<"button"> {
   readonly variant?: ButtonVariant;
   readonly size?: ButtonSize;
-  /** Rendered before the label. An `md` button sizes the icon; `sm` and `lg` leave it to the caller. */
+  /** Rendered before the label. An `sm` or `md` button sizes the icon; `lg` and `flush` leave it to the caller. */
   readonly icon?: JSX.Element;
   /** Swaps the icon for a spinner and disables the button. */
   readonly loading?: boolean;

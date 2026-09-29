@@ -486,7 +486,7 @@ export function FindingsPanel() {
                   : t("Unfold {count} identical findings", { count: run?.members.length ?? 0 })
               }
               class="tabular-nums"
-              icon={opened().has(id) ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+              icon={opened().has(id) ? <ChevronDown /> : <ChevronRight />}
               onClick={() => toggleRun(id)}
             >
               × {run?.members.length ?? 1}
@@ -496,7 +496,7 @@ export function FindingsPanel() {
             {t("Go")}
           </Button>
           <Show when={finding.fix !== undefined}>
-            <Button size="sm" icon={<Wrench size={12} />} onClick={() => offer(finding)}>
+            <Button size="sm" icon={<Wrench />} onClick={() => offer(finding)}>
               {t("Fix")}
             </Button>
           </Show>

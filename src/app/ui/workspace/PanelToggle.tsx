@@ -28,7 +28,7 @@ export function PanelToggle() {
       data-testid="panel-toggle"
       aria-expanded={showing() ? "true" : "false"}
       label={showing() ? t("Hide the project panel") : t("Show the project panel")}
-      icon={showing() ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+      icon={showing() ? <PanelLeftClose /> : <PanelLeftOpen />}
       onClick={() => shell.setSidebarOpen(!showing())}
     />
   );

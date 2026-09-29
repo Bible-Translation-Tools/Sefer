@@ -261,7 +261,7 @@ export function FindingsFilters(props: FindingsFiltersProps) {
         type="search"
         size="sm"
         wrapperClass="min-w-40 flex-1"
-        icon={<Search size={13} />}
+        icon={<Search />}
         aria-label={t("Filter findings")}
         placeholder={t("Filter by text…")}
         value={filter().text}

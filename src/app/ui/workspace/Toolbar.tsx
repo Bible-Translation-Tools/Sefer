@@ -170,7 +170,7 @@ export function Toolbar() {
           type="search"
           data-testid="toolbar-search"
           wrapperClass="w-44"
-          icon={<SearchIcon size={14} />}
+          icon={<SearchIcon />}
           aria-label={t("Find in project")}
           placeholder={t("Search…")}
           value={query()}
@@ -190,7 +190,7 @@ export function Toolbar() {
           size="sm"
           data-testid="toolbar-undo"
           label={t("Undo")}
-          icon={<Undo2 size={16} />}
+          icon={<Undo2 />}
           disabled={!can("book.undo")}
           onClick={() => runCommand("book.undo")}
         />
@@ -198,7 +198,7 @@ export function Toolbar() {
           size="sm"
           data-testid="toolbar-redo"
           label={t("Redo")}
-          icon={<Redo2 size={16} />}
+          icon={<Redo2 />}
           disabled={!can("book.redo")}
           onClick={() => runCommand("book.redo")}
         />
@@ -212,7 +212,7 @@ export function Toolbar() {
             size="sm"
             data-testid="toolbar-overlay"
             label={t("Match formatting from source")}
-            icon={<ArrowLeftRight size={16} />}
+            icon={<ArrowLeftRight />}
             disabled={!can("overlay.book")}
             onClick={() => runCommand("overlay.book")}
           />
@@ -223,7 +223,7 @@ export function Toolbar() {
             size="sm"
             data-testid="toolbar-findings"
             label={t("Findings")}
-            icon={<Bell size={16} />}
+            icon={<Bell />}
             onClick={() =>
               void navigate({
                 to: "/project/$slug/findings",
@@ -255,7 +255,7 @@ export function Toolbar() {
               size="sm"
               data-testid="toolbar-kebab"
               label={t("More")}
-              icon={<MoreVertical size={16} />}
+              icon={<MoreVertical />}
             />
           }
         >

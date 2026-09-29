@@ -274,7 +274,7 @@ export function LocationBar(props: LocationBarProps) {
           data-testid="location-previous"
           label={t("Previous chapter")}
           tooltipSide="bottom"
-          icon={<ChevronUp size={14} />}
+          icon={<ChevronUp />}
           disabled={first()}
           onClick={() => step(-1)}
         />
@@ -283,7 +283,7 @@ export function LocationBar(props: LocationBarProps) {
           data-testid="location-next"
           label={t("Next chapter")}
           tooltipSide="bottom"
-          icon={<ChevronDown size={14} />}
+          icon={<ChevronDown />}
           disabled={last()}
           onClick={() => step(1)}
         />

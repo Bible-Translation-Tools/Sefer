@@ -63,7 +63,7 @@ export function Toaster() {
               <IconButton
                 label="Dismiss"
                 size="sm"
-                icon={<X size={14} />}
+                icon={<X />}
                 onClick={() => dismiss(toast.id)}
               />
             </Show>

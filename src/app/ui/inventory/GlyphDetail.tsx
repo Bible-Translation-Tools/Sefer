@@ -442,7 +442,7 @@ export function GlyphDetail(props: GlyphDetailProps) {
               size="sm"
               variant="tertiary"
               class="ms-auto"
-              icon={<ExternalLink size={12} />}
+              icon={<ExternalLink />}
               onClick={() => openInFindings()}
             >
               {t("Open this channel in Findings")}

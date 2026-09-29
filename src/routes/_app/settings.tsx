@@ -123,7 +123,7 @@ function SettingsPage() {
           label={t("Decrease {label}", { label: t(descriptor.label) })}
           variant="outlined"
           size="sm"
-          icon={<Minus size={14} />}
+          icon={<Minus />}
           disabled={value() <= low}
           onClick={() => nudge(-step)}
         />
@@ -135,7 +135,7 @@ function SettingsPage() {
           label={t("Increase {label}", { label: t(descriptor.label) })}
           variant="outlined"
           size="sm"
-          icon={<Plus size={14} />}
+          icon={<Plus />}
           disabled={value() >= high}
           onClick={() => nudge(step)}
         />

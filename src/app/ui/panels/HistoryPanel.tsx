@@ -474,7 +474,7 @@ export function HistoryPanel() {
                           size="sm"
                           variant="tertiary"
                           class="ms-auto"
-                          icon={<Undo2 size={12} />}
+                          icon={<Undo2 />}
                           onClick={() => revertFile(changes)}
                         >
                           {t("Revert file")}
