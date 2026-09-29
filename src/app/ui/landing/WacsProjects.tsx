@@ -170,7 +170,6 @@ function NoMatch(props: {
   readonly query: string;
   readonly regions: readonly string[];
   readonly onDropRegion: (region: string) => void;
-  readonly onImported: () => void;
 }) {
   // One message, so a translator sees the whole sentence; the query is bolded
   // by splitting the result around a placeholder no search can contain.
@@ -233,7 +232,7 @@ function NoMatch(props: {
       </div>
       {/* The same import the old cards ran, as two buttons, each going
           straight to the system picker. */}
-      <ImportHub variant="buttons" onImported={() => props.onImported()} />
+      <ImportHub variant="buttons" />
     </div>
   );
 }
@@ -244,10 +243,7 @@ export interface DownloadTracker {
   readonly update: (id: string, patch: Partial<PendingDownload>) => void;
 }
 
-export function WacsProjects(props: {
-  readonly onDownloaded: () => void;
-  readonly downloads: DownloadTracker;
-}) {
+export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
   const shell = useShell();
   const { services } = shell;
   // One catalogue per mount. It is a pure value over `env`, so there is nothing
@@ -464,7 +460,7 @@ export function WacsProjects(props: {
     const into = `${services.projectsRoot}/${lastSegment(entry.gitUrl.replace(/\.git$/u, ""))}`;
     // Read once, at the click: the callbacks below run long after, outside
     // any tracking scope, and must not read props there.
-    const { downloads, onDownloaded } = props;
+    const { downloads } = props;
     setBusy(entry.id);
     downloads.start(
       {
@@ -517,7 +513,6 @@ export function WacsProjects(props: {
       .then(() => {
         operation.end("passed", { "import.phase": "complete" });
         downloads.update(entry.id, { status: t("Done"), percent: 100 });
-        onDownloaded();
       })
       .catch((cause: unknown) => {
         operation.end(remoteVerdict(remoteReasonOf(cause)), {
@@ -718,7 +713,6 @@ export function WacsProjects(props: {
                   query={query().trim()}
                   regions={[...regionFilter()]}
                   onDropRegion={(name) => toggleRegion(name, false)}
-                  onImported={() => props.onDownloaded()}
                 />
               </Show>
             }

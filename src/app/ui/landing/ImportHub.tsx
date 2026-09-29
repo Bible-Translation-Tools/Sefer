@@ -74,7 +74,11 @@ interface Progress {
 }
 
 export function ImportHub(props: {
-  readonly onImported: () => void;
+  /**
+   * After a project lands — the rail goes to the projects page. The list
+   * itself needs no telling: `rememberProject` re-reads it.
+   */
+  readonly onImported?: () => void;
   /**
    * `buttons` (the default) is "Import zip" and "Import folder" as the
    * projects page's two large buttons, each going straight to the system
@@ -190,7 +194,7 @@ export function ImportHub(props: {
       // re-read, so the row it draws is the one just written.
       await run(rememberProject(services.projectsRoot, into, undefined));
       operation.end("passed", { "import.phase": "complete" });
-      props.onImported();
+      props.onImported?.();
     })().catch((cause: unknown) => {
       const message = describe(cause);
       operation.end("failed", {
@@ -296,7 +300,7 @@ export function ImportHub(props: {
       // re-read, so the row it draws is the one just written.
       await run(rememberProject(services.projectsRoot, into, undefined));
       operation.end("passed", { "import.phase": "complete" });
-      props.onImported();
+      props.onImported?.();
     })().catch((cause: unknown) => {
       const message = describe(cause);
       operation.end("failed", {
@@ -375,7 +379,7 @@ export function ImportHub(props: {
       end("passed", { "import.phase": "complete" });
       finished(t("Ready"), t("Cloned into {root}.", { root: into }), false);
       toasts.update(toast, { title: t("Cloned {name}", { name }), tone: "success" });
-      props.onImported();
+      props.onImported?.();
     })().catch((cause: unknown) => {
       const message = describe(cause);
       // Offline or a dead server is the world saying no; only a failure the

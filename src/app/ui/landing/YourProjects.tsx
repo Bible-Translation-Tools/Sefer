@@ -16,7 +16,8 @@
  *
  * The kebab is the rest of a project's life: rename it, save a copy of it,
  * delete it. All three are `ProjectAdmin`, and all three end in the same place
- * the import does — a write to the index and a re-read of this list.
+ * the import does — a write to the index, which re-reads this list
+ * (`projectIndexRevision`).
  */
 
 import { useNavigate, useSearch } from "@tanstack/solid-router";
@@ -30,7 +31,7 @@ import Share2 from "lucide-solid/icons/share-2";
 import Trash2 from "lucide-solid/icons/trash-2";
 import { For, Show, createEffect, createSignal } from "solid-js";
 
-import { forgetProject, touchProject } from "#core/project/projectIndex";
+import { touchProject } from "#core/project/projectIndex";
 
 import { t } from "../../i18n";
 import { exportProjectZip, renameProject } from "../../projectCommands";
@@ -48,11 +49,15 @@ import {
   toasts,
 } from "../primitives";
 import { flyCard, type PendingDownload } from "./downloads";
-import { listProjects, type ProjectSummary } from "./summaries";
+import {
+  forgetRemembered,
+  listProjects,
+  projectIndexRevision,
+  type ProjectSummary,
+} from "./summaries";
 
 /** One row of the kebab menu; the same class the toolbar's menu uses. */
 export function YourProjects(props: {
-  readonly reload: number;
   /** Downloads in flight, drawn first until the project each becomes is listed. */
   readonly downloads: readonly PendingDownload[];
   /** Where the newest download's row was, to fly its card up from. */
@@ -66,8 +71,6 @@ export function YourProjects(props: {
   const [rows, setRows] = createSignal<readonly ProjectSummary[] | undefined>(undefined, {
     name: "projectSummaries",
   });
-  /** Raised by this component's own writes; `props.reload` is the import hub's. */
-  const [changed, setChanged] = createSignal(0, { name: "projectsChanged" });
   const navigate = useNavigate();
 
   /** The card strip, and how many cards sit past its right edge. */
@@ -91,13 +94,12 @@ export function YourProjects(props: {
   const [busy, setBusy] = createSignal(false, { name: "projectActionBusy" });
 
   /**
-   * One pass per tick. Two tickers, one subscription: an import raises
-   * `props.reload` and this list re-reads itself without the list ever knowing
-   * what an import is; a rename or a delete raises `changed` for the same
-   * reason from the inside.
+   * One pass per change to the index (`projectIndexRevision`): every import,
+   * download, rename and delete writes the index through `summaries.ts`, so
+   * this list re-reads without knowing what any of them are.
    */
   createEffect(
-    () => [props.reload, changed()],
+    () => projectIndexRevision(),
     () => {
       const recent = services.settings.get(keys.recentProjects);
       void services
@@ -105,10 +107,6 @@ export function YourProjects(props: {
         .then(setRows);
     },
   );
-
-  const refresh = (): void => {
-    setChanged((held) => held + 1);
-  };
 
   // `project.rename` (registered by the shell) lands here with the root in
   // the URL; the dialog opens once the rows are known.
@@ -232,10 +230,9 @@ export function YourProjects(props: {
     const name = newName().trim();
     if (row === undefined || name === "" || busy()) return;
     setBusy(true);
-    void renameProject(services, row.root, name, row.lastOpened).then((done) => {
+    void renameProject(services, row.root, name, row.lastOpened).then(() => {
       setBusy(false);
       setRenaming(undefined);
-      if (done) refresh();
     });
   };
 
@@ -254,8 +251,7 @@ export function YourProjects(props: {
             // dialog is the confirmation — the person has already answered the
             // question the port exists to ask.
             yield* services.admin.delete(row.root, () => Effect.succeed(true));
-            const fileSystem = yield* FileSystem.FileSystem;
-            yield* Effect.ignore(forgetProject(fileSystem, services.projectsRoot, row.root));
+            yield* forgetRemembered(services.projectsRoot, row.root);
             const recent = { ...services.settings.get(keys.recentProjects) };
             if (recent[row.root] !== undefined) {
               delete recent[row.root];
@@ -275,7 +271,6 @@ export function YourProjects(props: {
           return;
         }
         toasts.info({ title: t("Deleted {name}", { name: row.name }) });
-        refresh();
       });
   };
 

@@ -6,8 +6,7 @@
  * add-a-project cards are gone:
  * importing is `ImportHub`, as buttons under the table and as the rail's menu.
  *
- * The state here is `reload`, a counter a download raises and the projects
- * list reads, and `downloads`: every download the WACS table started, which
+ * The state here is `downloads`: every download the WACS table started, which
  * the installed row draws as a card with a progress bar until the project it
  * becomes is listed. A downloaded project stays in the WACS table too.
  *
@@ -26,7 +25,6 @@ import { WacsProjects } from "./WacsProjects";
 import { YourProjects } from "./YourProjects";
 
 export function ProjectsLanding() {
-  const [reload, setReload] = createSignal(0, { name: "projectsReload" });
   /** Downloads started from the WACS table, newest first, until listed. */
   const [downloads, setDownloads] = createSignal<readonly PendingDownload[]>([], {
     name: "pendingDownloads",
@@ -44,7 +42,6 @@ export function ProjectsLanding() {
       <section class="shrink-0 space-y-3">
         <PanelHeader title={t("Projects Loaded into Sefer")} />
         <YourProjects
-          reload={reload()}
           downloads={downloads()}
           flyFrom={flyFrom()}
           onDismiss={(id) => setDownloads((held) => held.filter((item) => item.id !== id))}
@@ -52,7 +49,6 @@ export function ProjectsLanding() {
       </section>
 
       <WacsProjects
-        onDownloaded={() => setReload((held) => held + 1)}
         downloads={{
           start: (download, from) => {
             setFlyFrom(from);
