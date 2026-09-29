@@ -301,6 +301,12 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
    * had been left at.
    */
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => {
+    // Above a row being edited, every correction is held — a first one too:
+    // an edit that adds a result above the card it is typed in inserts a row
+    // there, and its first measurement would push the card down the screen.
+    const pinned = untrack(() => props.pinned);
+    const pinnedAt = pinned === undefined ? undefined : untrack(flat).indexOfKey.get(pinned);
+    if (pinnedAt !== undefined && item.index < pinnedAt) return true;
     if (!instance.itemSizeCache.has(item.key)) return false;
     const fold = (instance.scrollOffset ?? 0) + instance.scrollAdjustments;
     if (fold <= 0) return false;
@@ -348,11 +354,32 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
        * top, which is where a new list starts.
        */
       const lost = onScreen.length > 0 && !onScreen.some((key) => list.indexOfKey.has(key));
+      /**
+       * The row the reader's place is held by across the rebuild: the one
+       * being edited, else the first on screen that is still in the list.
+       * Rows added or removed above it — a result an edit created or ended —
+       * would otherwise move it, because the scroll offset alone stays put.
+       */
+      const pinned = untrack(() => props.pinned);
+      const anchor = lost
+        ? undefined
+        : pinned !== undefined && list.indexOfKey.has(pinned)
+          ? pinned
+          : onScreen.find((key) => list.indexOfKey.has(key));
+      const startOf = (key: string): number | undefined =>
+        virtualizer.measurementsCache.find((item) => item.key === key)?.start;
+      const before = anchor === undefined ? undefined : startOf(anchor);
       virtualizer.setOptions(optionsOf());
       unmount ??= virtualizer._didMount();
       if (lost && untrack(offset) > 0) {
         virtualizer.scrollToOffset(0);
         setOffset(0);
+      }
+      if (anchor !== undefined && before !== undefined) {
+        virtualizer.getVirtualItems();
+        const after = startOf(anchor);
+        const moved = after === undefined ? 0 : after - before;
+        if (moved !== 0) virtualizer.scrollToOffset((virtualizer.scrollOffset ?? 0) + moved);
       }
       publish();
     },
