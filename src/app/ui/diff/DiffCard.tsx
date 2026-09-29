@@ -39,7 +39,8 @@ import "#editor/editor.css";
 import { t } from "../../i18n";
 import { CardEditor } from "../multibuffer/CardEditor";
 import { CardFrame } from "../multibuffer/CardFrame";
-import { ContextControl, type ContextStep } from "../multibuffer/ContextControl";
+import type { CardEvent, CardView, ContextStep } from "../multibuffer/cardState";
+import { ContextControl } from "../multibuffer/ContextControl";
 import { Badge, cx, IconButton } from "../primitives";
 import { hunkKind, type Hunk } from "./hunks";
 import { hunkPaint, sidePaint, type Controls } from "./paint";
@@ -97,6 +98,9 @@ export function DiffCard(props: {
   readonly sides: DiffSides;
   readonly split: boolean;
   readonly usfm: boolean;
+  /** The reader's view of this card — its own USFM switch — held by the screen. */
+  readonly view: CardView;
+  readonly onView: (event: CardEvent) => void;
   readonly controls: Controls | undefined;
   /** Column captions in a split: what each source calls itself. */
   readonly currentLabel: string;
@@ -132,7 +136,7 @@ export function DiffCard(props: {
   });
 
   /** This card's own switch to USFM (its code icon), over the screen's mode. */
-  const [markup, setMarkup] = createSignal(false, { name: "cardMarkup" });
+  const markup = (): boolean => props.view.usfm;
   const usfm = (): boolean => props.usfm || markup();
 
   /**
@@ -343,7 +347,7 @@ export function DiffCard(props: {
                     icon={<CodeIcon size={14} />}
                     aria-pressed={markup() ? "true" : "false"}
                     data-card-markup=""
-                    onClick={() => setMarkup((was) => !was)}
+                    onClick={() => props.onView({ kind: "usfm" })}
                   />
                 </Show>
               </>

@@ -36,10 +36,12 @@ import type { EditorBook, Funnel } from "#editor/index";
 import { t } from "../../i18n";
 import { useShell, type Shell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
-import { stepExtent } from "../multibuffer/ContextControl";
-import type { ContextStep } from "./ExcerptCard";
+import type { ContextStep } from "../multibuffer/cardState";
+import { createCardViews, type CardViews } from "../multibuffer/cardViews";
 
 export interface ExcerptFeed {
+  /** Every card's view on this screen — its reach, its USFM, its open lines. */
+  readonly views: CardViews<Excerpt>;
   readonly groups: Accessor<readonly BookExcerpts[]>;
   readonly outline: Accessor<readonly OutlineRow[]>;
   /** One memoized parse for the whole screen; handed to every open satellite. */
@@ -144,16 +146,14 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
   const navigate = useNavigate();
 
   /**
-   * How far each card has been widened, by sid.
+   * Every card's view, by sid — the reach it has been widened to among it.
    *
    * Here rather than in the card: a card scrolls out of the list's window and
    * its row is unmounted, and "show me one more" must survive that — as
    * it must survive the re-read an accepted edit provokes. A sid that is no
    * longer in the results is simply never asked for.
    */
-  const [extents, setExtents] = createSignal<ReadonlyMap<string, Extent>>(new Map(), {
-    name: "excerptExtents",
-  });
+  const views = createCardViews<Excerpt>("excerpt");
 
   /** What every card starts from: the reader's setting, read when the screen opens. */
   const context = Math.max(
@@ -163,11 +163,7 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
   const initial: Extent = { up: context, down: context };
 
   const expand = (sid: string, step: ContextStep): void => {
-    setExtents((held) => {
-      const next = new Map(held);
-      next.set(sid, stepExtent(next.get(sid) ?? initial, step));
-      return next;
-    });
+    views.send(sid, { kind: "step", step, from: initial });
   };
 
   // One memo for the whole screen, not one per excerpt: every book that holds
@@ -282,7 +278,7 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
   const widened = new WeakMap<Excerpt, { readonly extent: Extent; readonly shown: Excerpt }>();
 
   const shownOf = (excerpt: Excerpt): Excerpt => {
-    const want = extents().get(excerpt.sid);
+    const want = views.extents().get(excerpt.sid);
     if (want === undefined) return excerpt;
     const held = widened.get(excerpt);
     if (held?.extent === want) return held.shown;
@@ -379,6 +375,7 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
   };
 
   return {
+    views,
     groups: () => model().groups,
     outline: () => model().outline,
     shownOf,

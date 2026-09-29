@@ -30,6 +30,7 @@ import type { EditorBook, Funnel } from "#editor/index";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { CardList } from "../multibuffer/CardList";
+import type { CardViews } from "../multibuffer/cardViews";
 import { cx, type VirtualSection } from "../primitives";
 import { claimSidebar } from "../workspace/sidebarSlot";
 import { ExcerptCard, type ContextStep, type MarkTone, type Paired } from "./ExcerptCard";
@@ -40,6 +41,8 @@ export interface ExcerptListProps {
   readonly outline: readonly OutlineRow[];
   /** Aim the main editor at this range of this book. */
   readonly onOpen: (bookId: BookId, from: number, to?: number) => void;
+  /** Every card's view on this screen, by sid — the feed's (`ExcerptFeed.views`). */
+  readonly views: CardViews<Excerpt>;
   /** Plain → Instantiated, for the one excerpt being edited. */
   readonly seat: (bookId: BookId) => Promise<EditorBook | undefined>;
   /**
@@ -182,11 +185,10 @@ export function ExcerptList(props: ExcerptListProps) {
   });
   let goTo: ((key: string) => void) | undefined;
 
-  /** Each card as it was last drawn, context and all, by row key. */
-  const lastShown = new Map<string, Excerpt>();
-  const shown = (excerpt: Excerpt, key: string): Excerpt => {
+  /** A card as drawn; the one being edited is remembered, for when its result goes. */
+  const shown = (excerpt: Excerpt, key: string, editing: boolean): Excerpt => {
     const drawn = props.shownOf?.(excerpt) ?? excerpt;
-    lastShown.set(key, drawn);
+    if (editing) props.views.drawn.set(key, drawn);
     return drawn;
   };
   const go = (key: string, section: string): void => {
@@ -354,7 +356,9 @@ export function ExcerptList(props: ExcerptListProps) {
               // the edit in it — has no result left to widen, so it is drawn
               // as it was last SHOWN: widened to the chapter, it stays the
               // chapter, rather than the one-verse snapshot the pin took.
-              session.gone ? (lastShown.get(key) ?? excerpt()) : shown(excerpt(), key)
+              session.gone
+                ? (props.views.drawn.get(key) ?? excerpt())
+                : shown(excerpt(), key, session.editing)
             }
             editing={session.editing}
             gone={session.gone ? session.goneLabel : undefined}
@@ -386,6 +390,8 @@ export function ExcerptList(props: ExcerptListProps) {
             notes={props.decor?.notes?.(excerpt(), key)}
             openable={props.decor?.openable}
             offerUsfm={props.decor?.offerUsfm?.(excerpt(), key)}
+            view={props.views.view(excerpt().sid)}
+            onView={(event) => props.views.send(excerpt().sid, event)}
             actions={props.decor?.actions?.(excerpt(), key)}
             markTone={props.decor?.markTone}
             nearby={session.gone ? [] : nearbyOf(props.shownOf?.(excerpt()) ?? excerpt())}

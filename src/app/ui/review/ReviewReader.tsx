@@ -60,11 +60,11 @@ import {
   type BookDiffApi,
   type Controls,
   type DiffSides,
-  type Extent,
   type Hunk,
 } from "../diff";
 import { CardList } from "../multibuffer/CardList";
-import { stepExtent, type ContextStep } from "../multibuffer/ContextControl";
+import type { ContextStep } from "../multibuffer/cardState";
+import { createCardViews } from "../multibuffer/cardViews";
 import {
   Badge,
   Button,
@@ -214,20 +214,14 @@ export function ReviewReader(props: {
    * feed keeps them: the extent is the card's, and a card that scrolls out of
    * the window and back must keep what the reader asked to see.
    */
-  const [extents, setExtents] = createSignal<ReadonlyMap<string, Extent>>(new Map(), {
-    name: "reviewExtents",
-  });
+  const views = createCardViews<never>("review");
   const expand = (key: string, step: ContextStep): void => {
     const steps = services.settings.get(keys.excerptContext);
-    setExtents((held) => {
-      const next = new Map(held);
-      next.set(key, stepExtent(next.get(key) ?? { up: steps, down: steps }, step));
-      return next;
-    });
+    views.send(key, { kind: "step", step, from: { up: steps, down: steps } });
   };
   /** The widenings of one book's cards, as a value: what re-prepares that book. */
   const extentsOf = (bookId: BookId): string =>
-    [...untrack(extents).entries()]
+    [...untrack(views.extents).entries()]
       .filter(([key]) => key.startsWith(`${bookId} `))
       .map(
         ([key, extent]) => `${key}=${extent.up}/${extent.down}/${extent.chapter === true ? 1 : 0}`,
@@ -260,7 +254,7 @@ export function ReviewReader(props: {
         baseline: sides.baseline,
         current: sides.current,
         steps,
-        extentOf: (key) => untrack(extents).get(key),
+        extentOf: views.extentOf,
         include,
         keep,
       }),
@@ -287,7 +281,7 @@ export function ReviewReader(props: {
       show: filter(),
       result: props.decidable,
       // A card widened re-prepares its book (and only it: the key says which).
-      widened: extents(),
+      widened: views.extents(),
     }),
     ({ books, show, result }) => {
       const steps = services.settings.get(keys.excerptContext);
@@ -978,6 +972,8 @@ export function ReviewReader(props: {
             card={(item, _key, session) => (
               <DiffCard
                 hunk={item().hunk}
+                view={views.view(item().hunk.key)}
+                onView={(event) => views.send(item().hunk.key, event)}
                 sides={item().held.sides}
                 split={split()}
                 usfm={props.usfm}

@@ -897,6 +897,7 @@ function Find() {
           goneLabel={t("No longer matches")}
           resultsKey={asked()}
           groups={feed.groups()}
+          views={feed.views}
           outline={feed.outline()}
           onOpen={feed.openInEditor}
           seat={feed.seat}

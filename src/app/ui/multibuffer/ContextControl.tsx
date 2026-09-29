@@ -16,35 +16,7 @@ import type { Extent } from "#core/excerpts/excerpts";
 
 import { t } from "../../i18n";
 import { cx, IconButton } from "../primitives";
-
-/** One press of the context control. */
-export type ContextStep = "up" | "down" | "chapter" | "fold";
-
-/**
- * A card's reach after one press — the ONE rule every list applies (Find's
- * feed, Review's cards). Fold is the unit alone, whatever the setting started
- * it at, and remembers the reach it folded, so pressing it again unfolds to
- * exactly that; any other step starts from where the card is and forgets it.
- */
-export const stepExtent = (now: Extent, step: ContextStep): Extent => {
-  if (step === "fold") {
-    if (now.folded !== undefined) return now.folded;
-    return widened(now) ? { up: 0, down: 0, folded: now } : now;
-  }
-  const at: Extent = {
-    up: now.up,
-    down: now.down,
-    ...(now.chapter === true ? { chapter: true } : {}),
-  };
-  return step === "chapter"
-    ? { up: at.up, down: at.down, chapter: at.chapter !== true }
-    : step === "up"
-      ? { up: at.up + 1, down: at.down }
-      : { up: at.up, down: at.down + 1 };
-};
-
-/** Whether a card shows anything beyond its own unit. */
-const widened = (now: Extent): boolean => now.chapter === true || now.up > 0 || now.down > 0;
+import { widened, type ContextStep } from "./cardState";
 
 export function ContextControl(props: {
   /** The card's reach: what the steps and the fold read. */

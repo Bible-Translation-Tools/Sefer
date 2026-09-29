@@ -232,6 +232,7 @@ function Terms() {
           loading={loading()}
           note={note()}
           groups={feed.groups()}
+          views={feed.views}
           outline={feed.outline()}
           onOpen={feed.openInEditor}
           seat={feed.seat}

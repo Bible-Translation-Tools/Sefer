@@ -55,11 +55,12 @@ import type { EditorBook, Funnel, MarkedRange } from "#editor/index";
 import { t } from "../../i18n";
 import { CardEditor } from "../multibuffer/CardEditor";
 import { CardFrame } from "../multibuffer/CardFrame";
-import { ContextControl, type ContextStep } from "../multibuffer/ContextControl";
+import type { CardEvent, CardView, ContextStep } from "../multibuffer/cardState";
+import { ContextControl } from "../multibuffer/ContextControl";
 import { cx, IconButton } from "../primitives";
 import { ExcerptReader } from "./ExcerptReader";
 
-export type { ContextStep } from "../multibuffer/ContextControl";
+export type { ContextStep } from "../multibuffer/cardState";
 
 /**
  * The text read beside the target.
@@ -132,6 +133,12 @@ export interface ExcerptCardProps {
    * can be switched; only a card that has a reason offers it.
    */
   readonly offerUsfm?: boolean;
+  /**
+   * The reader's view of this card — its USFM switch, its paired side's
+   * width — held by the screen, so it outlives the row (`cardViews.ts`).
+   */
+  readonly view: CardView;
+  readonly onView: (event: CardEvent) => void;
   /** The footer's slot: whatever this screen lets a reader do about this place. */
   readonly actions?: JSX.Element;
   /**
@@ -224,11 +231,9 @@ export function ExcerptCard(props: ExcerptCardProps) {
     name: "excerptBody",
   });
   const [wide, setWide] = createSignal(true, { name: "excerptWide" });
-  /** The reader's flip of the paired side's width default, or nothing. */
-  const [pairedFlip, setPairedFlip] = createSignal(false, { name: "excerptPairedFlip" });
-
-  /** This card alone in USFM, over the screen's mode. Off until asked. */
-  const [usfm, setUsfm] = createSignal(false, { name: "excerptUsfm" });
+  /** The reader's: this card alone in USFM, and the paired side's width flipped. */
+  const usfm = (): boolean => props.view.usfm;
+  const pairedFlip = (): boolean => props.view.pairedFlip;
   const mode = (): "regular" | "usfm" => (props.mode === "usfm" || usfm() ? "usfm" : "regular");
 
   createEffect(
@@ -352,7 +357,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
             label={collapsed() ? t("Show the same range") : t("Show only the match")}
             icon={collapsed() ? <UnfoldVerticalIcon size={13} /> : <FoldVerticalIcon size={13} />}
             aria-pressed={collapsed() ? "false" : "true"}
-            onClick={() => setPairedFlip((held) => !held)}
+            onClick={() => props.onView({ kind: "pairedFlip" })}
           />
         </Show>
       </header>
@@ -412,7 +417,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
               icon={<CodeIcon size={14} />}
               aria-pressed={usfm() ? "true" : "false"}
               data-card-usfm=""
-              onClick={() => setUsfm((was) => !was)}
+              onClick={() => props.onView({ kind: "usfm" })}
             />
           </Show>
           <Show when={props.notes === undefined && props.excerpt.hits.length > 1}>

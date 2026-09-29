@@ -102,10 +102,6 @@ export function FindingsPanel() {
    * arrows are used.
    */
   const [walking, setWalking] = createSignal(false, { name: "findingsWalking" });
-  /** The folded runs the reader has opened, by line id. Session state. */
-  const [opened, setOpened] = createSignal<ReadonlySet<string>>(new Set(), {
-    name: "findingsOpened",
-  });
 
   /**
    * `?code=` and `?pattern=`, from the inventory's "the other sites of this
@@ -275,16 +271,16 @@ export function FindingsPanel() {
     setCursor((held) => (held + delta + staticCount) % staticCount);
   };
 
-  /** One id in or out of a set. Both sets below are session state. */
-  const flip = (held: ReadonlySet<string>, id: string): ReadonlySet<string> => {
-    const next = new Set(held);
-    if (!next.delete(id)) next.add(id);
-    return next;
-  };
-
-  const toggleRun = (id: string): void => {
-    setOpened((held) => flip(held, id));
-  };
+  /**
+   * A folded run the reader has opened — the card's view, so it outlives the
+   * row. Keyed by section within the card: a verse in two sections folds in
+   * each on its own.
+   */
+  const runId = (row: FindingsRow, finding: Finding): string => `${row.sectionKey}|${finding.id}`;
+  const isOpen = (row: FindingsRow, finding: Finding): boolean =>
+    feed.excerpts.views.view(row.excerpt.sid).open.has(runId(row, finding));
+  const toggleRun = (row: FindingsRow, finding: Finding): void =>
+    feed.excerpts.views.send(row.excerpt.sid, { kind: "open", id: runId(row, finding) });
 
   const analysisFor = (finding: Finding) =>
     Option.getOrUndefined(shell.services.projectAnalysis.analysis(finding.bookId));
@@ -476,7 +472,6 @@ export function FindingsPanel() {
    * first member, which is what "identical" means here.
    */
   const line = (row: FindingsRow, finding: Finding, run?: FindingRun) => {
-    const id = `${row.key}|${finding.id}`;
     const folded = (run?.members.length ?? 1) > 1;
     const markup = inMarkup(row.excerpt, finding);
     return (
@@ -497,22 +492,22 @@ export function FindingsPanel() {
             <Button
               size="sm"
               variant="secondary"
-              aria-expanded={opened().has(id) ? "true" : "false"}
+              aria-expanded={isOpen(row, finding) ? "true" : "false"}
               aria-label={
-                opened().has(id)
+                isOpen(row, finding)
                   ? t("Fold {count} identical findings", { count: run?.members.length ?? 0 })
                   : t("Unfold {count} identical findings", { count: run?.members.length ?? 0 })
               }
               class="tabular-nums"
-              icon={opened().has(id) ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-              onClick={() => toggleRun(id)}
+              icon={isOpen(row, finding) ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+              onClick={() => toggleRun(row, finding)}
             >
               × {run?.members.length ?? 1}
             </Button>
           </Show>
         </div>
 
-        <Show when={folded && opened().has(id)}>
+        <Show when={folded && isOpen(row, finding)}>
           <ul class="ms-4 flex flex-col gap-0.5 border-s border-surface-border ps-2">
             <For each={run?.members.slice(1) ?? []}>{(member) => line(row, member)}</For>
           </ul>
@@ -687,6 +682,7 @@ export function FindingsPanel() {
               goneLabel={t("Resolved")}
               resultsKey={JSON.stringify(filters.filter())}
               groups={feed.groups()}
+              views={feed.excerpts.views}
               outline={feed.outline()}
               onOpen={openCard}
               seat={feed.excerpts.seat}

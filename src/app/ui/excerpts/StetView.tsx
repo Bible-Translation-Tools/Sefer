@@ -35,6 +35,7 @@ import type { EditorBook, Funnel } from "#editor/index";
 
 import { t } from "../../i18n";
 import type { SourceReading } from "../../workflows/stet";
+import type { CardViews } from "../multibuffer/cardViews";
 import { Badge, Card, Input, Select, Switch, cx } from "../primitives";
 import type { ContextStep, Paired } from "./ExcerptCard";
 import { ExcerptList } from "./ExcerptList";
@@ -52,6 +53,8 @@ export interface StetViewProps {
   readonly onLocale: (locale: string) => void;
 
   readonly groups: readonly BookExcerpts[];
+  /** Every card's view on this screen — the feed's. */
+  readonly views: CardViews<Excerpt>;
   readonly outline: readonly OutlineRow[];
   readonly onOpen: (bookId: BookId, from: number, to?: number) => void;
   readonly seat: (bookId: BookId) => Promise<EditorBook | undefined>;
@@ -245,6 +248,7 @@ export function StetView(props: StetViewProps) {
         goneLabel={t("No longer an occurrence")}
         resultsKey={props.selected}
         groups={props.groups}
+        views={props.views}
         outline={props.outline}
         onExpand={props.onExpand}
         onOpen={props.onOpen}
