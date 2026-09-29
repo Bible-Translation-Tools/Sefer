@@ -166,10 +166,19 @@ const estimate = (excerpt: Excerpt): number => {
 
 export function ExcerptList(props: ExcerptListProps) {
   const shell = useShell();
+  /**
+   * The section last gone to from an outline — what the outline highlights.
+   * The one clicked, not the one scrolled under: every card names its own
+   * place, so the outline is for going, not for saying where you are.
+   */
   const [active, setActive] = createSignal<string | undefined>(undefined, {
     name: "excerptActiveBook",
   });
   let goTo: ((key: string) => void) | undefined;
+  const go = (key: string, section: string): void => {
+    setActive(section);
+    goTo?.(key);
+  };
 
   const keyOf = (group: BookExcerpts, excerpt: Excerpt): string =>
     props.decor?.rowKey?.(group, excerpt) ?? excerpt.sid;
@@ -250,7 +259,13 @@ export function ExcerptList(props: ExcerptListProps) {
     return out;
   };
 
-  const current = () => active() ?? props.groups[0]?.bookId;
+  // A section a regrouping took away highlights the first one instead.
+  const current = () => {
+    const held = active();
+    return held !== undefined && props.groups.some((group) => group.bookId === held)
+      ? held
+      : props.groups[0]?.bookId;
+  };
 
   // The outline goes where the project's contents normally are: on a screen
   // of results the sidebar navigates the results (`workspace/sidebarSlot.ts`).
@@ -265,7 +280,7 @@ export function ExcerptList(props: ExcerptListProps) {
         active={current()}
         label={(row) => props.decor?.outlineLabel?.(row) ?? row.name}
         keyOf={keyOf}
-        onGo={(key) => goTo?.(key)}
+        onGo={go}
       />
     )),
   );
@@ -285,7 +300,7 @@ export function ExcerptList(props: ExcerptListProps) {
               type="button"
               data-outline={row.bookId}
               aria-current={current() === row.bookId ? "true" : undefined}
-              onClick={() => goTo?.(row.bookId)}
+              onClick={() => go(row.bookId, row.bookId)}
               class={cx(
                 "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-start text-small transition-colors",
                 current() === row.bookId
@@ -314,7 +329,6 @@ export function ExcerptList(props: ExcerptListProps) {
         goneLabel={props.goneLabel}
         resultsKey={props.resultsKey}
         focus={props.focus}
-        onActive={setActive}
         ref={(scrollTo) => {
           goTo = scrollTo;
         }}

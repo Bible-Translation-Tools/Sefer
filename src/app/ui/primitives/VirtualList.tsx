@@ -1,6 +1,7 @@
 /**
- * The multibuffer's engine: sticky section headers over a windowed list of
- * rows, measured as they appear.
+ * The multibuffer's engine: a windowed list of rows in sections, measured as
+ * they appear. No section headers: every card names its own place, and an
+ * outline finds a section by its first row.
  *
  * Find, Key terms and `/findings` share it. The measured numbers are the
  * argument for windowing at all: on a synthetic 7,296 findings an un-windowed
@@ -8,17 +9,12 @@
  * takes ~63 ms. `documentation/architecture/ui.md`, "The multibuffer", has the
  * full account.
  *
- * ## One flat item list, headers included
+ * ## One flat item list
  *
  * A virtualizer wants ONE list, so the sections are flattened into a run of
- * items in which a header and a row are both items. That is also what makes the
- * sticky header work: a virtual item is positioned by a transform, and
- * `position: sticky` does nothing inside a transform — so the header the reader
- * is currently under is taken out of the transform and rendered
- * `position: sticky; top: 0` instead, while `rangeExtractor` keeps its index in
- * the window even once it has scrolled past. This is TanStack's own sticky
- * recipe, and it is why the headers are not simply all rendered: at sixty-six
- * books that was fine, at a thousand groups it is not.
+ * rows, and a section is where its first row is. There were sticky section
+ * headers here once (TanStack's sticky recipe); they went when every card came
+ * to carry its full address, which made them say everything twice.
  *
  * ## Why `@tanstack/virtual-core` and not `@tanstack/solid-virtual`
  *
@@ -48,7 +44,7 @@
  * verse sid or a finding id — and each row reads its own geometry back out of
  * the item list by key. Strings reconcile by value, so a measurement MOVES a
  * row rather than replacing it, and an open editor survives the correction it
- * caused. It is also why `row` and `header` are handed ACCESSORS: a row
+ * caused. It is also why `row` is handed an ACCESSOR: a row
  * outlives the model it was built from and has to read the current one.
  *
  * ## Measure in the effect phase, never in the `ref`
@@ -98,36 +94,17 @@ export interface VirtualSection<T> {
   readonly rows: readonly VirtualRow<T>[];
 }
 
-/** The flattened list the virtualizer walks: a header or a row, in order. */
-type Entry<T> =
-  | { readonly kind: "header"; readonly key: string; readonly section: VirtualSection<T> }
-  | {
-      readonly kind: "row";
-      readonly key: string;
-      readonly row: VirtualRow<T>;
-      readonly section: VirtualSection<T>;
-    };
+/** The flattened list the virtualizer walks: every section's rows, in order. */
+interface Entry<T> {
+  readonly key: string;
+  readonly row: VirtualRow<T>;
+}
 
-/** The height a header is assumed to have before it has been on screen. */
-const HEADER = 34;
 /** How far past the viewport to keep items mounted, in ITEMS. */
 const OVERSCAN = 8;
 
 export interface VirtualListProps<T> {
   readonly sections: readonly VirtualSection<T>[];
-  /**
-   * The sticky header for one section, or none: a list whose rows already say
-   * which section they are in (Find's cards name their book) has no header
-   * entries at all, and a section is found by its first row.
-   *
-   * `ref` MUST go on the element that owns the header's whole height: it is
-   * what the virtualizer measures, and a wrapper of its own would report the
-   * wrong number.
-   */
-  readonly header?: (
-    section: Accessor<VirtualSection<T>>,
-    ref: (element: HTMLElement) => void,
-  ) => JSX.Element;
   /**
    * One row. Kept simple on purpose: the row owns its own chrome.
    *
@@ -144,8 +121,6 @@ export interface VirtualListProps<T> {
   readonly pinned?: string;
   /** Scroll this row into view when it changes. */
   readonly focus?: string;
-  /** Told which section the reader is currently under, for an outline column. */
-  readonly onActive?: (key: string) => void;
   readonly class?: string;
   /**
    * The scroller's role, for a list that is part of a larger structure: a
@@ -156,8 +131,7 @@ export interface VirtualListProps<T> {
   readonly empty?: JSX.Element;
   /**
    * Handed a `goTo`, so a caller can drive the list from an outline: a
-   * section key scrolls to where the section starts (its header, or its first
-   * row when there are none), a row key to that row.
+   * section key scrolls to its first row, a row key to that row.
    */
   readonly ref?: (scrollTo: (key: string) => void) => void;
 }
@@ -179,7 +153,6 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   let lastFlat:
     | {
         readonly entries: readonly Entry<T>[];
-        readonly starts: readonly number[];
         readonly indexOfKey: ReadonlyMap<string, number>;
         readonly startOfSection: ReadonlyMap<string, number>;
       }
@@ -195,48 +168,22 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
       )
         return lastFlat;
       const entries: Entry<T>[] = [];
-      /**
-       * Where each section starts, ascending — its header, or its first row
-       * when the list draws no headers. What the sticky and active-section
-       * searches walk.
-       */
-      const starts: number[] = [];
       const indexOfKey = new Map<string, number>();
+      /** Where each section starts: its first row. A section with none has nowhere. */
       const startOfSection = new Map<string, number>();
-      const headed = props.header !== undefined;
       for (const section of sections) {
-        // A headerless section with no rows has nowhere to start.
-        if (!headed && section.rows.length === 0) continue;
-        starts.push(entries.length);
-        startOfSection.set(section.key, entries.length);
-        if (headed) entries.push({ kind: "header", key: `header:${section.key}`, section });
+        if (section.rows.length > 0) startOfSection.set(section.key, entries.length);
         for (const row of section.rows) {
           indexOfKey.set(row.key, entries.length);
-          entries.push({ kind: "row", key: row.key, row, section });
+          entries.push({ key: row.key, row });
         }
       }
       lastSections = sections;
-      lastFlat = { entries, starts, indexOfKey, startOfSection };
+      lastFlat = { entries, indexOfKey, startOfSection };
       return lastFlat;
     },
     { name: "virtualFlat" },
   );
-
-  /**
-   * Where the section a given first-visible index sits in starts: the last
-   * start at or above it — its header, when there are headers. Deliberately a
-   * pure function of an index rather than of the scroll position, so the range
-   * extractor and the renderer cannot disagree about which header is the
-   * sticky one.
-   */
-  const sectionStartAbove = (index: number): number => {
-    let found = 0;
-    for (const at of untrack(flat).starts) {
-      if (at > index) break;
-      found = at;
-    }
-    return found;
-  };
 
   /** What the virtualizer reports, as Solid state. The writes are below. */
   const [items, setItems] = createSignal<readonly VirtualItem[]>([], { name: "virtualItems" });
@@ -247,18 +194,13 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
    *
    * The reader's place in a list is a row, not a number of pixels — see the
    * rebuild rule in the effect further down, which is the only thing this is
-   * for. Headers are left out on purpose: a section that survives a rebuild
-   * says the books still have results, not that the reader's place is still
-   * there.
+   * for.
    */
   let onScreen: readonly string[] = [];
 
   /** Publish one window, and remember the rows it held. */
   const remember = (window: readonly VirtualItem[]): void => {
-    const entries = untrack(flat).entries;
-    onScreen = window
-      .filter((item) => entries[item.index]?.kind === "row")
-      .map((item) => String(item.key));
+    onScreen = window.map((item) => String(item.key));
     setItems(window);
   };
 
@@ -280,21 +222,17 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     // the options when `scroller` moves, and it tracks it in its compute.
     getScrollElement: () => untrack(scroller) ?? null,
     estimateSize: (index: number) => {
-      const entry = untrack(flat).entries[index];
-      return entry === undefined ? HEADER : entry.kind === "header" ? HEADER : entry.row.estimate;
+      return untrack(flat).entries[index]?.row.estimate ?? 0;
     },
     // The caller's own stable string. It keys the library's measurement cache,
     // so a row that leaves the window and comes back is the height it was, and
     // it is what the `<For>` below reconciles on.
     getItemKey: (index: number) => untrack(flat).entries[index]?.key ?? index,
     overscan: OVERSCAN,
-    // Two indices are kept in the window whatever the scroll says: the header
-    // that is currently stuck (it has to exist to be sticky) and the caller's
-    // pinned row (unmounting an open editor would throw away the reader's
-    // work).
+    // The caller's pinned row is kept in the window whatever the scroll says:
+    // unmounting an open editor would throw away the reader's work.
     rangeExtractor: (range: Range) => {
       const keep = new Set(defaultRangeExtractor(range));
-      if (props.header !== undefined) keep.add(sectionStartAbove(range.startIndex));
       // Read at range time, untracked for the same reason: the library asks
       // what is pinned NOW, and a stale answer would unmount an open editor.
       const pinned = untrack(() => props.pinned);
@@ -420,41 +358,6 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     },
   );
 
-  /** The first item the reader can actually see, as an index. */
-  const firstVisible = createMemo(
-    () => {
-      const at = offset();
-      for (const item of items()) if (item.start + item.size > at) return item.index;
-      return 0;
-    },
-    { name: "virtualFirstVisible" },
-  );
-
-  /** Where the section being read starts — with headers, the stuck one. */
-  const stuck = createMemo(() => sectionStartAbove(firstVisible()), { name: "virtualStuck" });
-
-  /**
-   * The section a jump asked for and could not bring to the top — a short last
-   * section, below which the list ends. It is the active one until the reader
-   * scrolls; see `aim`.
-   */
-  const [asked, setAsked] = createSignal<string | undefined>(undefined, {
-    name: "virtualAsked",
-  });
-
-  // `flat` tracked too: a regrouping keeps the top index (0) and changes the
-  // section under it.
-  const activeSection = createMemo(() => asked() ?? flat().entries[stuck()]?.section.key, {
-    name: "virtualActive",
-  });
-
-  createEffect(
-    () => activeSection(),
-    (key) => {
-      if (key !== undefined) props.onActive?.(key);
-    },
-  );
-
   /**
    * The re-aim after a jump, while the rows it lands among are measured.
    *
@@ -473,21 +376,8 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   };
   onCleanup(stopAiming);
 
-  /** The reader's own scroll: no re-aim, and no section held from a jump. */
-  const readerScrolled = (): void => {
+  const aim = (index: number): void => {
     stopAiming();
-    setAsked(undefined);
-  };
-
-  /**
-   * `section` is the section a jump asked for. A short last section cannot
-   * reach the top — the list ends first — so the one above it stays on top and
-   * the outline would name that. A jump that ends against the bottom names the
-   * section it was asked for instead, until the reader scrolls.
-   */
-  const aim = (index: number, section: string | undefined): void => {
-    stopAiming();
-    setAsked(undefined);
     virtualizer.scrollToIndex(index, { align: "start" });
     let still = 0;
     let frames = 0;
@@ -495,18 +385,12 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
       const element = untrack(scroller);
       const target = virtualizer.getOffsetForIndex(index, "start")?.[0];
       if (element === undefined || target === undefined || ++frames > 60) return stopAiming();
-      const bottom = element.scrollHeight - element.clientHeight;
-      const reachable = Math.min(target, bottom);
-      if (Math.abs(element.scrollTop - reachable) > 1) {
+      // `target` is already clamped to the bottom, so a short last section
+      // settles there like any other.
+      if (Math.abs(element.scrollTop - target) > 1) {
         still = 0;
         virtualizer.scrollToOffset(target);
-      } else if (++still >= 3) {
-        // `getOffsetForIndex` is already clamped to the bottom, so the row's
-        // own start is what says the list ended before the section's top.
-        const start = virtualizer.measurementsCache[index]?.start ?? target;
-        if (section !== undefined && start > bottom + 1) setAsked(section);
-        return stopAiming();
-      }
+      } else if (++still >= 3) return stopAiming();
       aiming = requestAnimationFrame(step);
     };
     aiming = requestAnimationFrame(step);
@@ -515,9 +399,8 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   /** Where a section starts, or — for a key that names no section — that row. */
   const goTo = (key: string): void => {
     const held = untrack(flat);
-    const start = held.startOfSection.get(key);
-    const at = start ?? held.indexOfKey.get(key);
-    if (at !== undefined) aim(at, start === undefined ? undefined : key);
+    const at = held.startOfSection.get(key) ?? held.indexOfKey.get(key);
+    if (at !== undefined) aim(at);
   };
 
   createEffect(
@@ -558,10 +441,10 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     <div
       ref={setScroller}
       onScroll={(event) => setOffset(event.currentTarget.scrollTop)}
-      onWheel={readerScrolled}
-      onTouchStart={readerScrolled}
-      onPointerDown={readerScrolled}
-      onKeyDown={readerScrolled}
+      onWheel={stopAiming}
+      onTouchStart={stopAiming}
+      onPointerDown={stopAiming}
+      onKeyDown={stopAiming}
       data-virtual={props.sections.length}
       role={props.role}
       class={props.class ?? "min-h-0 min-w-0 flex-1 overflow-y-auto pe-1"}
@@ -578,15 +461,6 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
                 const index = at();
                 return index === undefined ? undefined : flat().entries[index];
               };
-              const asHeader = () => {
-                const held = entry();
-                return held?.kind === "header" ? held : undefined;
-              };
-              const asRow = () => {
-                const held = entry();
-                return held?.kind === "row" ? held : undefined;
-              };
-              const isStuck = () => at() === stuck();
               const start = () => geometry().get(key) ?? 0;
 
               /**
@@ -608,32 +482,17 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
               );
 
               return (
-                <>
-                  <Show when={props.header !== undefined && asHeader()}>
-                    {(header) => (
-                      // `sticky` cannot live inside a transform, so the stuck
-                      // header is positioned by `sticky` and every other one by
-                      // the transform the virtualizer computed.
-                      <div
-                        class={isStuck() ? "sticky top-0 z-20" : "absolute inset-x-0 top-0 z-10"}
-                        style={isStuck() ? undefined : { transform: `translateY(${start()}px)` }}
-                      >
-                        {props.header?.(() => header().section, setMeasured)}
-                      </div>
-                    )}
-                  </Show>
-                  <Show when={asRow()}>
-                    {(row) => (
-                      <div
-                        ref={setMeasured}
-                        class="absolute inset-x-0 top-0"
-                        style={{ transform: `translateY(${start()}px)` }}
-                      >
-                        {props.row(() => row().row.item, key)}
-                      </div>
-                    )}
-                  </Show>
-                </>
+                <Show when={entry()}>
+                  {(row) => (
+                    <div
+                      ref={setMeasured}
+                      class="absolute inset-x-0 top-0"
+                      style={{ transform: `translateY(${start()}px)` }}
+                    >
+                      {props.row(() => row().row.item, key)}
+                    </div>
+                  )}
+                </Show>
               );
             }}
           </For>

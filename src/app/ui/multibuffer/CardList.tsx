@@ -55,11 +55,6 @@ export interface CardSession {
 
 export interface CardListProps<T> {
   readonly sections: readonly VirtualSection<T>[];
-  /** None for a list whose cards name their own section — see `VirtualList`. */
-  readonly header?: (
-    section: Accessor<VirtualSection<T>>,
-    ref: (element: HTMLElement) => void,
-  ) => JSX.Element;
   readonly card: (item: Accessor<T>, key: string, session: CardSession) => JSX.Element;
   /** The book a card's edits land in: its edits are what the re-take waits for. */
   readonly bookOf: (item: T) => BookId;
@@ -85,7 +80,6 @@ export interface CardListProps<T> {
    */
   readonly onEditing?: (editing: boolean) => void;
   readonly focus?: string;
-  readonly onActive?: (section: string) => void;
   readonly ref?: (goTo: (key: string) => void) => void;
   readonly empty?: JSX.Element;
 }
@@ -236,10 +230,8 @@ export function CardList<T>(props: CardListProps<T>) {
       sections={shown()}
       pinned={editing()}
       focus={props.focus}
-      onActive={props.onActive}
       ref={props.ref}
       empty={props.empty}
-      header={props.header}
       row={(item, key) =>
         key.startsWith(LINE) ? (
           <div class="pt-3" data-card-line={key.slice(LINE.length)}>

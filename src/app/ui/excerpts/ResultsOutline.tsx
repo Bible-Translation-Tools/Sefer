@@ -32,7 +32,8 @@ export interface ResultsOutlineProps {
   readonly label: (row: OutlineRow) => string;
   /** A card's row key, which is what a chapter tile scrolls to. */
   readonly keyOf: (group: BookExcerpts, excerpt: Excerpt) => string;
-  readonly onGo: (key: string) => void;
+  /** Go to `key` — a section, or a row — in section `section`: the one this row highlights. */
+  readonly onGo: (key: string, section: string) => void;
 }
 
 interface ChapterTile {
@@ -127,7 +128,7 @@ export function ResultsOutline(props: ResultsOutlineProps) {
                     }
                     class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start text-small transition-colors data-focused:bg-sidebar-surface-active data-focused:font-medium data-focused:text-brand not-data-focused:text-sidebar-on-surface not-data-focused:hover:bg-sidebar-surface-hover"
                     onClick={() => {
-                      props.onGo(row.bookId);
+                      props.onGo(row.bookId, row.bookId);
                       if (!isOpen(row.bookId)) toggle(row.bookId);
                     }}
                   >
@@ -165,7 +166,7 @@ export function ResultsOutline(props: ResultsOutlineProps) {
                                 chapter: tile.label,
                               })}
                               class="flex w-full cursor-pointer items-baseline justify-center gap-1 rounded-md border border-surface-border bg-surface-primary py-1 text-center text-smallest tabular-nums text-on-surface-secondary transition-colors hover:bg-sidebar-surface-hover"
-                              onClick={() => props.onGo(tile.first)}
+                              onClick={() => props.onGo(tile.first, row.bookId)}
                             >
                               {tile.label}
                             </button>

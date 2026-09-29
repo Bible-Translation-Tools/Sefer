@@ -93,6 +93,11 @@ export const sameFields = (
 
 export function DiffCard(props: {
   readonly hunk: Hunk;
+  /**
+   * The book's name, for the title: every card names its whole place
+   * ("Genesis 3:6"), never the chapter and verse alone.
+   */
+  readonly bookName: string;
   readonly sides: DiffSides;
   readonly split: boolean;
   readonly usfm: boolean;
@@ -324,7 +329,7 @@ export function DiffCard(props: {
   return (
     <CardFrame
       data={{ "data-diff-card": props.hunk.key }}
-      label={hunkLabel(props.hunk)}
+      label={`${props.bookName} ${hunkLabel(props.hunk)}`}
       gone={props.gone}
       badges={
         <>

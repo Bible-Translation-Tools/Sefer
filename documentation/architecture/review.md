@@ -224,7 +224,8 @@ markup** switch). `src/app/ui/review/ReviewReader.tsx` holds it together, over
   back; the one control and one rule, `stepExtent`, on every card in Sefer);
   changes that fall in a card's context are painted
   there too, and neighbouring cards may show the same context, as Find's do.
-  Across every book that differs, with a sticky header per book. Or the WHOLE
+  Across every book that differs; each card's title names its whole place
+  ("Genesis 3:6"), so the list has no book headers. Or the WHOLE
   BOOK with its changes drawn in place, the other pane of a split following
   your place by unit (the reference pane's `watchLocation` pattern). A card's
   book icon opens it in the book at the same change, and Changes returns to
@@ -250,8 +251,9 @@ counter says where you are.
 
 **Decisions in three sizes.** A unit, in the gutter: ✓ keeps the current
 side's text, ↶ takes the other's, pressing the chosen one again clears it. A
-card, in its header ("Keep all here", "Take all here"). A book, in its header,
-over the changes the filter shows. A decided unit stops shouting: kept is
+card, in its header ("Keep all here", "Take all here"). A book, from its
+row's menu in the sidebar (and the Whole book toolbar), over the changes the
+filter shows; the row counts how many are decided. A decided unit stops shouting: kept is
 underlined quietly, taken gets a neutral wash. Strikeout means removed words and
 nothing else. There is no project-wide bulk
 decision beyond Clear: "keep every markup-only change in Genesis" is a

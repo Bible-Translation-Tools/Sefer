@@ -39,6 +39,7 @@ import BookOpen from "lucide-solid/icons/book-open";
 import CheckIcon from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import Columns2 from "lucide-solid/icons/columns-2";
+import MoreVertical from "lucide-solid/icons/more-vertical";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
 import type { BookId } from "#core/book/book";
@@ -72,6 +73,7 @@ import {
   IconButton,
   Menu,
   MenuCheckbox,
+  MenuItem,
   MenuLabel,
   MenuRadio,
   MenuSeparator,
@@ -525,7 +527,13 @@ export function ReviewReader(props: {
     if (card !== undefined && card !== "") requestAnimationFrame(() => goTo?.(card));
   };
 
+  /** The book last picked in the sidebar: the row it highlights in Changes. */
+  const [activeBook, setActiveBook] = createSignal<BookId | undefined>(undefined, {
+    name: "reviewActiveBook",
+  });
+
   const pickBook = (bookId: BookId): void => {
+    setActiveBook(bookId);
     props.onSelect(bookId);
     setPlace(undefined);
     setOpened(undefined);
@@ -636,11 +644,9 @@ export function ReviewReader(props: {
   /**
    * The sidebar navigates the CHANGES, as Find's does its results: one row per
    * book that differs, with how many of its changes are decided. A row goes to
-   * the book — its section in Changes, the book itself in Whole book.
+   * the book — its section in Changes, the book itself in Whole book — and its
+   * menu decides the whole book, which is why the list itself has no headers.
    */
-  const [activeBook, setActiveBook] = createSignal<BookId | undefined>(undefined, {
-    name: "reviewActiveBook",
-  });
   onCleanup(
     claimSidebar(() => (
       <div
@@ -664,18 +670,19 @@ export function ReviewReader(props: {
             <For each={prepared()}>
               {(held) => {
                 const here = (): boolean =>
-                  (scope() === "book" ? selectedBook()?.book.bookId : activeBook()) ===
-                  held.book.bookId;
+                  (scope() === "book"
+                    ? selectedBook()?.book.bookId
+                    : (activeBook() ?? prepared()[0]?.book.bookId)) === held.book.bookId;
                 const done = (): boolean =>
                   held.shown.length > 0 && decidedOf(held) === held.shown.length;
                 return (
-                  <li>
+                  <li class="flex items-center gap-0.5">
                     <button
                       type="button"
                       data-outline={held.book.bookId}
                       data-focused={here() ? "" : undefined}
                       aria-current={here() ? "true" : undefined}
-                      class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start text-small transition-colors data-focused:bg-sidebar-surface-active data-focused:font-medium data-focused:text-brand not-data-focused:text-sidebar-on-surface not-data-focused:hover:bg-sidebar-surface-hover"
+                      class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start text-small transition-colors data-focused:bg-sidebar-surface-active data-focused:font-medium data-focused:text-brand not-data-focused:text-sidebar-on-surface not-data-focused:hover:bg-sidebar-surface-hover"
                       onClick={() => pickBook(held.book.bookId)}
                     >
                       <Show
@@ -691,6 +698,38 @@ export function ReviewReader(props: {
                           : String(held.shown.length)}
                       </span>
                     </button>
+                    <Show when={props.decidable && held.shown.length > 0}>
+                      <Menu
+                        label={t("Decide {book}", { book: held.book.name })}
+                        side="bottom"
+                        align="end"
+                        class="w-56"
+                        trigger={
+                          <IconButton
+                            size="sm"
+                            label={t("Decide all of {book}", { book: held.book.name })}
+                            icon={<MoreVertical size={14} />}
+                            data-review-book-menu={held.book.bookId}
+                          />
+                        }
+                      >
+                        <MenuItem
+                          onSelect={() => props.decide(held.book.bookId, held.shown, "current")}
+                        >
+                          {t("Keep all of {source}'s", { source: props.currentShort })}
+                        </MenuItem>
+                        <MenuItem
+                          onSelect={() => props.decide(held.book.bookId, held.shown, "baseline")}
+                        >
+                          {t("Take all of {source}'s", { source: props.baselineShort })}
+                        </MenuItem>
+                        <MenuItem
+                          onSelect={() => props.decide(held.book.bookId, held.shown, undefined)}
+                        >
+                          {t("Clear")}
+                        </MenuItem>
+                      </Menu>
+                    </Show>
                   </li>
                 );
               }}
@@ -936,42 +975,10 @@ export function ReviewReader(props: {
             ref={(scrollTo) => {
               goTo = scrollTo;
             }}
-            onActive={(bookId) => {
-              setActiveBook(bookId);
-              props.onSelect(bookId);
-            }}
-            header={(section, ref) => {
-              const held = () => prepared().find((entry) => entry.book.bookId === section().key);
-              return (
-                <header
-                  ref={ref}
-                  class="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-surface-border bg-surface-secondary/95 px-1 py-1.5 backdrop-blur-xs"
-                  data-review-section={section().key}
-                >
-                  <strong class="text-small font-semibold">
-                    {held()?.book.name ?? section().key}
-                  </strong>
-                  <span class="text-smallest text-on-surface-tertiary">
-                    {props.decidable
-                      ? t("{cards} cards · {decided} of {total} decided", {
-                          cards: section().rows.length,
-                          decided: decidedOf(held()),
-                          total: held()?.shown.length ?? 0,
-                        })
-                      : t("{cards} cards · {total} changes", {
-                          cards: section().rows.length,
-                          total: held()?.shown.length ?? 0,
-                        })}
-                  </span>
-                  <div class="ms-auto">
-                    <Show when={held()}>{(found) => <BookActions held={found()} />}</Show>
-                  </div>
-                </header>
-              );
-            }}
             card={(item, _key, session) => (
               <DiffCard
                 hunk={item().hunk}
+                bookName={item().held.book.name}
                 sides={item().held.sides}
                 split={split()}
                 usfm={props.usfm}
