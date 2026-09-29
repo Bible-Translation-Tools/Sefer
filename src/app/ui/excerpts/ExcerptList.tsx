@@ -181,6 +181,14 @@ export function ExcerptList(props: ExcerptListProps) {
     name: "excerptActiveBook",
   });
   let goTo: ((key: string) => void) | undefined;
+
+  /** Each card as it was last drawn, context and all, by row key. */
+  const lastShown = new Map<string, Excerpt>();
+  const shown = (excerpt: Excerpt, key: string): Excerpt => {
+    const drawn = props.shownOf?.(excerpt) ?? excerpt;
+    lastShown.set(key, drawn);
+    return drawn;
+  };
   const go = (key: string, section: string): void => {
     setActive(section);
     goTo?.(key);
@@ -342,9 +350,11 @@ export function ExcerptList(props: ExcerptListProps) {
         card={(excerpt, key, session) => (
           <ExcerptCard
             excerpt={
-              // A pinned card gone from the results is drawn from its own
-              // snapshot: there is no result left to widen.
-              session.gone ? excerpt() : (props.shownOf?.(excerpt()) ?? excerpt())
+              // A pinned card gone from the results — its finding resolved by
+              // the edit in it — has no result left to widen, so it is drawn
+              // as it was last SHOWN: widened to the chapter, it stays the
+              // chapter, rather than the one-verse snapshot the pin took.
+              session.gone ? (lastShown.get(key) ?? excerpt()) : shown(excerpt(), key)
             }
             editing={session.editing}
             gone={session.gone ? session.goneLabel : undefined}
