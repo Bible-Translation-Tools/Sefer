@@ -1,14 +1,15 @@
 import { createFileRoute, lazyRouteComponent, notFound } from "@tanstack/solid-router";
 
 /**
- * `/project/$slug/playground` — a dev-only room for trying UI on real text.
+ * `/project/$slug/playground` — a prototype room for trying UI on real text.
  *
- * Gated exactly the way `/dev/fixture` is, and for the same reason:
- * `import.meta.env.DEV` is a build-time constant, so the branch below is
- * unreachable in a production build and nothing under `src/dev/playground` —
- * the experiments, the synthetic draft, the `import.meta.glob` of untracked
- * sketches — enters the bundle. Production answers the path with the not-found
- * boundary.
+ * Gated the way `/design` is (`__SEFER_DESIGN__`), so it is on the dev server
+ * AND the deployed `dev` channel, where a product owner can be sent a link,
+ * and never in production: the branch below is unreachable there, so nothing
+ * under `src/dev/playground` — the experiments, the synthetic draft, the
+ * `import.meta.glob` of untracked sketches — enters the bundle, and the path
+ * is the not-found boundary. `pnpm verify:design` checks that against real
+ * builds; `documentation/dev-only-routes.md` lists every route gated this way.
  *
  * It lives UNDER the project rather than beside `/dev/fixture` on purpose: the
  * parent route has already opened the project by the time a child renders, so
@@ -20,7 +21,7 @@ import { createFileRoute, lazyRouteComponent, notFound } from "@tanstack/solid-r
  * eagerly to wrap it.
  */
 const loadPlayground = async () => {
-  if (import.meta.env.DEV) {
+  if (__SEFER_DESIGN__) {
     const page = await import("#dev/playground/PlaygroundPage");
     return { default: page.PlaygroundPage };
   }
@@ -29,7 +30,7 @@ const loadPlayground = async () => {
 
 export const Route = createFileRoute("/_app/project/$slug/playground")({
   beforeLoad: () => {
-    if (!import.meta.env.DEV) throw notFound();
+    if (!__SEFER_DESIGN__) throw notFound();
   },
   /**
    * Every string parameter is kept, and nothing is declared — the same bargain

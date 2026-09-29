@@ -26,11 +26,17 @@ import path from "node:path";
 import process from "node:process";
 
 /**
- * A string that exists in the design surface and nowhere else. It lives in
- * `DesignHome.tsx` next to a note saying so, because a sentinel somebody
- * deletes while tidying is worse than no sentinel at all.
+ * Every surface behind `__SEFER_DESIGN__`, each by a string that exists in it
+ * and nowhere else. Each sentinel lives in its page next to a note saying so,
+ * because a sentinel somebody deletes while tidying is worse than no sentinel
+ * at all. A new route behind the switch adds a row here and one to
+ * `documentation/dev-only-routes.md`.
  */
-const SENTINEL = "__sefer_design_surface__";
+const SURFACES = [
+  { name: "/design", sentinel: "__sefer_design_surface__" },
+  { name: "/project/$slug/playground", sentinel: "__sefer_playground_surface__" },
+  { name: "/playground/history-diff", sentinel: "__sefer_history_diff_surface__" },
+] as const;
 
 /**
  * Always `dist`. The turnkey Solid Start plugin builds its own client and
@@ -49,7 +55,7 @@ const build = (mode: string): void => {
   });
 };
 
-const containsSentinel = (directory: string): string | null => {
+const containsSentinel = (directory: string, sentinel: string): string | null => {
   const walk = (current: string): string | null => {
     for (const entry of readdirSync(current, { withFileTypes: true })) {
       const full = path.join(current, entry.name);
@@ -62,7 +68,7 @@ const containsSentinel = (directory: string): string | null => {
       // shipped code, and matching it would report a leak that is not one.
       if (entry.name === "manifest.json") continue;
       if (!entry.isFile() || statSync(full).size === 0) continue;
-      if (readFileSync(full, "utf8").includes(SENTINEL)) return full;
+      if (readFileSync(full, "utf8").includes(sentinel)) return full;
     }
     return null;
   };
@@ -73,16 +79,20 @@ const main = (): void => {
   const failures: string[] = [];
 
   build("production");
-  const leaked = containsSentinel(DIST);
-  if (leaked === null) process.stdout.write("production: design surface absent ✓\n");
-  else failures.push(`production build ships the design surface: ${leaked}`);
+  for (const surface of SURFACES) {
+    const leaked = containsSentinel(DIST, surface.sentinel);
+    if (leaked === null) process.stdout.write(`production: ${surface.name} absent ✓\n`);
+    else failures.push(`production build ships ${surface.name}: ${leaked}`);
+  }
 
   build("dev");
-  const present = containsSentinel(DIST);
-  if (present === null) {
-    failures.push("dev build does NOT ship the design surface — the gate is off in both modes");
-  } else {
-    process.stdout.write("dev: design surface present ✓\n");
+  for (const surface of SURFACES) {
+    const present = containsSentinel(DIST, surface.sentinel);
+    if (present === null) {
+      failures.push(`dev build does NOT ship ${surface.name} — its gate is off in both modes`);
+    } else {
+      process.stdout.write(`dev: ${surface.name} present ✓\n`);
+    }
   }
 
   // Left as the design build, which is not what anybody wants to deploy.

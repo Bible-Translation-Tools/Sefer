@@ -40,6 +40,14 @@ import { experiments } from "./registry";
 // page, so importing it back would make a cycle.
 const Route = getRouteApi("/_app/project/$slug/playground");
 
+/**
+ * A string that exists here and nowhere else, so `pnpm verify:design` can ask
+ * a real build whether this page got into it (see `SURFACES` in
+ * `tools/verify/designBundle.ts`). Rendered as an attribute, not kept as a
+ * dead constant, so no minifier can decide it is unused. Do not tidy it away.
+ */
+const SENTINEL = "__sefer_playground_surface__";
+
 function Playground() {
   const shell = useShell();
   const services = shell.services;
@@ -250,7 +258,11 @@ function Playground() {
         </div>
       </header>
 
-      <main class="min-h-0 flex-1 overflow-auto" data-experiment={chosen()?.id}>
+      <main
+        class="min-h-0 flex-1 overflow-auto"
+        data-experiment={chosen()?.id}
+        data-prototype-surface={SENTINEL}
+      >
         {/* `keyed`, and it matters: without it a `Show` re-runs its child only
             when the condition crosses falsy, so switching experiments would
             swap the label and leave the previous one on screen. Keyed remounts

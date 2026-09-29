@@ -151,6 +151,14 @@ const describeMerge = (value: MergeFacts | "working" | string): string => {
 
 const shortBook = (name: string): string => name.replace(/^\d+-/u, "").replace(/\.usfm$/iu, "");
 
+/**
+ * A string that exists here and nowhere else, so `pnpm verify:design` can ask
+ * a real build whether this page got into it (see `SURFACES` in
+ * `tools/verify/designBundle.ts`). Rendered as an attribute, not kept as a
+ * dead constant, so no minifier can decide it is unused. Do not tidy it away.
+ */
+const SENTINEL = "__sefer_history_diff_surface__";
+
 export function HistoryDiffPage() {
   return <ShellGate>{() => <ReadyHistoryDiffPage />}</ShellGate>;
 }
@@ -829,6 +837,7 @@ function ReadyHistoryDiffPage() {
     <div
       class="mx-auto flex max-w-6xl flex-col gap-4 p-4 text-on-surface-primary"
       data-prototype="history-diff"
+      data-prototype-surface={SENTINEL}
     >
       <header class="flex flex-col gap-2">
         <div class="flex items-center gap-2">

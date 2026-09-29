@@ -1,7 +1,18 @@
 import { createFileRoute, lazyRouteComponent, notFound } from "@tanstack/solid-router";
 
+/**
+ * `/playground/history-diff` — the book-history prototype: one slide per
+ * change to a book, newest on the right, each a changed-unit multibuffer
+ * against the version before.
+ *
+ * Gated like `/design` (`__SEFER_DESIGN__`): on the dev server and the `dev`
+ * channel, so it can be shown, and never in production. `pnpm verify:design`
+ * checks it; `documentation/dev-only-routes.md` lists it. The pieces it proves
+ * out (`bookHistory`, `history/packView`, the book index) are meant to move
+ * behind the Git port when History is built for real.
+ */
 const loadHistoryDiff = async () => {
-  if (import.meta.env.DEV) {
+  if (__SEFER_DESIGN__) {
     const page = await import("#dev/playground/HistoryDiffPage");
     return { default: page.HistoryDiffPage };
   }
@@ -33,7 +44,7 @@ const stringOr = (value: unknown): string | undefined =>
 
 export const Route = createFileRoute("/_app/playground/history-diff")({
   beforeLoad: () => {
-    if (!import.meta.env.DEV) throw notFound();
+    if (!__SEFER_DESIGN__) throw notFound();
   },
   validateSearch: (search: Record<string, unknown>): HistoryDiffSearch => {
     const project = stringOr(search.project);
