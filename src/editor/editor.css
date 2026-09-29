@@ -958,6 +958,10 @@
   max-width: none;
   margin: 0;
   padding: 8px 12px;
+}
+/* The reading's ink and size only: USFM keeps its terminal's, or a card's
+   text is near-black on the terminal's black. */
+.cm-excerpt.cm-mode-regular .cm-content {
   font-size: var(--text-body);
   color: var(--on-surface-primary);
 }
