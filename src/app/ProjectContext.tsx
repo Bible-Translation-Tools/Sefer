@@ -253,8 +253,6 @@ export interface Shell {
    * project from a full-page screen). Held as a preference, so it survives a restart.
    */
   readonly lastLocation: (root: string) => LastLocation | undefined;
-  /** The path an Open of `root` should land on: the remembered book, or the census. */
-  readonly landingTarget: (root: string) => LandingTarget;
 
   /** The finding the "next/previous finding" commands point at. */
   readonly finding: Accessor<Finding | undefined>;
@@ -398,21 +396,6 @@ export interface Shell {
  * without either of them importing route ids.
  */
 export type Navigate = UseNavigateResult<string>;
-
-/**
- * Where an Open of a project should land, as the ROUTER's own shape rather
- * than a path string.
- *
- * Not a string: a discriminated pair of typed targets cannot be wrong about a
- * route that moved, which a string silently can, and needs no cast past the
- * typed route union.
- */
-export type LandingTarget =
-  | { readonly to: "/project/$slug"; readonly params: { readonly slug: string } }
-  | {
-      readonly to: "/project/$slug/book/$book";
-      readonly params: { readonly slug: string; readonly book: string };
-    };
 
 /** One row of `shell.recentProjects`: a root, its folder name, and when. */
 export interface RecentProject {
@@ -1137,25 +1120,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
 
   const lastLocation = (root: string): LastLocation | undefined => locations()[root];
 
-  /**
-   * Where an Open of `root` should land.
-   *
-   * The remembered book when there is one, and the project's census otherwise.
-   * The book is NOT checked against the project here — the project may not be
-   * open yet when this is asked — so the route that lands falls back to the
-   * census when the book turns out to be gone.
-   */
-  const landingTarget = (root: string): LandingTarget => {
-    const slug = slugFor(root);
-    const held = lastLocation(root);
-    return held === undefined
-      ? { to: "/project/$slug", params: { slug } }
-      : {
-          to: "/project/$slug/book/$book",
-          params: { slug, book: encodeURIComponent(held.bookId) },
-        };
-  };
-
   const aim = (bookId: BookId, from: number, to?: number, at?: RevealAt): void => {
     setReveal({ bookId, from, to, at });
   };
@@ -1367,7 +1331,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     noteCaret,
     noteChapterAtTop,
     lastLocation,
-    landingTarget,
     finding,
     findings,
     status,

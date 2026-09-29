@@ -159,14 +159,14 @@ export function AppBar() {
     path().startsWith("/project/") && !within().startsWith("/terms") ? "true" : "false";
   const terms = (): "true" | "false" => at("/terms");
   /**
-   * Home: with a project open, back to where the reader left off in it (the
-   * remembered book, as Back to editor does); otherwise `/`, which decides —
+   * Home: with a project open, back to where the reader left off in it —
+   * `/project/$slug`, which decides, as Back to editor does; otherwise `/`, which decides —
    * the last project reopens where it was left, an empty device shows the
    * empty state, and projects never opened here show the projects page.
    */
   const goHome = (): void => {
-    const project = shell.project();
-    if (project !== undefined) void navigate(shell.landingTarget(project.root));
+    if (shell.project() !== undefined)
+      void navigate({ to: "/project/$slug", params: { slug: shell.slug() } });
     else void navigate({ to: "/" });
   };
 
