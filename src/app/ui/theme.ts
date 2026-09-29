@@ -27,9 +27,9 @@ export type Theme = (typeof THEMES)[number];
  * is: every diff surface reads them by existing, and the settings sample shows
  * the one in force.
  */
-export const DIFF_PALETTES = ["standard", "blue-orange"] as const;
+const DIFF_PALETTES = ["standard", "blue-orange"] as const;
 export type DiffPalette = (typeof DIFF_PALETTES)[number];
-export const DIFF_REMOVED_MARKS = ["strike", "underline", "none"] as const;
+const DIFF_REMOVED_MARKS = ["strike", "underline", "none"] as const;
 export type DiffRemovedMark = (typeof DIFF_REMOVED_MARKS)[number];
 
 export interface Appearance {
