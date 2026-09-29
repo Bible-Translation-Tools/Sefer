@@ -74,7 +74,6 @@ import {
   createFindingsFeed,
   foldRuns,
   inMarkup,
-  markupSlice,
   type FindingRun,
   type FindingsRow,
 } from "./findingsFeed";
@@ -106,10 +105,6 @@ export function FindingsPanel() {
   /** The folded runs the reader has opened, by line id. Session state. */
   const [opened, setOpened] = createSignal<ReadonlySet<string>>(new Set(), {
     name: "findingsOpened",
-  });
-  /** The cards whose markup slices the reader has opened, by row key. */
-  const [pinned, setPinned] = createSignal<ReadonlySet<string>>(new Set(), {
-    name: "findingsSlices",
   });
 
   /**
@@ -291,10 +286,6 @@ export function FindingsPanel() {
     setOpened((held) => flip(held, id));
   };
 
-  const toggleSlice = (key: string): void => {
-    setPinned((held) => flip(held, key));
-  };
-
   const analysisFor = (finding: Finding) =>
     Option.getOrUndefined(shell.services.projectAnalysis.analysis(finding.bookId));
 
@@ -440,38 +431,18 @@ export function FindingsPanel() {
     );
 
   /**
-   * What a card IS, in its header: its severity, and whether a finding sits in
-   * markup or is stale — the same place Review says "markup only". A card that
-   * mixes severities badges each, and its lines say which is which.
+   * What a card IS, in its header: its severity, and whether a finding is
+   * stale. A card that mixes severities badges each, and its lines say which
+   * is which. A finding in markup is the card's code icon (`offerUsfm`).
    */
   const badges = (_excerpt: Excerpt, key: string) => {
     const row = feed.row(key);
     if (row === undefined) return undefined;
-    const markup = row.findings.some((finding) => inMarkup(row.excerpt, finding));
     return (
       <>
         <For each={severitiesOf(row)}>
           {(severity) => <Badge tone={severityTone(severity)}>{severity}</Badge>}
         </For>
-        <Show when={markup}>
-          {/* The span has no character in the reading — it is inside a
-              marker name, an attribute, a control character. The card keeps
-              showing the verse, says so here, and offers the raw slice
-              rather than quietly marking a different character. As Review's
-              "markup only" card does, and not in USFM mode, which shows it. */}
-          <Badge tone="muted">{t("in markup")}</Badge>
-          <Show when={mode() !== "usfm"}>
-            <Button
-              size="sm"
-              variant="tertiary"
-              data-markup-toggle
-              aria-pressed={pinned().has(key) ? "true" : "false"}
-              onClick={() => toggleSlice(key)}
-            >
-              {pinned().has(key) ? t("Hide markup") : t("Show markup")}
-            </Button>
-          </Show>
-        </Show>
         <Show when={row.findings.some(isStale)}>
           <Badge tone="muted">{t("stale")}</Badge>
         </Show>
@@ -541,21 +512,6 @@ export function FindingsPanel() {
           </Show>
         </div>
 
-        <Show when={markup && pinned().has(row.key)}>
-          {/* Raw USFM is never the card's BODY, only the answer to "what is
-              there, then" — the header's Show markup. */}
-          <p
-            data-markup-slice
-            class="px-0.5 font-mono text-smallest break-all text-on-surface-tertiary"
-          >
-            <span class="opacity-70">{markupSlice(row.excerpt, finding).before}</span>
-            <mark class="rounded-xs bg-surface-warning px-px font-semibold text-on-surface-warning">
-              {markupSlice(row.excerpt, finding).hit}
-            </mark>
-            <span class="opacity-70">{markupSlice(row.excerpt, finding).after}</span>
-          </p>
-        </Show>
-
         <Show when={folded && opened().has(id)}>
           <ul class="ms-4 flex flex-col gap-0.5 border-s border-surface-border ps-2">
             <For each={run?.members.slice(1) ?? []}>{(member) => line(row, member)}</For>
@@ -602,6 +558,13 @@ export function FindingsPanel() {
     // No "Open in editor": the card's own context steps widen it to the
     // chapter, and Enter on the current card still opens the editor there.
     openable: false,
+    // A span with no character in the reading — inside a marker name, an
+    // attribute, a control character — is shown by switching the card to
+    // USFM, where it is marked; the reading keeps the verse as the body.
+    offerUsfm: (_excerpt, key) => {
+      const row = feed.row(key);
+      return row?.findings.some((finding) => inMarkup(row.excerpt, finding)) === true;
+    },
   };
 
   /**

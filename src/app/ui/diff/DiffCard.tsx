@@ -19,6 +19,7 @@
 
 import type { EditorView } from "@codemirror/view";
 import type { JSX } from "@solidjs/web";
+import CodeIcon from "lucide-solid/icons/code";
 import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
 import type { Analysis } from "#core/galley";
@@ -39,7 +40,7 @@ import { t } from "../../i18n";
 import { CardEditor } from "../multibuffer/CardEditor";
 import { CardFrame } from "../multibuffer/CardFrame";
 import { ContextControl, type ContextStep } from "../multibuffer/ContextControl";
-import { Badge, Button, cx } from "../primitives";
+import { Badge, cx, IconButton } from "../primitives";
 import { hunkKind, hunkLabel, type Hunk } from "./hunks";
 import { hunkPaint, sidePaint, type Controls } from "./paint";
 
@@ -135,7 +136,7 @@ export function DiffCard(props: {
     name: "cardRight",
   });
 
-  /** This card's own "Show markup", over the screen's mode. */
+  /** This card's own switch to USFM (its code icon), over the screen's mode. */
   const [markup, setMarkup] = createSignal(false, { name: "cardMarkup" });
   const usfm = (): boolean => props.usfm || markup();
 
@@ -341,15 +342,14 @@ export function DiffCard(props: {
                   {kind()}
                 </Badge>
                 <Show when={!props.usfm}>
-                  <Button
+                  <IconButton
                     size="sm"
-                    variant="tertiary"
+                    label={markup() ? t("Show the reading") : t("Show the USFM")}
+                    icon={<CodeIcon size={14} />}
                     aria-pressed={markup() ? "true" : "false"}
                     data-card-markup=""
                     onClick={() => setMarkup((was) => !was)}
-                  >
-                    {markup() ? t("Hide markup") : t("Show markup")}
-                  </Button>
+                  />
                 </Show>
               </>
             )}

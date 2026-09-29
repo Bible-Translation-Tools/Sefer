@@ -29,14 +29,14 @@
  * produced no mark in the projection has no character in the reading — it is
  * inside a marker name, an attribute, a control character — which is exactly
  * what `Excerpts.quote` reports as `projected: false`. Asking the excerpt
- * costs nothing and needs no second analysis, and the raw slice is cut from
- * `Excerpt.source`, which is the text of the card's own span.
+ * costs nothing and needs no second analysis; such a card offers its own
+ * switch to USFM, where the span is marked.
  *
  * ### What belongs in core later
  *
- * `markupSlice` and `foldRuns` are pure functions over values core already
- * owns, and both would sit comfortably beside `quote`; nothing in either
- * reaches for Solid, the router or a host, so moving them is a cut and paste.
+ * `foldRuns` is a pure function over values core already owns, and would sit
+ * comfortably beside `quote`; nothing in it reaches for Solid, the router or a
+ * host, so moving it is a cut and paste.
  */
 
 import { createMemo, type Accessor } from "solid-js";
@@ -176,39 +176,6 @@ const inPlace = (findings: readonly Finding[]): readonly Finding[] =>
  */
 export const inMarkup = (excerpt: Excerpt, finding: Finding): boolean =>
   !excerpt.marks.some((mark) => mark.source === finding.from);
-
-/** A quotation cut from raw USFM, in three parts so the span can be marked. */
-export interface RawSlice {
-  readonly before: string;
-  readonly hit: string;
-  readonly after: string;
-}
-
-const BEFORE = 24;
-const AFTER = 32;
-
-const flat = (part: string): string => part.replace(/\s+/g, " ");
-
-/**
- * The raw USFM around a finding's span, cut from the card's own source.
- *
- * `Excerpt.source` is the text of `Excerpt.span`, so this is a subtraction and
- * not a mapping — the same arithmetic the card's USFM mode does. Clamped at
- * both ends, because a span may reach past the verses the card is showing.
- */
-export const markupSlice = (excerpt: Excerpt, finding: Finding): RawSlice => {
-  const base = excerpt.span.from;
-  const length = excerpt.source.length;
-  const at = Math.max(0, Math.min(length, finding.from - base));
-  const to = Math.max(at, Math.min(length, finding.to - base));
-  const start = Math.max(0, at - BEFORE);
-  const end = Math.min(length, to + AFTER);
-  return {
-    before: `${start > 0 ? "…" : ""}${flat(excerpt.source.slice(start, at))}`,
-    hit: flat(excerpt.source.slice(at, to)),
-    after: `${flat(excerpt.source.slice(to, end))}${end < length ? "…" : ""}`,
-  };
-};
 
 /** A run of identical findings, folded into the one line that stands for them. */
 export interface FindingRun {

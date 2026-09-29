@@ -130,6 +130,8 @@ export interface ExcerptDecor {
   readonly notes?: (excerpt: Excerpt, key: string) => JSX.Element;
   /** False: no "Open in editor" on a card — the card's own context steps open it wider. */
   readonly openable?: boolean;
+  /** Whether a card offers its own USFM switch — see `ExcerptCardProps.offerUsfm`. */
+  readonly offerUsfm?: (excerpt: Excerpt, key: string) => boolean;
   /** A card's footer actions — review progress, a quick filter. */
   readonly actions?: (excerpt: Excerpt, key: string) => JSX.Element;
   /** What a highlight means — see `ExcerptCardProps.markTone`. */
@@ -373,6 +375,7 @@ export function ExcerptList(props: ExcerptListProps) {
             badges={props.decor?.badges?.(excerpt(), key)}
             notes={props.decor?.notes?.(excerpt(), key)}
             openable={props.decor?.openable}
+            offerUsfm={props.decor?.offerUsfm?.(excerpt(), key)}
             actions={props.decor?.actions?.(excerpt(), key)}
             markTone={props.decor?.markTone}
             nearby={session.gone ? [] : nearbyOf(props.shownOf?.(excerpt()) ?? excerpt())}

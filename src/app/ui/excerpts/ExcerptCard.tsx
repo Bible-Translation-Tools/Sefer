@@ -37,6 +37,7 @@
  */
 
 import type { JSX } from "@solidjs/web";
+import CodeIcon from "lucide-solid/icons/code";
 import FoldVerticalIcon from "lucide-solid/icons/fold-vertical";
 import SquareArrowOutUpRightIcon from "lucide-solid/icons/square-arrow-out-up-right";
 import UnfoldVerticalIcon from "lucide-solid/icons/unfold-vertical";
@@ -125,6 +126,12 @@ export interface ExcerptCardProps {
   readonly notes?: JSX.Element;
   /** Whether the header offers "Open in editor". Absent is yes. */
   readonly openable?: boolean;
+  /**
+   * Offer this card's own switch to USFM — a code icon in the header — when
+   * what it is about sits in markup, which the reading cannot show. Every card
+   * can be switched; only a card that has a reason offers it.
+   */
+  readonly offerUsfm?: boolean;
   /** The footer's slot: whatever this screen lets a reader do about this place. */
   readonly actions?: JSX.Element;
   /**
@@ -220,7 +227,9 @@ export function ExcerptCard(props: ExcerptCardProps) {
   /** The reader's flip of the paired side's width default, or nothing. */
   const [pairedFlip, setPairedFlip] = createSignal(false, { name: "excerptPairedFlip" });
 
-  const mode = (): "regular" | "usfm" => props.mode ?? "regular";
+  /** This card alone in USFM, over the screen's mode. Off until asked. */
+  const [usfm, setUsfm] = createSignal(false, { name: "excerptUsfm" });
+  const mode = (): "regular" | "usfm" => (props.mode === "usfm" || usfm() ? "usfm" : "regular");
 
   createEffect(
     () => body(),
@@ -396,6 +405,16 @@ export function ExcerptCard(props: ExcerptCardProps) {
         // count said twice in another vocabulary.
         <>
           {props.badges}
+          <Show when={props.offerUsfm === true && props.mode !== "usfm"}>
+            <IconButton
+              size="sm"
+              label={usfm() ? t("Show the reading") : t("Show the USFM")}
+              icon={<CodeIcon size={14} />}
+              aria-pressed={usfm() ? "true" : "false"}
+              data-card-usfm=""
+              onClick={() => setUsfm((was) => !was)}
+            />
+          </Show>
           <Show when={props.notes === undefined && props.excerpt.hits.length > 1}>
             <span class="text-smallest text-on-surface-tertiary">
               {t("{count} matches", { count: props.excerpt.hits.length })}

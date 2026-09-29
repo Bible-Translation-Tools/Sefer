@@ -239,7 +239,7 @@ book, so the scope is a toggle a reader flips, not a setting they visit.
 navigation and the bulk actions to one kind, using the engine's own
 classification (`isUsfmStructureChange`, `isWhitespaceChange`). A card with
 formatting changes carries a "markup only" / "whitespace only" badge and a
-**Show markup** toggle for that card alone. In the reading those changes are
+code icon that switches that card alone to USFM. In the reading those changes are
 invisible, but a card never switches mode by itself; it once did, and a
 view that changes under the reader unasked reads as a bug.
 
