@@ -1,11 +1,18 @@
 /**
  * The icon rail: the one piece of chrome that is always on screen.
  *
- * Three bands. The mark at the top, inert for now. The MODES in the middle —
+ * A bar across the top of the window in the theme's own surface — white in
+ * light, the dark surface in dark — with a hairline under it. (It was a
+ * column down the left; the top won.)
+ *
+ * Three bands, left to right. The mark, which is the way home. (The panel's show/hide
+ * moved into the panel, beside the project button; `ShowPanel` brings a hidden
+ * one back.)
+ * The MODES in the middle —
  * Form, Refine, Key terms — the three ways of working on a project's text;
  * with no project open they are there but disabled, so the rail keeps one
  * shape — the empty state's included.
- * Form is not built yet and stays disabled. At the foot: More, Import (a zip,
+ * Form is not built yet and stays disabled. At the end: More, Import (a zip,
  * a folder or a clone, from anywhere), Settings, and Account (disabled until
  * there is an account).
  *
@@ -18,16 +25,15 @@
 import type { JSX } from "@solidjs/web";
 import { useNavigate, useRouterState } from "@tanstack/solid-router";
 import Bell from "lucide-solid/icons/bell";
-import BookOpen from "lucide-solid/icons/book-open";
 import CloudIcon from "lucide-solid/icons/cloud";
 import Download from "lucide-solid/icons/download";
 import Ellipsis from "lucide-solid/icons/ellipsis";
+import FileText from "lucide-solid/icons/file-text";
 import GitCompare from "lucide-solid/icons/git-compare";
 import HistoryIcon from "lucide-solid/icons/history";
 import ListChecks from "lucide-solid/icons/list-checks";
-import PanelLeft from "lucide-solid/icons/panel-left";
-import PenLine from "lucide-solid/icons/pen-line";
 import SettingsIcon from "lucide-solid/icons/settings";
+import Sheet from "lucide-solid/icons/sheet";
 import TypeIcon from "lucide-solid/icons/type";
 import UserIcon from "lucide-solid/icons/user";
 import { createSignal, For } from "solid-js";
@@ -35,13 +41,13 @@ import { createSignal, For } from "solid-js";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { ImportHub } from "../landing/ImportHub";
-import { Menu, MenuItem } from "../primitives";
+import { Menu, MenuItem, SegmentedControl } from "../primitives";
 
 /**
- * A rail tile: one 80×80 button holding the icon and the word under it, so
- * the hover and the active fill cover both. Active is the brand blue.
- *
- * The caption is the accessible name already, so there is no tooltip.
+ * A rail tile: a 48px icon button, the mode switcher's height, with the `md`
+ * standard 20px icon. The word is the button's name for a screen
+ * reader and its native tooltip on hover; it is never drawn — the modes, the
+ * one group that needs its words, are the segmented control.
  */
 function RailButton(props: {
   readonly label: string;
@@ -49,7 +55,7 @@ function RailButton(props: {
   readonly icon: JSX.Element;
   readonly pressed?: "true" | "false";
   readonly disabled?: boolean;
-  /** The native tooltip; for a disabled tile, the reason. */
+  /** The native tooltip; for a disabled tile, the reason. Defaults to the label. */
   readonly title?: string;
   readonly onClick?: () => void;
 }) {
@@ -59,15 +65,17 @@ function RailButton(props: {
       data-testid={props.testId}
       aria-pressed={props.pressed}
       disabled={props.disabled}
-      title={props.title}
+      title={props.title ?? props.label}
       onClick={() => props.onClick?.()}
-      class="flex size-20 shrink-0 cursor-pointer flex-col items-center justify-center gap-1 text-on-surface-invert transition-colors hover:not-disabled:bg-surface-invert-hover aria-pressed:bg-surface-invert-active aria-pressed:hover:bg-surface-invert-active disabled:cursor-not-allowed disabled:opacity-50"
+      class="flex size-12 shrink-0 cursor-pointer items-center justify-center rounded-xl text-on-surface-secondary transition-colors hover:not-disabled:bg-surface-secondary hover:not-disabled:text-on-surface-primary aria-pressed:bg-brand-light aria-pressed:text-brand disabled:cursor-not-allowed disabled:opacity-50"
     >
       {props.icon}
-      <span class="max-w-full truncate px-1 text-center text-caption">{props.label}</span>
+      <span class="sr-only">{props.label}</span>
     </button>
   );
 }
+
+type Mode = "form" | "refine" | "terms";
 
 type ProjectScreen =
   | "/project/$slug/findings"
@@ -101,7 +109,7 @@ function MoreMenu() {
   return (
     <Menu
       label={t("More")}
-      side="right"
+      side="bottom"
       align="end"
       open={open()}
       onOpenChange={setOpen}
@@ -148,101 +156,104 @@ export function IconRail() {
   const within = (): string => path().replace(/^\/project\/[^/]+/, "");
   const at = (prefix: string): "true" | "false" => (within().startsWith(prefix) ? "true" : "false");
   const open = (): boolean => shell.project() !== undefined;
-  /** Is the reader looking at a project, or at one of the full-page screens? */
-  const inProject = (): boolean => path().startsWith("/project/");
-
-  /**
-   * The Panel tile does two jobs, and which one depends on where you are.
-   *
-   * On a project route it is the project panel's show/hide (`Mod-b` too). On
-   * a full-page screen — settings, the projects page — there is no panel to
-   * toggle, and what a reader wants from it is the way BACK: it opens the
-   * panel and returns to the book they were in. A hotkey cannot be the only
-   * way to bring a hidden panel back, and the panel holds the way to all
-   * projects.
-   */
-  const togglePanel = (): void => {
-    const project = shell.project();
-    if (project !== undefined && !inProject()) {
-      shell.setSidebarOpen(true);
-      void navigate(shell.landingTarget(project.root));
-      return;
-    }
-    shell.setSidebarOpen(!shell.sidebarOpen());
-  };
-  const panelLabel = (): string => {
-    if (shell.project() !== undefined && !inProject()) return t("Back to the book");
-    return shell.sidebarShowing() ? t("Hide the project panel") : t("Show the project panel");
-  };
 
   /** Refine is the text itself: any project route that is not another mode. */
   const refining = (): "true" | "false" =>
     path().startsWith("/project/") && !within().startsWith("/terms") ? "true" : "false";
   const terms = (): "true" | "false" => at("/terms");
+  /**
+   * Home: with a project open, back to where the reader left off in it (the
+   * remembered book, as Back to editor does); otherwise `/`, which decides —
+   * the last project reopens where it was left, an empty device shows the
+   * empty state, and projects never opened here show the projects page.
+   */
+  const goHome = (): void => {
+    const project = shell.project();
+    if (project !== undefined) void navigate(shell.landingTarget(project.root));
+    else void navigate({ to: "/" });
+  };
+
+  /** Which mode the switcher shows as chosen; none on a screen outside them. */
+  const mode = (): Mode | undefined =>
+    terms() === "true" ? "terms" : refining() === "true" ? "refine" : undefined;
+  const goTo = (next: Mode): void => {
+    if (next === "refine") void navigate({ to: "/project/$slug", params: { slug: shell.slug() } });
+    else if (next === "terms")
+      void navigate({ to: "/project/$slug/terms", params: { slug: shell.slug() }, search: {} });
+  };
 
   return (
     <nav
       data-testid="rail"
       aria-label={t("Sefer")}
-      class="scrollbar-subtle flex w-20 shrink-0 flex-col items-center overflow-x-hidden overflow-y-auto bg-surface-invert px-0 py-4"
+      class="scrollbar-subtle flex h-18 w-full shrink-0 items-center gap-4 overflow-x-auto overflow-y-hidden border-b border-surface-border bg-surface-primary px-4 py-2"
     >
-      {/* The mark. Deliberately inert for the moment; it is the same
-          `public/sefer.svg` the tab shows, at 32px in an 80px box, used as a
-          MASK so it takes the rail's `on-surface-invert` white. */}
-      <span
-        data-testid="rail-home"
-        role="img"
-        aria-label={t("Sefer")}
-        class="flex size-20 shrink-0 items-center justify-center"
-      >
-        <span
-          class="size-8 bg-on-surface-invert"
-          style={{
-            "mask-image": "url(/sefer.svg)",
-            "mask-size": "contain",
-            "mask-repeat": "no-repeat",
-            "mask-position": "center",
-          }}
-        />
-      </span>
-
-      <RailButton
-        label={t("Panel")}
-        title={panelLabel()}
-        testId="rail-panel"
-        icon={<PanelLeft size={20} />}
-        pressed={inProject() && shell.sidebarShowing() ? "true" : "false"}
-        disabled={!open()}
-        onClick={togglePanel}
-      />
-
-      <div class="my-auto flex w-full flex-col items-center">
-        <RailButton label={t("Form")} testId="rail-form" icon={<PenLine size={20} />} disabled />
-        <RailButton
-          label={t("Refine")}
-          testId="rail-refine"
-          icon={<BookOpen size={20} />}
-          pressed={refining()}
-          disabled={!open()}
-          onClick={() => void navigate({ to: "/project/$slug", params: { slug: shell.slug() } })}
-        />
-        <RailButton
-          label={t("Key terms")}
-          testId="rail-terms"
-          icon={<ListChecks size={20} />}
-          pressed={terms()}
-          disabled={!open()}
-          onClick={() =>
-            void navigate({
-              to: "/project/$slug/terms",
-              params: { slug: shell.slug() },
-              search: {},
-            })
-          }
-        />
+      <div class="flex shrink-0 items-center gap-2">
+        {/* The mark and the name: the way home (see `goHome`). The mark is
+            `public/sefer.svg`, the tab's icon, used as a MASK so it takes the
+            theme's text colour in light and dark alike. */}
+        <button
+          type="button"
+          data-testid="rail-home"
+          aria-label={t("Home")}
+          title={t("Home")}
+          class="flex h-12 shrink-0 cursor-pointer items-center gap-3 rounded-lg px-2 transition-colors hover:bg-surface-secondary"
+          onClick={goHome}
+        >
+          <span
+            aria-hidden="true"
+            class="size-8 bg-on-surface-primary"
+            style={{
+              "mask-image": "url(/sefer.svg)",
+              "mask-size": "contain",
+              "mask-repeat": "no-repeat",
+              "mask-position": "center",
+            }}
+          />
+          <span
+            aria-hidden="true"
+            class="text-h4 font-semibold text-on-surface-primary max-md:sr-only"
+          >
+            {t("Sefer")}
+          </span>
+        </button>
       </div>
 
-      <div class="flex w-full flex-col items-center">
+      {/* The modes. A choice of one of three ways of working on the text, so
+          a radio group (`SegmentedControl`), not three buttons; each still
+          navigates. Form is not built; the other two need an open project. */}
+      <SegmentedControl<Mode>
+        label={t("Mode")}
+        iconsWhenNarrow
+        // Centred, with the space either side taking up the slack: it grows to
+        // its widest (three 10rem tabs), and shrinks before going icon-only.
+        class="mx-auto w-full max-w-[31rem] max-md:w-auto"
+        value={mode()}
+        onChange={goTo}
+        items={[
+          {
+            value: "form",
+            label: t("Form"),
+            icon: <Sheet size={20} aria-hidden="true" />,
+            disabled: true,
+            title: t("Form is not built yet."),
+          },
+          {
+            value: "refine",
+            label: t("Refine"),
+            icon: <FileText size={20} aria-hidden="true" />,
+            disabled: !open(),
+          },
+          {
+            value: "terms",
+            label: t("Key terms"),
+            icon: <ListChecks size={20} aria-hidden="true" />,
+            disabled: !open(),
+          },
+        ]}
+      />
+
+      <div class="flex shrink-0 items-center gap-2">
         <MoreMenu />
         {/* The import menu from anywhere; a finished import lands on the
             projects page, where the new project is. */}

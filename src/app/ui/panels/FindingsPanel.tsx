@@ -613,7 +613,6 @@ export function FindingsPanel() {
             </span>
             <SegmentedControl<FindingsView>
               label={t("Group findings by")}
-              size="sm"
               items={VIEWS.map((view) => ({ value: view.value, label: t(view.label) }))}
               value={filters.view()}
               onChange={(view) => filters.setView(view)}

@@ -1,17 +1,19 @@
 import { createFileRoute, useNavigate } from "@tanstack/solid-router";
-import { Show, createSignal, untrack } from "solid-js";
+import { Show, untrack } from "solid-js";
 
 import { useShell } from "#app/ProjectContext";
-import { shellKeys } from "#app/settings";
-import { ProjectsLanding } from "#app/ui/landing/ProjectsLanding";
-import { listProjects } from "#app/ui/landing/summaries";
 import { ShellGate } from "#app/ui/ShellGate";
 import { EmptyWorkspace } from "#app/ui/workspace/EmptyWorkspace";
 import "#app/ui/theme";
 
 /**
- * `/` is THE WORK: the project you were last in, or the projects list when
- * this device has none.
+ * `/` is HOME, and home is always the same place: the project you were last
+ * in, where you left it — or, when this device has never opened one, the empty
+ * workspace. That holds even when projects are installed but none has been
+ * opened: home does not quietly become the projects list, because a button
+ * whose destination changes without saying so is one nobody can trust. The
+ * empty workspace's project control is the way to the list, which shows what
+ * is there.
  *
  * The list itself is `/projects`, which is always the list — see the note
  * there for why the two are separate routes rather than one URL that tries to
@@ -49,29 +51,11 @@ function Landing() {
     return true;
   };
 
-  // No history is not the same as nothing installed: a project can be on disk
-  // and never opened here. Only an empty list earns the empty workspace.
-  // `undefined` while the list is being read, so neither screen flashes.
-  const [empty, setEmpty] = createSignal<boolean | undefined>(undefined, { name: "deviceEmpty" });
-  if (!enter()) {
-    const { services } = shell;
-    const recent = shellKeys(services.settings).recentProjects;
-    void services
-      .run(
-        listProjects(services.projectsRoot, services.fixtureProject, services.settings.get(recent)),
-      )
-      .then((rows) => setEmpty(rows.length === 0));
-  }
-
-  // A first run, or a device whose projects have all been removed: there is no
-  // work to go to, so the list IS the answer. Rendered rather than redirected,
-  // because a redirect to `/projects` would put a screen in the back stack
-  // that pressing Back could only bounce off.
+  // Nothing opened here yet: the empty workspace, whatever is installed.
+  const forwarded = enter();
   return (
-    <Show when={empty() !== undefined}>
-      <Show when={empty()} fallback={<ProjectsLanding />}>
-        <EmptyWorkspace />
-      </Show>
+    <Show when={!forwarded}>
+      <EmptyWorkspace />
     </Show>
   );
 }

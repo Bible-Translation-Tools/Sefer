@@ -256,7 +256,6 @@ export function InventoryPanel() {
                 onInput={(event) => setQuery(event.currentTarget.value)}
               />
               <SegmentedControl<Lens>
-                size="sm"
                 label={t("Show which characters")}
                 items={LENSES.map((item) => ({ value: item.value, label: t(item.label) }))}
                 value={lens()}

@@ -725,7 +725,6 @@ function Find() {
 
             <SegmentedControl
               label={t("Scope")}
-              size="sm"
               value={scope()}
               onChange={(next) =>
                 ask({

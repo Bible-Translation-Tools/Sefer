@@ -25,7 +25,8 @@ const field = variants({
   variants: {
     size: {
       sm: "h-7 rounded-md text-smallest",
-      md: "h-9 rounded-md text-small",
+      // The default: 48px, 12px sides and radius, 14px text.
+      md: "h-12 rounded-lg text-small",
       // The page-level search: 56px tall — the height of the large buttons
       // (16px text with 16px padding) — a 16px radius, body text.
       lg: "h-14 rounded-xl text-body",
@@ -40,6 +41,8 @@ const field = variants({
  */
 const padding = (size: InputSize, icon: boolean): string => {
   if (size === "lg") return icon ? "ps-[4.25rem] pe-8" : "px-8";
+  // `md`: the 20px icon 12px in, the text 6px after it (12 + 20 + 6 = 38px).
+  if (size === "md") return icon ? "ps-[2.375rem] pe-3" : "px-3";
   return icon ? "pe-2.5 ps-8" : "px-2.5";
 };
 
@@ -70,7 +73,11 @@ export function Input(props: InputProps) {
           aria-hidden="true"
           class={cx(
             "pointer-events-none absolute flex text-on-surface-tertiary",
-            props.size === "lg" ? "start-8" : "start-2.5",
+            props.size === "lg"
+              ? "start-8"
+              : (props.size ?? "md") === "md"
+                ? "start-3 [&_svg]:size-5"
+                : "start-2.5",
           )}
         >
           {props.icon}

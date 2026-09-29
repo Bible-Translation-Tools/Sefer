@@ -9,6 +9,7 @@ import { CommandPalette } from "#app/ui/CommandPalette";
 import { Kbd, Resizable, Toaster } from "#app/ui/primitives";
 import { BackToEditor } from "#app/ui/workspace/BackToEditor";
 import { IconRail } from "#app/ui/workspace/IconRail";
+import { PanelToggleColumn } from "#app/ui/workspace/PanelToggle";
 import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
 import { sidebarClaim } from "#app/ui/workspace/sidebarSlot";
 
@@ -56,9 +57,8 @@ import { sidebarClaim } from "#app/ui/workspace/sidebarSlot";
 function Workspace() {
   const shell = useShell();
   const path = useRouterState({ select: (state) => state.location.pathname });
-  // Never on `/` or `/projects`. `/` is either the projects page or, with
-  // nothing installed, `EmptyWorkspace` — a skeleton that draws its own
-  // sidebar, so nothing else in the chrome has to know which.
+  // Never on `/` or `/projects`. `/` is home: it forwards to the last project,
+  // or draws `EmptyWorkspace` — a skeleton that draws its own sidebar.
   const showing = (): boolean => shell.sidebarShowing() && path() !== "/projects" && path() !== "/";
   // Plain variables, not expressions in the props: `Resizable.Panel` reads its
   // three sizes ONCE, during registration, and a JSX expression is a lazy memo
@@ -81,6 +81,12 @@ function Workspace() {
         initialSize={initialWidth}
         minSize={minWidth}
         maxSize={maxWidth}
+        // Dragged well past its narrowest, the panel closes instead.
+        onCollapse={() => shell.setSidebarOpen(false)}
+        collapseHint={{
+          title: t("Keep dragging to close the panel"),
+          detail: t("Release to keep it open."),
+        }}
         class={showing() ? undefined : "hidden"}
       >
         {/* A screen of results may claim the panel for its own outline
@@ -89,7 +95,9 @@ function Workspace() {
           {(render) => render()()}
         </Show>
       </Resizable.Panel>
+      {/* On the panel's own edge: dragging its border resizes it. */}
       <Resizable.Handle
+        edge
         label={t("Resize the project panel")}
         class={showing() ? undefined : "hidden"}
       />
@@ -100,10 +108,15 @@ function Workspace() {
         {/* `relative`, and the door OUTSIDE the scroller: a full-page screen
             scrolls its own content, and a button that scrolled away with it
             would be a door you have to go back to the top to find. */}
-        <div class="relative h-full">
-          <BackToEditor />
-          <div class="h-full overflow-y-auto">
-            <Outlet />
+        <div class="flex h-full">
+          {/* The panel toggle for project screens without the editor's
+              toolbar: a column of its own, so it covers nothing. */}
+          <PanelToggleColumn />
+          <div class="relative h-full min-w-0 flex-1">
+            <BackToEditor />
+            <div class="h-full overflow-y-auto">
+              <Outlet />
+            </div>
           </div>
         </div>
       </Resizable.Panel>
@@ -122,15 +135,15 @@ function Chrome() {
   const shell = () => readyShell(state());
 
   return (
-    <div class="flex h-screen bg-surface-canvas">
+    <div class="flex h-screen flex-col bg-surface-canvas">
       <Show
         when={shell()}
-        fallback={<div class="w-13 shrink-0 border-e border-sidebar-border bg-surface-primary" />}
+        fallback={<div class="h-18 shrink-0 border-b border-surface-border bg-surface-primary" />}
       >
         <IconRail />
       </Show>
 
-      <div class="flex min-w-0 flex-1 flex-col">
+      <div class="flex min-h-0 min-w-0 flex-1 flex-col">
         <div class="min-h-0 flex-1">
           <Show
             when={shell()}

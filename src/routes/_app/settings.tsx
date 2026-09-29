@@ -267,7 +267,6 @@ function SettingsPage() {
       case "choice":
         return (
           <SegmentedControl
-            size="sm"
             label={t(descriptor.label)}
             value={read(descriptor.key)}
             onChange={(next) => write(descriptor.key, next)}

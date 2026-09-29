@@ -45,6 +45,7 @@ import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { Card, IconButton, Input, Popover, SegmentedControl } from "../primitives";
 import { bookName } from "./books";
+import { PanelToggle } from "./PanelToggle";
 import { metadataOf, projectName } from "./project";
 
 /** The two segments, as literal strings so Tailwind and the reader agree. */
@@ -134,12 +135,17 @@ export function Toolbar() {
 
   return (
     <div class="flex flex-wrap items-center gap-3" data-testid="toolbar">
-      <strong
-        class="min-w-0 shrink truncate text-h4 font-semibold text-on-surface-primary"
-        data-workspace-title
-      >
-        {title()}
-      </strong>
+      {/* The project panel's show/hide, then the title: the toggle sits on
+          the side nearest the panel it opens and closes. */}
+      <div class="flex min-w-0 shrink items-center gap-2">
+        <PanelToggle />
+        <strong
+          class="min-w-0 truncate text-h4 font-semibold text-on-surface-primary"
+          data-workspace-title
+        >
+          {title()}
+        </strong>
+      </div>
 
       <SegmentedControl<Segment>
         class="mx-auto"
