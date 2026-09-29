@@ -55,7 +55,8 @@ export interface CardSession {
 
 export interface CardListProps<T> {
   readonly sections: readonly VirtualSection<T>[];
-  readonly header: (
+  /** None for a list whose cards name their own section — see `VirtualList`. */
+  readonly header?: (
     section: Accessor<VirtualSection<T>>,
     ref: (element: HTMLElement) => void,
   ) => JSX.Element;

@@ -723,9 +723,7 @@ export function WacsProjects(props: {
               </Show>
             }
             // The column row lives OUTSIDE the scroller (above), so the
-            // scrollbar runs beside the rows only. The list still asks for a
-            // section header to measure; an empty one costs nothing.
-            header={(_section, ref) => <div ref={ref} />}
+            // scrollbar runs beside the rows only; the list draws no headers.
             row={(item) => {
               const entry = () => item().entry;
               return (

@@ -78,7 +78,7 @@ Zero width is the honest span. A search hit knows which characters matched; a re
 
 References the book does not have are skipped rather than reported: a guide covers the whole canon and a project covers a few books. So is one `resolve` calls ambiguous (malformed text with two anchors for the verse), rather than guessing which card it belongs on. Two references landing on one anchor — both verses of a bridge — become one occurrence, because they are one card.
 
-Everything after that — grouping by verse sid, the per-book headers, the outline with counts, Edit → satellite, Open in editor — is `group()` and `ExcerptList`, unchanged.
+Everything after that — grouping by verse sid, the outline with counts, Edit → satellite, Open in editor — is `group()` and `ExcerptList`, unchanged.
 
 ## What the source card shows
 

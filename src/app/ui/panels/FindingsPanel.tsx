@@ -549,34 +549,6 @@ export function FindingsPanel() {
       if (head === undefined) return row.bookId;
       return head.front ? t("{book} front", { book: head.label }) : head.label;
     },
-    header: (group) => {
-      const head = feed.head(group.bookId);
-      return (
-        <>
-          <Show
-            when={filters.view() === "severity"}
-            fallback={
-              <strong
-                class={cx(
-                  "text-small font-semibold text-on-surface-primary",
-                  filters.view() === "code" && "font-mono",
-                )}
-              >
-                {head?.label ?? group.bookId}
-              </strong>
-            }
-          >
-            <Badge tone={severityTone(head?.label ?? "")}>{head?.label}</Badge>
-          </Show>
-          <Show when={head?.detail}>
-            {(detail) => <span class="text-small text-on-surface-secondary">{detail()}</span>}
-          </Show>
-          <span class="ms-auto text-smallest text-on-surface-tertiary">
-            {t("{count} findings", { count: head?.count ?? group.count })}
-          </span>
-        </>
-      );
-    },
     // Chapter 0 is the matter before the first `\c` — an id line, a heading, a
     // table of contents entry — and `core/excerpts` labels it "Genesis 0",
     // which is a chapter nobody has.

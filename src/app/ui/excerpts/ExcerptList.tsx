@@ -1,6 +1,7 @@
 /**
- * The multibuffer: an outline column beside a windowed list of excerpts under
- * sticky per-book headers.
+ * The multibuffer: an outline column beside a windowed list of excerpts. No
+ * section headers: every card's title bar already names its book and verse,
+ * and the outline scrolls to a section's first card.
  *
  * One component, three feeds. Find supplies groups built from search hits,
  * STET from a term's occurrences plus a `pairedOf` for the paired resource,
@@ -117,14 +118,6 @@ export interface ExcerptDecor {
    * positions the second one on top of the first. Defaults to `excerpt.sid`.
    */
   readonly rowKey?: (group: BookExcerpts, excerpt: Excerpt) => string;
-  /** The sticky header's contents. Defaults to the book id and name: the outline beside it has the count. */
-  readonly header?: (group: BookExcerpts) => JSX.Element;
-  /**
-   * No visible section headers — Find, where every card's title bar already
-   * names its book. The header stays as a zero-height anchor: the outline
-   * scrolls to it and the list reads which section is on screen from it.
-   */
-  readonly hideHeaders?: boolean;
   /** The outline column's own label, when its rows are not books. */
   readonly outlineTitle?: string;
   /** One outline row's text. Defaults to the section key. */
@@ -257,16 +250,6 @@ export function ExcerptList(props: ExcerptListProps) {
     return out;
   };
 
-  const nameOf = (bookId: string): BookExcerpts | undefined =>
-    props.groups.find((group) => group.bookId === bookId);
-
-  /** The screen's own header for one section, when it draws its own. */
-  const decorated = (key: string): JSX.Element | undefined => {
-    const draw = props.decor?.header;
-    const group = nameOf(key);
-    return draw === undefined || group === undefined ? undefined : draw(group);
-  };
-
   const current = () => active() ?? props.groups[0]?.bookId;
 
   // The outline goes where the project's contents normally are: on a screen
@@ -336,30 +319,6 @@ export function ExcerptList(props: ExcerptListProps) {
           goTo = scrollTo;
         }}
         empty={props.empty}
-        header={(section, ref) =>
-          props.decor?.hideHeaders === true ? (
-            <header ref={ref} data-book={section().key} class="h-0 overflow-hidden">
-              <span class="sr-only">{nameOf(section().key)?.name ?? section().key}</span>
-            </header>
-          ) : (
-            <header
-              ref={ref}
-              data-book={section().key}
-              class="sticky top-0 z-10 flex items-baseline gap-2 border-b border-surface-border bg-surface-secondary/95 px-1 py-1.5 backdrop-blur-xs"
-            >
-              {decorated(section().key) ?? (
-                <>
-                  <strong class="text-small font-semibold text-on-surface-primary">
-                    {section().key}
-                  </strong>
-                  <span class="text-small text-on-surface-secondary">
-                    {nameOf(section().key)?.name}
-                  </span>
-                </>
-              )}
-            </header>
-          )
-        }
         card={(excerpt, key, session) => (
           <ExcerptCard
             excerpt={
