@@ -75,7 +75,7 @@
   --neutral-95: #f2f2f2;
   --neutral-100: #ffffff;
 
-  /* Slate: the blue-grey of the projects page and the rail, from the
+  /* Slate: the blue-grey of the projects page, from the
      designer's mockups. A ramp like the others, so the semantic layer below
      names a step and never a hex. */
   --slate-20: #0f2f4c;
@@ -157,13 +157,13 @@
   --sidebar-on-surface: var(--on-surface-primary);
   --sidebar-on-surface-muted: var(--on-surface-tertiary);
 
-  /* The inverted surface: a dark column whatever the theme, with white on it.
-     The icon rail is the first user. Active is the brand blue, held at the
-     light-theme shade in both themes so white text keeps its contrast. */
-  --surface-invert: var(--slate-20);
-  --surface-invert-hover: color-mix(in srgb, var(--slate-20), white 12%);
-  --surface-invert-active: var(--brand-40);
+  /* The inverted surface: near-black whatever the theme, with white on it —
+     for an overlay that must read the same over any screen (the project
+     panel's drag-to-close hint). Set here only, never overridden in the dark
+     blocks. `muted` is its secondary text. */
+  --surface-invert: var(--neutral-10);
   --on-surface-invert: var(--neutral-100);
+  --on-surface-invert-muted: var(--neutral-60);
 
   --button-primary-surface: var(--brand-40);
   --button-primary-surface-hover: var(--brand-30);
@@ -315,9 +315,8 @@
   --color-on-surface-highlight: var(--on-surface-highlight);
   --color-on-surface-success: var(--on-surface-success);
   --color-surface-invert: var(--surface-invert);
-  --color-surface-invert-hover: var(--surface-invert-hover);
-  --color-surface-invert-active: var(--surface-invert-active);
   --color-on-surface-invert: var(--on-surface-invert);
+  --color-on-surface-invert-muted: var(--on-surface-invert-muted);
 
   --color-sidebar-surface: var(--sidebar-surface);
   --color-sidebar-surface-hover: var(--sidebar-surface-hover);
@@ -354,9 +353,11 @@
   --text-body: 1rem;
   --text-small: 0.875rem;
   --text-smallest: 0.75rem;
-  /* The rail's tile caption: the one size below smallest, set tight. */
-  --text-caption: 0.6875rem;
-  --text-caption--line-height: 0.75rem;
+
+  /* The gap between neighbouring controls — buttons side by side, a
+     dialog's footer, a header's actions: `gap-controls`. One name, so the
+     designer's 12px is one value to change, not a `gap-3` on every screen. */
+  --spacing-controls: 0.75rem;
 
   /* Our radii REPLACE Tailwind's, so `rounded-lg` is the product's 12px and
      not the framework's 8px. The card radius the mockups use is lg/xl. */
@@ -414,6 +415,15 @@
     block-size: 100%;
     color-scheme: light dark;
   }
+  /* An explicit theme must win for the browser's own chrome too — scrollbars,
+     form controls. Left at "light dark", a Light theme on an OS in dark mode
+     drew dark native scrollbars in the book list and the editor. */
+  :root[data-theme="light"] {
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+  }
 
   body {
     min-block-size: 100%;
@@ -468,7 +478,8 @@
   h4,
   h5,
   h6 {
-    line-height: 1.15;
+    /* 150% everywhere, controls and headings included — the same as body. */
+    line-height: 1.5;
   }
 
   table {

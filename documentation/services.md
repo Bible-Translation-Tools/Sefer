@@ -405,7 +405,7 @@ There is one diff: the engine's decision units, addressed by sid (`core/diff/ske
 
 ### Overview
 
-The one compare screen, `/review`. Both sides are pickers over a `CompareSource` (the working project, a folder, a zip, a recorded version, or the saved file). The differences are drawn on the texts as the editor reads them: cards per change across every book, or the whole book; split or unified; decisions per unit, card or book, next/previous change (`Alt-F5`). You decide, then Apply, and Record a version (save + commit). The icon rail's Compare tile opens it. `src/core/compare`, `src/app/ui/review`. → [review](architecture/review.md)
+The one compare screen, `/review`. Both sides are pickers over a `CompareSource` (the working project, a folder, a zip, a recorded version, or the saved file). The differences are drawn on the texts as the editor reads them: cards per change across every book, or the whole book; split or unified; decisions per unit, card or book, next/previous change (`Alt-F5`). You decide, then Apply, and Record a version (save + commit). The app bar's More menu opens it (Compare). `src/core/compare`, `src/app/ui/review`. → [review](architecture/review.md)
 
 ### Constraints and known bugs
 

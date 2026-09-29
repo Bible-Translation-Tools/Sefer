@@ -379,10 +379,8 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       },
     }),
 
-    // The project panel's show/hide. The rail's panel tile went in the
-    // designer's pass and has no new home yet, and `workspace.sidebarOpen`
-    // persists — so without this a panel once hidden could never come back,
-    // and with it the panel's project button, the way back to all projects.
+    // The project panel's show/hide, as `PanelToggle` is; the keyboard's
+    // way, and `workspace.sidebarOpen` persists either way.
     registerCommand({
       id: "workspace.togglePanel",
       title: t("Show or hide the project panel"),
@@ -390,7 +388,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       run: () => bridge.setSidebarOpen(!bridge.sidebarOpen()),
     }),
 
-    // `project.open` (Mod-o) is registered by the rail's Import menu, which
+    // `project.open` (Mod-o) is registered by the app bar's Import menu, which
     // owns the import pipeline and its progress dialog: opening a folder is
     // importing it. Nothing opens a folder in place — every project is a copy
     // in Sefer's own storage, on both hosts (documentation/architecture/landing.md).

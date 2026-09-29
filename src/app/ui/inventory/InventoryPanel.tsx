@@ -249,14 +249,13 @@ export function InventoryPanel() {
               <Input
                 size="sm"
                 wrapperClass="w-56"
-                icon={<Search size={13} />}
+                icon={<Search />}
                 placeholder={t("A character, a name, or U+201C")}
                 aria-label={t("Filter characters")}
                 value={query()}
                 onInput={(event) => setQuery(event.currentTarget.value)}
               />
               <SegmentedControl<Lens>
-                size="sm"
                 label={t("Show which characters")}
                 items={LENSES.map((item) => ({ value: item.value, label: t(item.label) }))}
                 value={lens()}

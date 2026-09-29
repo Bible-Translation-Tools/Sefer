@@ -62,7 +62,7 @@ export function PanelHeader(props: PanelHeaderProps) {
         )}
       </div>
       {props.actions !== undefined && (
-        <div class="ms-auto flex flex-wrap items-center gap-2">{props.actions}</div>
+        <div class="ms-auto flex flex-wrap items-center gap-controls">{props.actions}</div>
       )}
     </div>
   );

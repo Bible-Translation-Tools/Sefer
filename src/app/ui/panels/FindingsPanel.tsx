@@ -494,7 +494,7 @@ export function FindingsPanel() {
                   : t("Unfold {count} identical findings", { count: run?.members.length ?? 0 })
               }
               class="tabular-nums"
-              icon={isOpen(row, finding) ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+              icon={isOpen(row, finding) ? <ChevronDown /> : <ChevronRight />}
               onClick={() => toggleRun(row, finding)}
             >
               × {run?.members.length ?? 1}
@@ -591,7 +591,6 @@ export function FindingsPanel() {
             </span>
             <SegmentedControl<FindingsView>
               label={t("Group findings by")}
-              size="sm"
               items={VIEWS.map((view) => ({ value: view.value, label: t(view.label) }))}
               value={filters.view()}
               onChange={(view) => filters.setView(view)}

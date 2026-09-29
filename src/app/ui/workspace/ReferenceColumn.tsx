@@ -236,7 +236,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           class="w-full"
           data-testid={`add-${pickerProps.role}`}
           disabled={busy()}
-          icon={<Plus size={14} aria-hidden="true" />}
+          icon={<Plus aria-hidden="true" />}
         >
           {pickerProps.role === "source" ? t("Add source…") : t("Add reference…")}
         </Button>

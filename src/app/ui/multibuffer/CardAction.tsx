@@ -66,7 +66,7 @@ export function CardActionButton(props: { readonly action: Accessor<CardAction> 
           <IconButton
             size="sm"
             label={action().label}
-            icon={<Dynamic component={action().icon} size={14} />}
+            icon={<Dynamic component={action().icon} />}
             aria-pressed={pressedOf(action())}
             data-card-action={action().id}
             onClick={() => action().onPress()}
@@ -78,11 +78,7 @@ export function CardActionButton(props: { readonly action: Accessor<CardAction> 
           <Button
             size="sm"
             variant={action().emphasis ?? "secondary"}
-            icon={
-              action().icon === undefined ? undefined : (
-                <Dynamic component={action().icon} size={13} />
-              )
-            }
+            icon={action().icon === undefined ? undefined : <Dynamic component={action().icon} />}
             aria-pressed={pressedOf(action())}
             title={action().title}
             data-card-action={action().id}

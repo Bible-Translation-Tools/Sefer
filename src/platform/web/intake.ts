@@ -100,7 +100,7 @@ const pickFiles = (attributes: Readonly<Record<string, string>>): Promise<readon
     // The window gets focus back when the dialog closes, either way. `change`
     // can land a moment after that focus, so give it a beat before deciding
     // nothing was chosen. Without this a browser that sends no `cancel` left
-    // the import's "Selecting the source…" dialog up for good, over the rail.
+    // the import's "Selecting the source…" dialog up for good, over the app bar.
     const focused = (): void => {
       setTimeout(() => finish([...(input.files ?? [])]), 500);
     };

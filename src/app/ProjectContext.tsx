@@ -249,8 +249,8 @@ export interface Shell {
    *
    * Written by `focus` and by every chapter change, read by the project route
    * (which sends an Open straight back to the work rather than to a census)
-   * and by the rail's panel toggle (which is the way back into a project from
-   * a full-page screen). Held as a preference, so it survives a restart.
+   * and by `BackToEditor` and the app bar's Home (the ways back into a
+   * project from a full-page screen). Held as a preference, so it survives a restart.
    */
   readonly lastLocation: (root: string) => LastLocation | undefined;
   /** The path an Open of `root` should land on: the remembered book, or the census. */
@@ -283,21 +283,12 @@ export interface Shell {
   /**
    * How many findings the reader is being asked to look at, by rung.
    *
-   * The rail's bell and the toolbar's bell both want one number and neither
+   * The app bar's bell and the toolbar's bell both want one number and neither
    * wants to learn the findings module's vocabulary to get it, so the count is
    * derived once here, off the findings store, so both bells read one number
    * that one publication wrote.
    */
   readonly findingCounts: Accessor<{ readonly errors: number; readonly warnings: number }>;
-
-  /**
-   * How many findings one book is being asked about — the sidebar's badge.
-   *
-   * A read of the census store, written when a Publication lands, rather than
-   * `ProjectAnalysis.census()` per keystroke per reader, which rebuilds every
-   * finding in every book.
-   */
-  readonly attentionOf: (bookId: BookId) => number;
 
   /** One book's row of the last Publication, or undefined before the first. */
   readonly summaryOf: (bookId: BookId) => BookSummary | undefined;
@@ -343,18 +334,18 @@ export interface Shell {
    * The workspace chrome: is the project sidebar showing, and how wide is it.
    *
    * Both are `workspace.*` preferences (src/app/settings.ts) and both live
-   * here for the same reason the mode and the clipped chapter do — the rail
-   * that toggles the sidebar and the sidebar itself are in different subtrees
+   * here for the same reason the mode and the clipped chapter do — the toggle
+   * that shows the sidebar and the sidebar itself are in different subtrees
    * of the root route, and a route match is not a lifetime.
    */
   readonly sidebarOpen: Accessor<boolean>;
   readonly setSidebarOpen: (open: boolean) => void;
   /**
-   * Is the sidebar actually on screen — the reader's toggle AND something to
-   * put in it. With no project open and no history the panel had nothing but
-   * an empty book list and a search box that searched it, so it collapses to
-   * the rail; `sidebarOpen` keeps the reader's own answer, untouched, for when
-   * a project is open again.
+   * Is the sidebar actually on screen — the reader's toggle AND a project to
+   * put in it. With none open the panel has no books to list, so it is off
+   * screen (`/` draws `EmptyWorkspace`, which carries its own); `sidebarOpen`
+   * keeps the reader's own answer, untouched, for when a project is open
+   * again.
    */
   readonly sidebarShowing: Accessor<boolean>;
   /** A fraction of the workspace row; see `SIDEBAR_WIDTH`. */
@@ -388,7 +379,7 @@ export interface Shell {
   /**
    * The OPEN project's slug — what every in-project link needs for its
    * `params`. Empty string when no project is open, which is a URL that
-   * resolves to the "no project here" state rather than a crash.
+   * resolves to the empty no-project state rather than a crash.
    */
   readonly slug: Accessor<string>;
   readonly rootForSlug: (slug: string) => string | undefined;
@@ -626,7 +617,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   // `justMinted` is what makes a fresh slug resolvable in the same tick. The
   // setting only answers a new value once the settings file has been written,
   // and a click mints then navigates at once, so without it the route would
-  // read the old map and say "no project here" for any project on its first
+  // read the old map and draw the no-project state for any project on its first
   // open. The setting still covers bookmarks and every later visit.
   const justMinted = new Map<string, string>();
   const slugFor = (root: string): string => {
@@ -743,7 +734,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     findings,
     findingCounts,
     summaryOf,
-    attentionOf,
     bookCensus,
     inventory,
   } = stores;
@@ -1387,7 +1377,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       setPaletteOpen(open);
     },
     findingCounts,
-    attentionOf,
     summaryOf,
     bookCensus,
     inventory,
@@ -1403,7 +1392,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       setSidebarOpen(open);
       persist(keys.sidebarOpen, open);
     },
-    sidebarShowing: () => sidebarOpen() && (project() !== undefined || recentProjects().length > 0),
+    sidebarShowing: () => sidebarOpen() && project() !== undefined,
     recentProjects,
     slugFor,
     slug,

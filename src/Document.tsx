@@ -15,7 +15,7 @@ export default function Document(props: ParentProps) {
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         {/* The SVG first, and the .ico only for what cannot read one: the
-            rail shows the same file, so the tab and the application agree. */}
+            app bar shows the same file, so the tab and the application agree. */}
         <link rel="icon" type="image/svg+xml" href="/sefer.svg" />
         <link rel="alternate icon" href="/favicon.ico" />
         <title>Sefer</title>

@@ -3,7 +3,7 @@
  *
  * A full-page route — findings, history, review, compare, find, terms,
  * inventory, cloud, settings, the projects list — replaces the editor
- * entirely, and the only door back was the rail's panel tile, which reads as
+ * entirely, and the only door back was the old rail's panel tile, which reads as
  * a panel toggle and not as "close this". So the door is spelled out: one
  * button, pinned to the top-right of the routed content, that says which book
  * it returns to.
@@ -19,7 +19,7 @@
  * `ShellBridge` deliberately does not carry a pathname.
  */
 
-import { useNavigate, useRouterState } from "@tanstack/solid-router";
+import { useNavigate } from "@tanstack/solid-router";
 import X from "lucide-solid/icons/x";
 import { Show, onCleanup } from "solid-js";
 
@@ -29,34 +29,19 @@ import { useShell } from "../../ProjectContext";
 import { IconButton } from "../primitives";
 import { bookName } from "./books";
 import { metadataOf } from "./project";
+import { useScreen } from "./screen";
 
 export function BackToEditor() {
   const shell = useShell();
   const navigate = useNavigate();
-  /**
-   * The route that actually matched — an ID from the generated tree, not a
-   * string we parse.
-   *
-   * Not a pathname prefix test: every project screen lives under
-   * `/project/$slug/`, so a prefix cannot tell them apart, and a predicate
-   * like that silently rots when screens move. A route id cannot rot that way
-   * — move a screen and this is a compile error.
-   */
-  const routeId = useRouterState({ select: (state) => state.matches.at(-1)?.routeId });
+  const screen = useScreen();
 
   /**
-   * Is there work behind this screen to go back TO?
-   *
-   * The work is the book, and the project route itself — which forwards to the
-   * book. Every other screen is a panel over the top of it and needs a door
-   * out, as soon as a project is open.
+   * Is there work behind this screen to go back TO? The work is the editor
+   * (`useScreen`); every other screen is a panel over the top of it and needs
+   * a door out, as soon as a project is open.
    */
-  const away = (): boolean =>
-    shell.project() !== undefined &&
-    // `_app` is the pathless layout every workspace screen sits under, so it
-    // is part of the ROUTE ID while absent from the URL. See `routes/_app.tsx`.
-    routeId() !== "/_app/project/$slug/book/$book" &&
-    routeId() !== "/_app/project/$slug/";
+  const away = (): boolean => shell.project() !== undefined && !screen.onEditor();
 
   const label = (): string => {
     const project = shell.project();
@@ -97,7 +82,7 @@ export function BackToEditor() {
           variant="outlined"
           label={label()}
           tooltipSide="left"
-          icon={<X size={16} />}
+          icon={<X />}
           onClick={back}
         />
       </div>

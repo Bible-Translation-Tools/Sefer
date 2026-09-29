@@ -98,7 +98,6 @@ export interface ShellStores {
   readonly findings: Accessor<readonly Finding[]>;
   readonly findingCounts: Accessor<{ readonly errors: number; readonly warnings: number }>;
   readonly summaryOf: (bookId: BookId) => BookSummary | undefined;
-  readonly attentionOf: (bookId: BookId) => number;
   readonly bookCensus: Accessor<readonly BookSummary[]>;
   readonly inventory: Accessor<Inventory>;
 }
@@ -134,7 +133,7 @@ export const makeShellStores = (options: {
    *
    * Both `ProjectAnalysis.findings()` and `census()` rebuild every finding in
    * every book, and `attach` invalidates their caches on every accepted edit —
-   * so read per keystroke, the bell, the rail and the sixty-six sidebar rows
+   * so read per keystroke, the bell, the app bar and the sixty-six sidebar rows
    * would each pay a whole-project rebuild.
    */
   // Signals for the three WHOLESALE products and a store for the one PARTIAL
@@ -210,11 +209,6 @@ export const makeShellStores = (options: {
    * does not wake the sixty-five it did not.
    */
   const summaryOf = (bookId: BookId): BookSummary | undefined => censusHeld[bookId];
-
-  const attentionOf = (bookId: BookId): number => {
-    const held = censusHeld[bookId];
-    return held === undefined ? 0 : held.diagnostics.errors + held.diagnostics.warnings;
-  };
 
   /** The whole census, in the project's own book order. */
   const bookCensus = (): readonly BookSummary[] => {
@@ -394,7 +388,6 @@ export const makeShellStores = (options: {
     findings,
     findingCounts,
     summaryOf,
-    attentionOf,
     bookCensus,
     inventory,
   };

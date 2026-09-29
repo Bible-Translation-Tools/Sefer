@@ -508,7 +508,7 @@ export function ReferencePane(props: ReferencePaneProps) {
               : t("Let {title} follow the book", { title: props.resource.title })
           }
           tooltipSide="left"
-          icon={following() ? <Link size={14} /> : <Unlink size={14} />}
+          icon={following() ? <Link /> : <Unlink />}
           onClick={() => setFollowing((on) => !on)}
         />
         <IconButton
@@ -516,7 +516,7 @@ export function ReferencePane(props: ReferencePaneProps) {
           data-testid={`unbind-${props.resource.id}`}
           label={t("Remove {title}", { title: props.resource.title })}
           tooltipSide="left"
-          icon={<X size={14} />}
+          icon={<X />}
           onClick={() => props.onUnbind()}
         />
       </div>

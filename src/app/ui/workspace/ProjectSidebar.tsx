@@ -19,14 +19,12 @@ import ArrowRight from "lucide-solid/icons/arrow-right";
 import BookIcon from "lucide-solid/icons/book";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";
-import FolderClock from "lucide-solid/icons/folder-clock";
 import Library from "lucide-solid/icons/library";
 import SearchIcon from "lucide-solid/icons/search";
-import TriangleAlert from "lucide-solid/icons/triangle-alert";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
 import { tocViewOf } from "#core/galley";
-import { chaptersAddress, type Address } from "#core/location/address";
+import { chaptersAddress, introAddress, type Address } from "#core/location/address";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
@@ -38,7 +36,6 @@ interface Row {
   readonly id: string;
   readonly name: string;
   readonly testament: Testament;
-  readonly attention: number;
 }
 
 interface Chapter {
@@ -82,8 +79,8 @@ export function ProjectSidebar() {
     name: "sidebarOpened",
   });
 
-  // A memo: it tracks the findings store, not `tick`, so typing in a book does
-  // not rebuild sixty-six rows to redraw badges that have not moved.
+  // A memo over the open project, so typing in a book does not rebuild
+  // sixty-six rows.
   const rows = createMemo(
     (): readonly Row[] => {
       const project = shell.project();
@@ -93,7 +90,6 @@ export function ProjectSidebar() {
         id: book.id,
         name: bookName(book.id, metadata),
         testament: testamentOf(book.id),
-        attention: shell.attentionOf(book.id),
       }));
     },
     { name: "sidebarBooks" },
@@ -151,20 +147,39 @@ export function ProjectSidebar() {
       return rows;
     }
     // Any other book: the engine's TOC from the analysis the project holds
-    // for it — never a scan of the text. Front matter is the focused book's
-    // concern; row 0 here is skipped.
+    // for it — never a scan of the text. Row 0 is the front matter, offered as
+    // "Intro" when it holds something, as it is for the focused book — so the
+    // tile is there before the book has been opened, not only after.
     const held = Option.getOrUndefined(shell.services.projectAnalysis.analysis(id));
     if (held === undefined) return [];
-    return tocViewOf(held.analysis)
-      .chapters.filter((chapter) => chapter.number > 0)
-      .map((chapter) => ({ index: chapter.number, label: String(chapter.number), intro: false }));
+    return tocViewOf(held.analysis).chapters.flatMap((chapter): Chapter[] => {
+      if (chapter.number > 0)
+        return [{ index: chapter.number, label: String(chapter.number), intro: false }];
+      return chapter.to > chapter.from ? [{ index: 0, label: t("Intro"), intro: true }] : [];
+    });
   };
 
   const openChapter = (id: string, chapter: Chapter): void => {
     // The focused book goes through `showChapter`, which decides clip vs
     // scroll and knows the intro row; any other book is a reference.
     if (shell.focused()?.id === id) shell.showChapter(chapter.index);
+    else if (chapter.intro) shell.showReference(introAddress(id));
     else shell.showReference(chaptersAddress(id, chapter.index));
+  };
+
+  /**
+   * The chapter the reader is in: the clipped one in chapter view, otherwise
+   * the one at the top of the editor, which the editor reports as it scrolls
+   * (the same place the location bar's crumb reads).
+   */
+  const currentChapter = (): number | undefined => {
+    const clipped = shell.chapter();
+    if (clipped !== null) return clipped;
+    const project = shell.project();
+    const book = shell.focused();
+    if (project === undefined || book === undefined) return undefined;
+    const held = shell.lastLocation(project.root);
+    return held?.bookId === book.id ? held.at : undefined;
   };
 
   const BookRow = (rowProps: { readonly row: Row }) => {
@@ -179,28 +194,21 @@ export function ProjectSidebar() {
       },
       { name: "sidebarChapters" },
     );
+    // An open book is one block with its grid: the canvas colour behind the
+    // row and its chapters, so the two read as one thing.
     return (
-      <li>
+      <li class={open() ? "rounded-lg bg-surface-canvas" : undefined}>
         <button
           type="button"
           data-testid={`sidebar-book-${rowProps.row.id}`}
           data-book={rowProps.row.id}
           data-focused={focused() ? "" : undefined}
           aria-expanded={open() ? "true" : "false"}
-          class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start text-small transition-colors data-focused:bg-sidebar-surface-active data-focused:font-medium data-focused:text-brand not-data-focused:text-sidebar-on-surface not-data-focused:hover:bg-sidebar-surface-hover"
+          class="flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-lg p-3 text-start text-small font-medium transition-colors data-focused:text-brand not-data-focused:text-sidebar-on-surface not-data-focused:hover:bg-sidebar-surface-hover"
           onClick={() => setOpened(open() ? null : rowProps.row.id)}
         >
-          <BookIcon size={15} aria-hidden="true" class="shrink-0" />
+          <BookIcon size={20} aria-hidden="true" class="shrink-0" />
           <span class="min-w-0 flex-1 truncate">{rowProps.row.name}</span>
-          <Show when={rowProps.row.attention > 0}>
-            <span
-              title={t("This book has findings to review.")}
-              class="inline-flex shrink-0 items-center gap-1 rounded-full bg-surface-warning px-1.5 py-0.5 text-smallest font-medium text-on-surface-warning"
-            >
-              <TriangleAlert size={11} aria-hidden="true" />
-              {t("Review")}
-            </span>
-          </Show>
           <span aria-hidden="true" class="shrink-0">
             <Show when={open()} fallback={<ChevronRight size={14} />}>
               <ChevronDown size={14} />
@@ -209,7 +217,12 @@ export function ProjectSidebar() {
         </button>
 
         <Show when={open() && chapters().length > 0}>
-          <ol class="mt-1 mb-2 grid grid-cols-4 gap-1 ps-7 pe-2">
+          <ol
+            // Indented to the book's icon (the row's 12px padding). As many
+            // columns as 3.75rem tiles — 12px padding round a 14px label as
+            // wide as "Intro" — fit, so a wider panel shows more. 1px apart.
+            class="grid grid-cols-[repeat(auto-fill,minmax(3.75rem,1fr))] gap-px px-3 pb-3"
+          >
             <For each={chapters()}>
               {(chapter) => (
                 <li>
@@ -217,8 +230,8 @@ export function ProjectSidebar() {
                     type="button"
                     data-chapter={chapter.index}
                     data-testid={`chapter-tile-${chapter.intro ? "intro" : chapter.label}`}
-                    data-current={focused() && shell.chapter() === chapter.index ? "" : undefined}
-                    class="w-full cursor-pointer rounded-md border py-1 text-center text-smallest tabular-nums transition-colors data-current:border-brand data-current:bg-brand-light data-current:font-semibold data-current:text-brand not-data-current:border-surface-border not-data-current:bg-surface-primary not-data-current:text-on-surface-secondary not-data-current:hover:bg-sidebar-surface-hover"
+                    data-current={focused() && currentChapter() === chapter.index ? "" : undefined}
+                    class="h-12 w-full cursor-pointer truncate rounded-lg border px-3 text-center text-small font-medium tabular-nums transition-colors data-current:border-brand data-current:bg-surface-primary data-current:font-semibold data-current:text-brand not-data-current:border-transparent not-data-current:text-on-surface-secondary not-data-current:hover:bg-surface-primary"
                     onClick={() => openChapter(rowProps.row.id, chapter)}
                   >
                     {chapter.label}
@@ -232,46 +245,8 @@ export function ProjectSidebar() {
     );
   };
 
-  /**
-   * With no project open, the panel is the way back into one.
-   *
-   * The book list and the reference box both need a project to mean anything —
-   * an empty list under a search box that searches it is the panel saying
-   * nothing twice. `shell.recentProjects` is what the landing screen wrote as
-   * it opened each one, so this is a history and not a directory listing; when
-   * it is empty there is nothing to show and the shell collapses the panel
-   * altogether (`shell.sidebarShowing`).
-   */
-  const Recents = () => (
-    <nav aria-label={t("Recent projects")} class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-      <p class="px-2 pt-3 pb-1 text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase">
-        {t("Recent projects")}
-      </p>
-      <ul>
-        <For each={shell.recentProjects()}>
-          {(recent) => (
-            <li>
-              <button
-                type="button"
-                data-recent={recent.root}
-                class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start text-small text-sidebar-on-surface transition-colors hover:bg-sidebar-surface-hover"
-                onClick={() =>
-                  void navigate({
-                    to: "/project/$slug",
-                    params: { slug: shell.slugFor(recent.root) },
-                    search: {},
-                  })
-                }
-              >
-                <FolderClock size={15} aria-hidden="true" class="shrink-0" />
-                <span class="min-w-0 flex-1 truncate">{recent.name}</span>
-              </button>
-            </li>
-          )}
-        </For>
-      </ul>
-    </nav>
-  );
+  // With no project open the panel says what it is for — its books arrive
+  // with a project — and the project control above it is the way to one.
 
   const path = useRouterState({ select: (state) => state.location.pathname });
   const choosing = (): boolean => path() === "/" || path().startsWith("/start");
@@ -330,39 +305,35 @@ export function ProjectSidebar() {
       <Show
         when={shell.project()}
         fallback={
-          <Show when={shell.recentProjects().length === 0} fallback={<Recents />}>
-            <div
-              data-testid="sidebar-empty"
-              class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-8 text-center text-small text-on-surface-tertiary"
-            >
-              <Library size={32} strokeWidth={1.5} aria-hidden="true" />
-              <p>
-                {t(
-                  "When your translation project is loaded into Sefer, its books will appear here.",
-                )}
-              </p>
-            </div>
-          </Show>
+          <div
+            data-testid="sidebar-empty"
+            class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-8 text-center text-small text-on-surface-tertiary"
+          >
+            <Library size={32} strokeWidth={1.5} aria-hidden="true" />
+            <p>
+              {t("When your translation project is loaded into Sefer, its books will appear here.")}
+            </p>
+          </div>
         }
       >
         <div class="flex flex-col gap-2 px-4 pb-2">
           <Input
-            size="sm"
             type="search"
             data-testid="sidebar-search"
-            icon={<SearchIcon size={14} />}
+            icon={<SearchIcon />}
             aria-label={t("Search for book and chapter")}
-            placeholder={t("Search for book and chapter")}
+            // An example, not a description: it fits the narrow panel and
+            // shows what the search understands. The label keeps the words.
+            placeholder={t("Mark 5")}
             value={query()}
             onInput={(event) => setQuery(event.currentTarget.value)}
           />
           <SegmentedControl
             label={t("Testament")}
-            size="sm"
             class="w-full"
             items={[
-              { value: "ot", label: t("Old Testament") },
-              { value: "nt", label: t("New Testament") },
+              { value: "ot", label: t("Old Testament"), shortLabel: t("Old") },
+              { value: "nt", label: t("New Testament"), shortLabel: t("New") },
             ]}
             value={testament()}
             onChange={pickTestament}

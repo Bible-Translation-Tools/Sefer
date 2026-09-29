@@ -81,9 +81,8 @@ the sidebar width — a record rewrite per click is a file write per click), and
   checked against the project first, so a book that has since been removed falls back to the census
   rather than to a not-found. `shell.landingTarget(root)` answers the same question for an Open, before
   the project is open.
-- **The rail's panel tile** uses it as the way back. On a project route the tile is the panel toggle;
-  on a full-page screen (settings, findings, history, review) there is no panel to toggle, so it opens
-  the panel and returns to the remembered book.
+- **`BackToEditor`** uses it as the way back from a full-page screen (settings, findings, history,
+  review), returning to the remembered book.
 
 `chapter` is the CLIP and `at` is the chapter that was at the top of the viewport. Both are needed,
 because a book opens WHOLE by default: a reader who had scrolled down to Psalm 3 had a clip of `null`
@@ -100,8 +99,7 @@ book an aim had named lands on the remembered place.
 ## The way back: `editor.back`
 
 Every full-page route — findings, history, review, find, terms, inventory, cloud, settings,
-the projects list — replaces the editor entirely. The rail's panel tile is one way back and reads as a
-panel toggle, so there is an explicit one as well: `src/app/ui/workspace/BackToEditor.tsx`, one
+the projects list — replaces the editor entirely. The way back is `src/app/ui/workspace/BackToEditor.tsx`, one
 `data-testid="back-to-editor"` button pinned to the top-right of the routed content, naming the book it
 returns to.
 
@@ -125,7 +123,7 @@ lands.
 ## The workspace chrome
 
 Three components, in `src/app/ui/workspace/`, and one rule between them: the
-RAIL answers "where in Sefer am I", the SIDEBAR answers "where in this project
+APP BAR answers "where in Sefer am I", the SIDEBAR answers "where in this project
 am I", and the TOOLBAR answers "what am I looking at".
 
 **Where the chrome is mounted is itself the rule.** It lives in
@@ -142,15 +140,24 @@ is a structural fact rather than a query parameter somebody can mistype.
 What `__root` keeps is what every screen needs whatever its frame: the head,
 the one `<ProjectProvider>`, the theme side effect, and the design annotator.
 A prototype outside the layout still has services, a theme and the comment
-panel — but not the rail, and not `installCommandKeys`, so it does not answer
+panel — but not the app bar, and not `installCommandKeys`, so it does not answer
 the application's Mod-K for an application it is not part of.
 
-- **`IconRail`** is permanent and one tile wide. Its panel toggle collapses the
-  sidebar and never itself. Everything below the toggle is lit from the
-  `pathname`, not from a signal, and every tile but three is a plain
-  navigation.
+- **`AppBar`** (`src/app/ui/workspace/AppBar.tsx`, testids `app-bar-*`) is permanent: a 72px bar across the top of the window in the
+  theme's own surface (`surface-primary`, a hairline under it). Left, the mark
+  and name — the Home button; centre, the two modes (Refine, Key terms) as a 48px
+  `SegmentedControl` (`md`, `iconsWhenNarrow`), which drop to icons below `md`;
+  right, 48px icon-only buttons. Everything on it is lit from the `pathname`,
+  not from a signal, and every button but three is a plain navigation.
+- **The project panel's show/hide** is not on the app bar. It is one button that
+  stays put and flips (`PanelToggle`, `panel-toggle`): left of the book's title
+  in the editor toolbar, and on project screens without that toolbar in the
+  same top-left spot, in a narrow column of its own (`PanelToggleColumn`).
+  Being outside the panel, it is also the way back. `Mod-b` does the same, and
+  dragging the panel's edge well past its minimum closes it
+  (`Resizable.Panel`'s `onCollapse`), keeping the width it had.
 
-  The mode tiles (Refine, Key terms) and the project screens (Character
+  The modes (Refine, Key terms) and the project screens (Character
   inventory, Compare — which goes to `/project/$slug/review` — and Cloud)
   appear only while a project is open: each is something you apply to a
   project, and offering one with nothing open is an affordance that answers
@@ -162,15 +169,14 @@ the application's Mod-K for an application it is not part of.
   well as `/projects`, because bringing a project in is the chooser's second
   half and `ProjectSidebar` reads the same two prefixes.
 
-- **`ProjectSidebar`** is the book list, the review pills from
-  `ProjectAnalysis.census`, and the chapter grid of the FOCUSED book — the one
-  place a chapter is chosen. There is no chapter `<select>` on the editor page.
-  With no project open the panel shows `shell.recentProjects` instead (the
-  `shell.recentProjects` preference the landing screen writes as it opens a
-  root) plus an "All projects" link; with no project AND no history there is
-  nothing to show, so `shell.sidebarShowing()` is false and the panel is off
-  screen. That is separate from `shell.sidebarOpen()`, which stays exactly as
-  the reader left it.
+- **`ProjectSidebar`** is the book list and each open book's chapter grid —
+  the one place a chapter is chosen. There is no chapter `<select>` on the
+  editor page. It marks nothing about findings for now: the review pill and
+  the red dots that replaced it were taken out until what a mark there means
+  is decided. With no project open there is nothing to list, so
+  `shell.sidebarShowing()` is false and the panel is off screen (`/`'s
+  `EmptyWorkspace` draws its own, with the empty message). That is separate
+  from `shell.sidebarOpen()`, which stays exactly as the reader left it.
 - **The sidebar is a slot.** A screen whose job is a list of places claims it
   for as long as it is mounted (`claimSidebar` in
   `src/app/ui/workspace/sidebarSlot.ts`; the last claim wins and releasing
@@ -267,7 +273,7 @@ An Effect-returning command is run on the app runtime by the runner `registerShe
 
 ## Routes and tokens
 
-Top level: `/`, `/projects`, `/settings`, `/start/create`, the dev-only `/dev/fixture`, and `/design` (outside the `_app` chrome). Under `/project/$slug`: the census (index), `book/$book`, `find`, `findings`, `history` (`?review=1` redirects to `review`), `inventory`, `terms`, `review`, `cloud` and `playground`. A project's slug is minted by `shell.slugFor(root)` and kept in the `projectSlugs` setting, so a bookmark keeps working; slugs minted this session are also held in memory and read first by `rootForSlug`, because a setting only answers a new value once the settings file is written and a click mints and navigates in the same tick. `find` owns its search params and derives its whole state from them, so a link into it from the rail or the toolbar changes the screen that is already mounted. File routes under `src/routes`; `src/routeTree.gen.ts` is generated — never edit it.
+Top level: `/`, `/projects`, `/settings`, `/start/create`, the dev-only `/dev/fixture`, and `/design` (outside the `_app` chrome). Under `/project/$slug`: the census (index), `book/$book`, `find`, `findings`, `history` (`?review=1` redirects to `review`), `inventory`, `terms`, `review`, `cloud` and `playground`. A project's slug is minted by `shell.slugFor(root)` and kept in the `projectSlugs` setting, so a bookmark keeps working; slugs minted this session are also held in memory and read first by `rootForSlug`, because a setting only answers a new value once the settings file is written and a click mints and navigates in the same tick. `find` owns its search params and derives its whole state from them, so a link into it from the app bar or the toolbar changes the screen that is already mounted. File routes under `src/routes`; `src/routeTree.gen.ts` is generated — never edit it.
 
 `src/app/ui/tokens.css` is the design system as plain custom properties, ported from the v1 editor's vanilla-extract contract so the two read as one product, and it is also the Tailwind v4 configuration: an `@theme` block mints a utility from every semantic name. Components use the semantic names (`bg-surface-primary`), never the ramps. Dark is a token swap under `[data-theme="dark"]` and `prefers-color-scheme`, never Tailwind's `dark:` variant. The reusable components live in `src/app/ui/primitives/`, which is the only place corvu is imported. `src/app/ui/app.css` is the one global stylesheet and holds only the `<body>` ground and the CodeMirror frame. See [the UI layer](ui.md).
 

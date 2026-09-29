@@ -876,7 +876,7 @@ export function ReviewPanel() {
             trigger={
               <Button size="sm" variant="secondary" data-review-sources title={sourcesLabel()}>
                 <span class="max-w-[40ch] truncate">{sourcesLabel()}</span>
-                <ChevronDown size={14} aria-hidden="true" />
+                <ChevronDown aria-hidden="true" />
               </Button>
             }
           >
@@ -948,7 +948,7 @@ export function ReviewPanel() {
               <Button
                 size="sm"
                 variant="secondary"
-                icon={<Save size={14} />}
+                icon={<Save />}
                 data-review-record
                 disabled={unsaved().length === 0}
                 title={t("{count} book(s) are not in their files yet.", {
@@ -965,22 +965,18 @@ export function ReviewPanel() {
               align="end"
               class="w-60"
               trigger={
-                <IconButton
-                  size="sm"
-                  label={t("More review actions")}
-                  icon={<MoreVertical size={16} />}
-                />
+                <IconButton size="sm" label={t("More review actions")} icon={<MoreVertical />} />
               }
             >
               <MenuItem
-                icon={<Eraser size={14} aria-hidden="true" />}
+                icon={<Eraser aria-hidden="true" />}
                 disabled={decisions().size === 0}
                 onSelect={clearEverything}
               >
                 {t("Clear every decision")}
               </MenuItem>
               <MenuItem
-                icon={<History size={14} aria-hidden="true" />}
+                icon={<History aria-hidden="true" />}
                 onSelect={() =>
                   void navigate({
                     to: "/project/$slug/history",
@@ -1072,7 +1068,7 @@ export function ReviewPanel() {
               </Button>
               <Button
                 variant="primary"
-                icon={<Save size={14} />}
+                icon={<Save />}
                 loading={recording()}
                 disabled={unsaved().length === 0}
                 data-review-record-confirm

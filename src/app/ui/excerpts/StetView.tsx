@@ -150,7 +150,7 @@ export function StetView(props: StetViewProps) {
           type="search"
           size="sm"
           aria-label={t("Filter terms")}
-          icon={<SearchIcon size={14} />}
+          icon={<SearchIcon />}
           placeholder={t("Filter terms")}
           value={props.filter}
           onInput={(event) => props.onFilter(event.currentTarget.value)}

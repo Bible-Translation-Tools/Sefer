@@ -12,7 +12,7 @@ import "#app/ui/theme";
  * What every screen needs whatever frame it is in: the head, the one
  * `<ProjectProvider>`, and the design annotator.
  *
- * The application's CHROME — the icon rail, the project sidebar, the palette,
+ * The application's CHROME — the app bar, the project sidebar, the palette,
  * the status line — is deliberately NOT here. It lives in `_app.tsx`, a
  * pathless layout, and the screens that belong inside the workspace are the
  * ones under it. Anything outside that layout, `/design` above all, is a blank

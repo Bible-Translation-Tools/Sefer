@@ -1,6 +1,6 @@
 /**
  * The import hub: the ways a project gets onto this device — a zip, a folder,
- * a clone — as the projects page's buttons or the rail's menu.
+ * a clone — as the projects page's buttons or the app bar's menu.
  *
  * The rule the whole component is built around: a source the host cannot serve
  * is rendered DISABLED with the reason in place of its explainer, never hidden
@@ -74,12 +74,16 @@ interface Progress {
 }
 
 export function ImportHub(props: {
-  readonly onImported: () => void;
+  /**
+   * After a project lands — the app bar goes to the projects page. The list
+   * itself needs no telling: `rememberProject` re-reads it.
+   */
+  readonly onImported?: () => void;
   /**
    * `buttons` (the default) is "Import zip" and "Import folder" as the
    * projects page's two large buttons, each going straight to the system
    * picker. `menu` is the same two plus "Clone from cloud", opened from
-   * `trigger` — the rail's Import. Same pipeline and progress dialog either way.
+   * `trigger` — the app bar's Import. Same pipeline and progress dialog either way.
    */
   readonly variant?: "buttons" | "menu";
   /** The menu's trigger; `menu` only. */
@@ -190,7 +194,7 @@ export function ImportHub(props: {
       // re-read, so the row it draws is the one just written.
       await run(rememberProject(services.projectsRoot, into, undefined));
       operation.end("passed", { "import.phase": "complete" });
-      props.onImported();
+      props.onImported?.();
     })().catch((cause: unknown) => {
       const message = describe(cause);
       operation.end("failed", {
@@ -296,7 +300,7 @@ export function ImportHub(props: {
       // re-read, so the row it draws is the one just written.
       await run(rememberProject(services.projectsRoot, into, undefined));
       operation.end("passed", { "import.phase": "complete" });
-      props.onImported();
+      props.onImported?.();
     })().catch((cause: unknown) => {
       const message = describe(cause);
       operation.end("failed", {
@@ -375,7 +379,7 @@ export function ImportHub(props: {
       end("passed", { "import.phase": "complete" });
       finished(t("Ready"), t("Cloned into {root}.", { root: into }), false);
       toasts.update(toast, { title: t("Cloned {name}", { name }), tone: "success" });
-      props.onImported();
+      props.onImported?.();
     })().catch((cause: unknown) => {
       const message = describe(cause);
       // Offline or a dead server is the world saying no; only a failure the
@@ -403,7 +407,7 @@ export function ImportHub(props: {
     else importPicked(t("Import from a folder"), "folder");
   };
 
-  // "Open project…" is importing a folder. Only the rail's menu registers it:
+  // "Open project…" is importing a folder. Only the app bar's menu registers it:
   // it is mounted on every screen, and one owner means one progress dialog.
   // `variant` is read once: an instance is one shape for its whole life.
   if (untrack(() => props.variant) === "menu")
@@ -443,17 +447,17 @@ export function ImportHub(props: {
           </div>
         }
       >
-        <Menu label={t("Import")} side="right" align="end" class="w-56" trigger={props.trigger}>
+        <Menu label={t("Import")} side="bottom" align="end" class="w-56" trigger={props.trigger}>
           <MenuItem
             data-testid="import-zip"
-            icon={<FileArchive size={16} aria-hidden="true" />}
+            icon={<FileArchive aria-hidden="true" />}
             onSelect={() => pick("zip")}
           >
             {t("Import zip")}
           </MenuItem>
           <MenuItem
             data-testid="import-folder"
-            icon={<FolderOpen size={16} aria-hidden="true" />}
+            icon={<FolderOpen aria-hidden="true" />}
             onSelect={() => pick("folder")}
           >
             {t("Import folder")}
@@ -462,7 +466,7 @@ export function ImportHub(props: {
               cannot serve says so where it would have been. */}
           <MenuItem
             data-testid="import-cloud"
-            icon={<CloudDownload size={16} aria-hidden="true" />}
+            icon={<CloudDownload aria-hidden="true" />}
             disabled={endpoint === null}
             title={endpoint === null ? t("No WACS server is set for this build.") : undefined}
             onSelect={openClone}

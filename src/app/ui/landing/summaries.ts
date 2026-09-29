@@ -20,11 +20,17 @@
  */
 
 import { Effect, FileSystem, Option, Result } from "effect";
+import { createSignal } from "solid-js";
 
 import { ProjectAdmin } from "#core/admin/projectAdmin";
 import { lastSegment } from "#core/fileSystem/path";
 import { HostInfo } from "#core/host/hostInfo";
-import { recordProject, repairProjectIndex, type ProjectRow } from "#core/project/projectIndex";
+import {
+  forgetProject,
+  recordProject,
+  repairProjectIndex,
+  type ProjectRow,
+} from "#core/project/projectIndex";
 import { firstArrival, type ProjectOrigin } from "#core/project/provenance";
 
 import { languageName, languageTag, projectDisplayName } from "../../language";
@@ -149,6 +155,23 @@ export const listProjects = (
   });
 
 /**
+ * How many times this session has added a project to the index or taken one
+ * out of it. The projects list re-reads on it, so a project arriving from
+ * anywhere — the app bar's Import while the list is on screen, the list's own
+ * buttons, a WACS download — shows up without its caller knowing the list
+ * exists.
+ *
+ * Bumped by the two functions below and by nothing else. `listProjects`'
+ * own repair writes the index too, and deliberately does not bump: the list
+ * re-reading itself because it read would never stop.
+ */
+const [indexRevision, setIndexRevision] = createSignal(0, { name: "projectIndexRevision" });
+export const projectIndexRevision = indexRevision;
+const indexChanged = Effect.sync(() => {
+  setIndexRevision((held) => held + 1);
+});
+
+/**
  * Adds or refreshes one project's row — every arrival (a zip, a folder, a
  * clone from the import hub or from Find), create and rename all end here, so
  * the list shows a new project the moment its files and history are on disk.
@@ -162,6 +185,18 @@ export const rememberProject = (
     const fileSystem = yield* FileSystem.FileSystem;
     const summary = yield* summarize(root, lastOpened, false);
     yield* Effect.ignore(recordProject(fileSystem, projectsRoot, asRow(summary)));
+    yield* indexChanged;
+  });
+
+/** Takes a deleted project's row out, the other end of `rememberProject`. */
+export const forgetRemembered = (
+  projectsRoot: string,
+  root: string,
+): Effect.Effect<void, never, Domain> =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    yield* Effect.ignore(forgetProject(fileSystem, projectsRoot, root));
+    yield* indexChanged;
   });
 
 /** Human date for the table; an absent value is the caller's em dash. */

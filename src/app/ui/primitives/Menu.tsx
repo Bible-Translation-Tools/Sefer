@@ -16,7 +16,7 @@
  *
  * `MenuLabel` heads a group, `MenuSeparator` divides groups.
  *
- * Two densities. `md` is the compact list (the rail's More, a card's actions);
+ * Two densities. `md` is the compact list (the app bar's More, a card's actions);
  * `lg` is the roomy one with body text (a table column's Sort and Filter).
  */
 
@@ -50,7 +50,9 @@ const row = variants({
   ].join(" "),
   variants: {
     size: {
-      md: "gap-2 px-3 py-1.5 text-small",
+      // The default: 12px all round, a 12px icon-to-label gap, 14px medium,
+      // a 20px icon — at least the 48px touch target.
+      md: "min-h-12 gap-3 p-3 text-small font-medium [&>svg]:size-5",
       lg: "gap-4 p-4 text-body font-medium",
     },
   },
@@ -135,7 +137,7 @@ export function Menu(props: MenuProps) {
 
 interface RowProps {
   readonly children: JSX.Element;
-  /** Leading icon, already sized by the caller. */
+  /** Leading icon; an `md` menu sizes it, an `lg` one leaves it to the caller. */
   readonly icon?: JSX.Element;
   readonly disabled?: boolean;
   /** Why it is disabled, or anything else worth a native tooltip. */

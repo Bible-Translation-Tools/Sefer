@@ -44,6 +44,12 @@ The file has four parts, in order:
   only indirection.
 - **Our radii replace Tailwind's**, so `rounded-lg` is the product's 12px, not
   the framework's 8px. Cards are `rounded-lg`, dialogs `rounded-xl`.
+- **Neighbouring controls are `gap-controls` apart** (12px, `--spacing-controls`),
+  not a `gap-2` or `gap-3` chosen per screen. `PanelHeader`'s actions and a
+  `Dialog`'s footer already use it.
+- **A control sizes its own icon** — 20px at `md`, 16px at `sm`
+  (`[&>svg]:size-5` / `size-4`, the icon slot only) — so an icon handed to one
+  takes no `size`. `lg` (and `Button`'s `flush`) still take the caller's.
 - **The shadows are `@utility` rules**, not `@theme` entries. Tailwind parses a
   themed shadow so it can offer `shadow-<color>`, which bakes the light colour
   into the class and leaves the dark override unread. `shadow-small`,
@@ -112,7 +118,7 @@ import from the directory, never from a file inside it.
 | `IconButton`         | `label` (REQUIRED — the `aria-label` and the tooltip), `icon`, `variant` subtle/filled/outlined, `size` sm/md/lg.                                                                                                                                                                                                                                    |
 | `Input`              | Every `<input>` prop except `size`; `size` sm/md/lg, `icon` (leading slot), `wrapperClass`.                                                                                                                                                                                                                                                          |
 | `Select`             | Native `<select>`, styled, with a drawn chevron; `size`, `wrapperClass`.                                                                                                                                                                                                                                                                             |
-| `SegmentedControl`   | `items` (`{ value, label, icon?, disabled? }`), `value`, `onChange`, `label`, `size`. A radio group; arrows move.                                                                                                                                                                                                                                    |
+| `SegmentedControl`   | `items` (`{ value, label, shortLabel?, icon?, disabled? }`), `value` (or `undefined`: none chosen), `onChange`, `label`, `size` sm/md/lg, `iconsWhenNarrow`. A radio group; arrows move.                                                                                                                                                             |
 | `Switch`             | `checked`, `onChange`, `label` or `aria-label`, `id`, `disabled`.                                                                                                                                                                                                                                                                                    |
 | `Badge`              | `tone` neutral/brand/warning/error/success/muted, `size`. `severityTone(severity)` maps a finding's severity to one.                                                                                                                                                                                                                                 |
 | `Card`               | Every `<section>` prop, plus `padded` (off for full-bleed bodies).                                                                                                                                                                                                                                                                                   |
@@ -122,7 +128,7 @@ import from the directory, never from a file inside it.
 | `Popover`            | `trigger`, `children`, `label`, `side`, `align`, `variant` panel/menu, optional `open`/`onOpenChange`, `triggerClass`, `fitViewport`.                                                                                                                                                                                                                |
 | `Menu`               | `label`, `trigger`, `size` md/lg, and `Popover`'s placement props; rows `MenuItem` (acts, closes), `MenuRadio` (chooses, closes), `MenuCheckbox` (toggles, stays open), `MenuLabel`, `MenuSeparator`. Arrows, Home/End, focus on open.                                                                                                               |
 | `Dialog`             | `open`, `onOpenChange`, `title` (required), `description`, `footer`.                                                                                                                                                                                                                                                                                 |
-| `Resizable`          | `.Root` (`orientation`, `onSizesChange`), `.Panel` (`initialSize`, `minSize`, `maxSize`), `.Handle` (`label`).                                                                                                                                                                                                                                       |
+| `Resizable`          | `.Root` (`orientation`, `onSizesChange`), `.Panel` (`initialSize`, `minSize`, `maxSize`, `onCollapse` + `collapseHint`: drag well past the minimum to close), `.Handle` (`label`, `edge`: sits on the panel's border).                                                                                                                               |
 | `Kbd`                | A keycap. Show the chord exactly as `src/app/commands.ts` spells it.                                                                                                                                                                                                                                                                                 |
 | `EmptyState`         | `icon`, `title`, `description`, one `action`.                                                                                                                                                                                                                                                                                                        |
 | `FilterList`         | `items`, `match(item, query)`, `key`, `children(item)`, `onPick`, `current`, `placeholder`, `label`. A list you can type at: a filter box that takes focus, arrows, Enter. The book and chapter pickers and the palette are its shape.                                                                                                               |
@@ -163,8 +169,8 @@ arrow keys, focus on open) is ours either way.
 inside a signal updater, Solid 2 runs that updater lazily, and the handle then
 asks for a size at index `-1` and dies. The package is not installed; the file
 keeps corvu's `Root`/`Panel`/`Handle` shape so that swapping back later is one
-import. Collapsing is deliberately not implemented: a collapsed sidebar is a
-different tree (an icon rail), not a zero-width panel.
+import. Collapsing is the caller's: `onCollapse` asks, and the workspace hides the
+panel with a class rather than shrinking it to zero, so its width comes back.
 
 ### Cards: one frame, one editor, one list (`src/app/ui/multibuffer/`)
 
@@ -306,7 +312,7 @@ by a test suite, and both need a handle that survives a reworded label and a
 retranslated one. `data-testid` is that handle.
 
 **The rule.** Kebab-case, `<area>-<thing>`, and the area is the piece of chrome
-a reader would name — e.g. `rail-refine`, `sidebar-book-PHM`, `toolbar-undo`,
+a reader would name — e.g. `app-bar-home`, `sidebar-book-PHM`, `toolbar-undo`,
 `kebab-export-zip`, `chapter-tile-3`, `location-next`, `palette-input`,
 `status-commands`, `editor-host`. A book id or a chapter label keeps its own
 spelling (`sidebar-book-3JN`, `chapter-tile-intro`) — it is an identifier, not
@@ -318,7 +324,7 @@ they render, so `data-testid` is an ordinary prop with no support needed from
 the primitive. Nothing generates one: a control gets an id when something
 drives it, and an id nothing uses is a name to keep in step for no reader.
 
-**What has one today**: the rail and each of its tiles, the sidebar with its
+**What has one today**: the app bar and each of its buttons, the sidebar with its
 project button, its Go-to box, each book row and each chapter tile; the
 toolbar, its search box, Undo, Redo, Findings, the kebab and each of the
 kebab's items; the location bar with its two crumbs and its two arrows; the

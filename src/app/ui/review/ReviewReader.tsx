@@ -692,7 +692,7 @@ export function ReviewReader(props: {
                           <IconButton
                             size="sm"
                             label={t("Decide all of {book}", { book: held.book.name })}
-                            icon={<MoreVertical size={14} />}
+                            icon={<MoreVertical />}
                             data-review-book-menu={held.book.bookId}
                           />
                         }
@@ -840,9 +840,9 @@ export function ReviewReader(props: {
           class="w-64"
           trigger={
             <Button size="sm" variant="tertiary" data-review-view>
-              <Columns2 size={14} aria-hidden="true" />
+              <Columns2 aria-hidden="true" />
               {t("View")}
-              <ChevronDown size={14} aria-hidden="true" />
+              <ChevronDown aria-hidden="true" />
             </Button>
           }
         >
@@ -868,13 +868,13 @@ export function ReviewReader(props: {
           <IconButton
             size="sm"
             label={t("Previous change (Alt-Shift-F5)")}
-            icon={<ArrowUp size={14} />}
+            icon={<ArrowUp />}
             onClick={() => step(-1)}
           />
           <IconButton
             size="sm"
             label={t("Next change (Alt-F5)")}
-            icon={<ArrowDown size={14} />}
+            icon={<ArrowDown />}
             onClick={() => step(1)}
           />
         </div>

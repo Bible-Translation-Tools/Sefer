@@ -38,7 +38,7 @@ import type { Guide, Term } from "#core/stet/stet";
  *     else nothing — and "nothing" is printed, not hidden.
  *
  * **The URL is the state**: `term`, `q` and `locale` are read from the search
- * params on every render, exactly as `/find` reads its own, because the rail
+ * params on every render, exactly as `/find` reads its own, because the app bar
  * can navigate here while the screen is already mounted.
  *
  * What is NOT here: a done count. Marking an occurrence settled needs a store

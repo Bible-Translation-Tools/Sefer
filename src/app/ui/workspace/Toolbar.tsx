@@ -45,6 +45,7 @@ import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { Card, IconButton, Input, Popover, SegmentedControl } from "../primitives";
 import { bookName } from "./books";
+import { PanelToggle } from "./PanelToggle";
 import { metadataOf, projectName } from "./project";
 
 /** The two segments, as literal strings so Tailwind and the reader agree. */
@@ -134,12 +135,17 @@ export function Toolbar() {
 
   return (
     <div class="flex flex-wrap items-center gap-3" data-testid="toolbar">
-      <strong
-        class="min-w-0 shrink truncate text-h4 font-semibold text-on-surface-primary"
-        data-workspace-title
-      >
-        {title()}
-      </strong>
+      {/* The project panel's show/hide, then the title: the toggle sits on
+          the side nearest the panel it opens and closes. */}
+      <div class="flex min-w-0 shrink items-center gap-2">
+        <PanelToggle />
+        <strong
+          class="min-w-0 truncate text-h4 font-semibold text-on-surface-primary"
+          data-workspace-title
+        >
+          {title()}
+        </strong>
+      </div>
 
       <SegmentedControl<Segment>
         class="mx-auto"
@@ -148,11 +154,11 @@ export function Toolbar() {
         /* Two modes, because that is what this control IS. Key terms was a
            third segment here and it is not a mode — it is a screen, and
            picking it navigated away, which made the other two look like
-           navigations too. It is a rail tile, where the other destinations
+           navigations too. It is an app bar mode, where the other destinations
            are. Form is a SURFACE, not a projection, and will not live here. */
         items={[
-          { value: "regular", label: t("Regular Mode"), icon: <BookOpen size={14} /> },
-          { value: "usfm", label: t("USFM"), icon: <Code size={14} /> },
+          { value: "regular", label: t("Regular Mode"), icon: <BookOpen /> },
+          { value: "usfm", label: t("USFM"), icon: <Code /> },
         ]}
         value={segment()}
         onChange={pick}
@@ -164,7 +170,7 @@ export function Toolbar() {
           type="search"
           data-testid="toolbar-search"
           wrapperClass="w-44"
-          icon={<SearchIcon size={14} />}
+          icon={<SearchIcon />}
           aria-label={t("Find in project")}
           placeholder={t("Search…")}
           value={query()}
@@ -184,7 +190,7 @@ export function Toolbar() {
           size="sm"
           data-testid="toolbar-undo"
           label={t("Undo")}
-          icon={<Undo2 size={16} />}
+          icon={<Undo2 />}
           disabled={!can("book.undo")}
           onClick={() => runCommand("book.undo")}
         />
@@ -192,7 +198,7 @@ export function Toolbar() {
           size="sm"
           data-testid="toolbar-redo"
           label={t("Redo")}
-          icon={<Redo2 size={16} />}
+          icon={<Redo2 />}
           disabled={!can("book.redo")}
           onClick={() => runCommand("book.redo")}
         />
@@ -206,7 +212,7 @@ export function Toolbar() {
             size="sm"
             data-testid="toolbar-overlay"
             label={t("Match formatting from source")}
-            icon={<ArrowLeftRight size={16} />}
+            icon={<ArrowLeftRight />}
             disabled={!can("overlay.book")}
             onClick={() => runCommand("overlay.book")}
           />
@@ -217,7 +223,7 @@ export function Toolbar() {
             size="sm"
             data-testid="toolbar-findings"
             label={t("Findings")}
-            icon={<Bell size={16} />}
+            icon={<Bell />}
             onClick={() =>
               void navigate({
                 to: "/project/$slug/findings",
@@ -249,7 +255,7 @@ export function Toolbar() {
               size="sm"
               data-testid="toolbar-kebab"
               label={t("More")}
-              icon={<MoreVertical size={16} />}
+              icon={<MoreVertical />}
             />
           }
         >

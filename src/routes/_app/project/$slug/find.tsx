@@ -742,7 +742,7 @@ function Find() {
             <Input
               ref={setBox}
               type="search"
-              icon={<SearchIcon size={14} />}
+              icon={<SearchIcon />}
               wrapperClass="w-72"
               placeholder={t("Find in project")}
               value={text()}
@@ -755,28 +755,28 @@ function Find() {
               <IconButton
                 size="sm"
                 label={t("Match case")}
-                icon={<CaseSensitiveIcon size={15} />}
+                icon={<CaseSensitiveIcon />}
                 aria-pressed={matchCase() ? "true" : "false"}
                 onClick={() => setMatchCase((held) => !held)}
               />
               <IconButton
                 size="sm"
                 label={t("Whole word")}
-                icon={<WholeWordIcon size={15} />}
+                icon={<WholeWordIcon />}
                 aria-pressed={wholeWord() ? "true" : "false"}
                 onClick={() => setWholeWord((held) => !held)}
               />
               <IconButton
                 size="sm"
                 label={t("Regular expression")}
-                icon={<RegexIcon size={15} />}
+                icon={<RegexIcon />}
                 aria-pressed={regex() ? "true" : "false"}
                 onClick={() => setRegex((held) => !held)}
               />
               <IconButton
                 size="sm"
                 label={t("Search the markup, not the reading")}
-                icon={<CodeIcon size={15} />}
+                icon={<CodeIcon />}
                 aria-pressed={markup() ? "true" : "false"}
                 onClick={() => setMarkup((held) => !held)}
               />
@@ -784,7 +784,6 @@ function Find() {
 
             <SegmentedControl
               label={t("Scope")}
-              size="sm"
               value={scope()}
               onChange={(next) =>
                 ask({
@@ -833,14 +832,14 @@ function Find() {
               <IconButton
                 size="sm"
                 label={t("Previous match")}
-                icon={<ChevronUpIcon size={15} />}
+                icon={<ChevronUpIcon />}
                 disabled={feedHits().length === 0}
                 onClick={() => step(-1)}
               />
               <IconButton
                 size="sm"
                 label={t("Next match")}
-                icon={<ChevronDownIcon size={15} />}
+                icon={<ChevronDownIcon />}
                 disabled={feedHits().length === 0}
                 onClick={() => step(1)}
               />

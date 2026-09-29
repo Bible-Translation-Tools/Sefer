@@ -36,7 +36,7 @@ export function ContextControl(props: {
       size="sm"
       data-step="fold"
       label={folded() ? t("Show the context again") : (props.only ?? t("Show only the match"))}
-      icon={folded() ? <UnfoldVerticalIcon size={13} /> : <FoldVerticalIcon size={13} />}
+      icon={folded() ? <UnfoldVerticalIcon /> : <FoldVerticalIcon />}
       aria-pressed={folded() ? "true" : "false"}
       disabled={!folded() && !widened(props.extent)}
       onClick={() => props.onStep("fold")}

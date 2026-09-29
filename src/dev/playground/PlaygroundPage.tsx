@@ -3,7 +3,7 @@
  *
  * It is deliberately NOT a screen of the application. It sits under
  * `/project/$slug` so the shell has already opened a project — real books, real
- * text, the real Galley service — and then gets out of the way: no icon rail,
+ * text, the real Galley service — and then gets out of the way: no app bar,
  * no location bar, no command palette. What is left is the thing being tried.
  *
  * Everything the frame knows how to do, it does once for every experiment:
