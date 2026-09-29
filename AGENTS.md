@@ -28,6 +28,7 @@ Read only the guidance relevant to the task:
 - [The landing screens](documentation/architecture/landing.md): the project list, what each import source needs per host, the Catalogue port, and where Create stops.
 - [Key terms (STET)](documentation/architecture/stet.md): read before touching `/terms`; covers the frozen catalogue and its `StetCatalog` port, the committed guide fixture, how a guide reference maps onto the project, and what is still a stand-in.
 - [Review](documentation/architecture/review.md): read before touching `/review`, `src/app/ui/review`, `src/core/compare`, `src/core/save` or `src/core/recovery`; covers the `CompareSource` port and why BOTH sides are pickers, the decision unit and the engine door behind it, what Apply writes and refuses, the explicit-only save model, and the working-state backup.
+- [Dev-only routes](documentation/dev-only-routes.md): every route behind `__SEFER_DESIGN__` or `import.meta.env.DEV`, the grep that finds them, and each one's URL on the `dev` channel; update it when a gate changes.
 - [The design surface](documentation/architecture/design.md): read before touching `/design`, `src/dev/design`, `src/dev/annotate` or the `__SEFER_DESIGN__` define; covers the three build modes and why the switch is a `define`, the path boundaries, the floating annotator, and how the designer hands work over.
 - [Cloud sync](documentation/architecture/sync.md): read before touching `/cloud`, `src/core/sync` or the Remote port; covers the nine states, the two clocks, the incoming plan, and why scripture text is never merged automatically.
 
@@ -64,7 +65,7 @@ Check `package.json` and runner configuration for executable commands. Distingui
 
 ## Channels
 
-`dev` is every push to master — web only, `--mode dev`, the only deployed thing carrying `/design`, the comment panel and `?fixture=1`. `preview` is a PROMOTION (a dispatch or a `v*-N` tag such as `v0.3.0-1`; `-rc.1` breaks Tauri's MSI bundler), with the full test suite and the full desktop matrix. `production` is a `v*` tag. Desktop has two channels, not three, because a desktop build costs twenty minutes and a web build costs one.
+`dev` is every push to master — web only, `--mode dev`, the only deployed thing carrying `/design`, the playgrounds, the comment panel and `?fixture=1` ([dev-only routes](documentation/dev-only-routes.md)). `preview` is a PROMOTION (a dispatch or a `v*-N` tag such as `v0.3.0-1`; `-rc.1` breaks Tauri's MSI bundler), with the full test suite and the full desktop matrix. `production` is a `v*` tag. Desktop has two channels, not three, because a desktop build costs twenty minutes and a web build costs one.
 
 Master deploying the least-stable channel reads oddly and is deliberate: the alternative is a long-lived `dev` branch, which means a merge train and divergence, and the person most often working here does not use git. One trunk keeps history linear, and it keeps `dev` and `preview` the same commit built two ways — so a difference between them can only ever be the design surface, never drift.
 
