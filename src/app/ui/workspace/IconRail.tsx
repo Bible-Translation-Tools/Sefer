@@ -7,11 +7,10 @@
  *
  * Three bands, left to right. The mark, which is the way home. (The project
  * panel's show/hide is `PanelToggle`, beside the book's title or in its own
- * column, not here.) The MODES in the middle — Form, Refine, Key terms — the
- * three ways of working on a project's text;
- * with no project open they are there but disabled, so the rail keeps one
- * shape — the empty state's included.
- * Form is not built yet and stays disabled. At the end: More, Import (a zip,
+ * column, not here.) The MODES in the middle — Refine and Key terms — the
+ * ways of working on a project's text; with no project open they are there
+ * but disabled, so the bar keeps one shape — the empty state's included. A
+ * mode joins when it is built, not before. At the end: More, Import (a zip,
  * a folder or a clone, from anywhere), Settings, and Account (disabled until
  * there is an account).
  *
@@ -32,7 +31,6 @@ import GitCompare from "lucide-solid/icons/git-compare";
 import HistoryIcon from "lucide-solid/icons/history";
 import ListChecks from "lucide-solid/icons/list-checks";
 import SettingsIcon from "lucide-solid/icons/settings";
-import Sheet from "lucide-solid/icons/sheet";
 import TypeIcon from "lucide-solid/icons/type";
 import UserIcon from "lucide-solid/icons/user";
 import { createSignal, For } from "solid-js";
@@ -74,7 +72,7 @@ function RailButton(props: {
   );
 }
 
-type Mode = "form" | "refine" | "terms";
+type Mode = "refine" | "terms";
 
 type ProjectScreen =
   | "/project/$slug/findings"
@@ -218,25 +216,19 @@ export function IconRail() {
         </button>
       </div>
 
-      {/* The modes. A choice of one of three ways of working on the text, so
-          a radio group (`SegmentedControl`), not three buttons; each still
-          navigates. Form is not built; the other two need an open project. */}
+      {/* The modes. A choice of one way of working on the text, so a radio
+          group (`SegmentedControl`), not buttons; each still navigates, and
+          each needs an open project. */}
       <SegmentedControl<Mode>
         label={t("Mode")}
         iconsWhenNarrow
         // Centred, with the space either side taking up the slack: it grows to
-        // its widest (three 10rem tabs), and shrinks before going icon-only.
-        class="mx-auto w-full max-w-[31rem] max-md:w-auto"
+        // its widest (two 10rem tabs in the track), and shrinks before going
+        // icon-only.
+        class="mx-auto w-full max-w-[20.75rem] max-md:w-auto"
         value={mode()}
         onChange={goTo}
         items={[
-          {
-            value: "form",
-            label: t("Form"),
-            icon: <Sheet aria-hidden="true" />,
-            disabled: true,
-            title: t("Form is not built yet."),
-          },
           {
             value: "refine",
             label: t("Refine"),
