@@ -64,7 +64,7 @@ const classes = variants({
       sm: "h-7 gap-1.5 rounded-md px-2.5 text-smallest",
       // The default, and the app's control size: 48px tall, 12px sides and
       // radius, 14px medium, a 20px icon 6px from its label.
-      md: "h-12 gap-1.5 rounded-lg px-3 text-small [&_svg]:size-5",
+      md: "h-12 gap-1.5 rounded-lg px-3 text-small [&>svg]:size-5",
       lg: "h-14 gap-2 rounded-xl px-4 text-body",
       flush: "gap-1.5 text-body",
     },
@@ -75,7 +75,7 @@ const classes = variants({
 export interface ButtonProps extends ComponentProps<"button"> {
   readonly variant?: ButtonVariant;
   readonly size?: ButtonSize;
-  /** Rendered before the label. An icon element, already sized by the caller. */
+  /** Rendered before the label. An `md` button sizes the icon; `sm` and `lg` leave it to the caller. */
   readonly icon?: JSX.Element;
   /** Swaps the icon for a spinner and disables the button. */
   readonly loading?: boolean;

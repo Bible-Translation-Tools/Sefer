@@ -36,7 +36,7 @@ const classes = variants({
       // `Button size="lg"` beside it.
       sm: "size-7 rounded-md",
       // The default: a 48px touch target round a 20px icon, 12px radius.
-      md: "size-12 rounded-lg [&_svg]:size-5",
+      md: "size-12 rounded-lg [&>svg]:size-5",
       lg: "size-14 rounded-xl",
     },
   },

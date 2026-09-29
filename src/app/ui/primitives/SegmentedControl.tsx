@@ -57,7 +57,7 @@ export interface SegmentedControlProps<T extends string> {
 }
 
 /**
- * `collapse` is whether this `lg` control may drop to icons below `md` — only
+ * `collapse` is whether this control may drop to icons below `md` — only
  * when every segment HAS an icon, or a narrow window would show blank tabs.
  */
 const sizeClass = (size: SegmentedControlProps<string>["size"], collapse: boolean): string => {
@@ -74,7 +74,7 @@ const sizeClass = (size: SegmentedControlProps<string>["size"], collapse: boolea
   // each starts from its own label's width, so a control sized to its content
   // fits its words, and one given a width (the sidebar's) shares the rest.
   return cx(
-    "h-10.5 min-w-0 flex-auto justify-center gap-1.5 rounded-lg px-3 text-small [&_svg]:size-5",
+    "h-10.5 min-w-0 flex-auto justify-center gap-1.5 rounded-lg px-3 text-small [&>svg]:size-5",
     collapse && "max-md:w-10.5 max-md:flex-none max-md:px-0",
   );
 };
@@ -89,6 +89,8 @@ const toneClass = (chosen: boolean): string => {
 export function SegmentedControl<T extends string>(props: SegmentedControlProps<T>) {
   const collapses = (): boolean =>
     props.iconsWhenNarrow === true && props.items.every((item) => item.icon !== undefined);
+  const firstEnabled = (): Segment<T> | undefined =>
+    props.items.find((item) => item.disabled !== true);
   const step = (delta: 1 | -1): void => {
     const items = props.items.filter((item) => item.disabled !== true);
     const at = items.findIndex((item) => item.value === props.value);
@@ -126,10 +128,11 @@ export function SegmentedControl<T extends string>(props: SegmentedControlProps<
             disabled={item.disabled}
             title={item.title}
             aria-label={item.shortLabel === undefined ? undefined : item.label}
-            // The first segment takes the tab stop when none is chosen, so the
-            // group can still be reached from the keyboard.
+            // The first ENABLED segment takes the tab stop when none is chosen,
+            // so the group can still be reached from the keyboard — a disabled
+            // button cannot take focus, and the rail's first mode is disabled.
             tabindex={
-              item.value === props.value || (props.value === undefined && item === props.items[0])
+              item.value === props.value || (props.value === undefined && item === firstEnabled())
                 ? 0
                 : -1
             }

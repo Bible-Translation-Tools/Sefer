@@ -52,7 +52,7 @@ const row = variants({
     size: {
       // The default: 12px all round, a 12px icon-to-label gap, 14px medium,
       // a 20px icon — at least the 48px touch target.
-      md: "min-h-12 gap-3 p-3 text-small font-medium [&_svg]:size-5",
+      md: "min-h-12 gap-3 p-3 text-small font-medium [&>svg]:size-5",
       lg: "gap-4 p-4 text-body font-medium",
     },
   },
@@ -137,7 +137,7 @@ export function Menu(props: MenuProps) {
 
 interface RowProps {
   readonly children: JSX.Element;
-  /** Leading icon, already sized by the caller. */
+  /** Leading icon; an `md` menu sizes it, an `lg` one leaves it to the caller. */
   readonly icon?: JSX.Element;
   readonly disabled?: boolean;
   /** Why it is disabled, or anything else worth a native tooltip. */

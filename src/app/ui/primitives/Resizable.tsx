@@ -311,6 +311,9 @@ function Handle(props: ResizableHandleProps) {
   const nudge = (pixels: number): void => {
     split.begin();
     split.drag(before, pixels);
+    // A key press is a whole gesture: without this, a nudge past a collapsible
+    // panel's minimum left its "keep dragging" hint up until the next drag.
+    split.end();
   };
 
   return (

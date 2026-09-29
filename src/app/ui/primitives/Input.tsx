@@ -76,7 +76,7 @@ export function Input(props: InputProps) {
             props.size === "lg"
               ? "start-8"
               : (props.size ?? "md") === "md"
-                ? "start-3 [&_svg]:size-5"
+                ? "start-3 [&>svg]:size-5"
                 : "start-2.5",
           )}
         >
