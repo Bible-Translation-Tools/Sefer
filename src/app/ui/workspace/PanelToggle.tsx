@@ -10,7 +10,6 @@
  * panel's edge closed hides it too (`onCollapse` in _app.tsx).
  */
 
-import { useRouterState } from "@tanstack/solid-router";
 import PanelLeftClose from "lucide-solid/icons/panel-left-close";
 import PanelLeftOpen from "lucide-solid/icons/panel-left-open";
 import { Show } from "solid-js";
@@ -18,6 +17,7 @@ import { Show } from "solid-js";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { IconButton } from "../primitives";
+import { useScreen } from "./screen";
 
 export function PanelToggle() {
   const shell = useShell();
@@ -42,9 +42,9 @@ export function PanelToggle() {
  */
 export function PanelToggleColumn() {
   const shell = useShell();
-  const path = useRouterState({ select: (state) => state.location.pathname });
+  const screen = useScreen();
   const wanted = (): boolean =>
-    shell.project() !== undefined && path().startsWith("/project/") && !path().includes("/book/");
+    shell.project() !== undefined && screen.inProject() && !screen.onEditor();
   return (
     <Show when={wanted()}>
       <div class="shrink-0 px-2 pt-6">
