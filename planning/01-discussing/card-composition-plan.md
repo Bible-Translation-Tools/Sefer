@@ -152,6 +152,7 @@ One commit per step, in the order above: 1 and 3 are small and independent, 2 ne
 - **`CardAction` is a union of `button` and `icon`**, so an icon without words must carry an icon and uses its label as the accessible name. Toggles are `pressed`, which `Button` already styles. Every card button answers to `data-card-action="<id>"`.
 - **The USFM switch moved to the header's actions**, on the right with Edit, rather than beside the badges: every header button is now a header action.
 - **Findings' height hint kept its name and formula** (`extraHeight`: 8px plus a line per folded run). The notes moved inside the header's border, but a line is still a line; Fix sits in the footer the context control already opens, so it adds nothing.
+- **No pruning.** Views are not cleared on a new query: a view is keyed by the verse, so a widening the reader asked for comes back with the verse, as the feed's extents always did. The store holds one small entry per card the reader touched.
 - **Card titles:** `Hunk.address` and `Hunk.label`, labelled by the `label` its builder is given (`location.label`), as `BookText.label` labels an excerpt.
 
 ## Decided

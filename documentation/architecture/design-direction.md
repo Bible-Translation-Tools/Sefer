@@ -46,14 +46,14 @@ STET is the same multibuffer: the list of excerpts is **prebaked on the source s
 
 ## Find (multibuffer, read-only until asked)
 
-Not a modal over the text. A pane beside the text. Results are a virtualized list grouped under a **sticky header per book** (the project/book is our "file"): "PHM · Philemon · 3 hits".
+Not a modal over the text. A pane beside the text. Results are a virtualized list of cards grouped by book (the project/book is our "file"). There is no header per book: every card's title names its whole place ("Philemon 1:4"), and the outline beside the list carries the counts (2026-09-29; a sticky "PHM · Philemon · 3 hits" header said everything twice).
 
 Differs from Zed's multibuffer deliberately:
 
 - Hits are grouped by the **verse sid from Onion's table of contents**; one excerpt per unique sid, however many hits fall inside it. Each excerpt has its own small header: the reference ("Philemon 1:4"), an **Edit** button, and an **Open in editor** action (aims the main editor at the hit).
 - Excerpts are **read-only by default**: the editor's own reading of the hit's unit plus one TOC step either side (a setting), hits highlighted — a small piece of the file, not a flattened quotation of it. No accidental edits from a results list. A footer carries the context control (one step up, the whole chapter, one step down) and a slot for the screen's own actions.
 - **Edit is a click, or a double-click.** Either swaps that one excerpt for a satellite editor (`src/editor/recipes/satellite.ts`) clipped to the same span, writing through the funnel to the canonical Book. Done (or leaving the excerpt) collapses it back to the read-only view. Only one satellite is live at a time.
-- An **outline** in the sidebar's place (the sidebar is a slot; see the shell chapter): one row per book with its hit count, in canonical order, and under it the hits reduced to chapters. Clicking a row scrolls the virtualized list to that book's sticky header, a chapter tile to its first card; the row for the book currently in view is highlighted as the list scrolls. STET and Findings get the same outline.
+- An **outline** in the sidebar's place (the sidebar is a slot; see the shell chapter): one row per book with its hit count, in canonical order, and under it the hits reduced to chapters. Clicking a row scrolls the virtualized list to that book's first card, a chapter tile to its first card in that chapter; the row clicked is the one highlighted — it does not follow the scroll, because every card already says where it is. STET and Findings get the same outline.
 - Cross-project find stays the `/find` route with the same list.
 
 ## No Replace in Find; Revert stays in Review

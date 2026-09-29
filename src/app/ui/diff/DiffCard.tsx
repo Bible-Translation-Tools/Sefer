@@ -127,7 +127,6 @@ export function DiffCard(props: {
   readonly open?: CardAction;
   /** One context step for this card: absent, the card offers no widening. */
   readonly onStep?: (step: ContextStep) => void;
-  readonly onOpen?: () => void;
   readonly onMounted?: (ms: number) => void;
 }) {
   const [left, setLeft] = createSignal<HTMLDivElement | undefined>(undefined, { name: "cardLeft" });

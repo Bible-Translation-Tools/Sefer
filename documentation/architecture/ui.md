@@ -267,9 +267,8 @@ CodeMirror satellite mounted inside one. Edit opened a satellite, the card
 grew, the growth re-created the card, and the card sat on "Opening…" for ever
 (fixed 2026-09-16). The `<For>` walks the window's keys instead — the caller's
 own verse sid or finding id — which reconcile by value, so a measurement moves
-a row rather than replacing it. That is also why `row` and `header` take
-accessors: a row outlives the model it was built from, and has to read the
-current one.
+a row rather than replacing it. That is also why `row` takes an accessor: a
+row outlives the model it was built from, and has to read the current one.
 
 **A first measurement never moves the viewport.**
 `shouldAdjustScrollPositionOnItemSizeChange` is an instance property, not an

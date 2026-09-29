@@ -978,7 +978,6 @@ export function ReviewReader(props: {
                 onDone={session.done}
                 seat={() => props.seat(item().hunk.bookId)}
                 analyze={(text) => analysisOf(item().hunk.bookId, "current", text)}
-                onOpen={() => openInBook(item().hunk)}
                 headerActions={cardDecision(item().hunk)}
                 onStep={(step) => expand(item().hunk.key, step)}
                 open={{

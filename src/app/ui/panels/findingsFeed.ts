@@ -3,7 +3,7 @@
  *
  * `/findings` shows the SAME cards `/find` shows — the projected verse, the
  * verse numbers, the context either side with its chevrons, Edit as a
- * satellite, sticky headers and an outline column — because a reader scanning
+ * satellite and an outline column — because a reader scanning
  * a place wants to see everything that might be wrong there in one gesture,
  * with the workflow they already have from searching. So
  * nothing here draws anything: it turns findings into `Occurrence`s, hands
@@ -74,12 +74,12 @@ export interface FindingsRow {
   readonly front: boolean;
 }
 
-/** What a sticky header says. `count` is FINDINGS, never rows. */
+/** What the outline says about one section. `count` is FINDINGS, never rows. */
 export interface FindingsHead {
   readonly key: string;
   /** `GEN`, `unknown-marker`, `warning`, or the flat view's one title. */
   readonly label: string;
-  /** `Genesis`, `Front matter` — the second half of a book header. */
+  /** `Genesis`, `Front matter` — the section's name beside its label. */
   readonly detail?: string;
   readonly count: number;
   readonly front: boolean;

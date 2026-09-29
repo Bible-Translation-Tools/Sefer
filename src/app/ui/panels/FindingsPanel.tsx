@@ -4,8 +4,8 @@
  *
  * It is the component the reader already knows from searching. Identical
  * cards, identical chrome, the same expand-up/expand-down context arrows, the
- * same outline column, the same sticky headers, the same Edit-as-satellite. The purpose is that someone
- * scanning a place — a Sous finding about a comma, say — sees everything that
+ * same outline column, the same Edit-as-satellite. The purpose is that
+ * someone scanning a place — a Sous finding about a comma, say — sees everything that
  * might be wrong there, in the verse it is wrong in, with the workflow they
  * already have. So this file draws no list of its own: `findingsFeed.ts` turns
  * findings into occurrences and hands them to `createExcerptFeed`, exactly as

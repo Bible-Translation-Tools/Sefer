@@ -1,6 +1,6 @@
 /**
- * The multibuffer's list: cards under sticky section headers, windowed, with
- * ONE edit session at a time — the pattern every list of places in Sefer
+ * The multibuffer's list: cards in sections, windowed, with ONE edit session
+ * at a time — the pattern every list of places in Sefer
  * shares (Find, Key terms, Findings, Review).
  *
  * A card is a view of a RESULT, and an edit can end the result: fix the error
