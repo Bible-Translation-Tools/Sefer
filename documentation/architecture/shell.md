@@ -169,15 +169,14 @@ the application's Mod-K for an application it is not part of.
   well as `/projects`, because bringing a project in is the chooser's second
   half and `ProjectSidebar` reads the same two prefixes.
 
-- **`ProjectSidebar`** is the book list, the review pills from
-  `ProjectAnalysis.census`, and the chapter grid of the FOCUSED book — the one
-  place a chapter is chosen. There is no chapter `<select>` on the editor page.
-  With no project open the panel shows `shell.recentProjects` instead (the
-  `shell.recentProjects` preference the landing screen writes as it opens a
-  root) plus an "All projects" link; with no project AND no history there is
-  nothing to show, so `shell.sidebarShowing()` is false and the panel is off
-  screen. That is separate from `shell.sidebarOpen()`, which stays exactly as
-  the reader left it.
+- **`ProjectSidebar`** is the book list and each open book's chapter grid —
+  the one place a chapter is chosen. There is no chapter `<select>` on the
+  editor page. It marks nothing about findings for now: the review pill and
+  the red dots that replaced it were taken out until what a mark there means
+  is decided. With no project open there is nothing to list, so
+  `shell.sidebarShowing()` is false and the panel is off screen (`/`'s
+  `EmptyWorkspace` draws its own, with the empty message). That is separate
+  from `shell.sidebarOpen()`, which stays exactly as the reader left it.
 - **The sidebar is a slot.** A screen whose job is a list of places claims it
   for as long as it is mounted (`claimSidebar` in
   `src/app/ui/workspace/sidebarSlot.ts`; the last claim wins and releasing

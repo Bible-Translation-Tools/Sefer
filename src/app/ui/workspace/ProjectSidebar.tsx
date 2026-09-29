@@ -36,7 +36,6 @@ interface Row {
   readonly id: string;
   readonly name: string;
   readonly testament: Testament;
-  readonly attention: number;
 }
 
 interface Chapter {
@@ -44,18 +43,7 @@ interface Chapter {
   readonly index: number;
   readonly label: string;
   readonly intro: boolean;
-  /** Its extent in the book's text, to place findings in it. */
-  readonly from: number;
-  readonly to: number;
 }
-
-/** The red dot that marks a book or chapter with findings to look at. */
-const Flag = (props: { readonly class?: string }) => (
-  <span
-    aria-hidden="true"
-    class={["size-2 shrink-0 rounded-full bg-on-surface-error", props.class]}
-  />
-);
 
 /** The chapter a typed place names, if it names one: "Luke 3" and "Luke 3:1" do, "Luke" does not. */
 const chapterOf = (address: Address | undefined): number | undefined => {
@@ -91,8 +79,8 @@ export function ProjectSidebar() {
     name: "sidebarOpened",
   });
 
-  // A memo: it tracks the findings store, not `tick`, so typing in a book does
-  // not rebuild sixty-six rows to redraw badges that have not moved.
+  // A memo over the open project, so typing in a book does not rebuild
+  // sixty-six rows.
   const rows = createMemo(
     (): readonly Row[] => {
       const project = shell.project();
@@ -102,7 +90,6 @@ export function ProjectSidebar() {
         id: book.id,
         name: bookName(book.id, metadata),
         testament: testamentOf(book.id),
-        attention: shell.attentionOf(book.id),
       }));
     },
     { name: "sidebarBooks" },
@@ -148,38 +135,14 @@ export function ProjectSidebar() {
     return choice === undefined ? shell.focused()?.id === id : choice === id;
   };
 
-  /**
-   * Where each book's errors and warnings start — the same findings the old
-   * "Review" tag counted (`attentionOf`), info left out. A memo over the
-   * Publication-scoped findings list, so it rebuilds when a pass lands and not
-   * per keystroke; a chapter is flagged when one of these falls inside it.
-   */
-  const flaggedAt = createMemo(
-    () => {
-      const starts = new Map<string, number[]>();
-      for (const finding of shell.findings()) {
-        if (finding.severity === "info") continue;
-        const held = starts.get(finding.bookId);
-        if (held === undefined) starts.set(finding.bookId, [finding.from]);
-        else held.push(finding.from);
-      }
-      return starts;
-    },
-    { name: "sidebarFlaggedAt" },
-  );
-  const flagged = (id: string, chapter: Chapter): boolean =>
-    (flaggedAt().get(id) ?? []).some((at) => at >= chapter.from && at < chapter.to);
-
   const chaptersOf = (id: string): readonly Chapter[] => {
     if (shell.focused()?.id === id) {
       const rows: Chapter[] = [];
       shell.outline().forEach((chapter, index) => {
-        const extent = { from: chapter.from, to: chapter.to };
-        if (chapter.label !== "")
-          rows.push({ index, label: chapter.label, intro: false, ...extent });
+        if (chapter.label !== "") rows.push({ index, label: chapter.label, intro: false });
         // The front matter row, and only if it holds something.
         else if (index === 0 && chapter.to > chapter.from)
-          rows.push({ index, label: t("Intro"), intro: true, ...extent });
+          rows.push({ index, label: t("Intro"), intro: true });
       });
       return rows;
     }
@@ -190,12 +153,9 @@ export function ProjectSidebar() {
     const held = Option.getOrUndefined(shell.services.projectAnalysis.analysis(id));
     if (held === undefined) return [];
     return tocViewOf(held.analysis).chapters.flatMap((chapter): Chapter[] => {
-      const extent = { from: chapter.from, to: chapter.to };
       if (chapter.number > 0)
-        return [{ index: chapter.number, label: String(chapter.number), intro: false, ...extent }];
-      return chapter.to > chapter.from
-        ? [{ index: 0, label: t("Intro"), intro: true, ...extent }]
-        : [];
+        return [{ index: chapter.number, label: String(chapter.number), intro: false }];
+      return chapter.to > chapter.from ? [{ index: 0, label: t("Intro"), intro: true }] : [];
     });
   };
 
@@ -249,12 +209,6 @@ export function ProjectSidebar() {
         >
           <BookIcon size={20} aria-hidden="true" class="shrink-0" />
           <span class="min-w-0 flex-1 truncate">{rowProps.row.name}</span>
-          <Show when={rowProps.row.attention > 0}>
-            <span title={t("This book has findings to review.")} class="flex shrink-0">
-              <Flag />
-              <span class="sr-only">{t("has findings to review")}</span>
-            </span>
-          </Show>
           <span aria-hidden="true" class="shrink-0">
             <Show when={open()} fallback={<ChevronRight size={14} />}>
               <ChevronDown size={14} />
@@ -277,14 +231,10 @@ export function ProjectSidebar() {
                     data-chapter={chapter.index}
                     data-testid={`chapter-tile-${chapter.intro ? "intro" : chapter.label}`}
                     data-current={focused() && currentChapter() === chapter.index ? "" : undefined}
-                    class="relative h-12 w-full cursor-pointer truncate rounded-lg border px-3 text-center text-small font-medium tabular-nums transition-colors data-current:border-brand data-current:bg-surface-primary data-current:font-semibold data-current:text-brand not-data-current:border-transparent not-data-current:text-on-surface-secondary not-data-current:hover:bg-surface-primary"
+                    class="h-12 w-full cursor-pointer truncate rounded-lg border px-3 text-center text-small font-medium tabular-nums transition-colors data-current:border-brand data-current:bg-surface-primary data-current:font-semibold data-current:text-brand not-data-current:border-transparent not-data-current:text-on-surface-secondary not-data-current:hover:bg-surface-primary"
                     onClick={() => openChapter(rowProps.row.id, chapter)}
                   >
                     {chapter.label}
-                    <Show when={flagged(rowProps.row.id, chapter)}>
-                      <Flag class="absolute end-1.5 top-1.5" />
-                      <span class="sr-only">{t("has findings to review")}</span>
-                    </Show>
                   </button>
                 </li>
               )}

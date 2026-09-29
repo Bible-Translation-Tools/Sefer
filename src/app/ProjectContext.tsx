@@ -283,15 +283,6 @@ export interface Shell {
    */
   readonly findingCounts: Accessor<{ readonly errors: number; readonly warnings: number }>;
 
-  /**
-   * How many findings one book is being asked about — the sidebar's badge.
-   *
-   * A read of the census store, written when a Publication lands, rather than
-   * `ProjectAnalysis.census()` per keystroke per reader, which rebuilds every
-   * finding in every book.
-   */
-  readonly attentionOf: (bookId: BookId) => number;
-
   /** One book's row of the last Publication, or undefined before the first. */
   readonly summaryOf: (bookId: BookId) => BookSummary | undefined;
 
@@ -343,11 +334,11 @@ export interface Shell {
   readonly sidebarOpen: Accessor<boolean>;
   readonly setSidebarOpen: (open: boolean) => void;
   /**
-   * Is the sidebar actually on screen — the reader's toggle AND something to
-   * put in it. With no project open and no history the panel had nothing but
-   * an empty book list and a search box that searched it, so it collapses to
-   * the rail; `sidebarOpen` keeps the reader's own answer, untouched, for when
-   * a project is open again.
+   * Is the sidebar actually on screen — the reader's toggle AND a project to
+   * put in it. With none open the panel has no books to list, so it is off
+   * screen (`/` draws `EmptyWorkspace`, which carries its own); `sidebarOpen`
+   * keeps the reader's own answer, untouched, for when a project is open
+   * again.
    */
   readonly sidebarShowing: Accessor<boolean>;
   /** A fraction of the workspace row; see `SIDEBAR_WIDTH`. */
@@ -701,7 +692,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     findings,
     findingCounts,
     summaryOf,
-    attentionOf,
     bookCensus,
     inventory,
   } = stores;
@@ -1319,7 +1309,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       setPaletteOpen(open);
     },
     findingCounts,
-    attentionOf,
     summaryOf,
     bookCensus,
     inventory,
@@ -1335,7 +1324,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       setSidebarOpen(open);
       persist(keys.sidebarOpen, open);
     },
-    sidebarShowing: () => sidebarOpen() && (project() !== undefined || recentProjects().length > 0),
+    sidebarShowing: () => sidebarOpen() && project() !== undefined,
     recentProjects,
     slugFor,
     slug,

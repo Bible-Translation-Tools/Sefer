@@ -98,7 +98,6 @@ export interface ShellStores {
   readonly findings: Accessor<readonly Finding[]>;
   readonly findingCounts: Accessor<{ readonly errors: number; readonly warnings: number }>;
   readonly summaryOf: (bookId: BookId) => BookSummary | undefined;
-  readonly attentionOf: (bookId: BookId) => number;
   readonly bookCensus: Accessor<readonly BookSummary[]>;
   readonly inventory: Accessor<Inventory>;
 }
@@ -210,11 +209,6 @@ export const makeShellStores = (options: {
    * does not wake the sixty-five it did not.
    */
   const summaryOf = (bookId: BookId): BookSummary | undefined => censusHeld[bookId];
-
-  const attentionOf = (bookId: BookId): number => {
-    const held = censusHeld[bookId];
-    return held === undefined ? 0 : held.diagnostics.errors + held.diagnostics.warnings;
-  };
 
   /** The whole census, in the project's own book order. */
   const bookCensus = (): readonly BookSummary[] => {
@@ -394,7 +388,6 @@ export const makeShellStores = (options: {
     findings,
     findingCounts,
     summaryOf,
-    attentionOf,
     bookCensus,
     inventory,
   };
