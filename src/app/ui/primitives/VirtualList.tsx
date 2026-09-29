@@ -55,8 +55,15 @@
  * then arrives as a RE-measurement of a 0-high row sitting exactly at the
  * fold, which is the one case TanStack compensates the scroll position for —
  * so each row in turn pushes the viewport down by its own height (8,154px of
- * accumulated correction on `/findings` before the list is touched). The element goes into a signal instead and is measured from an
- * effect, which runs once it is in the document.
+ * accumulated correction on `/findings` before the list is touched). The
+ * element goes into a signal instead and is measured from an effect, which
+ * runs once it is in the document.
+ *
+ * ## Where the reader is: `virtualScroll.ts`
+ *
+ * Every decision about the scroll position — what a rebuild keeps, which
+ * height corrections move the viewport, when a jump has landed — is a pure
+ * function there. This file only asks and does what it is told.
  */
 
 import type { JSX } from "@solidjs/web";
@@ -80,6 +87,8 @@ import {
   untrack,
   type Accessor,
 } from "solid-js";
+
+import { AIMING, aimStep, compensates, heldOffset, rebuild, type Aim } from "./virtualScroll";
 
 /** One row: a stable key, and the height to assume until it has been measured. */
 export interface VirtualRow<T> {
@@ -279,38 +288,20 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   const virtualizer = new Virtualizer(optionsOf());
 
   /**
-   * When a height correction may move the viewport under the reader.
-   *
-   * An INSTANCE property and not an option — `setOptions` never touches it,
-   * which is why it is set once, here.
-   *
-   * Compensating a correction is a way of holding still what the reader has
-   * already scrolled PAST: a row above the fold that turns out to be taller
-   * than its estimate would otherwise push the row they are reading down the
-   * screen. It is worth doing for exactly one kind of correction, a
-   * RE-measurement of a row this list has measured before — a card that grew
-   * because it was opened for editing, a verse that grew because it was
-   * expanded.
-   *
-   * A FIRST measurement is refused, and that is the narrowing the library's
-   * own default does not make. Every row is measured for the first time at
-   * least once, and answering those moves the viewport by the sum of every
-   * estimate's error: on arrival that walked `/findings` 8,154px down a list
-   * the reader had not touched, and on a fresh query — where every key is new
-   * — it dragged the list straight back to the offset the PREVIOUS results
-   * had been left at.
+   * When a height correction may move the viewport under the reader — the
+   * rule is `compensates`. An INSTANCE property and not an option:
+   * `setOptions` never touches it, which is why it is set once, here.
    */
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => {
-    // Above a row being edited, every correction is held — a first one too:
-    // an edit that adds a result above the card it is typed in inserts a row
-    // there, and its first measurement would push the card down the screen.
     const pinned = untrack(() => props.pinned);
-    const pinnedAt = pinned === undefined ? undefined : untrack(flat).indexOfKey.get(pinned);
-    if (pinnedAt !== undefined && item.index < pinnedAt) return true;
-    if (!instance.itemSizeCache.has(item.key)) return false;
-    const fold = (instance.scrollOffset ?? 0) + instance.scrollAdjustments;
-    if (fold <= 0) return false;
-    return item.start + item.size <= fold;
+    return compensates({
+      index: item.index,
+      remeasured: instance.itemSizeCache.has(item.key),
+      start: item.start,
+      size: item.size,
+      pinnedIndex: pinned === undefined ? undefined : untrack(flat).indexOfKey.get(pinned),
+      fold: (instance.scrollOffset ?? 0) + instance.scrollAdjustments,
+    });
   };
 
   /** Pull what the library computed into the two signals above. */
@@ -338,63 +329,45 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     unmount = undefined;
   });
 
+  /** The list the virtualizer's measurements were last built from. */
+  let drawn: ReturnType<typeof flat> | undefined;
+
   createEffect(
     () => [scroller(), flat()] as const,
     ([element, list]) => {
       if (element === undefined) return;
-      /**
-       * Is this still the list the reader was holding their place in?
-       *
-       * A place is a ROW. An accepted edit rebuilds the model and the reader
-       * stays where they were, because the rows they were looking at are
-       * still there under the same keys. A fresh query — or a regrouping of
-       * /findings — replaces every key on screen, and then there is nothing
-       * left to hold a place WITH: a scroll position measured in pixels of
-       * somebody else's results is not a place, so the list goes back to its
-       * top, which is where a new list starts.
-       */
-      const lost = onScreen.length > 0 && !onScreen.some((key) => list.indexOfKey.has(key));
-      /**
-       * The row the reader's place is held by across the rebuild: the one
-       * being edited, else the first on screen that is still in the list.
-       * Rows added or removed above it — a result an edit created or ended —
-       * would otherwise move it, because the scroll offset alone stays put.
-       */
-      const pinned = untrack(() => props.pinned);
-      const anchor = lost
-        ? undefined
-        : pinned !== undefined && list.indexOfKey.has(pinned)
-          ? pinned
-          : onScreen.find((key) => list.indexOfKey.has(key));
-      const startOf = (key: string): number | undefined =>
-        virtualizer.measurementsCache.find((item) => item.key === key)?.start;
-      const before = anchor === undefined ? undefined : startOf(anchor);
+      // What this rebuild does to the reader's place: `rebuild` decides.
+      const place = rebuild(
+        onScreen,
+        untrack(() => props.pinned),
+        (key) => list.indexOfKey.has(key),
+      );
+      const startIn = (held: typeof list | undefined, key: string): number | undefined => {
+        const index = held?.indexOfKey.get(key);
+        return index === undefined ? undefined : virtualizer.measurementsCache[index]?.start;
+      };
+      const before = place.kind === "hold" ? startIn(drawn, place.anchor) : undefined;
       virtualizer.setOptions(optionsOf());
       unmount ??= virtualizer._didMount();
-      if (lost && untrack(offset) > 0) {
+      drawn = list;
+      if (place.kind === "top" && untrack(offset) > 0) {
         virtualizer.scrollToOffset(0);
         setOffset(0);
       }
-      if (anchor !== undefined && before !== undefined) {
+      if (place.kind === "hold" && before !== undefined) {
         virtualizer.getVirtualItems();
-        const after = startOf(anchor);
-        const moved = after === undefined ? 0 : after - before;
-        if (moved !== 0) virtualizer.scrollToOffset((virtualizer.scrollOffset ?? 0) + moved);
+        const scrollTop = virtualizer.scrollOffset ?? 0;
+        const next = heldOffset(scrollTop, before, startIn(list, place.anchor));
+        if (next !== scrollTop) virtualizer.scrollToOffset(next);
       }
       publish();
     },
   );
 
   /**
-   * The re-aim after a jump, while the rows it lands among are measured.
-   *
-   * `scrollToIndex` aims from ESTIMATES and stops re-aiming after one frame
-   * without movement — before this list's rows have reported their real
-   * heights (they are measured from the effect phase, a frame or more later).
-   * The rows above the target then grow, and a first jump into a book landed
-   * short: on the fixture, the tail of 3 John above Jude 1:1, and the outline
-   * naming 3 John. So a jump keeps re-aiming until its target has held still
-   * for a few frames. The reader's own wheel, touch, pointer (the scrollbar) or key ends it.
+   * The re-aim after a jump, frame by frame, while the rows it lands among are
+   * measured — `aimStep` says when it has landed. The reader's own wheel,
+   * touch, pointer (the scrollbar) or key ends it.
    */
   let aiming: number | undefined;
   const stopAiming = (): void => {
@@ -406,21 +379,20 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   const aim = (index: number): void => {
     stopAiming();
     virtualizer.scrollToIndex(index, { align: "start" });
-    let still = 0;
-    let frames = 0;
-    const step = (): void => {
+    let state: Aim = AIMING;
+    const frame = (): void => {
       const element = untrack(scroller);
-      const target = virtualizer.getOffsetForIndex(index, "start")?.[0];
-      if (element === undefined || target === undefined || ++frames > 60) return stopAiming();
-      // `target` is already clamped to the bottom, so a short last section
-      // settles there like any other.
-      if (Math.abs(element.scrollTop - target) > 1) {
-        still = 0;
-        virtualizer.scrollToOffset(target);
-      } else if (++still >= 3) return stopAiming();
-      aiming = requestAnimationFrame(step);
+      const step = aimStep(
+        state,
+        element?.scrollTop ?? 0,
+        element === undefined ? undefined : virtualizer.getOffsetForIndex(index, "start")?.[0],
+      );
+      state = step.aim;
+      if (step.scrollTo !== undefined) virtualizer.scrollToOffset(step.scrollTo);
+      if (state.kind === "settled") return stopAiming();
+      aiming = requestAnimationFrame(frame);
     };
-    aiming = requestAnimationFrame(step);
+    aiming = requestAnimationFrame(frame);
   };
 
   /** Where a section starts, or — for a key that names no section — that row. */
