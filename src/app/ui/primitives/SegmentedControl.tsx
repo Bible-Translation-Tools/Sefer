@@ -89,6 +89,8 @@ const toneClass = (chosen: boolean): string => {
 export function SegmentedControl<T extends string>(props: SegmentedControlProps<T>) {
   const collapses = (): boolean =>
     props.iconsWhenNarrow === true && props.items.every((item) => item.icon !== undefined);
+  // By value, never by identity: a caller writing `items` inline hands over
+  // new objects on every read of the prop.
   const firstEnabled = (): Segment<T> | undefined =>
     props.items.find((item) => item.disabled !== true);
   const step = (delta: 1 | -1): void => {
@@ -132,7 +134,8 @@ export function SegmentedControl<T extends string>(props: SegmentedControlProps<
             // so the group can still be reached from the keyboard — a disabled
             // button cannot take focus, and the rail's first mode is disabled.
             tabindex={
-              item.value === props.value || (props.value === undefined && item === firstEnabled())
+              item.value === props.value ||
+              (props.value === undefined && item.value === firstEnabled()?.value)
                 ? 0
                 : -1
             }
