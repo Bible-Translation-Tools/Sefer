@@ -1056,15 +1056,33 @@
   margin: 0;
   padding: 12px 16px;
 }
-.cm-diff-modified-unit {
-  background-color: color-mix(in srgb, var(--brand-base) 6%, transparent);
+/* The diff's hues, as tokens, so a colour-vision preset (`data-diff-palette`,
+   written by `src/app/ui/theme.ts` from the "Review colours" setting) is one
+   block. Standard is Zed's and GitHub's red and green; blue-orange is GitHub's
+   protanopia-deuteranopia pair, for readers who cannot tell red from green.
+   Blue is the brand there too, so a decided bar goes neutral, and a changed
+   bar goes gold so it is not read as a removed one. */
+:root {
+  --diff-added: #16a34a;
+  --diff-removed: #dc2626;
+  --diff-modified: #d97706;
+  --diff-decided: var(--brand-base);
+}
+:root[data-diff-palette="blue-orange"] {
+  --diff-added: #0969da;
+  --diff-removed: #e16f24;
+  --diff-modified: #bf8700;
+  --diff-decided: var(--on-surface-tertiary);
 }
 .cm-diff-added-unit {
-  background-color: color-mix(in srgb, #16a34a 9%, transparent);
+  background-color: color-mix(in srgb, var(--diff-added) 9%, transparent);
 }
 .cm-diff-deleted-unit {
-  background-color: color-mix(in srgb, #dc2626 8%, transparent);
+  background-color: color-mix(in srgb, var(--diff-removed) 8%, transparent);
 }
+/* Also a changed verse with no word to mark in this projection (markup-only,
+   with markup hidden): changed, but not in what you can see. A changed verse
+   whose words are marked has no wash — the marks say it. */
 .cm-diff-markup-unit {
   background-color: color-mix(in srgb, var(--on-surface-tertiary) 8%, transparent);
 }
@@ -1086,12 +1104,22 @@
   background-color: transparent;
 }
 .cm-diff-added {
-  background-color: color-mix(in srgb, #16a34a 30%, transparent);
+  background-color: color-mix(in srgb, var(--diff-added) 30%, transparent);
   border-radius: 2px;
 }
+/* Removed words carry a mark that is not a colour, so a reader who cannot
+   tell the two hues apart still can (`data-diff-removed`, "Removed words"). */
 .cm-diff-removed {
-  background-color: color-mix(in srgb, #dc2626 26%, transparent);
+  background-color: color-mix(in srgb, var(--diff-removed) 26%, transparent);
   border-radius: 2px;
+  text-decoration: line-through;
+}
+:root[data-diff-removed="underline"] .cm-diff-removed {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+:root[data-diff-removed="none"] .cm-diff-removed {
+  text-decoration: none;
 }
 /* A one-text review drawn as Zed draws hunks (`DiffHunk` in
    recipes/diffView.ts): the final text, and a bar beside each changed unit's
@@ -1101,7 +1129,7 @@
   pointer-events: none;
 }
 .cm-diff-bar {
-  --bar: #d97706;
+  --bar: var(--diff-modified);
   width: 9px;
   cursor: pointer;
   pointer-events: auto;
@@ -1123,13 +1151,13 @@
   opacity: 1;
 }
 .cm-diff-bar-added {
-  --bar: #16a34a;
+  --bar: var(--diff-added);
 }
 .cm-diff-bar-deleted {
-  --bar: #dc2626;
+  --bar: var(--diff-removed);
 }
 .cm-diff-bar-decided {
-  --bar: var(--brand-base);
+  --bar: var(--diff-decided);
 }
 /* The other side's wording, opened at the verse: a block inside the line, so
    the paragraph breaks at this verse and not above the whole paragraph. */
@@ -1146,17 +1174,17 @@
 .cm-line > .cm-widgetBuffer:has(~ .cm-diff-was-box) {
   display: none;
 }
-/* Zed's colours: what it was on red, what it is on green, the words deeper.
+/* Zed's colours (standard palette): what it was on red, what it is on green, the words deeper.
    No margin, border or padding: opening a verse inserts its old wording and
    moves nothing else. */
 .cm-diff-was {
-  background-color: color-mix(in srgb, #dc2626 12%, transparent);
+  background-color: color-mix(in srgb, var(--diff-removed) 12%, transparent);
 }
 .cm-diff-was .cm-content {
   padding: 0;
 }
 .cm-diff-now {
-  background-color: color-mix(in srgb, #16a34a 12%, transparent);
+  background-color: color-mix(in srgb, var(--diff-added) 12%, transparent);
 }
 /* The stamp brings the page's paper with it; the block's own tint shows. */
 .cm-diff-was .cm-editor,

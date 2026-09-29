@@ -22,10 +22,20 @@ import {
   Switch,
 } from "#app/ui/primitives";
 import { ShellGate } from "#app/ui/ShellGate";
-import { applyAppearance, asTheme, type Appearance } from "#app/ui/theme";
+import {
+  applyAppearance,
+  asDiffPalette,
+  asDiffRemoved,
+  asTheme,
+  type Appearance,
+} from "#app/ui/theme";
 import { UpdatePanel } from "#app/ui/UpdatePanel";
 import type { SettingKey } from "#core/host/settings";
 import { parseTransport } from "#core/remote/transport";
+
+// The diff's tokens and marks, so the sample under "Removed words" is drawn
+// by the same rules as Review.
+import "#editor/editor.css";
 
 /**
  * The settings screen: one card per declared group, one row per registered key,
@@ -85,11 +95,13 @@ function SettingsPage() {
     return services.settings.get(key);
   };
 
-  /** The three appearance keys as one value, read straight out of Settings. */
+  /** The appearance keys as one value, read straight out of Settings. */
   const appearance = (): Appearance => ({
     theme: asTheme(services.settings.get(keys.theme)),
     fontSize: services.settings.get(keys.fontSize),
     zoom: services.settings.get(keys.zoom),
+    diffPalette: asDiffPalette(services.settings.get(keys.diffPalette)),
+    diffRemoved: asDiffRemoved(services.settings.get(keys.diffRemoved)),
   });
 
   // The authoritative read, once the composition is up. The module-level apply
@@ -335,19 +347,24 @@ function SettingsPage() {
                           class="flex items-center gap-6 py-3"
                           data-setting={descriptor.key.name}
                         >
-                          <label
-                            for={descriptor.key.name}
-                            class="min-w-0 flex-1 text-small text-on-surface-primary"
-                          >
-                            {t(descriptor.label)}
-                            <Show when={descriptor.description}>
-                              {(description) => (
-                                <span class="block text-smallest text-on-surface-tertiary">
-                                  {t(description())}
-                                </span>
-                              )}
+                          <div class="min-w-0 flex-1">
+                            <label
+                              for={descriptor.key.name}
+                              class="block text-small text-on-surface-primary"
+                            >
+                              {t(descriptor.label)}
+                              <Show when={descriptor.description}>
+                                {(description) => (
+                                  <span class="block text-smallest text-on-surface-tertiary">
+                                    {t(description())}
+                                  </span>
+                                )}
+                              </Show>
+                            </label>
+                            <Show when={descriptor.kind === "choice" && descriptor.preview}>
+                              <DiffSample />
                             </Show>
-                          </label>
+                          </div>
                           <div class="shrink-0">{widget(descriptor)}</div>
                         </div>
                       )
@@ -415,6 +432,29 @@ function SettingsPage() {
         })}
       </p>
     </main>
+  );
+}
+
+/**
+ * One change as Review draws it, under the diff settings: the verse as it was
+ * with its removed word marked, and as it is with its added one. Drawn with
+ * Review's own classes, so it follows the palette and the mark the moment
+ * either is written — `applyAppearance` stamps them on `<html>`.
+ */
+function DiffSample() {
+  return (
+    <div
+      class="mt-2 overflow-hidden rounded-md border border-surface-border font-[family-name:var(--font-scripture)] text-small"
+      aria-hidden="true"
+      data-diff-sample
+    >
+      <p class="cm-diff-was px-3 py-1">
+        {t("And God")} <span class="cm-diff-removed">{t("spoke")}</span> {t("all these words")}
+      </p>
+      <p class="cm-diff-now px-3 py-1">
+        {t("And God")} <span class="cm-diff-added">{t("said")}</span> {t("all these words")}
+      </p>
+    </div>
   );
 }
 

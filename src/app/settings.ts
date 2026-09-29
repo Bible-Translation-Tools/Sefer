@@ -73,6 +73,8 @@ export interface ChoiceSetting extends Described {
   readonly kind: "choice";
   readonly key: SettingKey<string>;
   readonly options: readonly { readonly value: string; readonly label: string }[];
+  /** A sample drawn under the row that shows the choice in force. */
+  readonly preview?: "diff";
 }
 
 /**
@@ -235,6 +237,10 @@ export type LastLocation = LastLocations[string];
 /** The tokens the shell keeps after registering, by the name the code uses. */
 export interface ShellKeys {
   readonly theme: SettingKey<string>;
+  /** The diff's hues: `standard` red and green, or `blue-orange` for red-green colour blindness. */
+  readonly diffPalette: SettingKey<string>;
+  /** What marks a removed word besides its colour: `strike`, `underline` or `none`. */
+  readonly diffRemoved: SettingKey<string>;
   readonly startInUsfmMode: SettingKey<boolean>;
   /** Whether the settings route shows its advanced group. */
   readonly showAdvancedSettings: SettingKey<boolean>;
@@ -384,6 +390,8 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
   if (held !== undefined) return held;
   const keys: ShellKeys = {
     theme: settings.register("shell.theme", Schema.String, "system"),
+    diffPalette: settings.register("review.palette", Schema.String, "standard"),
+    diffRemoved: settings.register("review.removedWords", Schema.String, "strike"),
     startInUsfmMode: settings.register("shell.startInUsfmMode", Schema.Boolean, false),
     showAdvancedSettings: settings.register("shell.showAdvancedSettings", Schema.Boolean, false),
     backupIdleMs: settings.register(
@@ -473,6 +481,31 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
       max: 200,
       step: 10,
       unit: "%",
+    },
+    {
+      key: keys.diffPalette,
+      label: "Change colours",
+      description:
+        "The colours Review draws added and removed words in. Blue and orange are for readers who find red and green hard to tell apart.",
+      kind: "choice",
+      group: "appearance",
+      options: [
+        { value: "standard", label: "Red and green" },
+        { value: "blue-orange", label: "Blue and orange" },
+      ],
+    },
+    {
+      key: keys.diffRemoved,
+      label: "Removed words",
+      description: "How a removed word is marked besides its colour.",
+      kind: "choice",
+      group: "appearance",
+      options: [
+        { value: "strike", label: "Struck through" },
+        { value: "underline", label: "Underlined" },
+        { value: "none", label: "Colour only" },
+      ],
+      preview: "diff",
     },
     {
       key: keys.editorFontSize,

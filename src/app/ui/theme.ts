@@ -1,7 +1,7 @@
 /**
  * Appearance: the preferences that are a fact about the DOCUMENT rather than
  * about a component — the colour scheme, the interface font size, the page
- * zoom, and the scripture surface's own size.
+ * zoom, the diff's colours, and the scripture surface's own size.
  *
  * They live here, outside any screen, because each is written onto the root
  * element and every route reads them by simply existing. `tokens.css`
@@ -21,15 +21,34 @@ const THEMES = ["system", "light", "dark"] as const;
 
 export type Theme = (typeof THEMES)[number];
 
+/**
+ * The diff's hues and its removed-word mark (`src/editor/editor.css`, the
+ * `--diff-*` tokens). A fact about the document for the same reason the theme
+ * is: every diff surface reads them by existing, and the settings sample shows
+ * the one in force.
+ */
+export const DIFF_PALETTES = ["standard", "blue-orange"] as const;
+export type DiffPalette = (typeof DIFF_PALETTES)[number];
+export const DIFF_REMOVED_MARKS = ["strike", "underline", "none"] as const;
+export type DiffRemovedMark = (typeof DIFF_REMOVED_MARKS)[number];
+
 export interface Appearance {
   readonly theme: Theme;
   /** Root font size in px; every `rem` in the interface scales with it. */
   readonly fontSize: number;
   /** Page zoom as a percentage. 100 is untouched. */
   readonly zoom: number;
+  readonly diffPalette: DiffPalette;
+  readonly diffRemoved: DiffRemovedMark;
 }
 
-const DEFAULT_APPEARANCE: Appearance = { theme: "system", fontSize: 16, zoom: 100 };
+const DEFAULT_APPEARANCE: Appearance = {
+  theme: "system",
+  fontSize: 16,
+  zoom: 100,
+  diffPalette: "standard",
+  diffRemoved: "strike",
+};
 
 /** The bounds the widgets offer and the cache is clamped to. */
 const FONT_SIZE_RANGE = { min: 12, max: 24 } as const;
@@ -60,6 +79,14 @@ const EDITOR_CACHE_KEY = "sefer.editorFontSize";
  */
 export const asTheme = (value: string): Theme =>
   (THEMES as readonly string[]).includes(value) ? (value as Theme) : "system";
+
+/** SAFETY: as `asTheme` — the `includes` check is what narrows `value`. */
+export const asDiffPalette = (value: string): DiffPalette =>
+  (DIFF_PALETTES as readonly string[]).includes(value) ? (value as DiffPalette) : "standard";
+
+/** SAFETY: as `asTheme`. */
+export const asDiffRemoved = (value: string): DiffRemovedMark =>
+  (DIFF_REMOVED_MARKS as readonly string[]).includes(value) ? (value as DiffRemovedMark) : "strike";
 
 const clamp = (value: number, low: number, high: number): number =>
   Number.isFinite(value) ? Math.min(high, Math.max(low, Math.round(value))) : low;
@@ -117,6 +144,11 @@ export const applyAppearance = (appearance: Appearance): void => {
   const zoom = asZoom(appearance.zoom);
   if (zoom === 100) root.style.removeProperty("zoom");
   else root.style.setProperty("zoom", `${zoom}%`);
+  // The defaults are the absence of the attribute, as `system` is.
+  if (appearance.diffPalette === "standard") root.removeAttribute("data-diff-palette");
+  else root.setAttribute("data-diff-palette", appearance.diffPalette);
+  if (appearance.diffRemoved === "strike") root.removeAttribute("data-diff-removed");
+  else root.setAttribute("data-diff-removed", appearance.diffRemoved);
   cache(appearance);
 };
 
@@ -142,6 +174,8 @@ const cachedAppearance = (): Appearance => {
       theme: asTheme(typeof record.theme === "string" ? record.theme : ""),
       fontSize: asFontSize(typeof record.fontSize === "number" ? record.fontSize : 16),
       zoom: asZoom(typeof record.zoom === "number" ? record.zoom : 100),
+      diffPalette: asDiffPalette(typeof record.diffPalette === "string" ? record.diffPalette : ""),
+      diffRemoved: asDiffRemoved(typeof record.diffRemoved === "string" ? record.diffRemoved : ""),
     };
   } catch {
     return DEFAULT_APPEARANCE;

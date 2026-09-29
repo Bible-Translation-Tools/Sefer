@@ -17,27 +17,44 @@ export type Side = "baseline" | "current";
 
 export const changed = (unit: DecisionUnit): boolean => unit.status !== "unchanged";
 
-const tint = (unit: DecisionUnit, decision: MergeSide | undefined, live: boolean): string =>
+const tint = (
+  unit: DecisionUnit,
+  decision: MergeSide | undefined,
+  live: boolean,
+  marked: boolean,
+): string =>
   // When decisions are WRITTEN (an editable review), the diff is the truth: a taken
   // unit that was edited afterwards differs again and is drawn as a change,
   // red and green like any other. The decision tint marks only a unit that
   // reads exactly as the side it was decided for.
   live && changed(unit)
-    ? statusTint(unit)
+    ? statusTint(unit, marked)
     : decision === "current"
       ? "cm-diff-kept"
       : decision === "baseline"
         ? "cm-diff-taken"
-        : statusTint(unit);
+        : statusTint(unit, marked);
 
-const statusTint = (unit: DecisionUnit): string =>
+/**
+ * A changed verse whose words are marked gets no wash: the marks say where it
+ * changed, and a faint tint under them said nothing more. One with nothing to
+ * mark in this projection — markup changed, markup hidden — gets the markup
+ * wash, or it would not show at all. `""` is no line.
+ */
+const statusTint = (unit: DecisionUnit, marked: boolean): string =>
   unit.status === "added"
     ? "cm-diff-added-unit"
     : unit.status === "deleted"
       ? "cm-diff-deleted-unit"
-      : unit.isUsfmStructureChange
+      : unit.isUsfmStructureChange || !marked
         ? "cm-diff-markup-unit"
-        : "cm-diff-modified-unit";
+        : "";
+
+/** Does either side of a changed unit have a word run to mark in this projection? */
+const marksWords = (unit: DecisionUnit, usfm: boolean): boolean =>
+  [...(unit.text?.baseline ?? []), ...(unit.text?.current ?? [])].some(
+    (run) => run.kind !== "unchanged" && visibleRun(run.what, usfm),
+  );
 
 /** Word runs worth marking in this projection: markup only when markup is shown. */
 const visibleRun = (what: string, usfm: boolean): boolean =>
@@ -119,11 +136,11 @@ export const sidePaint = (
       // verse — and in regular mode that hidden line is drawn as the next
       // verse's line, which the tint would then claim.
       const end = usfm ? span.to : readingEnd(analysis, span.from, span.to);
-      lines.push({
-        from: span.from,
-        to: Math.max(span.from + 1, end),
-        class: tint(unit, decision, controls?.live === true),
-      });
+      // Either side's marks count: a verse that only lost words is marked in
+      // the baseline pane, and the current pane's text beside it is enough.
+      const line = tint(unit, decision, controls?.live === true, marksWords(unit, usfm));
+      if (line !== "")
+        lines.push({ from: span.from, to: Math.max(span.from + 1, end), class: line });
       // Word marks only where there is something to compare: a unit only one
       // side has is ALL change, and marking each of its words says nothing
       // the tint has not.
@@ -193,7 +210,7 @@ export const hunkPaint = (
       from: span.from,
       to: Math.max(span.from + 1, end),
       // Open: the verse as it reads now, green beside the red of what it was.
-      tint: changed(unit) ? "cm-diff-now" : tint(unit, decision, controls?.live === true),
+      tint: changed(unit) ? "cm-diff-now" : tint(unit, decision, controls?.live === true, true),
       marks: runs
         .filter((run) => run.kind !== "unchanged" && visibleRun(run.what, usfm))
         .map((run) => ({ from: run.from, to: run.to, class: "cm-diff-added" })),
