@@ -181,15 +181,19 @@ export function DiffCard(props: {
       if (!split || l === undefined || from === undefined || to === undefined) return;
       const { sides } = now();
       const paint = baselinePaint(markup);
-      const mount = mountDiffView({
-        parent: l,
-        text,
-        analyze: () => sides.baseline,
-        mode: markup ? "usfm" : "default",
-        clip: { from, to },
-        surface: "cm-diff cm-diff-card",
-        paint: paint(),
-      });
+      // Untracked as a whole: drawing the gutter's decision widgets reads the
+      // decisions, and this is a one-time build — the repaint effect follows.
+      const mount = untrack(() =>
+        mountDiffView({
+          parent: l,
+          text,
+          analyze: () => sides.baseline,
+          mode: markup ? "usfm" : "default",
+          clip: { from, to },
+          surface: "cm-diff cm-diff-card",
+          paint: paint(),
+        }),
+      );
       panes.set("baseline", { mount, paint, live: false });
       return () => {
         panes.delete("baseline");
@@ -243,15 +247,19 @@ export function DiffCard(props: {
       const started = performance.now();
       const { hunk, sides } = now();
       const paint = currentPaint(markup, split);
-      const mount = mountDiffView({
-        parent: r,
-        text: sides.currentText,
-        analyze: () => sides.current,
-        mode: markup ? "usfm" : "default",
-        clip: hunk.current,
-        surface: "cm-diff cm-diff-card",
-        paint: paint(),
-      });
+      // Untracked as a whole: drawing the gutter's decision widgets reads the
+      // decisions, and this is a one-time build — the repaint effect follows.
+      const mount = untrack(() =>
+        mountDiffView({
+          parent: r,
+          text: sides.currentText,
+          analyze: () => sides.current,
+          mode: markup ? "usfm" : "default",
+          clip: hunk.current,
+          surface: "cm-diff cm-diff-card",
+          paint: paint(),
+        }),
+      );
       panes.set("current", { mount, paint, live: false });
       props.onMounted?.(performance.now() - started);
       return () => {
@@ -292,7 +300,7 @@ export function DiffCard(props: {
       paint,
       live: true,
     });
-    repaintDiff(view, paint());
+    untrack(() => repaintDiff(view, paint()));
   };
 
   // A decision, or a new comparison, repaints in place. A live pane whose text
@@ -314,7 +322,9 @@ export function DiffCard(props: {
           if (doc.length !== text.length || doc.toString() !== text) continue;
         }
         // A snapshot of the decisions: the compute above is what tracks them.
-        pane.mount.repaint(untrack(pane.paint));
+        // The decisions are the compute's; painting — and the gutter widgets
+        // it draws — reads them again, and is not a subscription.
+        untrack(() => pane.mount.repaint(pane.paint()));
       }
     },
   );

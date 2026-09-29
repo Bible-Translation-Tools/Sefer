@@ -1235,7 +1235,9 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       if (open === undefined || want === undefined || open.root !== want) return;
       setLandOnOpen(undefined);
       const book = open.book("MAT") ?? open.books[0];
-      if (book !== undefined) showReference(chaptersAddress(book.id, 1));
+      // A one-time landing, not a subscription: what `showReference` reads
+      // (the project, the books it holds, its slug) is this moment's value.
+      if (book !== undefined) untrack(() => showReference(chaptersAddress(book.id, 1)));
     },
   );
 

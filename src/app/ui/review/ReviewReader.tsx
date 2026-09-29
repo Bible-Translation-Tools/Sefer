@@ -249,7 +249,9 @@ export function ReviewReader(props: {
       units,
       shown: units.filter((unit) => (changed(unit) && include(unit)) || keep(unit)),
       hunks: hunksOf({
-        label: (address) => shell.location.label(address),
+        // Read as of now: cards are built in the prepare effect, and a book's
+        // name is not something a review follows while it is open.
+        label: (address) => untrack(() => shell.location.label(address)),
         bookId: book.bookId,
         units,
         baseline: sides.baseline,
