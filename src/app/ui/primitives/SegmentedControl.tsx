@@ -61,7 +61,7 @@ export interface SegmentedControlProps<T extends string> {
  * when every segment HAS an icon, or a narrow window would show blank tabs.
  */
 const sizeClass = (size: SegmentedControlProps<string>["size"], collapse: boolean): string => {
-  if (size === "sm") return "h-6 gap-1.5 rounded-md px-2.5 text-smallest [&>svg]:size-3";
+  if (size === "sm") return "h-6 gap-1.5 rounded-md px-2.5 text-smallest [&>svg]:size-4";
   // 42px segments inside the 3px track, sharing the control's width evenly;
   // the caller caps the control, so a segment is never wider than its share.
   if (size === "lg")

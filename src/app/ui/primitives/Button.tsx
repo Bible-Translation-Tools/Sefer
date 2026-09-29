@@ -61,8 +61,8 @@ const classes = variants({
         "bg-surface-error text-on-surface-error border-surface-error hover:not-disabled:brightness-95",
     },
     size: {
-      // Compact: 28px, a 12px icon.
-      sm: "h-7 gap-1.5 rounded-md px-2.5 text-smallest [&>svg]:size-3",
+      // Compact: 28px, a 16px icon.
+      sm: "h-7 gap-1.5 rounded-md px-2.5 text-smallest [&>svg]:size-4",
       // The default, and the app's control size: 48px tall, 12px sides and
       // radius, 14px medium, a 20px icon 6px from its label.
       md: "h-12 gap-1.5 rounded-lg px-3 text-small [&>svg]:size-5",
