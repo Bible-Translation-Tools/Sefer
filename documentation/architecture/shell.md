@@ -143,13 +143,12 @@ A prototype outside the layout still has services, a theme and the comment
 panel — but not the rail, and not `installCommandKeys`, so it does not answer
 the application's Mod-K for an application it is not part of.
 
-- **`IconRail`** is permanent: a 72px near-black bar across the top of the window
-  (`surface-invert`, the same in both themes). Left, the mark and name; centre,
-  the three modes as a 48px `SegmentedControl` (`size="lg"`, `tone="invert"`),
-  centred, its tabs at most 10rem each, shrinking before they collapse to icons
-  below `md`; right, icon-only tiles. Everything on it is lit
-  from the `pathname`, not from a signal, and every tile but three is a plain
-  navigation.
+- **`IconRail`** is permanent: a 72px bar across the top of the window in the
+  theme's own surface (`surface-primary`, a hairline under it). Left, the mark
+  and name — the Home button; centre, the three modes as a 48px
+  `SegmentedControl` (`md`, `iconsWhenNarrow`), which drop to icons below `md`;
+  right, 48px icon-only tiles. Everything on it is lit from the `pathname`,
+  not from a signal, and every tile but three is a plain navigation.
 - **The project panel's show/hide** is not on the rail. It is one button that
   stays put and flips (`PanelToggle`, `panel-toggle`): left of the book's title
   in the editor toolbar, and on project screens without that toolbar in the

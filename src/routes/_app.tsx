@@ -56,9 +56,8 @@ import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
 function Workspace() {
   const shell = useShell();
   const path = useRouterState({ select: (state) => state.location.pathname });
-  // Never on `/` or `/projects`. `/` is either the projects page or, with
-  // nothing installed, `EmptyWorkspace` — a skeleton that draws its own
-  // sidebar, so nothing else in the chrome has to know which.
+  // Never on `/` or `/projects`. `/` is home: it forwards to the last project,
+  // or draws `EmptyWorkspace` — a skeleton that draws its own sidebar.
   const showing = (): boolean => shell.sidebarShowing() && path() !== "/projects" && path() !== "/";
   // Plain variables, not expressions in the props: `Resizable.Panel` reads its
   // three sizes ONCE, during registration, and a JSX expression is a lazy memo
@@ -132,7 +131,10 @@ function Chrome() {
 
   return (
     <div class="flex h-screen flex-col bg-surface-canvas">
-      <Show when={shell()} fallback={<div class="h-18 shrink-0 bg-surface-invert" />}>
+      <Show
+        when={shell()}
+        fallback={<div class="h-18 shrink-0 border-b border-surface-border bg-surface-primary" />}
+      >
         <IconRail />
       </Show>
 

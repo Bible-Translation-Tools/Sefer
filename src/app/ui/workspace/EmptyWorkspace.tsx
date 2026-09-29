@@ -1,8 +1,10 @@
 /**
- * The empty state: what `/` draws when nothing is installed on this device.
+ * The empty state: what home (`/`) draws when no project has been opened on
+ * this device — whether or not any are installed. The project control is the
+ * way to the projects page, which shows what is there.
  *
- * A SKELETON of the workspace, and the one place that knows the device is
- * empty — `/` decides, once, and nothing else in the chrome asks. It is built
+ * A SKELETON of the workspace; `/` decides, once, and nothing else in the
+ * chrome asks. It is built
  * from the real pieces in their ordinary no-project state rather than from
  * look-alikes: the rail already disables what needs an open project, and the
  * sidebar with no project and no recents shows its empty message and the way

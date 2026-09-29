@@ -44,13 +44,15 @@ export interface SegmentedControlProps<T extends string> {
   /**
    * `md` (the default) and `lg` are 48px tall: a 3px track around 42px
    * segments that share the control's width evenly — 14px medium at `md`,
-   * body text at `lg` (the app bar's modes). Narrow, labels truncate; below
-   * `md` an `lg` control whose segments all have icons drops to them, the
-   * labels kept for screen readers. `sm` is the compact 24px one.
+   * body text at `lg`. Narrow, labels truncate (see `iconsWhenNarrow` for
+   * dropping to icons). `sm` is the compact 24px one.
    */
   readonly size?: "sm" | "md" | "lg";
-  /** `invert` is for a dark bar: a raised track and the chosen segment dark. */
-  readonly tone?: "default" | "invert";
+  /**
+   * Below `md`, drop to icons, the labels kept for screen readers — the app
+   * bar's modes. Only honoured when every segment has an icon.
+   */
+  readonly iconsWhenNarrow?: boolean;
   readonly class?: ClassValue;
 }
 
@@ -71,22 +73,22 @@ const sizeClass = (size: SegmentedControlProps<string>["size"], collapse: boolea
   // 14px medium, a 20px icon 6px from its label. `flex-auto`, not `flex-1`:
   // each starts from its own label's width, so a control sized to its content
   // fits its words, and one given a width (the sidebar's) shares the rest.
-  return "h-10.5 min-w-0 flex-auto justify-center gap-1.5 rounded-lg px-3 text-small [&_svg]:size-5";
+  return cx(
+    "h-10.5 min-w-0 flex-auto justify-center gap-1.5 rounded-lg px-3 text-small [&_svg]:size-5",
+    collapse && "max-md:w-10.5 max-md:flex-none max-md:px-0",
+  );
 };
 
-const toneClass = (tone: SegmentedControlProps<string>["tone"], chosen: boolean): string => {
-  if (tone === "invert")
-    return chosen
-      ? "bg-surface-invert font-semibold text-on-surface-invert"
-      : "text-on-surface-invert-muted hover:not-disabled:text-on-surface-invert";
+const toneClass = (chosen: boolean): string => {
   return chosen
     ? "bg-surface-primary text-brand shadow-small"
-    : "text-on-surface-secondary hover:not-disabled:text-on-surface-primary";
+    : // A step darker than the track on hover, so the target is the segment.
+      "text-on-surface-secondary hover:not-disabled:bg-surface-tertiary hover:not-disabled:text-on-surface-primary";
 };
 
 export function SegmentedControl<T extends string>(props: SegmentedControlProps<T>) {
   const collapses = (): boolean =>
-    props.size === "lg" && props.items.every((item) => item.icon !== undefined);
+    props.iconsWhenNarrow === true && props.items.every((item) => item.icon !== undefined);
   const step = (delta: 1 | -1): void => {
     const items = props.items.filter((item) => item.disabled !== true);
     const at = items.findIndex((item) => item.value === props.value);
@@ -105,9 +107,7 @@ export function SegmentedControl<T extends string>(props: SegmentedControlProps<
         props.size === "sm"
           ? "gap-0.5 rounded-lg p-0.5"
           : "h-12 min-w-0 gap-0.75 rounded-2xl p-0.75",
-        props.tone === "invert"
-          ? "bg-surface-invert-raised"
-          : "border border-surface-border bg-surface-secondary",
+        "border border-surface-border bg-surface-secondary",
         props.class,
       )}
       onKeyDown={(event) => {
@@ -139,7 +139,7 @@ export function SegmentedControl<T extends string>(props: SegmentedControlProps<
               sizeClass(props.size, collapses()),
               // In a very narrow control the padding gives way to the words.
               item.shortLabel !== undefined && "@max-[8rem]:px-1",
-              toneClass(props.tone, item.value === props.value),
+              toneClass(item.value === props.value),
             )}
             onClick={() => props.onChange(item.value)}
           >

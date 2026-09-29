@@ -405,7 +405,6 @@ export function YourProjects(props: {
                     <div class="mt-auto flex items-center gap-2 pt-4">
                       <Button
                         variant="accent"
-                        size="lg"
                         class="flex-1 justify-between"
                         onClick={() => open(row)}
                       >
@@ -419,7 +418,6 @@ export function YourProjects(props: {
                         class="w-52"
                         trigger={
                           <IconButton
-                            size="lg"
                             label={t("More actions for {name}", { name: row.name })}
                             icon={<MoreVertical size={24} />}
                           />

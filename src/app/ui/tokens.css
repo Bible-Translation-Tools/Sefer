@@ -157,15 +157,11 @@
   --sidebar-on-surface: var(--on-surface-primary);
   --sidebar-on-surface-muted: var(--on-surface-tertiary);
 
-  /* The inverted surface: a near-black bar whatever the theme, with white on
-     it. The icon rail is the first user. Set here only and never overridden in
-     the dark blocks, so the rail looks the same in both themes. `raised` is a
-     step lighter — the mode switcher's track, and a hovered or pressed tile —
-     and `muted` is the text of a segment that is not the chosen one. */
+  /* The inverted surface: near-black whatever the theme, with white on it —
+     for an overlay that must read the same over any screen (the project
+     panel's drag-to-close hint). Set here only, never overridden in the dark
+     blocks. `muted` is its secondary text. */
   --surface-invert: var(--neutral-10);
-  --surface-invert-raised: var(--neutral-20);
-  --surface-invert-hover: var(--neutral-20);
-  --surface-invert-active: var(--neutral-20);
   --on-surface-invert: var(--neutral-100);
   --on-surface-invert-muted: var(--neutral-60);
 
@@ -319,9 +315,6 @@
   --color-on-surface-highlight: var(--on-surface-highlight);
   --color-on-surface-success: var(--on-surface-success);
   --color-surface-invert: var(--surface-invert);
-  --color-surface-invert-raised: var(--surface-invert-raised);
-  --color-surface-invert-hover: var(--surface-invert-hover);
-  --color-surface-invert-active: var(--surface-invert-active);
   --color-on-surface-invert: var(--on-surface-invert);
   --color-on-surface-invert-muted: var(--on-surface-invert-muted);
 
@@ -419,6 +412,15 @@
     line-height: 1.5;
     block-size: 100%;
     color-scheme: light dark;
+  }
+  /* An explicit theme must win for the browser's own chrome too — scrollbars,
+     form controls. Left at "light dark", a Light theme on an OS in dark mode
+     drew dark native scrollbars in the book list and the editor. */
+  :root[data-theme="light"] {
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
   }
 
   body {
