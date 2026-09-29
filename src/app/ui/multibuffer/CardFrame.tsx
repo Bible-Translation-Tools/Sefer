@@ -25,7 +25,7 @@ import { Show } from "solid-js";
 
 import { t } from "../../i18n";
 import { Badge, Card, cx } from "../primitives";
-import { CardActions, drawAction, type CardAction } from "./CardAction";
+import { CardActionButton, CardActions, type CardAction } from "./CardAction";
 
 /** Whether a card can be edited, and the session when it can. */
 export type CardEdit =
@@ -106,12 +106,10 @@ export function CardFrame(props: CardFrameProps) {
           {props.info}
           <div class="ms-auto flex shrink-0 items-center gap-1">
             <CardActions actions={props.headerActions ?? []} />
-            <Show when={editAction(props.edit)} keyed>
-              {(action) => drawAction(action)}
+            <Show when={editAction(props.edit)}>
+              {(action) => <CardActionButton action={action} />}
             </Show>
-            <Show when={props.open} keyed>
-              {(action) => drawAction(action)}
-            </Show>
+            <Show when={props.open}>{(action) => <CardActionButton action={action} />}</Show>
           </div>
         </header>
 

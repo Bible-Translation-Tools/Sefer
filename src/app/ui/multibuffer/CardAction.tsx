@@ -12,8 +12,8 @@
  * an icon; `button` shows its words and may lead with an icon.
  */
 
-import type { JSX } from "@solidjs/web";
-import { For } from "solid-js";
+import { Dynamic, type JSX } from "@solidjs/web";
+import { For, Show, type Accessor } from "solid-js";
 
 import { Button, IconButton } from "../primitives";
 
@@ -45,41 +45,62 @@ const pressedOf = (action: CardAction): "true" | "false" | undefined =>
   action.pressed === undefined ? undefined : action.pressed ? "true" : "false";
 
 /**
- * One action, drawn. A function of one immutable action, not a component: a
- * caller hands a NEW action when anything about it changes (its label, its
- * pressed state), and the `<For>` below re-draws that one.
+ * One action, drawn — and kept: the button is made once per action id and
+ * reads its current words and pressed state from `action`, so pressing a
+ * toggle from the keyboard leaves focus on the button it pressed. (Drawn from
+ * each new action object, the button was replaced and focus went with it.)
  */
-export const drawAction = (action: CardAction): JSX.Element => {
-  if (action.kind === "icon") {
-    const Icon = action.icon;
-    return (
-      <IconButton
-        size="sm"
-        label={action.label}
-        icon={<Icon size={14} />}
-        aria-pressed={pressedOf(action)}
-        data-card-action={action.id}
-        onClick={() => action.onPress()}
-      />
-    );
-  }
-  const Icon = action.icon;
+export function CardActionButton(props: { readonly action: Accessor<CardAction> }): JSX.Element {
+  const asIcon = () => {
+    const action = props.action();
+    return action.kind === "icon" ? action : undefined;
+  };
+  const asButton = () => {
+    const action = props.action();
+    return action.kind === "button" ? action : undefined;
+  };
   return (
-    <Button
-      size="sm"
-      variant={action.emphasis ?? "secondary"}
-      icon={Icon === undefined ? undefined : <Icon size={13} />}
-      aria-pressed={pressedOf(action)}
-      title={action.title}
-      data-card-action={action.id}
-      onClick={() => action.onPress()}
-    >
-      {action.label}
-    </Button>
+    <>
+      <Show when={asIcon()}>
+        {(action) => (
+          <IconButton
+            size="sm"
+            label={action().label}
+            icon={<Dynamic component={action().icon} size={14} />}
+            aria-pressed={pressedOf(action())}
+            data-card-action={action().id}
+            onClick={() => action().onPress()}
+          />
+        )}
+      </Show>
+      <Show when={asButton()}>
+        {(action) => (
+          <Button
+            size="sm"
+            variant={action().emphasis ?? "secondary"}
+            icon={
+              action().icon === undefined ? undefined : (
+                <Dynamic component={action().icon} size={13} />
+              )
+            }
+            aria-pressed={pressedOf(action())}
+            title={action().title}
+            data-card-action={action().id}
+            onClick={() => action().onPress()}
+          >
+            {action().label}
+          </Button>
+        )}
+      </Show>
+    </>
   );
-};
+}
 
-/** A run of actions, in order. */
+/** A run of actions, in order, one button per id. */
 export function CardActions(props: { readonly actions: readonly CardAction[] }): JSX.Element {
-  return <For each={props.actions}>{(action) => drawAction(action)}</For>;
+  return (
+    <For each={props.actions} keyed={(action) => action.id}>
+      {(action) => <CardActionButton action={action} />}
+    </For>
+  );
 }
