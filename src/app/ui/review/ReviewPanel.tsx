@@ -887,7 +887,7 @@ export function ReviewPanel() {
               label={t("Show USFM markup")}
             />
             <Button
-              icon={<History size={14} />}
+              icon={<History />}
               onClick={() =>
                 void navigate({
                   to: "/project/$slug/history",
@@ -1068,7 +1068,7 @@ export function ReviewPanel() {
                   </div>
                   <Button
                     variant="primary"
-                    icon={<Save size={14} />}
+                    icon={<Save />}
                     data-review-record
                     loading={recording()}
                     disabled={unsaved().length === 0}

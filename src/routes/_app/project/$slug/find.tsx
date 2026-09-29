@@ -683,7 +683,7 @@ function Find() {
             <Input
               ref={setBox}
               type="search"
-              icon={<SearchIcon size={14} />}
+              icon={<SearchIcon />}
               wrapperClass="w-72"
               placeholder={t("Find in project")}
               value={text()}

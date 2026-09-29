@@ -234,20 +234,20 @@ export function IconRail() {
           {
             value: "form",
             label: t("Form"),
-            icon: <Sheet size={20} aria-hidden="true" />,
+            icon: <Sheet aria-hidden="true" />,
             disabled: true,
             title: t("Form is not built yet."),
           },
           {
             value: "refine",
             label: t("Refine"),
-            icon: <FileText size={20} aria-hidden="true" />,
+            icon: <FileText aria-hidden="true" />,
             disabled: !open(),
           },
           {
             value: "terms",
             label: t("Key terms"),
-            icon: <ListChecks size={20} aria-hidden="true" />,
+            icon: <ListChecks aria-hidden="true" />,
             disabled: !open(),
           },
         ]}

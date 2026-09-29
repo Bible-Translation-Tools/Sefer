@@ -97,7 +97,7 @@ export function BackToEditor() {
           variant="outlined"
           label={label()}
           tooltipSide="left"
-          icon={<X size={16} />}
+          icon={<X />}
           onClick={back}
         />
       </div>

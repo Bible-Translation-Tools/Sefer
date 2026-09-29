@@ -409,7 +409,7 @@ export function YourProjects(props: {
                         onClick={() => open(row)}
                       >
                         {t("Open Project")}
-                        <ArrowRight size={16} aria-hidden="true" />
+                        <ArrowRight aria-hidden="true" />
                       </Button>
                       <Menu
                         label={t("Project actions")}
@@ -419,12 +419,12 @@ export function YourProjects(props: {
                         trigger={
                           <IconButton
                             label={t("More actions for {name}", { name: row.name })}
-                            icon={<MoreVertical size={24} />}
+                            icon={<MoreVertical />}
                           />
                         }
                       >
                         <MenuItem
-                          icon={<FolderOpen size={14} aria-hidden="true" />}
+                          icon={<FolderOpen aria-hidden="true" />}
                           onSelect={() => open(row)}
                         >
                           {t("Open")}
@@ -435,13 +435,13 @@ export function YourProjects(props: {
                             that would fail. */}
                         <Show when={!row.fixture}>
                           <MenuItem
-                            icon={<Share2 size={14} aria-hidden="true" />}
+                            icon={<Share2 aria-hidden="true" />}
                             onSelect={() => share(row)}
                           >
                             {t("Share…")}
                           </MenuItem>
                           <MenuItem
-                            icon={<PencilLine size={14} aria-hidden="true" />}
+                            icon={<PencilLine aria-hidden="true" />}
                             onSelect={() => {
                               setNewName(row.name);
                               setRenaming(row);
@@ -450,13 +450,13 @@ export function YourProjects(props: {
                             {t("Rename…")}
                           </MenuItem>
                           <MenuItem
-                            icon={<Download size={14} aria-hidden="true" />}
+                            icon={<Download aria-hidden="true" />}
                             onSelect={() => exportZip(row)}
                           >
                             {t("Export as zip")}
                           </MenuItem>
                           <MenuItem
-                            icon={<Trash2 size={14} aria-hidden="true" />}
+                            icon={<Trash2 aria-hidden="true" />}
                             onSelect={() => setDeleting(row)}
                           >
                             {t("Delete…")}

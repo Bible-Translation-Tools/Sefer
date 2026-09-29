@@ -277,7 +277,7 @@ export function HistoryPanel() {
         subtitle={t("What git recorded, newest first — and, at the top, what it has not.")}
         actions={
           <>
-            <Button icon={<RefreshCw size={14} />} onClick={load}>
+            <Button icon={<RefreshCw />} onClick={load}>
               {t("Reload")}
             </Button>
             <Button variant="primary" onClick={review}>

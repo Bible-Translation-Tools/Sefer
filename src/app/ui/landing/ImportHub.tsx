@@ -446,14 +446,14 @@ export function ImportHub(props: {
         <Menu label={t("Import")} side="bottom" align="end" class="w-56" trigger={props.trigger}>
           <MenuItem
             data-testid="import-zip"
-            icon={<FileArchive size={16} aria-hidden="true" />}
+            icon={<FileArchive aria-hidden="true" />}
             onSelect={() => pick("zip")}
           >
             {t("Import zip")}
           </MenuItem>
           <MenuItem
             data-testid="import-folder"
-            icon={<FolderOpen size={16} aria-hidden="true" />}
+            icon={<FolderOpen aria-hidden="true" />}
             onSelect={() => pick("folder")}
           >
             {t("Import folder")}
@@ -462,7 +462,7 @@ export function ImportHub(props: {
               cannot serve says so where it would have been. */}
           <MenuItem
             data-testid="import-cloud"
-            icon={<CloudDownload size={16} aria-hidden="true" />}
+            icon={<CloudDownload aria-hidden="true" />}
             disabled={endpoint === null}
             title={endpoint === null ? t("No WACS server is set for this build.") : undefined}
             onSelect={openClone}

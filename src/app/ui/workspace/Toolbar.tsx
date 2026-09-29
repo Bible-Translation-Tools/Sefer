@@ -157,8 +157,8 @@ export function Toolbar() {
            navigations too. It is a rail tile, where the other destinations
            are. Form is a SURFACE, not a projection, and will not live here. */
         items={[
-          { value: "regular", label: t("Regular Mode"), icon: <BookOpen size={14} /> },
-          { value: "usfm", label: t("USFM"), icon: <Code size={14} /> },
+          { value: "regular", label: t("Regular Mode"), icon: <BookOpen /> },
+          { value: "usfm", label: t("USFM"), icon: <Code /> },
         ]}
         value={segment()}
         onChange={pick}
