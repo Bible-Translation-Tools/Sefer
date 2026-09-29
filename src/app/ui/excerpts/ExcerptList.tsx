@@ -119,6 +119,12 @@ export interface ExcerptDecor {
   readonly rowKey?: (group: BookExcerpts, excerpt: Excerpt) => string;
   /** The sticky header's contents. Defaults to the book id and name: the outline beside it has the count. */
   readonly header?: (group: BookExcerpts) => JSX.Element;
+  /**
+   * No visible section headers — Find, where every card's title bar already
+   * names its book. The header stays as a zero-height anchor: the outline
+   * scrolls to it and the list reads which section is on screen from it.
+   */
+  readonly hideHeaders?: boolean;
   /** The outline column's own label, when its rows are not books. */
   readonly outlineTitle?: string;
   /** One outline row's text. Defaults to the section key. */
@@ -330,24 +336,30 @@ export function ExcerptList(props: ExcerptListProps) {
           goTo = scrollTo;
         }}
         empty={props.empty}
-        header={(section, ref) => (
-          <header
-            ref={ref}
-            data-book={section().key}
-            class="sticky top-0 z-10 flex items-baseline gap-2 border-b border-surface-border bg-surface-secondary/95 px-1 py-1.5 backdrop-blur-xs"
-          >
-            {decorated(section().key) ?? (
-              <>
-                <strong class="text-small font-semibold text-on-surface-primary">
-                  {section().key}
-                </strong>
-                <span class="text-small text-on-surface-secondary">
-                  {nameOf(section().key)?.name}
-                </span>
-              </>
-            )}
-          </header>
-        )}
+        header={(section, ref) =>
+          props.decor?.hideHeaders === true ? (
+            <header ref={ref} data-book={section().key} class="h-0 overflow-hidden">
+              <span class="sr-only">{nameOf(section().key)?.name ?? section().key}</span>
+            </header>
+          ) : (
+            <header
+              ref={ref}
+              data-book={section().key}
+              class="sticky top-0 z-10 flex items-baseline gap-2 border-b border-surface-border bg-surface-secondary/95 px-1 py-1.5 backdrop-blur-xs"
+            >
+              {decorated(section().key) ?? (
+                <>
+                  <strong class="text-small font-semibold text-on-surface-primary">
+                    {section().key}
+                  </strong>
+                  <span class="text-small text-on-surface-secondary">
+                    {nameOf(section().key)?.name}
+                  </span>
+                </>
+              )}
+            </header>
+          )
+        }
         card={(excerpt, key, session) => (
           <ExcerptCard
             excerpt={

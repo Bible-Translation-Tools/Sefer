@@ -909,6 +909,7 @@ function Find() {
           activeHit={cursorAt()}
           mode={mode()}
           pairedOf={scope() === "reference" ? pairedOf : undefined}
+          decor={{ hideHeaders: true }}
           empty={
             <EmptyState
               icon={<SearchIcon size={22} />}
