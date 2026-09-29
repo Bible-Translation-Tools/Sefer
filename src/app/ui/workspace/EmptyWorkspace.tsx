@@ -4,11 +4,10 @@
  * way to the projects page, which shows what is there.
  *
  * A SKELETON of the workspace; `/` decides, once, and nothing else in the
- * chrome asks. It is built
- * from the real pieces in their ordinary no-project state rather than from
- * look-alikes: the rail already disables what needs an open project, and the
- * sidebar with no project and no recents shows its empty message and the way
- * to the projects page. The main area is deliberately blank.
+ * chrome asks. It is built from the real pieces in their ordinary no-project
+ * state rather than from look-alikes: the rail already disables what needs an
+ * open project, and the sidebar with no project shows its empty message and
+ * the way to the projects page. The main area is deliberately blank.
  *
  * Keeping this skeleton and the real workspace in one shape is a chore, and a
  * known one: when the workspace's layout changes, change this with it.

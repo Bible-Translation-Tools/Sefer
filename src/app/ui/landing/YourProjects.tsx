@@ -10,7 +10,7 @@
  * appears; after that the list is the index's word for it.
  *
  * Opening writes `lastOpened` — to the index, and to `shell.recentProjects`,
- * which the sidebar reads — BEFORE it navigates. A project that failed to open
+ * which home (`/`) reads to reopen the last project — BEFORE it navigates. A project that failed to open
  * is still a project you tried to open, and the ordering people rely on is
  * "what I was last working on", not "what last succeeded".
  *

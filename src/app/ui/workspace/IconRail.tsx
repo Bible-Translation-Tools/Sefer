@@ -5,11 +5,10 @@
  * light, the dark surface in dark — with a hairline under it. (It was a
  * column down the left; the top won.)
  *
- * Three bands, left to right. The mark, which is the way home. (The panel's show/hide
- * moved into the panel, beside the project button; `ShowPanel` brings a hidden
- * one back.)
- * The MODES in the middle —
- * Form, Refine, Key terms — the three ways of working on a project's text;
+ * Three bands, left to right. The mark, which is the way home. (The project
+ * panel's show/hide is `PanelToggle`, beside the book's title or in its own
+ * column, not here.) The MODES in the middle — Form, Refine, Key terms — the
+ * three ways of working on a project's text;
  * with no project open they are there but disabled, so the rail keeps one
  * shape — the empty state's included.
  * Form is not built yet and stays disabled. At the end: More, Import (a zip,

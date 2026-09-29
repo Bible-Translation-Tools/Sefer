@@ -49,7 +49,7 @@ export function Dialog(props: DialogProps) {
           )}
           <div class="mt-4 text-small text-on-surface-primary">{props.children}</div>
           {props.footer !== undefined && (
-            <div class="mt-5 flex items-center justify-end gap-2">{props.footer}</div>
+            <div class="mt-5 flex items-center justify-end gap-controls">{props.footer}</div>
           )}
         </CorvuDialog.Content>
       </CorvuDialog.Portal>

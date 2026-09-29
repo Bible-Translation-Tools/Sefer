@@ -330,27 +330,25 @@ export function ProjectSidebar() {
             </button>
           }
         >
-          <div class="flex items-center gap-2">
-            <button
-              type="button"
-              data-testid="sidebar-project"
-              data-current={choosing() ? "" : undefined}
-              class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-2xl border bg-surface-primary p-4 text-start transition-colors hover:bg-sidebar-surface-hover data-current:border-brand data-current:bg-brand-light not-data-current:border-surface-border"
-              onClick={() => void navigate({ to: "/projects" })}
-            >
-              <span class="min-w-0 flex-1">
-                <span class="block truncate text-small font-bold text-on-surface-primary">
-                  {projectName(shell.project())}
-                </span>
-                <Show when={projectLanguage(shell.project()) !== ""}>
-                  <span class="block truncate text-smallest text-on-surface-tertiary">
-                    {projectLanguage(shell.project())}
-                  </span>
-                </Show>
+          <button
+            type="button"
+            data-testid="sidebar-project"
+            data-current={choosing() ? "" : undefined}
+            class="flex w-full cursor-pointer items-center gap-2 rounded-2xl border bg-surface-primary p-4 text-start transition-colors hover:bg-sidebar-surface-hover data-current:border-brand data-current:bg-brand-light not-data-current:border-surface-border"
+            onClick={() => void navigate({ to: "/projects" })}
+          >
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-small font-bold text-on-surface-primary">
+                {projectName(shell.project())}
               </span>
-              <ChevronDown size={16} aria-hidden="true" class="shrink-0 text-on-surface-tertiary" />
-            </button>
-          </div>
+              <Show when={projectLanguage(shell.project()) !== ""}>
+                <span class="block truncate text-smallest text-on-surface-tertiary">
+                  {projectLanguage(shell.project())}
+                </span>
+              </Show>
+            </span>
+            <ChevronDown size={16} aria-hidden="true" class="shrink-0 text-on-surface-tertiary" />
+          </button>
         </Show>
       </div>
 

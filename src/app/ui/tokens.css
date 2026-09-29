@@ -353,9 +353,11 @@
   --text-body: 1rem;
   --text-small: 0.875rem;
   --text-smallest: 0.75rem;
-  /* The rail's tile caption: the one size below smallest, set tight. */
-  --text-caption: 0.6875rem;
-  --text-caption--line-height: 1.5;
+
+  /* The gap between neighbouring controls — buttons side by side, a
+     dialog's footer, a header's actions: `gap-controls`. One name, so the
+     designer's 12px is one value to change, not a `gap-3` on every screen. */
+  --spacing-controls: 0.75rem;
 
   /* Our radii REPLACE Tailwind's, so `rounded-lg` is the product's 12px and
      not the framework's 8px. The card radius the mockups use is lg/xl. */
