@@ -374,7 +374,8 @@ export function FindingsPanel() {
    *
    * Listened for on the document because the page has no single focusable
    * body, and guarded on the target: the text filter and every other field is
-   * a place where `j` means `j`, and so is an open satellite. Modified chords
+   * a place where a key means itself, and so is an open satellite and so is
+   * Enter on a button. Modified chords
    * are left to `src/app/commands.ts`, which owns the `Mod-` keymap.
    */
   {
@@ -385,6 +386,10 @@ export function FindingsPanel() {
         if (target.isContentEditable) return;
         const tag = target.tagName;
         if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+        // Enter (and Space) on a button or a link is that control's: a card's
+        // Edit, Fix or USFM switch pressed from the keyboard, not "open the
+        // current card".
+        if (event.key === "Enter" && target.closest("button, a, [role=menuitem]") !== null) return;
       }
       if (event.key === "ArrowDown") step(1);
       else if (event.key === "ArrowUp") step(-1);
