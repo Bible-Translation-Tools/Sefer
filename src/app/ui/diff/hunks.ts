@@ -19,8 +19,8 @@
 
 import type { Extent } from "#core/excerpts/excerpts";
 import { tocViewOf, type Analysis } from "#core/galley";
-import { unitReference, type DecisionUnit } from "#core/galley/diff";
-import { addressCode } from "#core/location/address";
+import type { DecisionUnit } from "#core/galley/diff";
+import { addressCode, type Address } from "#core/location/address";
 import { tocUnits, unitAddress, unitIndexAt, type TocUnit } from "#core/location/locate";
 
 import { changed } from "./paint";
@@ -38,8 +38,10 @@ export interface Hunk {
   readonly bookId: string;
   /** `"<book> <address>"` — stable while the unit is: the list's row key. */
   readonly key: string;
-  /** Its own unit's reference ("1:4"): the card's title, kept when its changes go. */
-  readonly reference: string;
+  /** Its TOC unit's place: the card's title, kept when its changes go. */
+  readonly address: Address;
+  /** What a person reads for `address` ("Genesis 1:4") — the caller's `label`. */
+  readonly label: string;
   /** The engine's changes inside this unit: what the card decides. */
   readonly units: readonly DecisionUnit[];
   /**
@@ -98,6 +100,12 @@ export const hunksOf = (options: {
   readonly units: readonly DecisionUnit[];
   readonly baseline: Analysis;
   readonly current: Analysis;
+  /**
+   * What a person reads for a place — the shell's one display rule
+   * (`location.label`), as an excerpt's `BookText.label` is. Every card on
+   * every screen is titled by it.
+   */
+  readonly label: (address: Address) => string;
   /** The setting's steps, for a card nobody has widened. */
   readonly steps: number;
   /** A card's own extent, by its key, once somebody widened it. */
@@ -138,7 +146,8 @@ export const hunksOf = (options: {
   for (const [at, own] of [...groups.entries()].sort((a, b) => a[0] - b[0])) {
     const toc = current[at];
     if (toc === undefined) continue;
-    const key = `${options.bookId} ${addressCode(unitAddress(options.bookId, currentToc, toc))}`;
+    const address = unitAddress(options.bookId, currentToc, toc);
+    const key = `${options.bookId} ${addressCode(address)}`;
     const extent = options.extentOf?.(key) ?? { up: options.steps, down: options.steps };
     const shownCurrent = stretchOf(current, at, at, extent);
     // The baseline's stretch: the units its own changes span there, widened
@@ -173,7 +182,8 @@ export const hunksOf = (options: {
     out.push({
       bookId: options.bookId,
       key,
-      reference: own[0] === undefined ? "" : unitReference(own[0]),
+      address,
+      label: options.label(address),
       units: own,
       all: options.units.slice(low, Math.max(low, high)),
       current: shownCurrent.range,
@@ -194,9 +204,6 @@ const CHARS_PER_LINE = 70;
 /** A card's height before it has been measured. */
 export const estimate = (hunk: Hunk): number =>
   60 + Math.ceil((hunk.current.to - hunk.current.from) / CHARS_PER_LINE) * 30;
-
-/** The card's place: its own unit's reference ("1:4"). */
-export const hunkLabel = (hunk: Hunk): string => hunk.reference;
 
 /** A change whose words are the same on both sides: markup, or spacing. */
 export const isFormatting = (unit: DecisionUnit): boolean =>

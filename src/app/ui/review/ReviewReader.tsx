@@ -55,7 +55,6 @@ import {
   DiffCard,
   changed,
   estimate,
-  hunkLabel,
   hunksOf,
   isFormatting,
   type BookDiffApi,
@@ -255,6 +254,7 @@ export function ReviewReader(props: {
       units,
       shown: units.filter((unit) => (changed(unit) && include(unit)) || keep(unit)),
       hunks: hunksOf({
+        label: (address) => shell.location.label(address),
         bookId: book.bookId,
         units,
         baseline: sides.baseline,
@@ -964,7 +964,7 @@ export function ReviewReader(props: {
             sections={sections()}
             bookOf={(item) => item.hunk.bookId}
             seat={props.seat}
-            lineLabel={(item) => `${item.held.book.name} ${hunkLabel(item.hunk)}`}
+            lineLabel={(item) => item.hunk.label}
             // A card is keyed by its verse's address, so typing into it never
             // moves its key; an edit that ends its change leaves it held as
             // "No longer a change" — never handed to a neighbour.
@@ -978,7 +978,6 @@ export function ReviewReader(props: {
             card={(item, _key, session) => (
               <DiffCard
                 hunk={item().hunk}
-                bookName={item().held.book.name}
                 sides={item().held.sides}
                 split={split()}
                 usfm={props.usfm}

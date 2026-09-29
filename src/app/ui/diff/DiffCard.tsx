@@ -41,7 +41,7 @@ import { CardEditor } from "../multibuffer/CardEditor";
 import { CardFrame } from "../multibuffer/CardFrame";
 import { ContextControl, type ContextStep } from "../multibuffer/ContextControl";
 import { Badge, cx, IconButton } from "../primitives";
-import { hunkKind, hunkLabel, type Hunk } from "./hunks";
+import { hunkKind, type Hunk } from "./hunks";
 import { hunkPaint, sidePaint, type Controls } from "./paint";
 
 /** Both texts of one book, and their parses — what every card of that book reads. */
@@ -94,11 +94,6 @@ export const sameFields = (
 
 export function DiffCard(props: {
   readonly hunk: Hunk;
-  /**
-   * The book's name, for the title: every card names its whole place
-   * ("Genesis 3:6"), never the chapter and verse alone.
-   */
-  readonly bookName: string;
   readonly sides: DiffSides;
   readonly split: boolean;
   readonly usfm: boolean;
@@ -330,7 +325,7 @@ export function DiffCard(props: {
   return (
     <CardFrame
       data={{ "data-diff-card": props.hunk.key }}
-      label={`${props.bookName} ${hunkLabel(props.hunk)}`}
+      label={props.hunk.label}
       gone={props.gone}
       badges={
         <>
