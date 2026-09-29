@@ -207,7 +207,7 @@ function Terms() {
     );
 
   return (
-    <main class="flex h-screen min-w-0 flex-col gap-4 p-6">
+    <main class="flex h-full min-w-0 flex-col gap-4 p-6">
       <PanelHeader title={t("Key terms")} />
 
       <Show
