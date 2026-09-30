@@ -44,6 +44,7 @@ import {
   type Pattern,
 } from "../galley";
 import type { SourceStamp } from "../source/source";
+import { comparisonOf, type Comparison } from "./compare";
 import { describeSous, render } from "./messages";
 
 /**
@@ -114,6 +115,13 @@ export interface Finding {
    * mean re-walking the snapshot for every row.
    */
   readonly pattern?: number;
+  /**
+   * What a Sous convention sentence compares — the form here and, when the
+   * sentence names one, the form the project usually writes — as two
+   * searches (`./compare.ts`). Read off the same descriptor as `message`.
+   * Quotes the document, so never goes to telemetry, like `message`.
+   */
+  readonly comparison?: Comparison;
 }
 
 const identify = (
@@ -369,6 +377,7 @@ export const fromSnapshot = (
         snapshot,
         ...before(resolved, finding, pattern),
       });
+      const comparison = comparisonOf(described);
       out.push({
         id: identify("sous", resolved.bookId, code, finding.from, finding.to),
         bookId: resolved.bookId,
@@ -383,6 +392,7 @@ export const fromSnapshot = (
         stamp: resolved.stamp,
         engine: resolved.engine,
         ...(finding.kind === "Convention" ? { pattern: finding.convention.pattern } : {}),
+        ...(comparison === undefined ? {} : { comparison }),
       });
     }
   }

@@ -20,14 +20,18 @@ A book the engine holds no mask for contributes nothing: a project opening regis
 
 ## Queries, options, failures
 
-- `Query { text, caseSensitive?, wholeWord?, regex? }`.
-- `Options { limit?, books?, analysisOf? }`. `limit` is a total across all books and omitted means no bound; `books` narrows the scan to those `BookId`s; `analysisOf` is where a hit's Address comes from (below). The bound is on the question instead: `MINIMUM_QUERY = 2`, measured on a whole Bible, below which the screen does not search — a single character is a quarter of a million hits nobody can read, and a capped count would answer "how many are there" wrongly.
+- `Query { text, caseSensitive?, wholeWord?, regex?, unicode? }`. `unicode` compiles a regex with the `u` flag, for `\p{L}` and friends; it is off for what a person types into Find, because `u` also makes a loose escape (`\-` outside a class) a syntax error.
+- `Options { limit?, books?, analysisOf?, previewWidth? }`. `limit` is a total across all books and omitted means no bound; `books` narrows the scan to those `BookId`s; `analysisOf` is where a hit's Address comes from (below). The bound is on the question instead: `longEnough(text)` — `MINIMUM_QUERY = 2` characters, measured on a whole Bible, below which a screen does not search, because a single letter is a quarter of a million hits nobody can read and a capped count would answer "how many are there" wrongly. One exception: a single character that is not a letter, a digit or a space ("—", "“") searches, because it is a glyph being checked on purpose, not a word being typed. The commonest such glyph, the comma, is about 55,000 hits in en_ulb and answers in about 130ms.
 - `SearchError { reason: "InvalidRegex" }` is the only failure. An empty query, a book filter that matches nothing, and a text with no match are all a successful empty result.
 - Hits arrive in book order, then offset order.
 
+## Asking from another screen
+
+Search is a module, not a screen, so a screen with a question asks it in place. `SearchDialog` (`src/app/ui/search/`) is the one door so far: a magnifying-glass button on a Sous convention finding that opens a dialog with what the finding's sentence compares, as two lists side by side — every place the form HERE occurs, and every place the form the project USUALLY writes occurs ("“'.” 3 times; the other way round, “.'”, 974 times"). The two queries are `Finding.comparison`, read off kitchen's message descriptor ([findings](findings.md)). Both run case-sensitive over whatever the reader's global mode shows — `findInReading` in Regular, `find` over the USFM in USFM — list up to 200 hits each with the match marked (`Options.previewWidth` asks for about 400 characters, so a verse wraps whole instead of being cut at 90), and open a hit in the editor.
+
 ## Hits are version-bound
 
-`Hit { bookId, stamp, from, to, address?, preview, pieces? }`. `from`/`to` are UTF-16 offsets into the revision named by `stamp`, the book's stamp at scan time. `preview` is display text only — the containing line (of the reading, for a reading hit) narrowed to about 90 characters — and must never be parsed back into coordinates. (`Hit` also declares an optional `projected`; no scan sets it.)
+`Hit { bookId, stamp, from, to, address?, preview, previewMatch, pieces? }`. `from`/`to` are UTF-16 offsets into the revision named by `stamp`, the book's stamp at scan time. `preview` is display text only — the containing line (of the reading, for a reading hit) narrowed to about 90 characters — and must never be parsed back into coordinates; `previewMatch` is where the match sits inside `preview`, for marking it. (`Hit` also declares an optional `projected`; no scan sets it.)
 
 `pieces` appears only when a reading hit maps back to more than **one** source piece, which means it spans markup the reading dropped; `from`/`to` are then the first piece, so anything that only wants somewhere to scroll to still works. Such a hit is **not replaceable**: `planReplace` returns `null` and `replaceInBook` refuses it as `Stale`. That is a rule, not a limitation — the markup between the pieces either survives the replacement or does not, and only the person editing knows which.
 

@@ -71,6 +71,7 @@ import {
   SegmentedControl,
   severityTone,
 } from "../primitives";
+import { SearchDialog } from "../search/SearchDialog";
 import {
   createFindingsFeed,
   foldRuns,
@@ -494,6 +495,10 @@ export function FindingsPanel() {
               {(described) => <SousSentence message={described()} tier="headline" />}
             </Show>
           </span>
+          {/* What a convention sentence compares, as two lists: here, and usually. */}
+          <Show when={finding.comparison}>
+            {(comparison) => <SearchDialog comparison={comparison()} />}
+          </Show>
           <div class="flex items-center gap-controls">
             <Show when={finding.details !== undefined}>
               <Button

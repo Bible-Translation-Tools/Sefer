@@ -363,10 +363,11 @@ function Find() {
       setProblem("");
       return;
     }
-    // One character over 66 books is a quarter of a million hits and nothing a
+    // One letter over 66 books is a quarter of a million hits and nothing a
     // person can read. Said out loud rather than answered with "0 results",
-    // which would read as "this word is not in your project".
-    if (staticQuery.text.length < Search.MINIMUM_QUERY) {
+    // which would read as "this word is not in your project". A single glyph
+    // that is not a letter searches (`Search.longEnough`).
+    if (!Search.longEnough(staticQuery.text)) {
       setHits([]);
       setReferenceHits([]);
       setProblem(
@@ -459,7 +460,7 @@ function Find() {
     const want = scope();
     if (project === undefined || book === undefined) return;
     // Not a book search, or not one this list holds: the whole search again.
-    if (want === "reference" || staticQuery.text.length < Search.MINIMUM_QUERY) return;
+    if (want === "reference" || !Search.longEnough(staticQuery.text)) return;
     if (want === "book" && focusedBook() !== bookId) return;
     const op = shell.services.composition.observability.operation("find.retake", {
       "find.book": bookId,
