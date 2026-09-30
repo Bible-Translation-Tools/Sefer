@@ -101,9 +101,13 @@ export interface GitService {
   readonly status: (repo: Repo) => Effect.Effect<Status, GitError>;
   /**
    * Stages exactly the receipt paths and commits them. Nothing is committed
-   * that Save did not write: an untracked scratch file, a stray editor
+   * that Sefer did not write: an untracked scratch file, a stray editor
    * backup, or a receipt whose path falls outside `repo.root` (which is
    * `Refused`) never reaches a commit.
+   *
+   * An empty receipt list is `Refused` — an empty commit records nothing
+   * true — except when `alsoParents` joins another history: the join is
+   * the thing recorded, even when the other side changed no file.
    */
   readonly commit: (
     repo: Repo,

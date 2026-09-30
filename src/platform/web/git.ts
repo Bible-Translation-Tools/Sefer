@@ -141,7 +141,12 @@ const makeWebGit = (fileSystem: FileSystem.FileSystem): GitService => {
       options?: CommitOptions,
     ): Effect.Effect<CommitId, GitError> =>
       Effect.gen(function* () {
-        if (receipts.length === 0) {
+        const also = options?.alsoParents ?? [];
+        // A join records something true with no file of its own: the other
+        // history's commits changed nothing this side lacks. Anything else
+        // with no receipts is a bug upstream, and an empty commit would say so
+        // in the history a translator reads.
+        if (receipts.length === 0 && also.length === 0) {
           return yield* refuse("nothing to commit: Save produced no receipts");
         }
         // The receipts rule: stage exactly what Save wrote, one path at a
@@ -150,7 +155,6 @@ const makeWebGit = (fileSystem: FileSystem.FileSystem): GitService => {
           const filepath = yield* relativeOrRefuse(repo, receipt.path);
           yield* attempt("Io", () => git.add({ fs, dir: repo.root, filepath }));
         }
-        const also = options?.alsoParents ?? [];
         // isomorphic-git's `parent` REPLACES HEAD as the parent list, so a
         // decision commit names HEAD first itself.
         const parent =

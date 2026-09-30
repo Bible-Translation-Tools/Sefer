@@ -170,7 +170,7 @@ export const fixtureStateRequested = (): FixtureName | undefined => {
 export const fixtureFacts = (state: FixtureName): SyncFacts => FIXTURES[state];
 
 /**
- * What a combine would replay, for the states that offer one.
+ * What a combine would join, for the states that offer one.
  *
  * The real answer comes from `previewCombine`, which reads the repository; a
  * fixture has none, and the confirmation dialog has to be reachable without
@@ -185,7 +185,8 @@ export const fixtureReplay = (state: FixtureName): CombineReplay | undefined =>
         from: "a1b2c3d4",
         onto: "c3d4e5f6",
         paths: ["40-MAT.usfm", "41-MRK.usfm"],
-        message: combineMessage(2),
+        taking: ["42-LUK.usfm"],
+        message: combineMessage(3),
       }
     : undefined;
 

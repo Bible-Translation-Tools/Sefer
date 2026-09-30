@@ -103,7 +103,7 @@ export function ActionCard(props: ActionCardProps) {
       <Show when={action() === "combine"}>
         <p class="rounded-md bg-surface-secondary px-3 py-2 text-small text-on-surface-secondary">
           {t(
-            "Combine means: keep my work as one version on top of the shared project's. The shared project's versions stay exactly as they are, yours are replayed above them, and no scripture text is merged line by line.",
+            "Combine means: keep both. Your versions and the shared project's stay exactly as they are, one new version joins them, and no scripture text is merged line by line.",
           )}
         </p>
       </Show>

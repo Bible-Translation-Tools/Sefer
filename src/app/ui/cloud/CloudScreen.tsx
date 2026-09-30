@@ -387,7 +387,7 @@ export function CloudScreen() {
     });
 
   /**
-   * The first of Combine's two presses: work out what WOULD be replayed, and
+   * The first of Combine's two presses: work out what WOULD be joined, and
    * put that to the person.
    *
    * The preview is local and asks the shared project nothing — it reads the
@@ -408,7 +408,7 @@ export function CloudScreen() {
     setProblem("");
     setBusy(true);
     void services
-      .run(previewCombine(project.root))
+      .run(previewCombine(project))
       .then((decision) => {
         if (decision.ok) setCombining(decision.replay);
         else setProblem(combineRefusal(decision.refusal));
@@ -444,16 +444,25 @@ export function CloudScreen() {
         transfer(action, pull, explainReceive);
         return;
       case "combine":
-        // Two presses, like a pull, and for a stronger reason: this one
-        // rewrites the work tree. The first press names the books that keep
-        // this device's version; the second runs the replay in `src/core/sync`
-        // — see documentation/architecture/sync.md, "Combine".
+        // Two presses, like a receive, and for a stronger reason: this one
+        // records and sends. The first press names the books that keep this
+        // device's version and the ones that arrive; the second runs the
+        // combine in `src/core/sync` — see documentation/architecture/sync.md.
         if (combining() === undefined) {
           askToCombine();
           return;
         }
         setCombining(undefined);
-        transfer(action, (root) => combine({ root, author: COMBINE_AUTHOR }), explainCombine);
+        transfer(
+          action,
+          () => {
+            const project = shell.project();
+            return project === undefined
+              ? Effect.void
+              : combine({ project, author: COMBINE_AUTHOR });
+          },
+          explainCombine,
+        );
         return;
       case "resolve":
         transfer(action, abortMerge);
@@ -565,9 +574,17 @@ export function CloudScreen() {
                             {(path) => <li data-cloud-book={path}>{bookFromPath(path)}</li>}
                           </For>
                         </ul>
+                        <Show when={replay().taking.length > 0}>
+                          <p>{t("These arrive from the shared project:")}</p>
+                          <ul class="list-disc space-y-1 pl-5" data-cloud="combine-taking">
+                            <For each={replay().taking}>
+                              {(path) => <li data-cloud-book={path}>{bookFromPath(path)}</li>}
+                            </For>
+                          </ul>
+                        </Show>
                         <p class="text-on-surface-secondary">
                           {t(
-                            "Everything else becomes the shared project's. No scripture text is merged line by line, and if anything goes wrong on the way this device is put back exactly as it is now.",
+                            "No scripture text is merged line by line, and if recording goes wrong this device is put back exactly as it is now.",
                           )}
                         </p>
                       </div>

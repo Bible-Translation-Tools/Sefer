@@ -111,24 +111,6 @@ export interface RemoteService {
   /** Creates the project on `target` and pushes it there for the first time. */
   readonly publish: (repo: Repo, target: string) => Effect.Effect<void, RemoteError>;
   /**
-   * Points `branch` at `toCommit` and makes the work tree match it.
-   *
-   * The half of Combine that no read can do: the shared project's versions
-   * become the base, and this device's work is replayed on top afterwards.
-   * It transfers nothing, but it lives on this port because the sync surface
-   * is the only thing that has any business asking for it.
-   *
-   * It is a FORCED move — anything uncommitted in the work tree is gone — so a
-   * caller must have committed or read out whatever it means to replay before
-   * calling. `branch` must be the branch HEAD is on; moving a branch out from
-   * under a different checked-out one is `Rejected`.
-   */
-  readonly moveBranch: (
-    repo: Repo,
-    branch: string,
-    toCommit: string,
-  ) => Effect.Effect<void, RemoteError>;
-  /**
    * Throws away a half-finished merge: the work tree goes back to HEAD and the
    * merge state is cleared. This is what Resolve does.
    *

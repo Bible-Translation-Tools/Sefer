@@ -76,8 +76,6 @@ export const serialiseRemote = (
     fastForward: (repo, to) => write(repo.root, "fast-forward", remote.fastForward(repo, to)),
     push: (repo) => write(repo.root, "push", remote.push(repo)),
     publish: (repo, target) => write(repo.root, "publish", remote.publish(repo, target)),
-    moveBranch: (repo, branch, toCommit) =>
-      write(repo.root, "move-branch", remote.moveBranch(repo, branch, toCommit)),
     abortMerge: (repo) => write(repo.root, "abort-merge", remote.abortMerge(repo)),
     progress: remote.progress,
   };

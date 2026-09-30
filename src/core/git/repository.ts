@@ -37,9 +37,9 @@ export type WriteKind =
   | "fetch"
   | "fast-forward"
   | "receive"
+  | "combine"
   | "push"
   | "publish"
-  | "move-branch"
   | "abort-merge";
 
 /** Kinds that bring a repository into being, so they may start from `absent`. */

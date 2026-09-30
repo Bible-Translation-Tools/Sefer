@@ -108,33 +108,3 @@ export const incomingPlan = (
     clean: contested.length === 0,
   };
 };
-
-/**
- * What a combine would do, when both sides have work.
- *
- * The move is v1's and it is the only one Sefer offers for a divergence: take
- * the cloud's versions as the base, then replay this device's work as ONE
- * version on top. It rewrites no cloud history, produces no merge commit, and
- * leaves a timeline a translator can read — "the cloud's three versions, then
- * mine".
- *
- * It is offered only when `safe`. A contested book means the same file moved
- * on both sides, and replaying over it would either conflict or silently pick
- * a winner; both are worse than the Compare screen.
- */
-export interface CombinePlan {
-  /** Versions on this device that would become one. */
-  readonly mine: number;
-  /** Versions from the cloud they would sit on top of. */
-  readonly cloud: number;
-  /** Books that must be compared by a person first. */
-  readonly contested: readonly string[];
-  readonly safe: boolean;
-}
-
-export const combinePlan = (ahead: number, behind: number, plan: IncomingPlan): CombinePlan => ({
-  mine: ahead,
-  cloud: behind,
-  contested: plan.contested,
-  safe: plan.contested.length === 0 && ahead > 0 && behind > 0,
-});

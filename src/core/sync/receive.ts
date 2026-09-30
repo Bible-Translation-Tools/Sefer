@@ -22,18 +22,17 @@
  *
  * The whole program runs in the repository's exclusive lane.
  */
-import { Data, Effect, FileSystem, Option, Result } from "effect";
+import { Data, Effect, type FileSystem, Option } from "effect";
 
-import { identifyBook, type Book, type BookId } from "../book/book";
-import { Galley, toLf } from "../galley";
-import { Git, repositoryPath, type ChangedPath, type CommitId, type Repo } from "../git/git";
+import type { BookId } from "../book/book";
+import type { Galley } from "../galley";
+import { Git, type CommitId } from "../git/git";
 import { Repositories } from "../git/repository";
 import { Observability } from "../observability";
 import type { Project } from "../project/project";
 import { Remote } from "../remote/remote";
 import { SaveCoordinator } from "../save/saveCoordinator";
-import type { SourceStamp } from "../source/source";
-import { bookFacts, type BookFacts, type Diff } from "./facts";
+import { booksByPath, classify, isScripture, unmoved } from "./classify";
 import { DEFAULT_OVERLAP, judge, type Overlap } from "./policy";
 import { trackingRef } from "./state";
 
@@ -83,8 +82,6 @@ export interface ReceiveOptions {
   readonly overlap?: Overlap;
 }
 
-const USFM = /\.usfm$/iu;
-
 const refuse = (refusal: ReceiveRefusal, description: string, books?: readonly string[]) =>
   new ReceiveError({ refusal, description, books });
 
@@ -95,92 +92,6 @@ const fromPort = (error: {
   new ReceiveError({
     refusal: undefined,
     description: `${error.reason}: ${error.description ?? "no detail"}`,
-  });
-
-/** A blob as LF text, or `undefined` when the path is not in that commit. */
-const textAt = (
-  repo: Repo,
-  rev: string,
-  path: string,
-): Effect.Effect<string | undefined, never, Git> =>
-  Effect.flatMap(Git, (git) =>
-    Effect.orElseSucceed(
-      Effect.map(
-        git.show(repo, rev, path),
-        (bytes): string | undefined => toLf(new TextDecoder().decode(bytes)).text,
-      ),
-      () => undefined,
-    ),
-  );
-
-const sameStamp = (a: SourceStamp, b: SourceStamp): boolean =>
-  a.revision === b.revision && a.length === b.length;
-
-interface Classified {
-  readonly facts: readonly BookFacts[];
-  /** The stamp each Book's Source had when it was classified. */
-  readonly stamps: ReadonlyMap<string, SourceStamp>;
-}
-
-/**
- * The facts for every scripture file the other side changed. The base is
- * HEAD (a receive only runs when HEAD is the merge base); mine is the Book's
- * current Source when the project holds the book, the work tree otherwise.
- */
-const classify = (
-  repo: Repo,
-  books: ReadonlyMap<string, Book>,
-  head: CommitId,
-  tip: CommitId,
-  changed: readonly ChangedPath[],
-): Effect.Effect<Classified, never, Git | Galley | FileSystem.FileSystem> =>
-  Effect.gen(function* () {
-    const fileSystem = yield* FileSystem.FileSystem;
-    const galley = yield* Galley;
-    const diff: Diff = (before, after) => {
-      const skeleton = galley.diff(before, after);
-      return Result.isSuccess(skeleton) ? skeleton.success : undefined;
-    };
-    const facts: BookFacts[] = [];
-    const stamps = new Map<string, SourceStamp>();
-    for (const entry of changed) {
-      if (!USFM.test(entry.path)) continue;
-      const book = books.get(entry.path);
-      let mine: string | undefined;
-      if (book === undefined) {
-        mine = yield* Effect.orElseSucceed(
-          Effect.map(
-            fileSystem.readFileString(`${repo.root}/${entry.path}`),
-            (text): string | undefined => toLf(text).text,
-          ),
-          () => undefined,
-        );
-      } else {
-        const source = book.source();
-        mine = source.text;
-        stamps.set(entry.path, source.stamp);
-      }
-      facts.push(
-        bookFacts(
-          {
-            path: entry.path,
-            bookId: book?.id ?? identifyBook(mine ?? "", entry.path),
-            base: yield* textAt(repo, head, entry.path),
-            mine,
-            theirs: yield* textAt(repo, tip, entry.path),
-          },
-          diff,
-        ),
-      );
-    }
-    return { facts, stamps };
-  });
-
-/** True when every classified Book still holds the Source it was classified at. */
-const unmoved = (classified: Classified, books: ReadonlyMap<string, Book>): boolean =>
-  [...classified.stamps].every(([path, stamp]) => {
-    const book = books.get(path);
-    return book !== undefined && sameStamp(book.source().stamp, stamp);
   });
 
 export const receive = (
@@ -246,11 +157,7 @@ const program = (options: ReceiveOptions) =>
     }
 
     const changed = yield* Effect.mapError(git.changedPathsBetween(repo, head, tip), fromPort);
-    const books = new Map<string, Book>();
-    for (const book of project.books) {
-      const relative = repositoryPath(repo.root, book.path);
-      if (Option.isSome(relative)) books.set(relative.value, book);
-    }
+    const books = booksByPath(repo, project);
 
     // 3–4. Every changed book against the Book as it is now; typing may land
     // while the blobs are read, so a Book that moved is classified again.
@@ -276,7 +183,7 @@ const program = (options: ReceiveOptions) =>
     const moved: BookId[] = [];
     const reopen: string[] = [];
     for (const entry of changed) {
-      if (!USFM.test(entry.path)) continue;
+      if (!isScripture(entry.path)) continue;
       const book = books.get(entry.path);
       if (book === undefined || entry.kind !== "modified") {
         // The project's book set is fixed when it opens: an added or removed

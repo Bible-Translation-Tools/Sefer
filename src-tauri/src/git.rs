@@ -371,7 +371,10 @@ pub fn git_commit(
     author_email: String,
     also_parents: Option<Vec<String>>,
 ) -> Result<String, String> {
-    if paths.is_empty() {
+    // A join records something true with no file of its own; anything else
+    // with no receipts is a bug upstream.
+    let also = also_parents.unwrap_or_default();
+    if paths.is_empty() && also.is_empty() {
         return Err(fail(
             REFUSED,
             "nothing to commit: Save produced no receipts",
@@ -401,7 +404,6 @@ pub fn git_commit(
     // A decision commit joins another history even when its tree is HEAD's
     // own (every decision kept this side's text), so only a plain commit
     // takes the "nothing changed" shortcut.
-    let also = also_parents.unwrap_or_default();
     let mut joined = Vec::with_capacity(also.len());
     for rev in &also {
         let oid = resolve_commit(&repo, rev)?
@@ -629,51 +631,10 @@ fn tree_at<'repo>(repo: &'repo Repository, rev: &str) -> Result<git2::Tree<'repo
 // The two work-tree moves the sync surface needs
 //
 // Both are local — no transport, no credential — but they exist FOR the sync
-// surface: Combine is a branch move plus a replay, and Resolve is an abort.
-// They sit on the `Remote` port because that is where the sync surface reaches
-// for them; they are here because git2 is what performs them.
+// surface: a receive is a fast-forward, and Resolve is an abort. They sit on
+// the `Remote` port because that is where the sync surface reaches for them;
+// they are here because git2 is what performs them.
 // ---------------------------------------------------------------------------
-
-/// Points `branch` at `to_commit` and makes the work tree match.
-///
-/// This is half of Combine: the shared project's versions become the base. It
-/// is a FORCED checkout — anything uncommitted in the work tree is lost — so a
-/// caller must have committed (or read out) the work it intends to replay
-/// before calling this. Combine does exactly that, which is why it is safe
-/// there and nowhere else.
-///
-/// The branch must be the one HEAD is on. Moving a branch out from under a
-/// checked-out different branch is a foot-gun with no caller, so it is refused.
-#[tauri::command]
-pub fn git_move_branch(root: String, branch: String, to_commit: String) -> Result<(), String> {
-    let repo = open_repo(&root)?;
-    let target = resolve_commit(&repo, &to_commit)?
-        .ok_or_else(|| fail(CONFLICT, format!("{to_commit} names no commit")))?;
-
-    if repo.state() != RepositoryState::Clean {
-        return Err(fail(
-            CONFLICT,
-            "a merge or rebase is in progress; finish or abort it first",
-        ));
-    }
-    let head = current_branch(&repo)?;
-    if head != branch {
-        return Err(fail(
-            CONFLICT,
-            format!(
-                "HEAD is on {head}, not {branch}; cannot move a branch that is not checked out"
-            ),
-        ));
-    }
-
-    let reference = format!("refs/heads/{branch}");
-    repo.reference(&reference, target, true, "sefer: move branch")
-        .map_err(io)?;
-    repo.set_head(&reference).map_err(io)?;
-    repo.checkout_head(Some(CheckoutBuilder::new().force()))
-        .map_err(io)?;
-    Ok(())
-}
 
 /// Moves the checked-out branch forward to `to` and brings the work tree
 /// with it — the receive half of a fast-forward, after a fetch.
