@@ -54,6 +54,7 @@ import type { Seat } from "#core/project/project";
 import { Recovery, RecoveryLive, type RecoveryService } from "#core/recovery/recovery";
 import { Gitea, GiteaLive, type GiteaService, type HttpFetch } from "#core/remote/gitea";
 import { Remote, type RemoteService } from "#core/remote/remote";
+import { Suggestions, SuggestionsLive } from "#core/remote/suggestions";
 import { parseTransport, through } from "#core/remote/transport";
 import { Library, LibraryLive, type LibraryService } from "#core/resources/library";
 import {
@@ -154,6 +155,7 @@ export type Domain =
   | Git
   | Repositories
   | Gitea
+  | Suggestions
   | Remote
   | ProjectAdmin;
 
@@ -353,11 +355,15 @@ const domainLayer = (
         headers: { ...init?.headers, "X-Requested-With": appId },
       });
 
+  const accountFetch =
+    tauri === undefined ? webFetch(appIdFor(build)) : globalThis.fetch.bind(globalThis);
   const account = Layer.provideMerge(
-    GiteaLive({
-      fetch: tauri === undefined ? webFetch(appIdFor(build)) : globalThis.fetch.bind(globalThis),
-      platform: tauri === undefined ? "web" : "desktop",
-    }),
+    Layer.provideMerge(
+      // Suggested changes (forks and pull requests): one topology among
+      // several, and this is its one registration.
+      SuggestionsLive({ fetch: accountFetch }),
+      GiteaLive({ fetch: accountFetch, platform: tauri === undefined ? "web" : "desktop" }),
+    ),
     // Desktop persists tokens in the OS keychain. The Web host has no secure
     // store and persists to `localStorage` anyway, deliberately: a session
     // that did not survive a reload was not a session. The trade is written

@@ -26,8 +26,18 @@ import { combine, receive, trackingRef } from "#core/sync";
 import { remoteReasonOf } from "./describe";
 import { recordVersion, type RecordOutcome } from "./recordVersion";
 import type { Services } from "./services";
+import { sendingTo } from "./suggestions";
 import { syncPreferences } from "./syncSettings";
 import { syncStatus } from "./syncStatus";
+
+/**
+ * Where this project sends: the shared project, or — when suggested changes
+ * are in use — this translator's own copy of it. The one place a send is
+ * pointed anywhere but `origin`; return "origin" here and the suggested-changes
+ * flow is gone from every send.
+ */
+export const destination = (services: Services, project: Project): Promise<string> =>
+  sendingTo(services, project);
 
 type CheckResult = "up-to-date" | "fetched" | "detached" | "no-branch" | "no-repository";
 
@@ -102,6 +112,7 @@ export const sendAfterSave = async (services: Services, project: Project): Promi
     "sync.cause": "save",
   });
   try {
+    const to = await destination(services, project);
     const sent = await services.run(
       Effect.gen(function* () {
         const git = yield* Git;
@@ -110,7 +121,7 @@ export const sendAfterSave = async (services: Services, project: Project): Promi
         // A project attached to nothing has nowhere to send to; that is not a
         // refusal, and the Save dialog did not promise a send.
         if (Option.isNone(yield* remote.origin(repo))) return false;
-        yield* remote.push(repo);
+        yield* remote.push(repo, to);
         return true;
       }),
     );
@@ -125,6 +136,8 @@ export const sendAfterSave = async (services: Services, project: Project): Promi
     if (reason === "Rejected") await checkForChanges(services, project);
   }
 };
+
+const optionalTheirs = (theirs: string | undefined) => (theirs === undefined ? {} : { theirs });
 
 export type SettleOutcome =
   | { readonly kind: "received"; readonly recorded: RecordOutcome }
@@ -142,8 +155,12 @@ export const settleWithShared = async (
   project: Project,
   author: Author,
   message: string,
+  /** A suggestion's head instead of the shared project's tip, and where the result is sent. */
+  with_: { readonly theirs?: string; readonly sendTo?: string } = {},
 ): Promise<SettleOutcome> => {
-  const received = await services.run(Effect.result(receive({ project, reviewed: true })));
+  const received = await services.run(
+    Effect.result(receive({ project, reviewed: true, ...optionalTheirs(with_.theirs) })),
+  );
   if (received._tag === "Success") {
     const dirty = project.books.filter((book) => services.save.dirty(book));
     const recorded = await recordVersion(services, project, dirty, message, author);
@@ -152,7 +169,19 @@ export const settleWithShared = async (
   }
   if (received.failure.refusal !== "diverged")
     return { kind: "refused", why: received.failure.description };
-  const combined = await services.run(Effect.result(combine({ project, author, reviewed: true })));
+  const sendTo = with_.sendTo ?? (await destination(services, project));
+  const combined = await services.run(
+    Effect.result(
+      combine({
+        project,
+        author,
+        reviewed: true,
+        sendTo,
+        message,
+        ...optionalTheirs(with_.theirs),
+      }),
+    ),
+  );
   return combined._tag === "Success"
     ? { kind: "combined", commit: combined.success.commit }
     : { kind: "refused", why: combined.failure.description };

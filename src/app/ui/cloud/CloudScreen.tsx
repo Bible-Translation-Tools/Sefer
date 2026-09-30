@@ -45,6 +45,7 @@ import { rememberSync } from "../../diagnostics";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import type { Domain } from "../../services";
+import { destination } from "../../syncActions";
 import { syncStatus } from "../../syncStatus";
 import { Button, Card, Dialog, EmptyState, PanelHeader } from "../primitives";
 import { createAccount } from "./account";
@@ -57,6 +58,7 @@ import { IncomingPlanCard } from "./IncomingPlanCard";
 import { ProjectCard } from "./ProjectCard";
 import { readSync, type ReadSyncOptions, type SyncFacts } from "./reading";
 import { SharedProjectCard, type SharedProjectActions } from "./SharedProjectCard";
+import { SuggestionsCard } from "./SuggestionsCard";
 import { SyncSettingsCard } from "./SyncSettingsCard";
 
 /** A project's folder name, which is what a person calls it. */
@@ -454,7 +456,10 @@ export function CloudScreen() {
             const project = shell.project();
             return project === undefined
               ? Effect.void
-              : Effect.flatMap(authorOrApp(), (author) => combine({ project, author }));
+              : Effect.flatMap(
+                  Effect.all([authorOrApp(), Effect.promise(() => destination(services, project))]),
+                  ([author, sendTo]) => combine({ project, author, sendTo }),
+                );
           },
           explainCombine,
         );
@@ -525,6 +530,13 @@ export function CloudScreen() {
 
                 <Show when={shell.project()?.root}>
                   {(root) => <SyncSettingsCard root={root()} />}
+                </Show>
+
+                {/* Suggested changes: one topology among several, one card. */}
+                <Show when={shell.project()}>
+                  {(project) => (
+                    <SuggestionsCard project={project()} signedIn={held().reading.signedIn} />
+                  )}
                 </Show>
 
                 <Show when={held().primary === "attach" || held().primary === "publish"}>

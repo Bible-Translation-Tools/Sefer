@@ -64,6 +64,7 @@ import { describe, reasonOf } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { recordVersion } from "../../recordVersion";
+import { suggestionRef } from "../../suggestions";
 import { sendAfterSave, settleWithShared } from "../../syncActions";
 import { setAuthorName, syncPreferences } from "../../syncSettings";
 import { unsavedChanges } from "../panels/changes";
@@ -110,18 +111,30 @@ export function ReviewPanel() {
   const shell = useShell();
   const navigate = useNavigate();
   const { services } = shell;
-  const version = createRecordedVersion(shell);
-  const shared = createRecordedVersion(shell, "shared");
-  // The last version both sides had in common: what "who changed this" is
-  // measured from, in a review against the shared project.
-  const common = createRecordedVersion(shell, "base");
-
-  const [leftId, setLeftId] = createSignal("project", { name: "reviewLeftKind" });
-  // SAFETY: `strict: false` gives the union of every route's search; the one
-  // field is read as `unknown` and compared, never trusted.
-  const search = useSearch({ strict: false }) as () => { readonly against?: unknown };
+  // SAFETY: `strict: false` gives the union of every route's search; both
+  // fields are read as `unknown` and narrowed, never trusted.
+  const search = useSearch({ strict: false }) as () => {
+    readonly against?: unknown;
+    readonly pull?: unknown;
+  };
+  /** A suggestion under review: its head, fetched to a local ref, is "theirs". */
+  const pull = (): number | undefined => {
+    const held = untrack(() => search().pull);
+    return typeof held === "number" ? held : undefined;
+  };
+  const theirsRef = (): string | undefined => {
+    const number = pull();
+    return number === undefined ? undefined : suggestionRef(number);
+  };
   /** Is one side the shared project? Then recording also takes what it changed. */
   const againstShared = (): boolean => rightId() === "shared" || leftId() === "shared";
+  const version = createRecordedVersion(shell);
+  const shared = createRecordedVersion(shell, "shared", theirsRef);
+  // The last version both sides had in common: what "who changed this" is
+  // measured from, in a review against the shared project.
+  const common = createRecordedVersion(shell, "base", theirsRef);
+
+  const [leftId, setLeftId] = createSignal("project", { name: "reviewLeftKind" });
   const [rightId, setRightId] = createSignal(
     untrack(() => search().against) === "shared" ? "shared" : "disk",
     { name: "reviewRightKind" },
@@ -183,6 +196,7 @@ export function ReviewPanel() {
       baselineOf: (book) => services.save.baseline(book),
       recorded: version.recorded(),
       shared: shared.recorded(),
+      sharedLabel: pull() === undefined ? undefined : t("The suggested changes"),
     });
 
   const choiceOf = (id: string): SourceChoice | undefined =>
@@ -817,7 +831,15 @@ export function ReviewPanel() {
     if (againstShared()) {
       // Reviewed against the shared project: what was decided stays, and
       // everything else it changed arrives with it — in one move.
-      const settled = await settleWithShared(services, project, by, staticMessage);
+      // A suggestion is brought into the shared project itself; anything else
+      // settles against it and sends wherever this project sends.
+      const settled = await settleWithShared(
+        services,
+        project,
+        by,
+        staticMessage,
+        theirsRef() === undefined ? {} : { theirs: theirsRef(), sendTo: "origin" },
+      );
       if (settled.kind === "refused")
         toasts.update(notice, {
           tone: "error",

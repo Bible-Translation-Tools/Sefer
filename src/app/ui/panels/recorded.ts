@@ -63,7 +63,12 @@ export interface RecordedVersion {
  */
 export type RecordedRef = "head" | "shared" | "base";
 
-export const createRecordedVersion = (shell: Shell, ref: RecordedRef = "head"): RecordedVersion => {
+export const createRecordedVersion = (
+  shell: Shell,
+  ref: RecordedRef = "head",
+  /** The ref "shared" means when it is not the branch's tracking ref: a suggestion's head. */
+  theirs?: () => string | undefined,
+): RecordedVersion => {
   const [recorded, setRecorded] = createSignal<Recorded>(
     { head: undefined, texts: new Map(), read: false },
     { name: "recordedVersion" },
@@ -98,8 +103,9 @@ export const createRecordedVersion = (shell: Shell, ref: RecordedRef = "head"): 
             );
             const tip = Option.isNone(branch)
               ? Option.none<string>()
-              : yield* Effect.orElseSucceed(git.resolve(repo, trackingRef(branch.value)), () =>
-                  Option.none<string>(),
+              : yield* Effect.orElseSucceed(
+                  git.resolve(repo, theirs?.() ?? trackingRef(branch.value)),
+                  () => Option.none<string>(),
                 );
             head = Option.getOrUndefined(tip);
             if (ref === "base" && head !== undefined) {

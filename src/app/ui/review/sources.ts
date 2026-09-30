@@ -77,6 +77,8 @@ export interface ChoiceContext {
   readonly recorded: RecordedTexts;
   /** The blobs at the remote-tracking ref, for the shared project's side. */
   readonly shared: RecordedTexts;
+  /** What that side is called: the shared project, or a suggestion to it. */
+  readonly sharedLabel?: string | undefined;
 }
 
 /**
@@ -135,15 +137,17 @@ export const sourceChoices = (context: ChoiceContext): readonly SourceChoice[] =
     },
     {
       id: "shared",
-      label: t("The shared project"),
-      shortLabel: t("the shared project"),
+      label: context.sharedLabel ?? t("The shared project"),
+      shortLabel: context.sharedLabel?.toLowerCase() ?? t("the shared project"),
       explainer:
         context.shared.head === undefined
           ? t("Nothing has been received from a shared project yet.")
           : t("The shared project's newest version, as the last check brought it here."),
       available: project !== undefined && context.shared.head !== undefined,
       immediate: () =>
-        project === undefined ? undefined : sharedSource(context.shared, t("The shared project")),
+        project === undefined
+          ? undefined
+          : sharedSource(context.shared, context.sharedLabel ?? t("The shared project")),
     },
     {
       id: "zip",

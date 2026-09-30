@@ -13,12 +13,20 @@ import { ShellGate } from "#app/ui/ShellGate";
  * Everything the screen does lives in `src/app/ui/review/`. The comparison is
  * not a search param: a picked zip has no address to put in one, and a frozen
  * comparison is session state, not a place. The one exception is `against=
- * shared`, which is an address — the shared project — and is how /cloud's
- * "Compare" opens the review already set against what arrived.
+ * shared`, which is an address — the shared project, or with `pull=<n>` a
+ * suggestion to it — and is how /cloud opens a review already set against
+ * what arrived.
  */
 export const Route = createFileRoute("/_app/project/$slug/review")({
-  validateSearch: (search: Record<string, unknown>): { readonly against?: "shared" } =>
-    search.against === "shared" ? { against: "shared" } : {},
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { readonly against?: "shared"; readonly pull?: number } => {
+    if (search.against !== "shared") return {};
+    // `pull` names a suggestion whose head was fetched for review; the shared
+    // project's side then reads that instead of the tracking ref.
+    const pull = Number(search.pull);
+    return Number.isInteger(pull) && pull > 0 ? { against: "shared", pull } : { against: "shared" };
+  },
   head: () => ({ meta: [{ title: "Sefer — review" }] }),
   component: () => <ShellGate>{() => <ReviewPanel />}</ShellGate>,
 });
