@@ -37,6 +37,7 @@ import {
   type EngineStamp,
   type Finding as CorpusFinding,
   type FindingMessage,
+  type FindingQuery,
   type FindingsSnapshot,
   markBefore,
   type MarkBefore,
@@ -44,7 +45,7 @@ import {
   type Pattern,
 } from "../galley";
 import type { SourceStamp } from "../source/source";
-import { comparisonOf, type Comparison } from "./compare";
+import { comparisonOf } from "./compare";
 import { describeSous, render } from "./messages";
 
 /**
@@ -93,7 +94,7 @@ export interface Finding {
   readonly details?: string;
   /**
    * What both of a Sous finding's sentences are rendered from: kitchen's id,
-   * its parameters, and the literal searches behind them (`queries`). A
+   * its parameters, and the searches behind them (`queries`). A
    * screen that draws each mark as a keycap renders from this
    * (`messages.ts`'s `renderRich`), never by parsing `message`.
    */
@@ -116,12 +117,12 @@ export interface Finding {
    */
   readonly pattern?: number;
   /**
-   * What a Sous convention sentence compares — the form here and, when the
-   * sentence names one, the form the project usually writes — as two
-   * searches (`./compare.ts`). Read off the same descriptor as `message`.
-   * Quotes the document, so never goes to telemetry, like `message`.
+   * What a Sous sentence compares, as kitchen's queries (`./compare.ts`):
+   * the form here, and what else the sentence names. Absent when there is
+   * nothing to search. Quotes the document, so never goes to telemetry, like
+   * `message`.
    */
-  readonly comparison?: Comparison;
+  readonly comparison?: readonly FindingQuery[];
 }
 
 const identify = (

@@ -497,7 +497,7 @@ export function FindingsPanel() {
           </span>
           {/* What a convention sentence compares, as two lists: here, and usually. */}
           <Show when={finding.comparison}>
-            {(comparison) => <SearchDialog comparison={comparison()} />}
+            {(comparison) => <SearchDialog queries={comparison()} />}
           </Show>
           <div class="flex items-center gap-controls">
             <Show when={finding.details !== undefined}>

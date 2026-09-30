@@ -1,16 +1,18 @@
 /**
  * A magnifying glass that shows what a finding's sentence is comparing: every
- * place the form HERE occurs, beside every place the project writes the form
- * it USUALLY writes instead — "“',” 4 times; the other way round, “,'”, 171
- * times" as two lists you can read.
+ * place the form HERE occurs, beside every place of what else the sentence
+ * names — "“'.” 4 times; the other way round, “.'”, 171 times" as lists you
+ * can read.
  *
- * Find is a core module (`src/core/search`), not a screen, so this asks it
- * directly instead of navigating to `/find` and losing its place. The two
- * queries come from the finding (`Finding.comparison`, `core/findings/
- * compare.ts`), case-sensitive always. WHAT is searched is the reader's global
- * mode, the same one the editor shows: the reading in Regular
- * (`findInReading`), the markup in USFM (`find`). Each hit is its place and
- * its line, wrapped rather than cut; a hit opens in the editor.
+ * The queries are kitchen's (`Finding.comparison`, `core/findings/
+ * compare.ts`; `sous-messages.md`, "Queries"), one column per purpose
+ * present: `this` (here), `alternative` (instead), `others` (usually). The
+ * dialog knows nothing about which rule wrote them. A literal goes to the
+ * engine's own find (`GalleyService.findAll`, targets only), with the
+ * query's case and whole-word flags; a regex runs over each book's verse-text
+ * reading (`findInReading`). Both search the text with the markers out, so a
+ * hit's preview reads as the reader sees it. Each hit is its place and its
+ * line, wrapped rather than cut; a hit opens in the editor.
  *
  * The searches run when the dialog OPENS, and the mask maps they build die
  * when it closes, for the reason `createReadings` gives: nothing holds a
@@ -22,44 +24,80 @@ import { Option, Result } from "effect";
 import SearchIcon from "lucide-solid/icons/search";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
-import type { Comparison, Probe, Touch } from "#core/findings/compare";
+import type { FindingQuery, FindingQueryPurpose } from "#core/galley";
 import { createReadings, type Readings } from "#core/search/reading";
 import * as Search from "#core/search/search";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { Dialog, IconButton, cx } from "../primitives";
+import { Dialog, IconButton, Kbd, cx } from "../primitives";
 
-/** How many hits a column lists. The count is always the whole answer. */
+/** How many hits a query lists. The count is always the whole answer. */
 const SHOWN = 200;
 
 /** Room to wrap: most verses are one line of this or less, so most show whole. */
 const PREVIEW_WIDTH = 400;
 
-const touchName = (touch: Touch): string => {
-  if (touch === "letter") return t("a letter");
-  if (touch === "space") return t("a space");
-  if (touch === "digit") return t("a digit");
-  return t("a punctuation mark");
+const PURPOSES: readonly FindingQueryPurpose[] = ["this", "alternative", "others"];
+
+const heading = (purpose: FindingQueryPurpose): string => {
+  if (purpose === "this") return t("Here");
+  if (purpose === "alternative") return t("Instead");
+  return t("Usually");
 };
 
-/** A probe as a reader recognises it: “,'”, or “,” before a letter. */
-const named = (probe: Probe): string => {
-  const shown = probe.shown;
-  if (shown.kind === "text") return `“${shown.text}”`;
-  return shown.side === "before"
-    ? t("“{glyph}” before {touch}", { glyph: shown.glyph, touch: touchName(shown.touch) })
-    : t("“{glyph}” after {touch}", { glyph: shown.glyph, touch: touchName(shown.touch) });
+/**
+ * A mark as itself, or as its `\u{…}` escape where it would not show (a
+ * space, a control, a format character).
+ */
+const visible = (escape: string, hex: string): string => {
+  const mark = String.fromCodePoint(Number.parseInt(hex, 16));
+  return /^[\p{L}\p{M}\p{N}\p{P}\p{S}]$/u.test(mark) ? mark : escape;
 };
 
-export function SearchDialog(props: { readonly comparison: Comparison }) {
+/** A character class longer than this shows its first members and an ellipsis. */
+const CLASS_SHOWN = 8;
+
+/** The query's whole text: the needle, or the regex with its escapes drawn. */
+const source = (query: FindingQuery): string =>
+  query.kind === "literal" ? query.needle : query.source.replace(/\\u\{([0-9a-f]+)\}/giu, visible);
+
+/**
+ * A query as a keycap's text: the needle, or the regex source with its
+ * escapes drawn as the marks they name and a long class cut short —
+ * `\?[\s([{༺༼᚛⁅…]*\p{Lowercase}`. `source` keeps the whole regex for a tooltip.
+ */
+const shown = (query: FindingQuery): string => {
+  if (query.kind === "literal") return query.needle;
+  return source(query).replace(/\[((?:\\.|[^\]\\])*)\]/gu, (whole, members: string) => {
+    const chars = members.match(/\\[pP]\{[^}]*\}|\\.|./gsu) ?? [];
+    return chars.length > CLASS_SHOWN ? `[${chars.slice(0, CLASS_SHOWN).join("")}…]` : whole;
+  });
+};
+
+// TODO(merge): revisit with Will — queries now drive SearchDialog/comparisonOf; decide whether the dialog stays generic Query[] and whether the probe fallback can go.
+export function SearchDialog(props: { readonly queries: readonly FindingQuery[] }) {
   const [open, setOpen] = createSignal(false, { name: "searchDialogOpen" });
+
+  const columns = createMemo(
+    () =>
+      PURPOSES.flatMap((purpose) => {
+        const queries = props.queries.filter((query) => query.purpose === purpose);
+        return queries.length === 0 ? [] : [{ purpose, queries }];
+      }),
+    { name: "searchDialogColumns" },
+  );
+
+  const form = (): string => {
+    const here = props.queries.find((query) => query.purpose === "this");
+    return here === undefined ? "" : `“${shown(here)}”`;
+  };
 
   return (
     <>
       <IconButton
         size="sm"
-        label={t("Search the project for {form}", { form: named(props.comparison.here) })}
+        label={t("Search the project for {form}", { form: form() })}
         icon={<SearchIcon />}
         aria-haspopup="dialog"
         onClick={() => setOpen(true)}
@@ -67,71 +105,65 @@ export function SearchDialog(props: { readonly comparison: Comparison }) {
       <Dialog
         open={open()}
         onOpenChange={setOpen}
-        title={
-          props.comparison.usual === undefined
-            ? t("{form} in the project", { form: named(props.comparison.here) })
-            : t("{here} and {usual} in the project", {
-                here: named(props.comparison.here),
-                usual: named(props.comparison.usual),
-              })
-        }
-        class={props.comparison.usual === undefined ? "w-[min(56rem,92vw)]" : "w-[min(90rem,95vw)]"}
+        title={t("{form} in the project", { form: form() })}
+        class={columns().length > 1 ? "w-[min(90rem,95vw)]" : "w-[min(56rem,92vw)]"}
       >
         <Show when={open()}>
-          <Results comparison={props.comparison} onGo={() => setOpen(false)} />
+          <Results columns={columns()} onGo={() => setOpen(false)} />
         </Show>
       </Dialog>
     </>
   );
 }
 
-function Results(props: { readonly comparison: Comparison; readonly onGo: () => void }) {
+interface ColumnOf {
+  readonly purpose: FindingQueryPurpose;
+  readonly queries: readonly FindingQuery[];
+}
+
+function Results(props: { readonly columns: readonly ColumnOf[]; readonly onGo: () => void }) {
   const shell = useShell();
   const readings = createReadings(shell.services.galley);
-  const usfm = (): boolean => shell.mode() === "usfm";
 
   return (
-    <div class="flex flex-col gap-3">
-      <p class="text-smallest text-on-surface-tertiary">
-        {usfm() ? t("Searching the USFM.") : t("Searching the text.")}
-      </p>
-      <div
-        class={cx(
-          "grid gap-4",
-          props.comparison.usual !== undefined &&
-            "md:grid-cols-2 md:divide-x md:divide-surface-border",
+    <div
+      class={cx(
+        "grid gap-4 md:divide-x md:divide-surface-border",
+        props.columns.length === 2 && "md:grid-cols-2",
+        props.columns.length >= 3 && "md:grid-cols-3",
+      )}
+    >
+      <For each={props.columns}>
+        {(column) => (
+          <section
+            class="flex min-w-0 flex-col gap-4 md:not-first:ps-4"
+            data-search-column={column.purpose}
+          >
+            <h3 class="text-smallest font-medium tracking-wide text-on-surface-tertiary uppercase">
+              {heading(column.purpose)}
+            </h3>
+            <For each={column.queries}>
+              {(query) => (
+                <Hits
+                  query={query}
+                  share={column.queries.length}
+                  readings={readings}
+                  onGo={props.onGo}
+                />
+              )}
+            </For>
+          </section>
         )}
-      >
-        <Column
-          heading={t("Here")}
-          probe={props.comparison.here}
-          readings={readings}
-          usfm={usfm()}
-          onGo={props.onGo}
-        />
-        <Show when={props.comparison.usual}>
-          {(usual) => (
-            <div class="md:ps-4">
-              <Column
-                heading={t("Usually")}
-                probe={usual()}
-                readings={readings}
-                usfm={usfm()}
-                onGo={props.onGo}
-              />
-            </div>
-          )}
-        </Show>
-      </div>
+      </For>
     </div>
   );
 }
 
-function Column(props: {
-  readonly heading: string;
-  readonly probe: Probe;
+function Hits(props: {
+  readonly query: FindingQuery;
+  /** How many queries share the column's height. */
+  readonly share: number;
   readonly readings: Readings;
-  readonly usfm: boolean;
   readonly onGo: () => void;
 }) {
   const shell = useShell();
@@ -140,29 +172,29 @@ function Column(props: {
   const analysisOf = (id: string) =>
     Option.getOrUndefined(shell.services.projectAnalysis.analysis(id))?.analysis;
 
-  const found = createMemo(
-    () => {
+  const hits = createMemo(
+    (): readonly Search.Hit[] => {
       const project = shell.project();
-      if (project === undefined) return Result.succeed([]);
-      const query: Search.Query = {
-        text: props.probe.text,
-        caseSensitive: true,
-        regex: props.probe.regex === true,
-        unicode: props.probe.regex === true,
-        wholeWord: props.probe.wholeWord === true,
-      };
+      if (project === undefined) return [];
       const options = { analysisOf, previewWidth: PREVIEW_WIDTH };
-      return props.usfm
-        ? Search.find(project.books, query, options)
-        : Search.findInReading(props.readings, project.books, query, options);
+      const query = props.query;
+      if (query.kind === "literal") {
+        const found = shell.services.galley.findAll(
+          { text: query.needle, caseSensitive: query.caseSensitive, wholeWord: query.wholeWord },
+          "targets",
+        );
+        return Search.fromEngine(props.readings, project.books, found, options);
+      }
+      const held = Search.findInReading(
+        props.readings,
+        project.books,
+        { text: query.source, regex: true, unicode: query.flags === "u", caseSensitive: true },
+        options,
+      );
+      return Result.isSuccess(held) ? held.success : [];
     },
     { name: "searchDialogHits" },
   );
-
-  const hits = (): readonly Search.Hit[] => {
-    const held = found();
-    return Result.isSuccess(held) ? held.success : [];
-  };
 
   const place = (hit: Search.Hit): string =>
     hit.address === undefined ? hit.bookId : shell.location.label(hit.address);
@@ -178,21 +210,26 @@ function Column(props: {
   };
 
   return (
-    <section class="flex min-w-0 flex-col gap-2" data-search-column={props.heading}>
-      <h3 class="flex items-baseline gap-2">
-        <span class="text-smallest font-medium tracking-wide text-on-surface-tertiary uppercase">
-          {props.heading}
+    <div class="flex min-w-0 flex-col gap-2">
+      <p class="flex items-baseline gap-2">
+        <span class="min-w-0 break-all" title={source(props.query)}>
+          <Kbd>{shown(props.query)}</Kbd>
         </span>
-        <span class="font-medium">{named(props.probe)}</span>
+        <Show when={props.query.kind === "literal" && props.query.wholeWord}>
+          <span class="text-smallest text-on-surface-tertiary">{t("whole word")}</span>
+        </Show>
         <span class="ms-auto tabular-nums text-on-surface-secondary">
           {hits().length.toLocaleString()}
         </span>
-      </h3>
+      </p>
       <Show
         when={hits().length > 0}
         fallback={<p class="text-small text-on-surface-tertiary">{t("None found.")}</p>}
       >
-        <ul class="scrollbar-subtle -mx-2 flex max-h-[62vh] flex-col overflow-y-auto">
+        <ul
+          class="scrollbar-subtle -mx-2 flex flex-col overflow-y-auto"
+          style={{ "max-height": `calc(62vh / ${props.share})` }}
+        >
           <For each={hits().slice(0, SHOWN)}>
             {(hit) => (
               <li>
@@ -204,7 +241,7 @@ function Column(props: {
                   <span class="text-smallest font-medium text-on-surface-secondary">
                     {place(hit)}
                   </span>
-                  <span class={cx("min-w-0 text-small break-words", props.usfm && "font-mono")}>
+                  <span class="min-w-0 text-small break-words">
                     {hit.preview.slice(0, hit.previewMatch.from)}
                     <mark class="rounded-xs bg-surface-highlight px-0.5 text-on-surface-highlight">
                       {hit.preview.slice(hit.previewMatch.from, hit.previewMatch.to)}
@@ -225,6 +262,6 @@ function Column(props: {
           </p>
         </Show>
       </Show>
-    </section>
+    </div>
   );
 }
