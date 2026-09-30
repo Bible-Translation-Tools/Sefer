@@ -516,4 +516,5 @@ export const funnelFor = (book: EditorBook): Funnel => ({
   undo: () => book.history()?.undo() ?? false,
   redo: () => book.history()?.redo() ?? false,
   depth: () => book.history()?.depth() ?? { undo: 0, redo: 0 },
+  tracer: () => book.state.facet(tracer),
 });

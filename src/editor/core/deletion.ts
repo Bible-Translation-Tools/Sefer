@@ -9,7 +9,12 @@
  * same target data and share one commit shell, so the two keys cannot disagree.
  */
 
-import { EditorState, type StateCommand, type Transaction } from "@codemirror/state";
+import {
+  EditorState,
+  findClusterBreak,
+  type StateCommand,
+  type Transaction,
+} from "@codemirror/state";
 
 import { lawfulStop } from "./caret";
 import { isBlankLine, lineIndexAt, opensAParagraph, type DocStructure } from "./docStructure";
@@ -98,7 +103,12 @@ function consumePress(
 
 type Verdict =
   | { readonly act: "nothing"; readonly say: string }
-  | { readonly act: "consume"; readonly say: string }
+  | {
+      readonly act: "consume";
+      readonly say: string;
+      /** The immortal set met, in USFM terms: where a press continues past it. */
+      readonly span?: PlanSpan;
+    }
   | { readonly act: "default"; readonly say: string }
   | {
       readonly act: "cut";
@@ -149,7 +159,8 @@ const CELL_RULES: readonly CellRule[] = [
     when: (t) => t.mutability === "immortal",
     say: (t) => ({
       act: "consume",
-      say: `cell immortal — the ${t.set} cannot be taken; the caret moves past it`,
+      say: `cell immortal — the ${t.set} cannot be taken; the press goes past it`,
+      span: t.wholeSpan,
     }),
   },
   {
@@ -277,24 +288,66 @@ function deleteAt(ix: OwnedIndex, pos: number): Verdict {
   return whole("delete.usfm.owned", "own-whole", `take own(${t.set}) whole`);
 }
 
-function commit(
+/** The one grapheme before (`back`) or after `at`, within its line; none at a line's edge. */
+function oneCluster(
   state: EditorState,
-  s: DocStructure,
-  ix: OwnedIndex,
-  r: PaintPort,
   at: number,
   back: boolean,
-  v: Verdict,
-  raw: (tr: Transaction) => void,
-): boolean {
+): { from: number; to: number } | null {
+  const line = state.doc.lineAt(at);
+  const off = at - line.from;
+  if (back ? off === 0 : off >= line.length) return null;
+  const other = line.from + findClusterBreak(line.text, off, !back);
+  return back ? { from: other, to: at } : { from: at, to: other };
+}
+
+/** One Backspace or Delete, and everything its verdict is carried out against. */
+interface Press {
+  readonly state: EditorState;
+  readonly s: DocStructure;
+  readonly ix: OwnedIndex;
+  readonly r: PaintPort;
+  /** Where the press is addressed from: the caret, or the far side of an immortal. */
+  readonly at: number;
+  readonly back: boolean;
+  readonly raw: (tr: Transaction) => void;
+  /** Already carried past one immortal: meeting a second only moves the caret. */
+  readonly passed?: boolean;
+}
+
+function commit(press: Press, v: Verdict): boolean {
+  const { state, s, ix, r, at, back, raw } = press;
   note(state, {
     rule: back ? "guardedBackspace" : "guardedDelete",
     verdict: TRACED[v.act],
-    detail: v.say,
+    detail: press.passed === true ? `past an immortal: ${v.say}` : v.say,
   });
   const dispatch = immortalGuard(state, s, ix, r, at, back, raw);
   if (v.act === "nothing") return true;
-  if (v.act === "consume") return consumePress(state, s, r, at, back, dispatch);
+  if (v.act === "consume") {
+    // A press that meets an immortal does not stop there: it goes past the
+    // immortal SET — in USFM terms, not graphemes: past `3`, its delimiter,
+    // `\v` and its space — and acts on the next mutable thing there, which
+    // at a locked `\v 3` opening its line is the newline that anchors the
+    // paragraph (visible as its indent, so taken as the paragraph's). It only
+    // moves the caret when that is immortal too, or nothing (Will, 2026-09-30).
+    const past =
+      v.span === undefined ? lawfulStop(state, s, r, at, back) : back ? v.span.from : v.span.to;
+    if (press.passed !== true && past !== null && past !== at) {
+      const onward: Press = { ...press, at: past, passed: true };
+      const next = back ? backspaceAt(ix, past) : deleteAt(ix, past);
+      if (next.act === "cut") return commit(onward, next);
+      // "Default" there is one ordinary character: the press takes it, as it
+      // would have had the caret started there.
+      const one = next.act === "default" ? oneCluster(state, past, back) : null;
+      if (one !== null)
+        return commit(
+          onward,
+          cutTo(one.from, one.to, back ? "delete.backward" : "delete.forward", null, next.say),
+        );
+    }
+    return consumePress(state, s, r, at, back, dispatch);
+  }
   if (v.act === "default") return false;
   // An empty number's marker goes with the one space that was its delimiter
   // (the text's leading space once the digits went): otherwise `\v` left
@@ -326,7 +379,8 @@ export function guardedBackspace(
     const sel = state.selection.main;
     if (!sel.empty || !isVisual(state)) return false;
     const ix = plansAt(state).targets();
-    return commit(state, structureAt(state), ix, r, sel.from, true, backspaceAt(ix, sel.from), raw);
+    const press: Press = { state, s: structureAt(state), ix, r, at: sel.from, back: true, raw };
+    return commit(press, backspaceAt(ix, sel.from));
   };
 }
 
@@ -339,7 +393,8 @@ export function guardedDelete(
     const sel = state.selection.main;
     if (!sel.empty || !isVisual(state)) return false;
     const ix = plansAt(state).targets();
-    return commit(state, structureAt(state), ix, r, sel.from, false, deleteAt(ix, sel.from), raw);
+    const press: Press = { state, s: structureAt(state), ix, r, at: sel.from, back: false, raw };
+    return commit(press, deleteAt(ix, sel.from));
   };
 }
 

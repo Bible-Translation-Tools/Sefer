@@ -25,10 +25,11 @@ import { Refusal } from "#core/book/book";
 
 import { settleTheCaretOnALegalPosition } from "../core/caret";
 import { pullSelectionsIntoTheClip } from "../core/clip";
-import { motionKeys, viewLayer } from "../core/compose";
+import { deletionKeys, motionKeys, viewLayer } from "../core/compose";
 import { DEFAULT_BUILD_OPTS } from "../core/decorations";
 import { borrowedStructure, structureAt, structureField } from "../core/docStructure";
 import { optsFacet, PAINT_PORT } from "../core/editorState";
+import { localTracer, tracer } from "../core/instrument";
 import { isVisual, modeFacet, trusted } from "../core/kernel";
 import { assignment } from "../core/registry";
 import { stopsIn } from "../core/stops";
@@ -394,11 +395,11 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
       borrowedStructure.of(() => opts.host.structure()),
       EditorView.editable.of(opts.editable),
       viewLayer(),
-      // The book's own motion over the stops; a satellite with no structure
-      // (none editable today) keeps CodeMirror's.
+      // The book's own motion over the stops, and its Backspace and Delete; a
+      // satellite with no structure (none editable today) keeps CodeMirror's.
       Prec.high(
         keymap.of(
-          motionKeys().map((binding) => ({
+          [...motionKeys(), ...deletionKeys()].map((binding) => ({
             ...binding,
             run: (target: EditorView) =>
               structured(target.state) && binding.run !== undefined && binding.run(target),
@@ -427,6 +428,9 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
         },
       }),
       keymap.of(defaultKeymap),
+      // The Book's tracer: this surface's keypress verdicts go to the ring the
+      // Book's judgement of their edit does, so a card's Backspace is visible.
+      Prec.lowest(tracer.of(opts.host.tracer?.() ?? localTracer)),
       ...opts.extensions,
     ],
   });
