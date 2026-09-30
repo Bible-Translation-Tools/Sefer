@@ -35,10 +35,11 @@ import {
   type DiagnosticView,
   type EngineStamp,
   type Finding as CorpusFinding,
+  type FindingMessage,
   type FindingsSnapshot,
 } from "../galley";
 import type { SourceStamp } from "../source/source";
-import { sousMessage } from "./messages";
+import { describeSous, render } from "./messages";
 
 /**
  * The three rungs a reader is shown. The per-book lint's `hint` folds into
@@ -74,8 +75,23 @@ export interface Finding {
   /** The producer's stable code: a catalogue name, or `sous.<lane>`. */
   readonly code: string;
   readonly producer: Producer;
-  /** Panel text. Quotes the document; never goes to telemetry. */
+  /**
+   * Panel text, plain: a Sous finding's headline. Quotes the document; never
+   * goes to telemetry.
+   */
   readonly message: string;
+  /**
+   * A Sous finding's supporting numbers — what is usual, how often, where —
+   * as plain text, for behind a "Why?". Quotes the document, like `message`.
+   */
+  readonly details?: string;
+  /**
+   * What both of a Sous finding's sentences are rendered from: kitchen's id,
+   * its parameters, and the literal searches behind them (`queries`). A
+   * screen that draws each mark as a keycap renders from this
+   * (`messages.ts`'s `renderRich`), never by parsing `message`.
+   */
+  readonly described?: FindingMessage;
   /** UTF-16 offsets into the text `stamp`/`engine` name. */
   readonly from: number;
   readonly to: number;
@@ -287,17 +303,20 @@ export const fromSnapshot = (
       const pattern =
         finding.kind === "Convention" ? patterns[finding.convention.pattern] : undefined;
       const code = corpusCode(finding, pattern?.channel);
+      const described = describeSous(finding, pattern, {
+        siteText: resolved.text.slice(finding.from, finding.to),
+        bookCount,
+        bookName,
+      });
       out.push({
         id: identify("sous", resolved.bookId, code, finding.from, finding.to),
         bookId: resolved.bookId,
         severity: corpusSeverity(finding),
         code,
         producer: "sous",
-        message: sousMessage(finding, pattern, {
-          siteText: resolved.text.slice(finding.from, finding.to),
-          bookCount,
-          bookName,
-        }),
+        message: render(described, "headline"),
+        details: render(described, "details"),
+        described,
         from: finding.from,
         to: finding.to,
         stamp: resolved.stamp,

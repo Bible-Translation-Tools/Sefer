@@ -80,9 +80,9 @@ import {
 // `src/core/galley` imports the engine holds for the reader too.
 export { FindingsSnapshot };
 export type { Finding, Pattern } from "@wycliffeassociates/scripture-kitchen/sous-reader";
-// Why a finding fired, as an id and its parameters, and the English catalog
-// those ids render through. `src/core/findings/messages.ts` is the one
-// formatter.
+// Why a finding fired, as an id, its parameters and its literal searches, and
+// the English catalog those ids render through (a headline and details each).
+// `src/core/findings/messages.ts` is the one formatter.
 export {
   describe as describeFinding,
   type Message as FindingMessage,
