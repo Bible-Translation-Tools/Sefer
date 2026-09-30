@@ -44,6 +44,7 @@ import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import type { SourceReading } from "../../workflows/stet";
 import type { CardViews } from "../multibuffer/cardViews";
+import { cardPolicy } from "../multibuffer/policy";
 import { Badge, Switch } from "../primitives";
 import { ProjectControl } from "../workspace/ProjectSidebar";
 import { claimSidebar } from "../workspace/sidebarSlot";
@@ -305,6 +306,10 @@ export function StetView(props: StetViewProps) {
     { kind: "none" },
     {
       edit: { kind: "direct" },
+      // Notes are not this workflow: in Regular they are hidden and passed
+      // through untouched, as `\s5` is, over the cards' locked verse numbers.
+      // USFM shows everything, notes included.
+      policy: (mode) => cardPolicy(mode, "hide-notes"),
       condensed: (excerpt) => excerpt.sid !== activeSid(),
       // Closed, the accordion follows the last core card; open, it heads the first additional one.
       after: (excerpt) =>

@@ -490,8 +490,12 @@ export interface GalleyService {
    * same way. Loose text rather than an id because a review side is often not
    * a registered book (a file on disk, an imported zip). `undefined` when the
    * engine refuses the text.
+   *
+   * `"verseText"` asks for the corpus mask's recipe over the loose text
+   * instead — the verses' own words, notes out — for a place that wants what
+   * the editor shows and not what a diff compares (a condensed card's line).
    */
-  readonly readerMask: (text: string) => MaskMap | undefined;
+  readonly readerMask: (text: string, recipe?: "text" | "verseText") => MaskMap | undefined;
 
   /**
    * The engine's content hash of `text` (XXH3-64, seed 0): the same value
@@ -911,9 +915,9 @@ const makeService = (
     }
   };
 
-  const readerMask = (text: string): MaskMap | undefined => {
+  const readerMask = (text: string, recipe: "text" | "verseText" = "text"): MaskMap | undefined => {
     try {
-      return MaskMap.open(handle.maskOf(text, { recipe: "text", utf16: true }));
+      return MaskMap.open(handle.maskOf(text, { recipe, utf16: true }));
     } catch {
       return undefined;
     }

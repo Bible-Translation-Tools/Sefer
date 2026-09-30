@@ -62,6 +62,14 @@ export interface CardFrameProps {
   readonly flush?: boolean;
   /** The footer's right: what this screen lets a reader do about this place. */
   readonly actions?: readonly CardAction[];
+  /**
+   * One dimmed line while another card is the active one (Key terms'). The
+   * whole card is then a button that makes it active — a click, or Enter or
+   * Space from the keyboard. The card draws its own regions; this is the
+   * frame's part: the look, and the way in.
+   */
+  readonly condensed?: boolean;
+  readonly onActivate?: () => void;
   /** Is this the card the screen's cursor is on? A ring. */
   readonly current?: boolean;
   readonly onDblClick?: (event: MouseEvent) => void;
@@ -95,12 +103,41 @@ export function CardFrame(props: CardFrameProps) {
       {...props.data}
       data-editing={editing() ? "true" : undefined}
       data-current={props.current === true ? "true" : undefined}
-      class={cx("overflow-hidden", props.current === true && "ring-1 ring-brand")}
+      data-condensed={props.condensed === true ? "" : undefined}
+      role={props.condensed === true ? "button" : undefined}
+      tabindex={props.condensed === true ? 0 : undefined}
+      aria-label={
+        props.condensed === true ? t("Open {place}", { place: String(props.title) }) : undefined
+      }
+      class={cx(
+        "overflow-hidden",
+        props.current === true && "ring-1 ring-brand",
+        // Padding and opacity ease with the regions' rows, so the card moves
+        // as one thing.
+        props.flush === true &&
+          "transition-[padding,opacity] duration-300 ease-in-out motion-reduce:transition-none",
+        props.condensed === true &&
+          "cursor-pointer py-4 opacity-60 hover:opacity-100 focus-visible:opacity-100",
+      )}
+      onClick={() => {
+        if (props.condensed === true) props.onActivate?.();
+      }}
+      onKeyDown={(event: KeyboardEvent) => {
+        if (props.condensed !== true || event.target !== event.currentTarget) return;
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        props.onActivate?.();
+      }}
       onDblClick={(event: MouseEvent) => props.onDblClick?.(event)}
     >
       <div
         class={cx(
-          props.flush === true ? "px-3 pb-2" : "border-b border-surface-border px-3 py-1.5",
+          props.flush === true
+            ? cx(
+                "px-3 transition-[padding] duration-300 ease-in-out motion-reduce:transition-none",
+                props.condensed === true ? "pb-1" : "pb-2",
+              )
+            : "border-b border-surface-border px-3 py-1.5",
         )}
       >
         <header class="flex flex-wrap items-center gap-2">

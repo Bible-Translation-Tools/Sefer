@@ -29,7 +29,11 @@ import type { EngineRange, GalleyService, MaskMap } from "#core/galley";
 
 /** Two sides of one book, plus room to switch books without re-masking. */
 const LIMIT = 4;
-const cache = new Map<string, MaskMap | undefined>();
+type Recipe = "text" | "verseText";
+const caches: Record<Recipe, Map<string, MaskMap | undefined>> = {
+  text: new Map(),
+  verseText: new Map(),
+};
 
 /**
  * One mask, remembered by the text itself — so there is nothing to
@@ -39,10 +43,11 @@ const cache = new Map<string, MaskMap | undefined>();
  * every render. The caller falls back to the raw slice, which is still a true
  * reading of the bytes.
  */
-const maskOf = (galley: GalleyService, text: string): MaskMap | undefined => {
+const maskOf = (galley: GalleyService, text: string, recipe: Recipe): MaskMap | undefined => {
   if (text === "") return undefined;
+  const cache = caches[recipe];
   if (cache.has(text)) return cache.get(text);
-  const held = galley.readerMask(text);
+  const held = galley.readerMask(text, recipe);
   cache.set(text, held);
   while (cache.size > LIMIT) {
     const oldest = cache.keys().next();
@@ -95,7 +100,18 @@ export const textOf = (
   if (range === undefined) return undefined;
   const raw = text.slice(range.from, range.to);
   if (markup) return raw;
-  const mask = maskOf(galley, text);
+  const mask = maskOf(galley, text, "text");
   if (mask === undefined) return raw;
+  return cut(mask, text, range.from, range.to);
+};
+
+/**
+ * What the editor shows of `[from, to)` in Regular mode: the verses' own
+ * words, notes and markers out, whitespace as the text has it. A condensed
+ * excerpt card's one line. The raw slice when the engine refuses the text.
+ */
+export const verseTextOf = (galley: GalleyService, text: string, range: EngineRange): string => {
+  const mask = maskOf(galley, text, "verseText");
+  if (mask === undefined) return text.slice(range.from, range.to);
   return cut(mask, text, range.from, range.to);
 };

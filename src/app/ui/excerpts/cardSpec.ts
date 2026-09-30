@@ -26,6 +26,7 @@ import type { JSX } from "@solidjs/web";
 
 import type { BookId } from "#core/book/book";
 import type { Excerpt, OutlineRow, BookExcerpts } from "#core/excerpts/excerpts";
+import type { EditorPolicy } from "#editor/index";
 
 import type { CardAction } from "../multibuffer/CardAction";
 import type { CardView, ContextStep } from "../multibuffer/cardState";
@@ -92,6 +93,13 @@ export interface ExcerptCardSpec {
   readonly after?: (excerpt: Excerpt, key: string) => JSX.Element | undefined;
   /** A status mark for the card's line (Key terms' approved check), drawn condensed too. */
   readonly status?: (excerpt: Excerpt, key: string) => JSX.Element | undefined;
+  /**
+   * The behaviour matrix this screen's cards opt into, in the reader's
+   * current mode — reader, editing satellite and paired side alike, and the
+   * Book judges the satellite's edits under it. Absent, the mode alone
+   * (`editorPolicy(mode)`). Key terms: notes hidden and immutable in Regular.
+   */
+  readonly policy?: (mode: "regular" | "usfm") => EditorPolicy;
   /** Pixels this card carries beyond the verse, before it has been measured. */
   readonly extraHeight?: (excerpt: Excerpt, key: string) => number;
 }
