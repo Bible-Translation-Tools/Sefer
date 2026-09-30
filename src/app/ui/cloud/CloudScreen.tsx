@@ -39,7 +39,7 @@ import {
   type SyncActionId,
 } from "#core/sync";
 
-import { APP_AUTHOR } from "../../author";
+import { authorOrApp } from "../../author";
 import { describe, remoteReasonOf } from "../../describe";
 import { rememberSync } from "../../diagnostics";
 import { t } from "../../i18n";
@@ -57,6 +57,7 @@ import { IncomingPlanCard } from "./IncomingPlanCard";
 import { ProjectCard } from "./ProjectCard";
 import { readSync, type ReadSyncOptions, type SyncFacts } from "./reading";
 import { SharedProjectCard, type SharedProjectActions } from "./SharedProjectCard";
+import { SyncSettingsCard } from "./SyncSettingsCard";
 
 /** A project's folder name, which is what a person calls it. */
 const projectName = (root: string): string => root.slice(root.lastIndexOf("/") + 1);
@@ -451,7 +452,9 @@ export function CloudScreen() {
           action,
           () => {
             const project = shell.project();
-            return project === undefined ? Effect.void : combine({ project, author: APP_AUTHOR });
+            return project === undefined
+              ? Effect.void
+              : Effect.flatMap(authorOrApp(), (author) => combine({ project, author }));
           },
           explainCombine,
         );
@@ -519,6 +522,10 @@ export function CloudScreen() {
                   problem={problem()}
                   onRun={() => run(held().primary)}
                 />
+
+                <Show when={shell.project()?.root}>
+                  {(root) => <SyncSettingsCard root={root()} />}
+                </Show>
 
                 <Show when={held().primary === "attach" || held().primary === "publish"}>
                   <SharedProjectCard

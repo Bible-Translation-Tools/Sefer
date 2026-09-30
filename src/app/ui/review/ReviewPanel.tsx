@@ -53,15 +53,17 @@ import {
 } from "#core/compare";
 import { diffSkeleton, type SkeletonResult } from "#core/diff/skeleton";
 import type { DecisionUnit, DiffSkeleton, MergeSide } from "#core/galley";
+import type { Author } from "#core/git/git";
 import { Observability } from "#core/observability";
 import type { Restorable } from "#core/recovery/recovery";
 import type { SourceStamp } from "#core/source/source";
 import type { EditorBook } from "#editor/index";
 
-import { APP_AUTHOR } from "../../author";
+import { personAuthor } from "../../author";
 import { describe, reasonOf } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
+import { setAuthorName } from "../../syncSettings";
 import { unsavedChanges } from "../panels/changes";
 import { ago, exact } from "../panels/format";
 import { createRecordedVersion } from "../panels/recorded";
@@ -132,6 +134,13 @@ export function ReviewPanel() {
   const [receipt, setReceipt] = createSignal("", { name: "reviewReceipt" });
   const [recording, setRecording] = createSignal(false, { name: "reviewRecording" });
   const [recordOpen, setRecordOpen] = createSignal(false, { name: "reviewRecordOpen" });
+  /** Who the version is by: the session's user or this device's name; undefined asks. */
+  const [author, setAuthor] = createSignal<Author | undefined>(undefined, { name: "reviewAuthor" });
+  const [typedName, setTypedName] = createSignal("", { name: "reviewAuthorName" });
+  const openRecord = (): void => {
+    setRecordOpen(true);
+    void services.run(personAuthor()).then((found) => setAuthor(Option.getOrUndefined(found)));
+  };
   const [sourcesOpen, setSourcesOpen] = createSignal(false, { name: "reviewSourcesOpen" });
   const [journals, setJournals] = createSignal<readonly Restorable[]>([], {
     name: "reviewJournals",
@@ -693,6 +702,25 @@ export function ReviewPanel() {
     const project = shell.project();
     const review = unsaved();
     if (project === undefined || recording() || review.length === 0) return;
+    // Taken before the save: afterwards no book is unsaved, and the default
+    // would name none of them.
+    const typedMessage = message().trim();
+    const staticMessage = typedMessage === "" ? defaultMessage() : typedMessage;
+    // Asked once per device, when nobody is signed in: a version carries a
+    // person's name, and "Sefer" would say nothing about who changed the text.
+    const typed = typedName().trim();
+    const by = author() ?? (typed === "" ? undefined : { name: typed, email: "" });
+    if (by === undefined) {
+      toasts.error({
+        title: t("Add your name first"),
+        message: t("It goes with every version you keep."),
+      });
+      return;
+    }
+    if (author() === undefined) {
+      await services.run(Effect.ignore(setAuthorName(services.settings, typed)));
+      setAuthor(by);
+    }
     setRecording(true);
     const notice = toasts.progress({ title: t("Recording…") });
 
@@ -738,12 +766,11 @@ export function ReviewPanel() {
       return;
     }
 
-    const staticMessage = message().trim() === "" ? defaultMessage() : message().trim();
     const recorded = await services.run(
       Effect.result(
         Effect.gen(function* () {
           const repo = yield* services.git.init(project.root);
-          return yield* services.git.commit(repo, receipts, staticMessage, APP_AUTHOR);
+          return yield* services.git.commit(repo, receipts, staticMessage, by);
         }),
       ),
     );
@@ -967,7 +994,7 @@ export function ReviewPanel() {
                 title={t("{count} book(s) with changes", {
                   count: unsaved().length,
                 })}
-                onClick={() => setRecordOpen(true)}
+                onClick={openRecord}
               >
                 {t("Record a version…")}
               </Button>
@@ -1091,6 +1118,20 @@ export function ReviewPanel() {
             </>
           }
         >
+          <Show when={author() === undefined}>
+            <label
+              class="block pb-1 text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase"
+              for="author-name"
+            >
+              {t("Your name, as your team knows you")}
+            </label>
+            <Input
+              id="author-name"
+              wrapperClass="w-full pb-3"
+              value={typedName()}
+              onInput={(event) => setTypedName(event.currentTarget.value)}
+            />
+          </Show>
           <label
             class="block pb-1 text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase"
             for="commit-message"
