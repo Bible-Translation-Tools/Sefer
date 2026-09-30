@@ -30,6 +30,7 @@ import {
   atContentHead,
   type TransactionRule,
 } from "./kernel";
+import { bindsToItsLine } from "./lineTable";
 import type { Addressed, OwnedIndex, ResolvedOwnedTarget } from "./owned";
 import type { PlanSpan } from "./plan";
 import { note, noteTr, type TraceVerdict } from "./trace";
@@ -48,8 +49,18 @@ const startsALine = (s: DocStructure, pos: number): boolean => {
   return i >= 0 && s.lines.fromAt(i) === pos;
 };
 
-const anchoredBack = (s: DocStructure, sp: PlanSpan): PlanSpan =>
-  sp.from > 0 && startsALine(s, sp.from) ? { from: sp.from - 1, to: sp.to } : sp;
+/**
+ * A set's span with the newline before it, when that newline is the set's: a
+ * marker that must start its line (`bindsToItsLine` — a paragraph or heading)
+ * owns the break that puts it there. A `\v` that happens to open its line does
+ * not: `for me.\v 7 You` is valid USFM, so the newline before a locked verse
+ * is a join the press may take (`…for me.\v 7 You`), not part of the verse.
+ */
+const anchoredBack = (s: DocStructure, sp: PlanSpan): PlanSpan => {
+  if (sp.from <= 0 || !startsALine(s, sp.from)) return sp;
+  const line = s.lines.maybe(lineIndexAt(s, sp.from));
+  return line !== null && bindsToItsLine(line) ? { from: sp.from - 1, to: sp.to } : sp;
+};
 
 function reachesImmortal(ix: OwnedIndex, s: DocStructure, from: number, to: number): boolean {
   const lo = Math.min(from, to);

@@ -250,6 +250,17 @@ export const isBlankLine = (l: DocLine): boolean => l.to === l.from;
 
 export const isDesignatorLine = (l: DocLine): boolean => l.cls === "slot.v" || l.cls === "slot.c";
 
+/**
+ * Is this line's marker one that must start its line — a Paragraph or Header
+ * marker in the engine's table (`\p`, `\m`, `\q1`, `\s1`, `\id`…), which is
+ * every `block.*` class and a blank line (`mapping.ts`)? The engine flags one
+ * that follows text directly (`marker-not-ws-preceded`), so the newline before
+ * it is part of it. A `\v`, a `\c`, a milestone, a character marker or a note
+ * may follow text directly, and the newline before one is only a line break.
+ */
+export const bindsToItsLine = (l: DocLine): boolean =>
+  l.cls === "blank" || l.cls.startsWith("block.");
+
 export const opensAParagraph = (l: DocLine): boolean =>
   l.marker !== null && (l.cls === "block.para" || l.cls === "blank");
 
