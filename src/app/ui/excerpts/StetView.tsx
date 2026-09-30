@@ -121,6 +121,52 @@ export function StetView(props: StetViewProps) {
   let goTo: ((key: string) => void) | undefined;
 
   /**
+   * The list's order: every curated card first, book by book, then the
+   * additional ones, book by book — never interleaved. A book with both is
+   * two sections, told apart by `extra` (`sectionKey` below).
+   */
+  const extra = new WeakSet<BookExcerpts>();
+  const ordered = createMemo(
+    (): { readonly core: readonly BookExcerpts[]; readonly more: readonly BookExcerpts[] } => {
+      const core: BookExcerpts[] = [];
+      const more: BookExcerpts[] = [];
+      for (const group of props.groups) {
+        const curated: Excerpt[] = [];
+        const rest: Excerpt[] = [];
+        for (const excerpt of group.excerpts)
+          (props.isCurated(excerpt) ? curated : rest).push(excerpt);
+        if (curated.length > 0) core.push({ ...group, excerpts: curated, count: curated.length });
+        if (rest.length > 0) {
+          const held = { ...group, excerpts: rest, count: rest.length };
+          extra.add(held);
+          more.push(held);
+        }
+      }
+      return { core, more };
+    },
+    { name: "stetOrdered" },
+  );
+  const listed = (): readonly BookExcerpts[] => [...ordered().core, ...ordered().more];
+  const lastCore = (): string | undefined => ordered().core.at(-1)?.excerpts.at(-1)?.sid;
+  const firstMore = (): string | undefined => ordered().more[0]?.excerpts[0]?.sid;
+
+  /** The accordion between the core verses and the additional ones: the sidebar switch's twin. */
+  const Accordion = () => (
+    <button
+      type="button"
+      data-stet-accordion=""
+      aria-expanded={props.additional ? "true" : "false"}
+      class="mt-3 flex h-12 w-full cursor-pointer items-center gap-2 rounded-lg px-3 text-start text-small font-semibold text-on-surface-primary transition-colors hover:bg-surface-secondary [&>svg]:size-5"
+      onClick={() => props.onAdditional(!props.additional)}
+    >
+      <Show when={props.additional} fallback={<ChevronRight aria-hidden="true" />}>
+        <ChevronDown aria-hidden="true" />
+      </Show>
+      {t("Additional references ({count})", { count: props.additionalCount })}
+    </button>
+  );
+
+  /**
    * The one active card: whole, with its actions; every other is condensed.
    * Held with the term it belongs to, so opening another term starts again at
    * that term's first card rather than at a sid it does not have.
@@ -129,7 +175,7 @@ export function StetView(props: StetViewProps) {
     { term: "", sid: "" },
     { name: "stetActiveCard" },
   );
-  const allExcerpts = (): readonly Excerpt[] => props.groups.flatMap((group) => group.excerpts);
+  const allExcerpts = (): readonly Excerpt[] => listed().flatMap((group) => group.excerpts);
   const activeSid = (): string | undefined => {
     const held = picked();
     const all = allExcerpts();
@@ -260,6 +306,13 @@ export function StetView(props: StetViewProps) {
     {
       edit: { kind: "direct" },
       condensed: (excerpt) => excerpt.sid !== activeSid(),
+      // Closed, the accordion follows the last core card; open, it heads the first additional one.
+      after: (excerpt) =>
+        !props.additional && props.additionalCount > 0 && excerpt.sid === lastCore() ? (
+          <Accordion />
+        ) : undefined,
+      before: (excerpt) =>
+        props.additional && excerpt.sid === firstMore() ? <Accordion /> : undefined,
       onActivate: (excerpt) => activate(excerpt.sid, "card"),
       status: (excerpt) =>
         isApproved(excerpt.sid) ? (
@@ -381,10 +434,12 @@ export function StetView(props: StetViewProps) {
                 this list stays the curated set. */}
             <Show when={props.additionalCount > 0}>
               <Switch
+                labelFirst
+                class="w-full justify-between px-3 py-2"
                 checked={props.additional}
                 onChange={props.onAdditional}
-                label={t("Show additional references ({count})", {
-                  count: props.additionalCount,
+                label={t("Show all ({count})", {
+                  count: inList() + (props.additional ? 0 : props.additionalCount),
                 })}
               />
             </Show>
@@ -429,7 +484,10 @@ export function StetView(props: StetViewProps) {
         goTo={(go) => {
           goTo = go;
         }}
-        groups={props.groups}
+        groups={listed()}
+        sections={{
+          sectionKey: (group) => (extra.has(group) ? `${group.bookId}:more` : group.bookId),
+        }}
         views={props.views}
         outline={props.outline}
         card={card}

@@ -87,6 +87,9 @@ export interface ExcerptCardSpec {
   readonly condensed?: (excerpt: Excerpt, key: string) => boolean;
   /** A condensed card was clicked: make it the active one. */
   readonly onActivate?: (excerpt: Excerpt, key: string) => void;
+  /** Drawn above or below the card, inside its row: Key terms' accordion. */
+  readonly before?: (excerpt: Excerpt, key: string) => JSX.Element | undefined;
+  readonly after?: (excerpt: Excerpt, key: string) => JSX.Element | undefined;
   /** A status mark for the card's line (Key terms' approved check), drawn condensed too. */
   readonly status?: (excerpt: Excerpt, key: string) => JSX.Element | undefined;
   /** Pixels this card carries beyond the verse, before it has been measured. */
@@ -98,6 +101,11 @@ export interface ExcerptCardSpec {
  * list's, not a card's — so it is its own declaration.
  */
 export interface OutlineSpec {
+  /**
+   * A section's key, when one book is two sections (Key terms: its core
+   * verses, then its additional ones). Defaults to the book.
+   */
+  readonly sectionKey?: (group: BookExcerpts) => string;
   /**
    * A row's key, when the sid alone is not unique. Grouping by code puts one
    * verse in two sections, and a virtualizer keyed on a repeated string

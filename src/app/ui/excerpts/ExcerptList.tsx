@@ -168,7 +168,7 @@ export function ExcerptList(props: ExcerptListProps) {
     const held = built.get(group);
     if (held !== undefined) return held;
     const made: VirtualSection<Excerpt> = {
-      key: group.bookId,
+      key: props.sections?.sectionKey?.(group) ?? group.bookId,
       rows: group.excerpts.map((excerpt) => {
         // `static`: the memo is the tracking scope, and the key is read here
         // rather than by a function that outlives it.

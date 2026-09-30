@@ -278,6 +278,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
   const direct = (): boolean => props.spec.edit.kind === "direct";
 
   const edit = (caret?: number, where?: { x: number; y: number }): void => {
+    if (targetBox !== undefined) setHold(targetBox.offsetHeight);
     setAt(caret);
     setPoint(where);
     props.onEdit();
@@ -288,33 +289,51 @@ export function ExcerptCard(props: ExcerptCardProps) {
   };
 
   const done = (): void => {
+    setHold(undefined);
     setBook(undefined);
     setAt(undefined);
     props.onDone();
   };
 
+  const reader = () => (
+    <ExcerptReader
+      analysis={props.excerpt.analysis}
+      span={props.excerpt.span}
+      mode={mode()}
+      marks={marks()}
+      label={`excerpt:${props.excerpt.sid}`}
+      follow={props.follow}
+      onEdit={props.spec.edit.kind === "none" ? undefined : edit}
+      direct={direct()}
+    />
+  );
+
+  /**
+   * The target's height, held from the click until the editor has drawn: the
+   * reading stays on screen while the book is seated, and the box keeps its
+   * size through the swap, so the card does not shrink and regrow.
+   */
+  const [hold, setHold] = createSignal<number | undefined>(undefined, { name: "excerptHold" });
+  let targetBox: HTMLDivElement | undefined;
+  createEffect(
+    () => props.editing && book() !== undefined,
+    (drawn) => {
+      if (!drawn) return;
+      // Two frames: one for the editor to mount, one for it to lay out.
+      requestAnimationFrame(() => requestAnimationFrame(() => setHold(undefined)));
+    },
+  );
+
   const target = (
-    <Show
-      when={props.editing}
-      fallback={
-        <ExcerptReader
-          analysis={props.excerpt.analysis}
-          span={props.excerpt.span}
-          mode={mode()}
-          marks={marks()}
-          label={`excerpt:${props.excerpt.sid}`}
-          follow={props.follow}
-          onEdit={props.spec.edit.kind === "none" ? undefined : edit}
-          direct={direct()}
-        />
-      }
-    >
+    <Show when={props.editing} fallback={reader()}>
       <Show
         when={book()}
         fallback={
-          <p class="px-3 py-2 text-small text-on-surface-tertiary">
-            {refused() ? t("That book could not be opened for editing.") : t("Opening…")}
-          </p>
+          <Show when={refused()} fallback={reader()}>
+            <p class="px-3 py-2 text-small text-on-surface-tertiary">
+              {t("That book could not be opened for editing.")}
+            </p>
+          </Show>
         }
       >
         {(seated) => (
@@ -500,6 +519,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
 
   return (
     <div ref={setBox}>
+      {props.spec.before?.(props.excerpt, props.rowKey)}
       <Show
         when={!condensed()}
         fallback={
@@ -513,11 +533,11 @@ export function ExcerptCard(props: ExcerptCardProps) {
             class="cursor-pointer px-6 py-4 opacity-60 transition-opacity hover:opacity-100"
             onClick={() => props.spec.onActivate?.(props.excerpt, props.rowKey)}
           >
-            <div class="flex items-center gap-3">
-              <h3 class="shrink-0 px-3 text-small font-bold text-on-surface-primary tabular-nums">
+            <div class="flex items-center gap-2">
+              <h3 class="shrink-0 ps-3 text-small font-bold text-on-surface-primary tabular-nums">
                 {props.excerpt.label}
               </h3>
-              <span class="ms-auto shrink-0">{status()}</span>
+              <span class="flex shrink-0">{status()}</span>
             </div>
             <div
               class={cx(
@@ -549,6 +569,8 @@ export function ExcerptCard(props: ExcerptCardProps) {
           gone={props.gone}
           info={
             <>
+              {/* The status sits right after the heading, open or condensed. */}
+              <Show when={status()}>{(mark) => <span class="flex shrink-0">{mark()}</span>}</Show>
               {spec().info?.(props.excerpt, props.rowKey, props.view)}
               {/* Not when the card carries notes: findings list themselves line
                 by line under the header, and "2 matches" above them would be
@@ -608,6 +630,10 @@ export function ExcerptCard(props: ExcerptCardProps) {
               sit under it, in its column, so they start at its left edge. */}
             <div class="flex min-w-0 flex-col gap-2">
               <div
+                ref={(element: HTMLDivElement) => {
+                  targetBox = element;
+                }}
+                style={hold() === undefined ? undefined : { "min-height": `${hold()}px` }}
                 data-direct-target={direct() ? "" : undefined}
                 data-editing={direct() && props.editing ? "" : undefined}
                 class={cx(
@@ -645,6 +671,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
           </div>
         </CardFrame>
       </Show>
+      {props.spec.after?.(props.excerpt, props.rowKey)}
     </div>
   );
 }

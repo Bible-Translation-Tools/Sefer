@@ -20,6 +20,8 @@ export interface SwitchProps {
   readonly id?: string;
   readonly disabled?: boolean;
   readonly class?: ClassValue;
+  /** The label before the track rather than after it: a row that ends in its switch. */
+  readonly labelFirst?: boolean;
 }
 
 export function Switch(props: SwitchProps) {
@@ -38,6 +40,7 @@ export function Switch(props: SwitchProps) {
       )}
       onClick={() => props.onChange(!props.checked)}
     >
+      {props.labelFirst === true && props.label !== undefined && <span>{props.label}</span>}
       <span
         aria-hidden="true"
         class={cx(
@@ -52,7 +55,7 @@ export function Switch(props: SwitchProps) {
           )}
         />
       </span>
-      {props.label !== undefined && <span>{props.label}</span>}
+      {props.labelFirst !== true && props.label !== undefined && <span>{props.label}</span>}
     </button>
   );
 }
