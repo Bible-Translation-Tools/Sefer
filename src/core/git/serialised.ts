@@ -35,8 +35,9 @@ export const serialiseGit = (git: GitService, repositories: RepositoriesService)
   return {
     open: git.open,
     init: (root) => write(root, "init", git.init(root)),
-    commit: (repo, receipts, message, author) =>
-      write(repo.root, "commit", git.commit(repo, receipts, message, author)),
+    commit: (repo, receipts, message, author, options) =>
+      write(repo.root, "commit", git.commit(repo, receipts, message, author, options)),
+    mergeBase: (repo, a, b) => read(repo.root, git.mergeBase(repo, a, b)),
     status: (repo) => read(repo.root, git.status(repo)),
     log: (repo, path) => read(repo.root, git.log(repo, path)),
     logFrom: (repo, ref) => read(repo.root, git.logFrom(repo, ref)),
@@ -69,7 +70,10 @@ export const serialiseRemote = (
     clone: (url, into) => write(into, "clone", remote.clone(url, into)),
     attach: (repo, url) => write(repo.root, "attach", remote.attach(repo, url)),
     origin: (repo) => read(repo.root, remote.origin(repo)),
+    // Nothing local is read or written: a probe needs no lane.
+    probe: remote.probe,
     fetch: (repo) => write(repo.root, "fetch", remote.fetch(repo)),
+    fastForward: (repo, to) => write(repo.root, "fast-forward", remote.fastForward(repo, to)),
     pull: (repo) => write(repo.root, "pull", remote.pull(repo)),
     push: (repo) => write(repo.root, "push", remote.push(repo)),
     publish: (repo, target) => write(repo.root, "publish", remote.publish(repo, target)),

@@ -36,6 +36,7 @@ export type WriteKind =
   | "attach"
   | "fetch"
   | "pull"
+  | "fast-forward"
   | "push"
   | "publish"
   | "move-branch"

@@ -55,6 +55,17 @@ export class RemoteError extends Data.TaggedError("RemoteError")<{
   readonly description?: string | undefined;
 }> {}
 
+/**
+ * What a URL is, asked of the server without transferring anything but its
+ * refs: the branch its HEAD names and where that branch points. `empty` is a
+ * repository with no branch yet — somewhere a first send can go.
+ */
+export interface Probe {
+  readonly defaultBranch: Option.Option<string>;
+  readonly head: Option.Option<string>;
+  readonly empty: boolean;
+}
+
 export interface RemoteService {
   /**
    * A fresh clone of `url` into `into`, with `origin` recorded as `attach`
@@ -80,7 +91,22 @@ export interface RemoteService {
    * "not attached yet" is the ordinary state of a project someone just made.
    */
   readonly origin: (repo: Repo) => Effect.Effect<Option.Option<string>, RemoteError>;
+  /**
+   * Asks `url` what it is without cloning it: the cheapest "are we up to
+   * date?", and the answer a URL field shows before anything is attached.
+   * Anonymous unless a credential is held for the host.
+   */
+  readonly probe: (url: string) => Effect.Effect<Probe, RemoteError>;
   readonly fetch: (repo: Repo) => Effect.Effect<Progress, RemoteError>;
+  /**
+   * Moves the checked-out branch forward to `to` and brings the work tree
+   * with it — only ever forward: `Rejected` unless `to` descends from HEAD.
+   *
+   * The checkout is SAFE, never forced: a file with changes no commit holds
+   * is not overwritten, and the move is refused whole rather than half made.
+   * Only files that differ between the two commits are written.
+   */
+  readonly fastForward: (repo: Repo, to: string) => Effect.Effect<void, RemoteError>;
   readonly pull: (repo: Repo) => Effect.Effect<Progress, RemoteError>;
   readonly push: (repo: Repo) => Effect.Effect<Progress, RemoteError>;
   /** Creates the project on `target` and pushes it there for the first time. */

@@ -13,11 +13,11 @@
 
 use std::path::{Component, Path};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use git2::{
     build::{CheckoutBuilder, RepoBuilder},
-    Cred, Delta, ErrorCode, FetchOptions, ObjectType, Oid, PushOptions, RemoteCallbacks,
+    Cred, Delta, Direction, ErrorCode, FetchOptions, ObjectType, Oid, PushOptions, RemoteCallbacks,
     Repository, RepositoryInitOptions, RepositoryState, ResetType, Signature, Sort, Status,
     StatusOptions,
 };
@@ -56,6 +56,14 @@ pub struct GitProgress {
     pub phase: String,
     pub loaded: usize,
     pub total: Option<usize>,
+}
+
+/// Mirrors the `Remote` port's `Probe`: what a URL is, from its refs alone.
+#[derive(Serialize)]
+pub struct GitProbe {
+    pub default_branch: Option<String>,
+    pub head: Option<String>,
+    pub empty: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -361,6 +369,7 @@ pub fn git_commit(
     message: String,
     author_name: String,
     author_email: String,
+    also_parents: Option<Vec<String>>,
 ) -> Result<String, String> {
     if paths.is_empty() {
         return Err(fail(
@@ -389,8 +398,25 @@ pub fn git_commit(
         .and_then(|head| head.target())
         .and_then(|oid| repo.find_commit(oid).ok());
 
+    // A decision commit joins another history even when its tree is HEAD's
+    // own (every decision kept this side's text), so only a plain commit
+    // takes the "nothing changed" shortcut.
+    let also = also_parents.unwrap_or_default();
+    let mut joined = Vec::with_capacity(also.len());
+    for rev in &also {
+        let oid = resolve_commit(&repo, rev)?
+            .ok_or_else(|| fail(CONFLICT, format!("{rev} names no commit")))?;
+        joined.push(repo.find_commit(oid).map_err(io)?);
+    }
+    if !joined.is_empty() && parent.is_none() {
+        return Err(fail(
+            CONFLICT,
+            "a commit joining another history needs a HEAD to join it to",
+        ));
+    }
+
     if let Some(existing) = &parent {
-        if existing.tree_id() == tree_oid {
+        if joined.is_empty() && existing.tree_id() == tree_oid {
             return Ok(existing.id().to_string());
         }
     } else if tree.is_empty() {
@@ -404,7 +430,7 @@ pub fn git_commit(
     }
 
     let signature = author_signature(&author_name, &author_email)?;
-    let parents: Vec<&git2::Commit<'_>> = parent.iter().collect();
+    let parents: Vec<&git2::Commit<'_>> = parent.iter().chain(joined.iter()).collect();
     let oid = repo
         .commit(
             Some("HEAD"),
@@ -556,6 +582,22 @@ pub fn git_changed_paths_between(
     Ok(out)
 }
 
+/// The best common ancestor of two revs, from commit ancestry alone; `None`
+/// when they share no history.
+#[tauri::command]
+pub fn git_merge_base(root: String, a: String, b: String) -> Result<Option<String>, String> {
+    let repo = open_repo(&root)?;
+    let left =
+        resolve_commit(&repo, &a)?.ok_or_else(|| fail(CONFLICT, format!("{a} names no commit")))?;
+    let right =
+        resolve_commit(&repo, &b)?.ok_or_else(|| fail(CONFLICT, format!("{b} names no commit")))?;
+    match repo.merge_base(left, right) {
+        Ok(oid) => Ok(Some(oid.to_string())),
+        Err(error) if error.code() == ErrorCode::NotFound => Ok(None),
+        Err(error) => Err(io(error)),
+    }
+}
+
 /// `rev` as a commit id, or `None` when nothing by that name exists.
 fn resolve_commit(repo: &Repository, rev: &str) -> Result<Option<Oid>, String> {
     match repo.revparse_single(rev) {
@@ -630,6 +672,48 @@ pub fn git_move_branch(root: String, branch: String, to_commit: String) -> Resul
     repo.set_head(&reference).map_err(io)?;
     repo.checkout_head(Some(CheckoutBuilder::new().force()))
         .map_err(io)?;
+    Ok(())
+}
+
+/// Moves the checked-out branch forward to `to` and brings the work tree
+/// with it — the receive half of a fast-forward, after a fetch.
+///
+/// Forward only: `Rejected` unless `to` descends from HEAD. And SAFE, never
+/// forced: the tree is checked out first with HEAD left where it is, so a
+/// file with changes no commit holds refuses the whole move before the
+/// branch has moved. libgit2 writes only the files that differ.
+#[tauri::command]
+pub fn git_fast_forward(root: String, to: String) -> Result<(), String> {
+    let repo = open_repo(&root)?;
+    if repo.state() != RepositoryState::Clean {
+        return Err(fail(
+            CONFLICT,
+            "a merge or rebase is in progress; finish or abort it first",
+        ));
+    }
+    let branch = current_branch(&repo)?;
+    let target = resolve_commit(&repo, &to)?
+        .ok_or_else(|| fail(CONFLICT, format!("{to} names no commit")))?;
+    let head = repo.head().ok().and_then(|head| head.target());
+    if head == Some(target) {
+        return Ok(());
+    }
+    if let Some(head) = head {
+        let forward = repo.graph_descendant_of(target, head).map_err(io)?;
+        if !forward {
+            return Err(fail(
+                REJECTED,
+                format!("{to} does not descend from {branch}; not a fast-forward"),
+            ));
+        }
+    }
+    let commit = repo.find_commit(target).map_err(io)?;
+    repo.checkout_tree(commit.as_object(), Some(CheckoutBuilder::new().safe()))
+        .map_err(|error| fail(REJECTED, error.message()))?;
+    let reference = format!("refs/heads/{branch}");
+    repo.reference(&reference, target, true, "sefer: fast-forward")
+        .map_err(io)?;
+    repo.set_head(&reference).map_err(io)?;
     Ok(())
 }
 
@@ -712,6 +796,51 @@ fn fetch_branch(
         phase: "fetch".to_string(),
         loaded: stats.received_objects(),
         total: Some(stats.total_objects()),
+    })
+}
+
+/// What `url` is, from its refs alone: no clone, no repository on disk.
+/// Anonymous unless both halves of a credential are given, as `git_fetch` is.
+#[tauri::command]
+pub fn git_probe(
+    url: String,
+    username: Option<String>,
+    token: Option<String>,
+) -> Result<GitProbe, String> {
+    let mut remote = git2::Remote::create_detached(url.as_str()).map_err(transport_failure)?;
+    let connection = remote
+        .connect_auth(
+            Direction::Fetch,
+            Some(remote_callbacks(credential_pair(&username, &token))),
+            None,
+        )
+        .map_err(transport_failure)?;
+    // An empty repository has no HEAD to name a branch, and says so as an
+    // error. Asked FIRST, because `list()` on a remote with no refs builds a
+    // slice from a null pointer in git2 0.20 (fixed in 0.21): an empty
+    // repository is answered here without listing anything.
+    let Ok(default) = connection.default_branch() else {
+        return Ok(GitProbe {
+            default_branch: None,
+            head: None,
+            empty: true,
+        });
+    };
+    let default_branch = default
+        .as_str()
+        .map(|name| name.trim_start_matches("refs/heads/").to_string());
+    let heads = connection.list().map_err(transport_failure)?;
+    let head = heads
+        .iter()
+        .find(|entry| entry.name() == "HEAD")
+        .map(|entry| entry.oid().to_string());
+    let empty = !heads
+        .iter()
+        .any(|entry| entry.name().starts_with("refs/heads/"));
+    Ok(GitProbe {
+        default_branch,
+        head,
+        empty,
     })
 }
 
@@ -869,12 +998,34 @@ pub fn git_push(
         });
     }
 
+    // libgit2 refuses a non-fast-forward itself, before sending ("cannot push
+    // non-fastforwardable reference"). A ref the SERVER then refuses — a
+    // protected branch, a hook — is reported only through this callback, and
+    // `push` itself still returns Ok, so without it that refusal reads as a
+    // sent push.
+    let refused = Arc::new(Mutex::new(None::<String>));
+    {
+        let refused = Arc::clone(&refused);
+        callbacks.push_update_reference(move |name, status| {
+            if let Some(reason) = status {
+                if let Ok(mut held) = refused.lock() {
+                    *held = Some(format!("{name}: {reason}"));
+                }
+            }
+            Ok(())
+        });
+    }
+
     let mut options = PushOptions::new();
     options.remote_callbacks(callbacks);
     let refspec = format!("refs/heads/{branch}:refs/heads/{branch}");
     handle
         .push(&[refspec.as_str()], Some(&mut options))
         .map_err(transport_failure)?;
+    let refusal = refused.lock().ok().and_then(|mut held| held.take());
+    if let Some(reason) = refusal {
+        return Err(fail(REJECTED, format!("push rejected: {reason}")));
+    }
 
     Ok(GitProgress {
         phase: "push".to_string(),

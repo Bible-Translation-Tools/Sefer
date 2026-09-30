@@ -40,6 +40,7 @@ import { createOnGitea, hostOf } from "#core/remote/onGitea";
 import {
   Remote,
   RemoteError,
+  type Probe,
   type Progress,
   type RemoteFailureReason,
   type RemoteService,
@@ -313,6 +314,33 @@ const makeWebRemote = (
           (remotes) => Option.fromNullishOr(remotes.find((entry) => entry.remote === ORIGIN)?.url),
         ),
 
+      // Refs only, over the same transport and headers a transfer uses. The
+      // URL is mapped to its content host first, as `attach` maps it, so a
+      // proxy URL and the server's own URL give the same answer.
+      probe: (requested) =>
+        Effect.gen(function* () {
+          const url = identityOf(options.transport, requested);
+          const last = { current: { phase: "done", loaded: 0 } satisfies Progress };
+          const wire = yield* wireAt(url, "", last, "optional");
+          const info = yield* attempt(() =>
+            git.getRemoteInfo2({
+              http: wire.http,
+              url,
+              headers: wire.headers,
+              ...(wire.onAuth === undefined ? {} : { onAuth: wire.onAuth }),
+              protocolVersion: 1,
+            }),
+          );
+          const refs = info.refs ?? [];
+          const head = refs.find((entry) => entry.ref === "HEAD");
+          const heads = refs.filter((entry) => entry.ref.startsWith("refs/heads/"));
+          return {
+            defaultBranch: Option.fromNullishOr(head?.target?.replace(/^refs\/heads\//u, "")),
+            head: Option.fromNullishOr(head?.oid),
+            empty: heads.length === 0,
+          } satisfies Probe;
+        }),
+
       // A bare fetch: it updates the remote-tracking refs and touches no file
       // in the work tree, which is what makes it the safe thing to offer
       // someone who wants to know whether anything arrived.
@@ -320,6 +348,43 @@ const makeWebRemote = (
         transfer(repo, "optional", (wire, branch) =>
           git.fetch({ ...wire, ref: branch, remoteRef: branch, singleBranch: true, prune: true }),
         ),
+
+      // Forward only, and never forced. The work tree is checked out to `to`
+      // first, with HEAD left alone, so a checkout that refuses (a file with
+      // changes no commit holds) leaves the branch where it was; the branch is
+      // moved only once the files are there.
+      fastForward: (repo, to) =>
+        Effect.gen(function* () {
+          const branch = yield* attempt(() =>
+            git.currentBranch({ fs, dir: repo.root, fullname: false }),
+          );
+          if (typeof branch !== "string")
+            return yield* Effect.fail(fail("Rejected", "HEAD is not on a branch"));
+          const head = yield* Effect.orElseSucceed(
+            attempt(() => git.resolveRef({ fs, dir: repo.root, ref: "HEAD" })),
+            () => undefined,
+          );
+          if (head === to) return;
+          if (head !== undefined) {
+            const forward = yield* attempt(() =>
+              git.isDescendent({ fs, dir: repo.root, oid: to, ancestor: head, depth: -1 }),
+            );
+            if (!forward)
+              return yield* Effect.fail(
+                fail("Rejected", `${to} does not descend from ${branch}; not a fast-forward`),
+              );
+          }
+          yield* attempt(() => git.checkout({ fs, dir: repo.root, ref: to, noUpdateHead: true }));
+          yield* attempt(() =>
+            git.writeRef({
+              fs,
+              dir: repo.root,
+              ref: `refs/heads/${branch}`,
+              value: to,
+              force: true,
+            }),
+          );
+        }),
 
       // `pull` may write files and may need to make a merge commit, so it
       // carries an author. Fast-forward is not forced: a genuine divergence

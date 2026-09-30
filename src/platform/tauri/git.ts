@@ -115,7 +115,7 @@ export const TauriGitLive: Layer.Layer<Git> = Layer.succeed(Git, {
       }),
     ),
 
-  commit: (repo, receipts, message, author) =>
+  commit: (repo, receipts, message, author, options) =>
     Effect.gen(function* () {
       const paths = yield* Effect.forEach(receipts, (receipt) =>
         relativeOrRefuse(repo, receipt.path),
@@ -126,8 +126,15 @@ export const TauriGitLive: Layer.Layer<Git> = Layer.succeed(Git, {
         message,
         authorName: author.name,
         authorEmail: author.email,
+        alsoParents: options?.alsoParents ?? null,
       });
     }),
+
+  mergeBase: (repo, a, b) =>
+    Effect.map(
+      call<CommitId | null>("git_merge_base", { root: repo.root, a, b }),
+      Option.fromNullishOr,
+    ),
 
   log: (repo, path) =>
     Effect.gen(function* () {

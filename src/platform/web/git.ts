@@ -15,6 +15,7 @@ import {
   type ChangedPath,
   type Commit,
   type CommitId,
+  type CommitOptions,
   Git,
   GitError,
   type GitFailureReason,
@@ -137,6 +138,7 @@ const makeWebGit = (fileSystem: FileSystem.FileSystem): GitService => {
       receipts: readonly SaveReceiptLike[],
       message: string,
       author: Author,
+      options?: CommitOptions,
     ): Effect.Effect<CommitId, GitError> =>
       Effect.gen(function* () {
         if (receipts.length === 0) {
@@ -148,7 +150,40 @@ const makeWebGit = (fileSystem: FileSystem.FileSystem): GitService => {
           const filepath = yield* relativeOrRefuse(repo, receipt.path);
           yield* attempt("Io", () => git.add({ fs, dir: repo.root, filepath }));
         }
-        return yield* attempt("Io", () => git.commit({ fs, dir: repo.root, message, author }));
+        const also = options?.alsoParents ?? [];
+        // isomorphic-git's `parent` REPLACES HEAD as the parent list, so a
+        // decision commit names HEAD first itself.
+        const parent =
+          also.length === 0
+            ? undefined
+            : [
+                yield* attempt("Conflict", () =>
+                  git.resolveRef({ fs, dir: repo.root, ref: "HEAD" }),
+                ),
+                ...also,
+              ];
+        return yield* attempt("Io", () =>
+          git.commit({
+            fs,
+            dir: repo.root,
+            message,
+            author,
+            ...(parent === undefined ? {} : { parent }),
+          }),
+        );
+      }),
+
+    mergeBase: (repo, a, b) =>
+      Effect.gen(function* () {
+        const [left, right] = yield* Effect.all([
+          attempt("Conflict", () => git.resolveRef({ fs, dir: repo.root, ref: a })),
+          attempt("Conflict", () => git.resolveRef({ fs, dir: repo.root, ref: b })),
+        ]);
+        const found = yield* attempt("Conflict", () =>
+          git.findMergeBase({ fs, dir: repo.root, oids: [left, right] }),
+        );
+        const first: unknown = found[0];
+        return typeof first === "string" ? Option.some(first) : Option.none();
       }),
 
     log,

@@ -33,6 +33,7 @@ import { createOnGitea, hostOf } from "#core/remote/onGitea";
 import {
   Remote,
   RemoteError,
+  type Probe,
   type Progress,
   type RemoteFailureReason,
   type RemoteService,
@@ -50,6 +51,13 @@ export interface TauriRemoteOptions {
 }
 
 /** The wire shape of `git.rs`'s `GitProgress`. */
+/** The wire shape of `git.rs`'s `GitProbe`. */
+interface WireProbe {
+  readonly default_branch: string | null;
+  readonly head: string | null;
+  readonly empty: boolean;
+}
+
 interface WireProgress {
   readonly phase: string;
   readonly loaded: number;
@@ -197,7 +205,24 @@ const makeTauriRemote = (
           call<string | null>("git_remote_url", { root: repo.root, name: ORIGIN }),
           Option.fromNullishOr,
         ),
+      probe: (url) =>
+        Effect.gen(function* () {
+          const credential = Option.getOrNull(yield* credentialFor(url));
+          const wire = yield* call<WireProbe>("git_probe", {
+            url,
+            username: credential?.username ?? null,
+            token: credential?.token ?? null,
+          });
+          return {
+            defaultBranch: Option.fromNullishOr(wire.default_branch),
+            head: Option.fromNullishOr(wire.head),
+            empty: wire.empty,
+          } satisfies Probe;
+        }),
       fetch: (repo) => transfer("git_fetch", repo, "optional"),
+      // Local: no origin, no credential. The forward-only and safe-checkout
+      // refusals are git2's, in Rust.
+      fastForward: (repo, to) => call<void>("git_fast_forward", { root: repo.root, to }),
       pull: (repo) => transfer("git_pull", repo, "optional"),
       push: (repo) => transfer("git_push", repo, "required"),
       publish: (repo, target) =>

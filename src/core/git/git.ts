@@ -55,6 +55,15 @@ export interface ChangedPath {
   readonly kind: ChangeKind;
 }
 
+/**
+ * `alsoParents` makes a decision commit: HEAD stays the first parent and these
+ * follow, so the commit joins the other side's history to ours. The tree is
+ * still exactly what the receipts staged; git's merge never runs.
+ */
+export interface CommitOptions {
+  readonly alsoParents?: readonly CommitId[];
+}
+
 export interface Status {
   readonly changed: readonly ChangedPath[];
 }
@@ -101,7 +110,18 @@ export interface GitService {
     receipts: readonly SaveReceiptLike[],
     message: string,
     author: Author,
+    options?: CommitOptions,
   ) => Effect.Effect<CommitId, GitError>;
+  /**
+   * The best common ancestor of two revs, from commit ancestry alone — no
+   * tree is read. `None` when they share no history (or, in a shallow
+   * repository, none that is here yet).
+   */
+  readonly mergeBase: (
+    repo: Repo,
+    a: string,
+    b: string,
+  ) => Effect.Effect<Option.Option<CommitId>, GitError>;
   /** Newest first. With `path`, only commits that touched that path. */
   readonly log: (repo: Repo, path?: string) => Effect.Effect<readonly Commit[], GitError>;
   /**
