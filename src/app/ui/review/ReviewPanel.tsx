@@ -719,6 +719,17 @@ export function ReviewPanel() {
       if (Option.isNone(baseline)) continue;
       receipts.push({ path: baseline.value.path, stamp: baseline.value.stamp });
     }
+    // What those saves also kept current (a burrito's metadata.json) goes in
+    // the same version, once, so no file Sefer wrote is left unrecorded.
+    if (receipts.length > 0) {
+      const staged = new Set(receipts.map((receipt) => receipt.path));
+      for (const receipt of saved.success)
+        for (const path of receipt.also)
+          if (!staged.has(path)) {
+            staged.add(path);
+            receipts.push({ path, stamp: receipt.stamp });
+          }
+    }
     if (receipts.length === 0) {
       toasts.update(notice, { title: t("Nothing to record"), tone: "info" });
       setRecording(false);

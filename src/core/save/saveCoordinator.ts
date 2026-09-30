@@ -65,6 +65,12 @@ export interface SaveReceipt {
   /** Byte length of the bytes actually written, in the file's own form. */
   readonly bytes: number;
   readonly at: number;
+  /**
+   * Other files this save made current — a burrito's `metadata.json`, whose
+   * ingredient checksums describe this book. Sefer wrote them, so they are
+   * receipts too, and they belong in the same commit as the book.
+   */
+  readonly also: readonly string[];
 }
 
 type SaveFailure =
@@ -203,8 +209,12 @@ export interface SaveCoordinatorOptions {
    * rather than a decorator around the service: a wrapper outside could be
    * bypassed by the one caller that matters. A failure is ignored — the
    * project's own bytes are already written.
+   *
+   * It answers the paths it keeps current for this book, written or not, and
+   * they become the receipt's `also`: a file that already matched is staged
+   * as a no-op, and one an earlier failed commit left behind is recorded now.
    */
-  readonly onSaved?: (receipt: SaveReceipt) => Effect.Effect<void, unknown>;
+  readonly onSaved?: (receipt: SaveReceipt) => Effect.Effect<readonly string[], unknown>;
 }
 
 /**
@@ -376,6 +386,7 @@ const make = (
           ...(hash === undefined ? {} : { hash }),
           bytes: bytes.length,
           at,
+          also: [],
         };
         // 5 the baseline Diff consumes
         baselines.set(book.id, {
@@ -403,8 +414,9 @@ const make = (
             });
         }
         // 8 what composition hangs off a completed write (see `onSaved`).
-        if (options.onSaved !== undefined) yield* Effect.ignore(options.onSaved(receipt));
-        return receipt;
+        if (options.onSaved === undefined) return receipt;
+        const also = yield* Effect.orElseSucceed(options.onSaved(receipt), () => []);
+        return { ...receipt, also };
       });
 
     /** Reads the file back and says whether it differs from what we wrote. */

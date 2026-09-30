@@ -49,6 +49,7 @@ import { HostInfo, type HostInfoService, type HostPaths } from "#core/host/hostI
 import { Settings, SettingsLive, type SettingsService } from "#core/host/settings";
 import { NoUpdaterLive, Updater, type UpdaterService } from "#core/host/updater";
 import { Observability } from "#core/observability";
+import { METADATA_FILE } from "#core/project/discovery";
 import type { Seat } from "#core/project/project";
 import { Recovery, RecoveryLive, type RecoveryService } from "#core/recovery/recovery";
 import { Gitea, GiteaLive, type GiteaService, type HttpFetch } from "#core/remote/gitea";
@@ -283,11 +284,16 @@ const saveLayer: Layer.Layer<
       // `ingredientFor` answers both questions at once — which project this
       // path belongs to, and what the ingredient is called inside it — and a
       // path under no `metadata.json` is a folder of loose USFM, not an error.
+      // The metadata path is answered whenever the book belongs to a burrito,
+      // so Record a version commits it with the book: a checksum written and
+      // never recorded would leave the project unrecorded after every save.
       onSaved: (receipt) =>
         Effect.flatMap(ingredientFor(fileSystem, receipt.path), (found) =>
           Option.isNone(found)
-            ? Effect.void
-            : Effect.asVoid(admin.refreshChecksums(found.value.root, [found.value.name])),
+            ? Effect.succeed([])
+            : Effect.as(admin.refreshChecksums(found.value.root, [found.value.name]), [
+                `${found.value.root}/${METADATA_FILE}`,
+              ]),
         ),
     });
   }),
