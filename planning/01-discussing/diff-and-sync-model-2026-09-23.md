@@ -66,7 +66,7 @@ On the `git-lifecycle` branch, in the order agreed (lanes, facts and policy, hos
 - **Combine takes `reviewed`** (and receive too): after Review has settled the contested books, their text is the decision and the refusal does not apply. `theirs` points either at a suggestion's head.
 - **Unrecorded work no longer refuses Combine.** Nothing is checked out over it; the files that arrive are only ones this device did not change, saved or unsaved.
 - **Suggested changes are isolated** so the topology can come out: `core/remote/suggestions.ts`, `app/suggestions.ts` and `SuggestionsCard.tsx`, joined at four one-line seams. With the seams cut, `pnpm deadcode` reports the three files unused (checked 2026-09-30). See [git](../../documentation/architecture/git.md#suggested-changes).
-- **Not built yet:** the unhealthy-repository copy and its Advanced tools ([§18](#18-resolved)); the Advanced / troubleshooting panel; bug 11 (the reading's `uncommitted` still comes from `git status`, though receive and Combine classify against the editor); `@codemirror/merge` for non-scripture files ([§4](#4-the-shape-of-every-comparison)), so the sid-aligned invariant is unchanged. From [§17](#17-small-todo-list-while-in-there), the kebab's "Save", the Review dev copy and `DEFAULT_BRANCH` are done; the copy suggestions wait for the PO pass.
+- **Not built yet:** the unhealthy-repository copy and its Advanced tools ([§18](#18-resolved)); the Advanced / troubleshooting panel; `@codemirror/merge` for non-scripture files ([§4](#4-the-shape-of-every-comparison)), so the sid-aligned invariant is unchanged. From [§17](#17-small-todo-list-while-in-there), the kebab's "Save", the Review dev copy and `DEFAULT_BRANCH` are done; the copy suggestions wait for the PO pass.
 
 ## 3. Rules that are settled
 
@@ -488,7 +488,7 @@ Never recorded: a path beyond its last segment, a URL, an account name, or any t
 
 ## 15. Bugs this work fixes
 
-Fixed on `git-lifecycle`: 1–10 and 12. Open: 11, 13, 14.
+Fixed on `git-lifecycle`: 1–12. Open: 13 and 14, which go with the history index.
 
 1. Open Books are not reloaded after a pull or Combine, so the next save reverts the incoming work ([§11](#11-receiving)).
 2. Web `pull` can merge automatically; desktop refuses. Receive becomes fetch + fast-forward on both hosts ([§11](#11-receiving)).

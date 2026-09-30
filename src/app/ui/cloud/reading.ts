@@ -17,7 +17,8 @@
 import { Effect, FileSystem, Option, Result } from "effect";
 
 import type { Galley } from "#core/galley";
-import { Git, type Commit } from "#core/git/git";
+import { DEFAULT_BRANCH, Git, type Commit } from "#core/git/git";
+import type { Project } from "#core/project/project";
 import { Gitea } from "#core/remote/gitea";
 import { Remote } from "#core/remote/remote";
 import {
@@ -51,12 +52,11 @@ export interface SyncSurvey {
     | undefined;
 }
 
-/** The branch to assume when HEAD is unborn — the one `git.init` creates. */
-const DEFAULT_BRANCH = "main";
-
 export interface ReadSyncOptions {
   /** The project's work tree. */
   readonly root: string;
+  /** The open project, so the plan measures "also changed here" against the editor. */
+  readonly project: Project;
   /** The Gitea host this build talks to; `null` when none is configured. */
   readonly host: string | null;
   /** `navigator.onLine`, passed in so the pure side stays testable. */
@@ -165,7 +165,12 @@ export const readSync = (
     // Combine asks the same question before it runs, and the screen must not
     // be able to offer a move the program then refuses.
     const plan = Effect.map(
-      surveyIncoming(repo, { tracking, base: mergeBase(localLog, remoteLog), behind }),
+      surveyIncoming(repo, {
+        tracking,
+        base: mergeBase(localLog, remoteLog),
+        behind,
+        project: options.project,
+      }),
       (survey) => survey.plan,
     );
     return { reading, plan };

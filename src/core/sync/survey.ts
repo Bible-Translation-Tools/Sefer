@@ -19,6 +19,8 @@ import { Effect, FileSystem, Result } from "effect";
 import { identifyBook } from "../book/book";
 import { Galley, toLf } from "../galley";
 import { Git, type ChangedPath, type Commit, type Repo } from "../git/git";
+import type { Project } from "../project/project";
+import { booksByPath } from "./classify";
 import { bookFacts, type BookFacts, type Diff } from "./facts";
 import { incomingPlan, type IncomingPlan } from "./plan";
 
@@ -50,6 +52,12 @@ export interface SurveyOptions {
   readonly base: Commit | undefined;
   /** The cloud's commits this device does not have, newest first. */
   readonly behind: readonly Commit[];
+  /**
+   * The open project. Its Books' CURRENT text is this device's side, unsaved
+   * edits included, the way receive and Combine classify; without it, the
+   * work tree's file is.
+   */
+  readonly project?: Project | undefined;
 }
 
 /** What one survey answers: the plan, and the raw paths it was built from. */
@@ -129,11 +137,16 @@ export const surveyIncoming = (
     const empty = [] as readonly ChangedPath[];
     const changed = yield* orEmpty(git.changedPathsBetween(repo, from, options.tracking), empty);
 
+    const books = options.project === undefined ? undefined : booksByPath(repo, options.project);
     const facts: BookFacts[] = [];
     for (const entry of changed) {
       if (!USFM.test(entry.path)) continue;
       const theirs = yield* textAt(repo, options.tracking, entry.path);
-      const mine = yield* textHere(fileSystem, repo.root, entry.path);
+      const book = books?.get(entry.path);
+      const mine =
+        book === undefined
+          ? yield* textHere(fileSystem, repo.root, entry.path)
+          : book.source().text;
       // With no shared history there is no base to measure from, and "absent
       // at the base" is the safe reading: both sides then count as having
       // changed the book, so nothing is offered as an automatic fast-forward.

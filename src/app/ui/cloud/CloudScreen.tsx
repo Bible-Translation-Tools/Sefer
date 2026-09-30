@@ -174,6 +174,7 @@ export function CloudScreen() {
     if (project === undefined || fixtureState() !== undefined) return undefined;
     return {
       root: project.root,
+      project,
       host: account.host,
       online: network.online(),
       lastFailure: network.lastFailure(),

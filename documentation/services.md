@@ -400,6 +400,7 @@ There is one diff: the engine's decision units, addressed by sid (`core/diff/ske
 - The plan: `planning/01-discussing/diff-and-sync-model-2026-09-23.md`. Skip by stamp, read only changed books, one change classification shared by History, Review and Cloud, — History and `projectSource` are on decision units and `core/diff/diff.ts` is deleted (2026-09-27); what remains is skipping the read by stamp.
 - The diff UI redesign is paused on `/project/$slug/playground`.
 - **Default baseline: the file on disk against the working session, not the last commit.**
+- **Open: files that aren't scripture** (a manifest, a versification file, `metadata.json`) have no comparison view. The agreed shape is `@codemirror/merge`'s read-only view, pick one side, behind Advanced; when it lands, the INVARIANTS rule becomes "Scripture diffs are sid-aligned". Until then Combine refuses a non-scripture file both sides changed.
 
 ## Review
 
