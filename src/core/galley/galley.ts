@@ -89,11 +89,14 @@ export {
   POOLS,
 } from "@wycliffeassociates/scripture-kitchen/sous-reader";
 export type {
+  CasingForm,
   Channel,
+  Cluster,
   ConventionReason,
   OuterClass,
   PatternKey,
   Pool,
+  Usual,
 } from "@wycliffeassociates/scripture-kitchen/sous-reader";
 // The TOC reader, same rule: `toc`/`tocAll` answer these classes, and the
 // sidebar reads chapter counts off them without learning a layout.

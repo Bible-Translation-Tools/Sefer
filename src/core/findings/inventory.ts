@@ -39,7 +39,9 @@ import type { BookId } from "../book/book";
 import {
   OUTER_CLASSES,
   PATTERN_DIGIT_GLYPH,
+  type CasingForm,
   type Channel,
+  type Cluster,
   type ConventionReason,
   type EngineStamp,
   type FindingsSnapshot,
@@ -47,6 +49,7 @@ import {
   type Pattern,
   type PatternKey,
   type Pool,
+  type Usual,
 } from "../galley";
 import type { SourceStamp } from "../source/source";
 
@@ -71,8 +74,12 @@ export interface PatternRow {
   readonly shareBp: number;
   /** Books holding part of the numerator, out of the snapshot's book count. */
   readonly books: number;
-  /** Staircase step, `null` on `Rarity`. */
+  /** Staircase step, `null` on `Rarity` and `BookRate`. */
   readonly band: number | null;
+  /** What the corpus does instead, as a phrase: `usually after a letter (54,620)`. */
+  readonly usual: string | undefined;
+  /** On a `RunShape` row: its exact clusters, most frequent first. */
+  readonly clusters: readonly Cluster[];
   /** Convention findings in this publication whose `pattern` is this row. */
   readonly flagged: number;
 }
@@ -139,7 +146,7 @@ export interface Glyph {
   readonly placement: readonly PlacementCell[];
   /** `RunShape` — how long a run of it gets, and whether the run is pure. */
   readonly runShape: readonly PatternRow[];
-  /** `Rarity`, `LetterRun`, `SentenceStart`. */
+  /** `Rarity`, `LetterRun`, `SentenceStart`, `BookRate`. */
   readonly other: readonly PatternRow[];
   /** Every row above, flat, in table order — the id space for a filter. */
   readonly rows: readonly PatternRow[];
@@ -291,8 +298,8 @@ const poolOf = (codePoint: number): Pool => {
   return "Other";
 };
 
-/** The key as a short phrase. One place, so a table and a message agree. */
-const labelOf = (key: PatternKey): string => {
+/** The key as a short phrase. `bookKey` names a book by its snapshot position. */
+const labelOf = (key: PatternKey, bookKey: (index: number) => string): string => {
   switch (key.kind) {
     case "ExactNeighbor":
       return key.neighbor === PATTERN_DIGIT_GLYPH ? "a digit" : String.fromCodePoint(key.neighbor);
@@ -314,19 +321,78 @@ const labelOf = (key: PatternKey): string => {
       return `σ ${key.sigma}`;
     case "Doubled":
       return key.separated ? "doubled, separated" : "doubled";
+    case "BookRate":
+      return `${key.side === "prev" ? "after" : "before"} ${CLASS_NAMES[key.class]} in ${bookKey(key.book)}`;
   }
 };
 
-const rowOf = (pattern: Pattern, index: number, flagged: number): PatternRow => ({
+const CLASS_NAMES: Record<OuterClass, string> = {
+  Letter: "a letter",
+  Space: "a space",
+  Digit: "a digit",
+  Nonletter: "a punctuation mark",
+  Edge: "the edge of the text",
+};
+
+const FORM_NAMES: Record<CasingForm, string> = {
+  Lower: "lowercase",
+  Title: "capitalized",
+  Upper: "in capitals",
+  Mixed: "in mixed case",
+  Uncased: "uncased",
+};
+
+const count = (n: number): string => n.toLocaleString("en");
+
+const quoted = (glyph: number): string =>
+  glyph === PATTERN_DIGIT_GLYPH ? "a digit" : `“${String.fromCodePoint(glyph)}”`;
+
+/**
+ * What the corpus does instead of the row's claim, as a phrase beside it.
+ * `key` says which side a placement's usual class is on.
+ */
+const usualOf = (key: PatternKey, usual: Usual): string | undefined => {
+  switch (usual.kind) {
+    case "None":
+      return undefined;
+    case "Placement":
+      return key.kind === "Placement" && key.side === "next"
+        ? `usually before ${CLASS_NAMES[usual.class]} (${count(usual.count)})`
+        : `usually after ${CLASS_NAMES[usual.class]} (${count(usual.count)})`;
+    case "ExactNeighbor":
+      return `usually followed by ${quoted(usual.neighbor)} (${count(usual.count)})`;
+    case "RunShape":
+      return usual.bucket <= 1
+        ? `usually alone (${count(usual.count)})`
+        : `usually in a ${usual.pure ? "run" : "mixed group"} of ${usual.bucket} (${count(usual.count)})`;
+    case "Rarity":
+      return usual.glyph === null
+        ? undefined
+        : `most common of its kind: ${quoted(usual.glyph)} (${count(usual.count)})`;
+    case "Casing":
+      return `usually ${FORM_NAMES[usual.form]} (${count(usual.count)})`;
+    case "BookRate":
+      return `${(usual.baselineBp / 100).toLocaleString("en", { maximumFractionDigits: 1 })}% in the other ${count(usual.otherBooks)} books`;
+  }
+};
+
+const rowOf = (
+  pattern: Pattern,
+  index: number,
+  flagged: number,
+  bookKey: (index: number) => string,
+): PatternRow => ({
   pattern: index,
   channel: pattern.channel,
   key: pattern.key,
-  label: labelOf(pattern.key),
+  label: labelOf(pattern.key, bookKey),
   numerator: pattern.numerator,
   denominator: pattern.denominator,
   shareBp: pattern.shareBp,
   books: pattern.books,
   band: pattern.band,
+  usual: usualOf(pattern.key, pattern.usual),
+  clusters: pattern.clusters ?? [],
   flagged,
 });
 
@@ -365,6 +431,7 @@ export const inventory = (
 ): Inventory => {
   const patterns = snapshot.patterns();
   const wordPatterns: PatternRow[] = [];
+  const bookKey = (index: number): string => snapshot.book(index)?.key ?? String(index + 1);
 
   // Pass one: how many convention sites name each pattern row, and where they
   // are. Counting first means a row knows its own flagged count when it is
@@ -401,7 +468,7 @@ export const inventory = (
   for (let index = 0; index < patterns.length; index += 1) {
     const pattern = patterns[index];
     const sites = hits.get(index) ?? [];
-    const row = rowOf(pattern, index, sites.length);
+    const row = rowOf(pattern, index, sites.length, bookKey);
     if (WORD_CHANNELS.has(pattern.channel)) {
       wordPatterns.push(row);
       continue;
@@ -437,7 +504,8 @@ export const inventory = (
         (row) =>
           row.channel === "Rarity" ||
           row.channel === "LetterRun" ||
-          row.channel === "SentenceStart",
+          row.channel === "SentenceStart" ||
+          row.channel === "BookRate",
       )
       .sort(byWeight);
     let sites = 0;
