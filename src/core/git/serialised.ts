@@ -74,7 +74,6 @@ export const serialiseRemote = (
     probe: remote.probe,
     fetch: (repo) => write(repo.root, "fetch", remote.fetch(repo)),
     fastForward: (repo, to) => write(repo.root, "fast-forward", remote.fastForward(repo, to)),
-    pull: (repo) => write(repo.root, "pull", remote.pull(repo)),
     push: (repo) => write(repo.root, "push", remote.push(repo)),
     publish: (repo, target) => write(repo.root, "publish", remote.publish(repo, target)),
     moveBranch: (repo, branch, toCommit) =>

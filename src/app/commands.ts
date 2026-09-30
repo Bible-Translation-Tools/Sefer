@@ -22,11 +22,9 @@ import { Effect, Option, Result, type Scope } from "effect";
 import { createSignal } from "solid-js";
 
 import { applyFormat, applyOverlay, formatBook, overlayBook } from "#core/fixes/fixes";
-import { Git } from "#core/git/git";
 import { makeMultiBook } from "#core/multibook/multibook";
 import { Observability, type ObservabilityService } from "#core/observability";
 import type { Project } from "#core/project/project";
-import { Remote } from "#core/remote/remote";
 import { emptyBlocks, structureAt, withoutScrolling } from "#editor/index";
 import type { EditorAction, EditorBook, ProjectionName } from "#editor/index";
 
@@ -344,29 +342,14 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
   const multibook = makeMultiBook(() => bridge.project()?.books ?? []);
 
   /**
-   * Pull and push differ by one word, so they share this. The project's
-   * repository is opened rather than initialised: transferring into a folder
-   * that is not a repository yet is a publish, not a pull.
+   * Receiving and sending happen on the cloud screen, where the plan card says
+   * what would arrive and a second press applies it. The palette opens that
+   * screen rather than transferring directly: a transfer from here would skip
+   * both, and a receive needs the plan a person has actually read.
    */
-  const runTransfer = (direction: "pull" | "push") => {
-    const project = bridge.project();
-    if (project === undefined) return;
-    return Effect.gen(function* () {
-      const git = yield* Git;
-      const remote = yield* Remote;
-      const repo = yield* git.open(project.root);
-      const progress = yield* direction === "pull" ? remote.pull(repo) : remote.push(repo);
-      bridge.report(
-        t("{direction}: {phase} ({loaded})", {
-          direction,
-          phase: progress.phase,
-          loaded: progress.loaded,
-        }),
-      );
-      // No book list: a transfer moves the repository under the whole
-      // project, and which books it touched is git's answer, not one we ask.
-      bridge.changed({ kind: "remote.transfer" });
-    });
+  const openCloud = (): void => {
+    if (bridge.project() === undefined) return;
+    void bridge.navigate({ to: "/project/$slug/cloud", params: { slug: bridge.slug() } });
   };
 
   const registrations = [
@@ -636,7 +619,8 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
     // ---------------------------------------------------------------------
     // Remote sync. Three commands, because remote work is three separate
     // approvals: prove who you are, take what arrived, publish what you did.
-    // None of them ever runs by itself (documentation/architecture/git.md).
+    // The last two open the cloud screen, which does the transfer after a
+    // second press (documentation/architecture/sync.md).
     // ---------------------------------------------------------------------
 
     registerCommand({
@@ -663,16 +647,16 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
 
     registerCommand({
       id: "remote.pull",
-      title: t("Pull from the cloud"),
+      title: t("Receive updates…"),
       when: hasProject,
-      run: () => runTransfer("pull"),
+      run: openCloud,
     }),
 
     registerCommand({
       id: "remote.push",
-      title: t("Push to the cloud"),
+      title: t("Send my changes…"),
       when: hasProject,
-      run: () => runTransfer("push"),
+      run: openCloud,
     }),
 
     registerCommand({

@@ -18,11 +18,10 @@
  * which books keep this device's version and a dialog names them.
  */
 
-import { Effect, Fiber, type FileSystem, Stream } from "effect";
+import { Effect, Fiber, Stream } from "effect";
 import CloudIcon from "lucide-solid/icons/cloud";
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 
-import type { Galley } from "#core/galley";
 import { Git } from "#core/git/git";
 import { Observability, type Attrs, type Operation, type Verdict } from "#core/observability";
 import { Remote, remoteVerdict } from "#core/remote/remote";
@@ -31,6 +30,8 @@ import {
   CombineError,
   emptyPlan,
   previewCombine,
+  receive,
+  ReceiveError,
   sync,
   wantsPlan,
   type CombineReplay,
@@ -42,11 +43,12 @@ import { describe, remoteReasonOf } from "../../describe";
 import { rememberSync } from "../../diagnostics";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
+import type { Domain } from "../../services";
 import { Button, Card, Dialog, EmptyState, PanelHeader } from "../primitives";
 import { createAccount } from "./account";
 import { AccountCard } from "./AccountCard";
 import { ActionCard } from "./ActionCard";
-import { bookFromPath, combineRefusal, combineTrouble, narrate } from "./copy";
+import { bookFromPath, combineRefusal, combineTrouble, narrate, receiveRefusal } from "./copy";
 import { DevStateSwitcher } from "./DevStateSwitcher";
 import { fixtureFacts, fixtureReplay, fixtureStateRequested } from "./fixture";
 import { IncomingPlanCard } from "./IncomingPlanCard";
@@ -77,6 +79,11 @@ const explainCombine = (cause: unknown): string | undefined => {
   if (!(cause instanceof CombineError)) return undefined;
   return cause.refusal === undefined ? combineTrouble(cause.state) : combineRefusal(cause.refusal);
 };
+
+const explainReceive = (cause: unknown): string | undefined =>
+  cause instanceof ReceiveError && cause.refusal !== undefined
+    ? receiveRefusal(cause.refusal, cause.books)
+    : undefined;
 
 export function CloudScreen() {
   const shell = useShell();
@@ -295,9 +302,7 @@ export function CloudScreen() {
    */
   const transfer = (
     action: SyncActionId,
-    work: (
-      root: string,
-    ) => Effect.Effect<unknown, unknown, Git | Remote | FileSystem.FileSystem | Galley>,
+    work: (root: string) => Effect.Effect<unknown, unknown, Domain>,
     explain?: (cause: unknown) => string | undefined,
   ): void => {
     const project = shell.project();
@@ -352,12 +357,12 @@ export function CloudScreen() {
       return yield* remote.fetch(yield* git.open(root));
     });
 
-  const pull = (root: string) =>
-    Effect.gen(function* () {
-      const git = yield* Git;
-      const remote = yield* Remote;
-      return yield* remote.pull(yield* git.open(root));
-    });
+  // A receive moves the Books with the files, so it needs the open project,
+  // not just its folder.
+  const pull = () => {
+    const project = shell.project();
+    return project === undefined ? Effect.void : receive({ project });
+  };
 
   const push = (root: string) =>
     Effect.gen(function* () {
@@ -436,7 +441,7 @@ export function CloudScreen() {
           return;
         }
         setConfirming(false);
-        transfer(action, pull);
+        transfer(action, pull, explainReceive);
         return;
       case "combine":
         // Two presses, like a pull, and for a stronger reason: this one

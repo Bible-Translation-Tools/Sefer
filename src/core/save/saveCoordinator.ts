@@ -46,7 +46,7 @@ import {
   Stream,
 } from "effect";
 
-import { trustedBy, type Book, type BookId } from "../book/book";
+import { trustedBy, type Book, type BookId, type Origin } from "../book/book";
 import { writeFileAtomic } from "../fileSystem/atomic";
 import { Observability, type ObservabilityService } from "../observability";
 import type { ExternalChange } from "../project/project";
@@ -151,6 +151,29 @@ export interface SaveCoordinatorService {
     change: ExternalChange,
     choice: ResolveChoice,
   ) => Effect.Effect<Option.Option<Baseline>, SaveError>;
+  /**
+   * Hands `book` the text its file holds now, as ONE trusted edit through the
+   * funnel, and makes that text the baseline — `resolve`'s `takeDisk`, for a
+   * file that changed because Sefer itself put new bytes there (a receive's
+   * checkout). `origin` is how the edit is recorded; history shows a received
+   * change as `incoming`, never as a revert.
+   *
+   * Nothing is applied when the book already holds that text, or when
+   * `expect` is given and the book has moved past it (typing landed after
+   * the caller decided this book could be replaced). The baseline moves to
+   * the file's text either way: a book whose file moved on must never keep
+   * measuring "unsaved" against bytes that are gone, or the next save would
+   * write the old text back over the new one without a difference ever
+   * being shown. Answers whether the text was applied.
+   *
+   * Refused when the file is not canonical text, or when the book's rules
+   * refuse the edit — and then the book is left as it was.
+   */
+  readonly takeDisk: (
+    book: Book,
+    origin: Origin,
+    expect?: SourceStamp,
+  ) => Effect.Effect<boolean, SaveError>;
   /** The per-path write queue. Save is the only owner of write ordering. */
   readonly serialize: (
     path: string,
@@ -405,7 +428,9 @@ const make = (
       });
 
     /** The on-disk text as a Baseline-shaped value, for `compare` and `takeDisk`. */
-    const readDisk = (change: ExternalChange): Effect.Effect<Baseline, SaveError> =>
+    const readDisk = (
+      change: Pick<ExternalChange, "bookId" | "path">,
+    ): Effect.Effect<Baseline, SaveError> =>
       Effect.gen(function* () {
         const bytes = yield* Effect.mapError(fileSystem.readFile(change.path), (error) => {
           const reason = failureFor(error);
@@ -436,6 +461,53 @@ const make = (
           // file's mtime and the port's stat is optional on some hosts.
           savedAt: Date.now(),
         };
+      });
+
+    const takeDisk = (
+      book: Book,
+      origin: Origin,
+      expect?: SourceStamp,
+    ): Effect.Effect<boolean, SaveError> =>
+      Effect.gen(function* () {
+        remember(book);
+        const disk = yield* readDisk({ bookId: book.id, path: book.path });
+        const stamp = book.source().stamp;
+        const moved =
+          expect !== undefined &&
+          (stamp.revision !== expect.revision || stamp.length !== expect.length);
+        const apply = !moved && book.source().text !== disk.text;
+        if (apply) {
+          // ONE change replacing the whole text, through the funnel: the
+          // editor's rules judge it, history records one event, and every
+          // reader sees it publish like any other edit.
+          const applied = book.apply(
+            [{ from: 0, to: book.source().text.length, insert: disk.text }],
+            origin,
+            trustedBy("save.takeDisk"),
+          );
+          if (Result.isFailure(applied))
+            return yield* Effect.fail(
+              refuse(book, "Refused", `${origin} refused by ${applied.failure.rule}`),
+            );
+        }
+        // The file's text is the baseline now. When it was applied its stamp
+        // is the book's, after the edit; when the book moved on, the stamp is
+        // the file's own, so `dirty` falls to the hash and says "unsaved".
+        baselines.set(book.id, {
+          ...disk,
+          stamp: apply || !moved ? book.source().stamp : disk.stamp,
+          savedAt: Date.now(),
+        });
+        observability?.note(
+          "baseline.take",
+          moved ? "declined" : "rewrote",
+          moved ? "book moved" : undefined,
+          {
+            "book.id": book.id,
+            "book.origin": origin,
+          },
+        );
+        return apply;
       });
 
     return {
@@ -485,29 +557,16 @@ const make = (
                 description: "no open Book to revert; open it before taking disk",
               }),
             );
-          const disk = yield* readDisk(change);
-          // ONE change replacing the whole text, through the funnel: the
-          // editor's rules judge it, history records one event, and every
-          // reader sees it publish like any other edit.
-          const applied = book.apply(
-            [{ from: 0, to: book.source().text.length, insert: disk.text }],
-            "revert",
-            trustedBy("save.takeDisk"),
-          );
-          if (Result.isFailure(applied))
-            return yield* Effect.fail(
-              refuse(book, "Refused", `revert refused by ${applied.failure.rule}`),
-            );
+          yield* takeDisk(book, "revert");
           conflicts.delete(change.bookId);
-          // The disk text is now what both sides hold, so it is the baseline;
-          // its stamp is the book's post-revert stamp, not the decoded 0.
-          baselines.set(book.id, { ...disk, stamp: book.source().stamp, savedAt: Date.now() });
           observability?.note("conflict.resolve", "rewrote", undefined, {
             "book.id": book.id,
             "save.choice": "takeDisk",
           });
           return Option.none();
         }),
+
+      takeDisk,
 
       serialize,
 

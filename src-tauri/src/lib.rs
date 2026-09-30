@@ -58,7 +58,6 @@ pub fn run() {
             git::git_remote_url,
             git::git_clone,
             git::git_fetch,
-            git::git_pull,
             git::git_push,
             credentials::credentials_get,
             credentials::credentials_set,

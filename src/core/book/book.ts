@@ -48,6 +48,8 @@ export type Origin =
   | "replace"
   | "recovery"
   | "revert"
+  /** Text a receive brought in: the file moved forward, and the Book with it. */
+  | "incoming"
   | `project.${string}`
   | (string & {});
 

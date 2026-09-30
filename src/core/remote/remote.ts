@@ -1,6 +1,6 @@
 /**
  * The Remote port: the online jobs a translator approves explicitly — clone
- * a repository into a new folder, attach one to a URL, fetch, pull, push —
+ * a repository into a new folder, attach one to a URL, fetch, fast-forward, push —
  * plus publishing a project somewhere it did not exist. Sefer is local-first, so
  * nothing here ever runs as a side effect of editing; every method is a job
  * someone asked for, and `progress()` exists so a long transfer can be shown
@@ -107,7 +107,6 @@ export interface RemoteService {
    * Only files that differ between the two commits are written.
    */
   readonly fastForward: (repo: Repo, to: string) => Effect.Effect<void, RemoteError>;
-  readonly pull: (repo: Repo) => Effect.Effect<Progress, RemoteError>;
   readonly push: (repo: Repo) => Effect.Effect<Progress, RemoteError>;
   /** Creates the project on `target` and pushes it there for the first time. */
   readonly publish: (repo: Repo, target: string) => Effect.Effect<void, RemoteError>;

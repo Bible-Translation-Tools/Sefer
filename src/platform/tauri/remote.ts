@@ -13,11 +13,11 @@
  *  2. The credential comes from the host `Credentials` service, keyed by the
  *     origin of the remote's URL — a token belongs to a Gitea instance, not to
  *     one repository. Tokens never reach a project file. Nobody signed in is
- *     an ANSWER, not a failure: WACS content is public, so fetch and pull run
+ *     an ANSWER, not a failure: WACS content is public, so fetch and probe run
  *     anonymously and only push insists on a credential.
- *  3. A pull fast-forwards or reports `Rejected`. Sefer does not merge USFM
- *     behind a translator's back; conflict markers inside scripture are worse
- *     than a question.
+ *  3. A receive only fast-forwards (`fastForward`), or reports `Rejected`.
+ *     Sefer does not merge USFM behind a translator's back; conflict markers
+ *     inside scripture are worse than a question.
  *
  * `publish` needs the Gitea API to create the repository, which is the one
  * thing git2 cannot do, so it goes through the same `Gitea` service the Web
@@ -223,7 +223,6 @@ const makeTauriRemote = (
       // Local: no origin, no credential. The forward-only and safe-checkout
       // refusals are git2's, in Rust.
       fastForward: (repo, to) => call<void>("git_fast_forward", { root: repo.root, to }),
-      pull: (repo) => transfer("git_pull", repo, "optional"),
       push: (repo) => transfer("git_push", repo, "required"),
       publish: (repo, target) =>
         Effect.gen(function* () {

@@ -71,13 +71,6 @@ const ORIGIN = "origin";
 /** The default branch `WebGitLive.init` creates, and the one we transfer. */
 const DEFAULT_BRANCH = "main";
 
-/**
- * Who a merge commit is by when a pull has to make one. The same identity
- * `git.commit` uses in `src/app/commands.ts`; a merge is Sefer's bookkeeping,
- * not something the translator authored.
- */
-const MERGE_AUTHOR = { name: "Sefer", email: "sefer@localhost" };
-
 /** How many progress events a slow reader may fall behind before losing some. */
 const PROGRESS_DEPTH = 64;
 
@@ -238,7 +231,7 @@ const makeWebRemote = (
         const held = yield* credentials.get(hostOf(url));
         // Push is the only transfer nobody can do anonymously. Refusing it
         // here rather than letting the server answer 401 is what turns "sign
-        // in first" into advice instead of a status code; fetch and pull run
+        // in first" into advice instead of a status code; fetch and probe run
         // without a credential, because WACS content is public and cloning a
         // translation is how somebody gets started.
         if (auth === "required" && Option.isNone(held)) {
@@ -385,14 +378,6 @@ const makeWebRemote = (
             }),
           );
         }),
-
-      // `pull` may write files and may need to make a merge commit, so it
-      // carries an author. Fast-forward is not forced: a genuine divergence
-      // must surface as `Rejected` rather than being silently resolved.
-      pull: (repo) =>
-        transfer(repo, "optional", (wire, branch) =>
-          git.pull({ ...wire, ref: branch, singleBranch: true, author: MERGE_AUTHOR }),
-        ),
 
       // A browser push over smart-HTTP normally takes one 401 on
       // `info/refs?service=git-receive-pack` before isomorphic-git calls

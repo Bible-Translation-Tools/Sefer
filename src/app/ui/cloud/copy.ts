@@ -25,6 +25,7 @@ import type {
   CombineRefusal,
   CombineState,
   IncomingPlan,
+  ReceiveRefusal,
   SyncActionId,
   SyncState,
 } from "#core/sync";
@@ -285,6 +286,29 @@ export const bookFromPath = (path: string): string => {
  * ends by saying where the work is, because a refused transfer is exactly when
  * somebody wonders.
  */
+/** Why a receive did not run, in the words the screen uses. */
+export const receiveRefusal = (refusal: ReceiveRefusal, books: readonly string[] = []): string => {
+  switch (refusal) {
+    case "review":
+      return t(
+        "You and the shared project both changed {books}, so nothing was received. Compare the two versions and decide what to keep. Your work is untouched.",
+        { books: books.join(", ") },
+      );
+    case "diverged":
+      return t(
+        "This device has versions the shared project does not have yet, so its updates were not received on their own. Combine them instead. Nothing has changed.",
+      );
+    case "no-cloud-copy":
+      return t("The shared project has no copy of this work yet. Publish it first.");
+    case "no-shared-version":
+      return t(
+        "This project and the shared project have no version in common, so there is nothing to build on. Nothing has changed.",
+      );
+    case "no-branch":
+      return t("There is nothing here to receive into. Your work is exactly as you left it.");
+  }
+};
+
 export const combineRefusal = (refusal: CombineRefusal): string => {
   switch (refusal) {
     case "contested":
