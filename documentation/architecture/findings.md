@@ -30,13 +30,14 @@ Both halves are drawn by the one `linter`, so there is one gutter, one popover a
 
 ## The one shape
 
-`Finding { id, bookId, severity, code, producer, message, from, to, stamp, engine, fix? }` — `src/core/findings/finding.ts` is the only place either producer is translated into it.
+`Finding { id, bookId, severity, code, producer, message, details?, described?, from, to, stamp, engine, fix? }` — `src/core/findings/finding.ts` is the only place either producer is translated into it.
 
 - `severity` is `error | warning | info`. Onion's `hint` folds into `info`; a code that says nothing at the document's declared `\usfm` version (and the whole `form` category) is **dropped**, so the census counts stay honest.
 - Sous carries no severity ladder at all, so Sefer's presentation policy is stated once in `corpusSeverity`: Hygiene is an error (a control character or a conflict marker is a defect in the file), Presence is a warning, everything statistical is info.
 - `code` is the catalogue name for Onion (`unknown-marker`) and `sous.<lane>[.<class>]` for Sous (`sous.hygiene.C0Control`, `sous.convention.Rarity`).
 - `id` is `producer:bookId:code:from-to`. **Row indices are not durable identities** — the next publication renumbers everything — so identity is semantic, and two rows with the same code at the same span are one finding.
 - `from`/`to` are UTF-16 offsets into the text the stamps name, exactly as the engine reported them. Nothing shifts an offset. A Sous publication whose `coordinateSpace` is UTF-8 is dropped whole rather than mixed with UTF-16 findings.
+- `message` is plain panel text; for a Sous finding it is the headline, and `details` and `described` are its second tier ("What a Sous finding says", below).
 - `fix` is a **pointer** (`{ kind: 'engine', diagnosticIndex }`), not the edits: a panel of four hundred findings resolves none of them.
 - `Finding` carries no Address. A chapter:verse address is only derivable from a table of contents, and one from another revision names the wrong verse with total confidence — so `navigateTarget(finding)` returns only the book and span, and a label comes from `shell.location.addressAt`, which names a place only when the analysis it is handed matches the finding's engine stamp.
 
@@ -185,17 +186,22 @@ The two new channels are convictions like any other and reach `/inventory` throu
 ## What a Sous finding says
 
 ```text
-describeFinding(finding, pattern, { siteText: "Moses, Moses", bookCount: 66, bookName })
-  → { id: "convention.doubled.separated", params: { word: "Moses", count: 1, total: 895, … } }
-  → “Moses” is written twice with only punctuation between here (“Moses, Moses”).
-    The project does this nowhere else; “Moses” appears 895 times.
+describeFinding(finding, pattern, { siteText: "He", bookCount: 66, bookName, patternBooks, snapshot, before })
+  → { id: "convention.casing", params: { word: "He", usualWord: "he", … }, queries: [ … ] }
+headline  “He” is capitalized here; this project writes “he” (6,889 times).
+details   Of its 6,893 uses in the middle of a sentence, this form appears 4 times, in 3 of 66
+          books. After [;], the next word is lowercase 4,367 of 4,891 times.
 ```
 
-Kitchen decides why a squiggle fired and names it as a message id with parameters (`sous-messages.ts`); its English catalog (`sous-messages.en.json`, ICU MessageFormat) is the wording. `src/core/findings/messages.ts` is Sefer's only formatter: one `intl-messageformat` per id, cached, locale `en`. Sefer writes no finding sentence of its own, and every Sous kind — hygiene, presence, source copy, length and every convention channel, `BookRate` included — goes through it. The `code` is unchanged (`sous.convention.<Channel>`).
+Kitchen decides why a squiggle fired and names it as a message id with parameters (`sous-messages.ts`); its English catalog (`sous-messages.en.json`, ICU MessageFormat) is the wording, a headline and details per id. `src/core/findings/messages.ts` is Sefer's only formatter: one `intl-messageformat` per id and tier, cached, locale `en`. Sefer writes no finding sentence of its own, and every Sous kind — hygiene, presence, source copy, length and every convention channel, `BookRate` included — goes through it. The `code` is unchanged (`sous.convention.<Channel>`).
 
 - **One headline.** A site matching several rows names only its finest pattern, and only that pattern is described. The reasons list is no longer printed.
 - **The words come from the text.** The engine keys a word by hash, so `fromSnapshot`'s resolver hands back the published text with each book (`PublishedBook.text`, the held analysis the publication measured) and `siteText` is its slice at the finding's UTF-16 span. The same resolver names a book for `BookRate` (`PublishedBook.name`, through `bookName` in `core/location/canon.ts`).
-- The message still quotes the document, so it stays panel text and never reaches telemetry.
+- **Two tiers.** `message` is the headline: one fact, and at most one alternative the reader might write. `details` is the supporting numbers — what is usual, how often, where — and the Findings panel shows it behind a "Why?" on the line, opened per line in the card's view like a folded run. The editor's squiggle popover shows the headline only.
+- **Marks are keycaps.** The catalog wraps every mark it quotes in `<g>`, because `“"”` cannot be read. `render` gives plain text with the tag dropped and the mark kept (`message`, `details`: tooltips, the text filter, the fold's identity); `renderRich` hands each mark to the caller, and `SousSentence` (`src/app/ui/panels/`) draws it as a `Kbd`. A screen renders rich from `described`, never by parsing `message` back.
+- **The context is complete.** `bookName` is the display name ("all in Isaiah"). `patternBooks` is kitchen's `booksByPattern(snapshot)`, built once per `fromSnapshot`, so a two-book spread is named rather than counted. `snapshot` is the publication, which answers `before`: for a Casing finding only, `PublishedBook.mask` (the book's `verseText` mask through `GalleyService.mask`, asked for once per book and ignored when its source length is not the published text's) supplies the last few kept spans before the word, and kitchen's `markBefore` reads the mark from that reading with the markers out — a raw `\q2` between `;` and `He` would read as a digit.
+- **Queries ride along, unrun.** `described.queries` is kitchen's literal needles (`purpose` this / alternative / others, with `caseSensitive` and `wholeWord`) for galley's `findAll`. Nothing runs them yet.
+- Both tiers quote the document, so they stay panel text and never reach telemetry.
 
 ## Proofreading settings
 
