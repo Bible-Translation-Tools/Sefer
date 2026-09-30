@@ -446,7 +446,10 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
       onKeyDown={stopAiming}
       data-virtual={props.sections.length}
       role={props.role}
-      class={props.class ?? "min-h-0 min-w-0 flex-1 overflow-y-auto pe-1"}
+      // The scrollbar is a 16px track of its own (`scrollbar-padded`), pulled
+      // out into the page's padding (`-me-4`), so the rows keep the width and
+      // the right edge of whatever sits above them, scrolling or not.
+      class={props.class ?? "scrollbar-padded -me-4 min-h-0 min-w-0 flex-1 overflow-y-auto"}
     >
       <Show when={props.sections.length > 0} fallback={props.empty}>
         <div style={{ height: `${total()}px` }} class="relative">

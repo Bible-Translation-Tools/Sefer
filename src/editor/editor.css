@@ -1243,17 +1243,51 @@
    there is one box and it only changes colour. 12px inside it on every side. */
 [data-direct-target] {
   position: relative;
+  /* Its own stacking context, so the outline's fill below can sit behind the
+     text without falling behind the card. */
+  isolation: isolate;
+}
+/* The frame draws both states, so the editor's own outline (drawn on its host,
+   which scrolls with the chapter) is not also drawn inside it. */
+[data-direct-target] .cm-editing::after {
+  display: none;
+}
+[data-direct-target][data-editing]::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border: 1.5px solid var(--brand-base);
+  border-radius: 10px;
+  pointer-events: none;
+  z-index: 1;
 }
 [data-direct-target]:not([data-editing])::after {
   content: "";
   position: absolute;
   inset: 2px;
+  z-index: -1;
   border: 1px solid var(--surface-border);
   border-radius: 10px;
   pointer-events: none;
+  transition:
+    background-color 150ms ease-in-out,
+    border-color 150ms ease-in-out;
+}
+/* The whole chapter showing, it reads as one text: the context at full
+   strength, not dimmed round the verse. */
+[data-direct-target][data-chapter] .cm-excerpt-context {
+  opacity: 1;
+}
+/* Hovered, it says it can be clicked: the canvas fill and the light brand
+   edge every field takes on hover (`Select`, `Input`: `border-brand/40`). */
+[data-direct-target]:not([data-editing]):hover::after {
+  background: var(--surface-canvas);
+  border-color: color-mix(in srgb, var(--brand-base) 40%, transparent);
 }
 [data-direct-target] .cm-excerpt .cm-content {
-  padding: 12px;
+  /* 12px inside the outline: the scroller already sits 3.5px in from the
+     frame, and the outline 2px (`ExcerptCard`). */
+  padding: 10.5px;
   /* Double spacing, as the guide's reading beside it (`ExcerptCard`). */
   line-height: 2;
 }

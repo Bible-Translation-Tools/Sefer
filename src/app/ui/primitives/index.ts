@@ -11,6 +11,7 @@
 export { Badge, severityTone, type BadgeTone } from "./Badge";
 export { Button } from "./Button";
 export { Card, PanelHeader } from "./Card";
+export { PageLeading, usePageLeading } from "./pageLeading";
 export { cx, type ClassValue } from "./cx";
 export { Dialog } from "./Dialog";
 export { EmptyState } from "./EmptyState";

@@ -161,6 +161,9 @@ const marksOf = (
   if (own.from > span.from)
     out.push({ from: span.from, to: own.from, class: "cm-excerpt-context" });
   if (span.to > own.to) out.push({ from: own.to, to: span.to, class: "cm-excerpt-context" });
+  // The own unit, marked so a card can find where it is drawn (a chapter
+  // opening keeps it in place). Unstyled.
+  if (own.to > own.from) out.push({ from: own.from, to: own.to, class: "cm-excerpt-own" });
   for (const hit of hits) {
     const tone = markTone?.(hit.from, excerpt);
     const name = cx(
@@ -276,6 +279,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
     props.active !== undefined && props.excerpt.hits.some((hit) => hit.from === props.active);
 
   const direct = (): boolean => props.spec.edit.kind === "direct";
+  const chapterOpen = (): boolean => props.excerpt.extent.chapter === true;
 
   const edit = (caret?: number, where?: { x: number; y: number }): void => {
     if (targetBox !== undefined) setHold(targetBox.offsetHeight);
@@ -289,7 +293,12 @@ export function ExcerptCard(props: ExcerptCardProps) {
   };
 
   const done = (): void => {
-    setHold(undefined);
+    // The reverse swap holds too: the editor's height until the reading has
+    // drawn in its place, then the box is free again.
+    if (targetBox !== undefined) {
+      setHold(targetBox.offsetHeight);
+      requestAnimationFrame(() => requestAnimationFrame(() => setHold(undefined)));
+    } else setHold(undefined);
     setBook(undefined);
     setAt(undefined);
     props.onDone();
@@ -305,6 +314,9 @@ export function ExcerptCard(props: ExcerptCardProps) {
       follow={props.follow}
       onEdit={props.spec.edit.kind === "none" ? undefined : edit}
       direct={direct()}
+      onReveal={(found) => {
+        reveal = found;
+      }}
     />
   );
 
@@ -321,6 +333,56 @@ export function ExcerptCard(props: ExcerptCardProps) {
       if (!drawn) return;
       // Two frames: one for the editor to mount, one for it to lay out.
       requestAnimationFrame(() => requestAnimationFrame(() => setHold(undefined)));
+    },
+  );
+
+  /**
+   * Show more opens the whole chapter, which puts text above the verse. When
+   * the card's animation has ended, the reading is scrolled back to the verse
+   * the card is for — its Address, already resolved through the TOC to
+   * `own.from` — with the editor's own scroll-to, as the book editor lands on
+   * a verse (`BookEditor`'s reveal).
+   */
+  let reveal: ((at: number) => void) | undefined;
+  createEffect(
+    () => chapterOpen(),
+    (open) => {
+      if (!open) return;
+      const timer = setTimeout(() => reveal?.(props.excerpt.own.from), 300);
+      return () => clearTimeout(timer);
+    },
+  );
+
+  /**
+   * A direct card's edit ends when the reader leaves the box: a press anywhere
+   * outside it, or focus going elsewhere (Tab, a click on something that takes
+   * focus), so the box never looks editable once it cannot be typed into.
+   */
+  createEffect(
+    () => (direct() && props.editing ? targetBox : undefined),
+    (element) => {
+      if (element === undefined) return;
+      const press = (event: PointerEvent): void => {
+        if (props.editing && event.target instanceof Node && !element.contains(event.target))
+          done();
+      };
+      const leave = (event: FocusEvent): void => {
+        const next = event.relatedTarget;
+        if (next instanceof Node && element.contains(next)) return;
+        // After the move lands: focus that only passed through (the editor
+        // replacing the reading) has come back by then.
+        setTimeout(() => {
+          // Still this card's edit: the press may have ended it and another
+          // card begun its own since.
+          if (props.editing && !element.contains(document.activeElement)) done();
+        }, 0);
+      };
+      document.addEventListener("pointerdown", press, true);
+      element.addEventListener("focusout", leave);
+      return () => {
+        document.removeEventListener("pointerdown", press, true);
+        element.removeEventListener("focusout", leave);
+      };
     },
   );
 
@@ -353,8 +415,6 @@ export function ExcerptCard(props: ExcerptCardProps) {
       </Show>
     </Show>
   );
-
-  const chapterOpen = (): boolean => props.excerpt.extent.chapter === true;
 
   const pairedText = () => (props.paired?.kind === "text" ? props.paired : undefined);
   const pairedStatic = () => (props.paired?.kind === "static" ? props.paired : undefined);
@@ -528,9 +588,10 @@ export function ExcerptCard(props: ExcerptCardProps) {
           <Card
             size="lg"
             padded={false}
+            raised={false}
             data-sid={props.excerpt.sid}
             data-condensed=""
-            class="cursor-pointer px-6 py-4 opacity-60 transition-opacity hover:opacity-100"
+            class="cursor-pointer p-6 opacity-60 transition-opacity hover:opacity-100"
             onClick={() => props.spec.onActivate?.(props.excerpt, props.rowKey)}
           >
             <div class="flex items-center gap-2">
@@ -629,6 +690,10 @@ export function ExcerptCard(props: ExcerptCardProps) {
               (`editor.css`, `[data-direct-target]`). Its controls
               sit under it, in its column, so they start at its left edge. */}
             <div class="flex min-w-0 flex-col gap-2">
+              {/* Two boxes: the FRAME, which never scrolls and draws the
+                  outline, and inside it the part that scrolls once the whole
+                  chapter is showing — so the outline stays round the box
+                  rather than scrolling away with the text. */}
               <div
                 ref={(element: HTMLDivElement) => {
                   targetBox = element;
@@ -636,13 +701,20 @@ export function ExcerptCard(props: ExcerptCardProps) {
                 style={hold() === undefined ? undefined : { "min-height": `${hold()}px` }}
                 data-direct-target={direct() ? "" : undefined}
                 data-editing={direct() && props.editing ? "" : undefined}
-                class={cx(
-                  "min-w-0",
-                  chapterOpen() && "max-h-[var(--card-room,60vh)] overflow-y-auto",
-                  direct() && "cursor-text",
-                )}
+                data-chapter={direct() && chapterOpen() ? "" : undefined}
+                class={cx("min-w-0", direct() && "cursor-pointer")}
               >
-                {target}
+                <div
+                  class={cx(
+                    chapterOpen() &&
+                      "scrollbar-padded max-h-[var(--card-room,60vh)] overflow-y-auto",
+                    // Inside the outline (2px in, 1.5px thick) and as round,
+                    // so scrolled text is cut off at the border, not past it.
+                    direct() && "m-[3.5px] rounded-[8.5px]",
+                  )}
+                >
+                  {target}
+                </div>
               </div>
               <Show when={direct()}>
                 <div data-card-actions class="flex items-center gap-controls">

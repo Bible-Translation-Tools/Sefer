@@ -151,8 +151,10 @@ the application's Mod-K for an application it is not part of.
   not from a signal, and every button but three is a plain navigation.
 - **The project panel's show/hide** is not on the app bar. It is one button that
   stays put and flips (`PanelToggle`, `panel-toggle`): left of the book's title
-  in the editor toolbar, and on project screens without that toolbar in the
-  same top-left spot, in a narrow column of its own (`PanelToggleColumn`).
+  in the editor toolbar, and on project screens without that toolbar at the
+  start of the screen's page header, inline with its title: the workspace
+  provides it as `PageLeading` (`usePanelToggleLeading`), and a page-level
+  `PanelHeader`, or Review's own header, draws it.
   Being outside the panel, it is also the way back. `Mod-b` does the same, and
   dragging the panel's edge well past its minimum closes it
   (`Resizable.Panel`'s `onCollapse`), keeping the width it had.
