@@ -80,7 +80,7 @@ import {
 // `src/core/galley` imports the engine holds for the reader too.
 export { FindingsSnapshot };
 export type { Finding, Pattern } from "@wycliffeassociates/scripture-kitchen/sous-reader";
-// Why a finding fired, as an id, its parameters and its literal searches, and
+// Why a finding fired, as an id, its parameters and its searches, and
 // the English catalog those ids render through (a headline and details each).
 // `src/core/findings/messages.ts` is the one formatter.
 export {
@@ -91,6 +91,8 @@ export {
   type Message as FindingMessage,
   type MessageContext as FindingMessageContext,
   type MessageId as FindingMessageId,
+  type Query as FindingQuery,
+  type QueryPurpose as FindingQueryPurpose,
 } from "@wycliffeassociates/scripture-kitchen/sous-messages";
 export { default as FINDING_MESSAGES_EN } from "@wycliffeassociates/scripture-kitchen/sous-messages.en.json";
 // Sous's judging settings as kitchen generates them: every key, its type, its

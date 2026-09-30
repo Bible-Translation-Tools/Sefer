@@ -52,11 +52,12 @@ import {
   type Receipt,
 } from "../book/book";
 import { describesExactly, type Analysis } from "../galley/analysis";
+import type { EngineHit } from "../galley/galley";
 import { tocViewOf } from "../galley/location";
 import type { Address } from "../location/address";
 import { addressAt } from "../location/locate";
 import type { Change, SourceStamp } from "../source/source";
-import type { Readings } from "./reading";
+import type { Reading, Readings } from "./reading";
 
 export interface Query {
   /** Literal text, or a regular expression source when `regex` is set. */
@@ -482,6 +483,63 @@ export const findInReading = (
     }
   }
   return Result.succeed(hits);
+};
+
+/**
+ * The engine's own find hits (`GalleyService.findAll`) as `Hit`s, for a
+ * literal whose words rule and case fold should be the engine's — kitchen's
+ * Sous queries name `findAll` as their door.
+ *
+ * The engine's `projected` range is an offset into the same verse-text
+ * reading `readings` cuts, so the preview is cut from that reading exactly as
+ * `findInReading` cuts one, and the match inside it is known. A hit whose book
+ * is not among `books`, or has no reading yet, is dropped: it has no stamp to
+ * bind to.
+ */
+export const fromEngine = (
+  readings: Readings,
+  books: readonly Book[],
+  found: readonly EngineHit[],
+  options?: Options,
+): readonly Hit[] => {
+  const byId = new Map<string, Book>(books.map((book) => [book.id, book]));
+  // Hits arrive book by book, so each book is looked up once.
+  let held:
+    | {
+        readonly id: string;
+        readonly stamp: SourceStamp;
+        readonly reading?: Reading;
+        readonly addressOf: AddressOf;
+      }
+    | undefined;
+  const hits: Hit[] = [];
+  for (const hit of found) {
+    const first = hit.source[0];
+    if (hit.bookId === undefined || first === undefined) continue;
+    if (held?.id !== hit.bookId) {
+      const book = byId.get(hit.bookId);
+      if (book === undefined) continue;
+      const { text, stamp } = book.source();
+      const reading = readings.of({ id: book.id, text, stamp });
+      held = {
+        id: book.id,
+        stamp,
+        ...(reading === undefined ? {} : { reading }),
+        addressOf: lazily(() => addressesOf(options?.analysisOf, book.id, book.id, text)),
+      };
+    }
+    if (held.reading === undefined) continue;
+    hits.push({
+      bookId: held.reading.bookId,
+      stamp: held.stamp,
+      from: first.from,
+      to: first.to,
+      ...withAddress(held.addressOf(first.from)),
+      ...previewAt(held.reading.text, hit.projected.from, hit.projected.to, options?.previewWidth),
+      ...(hit.source.length > 1 ? { pieces: hit.source } : {}),
+    });
+  }
+  return hits;
 };
 
 // ---------------------------------------------------------------------------
