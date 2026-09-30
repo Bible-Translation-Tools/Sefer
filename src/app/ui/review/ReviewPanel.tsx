@@ -56,6 +56,7 @@ import type { DecisionUnit, DiffSkeleton, MergeSide } from "#core/galley";
 import type { Author } from "#core/git/git";
 import { Observability } from "#core/observability";
 import type { Restorable } from "#core/recovery/recovery";
+import { bookFacts, type Diff } from "#core/sync/facts";
 import type { EditorBook } from "#editor/index";
 
 import { personAuthor } from "../../author";
@@ -111,6 +112,9 @@ export function ReviewPanel() {
   const { services } = shell;
   const version = createRecordedVersion(shell);
   const shared = createRecordedVersion(shell, "shared");
+  // The last version both sides had in common: what "who changed this" is
+  // measured from, in a review against the shared project.
+  const common = createRecordedVersion(shell, "base");
 
   const [leftId, setLeftId] = createSignal("project", { name: "reviewLeftKind" });
   // SAFETY: `strict: false` gives the union of every route's search; the one
@@ -579,6 +583,62 @@ export function ReviewPanel() {
     { name: "reviewBooks" },
   );
 
+  /**
+   * Per book, which passages each side changed since the two last agreed —
+   * the same facts the policy decides from, the editor's text on one side and
+   * the shared project's on the other. Only in a review against the shared
+   * project; anywhere else there is no common version to measure from.
+   */
+  const changedSince = createMemo(
+    (): ReadonlyMap<
+      BookId,
+      { readonly here: ReadonlySet<string>; readonly there: ReadonlySet<string> }
+    > => {
+      const out = new Map<BookId, { here: ReadonlySet<string>; there: ReadonlySet<string> }>();
+      if (!againstShared()) return out;
+      const base = common.recorded();
+      const editorOnLeft = rightId() === "shared";
+      const diff: Diff = (before, after) => {
+        const found = services.galley.diff(before, after);
+        return Result.isSuccess(found) ? found.success : undefined;
+      };
+      for (const book of reviewBooks()) {
+        const ancestor = base.texts.get(book.bookId)?.text;
+        if (ancestor === undefined) continue;
+        const facts = bookFacts(
+          {
+            bookId: book.bookId,
+            path: "",
+            base: ancestor,
+            mine: editorOnLeft ? book.currentText : book.baselineText,
+            theirs: editorOnLeft ? book.baselineText : book.currentText,
+          },
+          diff,
+        );
+        out.set(book.bookId, { here: new Set(facts.mine.refs), there: new Set(facts.theirs.refs) });
+      }
+      return out;
+    },
+    { name: "reviewChangedSince" },
+  );
+
+  const originOf = (
+    bookId: BookId,
+    units: readonly DecisionUnit[],
+  ): "there" | "here" | "both" | undefined => {
+    const sides = changedSince().get(bookId);
+    if (sides === undefined) return undefined;
+    let here = false;
+    let there = false;
+    for (const unit of units)
+      for (const sid of [unit.currentAddr?.sid, unit.baselineAddr?.sid]) {
+        if (sid === undefined) continue;
+        if (sides.here.has(sid)) here = true;
+        if (sides.there.has(sid)) there = true;
+      }
+    return here && there ? "both" : here ? "here" : there ? "there" : undefined;
+  };
+
   /** How many units have been ruled on across the whole review, of how many. */
   const totals = () => {
     let total = 0;
@@ -776,6 +836,7 @@ export function ReviewPanel() {
         setMessage("");
         version.refresh();
         shared.refresh();
+        common.refresh();
       }
       setRecording(false);
       return;
@@ -1095,6 +1156,7 @@ export function ReviewPanel() {
             <div class="flex min-h-0 flex-1 flex-col" data-review-units={totals().total}>
               <ReviewReader
                 books={reviewBooks()}
+                originOf={originOf}
                 decision={decisionFor}
                 decide={decideAny}
                 decidable={editable()}

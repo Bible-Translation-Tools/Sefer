@@ -55,12 +55,13 @@ export interface RecordedVersion {
  * browser fixture and must not raise.
  */
 /**
- * Which commit a reader stands on: `head`, the last version recorded here, or
+ * Which commit a reader stands on: `head`, the last version recorded here;
  * `shared`, the shared project's newest version as the last check fetched it
- * (the branch's remote-tracking ref). Both are frozen commits; only which one
- * is read differs.
+ * (the branch's remote-tracking ref); or `base`, the newest version the two
+ * have in common — what "who changed this" is measured from. All three are
+ * frozen commits; only which one is read differs.
  */
-export type RecordedRef = "head" | "shared";
+export type RecordedRef = "head" | "shared" | "base";
 
 export const createRecordedVersion = (shell: Shell, ref: RecordedRef = "head"): RecordedVersion => {
   const [recorded, setRecorded] = createSignal<Recorded>(
@@ -101,6 +102,19 @@ export const createRecordedVersion = (shell: Shell, ref: RecordedRef = "head"): 
                   Option.none<string>(),
                 );
             head = Option.getOrUndefined(tip);
+            if (ref === "base" && head !== undefined) {
+              const theirs = head;
+              const mine = yield* Effect.orElseSucceed(git.resolve(repo, "HEAD"), () =>
+                Option.none<string>(),
+              );
+              head = Option.isNone(mine)
+                ? undefined
+                : Option.getOrUndefined(
+                    yield* Effect.orElseSucceed(git.mergeBase(repo, mine.value, theirs), () =>
+                      Option.none<string>(),
+                    ),
+                  );
+            }
           }
           if (head === undefined) return NOTHING;
           const texts = new Map<BookId, Source>();

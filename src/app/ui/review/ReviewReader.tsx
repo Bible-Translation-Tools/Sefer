@@ -134,6 +134,11 @@ export function ReviewReader(props: {
   readonly decidable: boolean;
   readonly usfm: boolean;
   readonly onUsfm: (on: boolean) => void;
+  /** Who changed a card's passage, in a review against the shared project. */
+  readonly originOf?: (
+    bookId: BookId,
+    units: readonly DecisionUnit[],
+  ) => "there" | "here" | "both" | undefined;
   readonly currentLabel: string;
   readonly baselineLabel: string;
   readonly currentShort: string;
@@ -968,6 +973,7 @@ export function ReviewReader(props: {
                 split={split()}
                 usfm={props.usfm}
                 controls={controls().get(item().hunk.bookId)}
+                origin={props.originOf?.(item().hunk.bookId, item().hunk.units)}
                 currentLabel={props.currentLabel}
                 baselineLabel={props.baselineLabel}
                 currentFirst={props.currentFirst !== false}

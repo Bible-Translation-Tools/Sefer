@@ -102,6 +102,12 @@ export function DiffCard(props: {
   readonly view: CardView;
   readonly onView: (event: CardEvent) => void;
   readonly controls: Controls | undefined;
+  /**
+   * Who changed this passage since the two sides last agreed, when that is
+   * known — only in a review against the shared project, where "keep mine"
+   * on a passage only the other side changed would silently undo their work.
+   */
+  readonly origin?: "there" | "here" | "both" | undefined;
   /** Column captions in a split: what each source calls itself. */
   readonly currentLabel: string;
   readonly baselineLabel: string;
@@ -361,6 +367,17 @@ export function DiffCard(props: {
       info={
         <>
           <span class="text-smallest text-on-surface-tertiary">{status()}</span>
+          <Show when={props.origin}>
+            {(origin) => (
+              <Badge tone={origin() === "both" ? "warning" : "muted"}>
+                {origin() === "there"
+                  ? t("Changed there")
+                  : origin() === "here"
+                    ? t("Changed here")
+                    : t("Changed in both places")}
+              </Badge>
+            )}
+          </Show>
           <Show when={hunkKind(props.hunk.units)}>
             {(kind) => (
               <Badge tone="muted" data-diff-kind={kind()}>
