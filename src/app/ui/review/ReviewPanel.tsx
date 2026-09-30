@@ -63,7 +63,7 @@ import { describe, reasonOf } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { recordVersion } from "../../recordVersion";
-import { sendAfterSave } from "../../syncActions";
+import { sendAfterSave, settleWithShared } from "../../syncActions";
 import { setAuthorName, syncPreferences } from "../../syncSettings";
 import { unsavedChanges } from "../panels/changes";
 import { ago, exact } from "../panels/format";
@@ -116,6 +116,8 @@ export function ReviewPanel() {
   // SAFETY: `strict: false` gives the union of every route's search; the one
   // field is read as `unknown` and compared, never trusted.
   const search = useSearch({ strict: false }) as () => { readonly against?: unknown };
+  /** Is one side the shared project? Then recording also takes what it changed. */
+  const againstShared = (): boolean => rightId() === "shared" || leftId() === "shared";
   const [rightId, setRightId] = createSignal(
     untrack(() => search().against) === "shared" ? "shared" : "disk",
     { name: "reviewRightKind" },
@@ -368,9 +370,12 @@ export function ReviewPanel() {
   });
   createEffect(
     () => ({
+      // Both frozen sides are in the key: a side whose texts arrive after the
+      // screen opened (the shared project's, when /cloud's Compare opens it
+      // directly) is compared again once it has them.
       sides: `${leftId()}:${rightId()}:${leftPicked()?.id ?? ""}:${rightPicked()?.id ?? ""}:${
         version.recorded().head ?? ""
-      }`,
+      }:${shared.recorded().head ?? ""}`,
       text: live() ? revisions() : "",
     }),
     ({ sides }) => {
@@ -726,7 +731,8 @@ export function ReviewPanel() {
   const record = async (): Promise<void> => {
     const project = shell.project();
     const review = unsaved();
-    if (project === undefined || recording() || review.length === 0) return;
+    if (project === undefined || recording()) return;
+    if (review.length === 0 && !againstShared()) return;
     // Taken before the save: afterwards no book is unsaved, and the default
     // would name none of them.
     const typedMessage = message().trim();
@@ -748,6 +754,32 @@ export function ReviewPanel() {
     }
     setRecording(true);
     const notice = toasts.progress({ title: t("Recording…") });
+    if (againstShared()) {
+      // Reviewed against the shared project: what was decided stays, and
+      // everything else it changed arrives with it — in one move.
+      const settled = await settleWithShared(services, project, by, staticMessage);
+      if (settled.kind === "refused")
+        toasts.update(notice, {
+          tone: "error",
+          autoClose: false,
+          title: t("Not combined"),
+          message: settled.why,
+        });
+      else {
+        const books = project.books.map((book) => book.id);
+        shell.noteWritten(books, true);
+        toasts.update(notice, {
+          tone: "success",
+          title: t("Combined with the shared project"),
+          message: staticMessage,
+        });
+        setMessage("");
+        version.refresh();
+        shared.refresh();
+      }
+      setRecording(false);
+      return;
+    }
     const books = review.map((entry) => entry.book);
     const outcome = await recordVersion(services, project, books, staticMessage, by);
     switch (outcome.kind) {
@@ -979,7 +1011,7 @@ export function ReviewPanel() {
                 variant="secondary"
                 icon={<Save />}
                 data-review-record
-                disabled={unsaved().length === 0}
+                disabled={unsaved().length === 0 && !againstShared()}
                 title={t("{count} book(s) with changes", {
                   count: unsaved().length,
                 })}
@@ -1086,9 +1118,15 @@ export function ReviewPanel() {
           open={recordOpen()}
           onOpenChange={setRecordOpen}
           title={t("Record a version")}
-          description={t("Your changes in {count} book(s) are written and kept as a version.", {
-            count: unsaved().length,
-          })}
+          description={
+            againstShared()
+              ? t(
+                  "What you decided here is kept, and everything else the shared project changed arrives with it, as one version.",
+                )
+              : t("Your changes in {count} book(s) are written and kept as a version.", {
+                  count: unsaved().length,
+                })
+          }
           footer={
             <>
               <Button variant="tertiary" onClick={() => setRecordOpen(false)}>
@@ -1098,7 +1136,7 @@ export function ReviewPanel() {
                 variant="primary"
                 icon={<Save />}
                 loading={recording()}
-                disabled={unsaved().length === 0}
+                disabled={unsaved().length === 0 && !againstShared()}
                 data-review-record-confirm
                 onClick={() => void record().then(() => setRecordOpen(false))}
               >
@@ -1136,7 +1174,8 @@ export function ReviewPanel() {
             onKeyDown={(event: KeyboardEvent) => {
               if (event.key !== "Enter" || event.isComposing) return;
               event.preventDefault();
-              if (unsaved().length > 0) void record().then(() => setRecordOpen(false));
+              if (unsaved().length > 0 || againstShared())
+                void record().then(() => setRecordOpen(false));
             }}
           />
           <p class="pt-1 text-smallest text-on-surface-tertiary">

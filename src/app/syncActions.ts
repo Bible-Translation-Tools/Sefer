@@ -17,13 +17,14 @@
  */
 import { Effect, Option } from "effect";
 
-import { Git } from "#core/git/git";
+import { Git, type Author } from "#core/git/git";
 import type { Verdict } from "#core/observability";
 import type { Project } from "#core/project/project";
 import { Remote, remoteVerdict } from "#core/remote/remote";
-import { receive, trackingRef } from "#core/sync";
+import { combine, receive, trackingRef } from "#core/sync";
 
 import { remoteReasonOf } from "./describe";
+import { recordVersion, type RecordOutcome } from "./recordVersion";
 import type { Services } from "./services";
 import { syncPreferences } from "./syncSettings";
 import { syncStatus } from "./syncStatus";
@@ -123,4 +124,36 @@ export const sendAfterSave = async (services: Services, project: Project): Promi
     // screen can say "behind" or "diverged" with the facts.
     if (reason === "Rejected") await checkForChanges(services, project);
   }
+};
+
+export type SettleOutcome =
+  | { readonly kind: "received"; readonly recorded: RecordOutcome }
+  | { readonly kind: "combined"; readonly commit: string }
+  | { readonly kind: "refused"; readonly why: string };
+
+/**
+ * After a review against the shared project, keep what the person decided and
+ * take everything else the other side changed — as a fast-forward and one new
+ * version when this device has no versions of its own, or as one decision
+ * commit that joins both histories when it has.
+ */
+export const settleWithShared = async (
+  services: Services,
+  project: Project,
+  author: Author,
+  message: string,
+): Promise<SettleOutcome> => {
+  const received = await services.run(Effect.result(receive({ project, reviewed: true })));
+  if (received._tag === "Success") {
+    const dirty = project.books.filter((book) => services.save.dirty(book));
+    const recorded = await recordVersion(services, project, dirty, message, author);
+    if (recorded.kind === "recorded") void sendAfterSave(services, project);
+    return { kind: "received", recorded };
+  }
+  if (received.failure.refusal !== "diverged")
+    return { kind: "refused", why: received.failure.description };
+  const combined = await services.run(Effect.result(combine({ project, author, reviewed: true })));
+  return combined._tag === "Success"
+    ? { kind: "combined", commit: combined.success.commit }
+    : { kind: "refused", why: combined.failure.description };
 };

@@ -164,9 +164,11 @@ export interface SaveCoordinatorService {
    * checkout). `origin` is how the edit is recorded; history shows a received
    * change as `incoming`, never as a revert.
    *
-   * Nothing is applied when the book already holds that text, or when
+   * Nothing is applied when the book already holds that text, when
    * `expect` is given and the book has moved past it (typing landed after
-   * the caller decided this book could be replaced). The baseline moves to
+   * the caller decided this book could be replaced), or when `expect` is
+   * `"keep"`: a person decided this book's text in Review, and the file
+   * moving forward underneath it must not undo that decision. The baseline moves to
    * the file's text either way: a book whose file moved on must never keep
    * measuring "unsaved" against bytes that are gone, or the next save would
    * write the old text back over the new one without a difference ever
@@ -178,7 +180,7 @@ export interface SaveCoordinatorService {
   readonly takeDisk: (
     book: Book,
     origin: Origin,
-    expect?: SourceStamp,
+    expect?: SourceStamp | "keep",
   ) => Effect.Effect<boolean, SaveError>;
   /** The per-path write queue. Save is the only owner of write ordering. */
   readonly serialize: (
@@ -478,15 +480,16 @@ const make = (
     const takeDisk = (
       book: Book,
       origin: Origin,
-      expect?: SourceStamp,
+      expect?: SourceStamp | "keep",
     ): Effect.Effect<boolean, SaveError> =>
       Effect.gen(function* () {
         remember(book);
         const disk = yield* readDisk({ bookId: book.id, path: book.path });
         const stamp = book.source().stamp;
         const moved =
-          expect !== undefined &&
-          (stamp.revision !== expect.revision || stamp.length !== expect.length);
+          expect === "keep" ||
+          (expect !== undefined &&
+            (stamp.revision !== expect.revision || stamp.length !== expect.length));
         const apply = !moved && book.source().text !== disk.text;
         if (apply) {
           // ONE change replacing the whole text, through the funnel: the

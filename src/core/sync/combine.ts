@@ -241,10 +241,19 @@ export interface CombineOptions {
   /** Who the decision commit is by. */
   readonly author: Author;
   readonly overlap?: Overlap;
+  /**
+   * A person has just reviewed against the shared project: a book the policy
+   * would send to a person is decided already, and its text in the editor is
+   * the decision — saved and recorded as this side's, never overwritten by
+   * the other side's file.
+   */
+  readonly reviewed?: boolean;
 }
 
 interface Gathered {
   readonly decision: CombineDecision;
+  /** Books a person decided in Review, by path: kept as the editor holds them. */
+  readonly decided: readonly string[];
   /** The stamp each Book's Source had when it was classified. */
   readonly stamps: ReadonlyMap<string, SourceStamp>;
 }
@@ -260,6 +269,7 @@ const gather = (
   repo: Repo,
   project: Project,
   overlap: Overlap,
+  reviewed = false,
 ): Effect.Effect<Gathered, CombineError, Git | FileSystem.FileSystem | Galley> =>
   Effect.gen(function* () {
     const git = yield* Git;
@@ -308,11 +318,14 @@ const gather = (
     const verdicts = judge(classified.facts, overlap);
     // `combine` would need a unit-level merge, which Sefer does not do by
     // itself: below the book scope it still goes to a person here.
-    const review = classified.facts
-      .filter((_, index) => verdicts[index] === "review" || verdicts[index] === "combine")
-      .map((book) => book.bookId);
+    const needsPerson = classified.facts.filter(
+      (_, index) => verdicts[index] === "review" || verdicts[index] === "combine",
+    );
+    const decided = reviewed ? needsPerson.map((book) => book.path) : [];
+    const review = reviewed ? [] : needsPerson.map((book) => book.bookId);
 
     return {
+      decided,
       decision: planCombine({
         branch,
         localHead,
@@ -321,8 +334,12 @@ const gather = (
         ahead: notIn(localLog, remoteLog).length,
         behind: notIn(remoteLog, localLog).length,
         changed,
-        cloudChanged,
-        unrecorded: status.changed.map((entry) => entry.path),
+        // A decided book is this side's: it is not taken from the other side,
+        // and its saved-but-unrecorded file is the decision, not a conflict.
+        cloudChanged: cloudChanged.filter((entry) => !decided.includes(entry.path)),
+        unrecorded: status.changed
+          .map((entry) => entry.path)
+          .filter((path) => !decided.includes(path)),
         review,
       }),
       stamps: classified.stamps,
@@ -394,7 +411,12 @@ const program = (options: CombineOptions) =>
     // could lose somebody else's commit.
     yield* Effect.mapError(remote.fetch(repo), untouched);
 
-    const gathered = yield* gather(repo, project, options.overlap ?? DEFAULT_OVERLAP);
+    const gathered = yield* gather(
+      repo,
+      project,
+      options.overlap ?? DEFAULT_OVERLAP,
+      options.reviewed === true,
+    );
     const decision = gathered.decision;
     if (!decision.ok) {
       return yield* Effect.fail(
@@ -432,18 +454,38 @@ const program = (options: CombineOptions) =>
         yield* fileSystem.writeFile(full, bytes);
       });
 
+    // The decided books' text goes to their files first, through Save, so
+    // the decision commit records exactly what the person chose.
+    const books = booksByPath(repo, project);
+    const decidedBooks = gathered.decided.flatMap((path) => {
+      const book = books.get(path);
+      return book === undefined ? [] : [book];
+    });
+    yield* Effect.mapError(
+      save.saveAll(decidedBooks),
+      (error) =>
+        new CombineError({
+          refusal: undefined,
+          state: "untouched",
+          description: error.description ?? error.reason,
+        }),
+    );
+
     const recorded = yield* Effect.result(
       Effect.gen(function* () {
         for (const file of arriving)
           yield* Effect.mapError(write(file.path, file.bytes), fromDisk("restored"));
         // The receipts are the paths just written: nothing rides along. With
         // none, the commit is the join alone, which is what it records.
-        const receipts: readonly SaveReceiptLike[] = arriving.map((file) => ({
-          path: file.path,
-          // The port carries a stamp only to keep a receipt recognisable at a
-          // glance; the length is the one field that is true of these bytes.
-          stamp: { revision: 0, length: file.bytes.length },
-        }));
+        const receipts: readonly SaveReceiptLike[] = [
+          ...arriving.map((file) => ({
+            path: file.path,
+            // The port carries a stamp only to keep a receipt recognisable at
+            // a glance; the length is the one field true of these bytes.
+            stamp: { revision: 0, length: file.bytes.length },
+          })),
+          ...decidedBooks.map((book) => ({ path: book.path, stamp: book.source().stamp })),
+        ];
         return yield* Effect.mapError(
           git.commit(repo, receipts, replay.message, options.author, {
             alsoParents: [replay.onto],
@@ -478,7 +520,6 @@ const program = (options: CombineOptions) =>
 
     // The Books take what arrived. A Book typed into since the gather keeps
     // its text; its baseline still moves, so Save & Review shows the change.
-    const books = booksByPath(repo, project);
     const reloaded: BookId[] = [];
     for (const path of replay.taking) {
       const book = books.get(path);

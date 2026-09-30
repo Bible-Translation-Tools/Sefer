@@ -80,6 +80,13 @@ export interface ReceiveOptions {
   /** The open project: its Books are "mine", and the ones a receive reloads. */
   readonly project: Project;
   readonly overlap?: Overlap;
+  /**
+   * A person has just reviewed against the shared project. A book the policy
+   * would send to a person is theirs already decided: its file moves forward
+   * and its text — the decision — stays, reading as unsaved against the new
+   * file, for the commit that follows to record.
+   */
+  readonly reviewed?: boolean;
 }
 
 const refuse = (refusal: ReceiveRefusal, description: string, books?: readonly string[]) =>
@@ -165,7 +172,8 @@ const program = (options: ReceiveOptions) =>
     if (!unmoved(classified, books)) classified = yield* classify(repo, books, head, tip, changed);
     const verdicts = judge(classified.facts, options.overlap ?? DEFAULT_OVERLAP);
     const review = classified.facts.filter((_, index) => verdicts[index] === "review");
-    if (review.length > 0)
+    const decided = new Set(options.reviewed === true ? review.map((book) => book.path) : []);
+    if (review.length > 0 && options.reviewed !== true)
       return yield* Effect.fail(
         refuse(
           "review",
@@ -192,7 +200,11 @@ const program = (options: ReceiveOptions) =>
         continue;
       }
       const applied = yield* Effect.mapError(
-        save.takeDisk(book, "incoming", classified.stamps.get(entry.path)),
+        save.takeDisk(
+          book,
+          "incoming",
+          decided.has(entry.path) ? "keep" : classified.stamps.get(entry.path),
+        ),
         (error) => new ReceiveError({ refusal: undefined, description: error.description }),
       );
       (applied ? reloaded : moved).push(book.id);
