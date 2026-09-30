@@ -102,17 +102,17 @@ export const exportProjectZip = async (services: Services, root: string): Promis
 /**
  * Renames the project as people see it, and tells the index.
  *
- * `ProjectAdmin.rename` rewrites the burrito's `identification.name` (or
- * `.sefer/project.json` when there is no burrito) and does NOT move the
- * folder, so `shell.recentProjects` — which is keyed by root — has nothing to
+ * `ProjectAdmin.rename` records the name in this device's `.sefer/project.json`
+ * (never the burrito's metadata, which travels with the project) and does NOT
+ * move the folder, so `shell.recentProjects` — which is keyed by root — has nothing to
  * correct. The index does: it is where the name in the projects table comes
- * from, and it is re-read rather than patched because a burrito rename may
- * land in a different locale than the one we displayed.
+ * from, and it is re-read rather than patched so the table and the file can
+ * never disagree.
  *
  * `noteRenamed` is the third reader, and without it a rename would show a
- * green toast and change nothing on screen: the OPEN project holds the
- * metadata it decoded when it was opened, and nothing re-reads a burrito
- * mid-session. The overlay makes the sidebar header move with the table.
+ * green toast and change nothing on screen: the OPEN project's header reads
+ * the overlay, which a project open seeds from the same file. The overlay
+ * makes the sidebar header move with the table.
  */
 export const renameProject = async (
   services: Services,

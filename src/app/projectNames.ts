@@ -1,15 +1,11 @@
 /**
- * The names a rename changed in THIS session, by project root.
+ * The names chosen on this device, by project root: a rename made this
+ * session, and the one a project open reads from `.sefer/project.json`.
  *
- * A rename writes a file — the burrito's `identification.name`, or
- * `.sefer/project.json` for a project that has no burrito — and every reader
- * that learns a name from disk therefore learns the new one on its next read.
- * Two readers do not read again:
- *
- *   * the open `Project` holds the metadata it decoded when it was opened, so
- *     `projectName(shell.project())` keeps answering the old name until the
- *     project is closed and reopened;
- *   * nothing at all reads `.sefer/project.json` mid-session.
+ * A rename writes that file, and every reader that learns a name from disk
+ * learns the new one on its next read. The open project's header does not
+ * read disk: `projectName(shell.project())` answers from the metadata the
+ * Project decoded at open, which a device-local name never touches.
  *
  * Renaming then showed a green toast and changed nothing on screen. This is
  * the smallest honest fix: one module-level signal, written by the one
@@ -31,6 +27,6 @@ export const noteRenamed = (root: string, name: string): void => {
   setNames((held) => ({ ...held, [root]: name }));
 };
 
-/** The name this session gave the project, or undefined if it never renamed it. */
+/** The name chosen on this device, or undefined when none was. */
 export const renamedName = (root: string | undefined): string | undefined =>
   root === undefined ? undefined : names()[root];

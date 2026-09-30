@@ -69,6 +69,7 @@ import { t } from "./i18n";
 import { registerLegacyMarkers } from "./legacyMarkers";
 import { createLocation, type Location } from "./location";
 import { registerProjectCommands } from "./projectCommands";
+import { noteRenamed } from "./projectNames";
 import { composeServices, fixtureRequested, type Services } from "./services";
 import {
   shellKeys,
@@ -870,6 +871,12 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     live = ready;
     setProject(ready);
     setCursor(0);
+    // A name chosen on this device lives in `.sefer/project.json`, never in
+    // the project's own metadata, so the header learns it the way it learns a
+    // rename made this session.
+    void services.run(services.admin.recordedName(root)).then((recorded) => {
+      if (Option.isSome(recorded)) noteRenamed(root, recorded.value);
+    });
     // A seat swap replaces the Book object, so every row derived from one has
     // to be re-taken. One subscription for the whole project, not one per
     // book, and it is the Project's own announcement rather than a guess.

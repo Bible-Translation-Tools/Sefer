@@ -82,8 +82,8 @@ const summarize = (
     const metadata = yield* Effect.map(Effect.result(admin.metadata(root)), (result) =>
       Result.isSuccess(result) ? Option.getOrUndefined(result.success) : undefined,
     );
-    // The second answer for a name, and the only one a project with no burrito
-    // has: what `ProjectAdmin.rename` wrote into `.sefer/project.json`.
+    // The first answer for a name: what `ProjectAdmin.rename` wrote into this
+    // device's `.sefer/project.json`, ahead of what the metadata declares.
     const recorded = yield* Effect.map(admin.recordedName(root), Option.getOrUndefined);
     const from = yield* Effect.map(firstArrival(fileSystem, root), Option.getOrUndefined);
 
@@ -92,7 +92,7 @@ const summarize = (
     return {
       root,
       folder,
-      name: projectDisplayName(metadata, locale) || recorded || folder,
+      name: recorded || projectDisplayName(metadata, locale) || folder,
       language: languageName(metadata, locale),
       languageTag: languageTag(metadata),
       books: entries.filter(isUsfm).length,
