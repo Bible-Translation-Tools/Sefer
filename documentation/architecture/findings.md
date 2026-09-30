@@ -182,4 +182,25 @@ Presence is a `warning` because a verse coverage gap is usually real and occasio
 
 The two new channels are convictions like any other and reach `/inventory` through the same pattern table; see [Character inventory](inventory.md).
 
-The header's snapshot id now changes when the settings change, not only when the text does. That costs `ProjectAnalysis` nothing today: its finding, cross-book and inventory caches are keyed on nothing at all and are dropped wholesale whenever a publication lands or a book changes. A settings surface that flipped a lane WITHOUT touching any text would have to invalidate them by hand; nothing calls `setSettings` yet, and this is the note for whoever writes the first caller.
+## What a Sous finding says
+
+```text
+describeFinding(finding, pattern, { siteText: "Moses, Moses", bookCount: 66, bookName })
+  → { id: "convention.doubled.separated", params: { word: "Moses", count: 1, total: 895, … } }
+  → “Moses” is written twice with only punctuation between here (“Moses, Moses”).
+    The project does this nowhere else; “Moses” appears 895 times.
+```
+
+Kitchen decides why a squiggle fired and names it as a message id with parameters (`sous-messages.ts`); its English catalog (`sous-messages.en.json`, ICU MessageFormat) is the wording. `src/core/findings/messages.ts` is Sefer's only formatter: one `intl-messageformat` per id, cached, locale `en`. Sefer writes no finding sentence of its own, and every Sous kind — hygiene, presence, source copy, length and every convention channel, `BookRate` included — goes through it. The `code` is unchanged (`sous.convention.<Channel>`).
+
+- **One headline.** A site matching several rows names only its finest pattern, and only that pattern is described. The reasons list is no longer printed.
+- **The words come from the text.** The engine keys a word by hash, so `fromSnapshot`'s resolver hands back the published text with each book (`PublishedBook.text`, the held analysis the publication measured) and `siteText` is its slice at the finding's UTF-16 span. The same resolver names a book for `BookRate` (`PublishedBook.name`, through `bookName` in `core/location/canon.ts`).
+- The message still quotes the document, so it stays panel text and never reaches telemetry.
+
+## Proofreading settings
+
+`/settings` has a Proofreading card (`src/app/ui/SousSettingsPanel.tsx`) generated from kitchen's `SOUS_SETTINGS`: grouped by kitchen's `group`, each row kitchen's label, its plain description above the control, the control by `kind` (switch; number within its range; a share-bp shown as a percent), the default and a reset, and one Reset all. Sefer's only copy is the three group headings (`SOUS_GROUPS`, typed `satisfies Record<SousSettingGroup, …>`).
+
+They are stored globally, like every other preference, as one key (`sous.settings`) holding only the values the reader changed. `sousValues` fills the rest from kitchen's defaults and ignores a stored value that no longer fits its key's kind or range, so a setting kitchen adds or drops needs no migration.
+
+`ProjectContext` hands the engine the whole set before any project attaches, and on every change calls `galley.setSettings`, then `ProjectAnalysis.rejudge()`: the publication judged under the old settings is dropped, every book is marked stale, and the scheduler's one debounced pass re-analyzes and republishes once — the path an edit takes. The stores are told at once, so no screen keeps showing findings from the old settings while the pass runs; the snapshot id hashes the whole config, so the engine reuses nothing judged under it either.

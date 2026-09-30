@@ -91,7 +91,7 @@ Schema-validated preferences persisted as JSON through `writeFileAtomic`. Each m
 
 ### Constraints and known bugs
 
-- Nothing calls the engine's `setSettings` yet; the first caller must invalidate the findings caches by hand.
+- The proofreading (Sous) settings are one global key, `sous.settings`, holding only what the reader changed from kitchen's defaults (`src/app/sousSettings.ts`); they are not per project.
 
 ### Ideas / future
 
@@ -167,7 +167,7 @@ A bounded ring of events, spans and verdicts, and a second ring of 200 for `fail
 
 ### Overview
 
-The pinned Scripture Kitchen WASM build (tagged git dependency, v0.1.8). Onion parses, Sous proofreads, and Galley composes both. It is one in-process synchronous handle: `analyze`, `setExtensions` (the process-wide marker table), the corpus (`update`, `updateReference`, `publish`), `find`, `lint`, `toc`, `mask`, `diff`/`merge`, `formatEdits`, `skeleton`/`overlay`, `hash`. `src/core/galley`; loading happens in `src/platform/{web,node}/galley.ts`. → [galley](architecture/galley.md)
+The pinned Scripture Kitchen WASM build (tagged git dependency, v0.1.8). Onion parses, Sous proofreads, and Galley composes both. It is one in-process synchronous handle: `analyze`, `setExtensions` (the process-wide marker table), the corpus (`update`, `updateReference`, `publish`), `find`, `lint`, `toc`, `mask`, `diff`/`merge`, `formatEdits`, `skeleton`/`overlay`, `hash`, and the judging settings (`settings`/`setSettings`, the whole set, through kitchen's generated `fromSettings`/`toSettings`). It also re-exports kitchen's finding descriptors (`describeFinding`, the English catalog) and the typed settings list (`SOUS_SETTINGS`). `src/core/galley`; loading happens in `src/platform/{web,node}/galley.ts`. → [galley](architecture/galley.md)
 
 ### Constraints and known bugs
 
@@ -185,7 +185,7 @@ The pinned Scripture Kitchen WASM build (tagged git dependency, v0.1.8). Onion p
 
 ### Overview
 
-Sefer's whole-project consumer of Galley. It analyses every book when a project opens and re-analyses on a debounce. It holds the cross-book results, reference texts and the character inventory, each stamped for freshness. `src/core/analysis/projectAnalysis.ts`. → [findings](architecture/findings.md), [inventory](architecture/inventory.md)
+Sefer's whole-project consumer of Galley. It analyses every book when a project opens and re-analyses on a debounce. It holds the cross-book results, reference texts and the character inventory, each stamped for freshness. `rejudge()` is the door for a settings change: it drops the publication judged under the old settings, marks every book stale and lets the one debounced pass republish. `src/core/analysis/projectAnalysis.ts`. → [findings](architecture/findings.md), [inventory](architecture/inventory.md)
 
 ### Constraints and known bugs
 
@@ -316,7 +316,7 @@ One `Finding` shape over engine diagnostics and project checks, with a semantic 
 ### Constraints and known bugs
 
 - The inventory only lists characters the engine made a claim about; it waits on the Sous census.
-- Who localises rule messages is undecided.
+- A Sous finding's message is kitchen's descriptor rendered through its English ICU catalog (`src/core/findings/messages.ts`, `intl-messageformat`, locale `en`). Onion's messages are still the engine's catalogue strings, and there is no second language yet.
 
 ### Ideas / future
 
