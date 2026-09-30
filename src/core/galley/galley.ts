@@ -33,15 +33,16 @@ import {
   FORMAT_VERSION as SOUS_FORMAT_VERSION,
 } from "@wycliffeassociates/scripture-kitchen/sous-reader";
 import {
+  fromSettings,
+  toSettings,
+  type SousSettingsValues,
+} from "@wycliffeassociates/scripture-kitchen/sous-settings";
+import {
   Census as ProjectToc,
   FORMAT_VERSION as TOC_FORMAT_VERSION,
 } from "@wycliffeassociates/scripture-kitchen/toc-reader";
 import type { BookCensus as BookToc } from "@wycliffeassociates/scripture-kitchen/toc-reader";
-import {
-  Galley as GalleyHandle,
-  initSync,
-  type SousSettings as SousSettingsHandle,
-} from "@wycliffeassociates/scripture-kitchen/web";
+import { Galley as GalleyHandle, initSync } from "@wycliffeassociates/scripture-kitchen/web";
 // The whole namespace as well as the two names above: the engine's stateless
 // doors (diff, merge, format…) arrive as FREE FUNCTIONS on the module rather
 // than as methods on the handle, and `diff.ts` and `format.ts` bind them by
@@ -89,6 +90,18 @@ export {
   type MessageId as FindingMessageId,
 } from "@wycliffeassociates/scripture-kitchen/sous-messages";
 export { default as FINDING_MESSAGES_EN } from "@wycliffeassociates/scripture-kitchen/sous-messages.en.json";
+// Sous's judging settings as kitchen generates them: every key, its type, its
+// default and range, and one plain sentence each. Renamed at the seam because
+// `SettingKey` and `SettingGroup` are already Sefer's own words.
+export {
+  SETTING_KEYS as SOUS_SETTING_KEYS,
+  SOUS_SETTINGS,
+  type SettingGroup as SousSettingGroup,
+  type SettingKey as SousSettingKey,
+  type SettingKind as SousSettingKind,
+  type SettingSpec as SousSettingSpec,
+  type SousSettingsValues,
+} from "@wycliffeassociates/scripture-kitchen/sous-settings";
 // The pattern table's own vocabulary. Re-exported (not re-declared) so that a
 // reader of the table — `src/core/findings/inventory.ts` — names the same
 // closed sets the wire does, and a channel added upstream is a type error here
@@ -164,46 +177,6 @@ export interface EngineVersion {
   readonly sousFormat: number;
   readonly findFormat: number;
   readonly tocFormat: number;
-}
-
-/**
- * Sous's judging settings, as a plain object.
- *
- * The wasm `SousSettings` is a handle that must be freed, and its field names
- * are the Rust config's, kept verbatim so this object and the engine's own
- * documentation read the same. Copies cross this boundary in both directions;
- * no caller ever holds the handle.
- *
- * Of the lanes, `presence` judges verse coverage against a paired reference
- * and is ON; `source_copy` counts consecutive words a target shares with its
- * paired source verse (at least `source_copy_min_run`) and is OFF, because a
- * legitimately borrowed name would otherwise be a finding in every verse that
- * carries one.
- */
-export interface SousSettings {
-  readonly casing: boolean;
-  readonly doubled: boolean;
-  readonly doubles_productive_bp: number;
-  readonly exact_neighbor: boolean;
-  readonly lengths_enabled: boolean;
-  readonly letter_runs: boolean;
-  readonly min_verses: number;
-  readonly placement: boolean;
-  readonly pooled_neighbor: boolean;
-  readonly presence: boolean;
-  readonly rarity: boolean;
-  readonly run_shape: boolean;
-  readonly sentence_start: boolean;
-  readonly sentence_start_upper_bp: number;
-  readonly source_copy: boolean;
-  readonly source_copy_min_run: number;
-  readonly support_floor: number;
-  readonly terminal_upper_share_bp: number;
-  readonly word_length: boolean;
-  readonly word_length_sigma: number;
-  readonly word_support_floor: number;
-  readonly z_long: number;
-  readonly z_short: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -321,34 +294,6 @@ const decodeHits = (bytes: Uint8Array): readonly EngineHit[] => {
   }
   return out;
 };
-
-type SettingKey = keyof SousSettings;
-
-const SETTING_KEYS: readonly SettingKey[] = [
-  "casing",
-  "doubled",
-  "doubles_productive_bp",
-  "exact_neighbor",
-  "lengths_enabled",
-  "letter_runs",
-  "min_verses",
-  "placement",
-  "pooled_neighbor",
-  "presence",
-  "rarity",
-  "run_shape",
-  "sentence_start",
-  "sentence_start_upper_bp",
-  "source_copy",
-  "source_copy_min_run",
-  "support_floor",
-  "terminal_upper_share_bp",
-  "word_length",
-  "word_length_sigma",
-  "word_support_floor",
-  "z_long",
-  "z_short",
-];
 
 /**
  * One book's diagnostics without its syntax tree — what `lint(id)` answers.
@@ -570,10 +515,13 @@ export interface GalleyService {
   readonly findAll: (query: FindQuery, scope?: FindScope) => readonly EngineHit[];
 
   /** A copy of the settings the next `publish` judges with. */
-  readonly settings: () => SousSettings;
+  readonly settings: () => SousSettingsValues;
 
-  /** Replace some settings. Costs a re-judge, not a re-map. */
-  readonly setSettings: (patch: Partial<SousSettings>) => void;
+  /**
+   * Replace every setting. Costs a re-judge, not a re-map; the snapshot id
+   * hashes the whole config, so nothing judged under the old one is reused.
+   */
+  readonly setSettings: (values: SousSettingsValues) => void;
 
   /** Resident bytes across the whole handle: texts, products, cached rows. */
   readonly residentBytes: () => number;
@@ -736,43 +684,6 @@ const engineVersion = (): EngineVersion => ({
   findFormat: FIND_FORMAT_VERSION,
   tocFormat: TOC_FORMAT_VERSION,
 });
-
-const readSettings = (held: SousSettingsHandle): SousSettings => ({
-  casing: held.casing,
-  doubled: held.doubled,
-  doubles_productive_bp: held.doubles_productive_bp,
-  exact_neighbor: held.exact_neighbor,
-  lengths_enabled: held.lengths_enabled,
-  letter_runs: held.letter_runs,
-  min_verses: held.min_verses,
-  placement: held.placement,
-  pooled_neighbor: held.pooled_neighbor,
-  presence: held.presence,
-  rarity: held.rarity,
-  run_shape: held.run_shape,
-  sentence_start: held.sentence_start,
-  sentence_start_upper_bp: held.sentence_start_upper_bp,
-  source_copy: held.source_copy,
-  source_copy_min_run: held.source_copy_min_run,
-  support_floor: held.support_floor,
-  terminal_upper_share_bp: held.terminal_upper_share_bp,
-  word_length: held.word_length,
-  word_length_sigma: held.word_length_sigma,
-  word_support_floor: held.word_support_floor,
-  z_long: held.z_long,
-  z_short: held.z_short,
-});
-
-const writeSettings = (held: SousSettingsHandle, patch: Partial<SousSettings>): void => {
-  // SAFETY: every SETTING_KEYS entry is a declared mutable field of
-  // `SousSettings` (see pkg-web/usfm_galley.d.ts), and Sefer's own
-  // `SousSettings` gives each the same type.
-  const target = held as Record<SettingKey, boolean | number>;
-  for (const key of SETTING_KEYS) {
-    const value = patch[key];
-    if (value !== undefined) target[key] = value;
-  }
-};
 
 /**
  * `initSync` instantiates into module-global state inside the generated glue,
@@ -941,25 +852,6 @@ const makeService = (
     };
   };
 
-  const settings = (): SousSettings => {
-    const held = handle.config();
-    try {
-      return readSettings(held);
-    } finally {
-      held.free();
-    }
-  };
-
-  const setSettings = (patch: Partial<SousSettings>): void => {
-    const held = handle.config();
-    try {
-      writeSettings(held, patch);
-      handle.setConfig(held);
-    } finally {
-      held.free();
-    }
-  };
-
   /**
    * One overlay call's edits, read out and freed.
    *
@@ -1044,8 +936,8 @@ const makeService = (
       return changed === undefined ? undefined : changed.length > 0;
     },
     wordlessReferences: () => handle.lastWordlessReferences(),
-    settings,
-    setSettings,
+    settings: () => fromSettings(handle),
+    setSettings: (values) => toSettings(handle, values),
     residentBytes: () => handle.residentBytes(),
     dispose,
   };

@@ -185,6 +185,14 @@ export interface ProjectAnalysisService {
   readonly invalidate: (bookId: BookId) => void;
 
   /**
+   * The judging settings changed: drop the publication judged under the old
+   * ones, mark every book stale, and let the scheduler republish once, the way
+   * an edit does. Until it lands there are no Sous findings rather than
+   * findings for settings nobody has now.
+   */
+  readonly rejudge: () => void;
+
+  /**
    * Every finding in the project, in one shape: per-book Galley diagnostics
    * from the held analyses, plus the Sous findings of the last publication.
    * Memoised until something changes, because a panel asks on every render.
@@ -762,6 +770,14 @@ const make = (
         if (entry !== undefined) entry.stale = true;
         invalidateCaches();
         arm(bookId);
+      },
+      rejudge: () => {
+        snapshot = undefined;
+        invalidateCaches();
+        for (const [bookId, entry] of entries) {
+          entry.stale = true;
+          arm(bookId);
+        }
       },
       findings,
       crossBook,
