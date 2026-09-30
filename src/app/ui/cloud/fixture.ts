@@ -73,6 +73,7 @@ const planFor = (contested: boolean): IncomingPlan => ({
       chapters: [1],
       alsoHere: [],
       contested: false,
+      verdict: "take",
     },
     {
       bookId: "MRK",
@@ -81,6 +82,7 @@ const planFor = (contested: boolean): IncomingPlan => ({
       chapters: [1],
       alsoHere: contested ? [1] : [],
       contested,
+      verdict: contested ? "review" : "take",
     },
   ],
   contested: contested ? ["MRK"] : [],
