@@ -79,6 +79,16 @@ import {
 // `src/core/galley` imports the engine holds for the reader too.
 export { FindingsSnapshot };
 export type { Finding, Pattern } from "@wycliffeassociates/scripture-kitchen/sous-reader";
+// Why a finding fired, as an id and its parameters, and the English catalog
+// those ids render through. `src/core/findings/messages.ts` is the one
+// formatter.
+export {
+  describe as describeFinding,
+  type Message as FindingMessage,
+  type MessageContext as FindingMessageContext,
+  type MessageId as FindingMessageId,
+} from "@wycliffeassociates/scripture-kitchen/sous-messages";
+export { default as FINDING_MESSAGES_EN } from "@wycliffeassociates/scripture-kitchen/sous-messages.en.json";
 // The pattern table's own vocabulary. Re-exported (not re-declared) so that a
 // reader of the table — `src/core/findings/inventory.ts` — names the same
 // closed sets the wire does, and a channel added upstream is a type error here

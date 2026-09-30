@@ -44,17 +44,17 @@
 import { Context, Duration, Effect, Latch, Layer, Option, PubSub, Scope, Stream } from "effect";
 
 import type { Book, BookId } from "../book/book";
-import { fromAnalysis, fromSnapshot, type Finding } from "../findings/finding";
+import { fromAnalysis, fromSnapshot, type Finding, type PublishedBook } from "../findings/finding";
 import { EMPTY as EMPTY_INVENTORY, inventory, type Inventory } from "../findings/inventory";
 import {
   describesExactly,
   Galley,
   stampOf,
   type Analysis,
-  type EngineStamp,
   type FindingsSnapshot,
   type GalleyService,
 } from "../galley";
+import { bookName } from "../location/canon";
 import { Observability, type ObservabilityService } from "../observability";
 import type { Project } from "../project/project";
 import type { SourceStamp } from "../source/source";
@@ -476,15 +476,22 @@ const make = (
       return refreshed;
     });
 
-    const resolveBook = (
-      id: string,
-    ):
-      | { readonly bookId: BookId; readonly stamp: SourceStamp; readonly engine: EngineStamp }
-      | undefined => {
+    // The held analysis is the text the last publication measured: a pass
+    // refreshes the analyses it owes and then publishes, and nothing else
+    // writes `entry.analysis`.
+    const resolveBook = (id: string): PublishedBook | undefined => {
       const entry = entries.get(id);
       if (entry === undefined || entry.analysis === undefined || entry.stamp === undefined)
         return undefined;
-      return { bookId: id, stamp: entry.stamp, engine: stampOf(entry.analysis) };
+      const metadata =
+        attached === undefined ? undefined : Option.getOrUndefined(attached.metadata());
+      return {
+        bookId: id,
+        stamp: entry.stamp,
+        engine: stampOf(entry.analysis),
+        text: entry.analysis.text,
+        name: bookName(id, metadata),
+      };
     };
 
     const crossBook = (): readonly Finding[] => {

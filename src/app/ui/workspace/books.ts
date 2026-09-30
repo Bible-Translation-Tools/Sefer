@@ -3,28 +3,12 @@
  *
  * The table lives in core (`core/location/canon.ts`) because a canon is Bible
  * data; reading what somebody typed is `core/location/citation.ts`, reached
- * through the shell's location service (`app/location.ts`). What stays here
- * is the display join: a `Project`'s decoded metadata, turned into a name.
+ * through the shell's location service (`app/location.ts`). `bookName`, the
+ * join of a project's metadata into a name, is in core beside the canon since
+ * a finding's message names a book too; the workspace reads all three here.
  */
 
-import { CANON, testamentOf, type Testament } from "#core/location/canon";
-import { localized, type ProjectMetadata } from "#core/resources/projectMetadata";
+import { bookName, CANON, testamentOf, type Testament } from "#core/location/canon";
 
-export { CANON, testamentOf };
+export { bookName, CANON, testamentOf };
 export type { Testament };
-
-const BY_ID = new Map(CANON.map((book) => [book.id, book]));
-
-/**
- * What to call a book: what the project calls it, else what the book calls
- * itself (`heading` — its `\h` or `\toc2`, as the engine reads them, when the
- * caller holds a parse), else the English canon, else the id itself. Native
- * first, English second; never blank — the id is always something a reader
- * can act on.
- */
-export const bookName = (id: string, metadata?: ProjectMetadata, heading?: string): string => {
-  const local = localized(metadata?.bookNames[id], [metadata?.defaultLocale]);
-  if (local !== "") return local;
-  if (heading !== undefined && heading !== "") return heading;
-  return BY_ID.get(id.toUpperCase())?.name ?? id;
-};

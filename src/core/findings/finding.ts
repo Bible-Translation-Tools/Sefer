@@ -38,6 +38,7 @@ import {
   type FindingsSnapshot,
 } from "../galley";
 import type { SourceStamp } from "../source/source";
+import { sousMessage } from "./messages";
 
 /**
  * The three rungs a reader is shown. The per-book lint's `hint` folds into
@@ -218,18 +219,16 @@ const corpusSeverity = (finding: CorpusFinding): Severity => {
   }
 };
 
-const plural = (n: number, one: string, many: string): string => (n === 1 ? one : many);
-
-/** `+` marks a lane the engine clamped, so the number reads as "at least". */
-const atLeast = (n: number, saturated: boolean): string => `${n}${saturated ? "+" : ""}`;
-
-/**
- * A glyph the message can quote. Zero means the channel judges no scalar (the
- * word lanes carry a hash instead), and the pooled-digit sentinel is above the
- * Unicode range, so one bounds check rejects both without a constant.
- */
-const glyphText = (glyph: number): string | null =>
-  glyph > 0 && glyph <= 0x10ffff ? String.fromCodePoint(glyph) : null;
+/** A published book, as the Sous readers need it back. */
+export interface PublishedBook {
+  readonly bookId: BookId;
+  readonly stamp: SourceStamp;
+  readonly engine: EngineStamp;
+  /** The text the publication measured, which `stamp` names. */
+  readonly text: string;
+  /** What the reader calls the book. */
+  readonly name: string;
+}
 
 const corpusCode = (finding: CorpusFinding, channel: string | undefined): string => {
   switch (finding.kind) {
@@ -246,49 +245,6 @@ const corpusCode = (finding: CorpusFinding, channel: string | undefined): string
   }
 };
 
-const corpusMessage = (
-  finding: CorpusFinding,
-  pattern:
-    | { readonly channel: string; readonly glyph: number; readonly shareBp: number }
-    | undefined,
-): string => {
-  switch (finding.kind) {
-    case "Hygiene": {
-      const { class: hygiene, run, saturated } = finding.hygiene;
-      return `${atLeast(run, saturated)} ${plural(run, "character", "characters")} of ${hygiene}`;
-    }
-    case "Presence": {
-      const { kind, keys, saturated } = finding.presence;
-      const verses = `${atLeast(keys, saturated)} ${plural(keys, "verse", "verses")}`;
-      if (kind === "Missing") return `${verses} the source has are missing here`;
-      if (kind === "Extra") return `${verses} here are not in the source`;
-      return `${verses} here are empty`;
-    }
-    case "SourceCopy": {
-      const { run, eligible, saturated } = finding.sourceCopy;
-      return `${atLeast(run, saturated)} consecutive ${plural(run, "word", "words")} also in the paired source verse, of ${eligible} eligible`;
-    }
-    case "LengthProportionality": {
-      const { bookScope, projectScope } = finding.digest;
-      const book = bookScope === null ? "n/a" : bookScope.toFixed(2);
-      const project = projectScope === null ? "n/a" : projectScope.toFixed(2);
-      return `verse length is out of proportion with the source (book ${book}, project ${project})`;
-    }
-    case "Convention": {
-      const reasons = finding.convention.reasons;
-      if (pattern === undefined) return `unconventional here (${reasons.join(", ")})`;
-      const glyph = glyphText(pattern.glyph);
-      const what = glyph === null ? "this word" : `“${glyph}”`;
-      // The channel is usually also one of the reasons; naming it twice reads
-      // as a bug. The rarity lane convicts on scarcity, so its share is zero
-      // by construction and "0.0% of sites" would too.
-      const lanes = [pattern.channel, ...reasons.filter((reason) => reason !== pattern.channel)];
-      const share = pattern.shareBp > 0 ? `, ${(pattern.shareBp / 100).toFixed(2)}% of sites` : "";
-      return `${what} is used unconventionally for this project (${lanes.join(", ")}${share})`;
-    }
-  }
-};
-
 /**
  * Sous corpus findings → findings, for a whole publication.
  *
@@ -298,6 +254,10 @@ const corpusMessage = (
  * because a finding without a provable stamp cannot be checked for freshness
  * and so cannot be navigated to or fixed.
  *
+ * `text` is the book's text as it was published, so a message can quote the
+ * finding's own words (the engine keys a word by hash), and `name` is what
+ * the reader calls the book, for a message that names one.
+ *
  * A publication whose coordinates are UTF-8 byte offsets is dropped whole: the
  * offsets in the one shape are UTF-16 code units into canonical LF text, and
  * silently mixing spaces is exactly the class of bug the stamps exist to
@@ -306,14 +266,16 @@ const corpusMessage = (
  */
 export const fromSnapshot = (
   snapshot: FindingsSnapshot,
-  resolveBook: (
-    id: string,
-  ) =>
-    | { readonly bookId: BookId; readonly stamp: SourceStamp; readonly engine: EngineStamp }
-    | undefined,
+  resolveBook: (id: string) => PublishedBook | undefined,
 ): readonly Finding[] => {
   if (snapshot.coordinateSpace !== "utf16") return [];
   const patterns = snapshot.patterns();
+  const bookCount = snapshot.length;
+  const bookName = (index: number): string => {
+    const book = snapshot.book(index);
+    if (book === undefined) return String(index + 1);
+    return resolveBook(book.id)?.name ?? book.key;
+  };
   const out: Finding[] = [];
   for (let index = 0; index < snapshot.length; index += 1) {
     const book = snapshot.book(index);
@@ -331,7 +293,11 @@ export const fromSnapshot = (
         severity: corpusSeverity(finding),
         code,
         producer: "sous",
-        message: corpusMessage(finding, pattern),
+        message: sousMessage(finding, pattern, {
+          siteText: resolved.text.slice(finding.from, finding.to),
+          bookCount,
+          bookName,
+        }),
         from: finding.from,
         to: finding.to,
         stamp: resolved.stamp,
