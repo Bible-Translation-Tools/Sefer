@@ -24,6 +24,7 @@ import {
   folderSource,
   recordedSource,
   savedSource,
+  sharedSource,
   type CompareSource,
   type RecordedTexts,
 } from "#core/compare";
@@ -74,6 +75,8 @@ export interface ChoiceContext {
   readonly baselineOf: (book: Book) => Option.Option<Baseline>;
   /** The blobs at HEAD, for the last-recorded side. */
   readonly recorded: RecordedTexts;
+  /** The blobs at the remote-tracking ref, for the shared project's side. */
+  readonly shared: RecordedTexts;
 }
 
 /**
@@ -129,6 +132,18 @@ export const sourceChoices = (context: ChoiceContext): readonly SourceChoice[] =
       available: project !== undefined && context.recorded.head !== undefined,
       immediate: () =>
         project === undefined ? undefined : recordedSource(context.recorded, t("Last recorded")),
+    },
+    {
+      id: "shared",
+      label: t("The shared project"),
+      shortLabel: t("the shared project"),
+      explainer:
+        context.shared.head === undefined
+          ? t("Nothing has been received from a shared project yet.")
+          : t("The shared project's newest version, as the last check brought it here."),
+      available: project !== undefined && context.shared.head !== undefined,
+      immediate: () =>
+        project === undefined ? undefined : sharedSource(context.shared, t("The shared project")),
     },
     {
       id: "zip",

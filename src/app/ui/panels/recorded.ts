@@ -26,6 +26,7 @@ import type { BookId } from "#core/book/book";
 import { Git, repositoryPath } from "#core/git/git";
 import type { Project } from "#core/project/project";
 import { decode, type Source } from "#core/source/source";
+import { trackingRef } from "#core/sync";
 
 import type { Shell } from "../../ProjectContext";
 
@@ -53,7 +54,15 @@ export interface RecordedVersion {
  * `Effect.result`: a project with no repository is the ordinary case in a
  * browser fixture and must not raise.
  */
-export const createRecordedVersion = (shell: Shell): RecordedVersion => {
+/**
+ * Which commit a reader stands on: `head`, the last version recorded here, or
+ * `shared`, the shared project's newest version as the last check fetched it
+ * (the branch's remote-tracking ref). Both are frozen commits; only which one
+ * is read differs.
+ */
+export type RecordedRef = "head" | "shared";
+
+export const createRecordedVersion = (shell: Shell, ref: RecordedRef = "head"): RecordedVersion => {
   const [recorded, setRecorded] = createSignal<Recorded>(
     { head: undefined, texts: new Map(), read: false },
     { name: "recordedVersion" },
@@ -78,8 +87,21 @@ export const createRecordedVersion = (shell: Shell): RecordedVersion => {
           const opened = yield* Effect.result(git.open(project.root));
           if (Result.isFailure(opened)) return NOTHING;
           const repo = opened.success;
-          const log = yield* Effect.result(git.log(repo));
-          const head = Result.isSuccess(log) ? log.success[0]?.id : undefined;
+          let head: string | undefined;
+          if (ref === "head") {
+            const log = yield* Effect.result(git.log(repo));
+            head = Result.isSuccess(log) ? log.success[0]?.id : undefined;
+          } else {
+            const branch = yield* Effect.orElseSucceed(git.branch(repo), () =>
+              Option.none<string>(),
+            );
+            const tip = Option.isNone(branch)
+              ? Option.none<string>()
+              : yield* Effect.orElseSucceed(git.resolve(repo, trackingRef(branch.value)), () =>
+                  Option.none<string>(),
+                );
+            head = Option.getOrUndefined(tip);
+          }
           if (head === undefined) return NOTHING;
           const texts = new Map<BookId, Source>();
           for (const book of project.books) {

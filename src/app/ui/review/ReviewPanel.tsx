@@ -32,7 +32,7 @@
  * project's own unsaved work and not the comparison.
  */
 
-import { useNavigate } from "@tanstack/solid-router";
+import { useNavigate, useSearch } from "@tanstack/solid-router";
 import { Effect, Option, Result } from "effect";
 import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
@@ -110,9 +110,16 @@ export function ReviewPanel() {
   const navigate = useNavigate();
   const { services } = shell;
   const version = createRecordedVersion(shell);
+  const shared = createRecordedVersion(shell, "shared");
 
   const [leftId, setLeftId] = createSignal("project", { name: "reviewLeftKind" });
-  const [rightId, setRightId] = createSignal("disk", { name: "reviewRightKind" });
+  // SAFETY: `strict: false` gives the union of every route's search; the one
+  // field is read as `unknown` and compared, never trusted.
+  const search = useSearch({ strict: false }) as () => { readonly against?: unknown };
+  const [rightId, setRightId] = createSignal(
+    untrack(() => search().against) === "shared" ? "shared" : "disk",
+    { name: "reviewRightKind" },
+  );
   const [leftPicked, setLeftPicked] = createSignal<CompareSource | undefined>(undefined, {
     name: "reviewLeftPicked",
   });
@@ -169,6 +176,7 @@ export function ReviewPanel() {
       project: shell.project(),
       baselineOf: (book) => services.save.baseline(book),
       recorded: version.recorded(),
+      shared: shared.recorded(),
     });
 
   const choiceOf = (id: string): SourceChoice | undefined =>
