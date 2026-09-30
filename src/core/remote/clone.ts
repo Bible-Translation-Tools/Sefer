@@ -16,6 +16,7 @@
 import { Effect, FileSystem } from "effect";
 
 import type { Repo } from "../git/git";
+import { excludeSeferFolder } from "../git/intake";
 import { appendArrival } from "../project/provenance";
 import { Remote, type Progress, type RemoteError } from "./remote";
 
@@ -42,6 +43,10 @@ export const cloneRepository = (
     const remote = yield* Remote;
     const fileSystem = yield* FileSystem.FileSystem;
     const cloned = yield* remote.clone(url, into);
+    // This device's corner stays out of the repository from the first
+    // moment, before provenance writes into it. A clone's HEAD is its
+    // arrival, so there is nothing to commit.
+    yield* Effect.ignore(excludeSeferFolder(fileSystem, into));
     // A clone that arrived but could not be recorded is still a clone: the
     // project is on disk and works, and its row simply says "from" nothing.
     yield* Effect.ignore(

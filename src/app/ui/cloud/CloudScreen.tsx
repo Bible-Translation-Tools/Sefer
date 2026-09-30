@@ -39,6 +39,7 @@ import {
   type SyncActionId,
 } from "#core/sync";
 
+import { APP_AUTHOR } from "../../author";
 import { describe, remoteReasonOf } from "../../describe";
 import { rememberSync } from "../../diagnostics";
 import { t } from "../../i18n";
@@ -59,15 +60,6 @@ import { SharedProjectCard, type SharedProjectActions } from "./SharedProjectCar
 
 /** A project's folder name, which is what a person calls it. */
 const projectName = (root: string): string => root.slice(root.lastIndexOf("/") + 1);
-
-/**
- * Who the combined version is by.
- *
- * Sefer, not the translator: the one version a combine records is bookkeeping
- * over versions they already authored, the same identity `src/app/commands.ts`
- * commits a save under and the Web host writes a merge under.
- */
-const COMBINE_AUTHOR = { name: "Sefer", email: "sefer@localhost" } as const;
 
 /**
  * A combine's failure, as the sentence a translator reads.
@@ -457,9 +449,7 @@ export function CloudScreen() {
           action,
           () => {
             const project = shell.project();
-            return project === undefined
-              ? Effect.void
-              : combine({ project, author: COMBINE_AUTHOR });
+            return project === undefined ? Effect.void : combine({ project, author: APP_AUTHOR });
           },
           explainCombine,
         );

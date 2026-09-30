@@ -58,6 +58,7 @@ import type { Restorable } from "#core/recovery/recovery";
 import type { SourceStamp } from "#core/source/source";
 import type { EditorBook } from "#editor/index";
 
+import { APP_AUTHOR } from "../../author";
 import { describe, reasonOf } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
@@ -83,9 +84,6 @@ import { bookName } from "../workspace/books";
 import { metadataOf } from "../workspace/project";
 import { ReviewReader, type ReviewBook } from "./ReviewReader";
 import { sourceChoices, type SourceChoice } from "./sources";
-
-/** The author every Sefer commit carries until accounts reach this screen. */
-const AUTHOR = { name: "Sefer", email: "sefer@localhost" } as const;
 
 /** How long typing pauses before the review compares again: the cards' pause. */
 const TYPING_PAUSE_MS = 400;
@@ -741,7 +739,7 @@ export function ReviewPanel() {
       Effect.result(
         Effect.gen(function* () {
           const repo = yield* services.git.init(project.root);
-          return yield* services.git.commit(repo, receipts, staticMessage, AUTHOR);
+          return yield* services.git.commit(repo, receipts, staticMessage, APP_AUTHOR);
         }),
       ),
     );
