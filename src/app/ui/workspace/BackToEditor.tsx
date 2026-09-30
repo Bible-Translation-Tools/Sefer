@@ -56,10 +56,8 @@ export function BackToEditor() {
     if (shell.project() === undefined) return;
     // The PARENT route, and nothing cleverer. `/project/$slug` already knows
     // where the work is — it forwards to the remembered book, and falls back
-    // to the book list when that book is gone — so asking it is one door
-    // instead of two answers that can disagree. Resolving
-    // `shell.landingTarget(root)` here would make the same decision a second
-    // time from the same inputs.
+    // to the first book when that one is gone — so asking it is one door
+    // instead of two answers that can disagree.
     void navigate({ to: "/project/$slug", params: { slug: shell.slug() } });
   };
 

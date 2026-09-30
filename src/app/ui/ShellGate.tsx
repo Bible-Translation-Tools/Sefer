@@ -15,6 +15,7 @@ import { Match, Switch } from "solid-js";
 
 import { t } from "../i18n";
 import { useShellState } from "../ProjectContext";
+import { DelayedSpinner } from "./primitives";
 
 export function ShellGate(props: { readonly children: () => JSX.Element }) {
   const state = useShellState();
@@ -25,11 +26,7 @@ export function ShellGate(props: { readonly children: () => JSX.Element }) {
   };
 
   return (
-    <Switch
-      fallback={
-        <p class="p-6 text-small text-on-surface-tertiary">{t("Loading the USFM engine…")}</p>
-      }
-    >
+    <Switch fallback={<DelayedSpinner />}>
       <Match when={state().kind === "ready"}>{props.children()}</Match>
       <Match when={state().kind === "failed"}>
         <p

@@ -8,7 +8,7 @@
  * One dev server on a free port, one Chromium driven by Playwright. Each run
  * opens a FRESH page per level (fresh composition, empty ring, cold heap),
  * seeds the `small-nt` fixture through `/projects?fixture=1`, and then only
- * clicks: Open, Psalms, USFM, a line. It types a warm-up, then the measured
+ * clicks: Open Project (which lands on Psalms), USFM, a line. It types a warm-up, then the measured
  * characters at a fixed cadence, then opens Compare against the files. The
  * level is set through `__sefer.observability.setLevel` before any of that.
  *
@@ -290,7 +290,7 @@ const measure = async (
   await cdp.send("Performance.enable");
   try {
     await page.goto(`${base}/projects?fixture=1`);
-    const open = page.getByRole("button", { name: "Open", exact: true });
+    const open = page.getByRole("button", { name: "Open Project", exact: true });
     await open.waitFor();
     const set = await page.evaluate((next) => {
       const surface = globalThis.__sefer?.observability;
@@ -299,15 +299,16 @@ const measure = async (
     }, level);
     if (set !== level) throw new Error(`could not set level ${level}: is this the dev server?`);
 
-    // One project open, timed from the click to the book list.
+    // One project open, timed from the click to the editor. A fresh context
+    // has no remembered book, so the open lands on the fixture's first book,
+    // which is Psalms.
     const openStarted = performance.now();
     await open.click();
-    const psalms = page.locator("a[href='/project/small-nt/book/PSA']");
-    await psalms.waitFor();
+    await page.waitForURL("**/project/small-nt/book/PSA");
+    await page.locator(".cm-editor").first().waitFor();
     const projectOpenMs = performance.now() - openStarted;
 
-    await psalms.click();
-    await page.locator("button:text-is('USFM')").click();
+    await page.getByRole("radio", { name: "USFM" }).click();
     await page.locator(".cm-line:has-text('meditates day and night')").click();
     await page.keyboard.press("End");
     await typeAt(page, options.warmup, options.cadence);
@@ -348,10 +349,12 @@ const measure = async (
     const metrics = await cdp.send("Performance.getMetrics");
     const heap = metrics.metrics.find((metric) => metric.name === "JSHeapUsedSize")?.value ?? 0;
 
-    // One comparison: the editor against the files, which the typing made differ.
+    // One comparison: the editor against the files, which the typing made
+    // differ. Compare is the Review screen, under the app bar's More menu.
     const compareStarted = performance.now();
-    await page.getByRole("button", { name: "Compare" }).click();
-    const differ = page.getByText(/^[1-9]\d* book\(s\) differ$/u);
+    await page.getByTestId("app-bar-more").click();
+    await page.getByRole("menuitem", { name: "Compare" }).click();
+    const differ = page.getByText(/^[1-9]\d* book\(s\) differ/u);
     const compared = await differ.waitFor({ timeout: 15_000 }).then(
       () => true,
       () => false,
@@ -476,7 +479,7 @@ const main = async (): Promise<void> => {
     // the one that compiled the app.
     const warm = await browser.newPage();
     await warm.goto(`${base}/projects?fixture=1`);
-    await warm.getByRole("button", { name: "Open", exact: true }).waitFor();
+    await warm.getByRole("button", { name: "Open Project", exact: true }).waitFor();
     await warm.close();
 
     const measurements: Measurement[] = [];

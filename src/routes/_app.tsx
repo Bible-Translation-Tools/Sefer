@@ -168,7 +168,9 @@ function Chrome() {
           data-testid="status-line"
           class="flex items-center gap-3 border-t border-sidebar-border bg-surface-primary px-3 py-1 text-smallest text-on-surface-tertiary"
         >
-          <Show when={shell()} fallback={<span>{t("starting…")}</span>}>
+          {/* Blank while it boots, like every other short wait: a word here
+              for the half second before the shell exists is only a flash. */}
+          <Show when={shell()} fallback={<span aria-hidden="true">&nbsp;</span>}>
             {(ready) => (
               <>
                 <span data-storage={ready().services.storage}>{ready().services.storage}</span>

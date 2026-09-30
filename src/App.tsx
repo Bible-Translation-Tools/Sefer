@@ -4,6 +4,7 @@ import { Show } from "solid-js";
 
 import { composeApplication } from "#app/composition";
 import { CompositionProvider, useComposition } from "#app/CompositionContext";
+import { DelayedSpinner, PENDING_MS } from "#app/ui/primitives";
 
 import "#app/ui/app.css";
 
@@ -12,9 +13,14 @@ import "#app/ui/app.css";
 // from this tree.
 import { routeTree } from "./routeTree.gen";
 
+// One wait, one look: blank, and a spinner only past `PENDING_MS`. The router's
+// own threshold is the same number, but it does not cover everything — a route
+// chunk still loading suspends straight to this component — so the component
+// holds the delay itself too.
 const router = createRouter({
   routeTree,
-  defaultPendingComponent: () => <main>Loading…</main>,
+  defaultPendingMs: PENDING_MS,
+  defaultPendingComponent: DelayedSpinner,
 });
 
 // Registers the router's types library-wide, so `to`/`params` on every

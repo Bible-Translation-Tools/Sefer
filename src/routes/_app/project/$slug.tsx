@@ -3,7 +3,7 @@ import { Match, Switch, createEffect, createSignal, untrack } from "solid-js";
 
 import { t } from "#app/i18n";
 import { useShell } from "#app/ProjectContext";
-import { EmptyState } from "#app/ui/primitives";
+import { DelayedSpinner } from "#app/ui/primitives";
 import { ShellGate } from "#app/ui/ShellGate";
 import "#app/ui/theme";
 
@@ -75,12 +75,9 @@ function ProjectLayout() {
       </Match>
       <Match when={phase() === "opening"}>
         {/* The open reads every book, parses every book and proofreads the
-            whole corpus before it answers — ~600ms for a Bible — so this is a
-            real wait and it is stated once, here, rather than per screen. */}
-        <EmptyState
-          title={t("opening…")}
-          description={t("reading, parsing and proofreading the project.")}
-        />
+            whole corpus before it answers — ~600ms for a Bible. Stated once,
+            here, rather than per screen, and blank unless it runs long. */}
+        <DelayedSpinner />
       </Match>
     </Switch>
   );
