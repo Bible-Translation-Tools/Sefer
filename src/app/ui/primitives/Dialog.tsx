@@ -29,7 +29,12 @@ export interface DialogProps {
 
 export function Dialog(props: DialogProps) {
   return (
-    <CorvuDialog open={props.open} onOpenChange={props.onOpenChange}>
+    // A modal traps focus, so focus "leaving" it is never the person
+    // dismissing it. corvu's outside-focus dismissal read the focus returning
+    // to the button that opened it last time as exactly that, so a dialog
+    // cancelled and opened again shut in the same click. Escape and a press
+    // outside still close it.
+    <CorvuDialog open={props.open} onOpenChange={props.onOpenChange} closeOnOutsideFocus={false}>
       <CorvuDialog.Portal>
         <CorvuDialog.Overlay class="fixed inset-0 z-40 bg-surface-overlay" />
         <CorvuDialog.Content
