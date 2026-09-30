@@ -67,6 +67,7 @@ import { recordVersion } from "../../recordVersion";
 import { suggestionRef } from "../../suggestions";
 import { sendAfterSave, settleWithShared } from "../../syncActions";
 import { setAuthorName, syncPreferences } from "../../syncSettings";
+import { combineRefusal, combineTrouble, receiveRefusal } from "../cloud/copy";
 import { unsavedChanges } from "../panels/changes";
 import { ago, exact } from "../panels/format";
 import { createRecordedVersion } from "../panels/recorded";
@@ -653,13 +654,50 @@ export function ReviewPanel() {
     return here && there ? "both" : here ? "here" : there ? "there" : undefined;
   };
 
+  /**
+   * The side a passage lands on when nobody chooses, in a review against the
+   * shared project: what only they changed comes in, what only you changed
+   * stays. A passage changed in both places — or one whose origin cannot be
+   * told — has no preset: a person decides it, and Record waits for that.
+   */
+  const preset = (bookId: BookId, unit: DecisionUnit): MergeSide | undefined => {
+    if (!againstShared()) return undefined;
+    const origin = originOf(bookId, [unit]);
+    return origin === "there" ? "baseline" : origin === "here" ? "current" : undefined;
+  };
+
+  /** The decision a card shows and Record applies: the person's, else the preset. */
+  const effectiveFor = (bookId: BookId, unitId: string): MergeSide | undefined => {
+    const held = decisionFor(bookId, unitId);
+    if (held !== undefined || !againstShared()) return held;
+    const unit = reviewBooks()
+      .find((book) => book.bookId === bookId)
+      ?.skeleton.units.find((entry) => entry.id === unitId);
+    return unit === undefined ? undefined : preset(bookId, unit);
+  };
+
+  /** Passages changed in both places that nobody has chosen a side for yet. */
+  const undecidedBoth = (): number => {
+    if (!againstShared()) return 0;
+    let count = 0;
+    for (const book of reviewBooks())
+      for (const unit of book.skeleton.units)
+        if (
+          unit.status !== "unchanged" &&
+          decisionFor(book.bookId, unit.id) === undefined &&
+          preset(book.bookId, unit) === undefined
+        )
+          count += 1;
+    return count;
+  };
+
   /** How many units have been ruled on across the whole review, of how many. */
   const totals = () => {
     let total = 0;
     let decided = 0;
     for (const book of reviewBooks())
       for (const unit of book.skeleton.units) {
-        const held = decisionFor(book.bookId, unit.id);
+        const held = effectiveFor(book.bookId, unit.id);
         // A taken unit in an editable review is unchanged now, and still counts.
         if (unit.status === "unchanged" && held === undefined) continue;
         total += 1;
@@ -757,7 +795,17 @@ export function ReviewPanel() {
     staticUnits: readonly DecisionUnit[],
     side: MergeSide | undefined,
   ): void => {
-    if (editable()) writeNow(bookId, staticUnits, side);
+    if (!editable()) return;
+    // "Put back" on a passage that is only PRESET to theirs: nothing was
+    // taken, so clearing would change nothing on screen. What the words ask
+    // for is this side's text, so that is the choice made.
+    const putBackPreset =
+      side === undefined &&
+      staticUnits.length > 0 &&
+      staticUnits.every(
+        (unit) => decisionFor(bookId, unit.id) === undefined && preset(bookId, unit) === "baseline",
+      );
+    writeNow(bookId, staticUnits, putBackPreset ? "current" : side);
   };
 
   /**
@@ -810,7 +858,15 @@ export function ReviewPanel() {
     // Taken before the save: afterwards no book is unsaved, and the default
     // would name none of them.
     const typedMessage = message().trim();
-    const staticMessage = typedMessage === "" ? defaultMessage() : typedMessage;
+    // Against the shared project the version is a settling, and says which
+    // books it settled; anything else names the books it records.
+    const settledNames = reviewBooks().map((book) => bookName(book.bookId, metadataOf(project)));
+    const settling = !againstShared()
+      ? undefined
+      : settledNames.length === 0
+        ? t("Combined with the shared project")
+        : t("Combined {books} with the shared project", { books: settledNames.join(", ") });
+    const staticMessage = typedMessage !== "" ? typedMessage : (settling ?? defaultMessage());
     // Asked once per device, when nobody is signed in: a version carries a
     // person's name, and "Sefer" would say nothing about who changed the text.
     const typed = typedName().trim();
@@ -826,39 +882,118 @@ export function ReviewPanel() {
       await services.run(Effect.ignore(setAuthorName(services.settings, typed)));
       setAuthor(by);
     }
+    if (againstShared() && undecidedBoth() > 0) {
+      toasts.error({
+        title: t("Choose a side first"),
+        message: t("{count} passage(s) changed in both places still need a choice.", {
+          count: undecidedBoth(),
+        }),
+      });
+      return;
+    }
     setRecording(true);
     const notice = toasts.progress({ title: t("Recording…") });
     if (againstShared()) {
+      // The presets become real first: every passage only they changed, and
+      // nobody chose, is taken into the project's text. What is recorded is
+      // then exactly the project's text — decisions, presets, and whatever
+      // was typed into the review's cards.
+      for (const book of reviewBooks()) {
+        const taking = book.skeleton.units.filter(
+          (unit) =>
+            unit.status !== "unchanged" &&
+            decisionFor(book.bookId, unit.id) === undefined &&
+            preset(book.bookId, unit) === "baseline",
+        );
+        if (taking.length > 0) writeNow(book.bookId, taking, "baseline");
+      }
+      const settled = new Set(reviewBooks().map((book) => book.bookId));
       // Reviewed against the shared project: what was decided stays, and
       // everything else it changed arrives with it — in one move.
       // A suggestion is brought into the shared project itself; anything else
       // settles against it and sends wherever this project sends.
-      const settled = await settleWithShared(
+      const outcome = await settleWithShared(
         services,
         project,
         by,
         staticMessage,
+        settled,
         theirsRef() === undefined ? {} : { theirs: theirsRef(), sendTo: "origin" },
       );
-      if (settled.kind === "refused")
-        toasts.update(notice, {
-          tone: "error",
-          autoClose: false,
-          title: t("Not combined"),
-          message: settled.why,
-        });
-      else {
-        const books = project.books.map((book) => book.id);
-        shell.noteWritten(books, true);
-        toasts.update(notice, {
-          tone: "success",
-          title: t("Combined with the shared project"),
-          message: staticMessage,
-        });
+      const done = (): void => {
         setMessage("");
         version.refresh();
         shared.refresh();
         common.refresh();
+      };
+      switch (outcome.kind) {
+        case "refused":
+          toasts.update(notice, {
+            tone: "error",
+            autoClose: false,
+            title: t("Not combined"),
+            message:
+              outcome.receive !== undefined
+                ? receiveRefusal(outcome.receive, outcome.books ?? [])
+                : outcome.combine !== undefined
+                  ? combineRefusal(outcome.combine)
+                  : outcome.state !== undefined
+                    ? combineTrouble(outcome.state)
+                    : outcome.description,
+          });
+          break;
+        case "combined":
+          shell.noteWritten(
+            project.books.map((book) => book.id),
+            true,
+          );
+          toasts.update(notice, {
+            tone: outcome.sent ? "success" : "info",
+            title: outcome.sent
+              ? t("Combined with the shared project")
+              : t("Combined here; not sent yet"),
+            message: outcome.sent ? staticMessage : combineTrouble("recorded"),
+          });
+          done();
+          break;
+        case "received":
+          // The shared project's versions arrived either way; what the
+          // person decided was then kept, or it was not, and that is said.
+          switch (outcome.recorded.kind) {
+            case "recorded":
+            case "nothing":
+              shell.noteWritten(
+                project.books.map((book) => book.id),
+                true,
+              );
+              toasts.update(notice, {
+                tone: "success",
+                title: t("Combined with the shared project"),
+                message: staticMessage,
+              });
+              done();
+              break;
+            case "not-recorded":
+              shell.noteWritten(outcome.recorded.books, false);
+              toasts.update(notice, {
+                tone: "error",
+                autoClose: false,
+                title: t("Updates received; your decisions are on disk, but not recorded"),
+                message: describe(outcome.recorded.error),
+              });
+              done();
+              break;
+            case "not-written":
+              toasts.update(notice, {
+                tone: "error",
+                autoClose: false,
+                title: t("Updates received; your decisions could not be written"),
+                message: describe(outcome.recorded.error),
+              });
+              done();
+              break;
+          }
+          break;
       }
       setRecording(false);
       return;
@@ -1179,7 +1314,7 @@ export function ReviewPanel() {
               <ReviewReader
                 books={reviewBooks()}
                 originOf={originOf}
-                decision={decisionFor}
+                decision={effectiveFor}
                 decide={decideAny}
                 decidable={editable()}
                 usfm={markup()}
@@ -1205,7 +1340,7 @@ export function ReviewPanel() {
           description={
             againstShared()
               ? t(
-                  "What you decided here is kept, and everything else the shared project changed arrives with it, as one version.",
+                  "The project's text is kept as you left it here: your choices, and anything you edited. A passage only the shared project changed, that you didn't choose for, comes in. Everything else it changed arrives too, as one version.",
                 )
               : t("Your changes in {count} book(s) are written and kept as a version.", {
                   count: unsaved().length,
@@ -1220,7 +1355,7 @@ export function ReviewPanel() {
                 variant="primary"
                 icon={<Save />}
                 loading={recording()}
-                disabled={unsaved().length === 0 && !againstShared()}
+                disabled={(unsaved().length === 0 && !againstShared()) || undecidedBoth() > 0}
                 data-review-record-confirm
                 onClick={() => void record().then(() => setRecordOpen(false))}
               >
@@ -1229,6 +1364,14 @@ export function ReviewPanel() {
             </>
           }
         >
+          <Show when={undecidedBoth() > 0}>
+            <p class="pb-3 text-small text-on-surface-warning" data-review-undecided>
+              {t(
+                "{count} passage(s) changed in both places still need a choice: keep yours or take the shared project's.",
+                { count: undecidedBoth() },
+              )}
+            </p>
+          </Show>
           <Show when={author() === undefined}>
             <label
               class="block pb-1 text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase"

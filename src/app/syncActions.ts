@@ -12,16 +12,26 @@
  * server's fast-forward rule is the check, and a refusal starts the check at
  * once so `/cloud` reads `behind` or `diverged` rather than a bare error.
  *
- * Neither runs offline; `syncStatus` says so first. Both hold the repository's
+ * Neither runs with no interface up; `syncStatus` says so first. A network
+ * failure the last transfer met does not stop them — they are how Sefer finds
+ * out it is over. Both hold the repository's
  * lane through the ports, so a check and a send cannot race.
  */
 import { Effect, Option } from "effect";
 
+import type { BookId } from "#core/book/book";
 import { Git, type Author } from "#core/git/git";
 import type { Verdict } from "#core/observability";
 import type { Project } from "#core/project/project";
 import { Remote, remoteVerdict } from "#core/remote/remote";
-import { combine, receive, trackingRef } from "#core/sync";
+import {
+  combine,
+  receive,
+  trackingRef,
+  type CombineRefusal,
+  type CombineState,
+  type ReceiveRefusal,
+} from "#core/sync";
 
 import { remoteReasonOf } from "./describe";
 import { recordVersion, type RecordOutcome } from "./recordVersion";
@@ -64,7 +74,7 @@ const ask = (root: string): Effect.Effect<CheckResult, unknown, Git | Remote> =>
 export const checkForChanges = async (services: Services, project: Project): Promise<void> => {
   const root = project.root;
   const operation = services.composition.observability.operation("sync.check");
-  if (!syncStatus.online()) {
+  if (!syncStatus.interfaceUp()) {
     operation.end("declined", { "sync.check.result": "offline" });
     return;
   }
@@ -103,7 +113,7 @@ export const checkForChanges = async (services: Services, project: Project): Pro
 export const sendAfterSave = async (services: Services, project: Project): Promise<void> => {
   const root = project.root;
   if (!syncPreferences(services.settings, root).sendOnSave) return;
-  if (!syncStatus.online()) {
+  if (!syncStatus.interfaceUp()) {
     syncStatus.noteSend({ refused: "Network" });
     return;
   }
@@ -140,26 +150,39 @@ export const sendAfterSave = async (services: Services, project: Project): Promi
 const optionalTheirs = (theirs: string | undefined) => (theirs === undefined ? {} : { theirs });
 
 export type SettleOutcome =
+  /** Received by fast-forward; `recorded` says whether the decisions were then kept. */
   | { readonly kind: "received"; readonly recorded: RecordOutcome }
-  | { readonly kind: "combined"; readonly commit: string }
-  | { readonly kind: "refused"; readonly why: string };
+  /** One decision commit; `sent` is false when it is kept here and sending did not finish. */
+  | { readonly kind: "combined"; readonly commit: string | undefined; readonly sent: boolean }
+  | {
+      readonly kind: "refused";
+      readonly receive?: ReceiveRefusal | undefined;
+      readonly combine?: CombineRefusal | undefined;
+      readonly books?: readonly string[] | undefined;
+      /** Whether anything moved: a combine that failed part-way says where it left things. */
+      readonly state?: CombineState | undefined;
+      readonly description: string;
+    };
 
 /**
- * After a review against the shared project, keep what the person decided and
- * take everything else the other side changed — as a fast-forward and one new
- * version when this device has no versions of its own, or as one decision
- * commit that joins both histories when it has.
+ * After a review against the shared project, record the project's text for
+ * every book the review settled — the person's decisions, and their edits in
+ * the review — and take everything else the other side changed: as a
+ * fast-forward and one new version when this device has no versions of its
+ * own, or as one decision commit that joins both histories when it has.
  */
 export const settleWithShared = async (
   services: Services,
   project: Project,
   author: Author,
   message: string,
+  /** The books whose project text is the decision. */
+  settled: ReadonlySet<BookId>,
   /** A suggestion's head instead of the shared project's tip, and where the result is sent. */
   with_: { readonly theirs?: string; readonly sendTo?: string } = {},
 ): Promise<SettleOutcome> => {
   const received = await services.run(
-    Effect.result(receive({ project, reviewed: true, ...optionalTheirs(with_.theirs) })),
+    Effect.result(receive({ project, settled, ...optionalTheirs(with_.theirs) })),
   );
   if (received._tag === "Success") {
     const dirty = project.books.filter((book) => services.save.dirty(book));
@@ -168,21 +191,34 @@ export const settleWithShared = async (
     return { kind: "received", recorded };
   }
   if (received.failure.refusal !== "diverged")
-    return { kind: "refused", why: received.failure.description };
+    return {
+      kind: "refused",
+      receive: received.failure.refusal,
+      books: received.failure.books,
+      description: received.failure.description,
+    };
   const sendTo = with_.sendTo ?? (await destination(services, project));
   const combined = await services.run(
     Effect.result(
       combine({
         project,
         author,
-        reviewed: true,
+        settled,
         sendTo,
         message,
         ...optionalTheirs(with_.theirs),
       }),
     ),
   );
-  return combined._tag === "Success"
-    ? { kind: "combined", commit: combined.success.commit }
-    : { kind: "refused", why: combined.failure.description };
+  if (combined._tag === "Success")
+    return { kind: "combined", commit: combined.success.commit, sent: true };
+  // Recorded here and not sent is not a refusal: the next send carries it.
+  if (combined.failure.state === "recorded")
+    return { kind: "combined", commit: undefined, sent: false };
+  return {
+    kind: "refused",
+    combine: combined.failure.refusal,
+    state: combined.failure.state,
+    description: combined.failure.description,
+  };
 };

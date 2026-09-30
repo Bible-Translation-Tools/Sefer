@@ -152,29 +152,40 @@ const makeWebGit = (fileSystem: FileSystem.FileSystem): GitService => {
         }
         // The receipts rule: stage exactly what Save wrote, one path at a
         // time, so a file nobody saved cannot ride along in the commit.
-        for (const receipt of receipts) {
-          const filepath = yield* relativeOrRefuse(repo, receipt.path);
-          yield* attempt("Io", () => git.add({ fs, dir: repo.root, filepath }));
-        }
-        // isomorphic-git's `parent` REPLACES HEAD as the parent list, so a
-        // decision commit names HEAD first itself.
-        const parent =
-          also.length === 0
-            ? undefined
-            : [
-                yield* attempt("Conflict", () =>
-                  git.resolveRef({ fs, dir: repo.root, ref: "HEAD" }),
-                ),
-                ...also,
-              ];
-        return yield* attempt("Io", () =>
-          git.commit({
-            fs,
-            dir: repo.root,
-            message,
-            author,
-            ...(parent === undefined ? {} : { parent }),
+        const staged: string[] = [];
+        for (const receipt of receipts) staged.push(yield* relativeOrRefuse(repo, receipt.path));
+        // A commit that fails must not leave the index holding paths no commit
+        // records, or the next ordinary commit would carry them: every path
+        // staged here goes back to HEAD's on the way out.
+        const unstage = Effect.forEach(staged, (filepath) =>
+          Effect.ignore(attempt("Io", () => git.resetIndex({ fs, dir: repo.root, filepath }))),
+        );
+        return yield* Effect.onError(
+          Effect.gen(function* () {
+            for (const filepath of staged)
+              yield* attempt("Io", () => git.add({ fs, dir: repo.root, filepath }));
+            // isomorphic-git's `parent` REPLACES HEAD as the parent list, so a
+            // decision commit names HEAD first itself.
+            const parent =
+              also.length === 0
+                ? undefined
+                : [
+                    yield* attempt("Conflict", () =>
+                      git.resolveRef({ fs, dir: repo.root, ref: "HEAD" }),
+                    ),
+                    ...also,
+                  ];
+            return yield* attempt("Io", () =>
+              git.commit({
+                fs,
+                dir: repo.root,
+                message,
+                author,
+                ...(parent === undefined ? {} : { parent }),
+              }),
+            );
           }),
+          () => unstage,
         );
       }),
 

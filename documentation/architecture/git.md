@@ -51,8 +51,9 @@ The owner's decision (2026-09-06) is one implementation per host, not one librar
 suite both must pass: init, empty status, a file written through `FileSystem`, a commit from one receipt,
 then `log`, `show`, and `previousVersions` agreeing on it. It is exported and registered nowhere — the
 tier each Layer belongs to is the registration site's decision. The desktop Layer cannot be registered
-against it at all — `invoke` needs a Tauri runtime — so the same case, plus one per command, is
-restated as Rust unit tests in `git.rs` and run by `cargo test`.
+against it at all — `invoke` needs a Tauri runtime. The Rust restatement of it that `git.rs` once
+carried was removed on 2026-09-26 with every other new test, under the rule that tests wait until
+behaviour is locked, so today nothing runs the desktop commands but the app itself.
 
 The one behaviour the two implementations reached differently and had to be brought together: the Web
 layer refuses an empty receipt list, and `git_commit` did not — on an unborn HEAD it produced an empty
@@ -74,8 +75,11 @@ repository, and libgit2 is reached from more than one window. So `src/core/git/r
   themselves.
 - **The lifecycle.** `step` is a pure transition over `absent | opening | ready | busy | unhealthy |
 closing`, the order of its cases being the policy: closing refuses new work while running work
-  ends; `unhealthy` (did not open, or a mutation stopped part-way) refuses everything but a repair,
-  which today is only `abort-merge`; only `init` and `clone` may begin from `absent`.
+  ends; `unhealthy` (the repository did not open) refuses everything but a repair, which today is
+  only `abort-merge`, and the next write looks again, so a failure that has passed does not strand
+  the repository for the session; only `init` and `clone` may begin from `absent`. Nothing marks a
+  repository unhealthy after a mutation stopped part-way yet: the one case, a `stranded` combine, has
+  its own word on the screen, and blocking every write with no repair on offer would be worse.
 - **Nobody calls it.** `src/core/git/serialised.ts` wraps both hosts' `Git` and `Remote` once, in
   composition (`laned()` in `src/app/services.ts`), so no host can forget a lane and no caller knows
   lanes exist. A lifecycle refusal keeps each port's own error — `GitError` `Refused`, `RemoteError`
@@ -123,7 +127,10 @@ squash it served.
   one.
 
 Its four reasons (`Unavailable`, `Unauthorized`, `Network`, `Rejected`) exist because only one of
-them is worth retrying unchanged. Gitea answers a missing permission with either 401 or 403, and both
+them is worth retrying unchanged. A transfer that stops moving ends as `Network` on both hosts — on
+the Web, a request with no byte for 60 s is aborted (the clock restarts with every chunk); on
+desktop, libgit2's read timeout ([desktop](desktop.md)) — because a transfer holds its repository's
+lane, and a stalled proxy would otherwise hold every Record a version behind it. Gitea answers a missing permission with either 401 or 403, and both
 are `Unauthorized`, so the words say both.
 
 `clone(url, into)` is a real clone — isomorphic-git's `clone` on the Web, git2's `RepoBuilder`
@@ -189,7 +196,8 @@ A translator who cannot write to the shared project sends to their OWN COPY of i
 suggests those changes: one open pull request from that copy's branch, which later sends keep up to
 date by themselves. Whoever can write to the shared project sees the open suggestions on `/cloud`, and
 reviews one — Review against the shared project, with the suggestion's head
-(`refs/pull/<n>/head`, fetched to `refs/remotes/origin/pull/<n>`) as the other side — or declines it
+(`refs/pull/<n>/head`, fetched to `refs/sefer/pull/<n>` — outside `refs/remotes/origin/`, which the
+Web's pruning fetch clears of every ref it did not write) as the other side — or declines it
 with a note. "Pull request" is Gitea's word and the code's; the screen says "suggested changes".
 
 It is one topology among several, so it is built to come out. `src/core/remote/suggestions.ts` is its

@@ -60,8 +60,9 @@ export type RepositoryState =
   /** This context holds the exclusive lane for `kind`. */
   | { readonly _tag: "busy"; readonly kind: WriteKind }
   /**
-   * The repository cannot be trusted until a person repairs it: it did not
-   * open, or a mutation is known to have stopped part-way.
+   * The repository cannot be trusted right now: it did not open, or a caller
+   * said it broke. The next write looks again, so a failure that has passed
+   * (a slow disk, a tab mid-clone) does not strand it for the session.
    */
   | { readonly _tag: "unhealthy"; readonly reason: string }
   /** The project is closing: new work is refused while running work ends. */
@@ -338,7 +339,8 @@ const make = Effect.gen(function* () {
       // repository since this one looked. Look again before a write that
       // needs one, and before the exclusive lock is held, since the look
       // takes the shared lock.
-      if (!CREATES.has(kind) && (yield* SubscriptionRef.get(ref))._tag === "absent")
+      const now = (yield* SubscriptionRef.get(ref))._tag;
+      if (!CREATES.has(kind) && (now === "absent" || (now === "unhealthy" && !REPAIRS.has(kind))))
         yield* look(root, ref);
       const asked = performance.now();
       return yield* lock.hold(

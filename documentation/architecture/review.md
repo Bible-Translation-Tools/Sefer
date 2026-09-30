@@ -107,10 +107,13 @@ sync policy decides with (`bookFacts`, `src/core/sync/facts.ts`), so Review and 
 disagree about which passages both people touched. It is a label, not a colour: the tint stays by
 side.
 
-Pressing Record a version in this review SETTLES the difference rather than only recording the
-editor: what the person decided is kept, and everything else the other side changed arrives, as one
-version — a receive and a version, or one decision commit ([sync](sync.md), "A contested book,
-settled in Review").
+Every passage has a side before anyone chooses: changed only there is preset to theirs, changed
+only here to mine, and the card shows the preset as its decision. A passage changed in both places
+has none, and Record a version waits until each has a choice. Pressing it SETTLES the difference
+rather than only recording the editor: the presets still set to theirs are taken into the project's
+text, and then the project's text — choices, presets and anything typed into the cards — is what is
+recorded, with everything else the other side changed, as one version: a receive and a version, or
+one decision commit ([sync](sync.md), "A contested book, settled in Review").
 
 ### The screen never says "left" or "right"
 

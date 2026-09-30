@@ -52,6 +52,13 @@ if (typeof window === "object") {
 export interface SyncStatus {
   /** Online by both detectors: the interface is up and no transfer said otherwise. */
   readonly online: Accessor<boolean>;
+  /**
+   * Whether an interface is up at all, ignoring how the last transfer ended.
+   * The automatic check and send ask this, not `online`: they ARE the probe
+   * that finds out whether a network failure is over, and a signal that
+   * waited for a success before trying would never see one.
+   */
+  readonly interfaceUp: Accessor<boolean>;
   /** Why the last transfer failed, when one did and none has succeeded since. */
   readonly lastFailure: Accessor<RemoteFailureReason | undefined>;
   /** Record a transfer's failure; a `Network` one is what makes us offline. */
@@ -72,6 +79,7 @@ export interface SyncStatus {
 
 export const syncStatus: SyncStatus = {
   online: () => online() && lastFailure() !== "Network",
+  interfaceUp: online,
   lastFailure,
   noteFailure: (reason) => setLastFailure(reason),
   noteSuccess: () => setLastFailure(undefined),

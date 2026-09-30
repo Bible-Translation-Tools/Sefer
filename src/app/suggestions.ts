@@ -33,7 +33,7 @@ import type { Services } from "./services";
 const COPY = "copy";
 
 /** The local ref a suggestion's head is fetched to, for Review to read. */
-export const suggestionRef = (number: number): string => `refs/remotes/origin/pull/${number}`;
+export const suggestionRef = (number: number): string => `refs/sefer/pull/${number}`;
 
 /** `owner/name` of a repository URL on the content host. */
 const ownerAndName = (

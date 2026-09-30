@@ -28,6 +28,7 @@
 
 import { Data, Effect, FileSystem, Option, type PlatformError, Result } from "effect";
 
+import { ProjectAdmin } from "../admin/projectAdmin";
 import type { BookId } from "../book/book";
 import { parentPath } from "../fileSystem/path";
 import type { Galley } from "../galley";
@@ -37,15 +38,25 @@ import {
   type CommitId,
   Git,
   type GitError,
+  repositoryPath,
   type Repo,
   type SaveReceiptLike,
 } from "../git/git";
 import { Repositories } from "../git/repository";
+import { METADATA_FILE } from "../project/discovery";
 import type { Project } from "../project/project";
 import { Remote, type RemoteError } from "../remote/remote";
 import { SaveCoordinator } from "../save/saveCoordinator";
 import type { SourceStamp } from "../source/source";
-import { booksByPath, classify, isScripture } from "./classify";
+import {
+  booksByPath,
+  classify,
+  giveBack,
+  handOver,
+  isScripture,
+  type Applied,
+  type Classified,
+} from "./classify";
 import { DEFAULT_OVERLAP, judge, type Overlap } from "./policy";
 import { notIn, trackingRef } from "./state";
 
@@ -63,6 +74,8 @@ import { notIn, trackingRef } from "./state";
  * - `contested` — both sides changed the same file. Never merged; compared.
  * - `deletion` — the other side deleted a file. `Git.commit` stages receipts,
  *   and a receipt cannot say "this file is gone".
+ * - `moved` — a book the other side changed was typed into, or opened, while
+ *   the combine read it. Nothing was written; pressing again reads it afresh.
  */
 export type CombineRefusal =
   | "no-branch"
@@ -71,7 +84,8 @@ export type CombineRefusal =
   | "no-shared-version"
   | "not-diverged"
   | "contested"
-  | "deletion";
+  | "deletion"
+  | "moved";
 
 /**
  * What state the repository is in when a combine fails.
@@ -180,8 +194,12 @@ const planCombine = (survey: CombineSurvey): CombineDecision => {
   // one with changes here no commit holds — where taking theirs would be a
   // silent decision rather than a stated one.
   const mine = new Set([...survey.changed.map((entry) => entry.path), ...survey.unrecorded]);
+  // `metadata.json` is not a decision: its checksums describe the files, and
+  // are worked out again from the combined ones.
   const both = survey.cloudChanged
-    .filter((entry) => !isScripture(entry.path) && mine.has(entry.path))
+    .filter(
+      (entry) => !isScripture(entry.path) && entry.path !== METADATA_FILE && mine.has(entry.path),
+    )
     .map((entry) => entry.path);
   if (both.length > 0) return no("contested", `both sides changed ${both.join(", ")}`);
 
@@ -220,6 +238,17 @@ export interface CombineResult {
   readonly reloaded: readonly BookId[];
 }
 
+/** One receipt per path; the first one names it. */
+const dedupe = (repo: Repo, receipts: readonly SaveReceiptLike[]): readonly SaveReceiptLike[] => {
+  const seen = new Set<string>();
+  return receipts.filter((receipt) => {
+    const key = Option.getOrElse(repositoryPath(repo.root, receipt.path), () => receipt.path);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
 /** A port failure, carrying its reason forward so the shell can classify it. */
 const fromPort =
   (state: CombineState) =>
@@ -242,12 +271,12 @@ export interface CombineOptions {
   readonly author: Author;
   readonly overlap?: Overlap;
   /**
-   * A person has just reviewed against the shared project: a book the policy
-   * would send to a person is decided already, and its text in the editor is
-   * the decision — saved and recorded as this side's, never overwritten by
-   * the other side's file.
+   * Books a person has just settled in Review against the other side: each
+   * one's text in the project IS the decision — saved and recorded as it is,
+   * whatever either side changed, and never overwritten by the other side's
+   * file.
    */
-  readonly reviewed?: boolean;
+  readonly settled?: ReadonlySet<BookId>;
   /** The ref "theirs" is read from — the shared project's tracking ref unless named. */
   readonly theirs?: string;
   /** Where the decision commit is sent — `origin` unless named. */
@@ -260,8 +289,7 @@ interface Gathered {
   readonly decision: CombineDecision;
   /** Books a person decided in Review, by path: kept as the editor holds them. */
   readonly decided: readonly string[];
-  /** The stamp each Book's Source had when it was classified. */
-  readonly stamps: ReadonlyMap<string, SourceStamp>;
+  readonly classified: Classified;
 }
 
 /**
@@ -275,7 +303,7 @@ const gather = (
   repo: Repo,
   project: Project,
   overlap: Overlap,
-  reviewed = false,
+  settled: ReadonlySet<BookId> = new Set(),
   theirs?: string,
 ): Effect.Effect<Gathered, CombineError, Git | FileSystem.FileSystem | Galley> =>
   Effect.gen(function* () {
@@ -318,9 +346,9 @@ const gather = (
     const status = yield* Effect.mapError(git.status(repo), untouched);
 
     const books = booksByPath(repo, project);
-    const classified =
+    const classified: Classified =
       base === undefined || cloudHead === undefined
-        ? { facts: [], stamps: new Map<string, SourceStamp>() }
+        ? { facts: [], stamps: new Map<string, SourceStamp>(), theirs: new Map<string, string>() }
         : yield* classify(repo, books, base, cloudHead, cloudChanged);
     const verdicts = judge(classified.facts, overlap);
     // `combine` would need a unit-level merge, which Sefer does not do by
@@ -328,8 +356,10 @@ const gather = (
     const needsPerson = classified.facts.filter(
       (_, index) => verdicts[index] === "review" || verdicts[index] === "combine",
     );
-    const decided = reviewed ? needsPerson.map((book) => book.path) : [];
-    const review = reviewed ? [] : needsPerson.map((book) => book.bookId);
+    const decided = [...books].filter(([, book]) => settled.has(book.id)).map(([path]) => path);
+    const review = needsPerson
+      .filter((book) => !decided.includes(book.path))
+      .map((book) => book.bookId);
 
     return {
       decided,
@@ -349,7 +379,7 @@ const gather = (
           .filter((path) => !decided.includes(path)),
         review,
       }),
-      stamps: classified.stamps,
+      classified,
     };
   });
 
@@ -388,6 +418,15 @@ export const combine = (
 > =>
   Effect.gen(function* () {
     const repositories = yield* Repositories;
+    const git = yield* Git;
+    const remote = yield* Remote;
+    // Ask the shared project what it has NOW — before the exclusive lane, so a
+    // slow network holds the lane only for its own transfer. The screen's
+    // reading may be minutes old; this is seconds, and the send is
+    // fast-forward only, so a head that moves in between is refused, never
+    // overwritten.
+    const repo = yield* Effect.mapError(git.open(options.project.root), fromPort("untouched"));
+    yield* Effect.mapError(remote.fetch(repo), fromPort("untouched"));
     return yield* Effect.catchTag(
       repositories.exclusive(options.project.root, "combine", program(options)),
       "RepositoryError",
@@ -413,16 +452,11 @@ const program = (options: CombineOptions) =>
 
     const repo: Repo = yield* Effect.mapError(git.open(project.root), untouched);
 
-    // Ask the shared project what it has NOW. The screen's reading may be
-    // minutes old, and a combine onto a stale head is the one way this move
-    // could lose somebody else's commit.
-    yield* Effect.mapError(remote.fetch(repo), untouched);
-
     const gathered = yield* gather(
       repo,
       project,
       options.overlap ?? DEFAULT_OVERLAP,
-      options.reviewed === true,
+      options.settled,
       options.theirs,
     );
     const decision = gathered.decision;
@@ -437,22 +471,58 @@ const program = (options: CombineOptions) =>
     }
     const replay = decision.replay;
 
-    // What each arriving file holds now (HEAD's bytes, or nothing), so a
-    // failed commit can put the work tree back exactly.
+    // The Books take the other side's text first, all or none, in one step
+    // no keystroke can interrupt — so typing never lands between "this book
+    // may be replaced" and the replacing. Nothing on disk has moved yet, so
+    // a Book that moved is a refusal with nothing to undo.
+    const handed = yield* handOver(
+      repo,
+      project,
+      gathered.classified,
+      replay.taking.filter(isScripture),
+      "incoming",
+    );
+    if (!handed.ok)
+      return yield* Effect.fail(
+        new CombineError({
+          refusal: "moved" in handed ? "moved" : undefined,
+          state: "untouched",
+          description:
+            "moved" in handed
+              ? `changed while combining: ${handed.moved.join(", ")}`
+              : `${handed.refused} was refused by ${handed.rule}`,
+        }),
+      );
+    const applied: readonly Applied[] = handed.applied;
+    const untouchedAfterHandOver = (error: CombineError) =>
+      Effect.flatMap(giveBack(applied), () => Effect.fail(error));
+
+    // What each file the combine writes holds now (HEAD's bytes, or nothing),
+    // so a failed commit can put the work tree back exactly. `metadata.json`
+    // is among them whenever the project has one: its checksums are worked
+    // out again below.
+    const metadataHere = yield* Effect.orElseSucceed(
+      fileSystem.exists(`${repo.root}/${METADATA_FILE}`),
+      () => false,
+    );
+    const touched = [...new Set([...replay.taking, ...(metadataHere ? [METADATA_FILE] : [])])];
     const before: { readonly path: string; readonly bytes: Uint8Array | undefined }[] = [];
-    const arriving: { readonly path: string; readonly bytes: Uint8Array }[] = [];
-    for (const path of replay.taking) {
+    for (const path of touched)
       before.push({
         path,
         bytes: yield* Effect.orElseSucceed(
-          Effect.map(git.show(repo, replay.from, path), (bytes): Uint8Array | undefined => bytes),
+          Effect.map(
+            fileSystem.readFile(`${repo.root}/${path}`),
+            (bytes): Uint8Array | undefined => bytes,
+          ),
           () => undefined,
         ),
       });
-      arriving.push({
-        path,
-        bytes: yield* Effect.mapError(git.show(repo, replay.onto, path), untouched),
-      });
+    const arriving: { readonly path: string; readonly bytes: Uint8Array }[] = [];
+    for (const path of replay.taking) {
+      const bytes = yield* Effect.result(git.show(repo, replay.onto, path));
+      if (Result.isFailure(bytes)) return yield* untouchedAfterHandOver(untouched(bytes.failure));
+      arriving.push({ path, bytes: bytes.success });
     }
 
     const write = (path: string, bytes: Uint8Array) =>
@@ -463,26 +533,40 @@ const program = (options: CombineOptions) =>
       });
 
     // The decided books' text goes to their files first, through Save, so
-    // the decision commit records exactly what the person chose.
+    // the decision commit records exactly what the person chose — and what
+    // each save kept current beside its book.
     const books = booksByPath(repo, project);
     const decidedBooks = gathered.decided.flatMap((path) => {
       const book = books.get(path);
-      return book === undefined ? [] : [book];
+      return book === undefined || !save.dirty(book) ? [] : [book];
     });
-    yield* Effect.mapError(
-      save.saveAll(decidedBooks),
-      (error) =>
+    const saved = yield* Effect.result(save.saveAll(decidedBooks));
+    if (Result.isFailure(saved))
+      return yield* untouchedAfterHandOver(
         new CombineError({
           refusal: undefined,
           state: "untouched",
-          description: error.description ?? error.reason,
+          description: saved.failure.description ?? saved.failure.reason,
         }),
-    );
+      );
 
+    const admin = Option.getOrUndefined(yield* Effect.serviceOption(ProjectAdmin));
     const recorded = yield* Effect.result(
       Effect.gen(function* () {
         for (const file of arriving)
           yield* Effect.mapError(write(file.path, file.bytes), fromDisk("restored"));
+        // The checksums describe the files, so they are worked out again over
+        // the combined ones rather than taken from either side.
+        if (metadataHere && admin !== undefined)
+          yield* Effect.mapError(
+            admin.refreshChecksums(repo.root),
+            (error) =>
+              new CombineError({
+                refusal: undefined,
+                state: "restored",
+                description: error.description ?? error.reason,
+              }),
+          );
         // The receipts are the paths just written: nothing rides along. With
         // none, the commit is the join alone, which is what it records.
         const receipts: readonly SaveReceiptLike[] = [
@@ -492,12 +576,22 @@ const program = (options: CombineOptions) =>
             // a glance; the length is the one field true of these bytes.
             stamp: { revision: 0, length: file.bytes.length },
           })),
-          ...decidedBooks.map((book) => ({ path: book.path, stamp: book.source().stamp })),
+          ...saved.success.flatMap((receipt) => [
+            { path: receipt.path, stamp: receipt.stamp },
+            ...receipt.also.map((path) => ({ path, stamp: receipt.stamp })),
+          ]),
+          ...(metadataHere ? [{ path: METADATA_FILE, stamp: { revision: 0, length: 0 } }] : []),
         ];
         return yield* Effect.mapError(
-          git.commit(repo, receipts, options.message ?? replay.message, options.author, {
-            alsoParents: [replay.onto],
-          }),
+          git.commit(
+            repo,
+            dedupe(repo, receipts),
+            options.message ?? replay.message,
+            options.author,
+            {
+              alsoParents: [replay.onto],
+            },
+          ),
           fromPort("restored"),
         );
       }),
@@ -511,6 +605,7 @@ const program = (options: CombineOptions) =>
             : write(file.path, file.bytes),
         ),
       );
+      yield* giveBack(applied);
       return yield* Effect.fail(
         Result.isFailure(undone)
           ? new CombineError({
@@ -526,17 +621,14 @@ const program = (options: CombineOptions) =>
       );
     }
 
-    // The Books take what arrived. A Book typed into since the gather keeps
-    // its text; its baseline still moves, so Save & Review shows the change.
-    const reloaded: BookId[] = [];
+    // The baselines follow the files. A Book typed into since the hand-over
+    // keeps its typing, on top of the other side's text, as unsaved work.
+    const reloaded: BookId[] = applied.map((entry) => entry.book.id);
+    const now = booksByPath(repo, project);
     for (const path of replay.taking) {
-      const book = books.get(path);
-      if (book === undefined) continue;
-      const applied = yield* Effect.orElseSucceed(
-        save.takeDisk(book, "incoming", gathered.stamps.get(path)),
-        () => false,
-      );
-      if (applied) reloaded.push(book.id);
+      const book = now.get(path);
+      if (book === undefined || !isScripture(path)) continue;
+      yield* Effect.ignore(save.takeDisk(book, "incoming", "keep"));
     }
 
     // Nothing on the cloud changed until this line.

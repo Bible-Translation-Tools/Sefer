@@ -44,12 +44,21 @@ export function SuggestionsCard(props: { readonly project: Project; readonly sig
   });
   const [busy, setBusy] = createSignal(false, { name: "suggestionsBusy" });
 
-  /** The project is a parameter, not a read: this runs from promise continuations. */
+  /**
+   * The project is a parameter, not a read: this runs from promise
+   * continuations. Only the newest load writes, so an answer about a project
+   * that has since been left never lands on the next one's card.
+   */
+  let asked = 0;
   const load = async (project: Project, signedIn: boolean): Promise<void> => {
-    setOwnCopy(await hasOwnCopy(services, project));
+    const mine = ++asked;
+    const ownCopy = await hasOwnCopy(services, project);
     const canWrite = signedIn ? await canWriteShared(services, project) : undefined;
+    const waiting = canWrite === true ? await openSuggestions(services, project) : [];
+    if (mine !== asked) return;
+    setOwnCopy(ownCopy);
     setWriter(canWrite);
-    setWaiting(canWrite === true ? await openSuggestions(services, project) : []);
+    setWaiting(waiting);
   };
   // On mount, and again for a different project; `load` reads the project as
   // a parameter-free call, so the key is what is tracked.

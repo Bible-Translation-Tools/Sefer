@@ -10,15 +10,19 @@
  *    other side lacks — that is a divergence, and Combine's);
  * 3. classify every book the other side changed against each Book's CURRENT
  *    Source — unsaved edits included — and ask the policy;
- * 4. refuse whole if any book needs a person;
- * 5. fast-forward: the branch moves and the work tree follows, safely (a file
- *    with unrecorded changes refuses the move before anything is written);
- * 6. hand each changed Book the text its file now holds, as one `incoming`
- *    edit, so the editor, Undo, the journal and Save all move with it.
+ * 4. refuse whole if any book needs a person, or a file the other side
+ *    changed has changes here no version holds;
+ * 5. hand each changed Book the other side's text, as one `incoming` edit, all
+ *    or none in one synchronous step — so the editor, Undo, the journal and
+ *    Save all move with it, and no keystroke lands between check and write;
+ * 6. fast-forward: the branch moves and the work tree follows, safely; if it
+ *    cannot, the Books are given their text back;
+ * 7. every changed Book's baseline follows its file.
  *
- * Step 6 is what a pull never did: it moved the files and left every open
+ * Step 5 is what a pull never did: it moved the files and left every open
  * Book, and its baseline, on the old text — so the next save wrote the old
- * text back over what had just arrived.
+ * text back over what had just arrived. It comes BEFORE the files move so that
+ * a Book that cannot take the text stops the receive with nothing to undo.
  *
  * The whole program runs in the repository's exclusive lane.
  */
@@ -32,7 +36,7 @@ import { Observability } from "../observability";
 import type { Project } from "../project/project";
 import { Remote } from "../remote/remote";
 import { SaveCoordinator } from "../save/saveCoordinator";
-import { booksByPath, classify, isScripture, unmoved } from "./classify";
+import { booksByPath, classify, giveBack, handOver, isScripture, unmoved } from "./classify";
 import { DEFAULT_OVERLAP, judge, type Overlap } from "./policy";
 import { trackingRef } from "./state";
 
@@ -44,13 +48,19 @@ import { trackingRef } from "./state";
  * - `no-shared-version` — the two histories have no commit in common.
  * - `diverged` — this device has commits the other side lacks: Combine.
  * - `review` — a book both sides changed, by the policy's measure: Compare.
+ * - `unrecorded` — a file the other side changed has changes here no version
+ *   holds; moving it forward would lose them.
+ * - `moved` — a book the other side changed was typed into, or opened, while
+ *   the receive read it, twice running. Nothing was written.
  */
 export type ReceiveRefusal =
   | "no-branch"
   | "no-cloud-copy"
   | "no-shared-version"
   | "diverged"
-  | "review";
+  | "review"
+  | "unrecorded"
+  | "moved";
 
 export class ReceiveError extends Data.TaggedError("ReceiveError")<{
   /** Which rule said no, or `undefined` when a port failed instead. */
@@ -68,10 +78,10 @@ export interface ReceiveResult {
   /** Books handed their new text. */
   readonly reloaded: readonly BookId[];
   /**
-   * Books whose file moved forward but which were typed into while the
-   * receive ran: their text stands, and Save & Review shows the difference.
+   * Books whose baseline could not follow their file — it could not be read
+   * back. Their text stands; Save & Review shows the difference.
    */
-  readonly moved: readonly BookId[];
+  readonly unsettled: readonly BookId[];
   /** Book files the other side added or removed; seen once the project reopens. */
   readonly reopen: readonly string[];
 }
@@ -81,12 +91,12 @@ export interface ReceiveOptions {
   readonly project: Project;
   readonly overlap?: Overlap;
   /**
-   * A person has just reviewed against the shared project. A book the policy
-   * would send to a person is theirs already decided: its file moves forward
-   * and its text — the decision — stays, reading as unsaved against the new
-   * file, for the commit that follows to record.
+   * Books a person has just settled in Review against the other side: each
+   * one's text in the project IS the decision. Its file moves forward and
+   * its text stays, reading as unsaved against the new file, for the commit
+   * that follows to record — whatever the policy would have said.
    */
-  readonly reviewed?: boolean;
+  readonly settled?: ReadonlySet<BookId>;
   /**
    * The ref "theirs" is read from — the shared project's remote-tracking ref
    * unless named: a suggestion's head, fetched to a local ref, is received the
@@ -116,7 +126,16 @@ export const receive = (
 > =>
   Effect.gen(function* () {
     const repositories = yield* Repositories;
+    const git = yield* Git;
+    const remote = yield* Remote;
     const root = options.project.root;
+    // 1. The other side as it is this second, not as the screen last saw it —
+    // fetched BEFORE the exclusive lane is taken, so a slow network holds the
+    // lane only for its own transfer and never a Record a version behind it.
+    // Fetching here rather than inside is as fresh: a push is fast-forward
+    // only, so a head that moves in between is refused, never overwritten.
+    const repo = yield* Effect.mapError(git.open(root), fromPort);
+    yield* Effect.mapError(remote.fetch(repo), fromPort);
     return yield* Effect.catchTag(
       repositories.exclusive(root, "receive", program(options)),
       "RepositoryError",
@@ -137,8 +156,6 @@ const program = (options: ReceiveOptions) =>
     const branch = Option.getOrUndefined(yield* Effect.mapError(git.branch(repo), fromPort));
     if (branch === undefined) return yield* Effect.fail(refuse("no-branch", "HEAD is detached"));
 
-    // 1. The other side as it is this second, not as the screen last saw it.
-    yield* Effect.mapError(remote.fetch(repo), fromPort);
     const tip = Option.getOrUndefined(
       yield* Effect.mapError(git.resolve(repo, options.theirs ?? trackingRef(branch)), fromPort),
     );
@@ -147,7 +164,7 @@ const program = (options: ReceiveOptions) =>
         refuse("no-cloud-copy", `${options.theirs ?? trackingRef(branch)} does not exist`),
       );
     const head = Option.getOrUndefined(yield* Effect.mapError(git.resolve(repo, "HEAD"), fromPort));
-    const nothing: ReceiveResult = { head, paths: [], reloaded: [], moved: [], reopen: [] };
+    const nothing: ReceiveResult = { head, paths: [], reloaded: [], unsettled: [], reopen: [] };
     if (head === tip) return nothing;
 
     // An unborn HEAD has nothing to measure "mine" from, and a checkout over
@@ -172,56 +189,109 @@ const program = (options: ReceiveOptions) =>
     }
 
     const changed = yield* Effect.mapError(git.changedPathsBetween(repo, head, tip), fromPort);
-    const books = booksByPath(repo, project);
 
-    // 3–4. Every changed book against the Book as it is now; typing may land
-    // while the blobs are read, so a Book that moved is classified again.
-    let classified = yield* classify(repo, books, head, tip, changed);
-    if (!unmoved(classified, books)) classified = yield* classify(repo, books, head, tip, changed);
-    const verdicts = judge(classified.facts, options.overlap ?? DEFAULT_OVERLAP);
-    const review = classified.facts.filter((_, index) => verdicts[index] === "review");
-    const decided = new Set(options.reviewed === true ? review.map((book) => book.path) : []);
-    if (review.length > 0 && options.reviewed !== true)
+    // 3–4. Every changed book against the Book as it is now, and the policy.
+    const settled = options.settled ?? new Set<BookId>();
+    const decide = Effect.gen(function* () {
+      const books = booksByPath(repo, project);
+      let classified = yield* classify(repo, books, head, tip, changed);
+      if (!unmoved(classified, books))
+        classified = yield* classify(repo, books, head, tip, changed);
+      const verdicts = judge(classified.facts, options.overlap ?? DEFAULT_OVERLAP);
+      const isSettled = (path: string): boolean => {
+        const book = books.get(path);
+        return book !== undefined && settled.has(book.id);
+      };
+      // `combine` below the book scope would need a unit-level merge, which a
+      // receive does not do: it goes to a person like `review`.
+      const review = classified.facts.filter(
+        (book, index) =>
+          (verdicts[index] === "review" || verdicts[index] === "combine") && !isSettled(book.path),
+      );
+      const taking = changed
+        .filter((entry) => isScripture(entry.path) && entry.kind === "modified")
+        .map((entry) => entry.path)
+        .filter((path) => !isSettled(path));
+      return { classified, review, taking };
+    });
+
+    let decided = yield* decide;
+    if (decided.review.length > 0)
       return yield* Effect.fail(
         refuse(
           "review",
-          `both sides changed ${review.map((book) => book.bookId).join(", ")}`,
-          review.map((book) => book.bookId),
+          `both sides changed ${decided.review.map((book) => book.bookId).join(", ")}`,
+          decided.review.map((book) => book.bookId),
         ),
       );
 
-    // 5. The files move forward, safely.
-    yield* Effect.mapError(remote.fastForward(repo, tip), fromPort);
+    // A file with changes here that no version holds would stop the checkout
+    // part-way, after the Books had moved; so it refuses before anything does.
+    const status = yield* Effect.mapError(git.status(repo), fromPort);
+    const theirs = new Set(changed.map((entry) => entry.path));
+    const unrecorded = status.changed.map((entry) => entry.path).filter((path) => theirs.has(path));
+    if (unrecorded.length > 0)
+      return yield* Effect.fail(
+        refuse("unrecorded", `changes here no version holds: ${unrecorded.join(", ")}`),
+      );
 
-    // 6. And the Books with them. A Book typed into since it was classified
-    // keeps its text; its baseline still moves, so Review shows the change.
-    const reloaded: BookId[] = [];
-    const moved: BookId[] = [];
+    // 5. The Books take the other side's text first, all or none, in one step
+    // no keystroke can interrupt. A Book that moved since it was read is read
+    // again, once.
+    let handed = yield* handOver(repo, project, decided.classified, decided.taking, "incoming");
+    if (!handed.ok && "moved" in handed) {
+      decided = yield* decide;
+      if (decided.review.length > 0)
+        return yield* Effect.fail(
+          refuse(
+            "review",
+            `both sides changed ${decided.review.map((book) => book.bookId).join(", ")}`,
+            decided.review.map((book) => book.bookId),
+          ),
+        );
+      handed = yield* handOver(repo, project, decided.classified, decided.taking, "incoming");
+    }
+    if (!handed.ok)
+      return yield* Effect.fail(
+        "moved" in handed
+          ? refuse("moved", `changed while receiving: ${handed.moved.join(", ")}`)
+          : new ReceiveError({
+              refusal: undefined,
+              description: `${handed.refused} was refused by ${handed.rule}`,
+            }),
+      );
+    const applied = handed.applied;
+
+    // 6. The files move forward, safely. If they cannot, the Books go back.
+    const moved = yield* Effect.result(remote.fastForward(repo, tip));
+    if (moved._tag === "Failure") {
+      yield* giveBack(applied);
+      return yield* Effect.fail(fromPort(moved.failure));
+    }
+
+    // 7. The baselines follow the files, every one — a failure is listed,
+    // not a reason to leave the rest behind.
+    const reloaded: BookId[] = applied.map((entry) => entry.book.id);
+    const unsettled: BookId[] = [];
     const reopen: string[] = [];
+    const now = booksByPath(repo, project);
     for (const entry of changed) {
       if (!isScripture(entry.path)) continue;
-      const book = books.get(entry.path);
+      const book = now.get(entry.path);
       if (book === undefined || entry.kind !== "modified") {
         // The project's book set is fixed when it opens: an added or removed
         // book file is there on disk and appears at the next open.
         reopen.push(entry.path);
         continue;
       }
-      const applied = yield* Effect.mapError(
-        save.takeDisk(
-          book,
-          "incoming",
-          decided.has(entry.path) ? "keep" : classified.stamps.get(entry.path),
-        ),
-        (error) => new ReceiveError({ refusal: undefined, description: error.description }),
-      );
-      (applied ? reloaded : moved).push(book.id);
+      const followed = yield* Effect.result(save.takeDisk(book, "incoming", "keep"));
+      if (followed._tag === "Failure") unsettled.push(book.id);
     }
     observability?.note("sync.receive", "rewrote", undefined, {
       "sync.paths": changed.length,
       "sync.reloaded": reloaded.length,
-      "sync.moved": moved.length,
+      "sync.unsettled": unsettled.length,
       "sync.reopen": reopen.length,
     });
-    return { head: tip, paths: changed.map((entry) => entry.path), reloaded, moved, reopen };
+    return { head: tip, paths: changed.map((entry) => entry.path), reloaded, unsettled, reopen };
   });

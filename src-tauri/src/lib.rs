@@ -18,6 +18,7 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    git::configure_timeouts();
     let mut builder = tauri::Builder::default()
         // `fs` backs the FileSystem port, `dialog` the Dialogs port, `os` the
         // locale HostInfo reports, `opener` the "reveal in Finder" affordances.

@@ -184,36 +184,46 @@ second press is a dialog naming the books that keep this device's version and th
 
 ## Receiving
 
-`src/core/sync/receive.ts`. A receive is a fast-forward, and it moves the Books with the files. In
-the repository's exclusive lane:
+`src/core/sync/receive.ts`. A receive is a fast-forward, and it moves the Books with the files:
 
-1. fetch, so the other side's tip is this second's;
+1. fetch, so the other side's tip is this second's — BEFORE the repository's exclusive lane is
+   taken, so a slow network holds the lane only for its own transfer, never a Record a version
+   behind it; the rest runs in the lane;
 2. refuse unless HEAD is the merge base — this device having commits the other side lacks is a
    divergence, and Combine's;
 3. classify every book the other side changed against each Book's current text, and ask the policy;
-4. refuse whole if any book needs a person;
-5. `Remote.fastForward`: the branch moves and the work tree follows through a SAFE checkout, so a
-   file with changes no commit holds refuses the move before anything is written;
-6. hand each changed Book the text its file now holds through `SaveCoordinator.takeDisk(book,
-"incoming", stamp)`, as one `incoming` edit, so the editor, Undo, the journal and Save all move
-   with it, and the Book's baseline moves to the new commit.
+4. refuse whole if any book needs a person, or if a file the other side changed has changes here no
+   version holds;
+5. hand each changed Book the other side's text (`handOver`, `src/core/sync/classify.ts`), as one
+   `incoming` edit per Book, all or none, in ONE synchronous step: each Book is looked up afresh
+   (opening a book swaps its object) and its stamp checked against the classification in the same
+   turn as the apply, so no keystroke can land between "this book may be replaced" and the
+   replacing. A Book that moved is read again once, then the receive refuses with nothing written;
+6. `Remote.fastForward`: the branch moves and the work tree follows through a SAFE checkout; if it
+   cannot, every Book is given its text back;
+7. every changed Book's baseline follows its file (`SaveCoordinator.takeDisk(book, "incoming",
+"keep")`), each one attempted and a failure listed rather than leaving the rest behind.
 
-Step 6 is what `pull` never did. It moved the files and left every open Book, and its baseline, on
-the old text, so the next save wrote the old text back over what had just arrived. `takeDisk` is also
-the one exception to "only Save writes a book" ([INVARIANTS](../INVARIANTS.md)): the bytes are Git's,
-and the Book learns them in the same step. It checks the stamp it was given; a Book typed into since
-the classification keeps its text, and only its baseline moves, so Save & Review shows the difference.
+Step 5 is what `pull` never did. It moved the files and left every open Book, and its baseline, on
+the old text, so the next save wrote the old text back over what had just arrived. Handing the Books
+their text BEFORE the files move is what makes a refusal cheap: nothing on disk has changed yet.
+This is the one exception to "only Save writes a book" ([INVARIANTS](../INVARIANTS.md)): the bytes
+are Git's, and the Book learns them in the same move. `/cloud` says what a receive could not finish:
+a book file that arrived or went (the book set is fixed while a project is open), or a book whose
+file could not be read back.
 
-| Refusal             | What it means                                                |
-| ------------------- | ------------------------------------------------------------ |
-| `no-branch`         | HEAD is detached; there is no branch to move forward.        |
-| `no-cloud-copy`     | The shared project has no copy of this branch.               |
-| `no-shared-version` | The two histories have no commit in common.                  |
-| `diverged`          | This device has commits the other side lacks: Combine.       |
-| `review`            | A book both sides changed, by the policy's measure: Compare. |
+| Refusal             | What it means                                                     |
+| ------------------- | ----------------------------------------------------------------- |
+| `no-branch`         | HEAD is detached; there is no branch to move forward.             |
+| `no-cloud-copy`     | The shared project has no copy of this branch.                    |
+| `no-shared-version` | The two histories have no commit in common.                       |
+| `diverged`          | This device has commits the other side lacks: Combine.            |
+| `review`            | A book both sides changed, by the policy's measure: Compare.      |
+| `unrecorded`        | A file the other side changed has changes here no version holds.  |
+| `moved`             | A book was typed into or opened while the receive read it, twice. |
 
-`receive` takes `reviewed: true` when a person has already decided the contested books in Review
-(below), and `theirs` when the other side is not the shared project's tip — a suggestion's head.
+`receive` takes `settled` — the books whose project text a person has just decided in Review
+(below) — and `theirs` when the other side is not the shared project's tip: a suggestion's head.
 
 ## Diverged, and Combine
 
@@ -246,15 +256,24 @@ ORDER is policy the same way `syncStateOf`'s is:
 | `not-diverged`      | Only one side moved: send or receive instead.                         |
 | `contested`         | Both sides changed the same file. Never merged; compared.             |
 | `deletion`          | The other side deleted a file, and a receipt cannot say "it is gone". |
+| `moved`             | A book was typed into or opened while the combine read it.            |
 
 `contested` is decided per FILE as well as per book: the policy settles scripture, and a straight
 path intersection catches a manifest or a versification file both sides touched, where "keep mine"
-would otherwise be a silent decision. Unrecorded work is no longer a refusal, because nothing is
+would otherwise be a silent decision. `metadata.json` is the exception: its checksums describe the
+files, so it is never a decision. The combine takes the other side's, then works the checksums out
+again over the combined files (`ProjectAdmin.refreshChecksums`) and records it in the decision
+commit, beside what each decided book's save kept current. Without that, every Scripture Burrito
+project refused to combine, because every save on each side changes the file. Unrecorded work is no longer a refusal, because nothing is
 checked out over it: the files that arrive are only ones this device did not change.
 
-**The transaction.** Everything that can refuse happens before the first write. The other side's
-files are then written and recorded; if recording fails they are put back. Once recorded, the Books
-take the new text through `takeDisk`, and the result is sent to `destination()`. `CombineError.state`
+**The transaction.** Everything that can refuse happens before the first write, including the
+Books taking the other side's text, all or none, the same way a receive does. The files are then
+written and recorded; if recording fails they are put back and the Books are given their text back
+(a Book typed into since keeps the typing). A commit that fails leaves the index as it found it, on
+both hosts, so nothing staged for it rides into the next commit. Once recorded, the baselines follow
+the files, and the result is sent to `destination()`. Like a receive, the fetch runs before the
+exclusive lane is taken. `CombineError.state`
 says where the repository is:
 
 - `untouched` — nothing was written: every refusal, and every failure up to the first write;
@@ -276,12 +295,24 @@ program then refuses.
 
 When a book is contested the primary action is Compare: Review, with "the shared project" as the
 other side (`/project/$slug/review?against=shared`), where every passage says whether it changed
-there, here, or in both places ([review](review.md)). What the person decides there is kept, and
-everything else the other side changed arrives, as one version: `settleWithShared`
-(`src/app/syncActions.ts`) saves the decided books and then either receives with `reviewed: true` and
-records a version, when this device had no commits of its own, or combines with `reviewed: true`,
-which writes the decision commit over the person's text. Verified end to end against the sandbox on
-2026-09-30: both people's Matthew changes arrived in `41-MAT.usfm`, in a commit with two parents.
+there, here, or in both places ([review](review.md)).
+
+What is recorded is **the project's text**, the latest of it: the person's choices, and anything
+they typed into the review's cards. Every passage has a side even before anyone chooses — what only
+the shared project changed is preset to theirs, what only this device changed to mine — and a
+passage changed in both places has no preset: Record waits until every one of those has a choice.
+Pressing Record makes the presets real (the passages still set to theirs are taken into the
+project's text), and then every book the review showed is SETTLED: its project text is the
+decision, whatever the policy would have said about it. `settleWithShared`
+(`src/app/syncActions.ts`) then either receives with `settled` and records a version, when this
+device had no commits of its own, or combines with `settled`, which writes the decision commit
+over the settled text. Books the review did not show — the two sides already agree — simply
+arrive.
+
+The first build settled from the verdicts instead, and lost decisions both ways: a book only the
+other side changed was overwritten with theirs even where the person had kept a passage of their
+own, and a book both sides changed was kept whole, dropping every one of the other side's passages
+nobody had ruled on.
 
 **Finish the transfer is wired.** `Remote.abortMerge(repo)` — isomorphic-git's `abortMerge` on the
 Web, `git_abort_merge` over git2 on desktop — puts the work tree back to HEAD and clears the merge
@@ -303,7 +334,10 @@ the policy would have shown. It runs as the `sync.check` operation.
 check, and a refusal starts `checkForChanges` at once so `/cloud` reads `behind` or `diverged` with
 the facts rather than a bare error.
 
-Neither runs offline, and both go through the ports' lanes, so a check and a send cannot race.
+Neither runs with no network interface up, and both go through the ports' lanes, so a check and a
+send cannot race. A network failure the last transfer met does NOT stop them
+(`syncStatus.interfaceUp`, not `online`): they are how Sefer finds out it is over, and a signal that
+waited for a success before trying would never see one.
 
 ### The settings
 

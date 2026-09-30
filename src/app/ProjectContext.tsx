@@ -779,10 +779,11 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     const closing = services.composition.observability.operation("project.close", {
       "project.books": staticOpen.books.length,
     });
-    await services.run(Effect.provideService(staticOpen.close(), Observability, closing));
-    // The repository's lane waits for any running transfer, then forgets the
-    // root, so nothing starts on a project that is no longer open.
+    // The repository's lane first: it waits for any running receive or
+    // combine to finish handing its Books their text, and refuses new work,
+    // so nothing applies to a Book of a project that is already closed.
     await services.run(Effect.flatMap(Repositories, (lanes) => lanes.close(staticOpen.root)));
+    await services.run(Effect.provideService(staticOpen.close(), Observability, closing));
     closing.end("passed");
   };
 

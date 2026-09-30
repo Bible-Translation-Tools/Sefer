@@ -47,7 +47,7 @@ import { useShell } from "../../ProjectContext";
 import type { Domain } from "../../services";
 import { destination } from "../../syncActions";
 import { syncStatus } from "../../syncStatus";
-import { Button, Card, Dialog, EmptyState, PanelHeader } from "../primitives";
+import { Button, Card, Dialog, EmptyState, PanelHeader, toasts } from "../primitives";
 import { createAccount } from "./account";
 import { AccountCard } from "./AccountCard";
 import { ActionCard } from "./ActionCard";
@@ -359,7 +359,30 @@ export function CloudScreen() {
   // not just its folder.
   const pull = () => {
     const project = shell.project();
-    return project === undefined ? Effect.void : receive({ project });
+    if (project === undefined) return Effect.fail(new Error("no project is open"));
+    return Effect.tap(receive({ project }), (received) =>
+      Effect.sync(() => {
+        // What a receive could not finish is said, not left for the next save
+        // to find: a book file that arrived or went (the book set is fixed
+        // while a project is open), and a book whose saved text could not be
+        // read back.
+        if (received.reopen.length > 0)
+          toasts.info({
+            title: t("Reopen the project to see every book"),
+            message: t("{books} arrived or were removed.", {
+              books: received.reopen.map(bookFromPath).join(", "),
+            }),
+          });
+        if (received.unsettled.length > 0)
+          toasts.error({
+            title: t("Some books could not be read back"),
+            message: t("{books}: their text is kept; review before saving.", {
+              books: received.unsettled.join(", "),
+            }),
+            autoClose: false,
+          });
+      }),
+    );
   };
 
   const push = (root: string) =>

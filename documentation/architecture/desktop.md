@@ -108,11 +108,17 @@ These are the semantics the two hosts must agree on, and where they are enforced
   clean repository that would discard unsaved work rather than undo a transfer.
 
 `src/core/git/contract.ts` is the acceptance suite, and it cannot reach this Layer: `invoke` needs a
-Tauri runtime and a Node harness has none. So the contract's own case — init, empty status, one saved
-file, one commit, then `log`/`show`/`previousVersions` agreeing — plus one case per command lives as
-`#[cfg(test)] mod tests` in `src-tauri/src/git.rs`, against real repositories in temp directories.
-`cargo test` in `src-tauri/` runs them. That is not the repository's "no tests" rule being bent: the
-rule is about locking UI behaviour while the surfaces move, and nothing there renders anything.
+Tauri runtime and a Node harness has none. A Rust restatement of it once lived in `git.rs` as
+`#[cfg(test)] mod tests`; it was removed on 2026-09-26 with every other new test, under the rule
+that tests wait until behaviour is locked. `cargo test` runs nothing today, so the desktop commands
+are proved only by running the app.
+
+- **Transfers end when they stop moving.** `configure_timeouts` (called first in `run`) sets
+  libgit2's connect timeout to 15 s and its per-read timeout to 60 s: a stalled server would
+  otherwise hold the repository's lane, and every Record a version behind it, indefinitely. A slow
+  transfer that is still arriving is never cut off.
+- **A failed commit leaves the index alone.** `git_commit` stages in memory and writes the index only
+  once the commit exists.
 
 The commit identity goes through one function, `author_signature`, and arrives from TS:
 `src/app/author.ts` is the one answer on both hosts — the signed-in username, else the name this

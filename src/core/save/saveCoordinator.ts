@@ -513,10 +513,12 @@ const make = (
           stamp: apply || !moved ? book.source().stamp : disk.stamp,
           savedAt: Date.now(),
         });
+        // "keep" is asked for, not a race lost: the baseline follows the file
+        // and the Book's text stands by design.
         observability?.note(
           "baseline.take",
-          moved ? "declined" : "rewrote",
-          moved ? "book moved" : undefined,
+          moved && expect !== "keep" ? "declined" : "rewrote",
+          expect === "keep" ? "baseline only" : moved ? "book moved" : undefined,
           {
             "book.id": book.id,
             "book.origin": origin,

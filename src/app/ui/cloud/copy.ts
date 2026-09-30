@@ -346,6 +346,14 @@ export const receiveRefusal = (refusal: ReceiveRefusal, books: readonly string[]
       return t(
         "This project and the shared project have no version in common, so there is nothing to build on. Nothing has changed.",
       );
+    case "unrecorded":
+      return t(
+        "Some files the shared project changed have changes here that aren't kept as a version yet, so nothing was received. Save them first. Your work is untouched.",
+      );
+    case "moved":
+      return t(
+        "A book changed while the updates were arriving, so nothing was received. Try again. Your work is untouched.",
+      );
     case "no-branch":
       return t("There is nothing here to receive into. Your work is exactly as you left it.");
   }
@@ -370,6 +378,10 @@ export const combineRefusal = (refusal: CombineRefusal): string => {
     case "deletion":
       return t(
         "The shared project deleted a file, and a combine cannot carry a deletion yet. Nothing has changed.",
+      );
+    case "moved":
+      return t(
+        "A book changed while the two were being combined, so nothing was. Try again. Your work is untouched.",
       );
     case "no-branch":
     case "no-work-here":

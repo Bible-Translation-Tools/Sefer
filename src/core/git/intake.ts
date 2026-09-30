@@ -37,8 +37,15 @@ export interface IntakeResult {
   readonly arrival: CommitId | undefined;
 }
 
-/** What survives adoption at the top of `.git`; `config` is rewritten. */
-const KEEP = new Set(["objects", "refs", "HEAD", "shallow", "packed-refs", "config"]);
+/**
+ * What survives adoption at the top of `.git`; `config` is rewritten.
+ *
+ * `index` stays: it is the repository's own record of what HEAD holds, and
+ * without it every file reads as changed — on the Web, where a commit is
+ * built from the index, the arrival then re-recorded the whole tree as a
+ * commit identical to HEAD.
+ */
+const KEEP = new Set(["objects", "refs", "HEAD", "shallow", "packed-refs", "config", "index"]);
 
 /** What survives under `refs/`: branches and tags, never another remote's refs. */
 const KEEP_REFS = new Set(["heads", "tags"]);

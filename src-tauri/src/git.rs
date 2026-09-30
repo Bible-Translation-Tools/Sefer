@@ -134,6 +134,20 @@ fn transport_failure(error: git2::Error) -> String {
 /// has nothing to answer with reports a public fetch as an auth failure.
 /// Push is the other way round and always carries one; `git_push` says so in
 /// its signature.
+/// A transfer that stops moving is ended: it holds its repository's lane, and
+/// a server that stalls would otherwise hold it — and every Record a version
+/// waiting on it — indefinitely. libgit2's server timeout is per read, so a
+/// slow transfer that is still arriving is never cut off. Called once, first
+/// thing in `run`, because these options are process globals.
+pub fn configure_timeouts() {
+    // SAFETY: libgit2's options are unsynchronised globals; `run` calls this
+    // before Tauri spawns a thread or any command can reach libgit2.
+    unsafe {
+        let _ = git2::opts::set_server_connect_timeout_in_milliseconds(15_000);
+        let _ = git2::opts::set_server_timeout_in_milliseconds(60_000);
+    }
+}
+
 fn remote_callbacks(credential: Option<(&str, &str)>) -> RemoteCallbacks<'static> {
     let mut callbacks = RemoteCallbacks::new();
     if let Some((username, token)) = credential {
@@ -395,7 +409,9 @@ pub fn git_commit(
             index.remove_path(relative).map_err(io)?;
         }
     }
-    index.write().map_err(io)?;
+    // The staging stays in memory until the commit exists: a commit that fails
+    // must not leave the on-disk index holding paths no commit records, or the
+    // next ordinary commit would carry them.
 
     let tree_oid = index.write_tree().map_err(io)?;
     let tree = repo.find_tree(tree_oid).map_err(io)?;
@@ -423,6 +439,7 @@ pub fn git_commit(
 
     if let Some(existing) = &parent {
         if joined.is_empty() && existing.tree_id() == tree_oid {
+            index.write().map_err(io)?;
             return Ok(existing.id().to_string());
         }
     } else if tree.is_empty() {
@@ -447,6 +464,7 @@ pub fn git_commit(
             &parents,
         )
         .map_err(io)?;
+    index.write().map_err(io)?;
     Ok(oid.to_string())
 }
 

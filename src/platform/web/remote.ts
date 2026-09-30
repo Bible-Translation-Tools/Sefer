@@ -98,6 +98,9 @@ interface Wire {
   readonly onProgress: (event: GitProgress) => void;
 }
 
+/** How long a request may go without a byte before it is ended. */
+const STALL_MS = 60_000;
+
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
@@ -126,7 +129,7 @@ const classify = (error: unknown): RemoteError => {
   if (/401|403|authentication|authorization|access denied|forbidden/iu.test(message)) {
     return fail("Unauthorized", message);
   }
-  if (/network|offline|enotfound|econn|cors|failed to fetch/iu.test(message)) {
+  if (/network|offline|enotfound|econn|cors|failed to fetch|stalled|aborted/iu.test(message)) {
     return fail("Network", message);
   }
   // An unrecognised throw is still a refusal of the request, never a success.
@@ -152,9 +155,47 @@ const makeWebRemote = (
 
     // isomorphic-git's client, with every request sent through the transport.
     // The one place a proxy URL exists; everything outside sees content hosts.
+    //
+    // And a request that stops moving is ended: a transfer holds its
+    // repository's lane, and a proxy that stalls would otherwise hold it —
+    // and every Record a version waiting on it — for as long as the browser
+    // cares to wait. The clock restarts with every chunk, so a slow transfer
+    // that is still arriving is never cut off.
     const transported: typeof http = {
-      request: (request) =>
-        http.request({ ...request, url: through(options.transport, request.url) }),
+      request: async (request) => {
+        const controller = new AbortController();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const restart = (): void => {
+          if (timer !== undefined) clearTimeout(timer);
+          timer = setTimeout(
+            () => controller.abort(new Error(`stalled: nothing for ${STALL_MS / 1000} s`)),
+            STALL_MS,
+          );
+        };
+        restart();
+        try {
+          const response = await http.request({
+            ...request,
+            url: through(options.transport, request.url),
+            signal: controller.signal,
+          });
+          const chunks = response.body;
+          const body = async function* (): AsyncGenerator<Uint8Array> {
+            try {
+              for await (const chunk of chunks ?? []) {
+                restart();
+                yield chunk;
+              }
+            } finally {
+              if (timer !== undefined) clearTimeout(timer);
+            }
+          };
+          return { ...response, body: body() };
+        } catch (error) {
+          if (timer !== undefined) clearTimeout(timer);
+          throw error;
+        }
+      },
     };
 
     const urlNamed = (repo: Repo, name = ORIGIN): Effect.Effect<string, RemoteError> =>
