@@ -31,7 +31,7 @@ current project**. Both sides implement one port, `CompareSource`
 interface CompareSource {
   readonly id: string; // stable within a session
   readonly label: string; // "In the editor", "On disk", "shared-nt"
-  readonly kind: CompareSourceKind; // "project" | "folder" | an open string ("disk", "recorded")
+  readonly kind: CompareSourceKind; // "project" | "folder" | an open string ("disk", "recorded", "remote")
   readonly canApply: boolean; // may this side be written?
   books(): Effect<readonly BookId[], CompareError>;
   read(bookId): Effect<{ text: string; stamp?: SourceStamp }, CompareError>;
@@ -43,15 +43,16 @@ Every Effect carries `R = never`: a source captures what it needs — a Project,
 or a `FileSystem` and a root — when it is CONSTRUCTED, so a comparison can be
 run from a component, a command or a test with one `run` and no context.
 
-Core has four kinds, and the LEFT and RIGHT pickers (`src/app/ui/review/sources.ts`) offer five choices over them:
+Core has five kinds, and the LEFT and RIGHT pickers (`src/app/ui/review/sources.ts`) offer six choices over them:
 
-| picker choice | core source                                               | what                                                                        | writable |
-| ------------- | --------------------------------------------------------- | --------------------------------------------------------------------------- | -------- |
-| In the editor | `currentProjectSource` (`project`)                        | the books as the editor holds them, unsaved keystrokes included             | **yes**  |
-| On disk       | `savedSource` (`disk`, `src/core/compare/pastSources.ts`) | the bytes in the project's files (`SaveCoordinator.baseline`)               | no       |
-| Last recorded | `recordedSource` (`recorded`, same file)                  | the blobs at HEAD, read once per commit (`src/app/ui/panels/recorded.ts`)   | no       |
-| A zip         | `folderSource` (`folder`)                                 | a `.zip` unpacked into a scratch folder first — a zip is not a kind in core | no       |
-| A folder      | `folderSource` (`folder`)                                 | any directory the `FileSystem` port can read                                | no       |
+| picker choice      | core source                                               | what                                                                        | writable |
+| ------------------ | --------------------------------------------------------- | --------------------------------------------------------------------------- | -------- |
+| In the editor      | `currentProjectSource` (`project`)                        | the books as the editor holds them, unsaved keystrokes included             | **yes**  |
+| On disk            | `savedSource` (`disk`, `src/core/compare/pastSources.ts`) | the bytes in the project's files (`SaveCoordinator.baseline`)               | no       |
+| Last recorded      | `recordedSource` (`recorded`, same file)                  | the blobs at HEAD, read once per commit (`src/app/ui/panels/recorded.ts`)   | no       |
+| The shared project | `sharedSource` (`remote`, same file)                      | the blobs at the remote-tracking ref, as of the last check                  | no       |
+| A zip              | `folderSource` (`folder`)                                 | a `.zip` unpacked into a scratch folder first — a zip is not a kind in core | no       |
+| A folder           | `folderSource` (`folder`)                                 | any directory the `FileSystem` port can read                                | no       |
 
 Left defaults to the editor and right to the file on disk, because that is the
 comparison a reader wants nine times in ten — **not** because the screen knows
@@ -90,6 +91,26 @@ under a decision already made. `recorded` and `folder` are;
 did not follow the editor is a review of nothing. They read live, and the
 screen re-takes the whole comparison on every shell tick while either of them
 is on a side. A comparison is still a snapshot — this simply takes a new one.
+
+### Against the shared project
+
+"The shared project" is the other side of a receive or a combine, as a source like any other: the
+blobs at `refs/remotes/origin/<branch>`, read once per head (`createRecordedVersion(shell, "shared")`),
+never written by a review — it changes only by sending. `/cloud`'s Compare and a contested row of the
+incoming plan open it as `/project/$slug/review?against=shared`; `?pull=<n>` reads a suggestion's head
+instead, labelled as that suggestion ([git](git.md), Suggested changes).
+
+Only this pairing has a third text: the version both sides last agreed on, the merge base, read as
+`createRecordedVersion(shell, "base")`. Against it, every card says where its change came from —
+**Changed there**, **Changed here**, or **Changed in both places** — from the same change facts the
+sync policy decides with (`bookFacts`, `src/core/sync/facts.ts`), so Review and `/cloud` cannot
+disagree about which passages both people touched. It is a label, not a colour: the tint stays by
+side.
+
+Pressing Record a version in this review SETTLES the difference rather than only recording the
+editor: what the person decided is kept, and everything else the other side changed arrives, as one
+version — a receive and a version, or one decision commit ([sync](sync.md), "A contested book,
+settled in Review").
 
 ### The screen never says "left" or "right"
 
@@ -327,9 +348,24 @@ a book yet, and it says so in one line.
 
 **The project file is written only when a version is recorded.** There is no
 timer on the file, no idle write, no `autosave` — Review's one button calls
-`saveAll` and then `Git.commit`, in that order, as one action. It is offered
-whenever the project is one of the two sides, because what it records is the
-project's own unsaved work and not the comparison.
+`saveAll` and then `Git.commit`, in that order, as one action
+(`recordVersion`, `src/app/recordVersion.ts`, which the save key shares when
+"Skip review of my changes" is on). It is offered whenever the project is one
+of the two sides, because what it records is the project's own unsaved work
+and not the comparison. The commit takes exactly the save's receipts, plus
+what each save kept current beside its book — a burrito's `metadata.json`
+checksums — so no file Sefer wrote is left unrecorded.
+
+The version is by a person ([sync](sync.md), "Who a version is by"): the
+signed-in username, or this device's name, asked once the first time. The
+default message is worked out from the books BEFORE they are saved, because
+after the save nothing differs and it read "Edited". When "Send my changes on
+save" is on, the send follows the commit; a refused send leaves the version
+recorded, and the words say only the sending did not happen.
+
+The one other writer of a book's text and baseline is a receive: Git's bytes
+arrive through `SaveCoordinator.takeDisk(book, "incoming", stamp)`, as one
+edit and a new baseline in the same step ([sync](sync.md), Receiving).
 
 The only automatic write left in the product is Recovery's journal: the
 **working-state backup**. It is debounced off the keystroke path ("Back up work
@@ -477,7 +513,5 @@ Recovery never writes the project file, and Save never writes the journal.
   per-book ones prove too slow for a formatting pass over 66 books.
 - `compare.colours: "sideTint" | "redGreen"`. Named, not registered; the
   reading is red/green today (above).
-- More sources: a git checkpoint, another local project, remote latest. The
-  port is the point; each is a new file.
-- The incoming-remote reconciliation narrative ([sync.md](sync.md)). The
-  decision map is its foundation.
+- More sources: a git checkpoint, another local project. The port is the
+  point; each is a new file.

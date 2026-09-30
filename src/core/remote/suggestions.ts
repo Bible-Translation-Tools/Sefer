@@ -31,7 +31,7 @@ export interface Suggestion {
   readonly branch: string;
 }
 
-export interface SuggestRequest {
+interface SuggestRequest {
   /** The suggester's account, whose copy holds `branch`. */
   readonly from: string;
   readonly branch: string;
@@ -41,7 +41,7 @@ export interface SuggestRequest {
   readonly body: string;
 }
 
-export interface SuggestionsService {
+interface SuggestionsService {
   /** Can the signed-in account write to `owner/name`? */
   readonly canWrite: (
     host: string,

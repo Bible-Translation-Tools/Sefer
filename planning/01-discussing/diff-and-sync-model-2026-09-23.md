@@ -1,6 +1,6 @@
 # Diff, sync and the Git lifecycle
 
-**Status:** the one working spec, 2026-09-29 (revised 2026-09-30), agreed with Will in conversation. Only what [§2](#2-already-built) lists is built. This doc absorbs:
+**Status:** the one working spec, 2026-09-29 (revised 2026-09-30), agreed with Will in conversation. Built on the `git-lifecycle` branch (2026-09-30, unmerged): everything [§2a](#2a-as-built-2026-09-30) lists, with its deviations. The durable account is now in the architecture chapters ([git](../../documentation/architecture/git.md), [sync](../../documentation/architecture/sync.md), [review](../../documentation/architecture/review.md)); this doc keeps the reasoning and what is still open. This doc absorbs:
 
 - the 2026-09-19 "book and chapter time travel" note (`next-git-considerations.md`, now deleted);
 - the progress log of the local review and history plan (deleted);
@@ -46,6 +46,27 @@ From Will's voice note (2026-09-23):
   - `history/bookIndex.ts`, `indexStore.ts` and `indexWorker.ts` build the book-change index in a worker (under a shared Web Lock) and store it.
   - `src/core/history/window.ts` holds the bounded LRU.
   - Also built on the spike: common ancestor, changed-on-both-sides facts, and author in the index.
+
+## 2a. As built (2026-09-30)
+
+On the `git-lifecycle` branch, in the order agreed (lanes, facts and policy, host ops, receive and combine, recording and intake, the app, suggested changes). Verified end to end on the Web against the sandbox `Will_Kelly/x-en-ulb`: clone, the check on open (probe, ~450 ms when nothing changed), send on save, receive into open Books, a refused send reading `diverged`, Combine as a two-parent commit, a contested Matthew settled through Review with both people's changes in `41-MAT.usfm`, the per-passage labels, and the suggestions card as the owner. **Not verified:** forks and pull requests (they need a second account), Web Locks across two tabs, and the desktop app at runtime (the Rust compiles and `cargo test` passes).
+
+**Built as specified:** [§5](#5-intake) intake with the allowlist and the arrival commit, the `.sefer/` exclude, `master` as the default, the device-local name; [§6](#6-the-repository-lifecycle-and-the-one-writer) the lifecycle and lanes; [§8](#8-sync-settings) the four settings and connectivity as one signal (`src/app/syncStatus.ts`); [§9](#9-the-check-on-open) the check on open, probe first; [§10](#10-change-facts-and-policy) facts and `judge`; [§11](#11-receiving) receive through `takeDisk(book, "incoming")` and the decision commit; [§12](#12-record-a-version-save-then-commit) Record a version with the metadata receipt and a person as author; [§13](#13-choosing-a-shared-project) "the shared project" as a Review source, and suggested changes.
+
+**Where it differs from the text below:**
+
+- **The history index ([§7](#7-the-history-index)) and shallow clone plus deepen are deferred.** Nothing in this build consumes them before History does: the merge base comes from `Git.mergeBase`, and survey diffs only the books `changedPathsBetween` names. §15's 13 and 14 stay open with it.
+- **No Rust mutex.** Tauri runs non-async commands one at a time; the one writer is the TS lane on both hosts.
+- **The adoption allowlist keeps `refs/tags`** as well as `refs/heads`.
+- **A lifecycle refusal on `Remote` is `Rejected`**, and on `Git` `Refused`, so no caller's error handling changed.
+- **`sync.receive` is a note, not an operation**: it runs inside the transfer or check that asked for it. The lifecycle writes `repository.*` notes. There is no `deepen` and no `probe` operation; `sync.check` covers the probe.
+- **The sync settings live on `/cloud`**, not `/settings`, beside the state they change.
+- **git2 went from 0.20 to 0.21** (Will's OK), which fixed 0.20's `Remote::list()` returning a null slice for an empty repository.
+- **401 and 403 are both `Unauthorized`**, so the copy names both: "this account may not have permission to write to the shared project, or its sign-in has expired".
+- **Combine takes `reviewed`** (and receive too): after Review has settled the contested books, their text is the decision and the refusal does not apply. `theirs` points either at a suggestion's head.
+- **Unrecorded work no longer refuses Combine.** Nothing is checked out over it; the files that arrive are only ones this device did not change, saved or unsaved.
+- **Suggested changes are isolated** so the topology can come out: `core/remote/suggestions.ts`, `app/suggestions.ts` and `SuggestionsCard.tsx`, joined at four one-line seams. With the seams cut, `pnpm deadcode` reports the three files unused (checked 2026-09-30). See [git](../../documentation/architecture/git.md#suggested-changes).
+- **Not built yet:** the unhealthy-repository copy and its Advanced tools ([§18](#18-resolved)); the Advanced / troubleshooting panel; bug 11 (the reading's `uncommitted` still comes from `git status`, though receive and Combine classify against the editor); `@codemirror/merge` for non-scripture files ([§4](#4-the-shape-of-every-comparison)), so the sid-aligned invariant is unchanged. From [§17](#17-small-todo-list-while-in-there), the kebab's "Save", the Review dev copy and `DEFAULT_BRANCH` are done; the copy suggestions wait for the PO pass.
 
 ## 3. Rules that are settled
 
@@ -466,6 +487,8 @@ Names follow the glossary's rule, **`<thing>.<what happened to it>`**, and exten
 Never recorded: a path beyond its last segment, a URL, an account name, or any text.
 
 ## 15. Bugs this work fixes
+
+Fixed on `git-lifecycle`: 1–10 and 12. Open: 11, 13, 14.
 
 1. Open Books are not reloaded after a pull or Combine, so the next save reverts the incoming work ([§11](#11-receiving)).
 2. Web `pull` can merge automatically; desktop refuses. Receive becomes fetch + fast-forward on both hosts ([§11](#11-receiving)).

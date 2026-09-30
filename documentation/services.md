@@ -7,7 +7,7 @@ One section per service: what it is in plain words, what is wrong or constrained
 ## Where to focus (as of 2026-09-25)
 
 1. **Location** — done: every place question goes through Citation, Address and Location over the engine's TOC, and no regex reads a designator. Anchors (for comments) are the next piece, when comments start. See [Location](#location-and-reference) and [the Location chapter](architecture/location.md).
-2. **Git, top to bottom** — history time travel is next, and the pull/push/lifecycle flow needs one careful pass before anything else is added to it. See [Git](#git).
+2. **Git, top to bottom** — the lifecycle pass is built on the `git-lifecycle` branch (2026-09-30): one writer per repository, receive as a fast-forward through the Books, Combine as a decision commit, intake, check on open and send on save. History time travel is next. See [Git](#git).
 3. **One diff and sync model** — after the primitives settle: stop reading every book (the line diff is retired, 2026-09-27), one change classification for History, Review and Cloud. See [Diff](#diff) and `planning/01-discussing/diff-and-sync-model-2026-09-23.md`.
 4. **Data safety in Recovery** — done on the review branch (2026-09-28): a journal knows the text it started from by hash, and one subscriber on the canonical edit feed backs up every book. What is left is a damaged journal's valid prefix, and a recovery unit test (a candidate in the testing chapter). See [Recovery](#recovery).
 
@@ -405,7 +405,7 @@ There is one diff: the engine's decision units, addressed by sid (`core/diff/ske
 
 ### Overview
 
-The one compare screen, `/review`. Both sides are pickers over a `CompareSource` (the working project, a folder, a zip, a recorded version, or the saved file). The differences are drawn on the texts as the editor reads them: cards per change across every book, or the whole book; split or unified; decisions per unit, card or book, next/previous change (`Alt-F5`). You decide, then Apply, and Record a version (save + commit). The app bar's More menu opens it (Compare). `src/core/compare`, `src/app/ui/review`. → [review](architecture/review.md)
+The one compare screen, `/review`. Both sides are pickers over a `CompareSource` (the working project, a folder, a zip, a recorded version, the saved file, or the shared project — where each change says whether it changed there, here or in both places, and Record a version settles the difference). The differences are drawn on the texts as the editor reads them: cards per change across every book, or the whole book; split or unified; decisions per unit, card or book, next/previous change (`Alt-F5`). You decide, then Apply, and Record a version (save + commit). The app bar's More menu opens it (Compare). `src/core/compare`, `src/app/ui/review`. → [review](architecture/review.md)
 
 ### Constraints and known bugs
 
@@ -458,16 +458,14 @@ A JSONL journal of edits to the dirty buffer, debounced and compacted. On open, 
 
 ### Overview
 
-One port answered by isomorphic-git over OPFS on Web and git2 through Rust commands on desktop: commit, log, show, `previousVersions`, branch, resolve, `changedPathsBetween`, `moveBranch`, `abortMerge`. History is a list of versions with a diff against working and a per-hunk Revert. `src/core/git`, `src-tauri/src/git.rs`. → [git](architecture/git.md), [desktop](architecture/desktop.md)
+One port answered by isomorphic-git over OPFS on Web and git2 0.21 through Rust commands on desktop: commit (with decision-commit parents), mergeBase, log, show, `previousVersions`, branch, resolve, `changedPathsBetween`. Every call runs in its repository's lane — one writer per repository, across tabs by Web Locks — under a lifecycle (absent / opening / ready / busy / unhealthy / closing). Intake gives every arriving project a repository and an arrival commit, adopting an arriving `.git` through an allowlist. History is a list of versions with a diff against working and a per-hunk Revert. `src/core/git`, `src-tauri/src/git.rs`. → [git](architecture/git.md), [desktop](architecture/desktop.md)
 
 ### Constraints and known bugs
 
 The flow needs one top-to-bottom pass before more is added.
 
-- Desktop pull (`git.rs:776`) force-checks-out the incoming tree and does not first look for uncommitted changes on disk. Under explicit save the "uncommitted change" is usually a saved-but-unrecorded book, and it would be overwritten.
-- Desktop push has no rejection callback: a push the server refuses (for example, not a fast-forward) can look like success.
-- The commit author is hard-coded as `Sefer <sefer@localhost>` in three places.
-- There is no repository lifecycle (absent / busy / unhealthy / closing), and mutations are not serialised against each other.
+- The lifecycle, the lanes and the desktop commands are built but the desktop app has not been run against them; Web Locks across two tabs has not been exercised either (2026-09-30).
+- The only repair an `unhealthy` repository allows is aborting a merge; there is no screen for it.
 - Web `previousVersions` walks the whole log with no `depth`.
 - Web `log(repo, path)` (so `previousVersions` and `show` too) fails on real histories: isomorphic-git 1.42 parses every tree it walks and throws `UnsafeFilepathError` on an entry name git itself accepts, and one throw loses the whole result. `WycliffeAssociates/en_ulb`'s 2018 root tree has `00-About_the_ULB\ULB-Intro.md`, so Genesis history fails outright (native git: 156 changes). The `/playground/history-diff` spike walks raw tree objects instead (`src/dev/playground/bookHistory.ts`, matches native `git log -- 01-GEN.usfm` exactly); the port itself is unchanged.
 
@@ -485,26 +483,29 @@ The flow needs one top-to-bottom pass before more is added.
 
 ### Overview
 
-Clone, fetch, pull, push and branch moves against a Gitea (WACS) server, plus the Gitea account half (sign-in, tokens). The CONTENT HOST is the identity on both hosts — what `origin` names and a sign-in is filed under; on the Web every request goes through the transport (`src/core/remote/transport.ts`, the proxy that fronts each host), applied inside the HTTP clients and stored nowhere. `src/core/remote`, `platform/{web,tauri}/remote.ts`. → [git](architecture/git.md), [configuration](architecture/configuration.md)
+Clone, probe, fetch, fast-forward and push against a Gitea (WACS) server — no pull, no forced checkout, no force push — plus the Gitea account half (sign-in, tokens). The CONTENT HOST is the identity on both hosts — what `origin` names and a sign-in is filed under; on the Web every request goes through the transport (`src/core/remote/transport.ts`, the proxy that fronts each host), applied inside the HTTP clients and stored nowhere. `src/core/remote`, `platform/{web,tauri}/remote.ts`. → [git](architecture/git.md), [configuration](architecture/configuration.md)
 
 ### Constraints and known bugs
 
 - Desktop transfer progress is a `TODO(seam)` (`platform/tauri/remote.ts:141`).
 - Desktop `git_clone` (git2 `RepoBuilder`) compiles but has not been run against a server; the web clone was checked on `main` and `master` repositories through the prod proxy, and (2026-09-25) stores the content host as `origin`.
+- Suggested changes (forks and pull requests, `core/remote/suggestions.ts`) are built but not exercised against a second account. They join the app at four seams and can be cut out; [git](architecture/git.md#suggested-changes).
 
 ### Ideas / future
 
-- None.
+- Shallow clone and deepen, and the history index, are deferred until History needs them.
 
 ## Sync
 
 ### Overview
 
-The `/cloud` screen. It reads the two clocks and sorts the project into one of nine states, plans what a Receive would change, and Combines. Scripture text is never merged automatically. `src/core/sync`, `app/ui/cloud`. → [sync](architecture/sync.md)
+The `/cloud` screen. It reads the two clocks and sorts the project into one of ten states, plans what a Receive would change from change facts and one overlap policy, receives by fast-forward, and Combines as one decision commit; a contested book is settled in Review against the shared project. The check on open and send on save run per project, on by default. Scripture text is never merged automatically. `src/core/sync`, `app/ui/cloud`. → [sync](architecture/sync.md)
 
 ### Constraints and known bugs
 
 - A contested book's link opens Review for the project, not that book: Review takes no book in its URL.
+- A direct reload onto `/cloud?fixture=1` has shown a blank screen; not yet known whether that predates the lifecycle work.
+- The overlap scope is `book` everywhere; `chapter` and `verse` exist in the policy with no setting.
 
 ### Ideas / future
 
@@ -565,7 +566,7 @@ Stable resource identities bound to project roles (`source`, `reference`, `tn`, 
 
 ### Overview
 
-Rename, delete, archive, export, metadata and checksum refresh. `src/core/admin/projectAdmin.ts`, `app/projectCommands.ts`, `YourProjects.tsx`. → [git](architecture/git.md), [landing](architecture/landing.md)
+Rename (this device's name only, in `.sefer/project.json`), delete, archive, export, metadata and checksum refresh. `src/core/admin/projectAdmin.ts`, `app/projectCommands.ts`, `YourProjects.tsx`. → [git](architecture/git.md), [landing](architecture/landing.md)
 
 ### Constraints and known bugs
 

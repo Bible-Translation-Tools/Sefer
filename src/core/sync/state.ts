@@ -196,7 +196,8 @@ const clocksOf = (reading: SyncReading): Clocks => ({
  * - `publish` — create the cloud copy and send the first version.
  * - `pull` — take the cloud's versions. Behind a confirmed plan, always.
  * - `push` — send this device's versions.
- * - `combine` — squash this device's work onto the cloud's, the diverged move.
+ * - `combine` — join this device's work and the cloud's in one decision
+ *   commit, the diverged move.
  * - `compare` — the diverged move when both sides touched the same book: a
  *   person decides, in the Compare screen, and no text is merged here.
  * - `resolve` — finish the merge that is part-way through.

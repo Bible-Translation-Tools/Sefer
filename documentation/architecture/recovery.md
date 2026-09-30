@@ -48,6 +48,11 @@ visited twice was journalled twice.)
 canonical LF text) of what the file holds — Save's baseline, which every
 book gets at open and which follows every save.
 
+A receive needs no special case: the text that arrives reaches a Book through
+`SaveCoordinator.takeDisk(book, "incoming")`, one apply like any other, and the
+baseline moves in the same step, so the journal finds the text back at the
+file and clears ([sync](sync.md), Receiving).
+
 ## The journal file
 
 One JSON line per accepted apply — `{ before, after, changes, origin, at }` —

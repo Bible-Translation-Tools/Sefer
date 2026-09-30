@@ -33,7 +33,7 @@ const USFM = /\.usfm$/iu;
  * with an ancestor of the real base. The cost of that is a plan that lists
  * MORE changed chapters than strictly necessary, which is the safe direction
  * to be wrong in. `undefined` means no shared history at all — and that is a
- * refusal for Combine rather than something to replay over.
+ * refusal for Combine rather than something to join.
  */
 export const mergeBase = (
   local: readonly Commit[],
@@ -105,7 +105,7 @@ const textHere = (
  * Costs no network: everything below is already down from the last fetch.
  * Every read degrades to `""` rather than failing — an unreadable blob then
  * looks changed on both sides, which is the pessimistic answer and the safe
- * one, because it sends the book to Compare instead of into a replay.
+ * one, because it sends the book to Compare instead of into a combine.
  */
 export const surveyIncoming = (
   repo: Repo,

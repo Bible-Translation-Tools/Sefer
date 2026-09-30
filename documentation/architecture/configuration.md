@@ -76,3 +76,10 @@ observability switches (`VITE_SEFER_OTLP_URL`, `VITE_SEFER_OTLP_METRICS`,
 `import.meta.env.DEV` is different: it is a build-time constant Vite folds so
 dev-only code is dropped from production, and it belongs wherever that branch
 is. Do not read a network preference anywhere but `endpoints.ts`.
+
+## Not configuration: the sync settings
+
+The four per-project sync settings (check on open, send on save, and the two skip-review
+tolerances) and this device's author name are Settings values, not build variables: stored on the
+device, keyed by project root, and never in the repository, because whether this laptop checks on
+open is not a fact about the translation. `src/app/syncSettings.ts`; [sync](sync.md), "The settings".
