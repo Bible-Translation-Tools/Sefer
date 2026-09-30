@@ -87,6 +87,12 @@ export interface ReceiveOptions {
    * file, for the commit that follows to record.
    */
   readonly reviewed?: boolean;
+  /**
+   * The ref "theirs" is read from — the shared project's remote-tracking ref
+   * unless named: a suggestion's head, fetched to a local ref, is received the
+   * same way.
+   */
+  readonly theirs?: string;
 }
 
 const refuse = (refusal: ReceiveRefusal, description: string, books?: readonly string[]) =>
@@ -134,10 +140,12 @@ const program = (options: ReceiveOptions) =>
     // 1. The other side as it is this second, not as the screen last saw it.
     yield* Effect.mapError(remote.fetch(repo), fromPort);
     const tip = Option.getOrUndefined(
-      yield* Effect.mapError(git.resolve(repo, trackingRef(branch)), fromPort),
+      yield* Effect.mapError(git.resolve(repo, options.theirs ?? trackingRef(branch)), fromPort),
     );
     if (tip === undefined)
-      return yield* Effect.fail(refuse("no-cloud-copy", `${trackingRef(branch)} does not exist`));
+      return yield* Effect.fail(
+        refuse("no-cloud-copy", `${options.theirs ?? trackingRef(branch)} does not exist`),
+      );
     const head = Option.getOrUndefined(yield* Effect.mapError(git.resolve(repo, "HEAD"), fromPort));
     const nothing: ReceiveResult = { head, paths: [], reloaded: [], moved: [], reopen: [] };
     if (head === tip) return nothing;

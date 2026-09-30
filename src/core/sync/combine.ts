@@ -248,6 +248,12 @@ export interface CombineOptions {
    * the other side's file.
    */
   readonly reviewed?: boolean;
+  /** The ref "theirs" is read from — the shared project's tracking ref unless named. */
+  readonly theirs?: string;
+  /** Where the decision commit is sent — `origin` unless named. */
+  readonly sendTo?: string;
+  /** The decision commit's message, when the caller has a better one than the count. */
+  readonly message?: string;
 }
 
 interface Gathered {
@@ -270,13 +276,14 @@ const gather = (
   project: Project,
   overlap: Overlap,
   reviewed = false,
+  theirs?: string,
 ): Effect.Effect<Gathered, CombineError, Git | FileSystem.FileSystem | Galley> =>
   Effect.gen(function* () {
     const git = yield* Git;
     const untouched = fromPort("untouched");
 
     const branch = Option.getOrUndefined(yield* Effect.mapError(git.branch(repo), untouched));
-    const tracking = branch === undefined ? undefined : trackingRef(branch);
+    const tracking = branch === undefined ? undefined : (theirs ?? trackingRef(branch));
     // The cloud's head. `None` is an answer — "nothing has been sent yet" —
     // so it becomes a refusal rather than a fault.
     const cloudHead =
@@ -416,6 +423,7 @@ const program = (options: CombineOptions) =>
       project,
       options.overlap ?? DEFAULT_OVERLAP,
       options.reviewed === true,
+      options.theirs,
     );
     const decision = gathered.decision;
     if (!decision.ok) {
@@ -487,7 +495,7 @@ const program = (options: CombineOptions) =>
           ...decidedBooks.map((book) => ({ path: book.path, stamp: book.source().stamp })),
         ];
         return yield* Effect.mapError(
-          git.commit(repo, receipts, replay.message, options.author, {
+          git.commit(repo, receipts, options.message ?? replay.message, options.author, {
             alsoParents: [replay.onto],
           }),
           fromPort("restored"),
@@ -532,7 +540,7 @@ const program = (options: CombineOptions) =>
     }
 
     // Nothing on the cloud changed until this line.
-    yield* Effect.mapError(remote.push(repo), fromPort("recorded"));
+    yield* Effect.mapError(remote.push(repo, options.sendTo), fromPort("recorded"));
     return {
       commit: recorded.success,
       onto: replay.onto,

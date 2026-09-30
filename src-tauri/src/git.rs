@@ -802,6 +802,36 @@ pub fn git_probe(
     })
 }
 
+/// One named ref from `remote` — one no branch refspec covers, such as a
+/// suggestion's `refs/pull/<n>/head` — into the local ref `into`. Answers the
+/// commit it names. Nothing in the work tree moves.
+#[tauri::command]
+pub fn git_fetch_ref(
+    root: String,
+    remote: String,
+    from: String,
+    into: String,
+    username: Option<String>,
+    token: Option<String>,
+) -> Result<String, String> {
+    let repo = open_repo(&root)?;
+    let mut handle = repo
+        .find_remote(&remote)
+        .map_err(|error| fail(CONFLICT, error.message()))?;
+    let mut options = FetchOptions::new();
+    options.remote_callbacks(remote_callbacks(credential_pair(&username, &token)));
+    let refspec = format!("+{from}:{into}");
+    handle
+        .fetch(&[refspec.as_str()], Some(&mut options), None)
+        .map_err(transport_failure)?;
+    let target = repo
+        .find_reference(&into)
+        .map_err(|_| fail(REJECTED, format!("{from} is not on {remote}")))?
+        .target()
+        .ok_or_else(|| fail(REJECTED, format!("{from} is not on {remote}")))?;
+    Ok(target.to_string())
+}
+
 /// A fresh clone of `url` into `root`, on the branch the server's HEAD names.
 ///
 /// `RepoBuilder` rather than init-then-fetch because the default branch is the

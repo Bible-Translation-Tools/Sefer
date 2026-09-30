@@ -69,12 +69,15 @@ export const serialiseRemote = (
     // of it will ask for, so a second clone into the same folder waits.
     clone: (url, into) => write(into, "clone", remote.clone(url, into)),
     attach: (repo, url) => write(repo.root, "attach", remote.attach(repo, url)),
+    attachAs: (repo, name, url) => write(repo.root, "attach", remote.attachAs(repo, name, url)),
+    urlOf: (repo, name) => read(repo.root, remote.urlOf(repo, name)),
+    fetchRef: (repo, from, into) => write(repo.root, "fetch", remote.fetchRef(repo, from, into)),
     origin: (repo) => read(repo.root, remote.origin(repo)),
     // Nothing local is read or written: a probe needs no lane.
     probe: remote.probe,
     fetch: (repo) => write(repo.root, "fetch", remote.fetch(repo)),
     fastForward: (repo, to) => write(repo.root, "fast-forward", remote.fastForward(repo, to)),
-    push: (repo) => write(repo.root, "push", remote.push(repo)),
+    push: (repo, to) => write(repo.root, "push", remote.push(repo, to)),
     publish: (repo, target) => write(repo.root, "publish", remote.publish(repo, target)),
     abortMerge: (repo) => write(repo.root, "abort-merge", remote.abortMerge(repo)),
     progress: remote.progress,

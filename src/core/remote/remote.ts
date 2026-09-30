@@ -82,6 +82,16 @@ export interface RemoteService {
   ) => Effect.Effect<{ readonly repo: Repo; readonly progress: Progress }, RemoteError>;
   /** Records `url` as the repository's origin. Does not transfer anything. */
   readonly attach: (repo: Repo, url: string) => Effect.Effect<void, RemoteError>;
+  /** `attach` for a remote other than `origin` — somewhere else to send to. */
+  readonly attachAs: (repo: Repo, name: string, url: string) => Effect.Effect<void, RemoteError>;
+  /** The URL recorded for the remote `name`, or `None`. */
+  readonly urlOf: (repo: Repo, name: string) => Effect.Effect<Option.Option<string>, RemoteError>;
+  /**
+   * Fetches one named ref from `origin` — one no branch refspec covers — into
+   * the local ref `into`, and answers the commit it names. Nothing in the work
+   * tree moves.
+   */
+  readonly fetchRef: (repo: Repo, from: string, into: string) => Effect.Effect<string, RemoteError>;
   /**
    * The URL `attach` recorded, or `None` when this project has none.
    *
@@ -107,7 +117,8 @@ export interface RemoteService {
    * Only files that differ between the two commits are written.
    */
   readonly fastForward: (repo: Repo, to: string) => Effect.Effect<void, RemoteError>;
-  readonly push: (repo: Repo) => Effect.Effect<Progress, RemoteError>;
+  /** Sends the checked-out branch to `to`, `origin` unless named. */
+  readonly push: (repo: Repo, to?: string) => Effect.Effect<Progress, RemoteError>;
   /** Creates the project on `target` and pushes it there for the first time. */
   readonly publish: (repo: Repo, target: string) => Effect.Effect<void, RemoteError>;
   /**

@@ -114,13 +114,11 @@ const makeTauriRemote = (
     // wait or let a long fetch grow the heap.
     const events = yield* PubSub.sliding<Progress>({ capacity: PROGRESS_DEPTH });
 
-    const originUrl = (repo: Repo): Effect.Effect<string, RemoteError> =>
-      Effect.flatMap(
-        call<string | null>("git_remote_url", { root: repo.root, name: ORIGIN }),
-        (url) =>
-          url === null
-            ? Effect.fail(fail("Unavailable", "this project has no remote attached yet"))
-            : Effect.succeed(url),
+    const originUrl = (repo: Repo, name = ORIGIN): Effect.Effect<string, RemoteError> =>
+      Effect.flatMap(call<string | null>("git_remote_url", { root: repo.root, name }), (url) =>
+        url === null
+          ? Effect.fail(fail("Unavailable", "this project has no remote attached yet"))
+          : Effect.succeed(url),
       );
 
     /**
@@ -152,9 +150,10 @@ const makeTauriRemote = (
       command: string,
       repo: Repo,
       auth: "required" | "optional",
+      name = ORIGIN,
     ): Effect.Effect<Progress, RemoteError> =>
       Effect.gen(function* () {
-        const url = yield* originUrl(repo);
+        const url = yield* originUrl(repo, name);
         const held = yield* credentialFor(url);
         // Push is the only transfer nobody can do anonymously, and refusing it
         // here rather than letting the server answer 401 is what turns "sign
@@ -167,7 +166,7 @@ const makeTauriRemote = (
         const credential = Option.getOrNull(held);
         const wire = yield* call<WireProgress>(command, {
           root: repo.root,
-          remote: ORIGIN,
+          remote: name,
           username: credential?.username ?? null,
           token: credential?.token ?? null,
         });
@@ -198,6 +197,26 @@ const makeTauriRemote = (
         }),
 
       attach,
+      attachAs: (repo, name, url) =>
+        call<void>("git_ensure_remote", { root: repo.root, name, url }),
+      urlOf: (repo, name) =>
+        Effect.map(
+          call<string | null>("git_remote_url", { root: repo.root, name }),
+          Option.fromNullishOr,
+        ),
+      fetchRef: (repo, from, into) =>
+        Effect.gen(function* () {
+          const url = yield* originUrl(repo);
+          const credential = Option.getOrNull(yield* credentialFor(url));
+          return yield* call<string>("git_fetch_ref", {
+            root: repo.root,
+            remote: ORIGIN,
+            from,
+            into,
+            username: credential?.username ?? null,
+            token: credential?.token ?? null,
+          });
+        }),
       // `git_remote_url` already answers `string | null`, so the read half of
       // attach costs desktop no new Rust.
       origin: (repo) =>
@@ -223,7 +242,7 @@ const makeTauriRemote = (
       // Local: no origin, no credential. The forward-only and safe-checkout
       // refusals are git2's, in Rust.
       fastForward: (repo, to) => call<void>("git_fast_forward", { root: repo.root, to }),
-      push: (repo) => transfer("git_push", repo, "required"),
+      push: (repo, to) => transfer("git_push", repo, "required", to ?? ORIGIN),
       publish: (repo, target) =>
         Effect.gen(function* () {
           const url = target.startsWith("http")
