@@ -203,16 +203,16 @@ fn commit_of(commit: &git2::Commit<'_>) -> GitCommit {
 fn current_branch(repo: &Repository) -> Result<String, String> {
     match repo.head() {
         Ok(head) => match head.shorthand() {
-            Some(name) => Ok(name.to_string()),
-            None => Err(fail(CONFLICT, "HEAD is detached; no branch to use")),
+            Ok(name) => Ok(name.to_string()),
+            Err(_) => Err(fail(CONFLICT, "HEAD is detached; no branch to use")),
         },
         Err(error) if error.code() == ErrorCode::UnbornBranch => {
             let reference = repo
                 .find_reference("HEAD")
                 .map_err(|error| fail(CONFLICT, error.message()))?;
             match reference.symbolic_target() {
-                Some(target) => Ok(target.trim_start_matches("refs/heads/").to_string()),
-                None => Ok(DEFAULT_BRANCH.to_string()),
+                Ok(Some(target)) => Ok(target.trim_start_matches("refs/heads/").to_string()),
+                _ => Ok(DEFAULT_BRANCH.to_string()),
             }
         }
         Err(error) => Err(fail(CONFLICT, error.message())),
@@ -330,7 +330,7 @@ pub fn git_status(root: String) -> Result<Vec<GitChangedPath>, String> {
 
     let mut out = Vec::new();
     for entry in statuses.iter() {
-        let Some(path) = entry.path() else { continue };
+        let Ok(path) = entry.path() else { continue };
         let flags = entry.status();
         // Order matters: a path can carry several bits at once (staged as new
         // and modified again in the work tree), and the port names one kind.
@@ -732,7 +732,7 @@ pub fn git_ensure_remote(root: String, name: String, url: String) -> Result<(), 
 pub fn git_remote_url(root: String, name: String) -> Result<Option<String>, String> {
     let repo = open_repo(&root)?;
     let outcome = match repo.find_remote(&name) {
-        Ok(remote) => Ok(remote.url().map(|url| url.to_string())),
+        Ok(remote) => Ok(remote.url().ok().map(|url| url.to_string())),
         Err(error) if error.code() == ErrorCode::NotFound => Ok(None),
         Err(error) => Err(io(error)),
     };
@@ -780,20 +780,6 @@ pub fn git_probe(
             None,
         )
         .map_err(transport_failure)?;
-    // An empty repository has no HEAD to name a branch, and says so as an
-    // error. Asked FIRST, because `list()` on a remote with no refs builds a
-    // slice from a null pointer in git2 0.20 (fixed in 0.21): an empty
-    // repository is answered here without listing anything.
-    let Ok(default) = connection.default_branch() else {
-        return Ok(GitProbe {
-            default_branch: None,
-            head: None,
-            empty: true,
-        });
-    };
-    let default_branch = default
-        .as_str()
-        .map(|name| name.trim_start_matches("refs/heads/").to_string());
     let heads = connection.list().map_err(transport_failure)?;
     let head = heads
         .iter()
@@ -802,6 +788,13 @@ pub fn git_probe(
     let empty = !heads
         .iter()
         .any(|entry| entry.name().starts_with("refs/heads/"));
+    // An empty repository has no HEAD to name a branch, and says so as an
+    // error rather than an empty answer.
+    let default_branch = connection.default_branch().ok().and_then(|name| {
+        name.as_str()
+            .ok()
+            .map(|name| name.trim_start_matches("refs/heads/").to_string())
+    });
     Ok(GitProbe {
         default_branch,
         head,
