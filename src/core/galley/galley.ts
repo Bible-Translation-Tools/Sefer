@@ -98,8 +98,6 @@ export {
   SOUS_SETTINGS,
   type SettingGroup as SousSettingGroup,
   type SettingKey as SousSettingKey,
-  type SettingKind as SousSettingKind,
-  type SettingSpec as SousSettingSpec,
   type SousSettingsValues,
 } from "@wycliffeassociates/scripture-kitchen/sous-settings";
 // The pattern table's own vocabulary. Re-exported (not re-declared) so that a
