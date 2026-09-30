@@ -56,14 +56,15 @@ import type { DecisionUnit, DiffSkeleton, MergeSide } from "#core/galley";
 import type { Author } from "#core/git/git";
 import { Observability } from "#core/observability";
 import type { Restorable } from "#core/recovery/recovery";
-import type { SourceStamp } from "#core/source/source";
 import type { EditorBook } from "#editor/index";
 
 import { personAuthor } from "../../author";
 import { describe, reasonOf } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { setAuthorName } from "../../syncSettings";
+import { recordVersion } from "../../recordVersion";
+import { sendAfterSave } from "../../syncActions";
+import { setAuthorName, syncPreferences } from "../../syncSettings";
 import { unsavedChanges } from "../panels/changes";
 import { ago, exact } from "../panels/format";
 import { createRecordedVersion } from "../panels/recorded";
@@ -137,9 +138,25 @@ export function ReviewPanel() {
   /** Who the version is by: the session's user or this device's name; undefined asks. */
   const [author, setAuthor] = createSignal<Author | undefined>(undefined, { name: "reviewAuthor" });
   const [typedName, setTypedName] = createSignal("", { name: "reviewAuthorName" });
+  /** Whether recording will also send, so the dialog can say so before the press. */
+  const [sends, setSends] = createSignal(false, { name: "reviewSends" });
   const openRecord = (): void => {
     setRecordOpen(true);
     void services.run(personAuthor()).then((found) => setAuthor(Option.getOrUndefined(found)));
+    const project = shell.project();
+    if (project === undefined) return;
+    void services
+      .run(
+        Effect.orElseSucceed(
+          Effect.flatMap(services.git.open(project.root), (repo) => services.remote.origin(repo)),
+          () => Option.none<string>(),
+        ),
+      )
+      .then((origin) =>
+        setSends(
+          Option.isSome(origin) && syncPreferences(services.settings, project.root).sendOnSave,
+        ),
+      );
   };
   const [sourcesOpen, setSourcesOpen] = createSignal(false, { name: "reviewSourcesOpen" });
   const [journals, setJournals] = createSignal<readonly Restorable[]>([], {
@@ -723,83 +740,47 @@ export function ReviewPanel() {
     }
     setRecording(true);
     const notice = toasts.progress({ title: t("Recording…") });
-
-    const saved = await services.run(Effect.result(services.save.saveAll(project.books)));
-    if (Result.isFailure(saved)) {
-      toasts.update(notice, {
-        tone: "error",
-        title: t("Could not write to disk"),
-        message: describe(saved.failure),
-        autoClose: false,
-      });
-      setRecording(false);
-      return;
-    }
-    // The files hold this text and no version holds the files: that is
-    // `onDisk`, exactly. Saying it here rather than bumping a counter is what
-    // keeps the early return below from leaving the markers wrong.
-    shell.noteWritten(
-      review.map((book) => book.bookId),
-      false,
-    );
-
-    const receipts: { readonly path: string; readonly stamp: SourceStamp }[] = [];
-    for (const book of review) {
-      const baseline = services.save.baseline(book.book);
-      if (Option.isNone(baseline)) continue;
-      receipts.push({ path: baseline.value.path, stamp: baseline.value.stamp });
-    }
-    // What those saves also kept current (a burrito's metadata.json) goes in
-    // the same version, once, so no file Sefer wrote is left unrecorded.
-    if (receipts.length > 0) {
-      const staged = new Set(receipts.map((receipt) => receipt.path));
-      for (const receipt of saved.success)
-        for (const path of receipt.also)
-          if (!staged.has(path)) {
-            staged.add(path);
-            receipts.push({ path, stamp: receipt.stamp });
-          }
-    }
-    if (receipts.length === 0) {
-      toasts.update(notice, { title: t("Nothing to record"), tone: "info" });
-      setRecording(false);
-      return;
-    }
-
-    const recorded = await services.run(
-      Effect.result(
-        Effect.gen(function* () {
-          const repo = yield* services.git.init(project.root);
-          return yield* services.git.commit(repo, receipts, staticMessage, by);
-        }),
-      ),
-    );
-    if (Result.isFailure(recorded)) {
-      shell.noteWritten(
-        review.map((book) => book.bookId),
-        false,
-      );
-      toasts.update(notice, {
-        tone: "error",
-        autoClose: false,
-        title: t("On disk, but not recorded"),
-        message: describe(recorded.failure),
-      });
-    } else {
-      shell.noteWritten(
-        review.map((book) => book.bookId),
-        true,
-      );
-      toasts.update(notice, {
-        tone: "success",
-        title: t("Recorded {count} book(s) as {hash}", {
-          count: receipts.length,
-          hash: recorded.success.slice(0, 7),
-        }),
-        message: staticMessage,
-      });
-      setMessage("");
-      version.refresh();
+    const books = review.map((entry) => entry.book);
+    const outcome = await recordVersion(services, project, books, staticMessage, by);
+    switch (outcome.kind) {
+      case "nothing":
+        toasts.update(notice, { title: t("Nothing to record"), tone: "info" });
+        break;
+      case "not-written":
+        toasts.update(notice, {
+          tone: "error",
+          title: t("Could not write to disk"),
+          message: describe(outcome.error),
+          autoClose: false,
+        });
+        break;
+      case "not-recorded":
+        // The files hold this text and no version holds the files: that is
+        // `onDisk`, exactly, and the book markers say so.
+        shell.noteWritten(outcome.books, false);
+        toasts.update(notice, {
+          tone: "error",
+          autoClose: false,
+          title: t("On disk, but not recorded"),
+          message: describe(outcome.error),
+        });
+        break;
+      case "recorded":
+        shell.noteWritten(outcome.books, true);
+        toasts.update(notice, {
+          tone: "success",
+          title: t("Recorded {count} book(s) as {hash}", {
+            count: outcome.receipts,
+            hash: outcome.commit.slice(0, 7),
+          }),
+          message: staticMessage,
+        });
+        setMessage("");
+        version.refresh();
+        // The send is its own line after "Saved": a refused send is never a
+        // failed save, and /cloud says what happened to it.
+        void sendAfterSave(services, project);
+        break;
     }
     setRecording(false);
   };
@@ -1153,6 +1134,11 @@ export function ReviewPanel() {
           <p class="pt-1 text-smallest text-on-surface-tertiary">
             {t("Your team sees this, and so will you later.")}
           </p>
+          <Show when={sends()}>
+            <p class="pt-3 text-small text-on-surface-secondary" data-review-sends>
+              {t("This also sends your changes to the shared project.")}
+            </p>
+          </Show>
         </Dialog>
       </Show>
     </main>

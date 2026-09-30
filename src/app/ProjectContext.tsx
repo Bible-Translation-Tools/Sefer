@@ -44,6 +44,7 @@ import { navigateTarget } from "#core/findings/findings";
 import type { Inventory } from "#core/findings/inventory";
 import * as Fixes from "#core/fixes/fixes";
 import { tocViewOf } from "#core/galley";
+import { Repositories } from "#core/git/repository";
 import type { SettingKey } from "#core/host/settings";
 import { chaptersAddress, type Address } from "#core/location/address";
 import { resolve } from "#core/location/locate";
@@ -81,6 +82,8 @@ import {
 } from "./settings";
 import type { ShellEvent } from "./shellEvent";
 import { makeShellStores, type SaveState } from "./shellStores";
+import { checkForChanges } from "./syncActions";
+import { syncPreferences } from "./syncSettings";
 import { applyEditorFontSize } from "./ui/theme";
 
 export type { SaveState } from "./shellStores";
@@ -777,6 +780,9 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       "project.books": staticOpen.books.length,
     });
     await services.run(Effect.provideService(staticOpen.close(), Observability, closing));
+    // The repository's lane waits for any running transfer, then forgets the
+    // root, so nothing starts on a project that is no longer open.
+    await services.run(Effect.flatMap(Repositories, (lanes) => lanes.close(staticOpen.root)));
     closing.end("passed");
   };
 
@@ -877,6 +883,9 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     void services.run(services.admin.recordedName(root)).then((recorded) => {
       if (Option.isSome(recorded)) noteRenamed(root, recorded.value);
     });
+    // "Check for changes on open": in the background, never before the
+    // editor — it only asks and fetches, and never moves a file.
+    if (syncPreferences(services.settings, root).checkOnOpen) void checkForChanges(services, ready);
     // A seat swap replaces the Book object, so every row derived from one has
     // to be re-taken. One subscription for the whole project, not one per
     // book, and it is the Project's own announcement rather than a guess.
