@@ -212,7 +212,7 @@ fn current_branch(repo: &Repository) -> Result<String, String> {
                 .map_err(|error| fail(CONFLICT, error.message()))?;
             match reference.symbolic_target() {
                 Some(target) => Ok(target.trim_start_matches("refs/heads/").to_string()),
-                None => Ok("main".to_string()),
+                None => Ok(DEFAULT_BRANCH.to_string()),
             }
         }
         Err(error) => Err(fail(CONFLICT, error.message())),
@@ -239,6 +239,10 @@ fn author_signature(name: &str, email: &str) -> Result<Signature<'static>, Strin
     };
     Signature::now(name, email).map_err(io)
 }
+
+/// The branch a repository Sefer creates starts on; `src/core/git/git.ts`
+/// names the same one for the Web host.
+const DEFAULT_BRANCH: &str = "master";
 
 const DEFAULT_AUTHOR_NAME: &str = "Sefer";
 const DEFAULT_AUTHOR_EMAIL: &str = "sefer@localhost";
@@ -311,7 +315,7 @@ pub fn git_init(root: String) -> Result<(), String> {
     }
     std::fs::create_dir_all(&root).map_err(|error| fail(IO, error.to_string()))?;
     let mut options = RepositoryInitOptions::new();
-    options.initial_head("main");
+    options.initial_head(DEFAULT_BRANCH);
     Repository::init_opts(&root, &options)
         .map(|_| ())
         .map_err(io)

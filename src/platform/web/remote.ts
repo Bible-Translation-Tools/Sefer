@@ -33,7 +33,7 @@ import git from "isomorphic-git";
 import http from "isomorphic-git/http/web";
 
 import { nodeFsView, type IsomorphicFs } from "#core/fileSystem/nodeView";
-import type { Repo } from "#core/git/git";
+import { DEFAULT_BRANCH, type Repo } from "#core/git/git";
 import { Credentials, type CredentialsService } from "#core/host/credentials";
 import { Gitea, type GiteaService } from "#core/remote/gitea";
 import { createOnGitea, hostOf } from "#core/remote/onGitea";
@@ -67,9 +67,6 @@ export interface WebRemoteOptions {
 
 /** The remote Sefer attaches and transfers; one per project, always. */
 const ORIGIN = "origin";
-
-/** The default branch `WebGitLive.init` creates, and the one we transfer. */
-const DEFAULT_BRANCH = "main";
 
 /** How many progress events a slow reader may fall behind before losing some. */
 const PROGRESS_DEPTH = 64;

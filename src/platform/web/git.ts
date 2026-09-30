@@ -11,6 +11,7 @@ import git from "isomorphic-git";
 
 import { nodeFsView } from "#core/fileSystem/nodeView";
 import {
+  DEFAULT_BRANCH,
   type Author,
   type ChangedPath,
   type Commit,
@@ -118,7 +119,7 @@ const makeWebGit = (fileSystem: FileSystem.FileSystem): GitService => {
     // the "open or create" the project flow wants.
     init: (root) =>
       Effect.as(
-        attempt("Io", () => git.init({ fs, dir: root, defaultBranch: "main" })),
+        attempt("Io", () => git.init({ fs, dir: root, defaultBranch: DEFAULT_BRANCH })),
         { root } satisfies Repo,
       ),
 

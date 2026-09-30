@@ -15,6 +15,12 @@ import { Context, Data, Effect, Option } from "effect";
 import { escapesRoot, normalisePath } from "../fileSystem/path";
 import type { SourceStamp } from "../source/source";
 
+/**
+ * The branch a repository Sefer creates starts on. A clone takes whatever
+ * branch the server's HEAD names instead; this is only for `init`.
+ */
+export const DEFAULT_BRANCH = "master";
+
 /** A commit's object id, opaque to core: a hex SHA on both hosts today. */
 export type CommitId = string;
 
