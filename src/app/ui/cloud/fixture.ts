@@ -105,6 +105,8 @@ const attached: SyncReading = {
   uncommitted: 0,
   mergeInProgress: false,
   lastFailure: undefined,
+  checking: false,
+  sendRefused: false,
 };
 
 /**
@@ -147,6 +149,7 @@ const FIXTURES: Readonly<Record<FixtureName, SyncFacts>> = {
     reading: { ...attached, ahead: mine, behind: theirs, mergeInProgress: true, uncommitted: 2 },
     plan: planFor(true),
   },
+  checking: { reading: { ...attached, checking: true }, plan: emptyPlan },
   offline: { reading: { ...attached, online: false, ahead: mine }, plan: emptyPlan },
   unauthorized: {
     reading: { ...attached, signedIn: false, lastFailure: "Unauthorized", ahead: mine },

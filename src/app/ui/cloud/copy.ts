@@ -57,8 +57,28 @@ export interface StateCopy {
   readonly tone: BadgeTone;
 }
 
-export const stateCopy = (state: SyncState): StateCopy => {
+/**
+ * What the reading adds to a state's words: whether the last failure was a
+ * send (the work was saved, only the sending did not happen), and whether
+ * anyone is signed in (a refusal to someone signed in is not a sign-in
+ * problem — it is permission).
+ */
+export interface StateContext {
+  readonly sendRefused?: boolean | undefined;
+  readonly signedIn?: boolean | undefined;
+}
+
+export const stateCopy = (state: SyncState, context: StateContext = {}): StateCopy => {
   switch (state) {
+    case "checking":
+      return {
+        chip: t("Checking"),
+        headline: t("Checking the shared project"),
+        detail: t(
+          "Sefer is asking the shared project what has changed. Your work is saved here, and you can keep working.",
+        ),
+        tone: "muted",
+      };
     case "detached":
       return {
         chip: t("Not shared"),
@@ -120,14 +140,36 @@ export const stateCopy = (state: SyncState): StateCopy => {
       return {
         chip: t("Offline"),
         headline: t("You're offline"),
-        detail: t("Your work is still saved here. You can send it once you're back online."),
+        detail:
+          context.sendRefused === true
+            ? t(
+                "Saved on this device. Not sent yet: you're offline. Sefer sends it the next time you save or open this project. Your work is safe here.",
+              )
+            : t("Your work is still saved here. You can send it once you're back online."),
         tone: "muted",
       };
     case "unauthorized":
+      // Signed in and still refused: a missing permission or an expired
+      // sign-in, which both hosts report as the same reason — so the words say
+      // both, and signing in again stays the one button.
+      if (context.signedIn === true)
+        return {
+          chip: t("Can't send"),
+          headline: t("This account can't send to the shared project"),
+          detail: t(
+            "Saved on this device. Not sent: this account may not have permission to write to the shared project, or its sign-in has expired. Your work is safe here.",
+          ),
+          tone: "warning",
+        };
       return {
         chip: t("Sign in again"),
         headline: t("Sign in to keep sharing"),
-        detail: t("Sending and receiving updates is paused until you sign in again."),
+        detail:
+          context.sendRefused === true
+            ? t(
+                "Saved on this device. Not sent: sign in to send your changes to the shared project. Your work is safe here.",
+              )
+            : t("Sending and receiving updates is paused until you sign in again."),
         tone: "error",
       };
   }

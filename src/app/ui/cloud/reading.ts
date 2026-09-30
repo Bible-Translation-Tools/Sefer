@@ -61,8 +61,12 @@ export interface ReadSyncOptions {
   readonly host: string | null;
   /** `navigator.onLine`, passed in so the pure side stays testable. */
   readonly online: boolean;
-  /** The last transfer's failure, from `createNetworkStatus`. */
+  /** The last transfer's failure, from `syncStatus`. */
   readonly lastFailure: SyncReading["lastFailure"];
+  /** A check on this project is running now. */
+  readonly checking: boolean;
+  /** The last send was refused. */
+  readonly sendRefused: boolean;
   /** When this session last fetched; `undefined` until it has. */
   readonly fetchedAt: number | undefined;
 }
@@ -114,6 +118,8 @@ export const readSync = (
       ...emptyReading,
       online: options.online,
       lastFailure: options.lastFailure,
+      checking: options.checking,
+      sendRefused: options.sendRefused,
       fetchedAt: options.fetchedAt,
       signedIn:
         options.host === null

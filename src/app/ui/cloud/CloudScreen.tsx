@@ -45,6 +45,7 @@ import { rememberSync } from "../../diagnostics";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import type { Domain } from "../../services";
+import { syncStatus } from "../../syncStatus";
 import { Button, Card, Dialog, EmptyState, PanelHeader } from "../primitives";
 import { createAccount } from "./account";
 import { AccountCard } from "./AccountCard";
@@ -53,7 +54,6 @@ import { bookFromPath, combineRefusal, combineTrouble, narrate, receiveRefusal }
 import { DevStateSwitcher } from "./DevStateSwitcher";
 import { fixtureFacts, fixtureReplay, fixtureStateRequested } from "./fixture";
 import { IncomingPlanCard } from "./IncomingPlanCard";
-import { createNetworkStatus } from "./network";
 import { ProjectCard } from "./ProjectCard";
 import { readSync, type ReadSyncOptions, type SyncFacts } from "./reading";
 import { SharedProjectCard, type SharedProjectActions } from "./SharedProjectCard";
@@ -81,7 +81,7 @@ export function CloudScreen() {
   const shell = useShell();
   const { services } = shell;
   const account = createAccount(shell);
-  const network = createNetworkStatus();
+  const network = syncStatus;
 
   const [facts, setFacts] = createSignal<SyncFacts | undefined>(undefined, { name: "syncFacts" });
   const [fetchedAt, setFetchedAt] = createSignal<number | undefined>(undefined, {
@@ -174,6 +174,8 @@ export function CloudScreen() {
       host: account.host,
       online: network.online(),
       lastFailure: network.lastFailure(),
+      checking: network.checking(project.root),
+      sendRefused: network.sendRefused(),
       fetchedAt: fetchedAt(),
     };
   };

@@ -36,6 +36,7 @@ export type SyncState =
   | "behind"
   | "diverged"
   | "conflicted"
+  | "checking"
   | "offline"
   | "unauthorized";
 
@@ -105,6 +106,19 @@ export interface SyncReading {
   readonly mergeInProgress: boolean;
   /** Why the last transfer failed, when one did and nothing has succeeded since. */
   readonly lastFailure: RemoteFailureReason | undefined;
+  /**
+   * A check is asking the shared project what changed, and holds the
+   * repository while it does: sending, receiving and combining wait for its
+   * answer rather than racing it.
+   */
+  readonly checking: boolean;
+  /**
+   * The last send — a press, or the one that follows a save — did not go
+   * through; `lastFailure` says why. It does not change the state (the
+   * failure's reason already does) but it changes the words: the work was
+   * saved, and only the sending did not happen.
+   */
+  readonly sendRefused: boolean;
 }
 
 /** A reading with nothing in it — the starting point every builder patches. */
@@ -122,6 +136,8 @@ export const emptyReading: SyncReading = {
   uncommitted: 0,
   mergeInProgress: false,
   lastFailure: undefined,
+  checking: false,
+  sendRefused: false,
 };
 
 /**
@@ -132,16 +148,19 @@ export const emptyReading: SyncReading = {
  *
  * 1. `conflicted` first — a half-finished merge makes every other answer a
  *    lie, and it is the one state a person can settle with no network.
- * 2. `offline` next — while the device cannot reach anything, "you are three
+ * 2. `checking` — the answer is being asked for right now, and every clock
+ *    below may be about to change.
+ * 3. `offline` next — while the device cannot reach anything, "you are three
  *    versions ahead" is true but not actionable, and the clocks still say it.
- * 3. `unauthorized` — reachable but not allowed in. Distinguished from offline
+ * 4. `unauthorized` — reachable but not allowed in. Distinguished from offline
  *    because only one of the two is worth retrying unchanged.
- * 4. `detached` — nothing to be ahead OF.
- * 5. `unpublished` — attached to a repository the branch has never reached.
- * 6. the clocks — diverged, ahead, behind, clean.
+ * 5. `detached` — nothing to be ahead OF.
+ * 6. `unpublished` — attached to a repository the branch has never reached.
+ * 7. the clocks — diverged, ahead, behind, clean.
  */
 const syncStateOf = (reading: SyncReading): SyncState => {
   if (reading.mergeInProgress) return "conflicted";
+  if (reading.checking) return "checking";
   if (!reading.online || reading.lastFailure === "Network") return "offline";
   if (!reading.signedIn || reading.lastFailure === "Unauthorized") return "unauthorized";
   if (reading.origin === undefined) return "detached";
@@ -204,6 +223,7 @@ const primaryActionOf = (state: SyncState, contested = false): SyncActionId => {
   switch (state) {
     case "conflicted":
       return "resolve";
+    case "checking":
     case "offline":
       return "retry";
     case "unauthorized":
