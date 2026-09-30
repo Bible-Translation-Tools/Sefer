@@ -5,7 +5,7 @@
  * reads — lists `objects/pack`, stats, reads `alternates`, tries a loose path
  * that is not there — and on OPFS each probe is an async round trip that walks
  * the path a segment at a time. A full Genesis walk was 88k calls and 37 s of
- * mostly idle time (`planning/01-discussing/local-review-and-history-plan.md`,
+ * mostly idle time (`planning/01-discussing/diff-and-sync-model-2026-09-23.md`, Appendix A,
  * "Where the Web time goes"). This view answers those probes from memory:
  *
  *  - the pack directory's files are read once and served from memory

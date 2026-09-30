@@ -473,8 +473,8 @@ The flow needs one top-to-bottom pass before more is added.
 
 ### Ideas / future
 
-- **Measured direction (2026-09-25, `planning/01-discussing/local-review-and-history-plan.md` in the main checkout):** a pack-cached filesystem view under the Web port (37 s → ~2 s for a full walk; isomorphic-git's per-object probing is the cost), then a durable book-change index built at clone and extended at fetch (en_ulb: 4 s, 0.7 MB gzipped; any book's history in ~3 ms), two-point comparison from root trees (42 ms), and common-ancestor / changed-on-both-sides facts for incoming work.
-- **Next up:** book time travel: a read-only historical pane with previous/next, and a bounded log. Then chapter filtering via Location, with a per-(blob, chapter) hash cache and an LRU. Plan: `planning/01-discussing/next-git-considerations.md`, which folds into the diff and sync model.
+- **Measured direction (2026-09-25, Appendix A of `planning/01-discussing/diff-and-sync-model-2026-09-23.md`):** a pack-cached filesystem view under the Web port (37 s → ~2 s for a full walk; isomorphic-git's per-object probing is the cost), then a durable book-change index built at clone and extended at fetch (en_ulb: 4 s, 0.7 MB gzipped; any book's history in ~3 ms), two-point comparison from root trees (42 ms), and common-ancestor / changed-on-both-sides facts for incoming work.
+- **Next up:** book time travel: a read-only historical pane with previous/next, and a bounded log. Then chapter filtering via Location, with a per-(blob, chapter) hash cache and an LRU. Plan: `planning/01-discussing/diff-and-sync-model-2026-09-23.md`, the one Git lifecycle spec.
 - Detect Git changes made outside Sefer; add "back to latest" and an unhealthy-repository recovery flow.
 
 ---
