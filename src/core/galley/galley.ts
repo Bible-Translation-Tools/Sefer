@@ -93,6 +93,8 @@ export {
   type MessageId as FindingMessageId,
   type Query as FindingQuery,
   type QueryPurpose as FindingQueryPurpose,
+  type QueryPart as FindingQueryPart,
+  type QueryClass as FindingQueryClass,
 } from "@wycliffeassociates/scripture-kitchen/sous-messages";
 export { default as FINDING_MESSAGES_EN } from "@wycliffeassociates/scripture-kitchen/sous-messages.en.json";
 // Sous's judging settings as kitchen generates them: every key, its type, its

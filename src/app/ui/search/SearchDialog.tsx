@@ -24,7 +24,12 @@ import { Option, Result } from "effect";
 import SearchIcon from "lucide-solid/icons/search";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
-import type { FindingQuery, FindingQueryPurpose } from "#core/galley";
+import type {
+  FindingQuery,
+  FindingQueryClass,
+  FindingQueryPart,
+  FindingQueryPurpose,
+} from "#core/galley";
 import { createReadings, type Readings } from "#core/search/reading";
 import * as Search from "#core/search/search";
 
@@ -55,25 +60,53 @@ const visible = (escape: string, hex: string): string => {
   return /^[\p{L}\p{M}\p{N}\p{P}\p{S}]$/u.test(mark) ? mark : escape;
 };
 
-/** A character class longer than this shows its first members and an ellipsis. */
-const CLASS_SHOWN = 8;
-
 /** The query's whole text: the needle, or the regex with its escapes drawn. */
 const source = (query: FindingQuery): string =>
   query.kind === "literal" ? query.needle : query.source.replace(/\\u\{([0-9a-f]+)\}/giu, visible);
 
-/**
- * A query as a keycap's text: the needle, or the regex source with its
- * escapes drawn as the marks they name and a long class cut short —
- * `\?[\s([{༺༼᚛⁅…]*\p{Lowercase}`. `source` keeps the whole regex for a tooltip.
- */
-const shown = (query: FindingQuery): string => {
-  if (query.kind === "literal") return query.needle;
-  return source(query).replace(/\[((?:\\.|[^\]\\])*)\]/gu, (whole, members: string) => {
-    const chars = members.match(/\\[pP]\{[^}]*\}|\\.|./gsu) ?? [];
-    return chars.length > CLASS_SHOWN ? `[${chars.slice(0, CLASS_SHOWN).join("")}…]` : whole;
-  });
+/** A query as people read it: kitchen's shape, exact text and named classes. */
+const partsOf = (query: FindingQuery): readonly FindingQueryPart[] =>
+  query.kind === "literal" ? [{ text: query.needle }] : query.shape;
+
+const classWord = (name: FindingQueryClass): string => {
+  switch (name) {
+    case "letter":
+      return t("a letter");
+    case "digit":
+      return t("a digit");
+    case "space":
+      return t("a space");
+    case "punctuation":
+      return t("a punctuation mark");
+    case "capital":
+      return t("a capital");
+    case "lowercase":
+      return t("a lowercase letter");
+  }
 };
+
+/** The shape as one line of plain text: `“?” + a capital`. */
+const plain = (query: FindingQuery): string =>
+  partsOf(query)
+    .map((part) => ("text" in part ? `“${part.text}”` : classWord(part.class)))
+    .join(" + ");
+
+/** The shape drawn: exact text as keycaps, a class as its words. */
+function Shape(props: { readonly query: FindingQuery }) {
+  return (
+    <span class="inline-flex flex-wrap items-baseline gap-1">
+      <For each={partsOf(props.query)}>
+        {(part) =>
+          "text" in part ? (
+            <Kbd>{part.text}</Kbd>
+          ) : (
+            <span class="text-small text-on-surface-secondary italic">{classWord(part.class)}</span>
+          )
+        }
+      </For>
+    </span>
+  );
+}
 
 // TODO(merge): revisit with Will — queries now drive SearchDialog/comparisonOf; decide whether the dialog stays generic Query[] and whether the probe fallback can go.
 export function SearchDialog(props: { readonly queries: readonly FindingQuery[] }) {
@@ -90,7 +123,7 @@ export function SearchDialog(props: { readonly queries: readonly FindingQuery[] 
 
   const form = (): string => {
     const here = props.queries.find((query) => query.purpose === "this");
-    return here === undefined ? "" : `“${shown(here)}”`;
+    return here === undefined ? "" : plain(here);
   };
 
   return (
@@ -213,7 +246,7 @@ function Hits(props: {
     <div class="flex min-w-0 flex-col gap-2">
       <p class="flex items-baseline gap-2">
         <span class="min-w-0 break-all" title={source(props.query)}>
-          <Kbd>{shown(props.query)}</Kbd>
+          <Shape query={props.query} />
         </span>
         <Show when={props.query.kind === "literal" && props.query.wholeWord}>
           <span class="text-smallest text-on-surface-tertiary">{t("whole word")}</span>
