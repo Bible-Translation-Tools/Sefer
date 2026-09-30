@@ -260,30 +260,15 @@ export function Toolbar() {
           }
         >
           <button
-            data-testid="kebab-save"
-            type="button"
-            class={item}
-            disabled={!can("book.save")}
-            onClick={() => {
-              setMenuOpen(false);
-              runCommand("book.save");
-            }}
-          >
-            {t("Save")}
-          </button>
-          <button
             data-testid="kebab-save-review"
             type="button"
             class={item}
             disabled={!can("book.save")}
             onClick={() => {
               setMenuOpen(false);
+              // The one way to save: it opens Review, where the files are
+              // written and the version kept together.
               runCommand("book.save");
-              void navigate({
-                to: "/project/$slug/history",
-                params: { slug: shell.slug() },
-                search: { review: true },
-              });
             }}
           >
             {t("Save & Review")}

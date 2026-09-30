@@ -682,8 +682,12 @@ export function ReviewPanel() {
 
   const unsaved = () => unsavedChanges(shell);
 
-  const defaultMessage = (): string =>
-    t("Edit {count} book(s)", { count: Math.max(unsaved().length, 1) });
+  // The books by name, so the history reads "Edited Mark, Luke" rather than
+  // a count nobody can search for.
+  const defaultMessage = (): string => {
+    const names = unsaved().map((book) => bookName(book.bookId, metadataOf(shell.project())));
+    return names.length === 0 ? t("Edited") : t("Edited {books}", { books: names.join(", ") });
+  };
 
   const record = async (): Promise<void> => {
     const project = shell.project();
@@ -960,7 +964,7 @@ export function ReviewPanel() {
                 icon={<Save />}
                 data-review-record
                 disabled={unsaved().length === 0}
-                title={t("{count} book(s) are not in their files yet.", {
+                title={t("{count} book(s) with changes", {
                   count: unsaved().length,
                 })}
                 onClick={() => setRecordOpen(true)}
@@ -1066,10 +1070,9 @@ export function ReviewPanel() {
           open={recordOpen()}
           onOpenChange={setRecordOpen}
           title={t("Record a version")}
-          description={t(
-            "{count} book(s) are not in their files yet. Nothing is written on a timer: this writes the files and records the version together.",
-            { count: unsaved().length },
-          )}
+          description={t("Your changes in {count} book(s) are written and kept as a version.", {
+            count: unsaved().length,
+          })}
           footer={
             <>
               <Button variant="tertiary" onClick={() => setRecordOpen(false)}>
@@ -1092,7 +1095,7 @@ export function ReviewPanel() {
             class="block pb-1 text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase"
             for="commit-message"
           >
-            {t("Message")}
+            {t("What did you change?")}
           </label>
           <Input
             id="commit-message"
@@ -1106,6 +1109,9 @@ export function ReviewPanel() {
               if (unsaved().length > 0) void record().then(() => setRecordOpen(false));
             }}
           />
+          <p class="pt-1 text-smallest text-on-surface-tertiary">
+            {t("Your team sees this, and so will you later.")}
+          </p>
         </Dialog>
       </Show>
     </main>
