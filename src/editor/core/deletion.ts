@@ -107,6 +107,8 @@ type Verdict =
       readonly event: string;
       readonly seal: string | null;
       readonly say: string;
+      /** Where the caret goes, when the cut knows better than "the same distance past it". */
+      readonly caret?: number;
     };
 
 const TRACED: Record<Verdict["act"], TraceVerdict> = {
@@ -199,14 +201,23 @@ function backspaceAt(ix: OwnedIndex, pos: number): Verdict {
   if (cell) return cell;
   const whole = (event: string, seal: string, say: string): Verdict =>
     cutTo(t.wholeSpan.from, t.wholeSpan.to, event, seal, say);
-  if (t.typable && pos >= t.typable.to)
-    return cutTo(
+  if (t.typable && pos >= t.typable.to) {
+    const cut = cutTo(
       t.typable.to - 1,
       t.typable.to,
       "delete.usfm.number",
       null,
       `shorten the ${t.set}'s number rather than take it whole`,
     );
+    // The last digit: the number is now EMPTY, and its delimiter becomes the
+    // text's leading space. The caret goes to the empty number's place, before
+    // that space — where a typed digit refills it (`\v 7 the`) and the next
+    // Backspace addresses the box and takes the marker — not the same distance
+    // past the cut, which is after the space, inside the verse's words.
+    return cut.act === "cut" && t.typable.to - t.typable.from === 1
+      ? { ...cut, caret: t.typable.from }
+      : cut;
+  }
   if (t.typable && pos > t.typable.from) return onePaint(`delete one glyph inside the ${t.set}`);
   if (t.form === "box")
     return whole("delete.usfm.anchored", "anchored-box", `take the ${t.set} the box stands for`);
@@ -285,10 +296,19 @@ function commit(
   if (v.act === "nothing") return true;
   if (v.act === "consume") return consumePress(state, s, r, at, back, dispatch);
   if (v.act === "default") return false;
+  // An empty number's marker goes with the one space that was its delimiter
+  // (the text's leading space once the digits went): otherwise `\v` left
+  // `Euphrates—\n the`, a double space where the verse used to be.
+  const to =
+    v.event === "delete.usfm.anchored" && state.doc.sliceString(v.to, v.to + 1) === " "
+      ? v.to + 1
+      : v.to;
   dispatch(
     state.update({
-      changes: { from: v.from, to: v.to, insert: weld(s, state, v.from, v.to) },
-      selection: { anchor: back ? v.from + Math.max(0, at - v.to) : Math.min(at, v.from) },
+      changes: { from: v.from, to, insert: weld(s, state, v.from, to) },
+      selection: {
+        anchor: v.caret ?? (back ? v.from + Math.max(0, at - to) : Math.min(at, v.from)),
+      },
       userEvent: v.event,
       ...(v.seal === null ? {} : { annotations: trusted.of(v.seal) }),
       scrollIntoView: true,
@@ -412,7 +432,12 @@ function rangePlan(ix: OwnedIndex, s: DocStructure, from: number, to: number): R
   let around = 0;
   for (const h of ix.targetsIn(lo, hi + 1).hits) {
     const t = h.target;
-    if (t.mutability !== "immortal" || consented(t)) continue;
+    // Immortal is immortal: a range writes around it even when it covers it
+    // whole. The one exception is a set the surface does not draw — a
+    // passthrough like `\s5` — which a covering delete still takes, because
+    // writing around an invisible marker loses its terminator (`\s5lways`) and
+    // keeps what the reader could not see (editor.md, "Passthrough markers").
+    if (t.mutability !== "immortal" || (consented(t) && t.paint === "none")) continue;
     const a = anchoredBack(s, t.wholeSpan);
     const clipped = { from: Math.max(a.from, lo), to: Math.min(a.to, hi) };
     if (clipped.to <= clipped.from) continue;

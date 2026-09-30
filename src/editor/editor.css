@@ -340,15 +340,19 @@
   letter-spacing: -0.02em;
 }
 
+/* An empty verse or chapter number: the outline is the place, the caret sits
+   on its left edge, and a typed digit fills it. About one superscript digit
+   wide with no margin of its own, so emptying a number barely moves the words
+   beside it. It is its diagnostic's whole mark (`recipes/lint.ts`,
+   SLOT_FINDINGS): the finding draws nothing of its own. */
 .cm-mode-regular .usfm-slot {
   display: inline-block;
-  width: 0.9em;
-  height: 0.9em;
+  width: 0.6em;
+  height: 0.8em;
   border: 1px dashed var(--editor-slot-line);
   background: var(--editor-slot-bg);
   border-radius: 2px;
   vertical-align: super;
-  margin-right: 0.3em;
   cursor: text;
 }
 .cm-mode-regular .usfm-slot-c {
@@ -838,6 +842,10 @@
   text-decoration-thickness: 1px;
   text-decoration-skip-ink: none;
   text-underline-offset: 3px;
+}
+/* An empty number's finding: the dashed box beside it is the whole mark. */
+.cm-host .cm-editor .cm-lintRange.usfm-lint-slot {
+  text-decoration: none;
 }
 .cm-host .cm-editor .cm-lintRange-error {
   text-decoration-color: var(--on-surface-error);

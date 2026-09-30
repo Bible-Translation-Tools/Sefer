@@ -517,8 +517,11 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
       }
       p--;
     }
-    if (held && !(kind === "break" && behind !== null))
-      return { target: held, kind: "box", at: pos };
+    // At an empty number's box the box answers, even when a line break is
+    // behind it (a `\v` that opens its line): Backspace there is the
+    // deliberate second step that takes the marker, not a join of the lines
+    // (Will, 2026-09-30). An empty `\c` is immortal, so it only moves the caret.
+    if (held) return { target: held, kind: "box", at: pos };
     if (kind === "none") return { target: ofEdge(pos), kind, at: p };
     return { target: behind, kind, at };
   };
