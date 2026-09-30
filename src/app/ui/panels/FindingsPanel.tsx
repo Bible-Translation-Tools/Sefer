@@ -495,7 +495,7 @@ export function FindingsPanel() {
               {(described) => <SousSentence message={described()} tier="headline" />}
             </Show>
           </span>
-          {/* What a convention sentence compares, as two lists: here, and usually. */}
+          {/* What a Sous sentence compares, as kitchen's queries: here, and what else it names. */}
           <Show when={finding.comparison}>
             {(comparison) => <SearchDialog queries={comparison()} />}
           </Show>

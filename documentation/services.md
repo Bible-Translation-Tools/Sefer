@@ -349,20 +349,20 @@ Offered repairs applied through the Book, with a triple staleness check. Engine 
 
 ### Overview
 
-Project find over the reading text, in JavaScript over the engine's mask map (`findInReading`). Literal or regex, case and whole-word switches, stamped hits, and reference-project hits drawn beside the verse. Replace all sits behind the Advanced setting `find.enableReplaceAll`. `src/core/search`, the `/find` route. A query needs two characters (`longEnough`), except a single non-letter glyph such as "—", which searches. Search is a module, so other screens ask it in place: `SearchDialog` (`src/app/ui/search`) is Findings' magnifying glass, showing what a Sous convention sentence compares (`Finding.comparison`) as two lists, here and usually, over the reading or the USFM by the global mode. → [search](architecture/search.md)
+Project find over the reading text, in JavaScript over the engine's mask map (`findInReading`). Literal or regex, case and whole-word switches, stamped hits, and reference-project hits drawn beside the verse. Replace all sits behind the Advanced setting `find.enableReplaceAll`. `src/core/search`, the `/find` route. A query needs two characters (`longEnough`), except a single non-letter glyph such as "—", which searches. Search is a module, so other screens ask it in place: `SearchDialog` (`src/app/ui/search`) is Findings' magnifying glass, showing kitchen's queries for a Sous finding (`Finding.comparison`) one column per purpose, literals through the engine's `findAll` and regexes over the verse-text reading. → [search](architecture/search.md)
 
 ### Constraints and known bugs
 
 - A hit that spans markup cannot be replaced (`Stale`).
 - A hit's `address` is there only when the caller's analysis describes exactly the scanned text (`Options.analysisOf`); otherwise it is absent. There is no fallback scanner. A bound reference is parsed once per exact text by `/find`, on its first hit.
 - `Hit.projected` is declared and never set; delete it next time search is touched.
-- Find compiles a typed regex without the `u` flag, so `\p{L}` matches nothing there. `Query.unicode` turns it on; only `SearchDialog`'s generated patterns set it.
+- Find compiles a typed regex without the `u` flag, so `\p{L}` matches nothing there. `Query.unicode` turns it on; only `SearchDialog`'s kitchen regexes set it.
 - Find's URL carries only `q` and `scope`. Regex, case, whole word and markup are local toggles that start off, so a link cannot open Find on a pattern, and `SearchDialog` has no "Open in Find".
 
 ### Ideas / future
 
 - **Find's toggles in the URL.** `regex`, `case`, `word` and `markup` search params seeded into the toggles, plus Unicode for a pattern (a `unicode` param, or try `u` and fall back when it will not compile). About 30 lines; any Find becomes linkable and each `SearchDialog` column gets "Open in Find" back.
-- **Only offer a comparison where both sides are worth reading.** A casing finding that "appears only here" gives a Here column of the one verse already on screen and a Usually column of hundreds of ordinary spellings, which says nothing the sentence did not. Either leave casing out of `comparisonOf`, or hide the button for any lane when the here count is one; the second would also hide a one-off swapped pair, where the usual list may still help.
+- **Only offer a comparison where both sides are worth reading.** A casing finding that "appears only here" gives a Here column of the one verse already on screen and a Usually column of hundreds of ordinary spellings, which says nothing the sentence did not. Either filter casing out in `comparisonOf`, or hide the button for any lane when the here count is one; the second would also hide a one-off swapped pair, where the usual list may still help.
 
 ## Excerpts
 
