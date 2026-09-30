@@ -27,6 +27,7 @@
 
 import type { BookId } from "../book/book";
 import {
+  booksByPattern,
   diagnosticMessage,
   diagnosticName,
   diagnosticSeverity,
@@ -37,6 +38,10 @@ import {
   type Finding as CorpusFinding,
   type FindingMessage,
   type FindingsSnapshot,
+  markBefore,
+  type MarkBefore,
+  type MaskMap,
+  type Pattern,
 } from "../galley";
 import type { SourceStamp } from "../source/source";
 import { describeSous, render } from "./messages";
@@ -244,7 +249,39 @@ export interface PublishedBook {
   readonly text: string;
   /** What the reader calls the book. */
   readonly name: string;
+  /**
+   * The book's reading map (`GalleyService.mask`), asked for only when a
+   * Casing message wants the mark before its word.
+   */
+  readonly mask?: () => MaskMap | undefined;
 }
+
+/** Enough reading before a word to find the mark in front of it. */
+const BEFORE_WINDOW = 32;
+
+/**
+ * The mark before source offset `at`, read from the verse text the engine
+ * judged (markers removed, as `markBefore` requires) rather than the USFM,
+ * where `\q2` between `;` and `He` would read as the digit 2. Only the last
+ * few kept spans before `at` are joined: `markBefore` walks back over space
+ * and quotation marks and stops at the first other character.
+ */
+const markBeforeIn = (text: string, mask: MaskMap, at: number): MarkBefore | undefined => {
+  // The last kept span starting before `at`: the ranges are in source order.
+  let low = 0;
+  let high = mask.rangeCount;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if (mask.range(mid).sourceFrom < at) low = mid + 1;
+    else high = mid;
+  }
+  let reading = "";
+  for (let row = low - 1; row >= 0 && reading.length < BEFORE_WINDOW; row -= 1) {
+    const range = mask.range(row);
+    reading = text.slice(range.sourceFrom, Math.min(range.sourceTo, at)) + reading;
+  }
+  return markBefore(reading, reading.length);
+};
 
 const corpusCode = (finding: CorpusFinding, channel: string | undefined): string => {
   switch (finding.kind) {
@@ -292,6 +329,27 @@ export const fromSnapshot = (
     if (book === undefined) return String(index + 1);
     return resolveBook(book.id)?.name ?? book.key;
   };
+  // Which books hold each pattern, so a two-book spread is named, not counted.
+  const patternBooks = booksByPattern(snapshot);
+  // A Casing message says what the project does after the mark before its
+  // word; the reading map that finds that mark is asked for once per book,
+  // and only by a book that has one.
+  const masks = new Map<string, MaskMap | undefined>();
+  const before = (
+    resolved: PublishedBook,
+    finding: CorpusFinding,
+    pattern: Pattern | undefined,
+  ): { readonly before?: MarkBefore } => {
+    if (pattern?.key.kind !== "Casing" || resolved.mask === undefined) return {};
+    // A map of any other revision than the one published names other offsets.
+    if (!masks.has(resolved.bookId)) {
+      const mask = resolved.mask();
+      masks.set(resolved.bookId, mask?.sourceLen === resolved.text.length ? mask : undefined);
+    }
+    const mask = masks.get(resolved.bookId);
+    const mark = mask === undefined ? undefined : markBeforeIn(resolved.text, mask, finding.from);
+    return mark === undefined ? {} : { before: mark };
+  };
   const out: Finding[] = [];
   for (let index = 0; index < snapshot.length; index += 1) {
     const book = snapshot.book(index);
@@ -307,6 +365,9 @@ export const fromSnapshot = (
         siteText: resolved.text.slice(finding.from, finding.to),
         bookCount,
         bookName,
+        patternBooks,
+        snapshot,
+        ...before(resolved, finding, pattern),
       });
       out.push({
         id: identify("sous", resolved.bookId, code, finding.from, finding.to),

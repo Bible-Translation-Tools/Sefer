@@ -499,6 +499,7 @@ const make = (
         engine: stampOf(entry.analysis),
         text: entry.analysis.text,
         name: bookName(id, metadata),
+        mask: () => galley.mask(id),
       };
     };
 

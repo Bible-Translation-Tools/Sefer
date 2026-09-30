@@ -84,7 +84,10 @@ export type { Finding, Pattern } from "@wycliffeassociates/scripture-kitchen/sou
 // the English catalog those ids render through (a headline and details each).
 // `src/core/findings/messages.ts` is the one formatter.
 export {
+  booksByPattern,
   describe as describeFinding,
+  markBefore,
+  type MarkBefore,
   type Message as FindingMessage,
   type MessageContext as FindingMessageContext,
   type MessageId as FindingMessageId,
