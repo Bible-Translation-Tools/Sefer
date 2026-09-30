@@ -375,6 +375,9 @@ The multibuffer shared by Find, Key terms and Findings: occurrences grouped by T
 - Cards follow the seat: while a book is seated (open in the editor, or a card editing it) every card of it applies the seat's published changes. Lazily: a card whose clip a change touches repaints on the next frame, the rest catch up 400 ms after typing pauses, so twenty followers cost a keystroke nothing measurable (they cost ~30 ms applied eagerly).
 - Opening a big project and searching at once is slow (13 s first results measured) because the project's background analysis holds the thread; the cards are not the cost there.
 - The context setting is read when a list opens; changing it does not move an open list.
+- Every excerpt reader should follow the global Regular/USFM mode unless a card is explicitly flipped to USFM; not yet checked across Find, Key terms and Findings (noted 2026-09-30).
+- Widening is off at a verse marker: in `rates—\v 19 |the`, Backspace deletes the `9` rather than the space, and selecting from the `9` to the `t` deletes the whole `19` (noted 2026-09-30).
+- A card with condensing (Key terms) keeps every card's body mounted and opens or closes it by a CSS row transition, so the card closing and the card opening move in the same frames and nothing is remounted; the condensed line is the engine's verse text of the card's own unit (`verseTextOf`, `readerMask(text, "verseText")`).
 
 ### Ideas / future
 
