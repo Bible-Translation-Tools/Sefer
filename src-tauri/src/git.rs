@@ -895,25 +895,55 @@ pub fn git_clone(
     })
 }
 
-/// Fetches everything a shallow clone left on the server, for the current
-/// branch: libgit2's "unshallow" is the largest depth there is. Moves no
-/// branch and no file.
+/// Fetches older history a shallow clone left on the server, for the current
+/// branch: `more` commits further back, or all of it when `None` — libgit2's
+/// "unshallow" is the largest depth there is. libgit2 has no relative deepen,
+/// so "more" is asked for as an absolute depth: the commits already reachable
+/// from the tracking ref, plus `more`. Moves no branch and no file.
+///
+/// Async, unlike the other commands: Tauri runs a plain command on the main
+/// thread, so a deepen waiting on the network froze the window, and desktop
+/// runs these in the background while somebody works. The TS side's
+/// exclusive lane is what keeps it from racing another writer.
 #[tauri::command]
-pub fn git_deepen(
+pub async fn git_deepen(
     root: String,
     remote: String,
+    more: Option<i32>,
     username: Option<String>,
     token: Option<String>,
 ) -> Result<GitProgress, String> {
-    let repo = open_repo(&root)?;
+    tauri::async_runtime::spawn_blocking(move || deepen(&root, &remote, more, username, token))
+        .await
+        .map_err(|error| fail(IO, error.to_string()))?
+}
+
+fn deepen(
+    root: &str,
+    remote: &str,
+    more: Option<i32>,
+    username: Option<String>,
+    token: Option<String>,
+) -> Result<GitProgress, String> {
+    let repo = open_repo(root)?;
     let branch = current_branch(&repo)?;
+    let depth = match more {
+        None => i32::MAX,
+        Some(more) => {
+            let tracking = format!("refs/remotes/{remote}/{branch}");
+            let mut walk = repo.revwalk().map_err(io)?;
+            walk.push_ref(&tracking).map_err(io)?;
+            let held = i32::try_from(walk.count()).unwrap_or(i32::MAX);
+            held.saturating_add(more.max(1))
+        }
+    };
     let mut handle = repo
-        .find_remote(&remote)
+        .find_remote(remote)
         .map_err(|error| fail(CONFLICT, error.message()))?;
     let refspec = format!("+refs/heads/{branch}:refs/remotes/{remote}/{branch}");
     let mut options = FetchOptions::new();
     options.remote_callbacks(remote_callbacks(credential_pair(&username, &token)));
-    options.depth(i32::MAX);
+    options.depth(depth);
     handle
         .fetch(&[refspec.as_str()], Some(&mut options), None)
         .map_err(transport_failure)?;

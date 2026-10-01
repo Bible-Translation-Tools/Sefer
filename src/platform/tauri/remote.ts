@@ -183,9 +183,8 @@ const makeTauriRemote = (
       // names and records `origin` itself. Desktop reaches any host, so the
       // URL goes through as given, exactly as `attach` takes it.
       //
-      // Desktop takes the whole history unless told otherwise: it has the
-      // disk and the native speed, and a translator's laptop is not where a
-      // clone hurts. A reference text asks for the latest only.
+      // The newest version only unless told otherwise, as on the Web: a slow
+      // or metered connection costs a laptop the same.
       clone: (url, into, cloning) =>
         Effect.gen(function* () {
           const credential = Option.getOrNull(yield* credentialFor(url));
@@ -194,7 +193,7 @@ const makeTauriRemote = (
             root: into,
             username: credential?.username ?? null,
             token: credential?.token ?? null,
-            depth: cloning?.history === "latest" ? 1 : null,
+            depth: (cloning?.history ?? "latest") === "latest" ? 1 : null,
           });
           const progress = progressOf(wire);
           yield* PubSub.publish(events, progress);
@@ -244,7 +243,23 @@ const makeTauriRemote = (
           } satisfies Probe;
         }),
       fetch: (repo) => transfer("git_fetch", repo, "optional"),
-      deepen: (repo) => transfer("git_deepen", repo, "optional"),
+      backfills: true,
+      deepen: (repo, more) =>
+        Effect.gen(function* () {
+          const url = yield* originUrl(repo);
+          const credential = Option.getOrNull(yield* credentialFor(url));
+          const progress = progressOf(
+            yield* call<WireProgress>("git_deepen", {
+              root: repo.root,
+              remote: ORIGIN,
+              more: more === "all" ? null : more,
+              username: credential?.username ?? null,
+              token: credential?.token ?? null,
+            }),
+          );
+          yield* PubSub.publish(events, progress);
+          return progress;
+        }),
       // Local: no origin, no credential. The forward-only and safe-checkout
       // refusals are git2's, in Rust.
       fastForward: (repo, to) => call<void>("git_fast_forward", { root: repo.root, to }),

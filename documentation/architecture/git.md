@@ -92,7 +92,8 @@ too.
 ### How much history a clone takes
 
 `Remote.clone(url, into, { history })` takes `latest` (depth 1) or `all`, and the CALLER chooses;
-left unsaid, the host does — the Web takes `latest`, desktop `all`. For en_ulb a full clone is about
+left unsaid it is `latest` on every host, because a slow or metered connection costs a laptop what it
+costs a browser. For en_ulb a full clone is about
 16 MB and a depth-1 clone about 1.6 MB: on a 1 Mbps connection, two minutes against fifteen seconds
 before the project opens, and a full pack is held in the page's memory while history is read. A
 reference text (a catalogue gateway row today) asks for `latest` on every host, because nobody reads
@@ -104,15 +105,26 @@ behind stay a set difference over commits both sides hold. A push from a shallow
 the server has the history.
 
 Only History reads further back. `Git.shallow(repo)` says the past on the device is short, and the
-History screen says so; the first time it opens on such a project in a session it runs
-`Remote.deepen(repo)` — every older commit for the branch in one fetch (git's "unshallow", the largest
-depth there is), in the exclusive lane — and reads again, and a button retries when that failed. The
-index notices: it records the boundary commits it stopped at, is current only while the repository's
-shallow set is exactly those, and extends backwards after a deepen. There is no background deepening,
-so a project nobody opens History on never downloads its old history.
+History screen says so. `Remote.deepen(repo, more)` fetches `more` commits further back, or `"all"`
+(git's "unshallow", the largest depth there is), in the exclusive lane. History fetches 10 the first
+time it opens on such a project in a session and offers "Load 10 more" and "Load all". The index
+notices: it records the boundary commits it stopped at, is current only while the repository's
+shallow set is exactly those, and extends backwards after each deepen.
 
-Checked on the sandbox, on the Web: a `latest` clone (2 s), a send from it, a receive into it, and
-History deepening it in under a second, after which its index matched the server's 35 commits.
+Where the hosts differ is what happens after the clone returns. `Remote.backfills` says whether the
+host fills the history in behind a clone whose caller left the choice to it: desktop does, the Web
+does not. `cloneRepository` then forks the backfill and returns at once, so the project opens on the
+newest version. The backfill deepens 200 commits at a time — each step one short turn of the lane, so
+a Record a version never waits behind the whole download — until the repository is whole, and stops
+quietly when a step fails or the project closes; History offers the rest. `git_deepen` is the one
+async desktop command, run off the window's thread, because a plain Tauri command runs on the main
+thread and a fetch waiting on the network froze the window. On the Web nothing older is downloaded
+for a project whose History is never opened. A caller that says `latest` (a reference text) gets no
+backfill on either host.
+
+Checked on the sandbox, on the Web: a `latest` clone (2 s), a send from it, a receive into it, History
+fetching 10 more and then all, after which the index matched the server's 37 commits. The desktop
+backfill compiles and has not been run.
 
 ## One writer per repository
 

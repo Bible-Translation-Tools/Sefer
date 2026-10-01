@@ -36,7 +36,7 @@ import { revertUnits } from "#core/diff/units";
 import { unitReference, type DecisionUnit } from "#core/galley";
 import type { Commit, Version } from "#core/git/git";
 import { Git, repositoryPath } from "#core/git/git";
-import { Remote } from "#core/remote/remote";
+import { Remote, type Deepen } from "#core/remote/remote";
 import { decode } from "#core/source/source";
 
 import { remoteReasonOf } from "../../describe";
@@ -74,6 +74,9 @@ interface Confirmation {
   readonly label: string;
   readonly run: () => void;
 }
+
+/** How many commits further back one step of older history goes. */
+const HISTORY_STEP = 10;
 
 /** Projects whose older history this session has already gone to fetch. */
 const deepened = new Set<string>();
@@ -151,34 +154,38 @@ export function HistoryPanel() {
         version.refresh();
         setOlder((now) => (answer.shallow ? (now === "loading" ? now : "missing") : "whole"));
         // The first time History opens on a project with its newest version
-        // only, the rest is fetched without being asked: opening History is
-        // the asking. Once per project per session, so a failure is not
+        // only, one step further back is fetched without being asked: opening
+        // History is the asking. Once per project per session, so a failure is not
         // retried on every visit; the button below retries.
         if (answer.shallow && !deepened.has(project.root) && syncStatus.interfaceUp()) {
           deepened.add(project.root);
-          loadOlder();
+          loadOlder(HISTORY_STEP);
         }
       });
   };
 
-  /** Fetch the history a newest-version clone left on the server, then read again. */
-  const loadOlder = (): void => {
+  /** Fetch older history a newest-version clone left on the server, then read again. */
+  const loadOlder = (more: Deepen): void => {
     const project = shell.project();
     if (project === undefined) return;
     setOlder("loading");
-    const operation = shell.services.composition.observability.operation("history.deepen");
+    const operation = shell.services.composition.observability.operation("history.deepen", {
+      "history.more": String(more),
+    });
     void shell.services
       .run(
         Effect.gen(function* () {
           const git = yield* Git;
           const remote = yield* Remote;
-          return yield* remote.deepen(yield* git.open(project.root));
+          return yield* remote.deepen(yield* git.open(project.root), more);
         }),
       )
       .then(
         (progress) => {
           operation.end("passed", { "history.loaded": progress.loaded });
-          setOlder("whole");
+          // `load` reads `shallow` again: a step that did not reach the
+          // beginning leaves the card offering more.
+          setOlder("missing");
           load();
         },
         (cause: unknown) => {
@@ -378,9 +385,14 @@ export function HistoryPanel() {
                         )}
                 </p>
                 <Show when={older() !== "loading"}>
-                  <Button variant="secondary" size="sm" onClick={loadOlder}>
-                    {t("Load older history")}
-                  </Button>
+                  <div class="flex gap-2">
+                    <Button variant="secondary" size="sm" onClick={() => loadOlder(HISTORY_STEP)}>
+                      {t("Load {count} more", { count: HISTORY_STEP })}
+                    </Button>
+                    <Button variant="tertiary" size="sm" onClick={() => loadOlder("all")}>
+                      {t("Load all")}
+                    </Button>
+                  </div>
                 </Show>
               </Card>
             </Show>

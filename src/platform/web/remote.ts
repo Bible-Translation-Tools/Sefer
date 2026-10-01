@@ -337,8 +337,8 @@ const makeWebRemote = (
       // The URL is mapped to its content host first, exactly as `attach`
       // does, so what lands in `.git/config` is the same either way.
       //
-      // The Web takes the newest version only unless told otherwise: a tenth
-      // of en_ulb's download, and the history comes later if History asks.
+      // The newest version only unless told otherwise: a tenth of en_ulb's
+      // download, and the history comes later if History asks.
       clone: (requested, into, cloning) =>
         Effect.gen(function* () {
           const url = identityOf(options.transport, requested);
@@ -423,17 +423,19 @@ const makeWebRemote = (
           git.fetch({ ...wire, ref: branch, remoteRef: branch, singleBranch: true, prune: true }),
         ),
 
-      // Everything the shallow boundary left on the server: git's own
-      // "unshallow" is a deepen by the largest depth there is.
-      deepen: (repo) =>
+      backfills: false,
+
+      // `more` commits past the shallow boundary (a relative deepen), or all
+      // of it: git's own "unshallow" is a deepen by the largest depth there is.
+      deepen: (repo, more) =>
         transfer(repo, "optional", (wire, branch) =>
           git.fetch({
             ...wire,
             ref: branch,
             remoteRef: branch,
             singleBranch: true,
-            depth: UNSHALLOW,
             tags: false,
+            ...(more === "all" ? { depth: UNSHALLOW } : { depth: more, relative: true }),
           }),
         ),
 

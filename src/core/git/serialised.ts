@@ -69,7 +69,8 @@ export const serialiseRemote = (
     // The folder does not exist yet; the lane is still the one a later open
     // of it will ask for, so a second clone into the same folder waits.
     clone: (url, into, options) => write(into, "clone", remote.clone(url, into, options)),
-    deepen: (repo) => write(repo.root, "deepen", remote.deepen(repo)),
+    deepen: (repo, more) => write(repo.root, "deepen", remote.deepen(repo, more)),
+    backfills: remote.backfills,
     attach: (repo, url) => write(repo.root, "attach", remote.attach(repo, url)),
     attachAs: (repo, name, url) => write(repo.root, "attach", remote.attachAs(repo, name, url)),
     urlOf: (repo, name) => read(repo.root, remote.urlOf(repo, name)),

@@ -75,15 +75,17 @@ export interface Probe {
  *   `deepen`, if History is ever opened. What a reference text wants.
  * - `all` — the whole history, now.
  *
- * Left unsaid, each host chooses: the Web takes `latest`, because a browser
- * on a low-end device or a slow connection is where a full clone hurts;
- * desktop takes `all`.
+ * Left unsaid, it is `latest` on every host: a slow or metered connection is
+ * the same cost on a laptop as in a browser.
  */
 export type CloneHistory = "latest" | "all";
 
 export interface CloneOptions {
   readonly history?: CloneHistory;
 }
+
+/** How much older history a deepen brings: that many more commits back, or all of it. */
+export type Deepen = number | "all";
 
 export interface RemoteService {
   /**
@@ -129,11 +131,20 @@ export interface RemoteService {
   readonly probe: (url: string) => Effect.Effect<Probe, RemoteError>;
   readonly fetch: (repo: Repo) => Effect.Effect<Progress, RemoteError>;
   /**
-   * Fetches the history a `latest` clone left on the server, all of it, for
-   * the current branch. Moves no branch and no file; a repository with its
-   * whole history already gets nothing.
+   * Fetches older history a `latest` clone left on the server, for the
+   * current branch: `more` commits further back, or `all` of it. Moves no
+   * branch and no file; a repository with its whole history gets nothing.
    */
-  readonly deepen: (repo: Repo) => Effect.Effect<Progress, RemoteError>;
+  readonly deepen: (repo: Repo, more: Deepen) => Effect.Effect<Progress, RemoteError>;
+  /**
+   * Whether this host brings the rest of a `latest` clone's history in the
+   * background once the clone has returned, when the caller left the choice
+   * to it. Desktop does — off the window's thread — so the project opens on
+   * the newest version and its past arrives while somebody works. The Web
+   * does not: a browser tab is where the download is the cost, and History
+   * asks for what it needs.
+   */
+  readonly backfills: boolean;
   /**
    * Moves the checked-out branch forward to `to` and brings the work tree
    * with it — only ever forward: `Rejected` unless `to` descends from HEAD.
