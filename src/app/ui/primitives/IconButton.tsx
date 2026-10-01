@@ -33,10 +33,10 @@ const classes = variants({
       outlined:
         "border-surface-border bg-surface-primary text-on-surface-primary hover:not-disabled:bg-surface-secondary",
       // No fill at rest: the glyph is quieter and, hovered, comes up to the
-      // text colour over a faint wash of it (white in dark mode), as the
+      // text colour on the card surface — the fill a verse card has — as the
       // Spiritual terms "Show more" row does.
       quiet:
-        "border-transparent bg-transparent text-on-surface-secondary hover:not-disabled:bg-on-surface-primary/6 hover:not-disabled:text-on-surface-primary",
+        "border-transparent bg-transparent text-on-surface-secondary hover:not-disabled:bg-surface-primary hover:not-disabled:text-on-surface-primary",
     },
     size: {
       // Radius lives with the size, as in `Button`: the 56px one matches

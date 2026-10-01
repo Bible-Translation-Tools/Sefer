@@ -1,10 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/solid-router";
 import { Effect, Result } from "effect";
-import { createEffect, createMemo, createSignal, For, Show, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, Show, untrack } from "solid-js";
 
 import { t } from "#app/i18n";
 import { useShell } from "#app/ProjectContext";
-import { createExcerptFeed, readBooks, StetView } from "#app/ui/excerpts";
+import { createExcerptFeed, readBooks, StetView, type ContextMode } from "#app/ui/excerpts";
 import { PanelHeader, Select } from "#app/ui/primitives";
 import { ShellGate } from "#app/ui/ShellGate";
 import { keyTermGuides, keyTerms, sourceReadings, type SourceReading } from "#app/workflows/stet";
@@ -232,7 +232,53 @@ function Terms() {
     { name: "termCuratedAt" },
   );
 
-  const feed = createExcerptFeed({ hits, name: "terms", analyze });
+  /**
+   * How a card shows its context — a DESIGN TWEAK, scaffolding until the
+   * question is settled (`pnpm design:scaffolding` lists it). `simple`: every
+   * card opens with a verse either side, dimmed; `manual`: the verse alone,
+   * with a previous / Show more / next control to widen it by hand. Builds
+   * without the design surface render `simple` and register nothing.
+   */
+  // `ownedWrite`: the panel calls `onChange` once as the tweak registers,
+  // which is while this screen is being built.
+  const [contextMode, setContextMode] = createSignal<ContextMode>("simple", {
+    name: "termsContextMode",
+    ownedWrite: true,
+  });
+  if (__SEFER_DESIGN__) {
+    // SAFETY: under `__SEFER_DESIGN__` the design surface installs this handle
+    // (`src/dev/designSurface.ts`) and `register` has this shape; `unknown` in
+    // the global's type only because platform may not import a dev tool.
+    const design = globalThis.__sefer?.design as
+      | {
+          readonly register?: (registration: {
+            readonly namespace: string;
+            readonly tweaks: readonly {
+              readonly key: string;
+              readonly label: string;
+              readonly kind: "choice";
+              readonly options: readonly string[];
+            }[];
+            readonly onChange: (values: Readonly<Record<string, string>>) => void;
+          }) => () => void;
+        }
+      | undefined;
+    const release = design?.register?.({
+      namespace: "terms",
+      tweaks: [{ key: "context", label: "Context", kind: "choice", options: ["simple", "manual"] }],
+      onChange: (values) => {
+        setContextMode(values["terms.context"] === "manual" ? "manual" : "simple");
+      },
+    });
+    if (release !== undefined) onCleanup(release);
+  }
+
+  const feed = createExcerptFeed({
+    hits,
+    name: "terms",
+    analyze,
+    context: () => (contextMode() === "simple" ? 1 : 0),
+  });
 
   // The source side, resolved once per term rather than once per card: a card
   // renders synchronously and reading a resource is an Effect.
@@ -338,6 +384,7 @@ function Terms() {
           onAdditional={setAdditional}
           additionalCount={allHits().length - curatedHits().length}
           coreTotalOf={(id) => coreTotals().get(id) ?? 0}
+          contextMode={contextMode()}
           isCurated={(excerpt) =>
             excerpt.hits.some((hit) => curatedAt().has(`${hit.bookId}:${hit.from}`))
           }

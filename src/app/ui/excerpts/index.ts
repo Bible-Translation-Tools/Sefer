@@ -4,7 +4,7 @@
  */
 
 export { type MarkTone, type Paired } from "./ExcerptCard";
-export { excerptCard, type ExcerptCardSpec, type OutlineSpec } from "./cardSpec";
+export { excerptCard, type ContextMode, type ExcerptCardSpec, type OutlineSpec } from "./cardSpec";
 export { ExcerptList } from "./ExcerptList";
 export { createExcerptFeed, readBooks, type ExcerptFeed } from "./feed";
 export { StetView } from "./StetView";

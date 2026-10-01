@@ -1288,6 +1288,11 @@
 }
 /* The whole chapter showing, it reads as one text: the context at full
    strength, not dimmed round the verse. */
+/* The verse either side of a Spiritual terms card stays dimmed even while
+   it is edited — editable, but plainly not the verse the card is for… */
+[data-direct-target]:not([data-chapter]) .cm-editing .cm-excerpt-context {
+  opacity: 0.55;
+}
 [data-direct-target][data-chapter] .cm-excerpt-context {
   opacity: 1;
 }

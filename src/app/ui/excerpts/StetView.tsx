@@ -49,7 +49,7 @@ import { cardPolicy } from "../multibuffer/policy";
 import { Switch } from "../primitives";
 import { ProjectControl } from "../workspace/ProjectSidebar";
 import { claimSidebar } from "../workspace/sidebarSlot";
-import { excerptCard } from "./cardSpec";
+import { excerptCard, type ContextMode } from "./cardSpec";
 import type { ContextStep, Paired } from "./ExcerptCard";
 import { ExcerptList } from "./ExcerptList";
 
@@ -86,6 +86,8 @@ export interface StetViewProps {
   readonly onAdditional: (on: boolean) => void;
   /** How many core verses this project has for a term: its row's count, open or not. */
   readonly coreTotalOf: (termId: string) => number;
+  /** How the cards show their context (a design tweak; `simple` outside design builds). */
+  readonly contextMode: ContextMode;
   /** How many additional references this project has for the open term. */
   readonly additionalCount: number;
   /** Is this card one of the curated verses — one the sidebar lists? */
@@ -166,7 +168,7 @@ export function StetView(props: StetViewProps) {
       type="button"
       data-stet-accordion=""
       aria-expanded={props.additional ? "true" : "false"}
-      class="mt-3 flex w-full cursor-pointer items-center gap-3 rounded-3xl border border-transparent bg-transparent p-6 text-start text-on-surface-secondary transition-colors hover:bg-on-surface-primary/6 hover:text-on-surface-primary [&>svg]:size-5 [&>svg]:shrink-0"
+      class="mt-3 flex w-full cursor-pointer items-center gap-3 rounded-3xl border border-transparent bg-transparent p-6 text-start text-on-surface-secondary transition-colors hover:bg-surface-primary hover:text-on-surface-primary [&>svg]:size-5 [&>svg]:shrink-0"
       onClick={() => props.onAdditional(!props.additional)}
     >
       <span class="flex min-w-0 flex-1 flex-col gap-1 ps-3">
@@ -378,6 +380,7 @@ export function StetView(props: StetViewProps) {
       step: (sid, step) => {
         props.onExpand(sid, step);
       },
+      manual: () => props.contextMode === "manual",
     },
     // No "Open in editor": the card is edited where it stands.
     { kind: "none" },
