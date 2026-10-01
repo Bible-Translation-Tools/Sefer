@@ -24,20 +24,23 @@
  */
 
 import { useNavigate } from "@tanstack/solid-router";
-import { Effect, Result } from "effect";
+import { Effect, Option, Result } from "effect";
 import GitCommitVertical from "lucide-solid/icons/git-commit-vertical";
 import PencilLine from "lucide-solid/icons/pencil-line";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Undo2 from "lucide-solid/icons/undo-2";
-import { For, Show, createEffect, createSignal, untrack } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
 import type { BookId } from "#core/book/book";
+import { diffSkeleton } from "#core/diff/skeleton";
 import { revertUnits } from "#core/diff/units";
-import { unitReference, type DecisionUnit } from "#core/galley";
+import type { DecisionUnit } from "#core/galley";
 import type { Commit, Version } from "#core/git/git";
 import { Git, repositoryPath } from "#core/git/git";
 import { Remote, type Deepen } from "#core/remote/remote";
 import { decode, type Source } from "#core/source/source";
+import { trackingRef } from "#core/sync";
+import type { EditorBook } from "#editor/index";
 
 import { remoteReasonOf } from "../../describe";
 import { t } from "../../i18n";
@@ -54,6 +57,7 @@ import {
   SegmentedControl,
   toasts,
 } from "../primitives";
+import { ReviewReader, type ReviewBook } from "../review/ReviewReader";
 import { bookName } from "../workspace/books";
 import { metadataOf } from "../workspace/project";
 import {
@@ -64,7 +68,6 @@ import {
   versionChanges,
   type BookChanges,
 } from "./changes";
-import { DiffView } from "./DiffView";
 import { ago, exact } from "./format";
 import { createRecordedVersion } from "./recorded";
 
@@ -102,6 +105,15 @@ export function HistoryPanel() {
   const [problem, setProblem] = createSignal("");
   const [selected, setSelected] = createSignal<string>(WORKING, { name: "selectedCommit" });
   const [shown, setShown] = createSignal<readonly BookChanges[]>([], { name: "shownDiff" });
+  /** Commit ids the shared project has; `undefined` when there is nothing to compare with. */
+  const [shared, setShared] = createSignal<ReadonlySet<string> | undefined>(undefined, {
+    name: "historyShared",
+  });
+  /** Recorded here and not yet on the shared project. */
+  const onlyHere = (id: string): boolean => {
+    const known = shared();
+    return known !== undefined && !known.has(id);
+  };
   /**
    * What a selected version is compared with. `version` (the default) is what
    * that version itself changed, against each book's version before it, as a
@@ -144,6 +156,17 @@ export function HistoryPanel() {
           const repo = opened.success;
           const commits = yield* Effect.result(git.log(repo));
           const shallow = yield* Effect.orElseSucceed(git.shallow(repo), () => false);
+          // What the shared project already has, as of the last check: every
+          // commit reachable from the remote-tracking ref. `undefined` when
+          // there is none to compare with — never sent, or no shared project —
+          // and then the timeline marks nothing.
+          const branch = yield* Effect.orElseSucceed(git.branch(repo), () => Option.none<string>());
+          let shared: ReadonlySet<string> | undefined;
+          if (Option.isSome(branch)) {
+            const theirs = yield* Effect.result(git.logFrom(repo, trackingRef(branch.value)));
+            if (Result.isSuccess(theirs))
+              shared = new Set(theirs.success.map((commit) => commit.id));
+          }
           const perBook = new Map<BookId, readonly Version[]>();
           for (const book of project.books) {
             const inside = repositoryPath(project.root, book.path);
@@ -156,6 +179,7 @@ export function HistoryPanel() {
             commits: Result.isSuccess(commits) ? commits.success : [],
             perBook,
             shallow,
+            shared,
           } as const;
         }),
       )
@@ -171,6 +195,7 @@ export function HistoryPanel() {
         setProblem("");
         setLog(answer.commits);
         setVersions(answer.perBook);
+        setShared(answer.shared);
         version.refresh();
         setOlder((now) => (answer.shallow ? (now === "loading" ? now : "missing") : "whole"));
         // The first time History opens on a project with its newest version
@@ -357,18 +382,6 @@ export function HistoryPanel() {
       ? Result.fail({ reason: "nothing to revert" })
       : revertUnits(shell.services.galley, changes.book, changes.changes, units);
 
-  const revertUnit = (changes: BookChanges, unit: DecisionUnit): void => {
-    setConfirming({
-      title: t("Revert {verse}?", { verse: unitReference(unit) }),
-      label: t("Revert"),
-      description: t(
-        "{book} goes back to the selected version for this one change. Undo takes it back.",
-        { book: nameOf(changes.bookId) },
-      ),
-      run: () => announce(changes.bookId, revertSome(changes, [unit])),
-    });
-  };
-
   const revertFile = (changes: BookChanges): void => {
     setConfirming({
       title: t("Revert every change in {book}?", { book: nameOf(changes.bookId) }),
@@ -376,6 +389,92 @@ export function HistoryPanel() {
       description: t("One edit, so one Undo takes the whole thing back."),
       run: () => announce(changes.bookId, revertSome(changes, changes.changes?.units ?? [])),
     });
+  };
+
+  /** USFM or the reading, in the reader below; History's own, not Review's. */
+  const [markup, setMarkup] = createSignal(false, { name: "historyMarkup" });
+  const [focusBook, setFocusBook] = createSignal<BookId | undefined>(undefined, {
+    name: "historyBook",
+  });
+
+  /** The shown books as the reader takes them: both texts and their skeleton. */
+  const reviewBooks = createMemo(
+    (): readonly ReviewBook[] => {
+      const out: ReviewBook[] = [];
+      for (const changes of shown()) {
+        const held = changes.changes;
+        if (changes.firstTime === true || held === undefined) continue;
+        const skeleton = diffSkeleton(
+          shell.services.galley,
+          changes.bookId,
+          held.baselineText,
+          held.workingText,
+        );
+        if (Result.isFailure(skeleton)) continue;
+        out.push({
+          bookId: changes.bookId,
+          name: nameOf(changes.bookId),
+          currentText: held.workingText,
+          baselineText: held.baselineText,
+          skeleton: skeleton.success,
+        });
+      }
+      return out;
+    },
+    { name: "historyReviewBooks" },
+  );
+
+  const seatBook = async (bookId: BookId): Promise<EditorBook | undefined> => {
+    const project = shell.project();
+    if (project === undefined) return undefined;
+    const opened = await shell.services.run(Effect.result(project.instantiate(bookId)));
+    if (Result.isFailure(opened)) return undefined;
+    return shell.services.seated(bookId);
+  };
+
+  /**
+   * A version's own change, written into your text: for each passage `units`
+   * covers, your text takes that version's wording. Never a revert of the
+   * version, never a checkout — one ordinary edit, unsaved until Record a
+   * version, and one Undo takes it back.
+   *
+   * The match is by place in the VERSION's text, which both diffs share: a
+   * unit's `current` range here (before → this version) and a unit's
+   * `baseline` range in "your text against this version" are offsets into
+   * the same text.
+   */
+  const adopt = (bookId: BookId, units: readonly DecisionUnit[]): void => {
+    const project = shell.project();
+    const book = project?.book(bookId);
+    const versionText = shown().find((held) => held.bookId === bookId)?.changes?.workingText;
+    if (book === undefined || versionText === undefined) return;
+    const against = changesOf(shell.services.galley, book, {
+      bookId,
+      stamp: book.source().stamp,
+      text: versionText,
+    });
+    const theirs = against.changes;
+    if (theirs === undefined || theirs.units.length === 0) {
+      toasts.success({ title: t("Already in your text") });
+      return;
+    }
+    const touches = (unit: DecisionUnit, mine: DecisionUnit): boolean => {
+      const span = unit.current ?? { from: unit.place.current, to: unit.place.current };
+      const at = mine.baseline ?? { from: mine.place.baseline, to: mine.place.baseline };
+      return at.from <= span.to && span.from <= at.to;
+    };
+    const picked = theirs.units.filter((mine) => units.some((unit) => touches(unit, mine)));
+    if (picked.length === 0) {
+      toasts.success({ title: t("Already in your text") });
+      return;
+    }
+    const done = revertUnits(shell.services.galley, book, theirs, picked);
+    if (Result.isFailure(done)) {
+      toasts.error({ title: t("Adopt refused"), message: t(done.failure.reason) });
+      return;
+    }
+    toasts.success({ title: t("Adopted into your text") });
+    shell.changed({ kind: "book.apply", books: [bookId] });
   };
 
   /** Revert is offered where the right side is the book in hand. */
@@ -538,40 +637,66 @@ export function HistoryPanel() {
                   </li>
                 </Show>
                 <For each={log() ?? []}>
-                  {(commit) => (
-                    <li>
-                      <button
-                        type="button"
-                        data-commit={commit.id}
-                        aria-current={selected() === commit.id ? "true" : undefined}
-                        class={ROW}
-                        onClick={() => setSelected(commit.id)}
+                  {(commit, index) => (
+                    <>
+                      {/* Only when some versions are not shared yet: a divider
+                        above them, and one where the shared ones begin. */}
+                      <Show when={index() === 0 && onlyHere(commit.id)}>
+                        <li
+                          data-history-divider="local"
+                          class="bg-surface-secondary px-3 py-1 text-smallest font-medium text-on-surface-warning"
+                        >
+                          {t("Only on this device")}
+                        </li>
+                      </Show>
+                      <Show
+                        when={
+                          index() > 0 &&
+                          !onlyHere(commit.id) &&
+                          onlyHere((log() ?? [])[index() - 1]?.id ?? "")
+                        }
                       >
-                        <div class="flex w-full items-center gap-2">
-                          <Badge class="font-mono">{commit.id.slice(0, 7)}</Badge>
-                          <span class="min-w-0 flex-1 truncate text-small font-medium text-on-surface-primary">
-                            {commit.message}
-                          </span>
-                        </div>
-                        <div class="flex w-full flex-wrap items-center gap-x-2 gap-y-1 text-smallest text-on-surface-tertiary">
-                          <span>{commit.author.name}</span>
-                          <span aria-hidden="true">·</span>
-                          <time
-                            datetime={new Date(commit.at).toISOString()}
-                            title={exact(commit.at)}
-                          >
-                            {ago(commit.at)}
-                          </time>
-                          <For each={booksIn(commit.id)}>
-                            {(bookId) => (
-                              <span title={bookId}>
-                                <Badge tone="brand">{nameOf(bookId)}</Badge>
-                              </span>
-                            )}
-                          </For>
-                        </div>
-                      </button>
-                    </li>
+                        <li
+                          data-history-divider="shared"
+                          class="bg-surface-secondary px-3 py-1 text-smallest font-medium text-on-surface-tertiary"
+                        >
+                          {t("On the shared project")}
+                        </li>
+                      </Show>
+                      <li>
+                        <button
+                          type="button"
+                          data-commit={commit.id}
+                          aria-current={selected() === commit.id ? "true" : undefined}
+                          class={ROW}
+                          onClick={() => setSelected(commit.id)}
+                        >
+                          <div class="flex w-full items-center gap-2">
+                            <Badge class="font-mono">{commit.id.slice(0, 7)}</Badge>
+                            <span class="min-w-0 flex-1 truncate text-small font-medium text-on-surface-primary">
+                              {commit.message}
+                            </span>
+                          </div>
+                          <div class="flex w-full flex-wrap items-center gap-x-2 gap-y-1 text-smallest text-on-surface-tertiary">
+                            <span>{commit.author.name}</span>
+                            <span aria-hidden="true">·</span>
+                            <time
+                              datetime={new Date(commit.at).toISOString()}
+                              title={exact(commit.at)}
+                            >
+                              {ago(commit.at)}
+                            </time>
+                            <For each={booksIn(commit.id)}>
+                              {(bookId) => (
+                                <span title={bookId}>
+                                  <Badge tone="brand">{nameOf(bookId)}</Badge>
+                                </span>
+                              )}
+                            </For>
+                          </div>
+                        </button>
+                      </li>
+                    </>
                   )}
                 </For>
               </ul>
@@ -662,28 +787,93 @@ export function HistoryPanel() {
                           {t("{count} line(s)", { count: changes.added })}
                         </Badge>
                       </Show>
-                      {/* Reverting only means something against the text in hand. */}
-                      <Show when={changes.firstTime !== true && reverting()}>
-                        <Button
-                          size="sm"
-                          variant="tertiary"
-                          class="ms-auto"
-                          icon={<Undo2 />}
-                          onClick={() => revertFile(changes)}
+                      {/* Against the text in hand a book can go back; a version's own
+                          change can be adopted into it. */}
+                      <Show when={changes.firstTime !== true}>
+                        <Show
+                          when={reverting()}
+                          fallback={
+                            <Button
+                              size="sm"
+                              variant="tertiary"
+                              class="ms-auto"
+                              icon={<Undo2 />}
+                              onClick={() => adopt(changes.bookId, changes.changes?.units ?? [])}
+                            >
+                              {t("Adopt all into your text")}
+                            </Button>
+                          }
                         >
-                          {t("Revert file")}
-                        </Button>
+                          <Button
+                            size="sm"
+                            variant="tertiary"
+                            class="ms-auto"
+                            icon={<Undo2 />}
+                            onClick={() => revertFile(changes)}
+                          >
+                            {t("Revert file")}
+                          </Button>
+                        </Show>
                       </Show>
                     </div>
-                    <Show when={changes.firstTime !== true}>
-                      <DiffView
-                        changes={changes.changes}
-                        onRevert={reverting() ? (unit) => revertUnit(changes, unit) : undefined}
-                      />
-                    </Show>
                   </section>
                 )}
               </For>
+              {/* The changes themselves: the multibuffer Review reads with —
+                  the same cards, steps, chapter and fold-back, Open in the
+                  book. Against the text in hand a card can put that passage
+                  back (Take); for a version's own change, Adopt (on hover)
+                  writes it into your text. Neither writes a file. */}
+              <Show when={reviewBooks().length > 0}>
+                <div class="flex h-[70vh] min-h-0 flex-col" data-history-reader>
+                  <ReviewReader
+                    books={reviewBooks()}
+                    decision={() => undefined}
+                    decide={(bookId, units, side) => {
+                      if (side !== "baseline") return;
+                      const changes = shown().find((held) => held.bookId === bookId);
+                      if (changes !== undefined) announce(bookId, revertSome(changes, units));
+                    }}
+                    decidable={reverting()}
+                    adopt={
+                      reverting()
+                        ? undefined
+                        : { label: t("Adopt"), onAdopt: (bookId, units) => adopt(bookId, units) }
+                    }
+                    usfm={markup()}
+                    onUsfm={setMarkup}
+                    currentLabel={
+                      compare() === "version" && selected() !== WORKING
+                        ? t("This version")
+                        : t("Your text")
+                    }
+                    baselineLabel={
+                      selected() === WORKING
+                        ? t("Last version")
+                        : compare() === "version"
+                          ? t("Before it")
+                          : t("This version")
+                    }
+                    currentShort={
+                      compare() === "version" && selected() !== WORKING
+                        ? t("this version")
+                        : t("yours")
+                    }
+                    baselineShort={
+                      selected() === WORKING
+                        ? t("the last version")
+                        : compare() === "version"
+                          ? t("before")
+                          : t("this version")
+                    }
+                    selected={focusBook()}
+                    onSelect={setFocusBook}
+                    seat={seatBook}
+                    onEdited={(bookId) => shell.changed({ kind: "book.apply", books: [bookId] })}
+                    currentFirst={false}
+                  />
+                </div>
+              </Show>
             </Show>
           </Card>
         </div>

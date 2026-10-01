@@ -8,8 +8,8 @@
  * the two lines it should be.
  *
  * `/review` is not one of these; it lives in `src/app/ui/review/`. What is
- * here beside the panels is what History needs — `changes.ts`, `recorded.ts`
- * and the unified `DiffView`.
+ * here beside the panels is what History needs — `changes.ts` and
+ * `recorded.ts`; its changes are drawn by Review's own `ReviewReader`.
  */
 
 export { FindingsPanel } from "./FindingsPanel";

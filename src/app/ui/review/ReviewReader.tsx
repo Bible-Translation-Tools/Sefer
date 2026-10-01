@@ -157,6 +157,15 @@ export function ReviewReader(props: {
    * left.
    */
   readonly currentFirst?: boolean;
+  /**
+   * When neither side is the Book (History's "what this version changed"):
+   * each card offers to write its passage into the reader's text instead of
+   * a decision. Drawn quiet, revealed on hover where there is a fine pointer.
+   */
+  readonly adopt?: {
+    readonly label: string;
+    readonly onAdopt: (bookId: BookId, units: readonly DecisionUnit[]) => void;
+  };
 }) {
   const shell = useShell();
   const { services } = shell;
@@ -582,7 +591,22 @@ export function ReviewReader(props: {
    * it again clears them.
    */
   const cardDecision = (hunk: Hunk): readonly CardAction[] => {
-    if (!props.decidable || hunk.units.length === 0) return [];
+    if (hunk.units.length === 0) return [];
+    if (!props.decidable) {
+      const adopt = props.adopt;
+      return adopt === undefined
+        ? []
+        : [
+            {
+              kind: "button",
+              id: "adopt",
+              emphasis: "tertiary",
+              label: adopt.label,
+              title: t("Write this change into your text. Unsaved until you record a version."),
+              onPress: () => adopt.onAdopt(hunk.bookId, hunk.units),
+            },
+          ];
+    }
     const sides = new Set(hunk.units.map((unit) => props.decision(hunk.bookId, unit.id)));
     const side: MergeSide | "mixed" | undefined = sides.size !== 1 ? "mixed" : [...sides][0];
     const one = hunk.units.length === 1;

@@ -51,6 +51,19 @@
     overflow: auto;
   }
 
+  /* A quiet card action, shown on hover where a mouse can hover; always
+     shown on touch, and to the keyboard when it has focus (History's Adopt). */
+  @media (hover: hover) and (pointer: fine) {
+    [data-diff-card] [data-card-action="adopt"] {
+      opacity: 0;
+      transition: opacity 120ms ease-in-out;
+    }
+    [data-diff-card]:hover [data-card-action="adopt"],
+    [data-card-action="adopt"]:focus-visible {
+      opacity: 1;
+    }
+  }
+
   .editor-host[data-mode="usfm"] .cm-editor {
     font-family: var(--font-mono);
   }
