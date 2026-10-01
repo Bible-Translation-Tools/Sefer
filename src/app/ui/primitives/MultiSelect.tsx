@@ -12,6 +12,9 @@
  *
  * Rows are `role="option"` in an `aria-multiselectable` listbox; arrows move
  * the highlight, Enter and Space toggle it, the same as `FilterList`.
+ *
+ * `single` makes it a pick-one combobox: choosing a row closes the panel, and
+ * the listbox is not multiselectable (Find's source text).
  */
 
 import type { JSX } from "@solidjs/web";
@@ -43,6 +46,8 @@ export interface MultiSelectProps<T> {
   readonly clear?: { readonly label: string; readonly onClear: () => void };
   /** Lands on the trigger as `data-filter-group`. */
   readonly id?: string;
+  /** Pick one: a choice closes the panel. */
+  readonly single?: boolean;
 }
 
 export function MultiSelect<T>(props: MultiSelectProps<T>) {
@@ -58,13 +63,23 @@ export function MultiSelect<T>(props: MultiSelectProps<T>) {
       : props.items.filter((item) => match(item, needle));
   });
 
+  const close = (): void => {
+    setOpen(false);
+    setQuery("");
+    setCursor(0);
+  };
+  const pick = (item: T): void => {
+    props.onToggle(item);
+    if (props.single === true) close();
+  };
+
   const keys = (event: KeyboardEvent): void => {
     const rows = shown();
     if (event.key === "ArrowDown") setCursor((at) => Math.min(at + 1, rows.length - 1));
     else if (event.key === "ArrowUp") setCursor((at) => Math.max(at - 1, 0));
     else if (event.key === "Enter" || (event.key === " " && props.match === undefined)) {
       const row = rows[cursor()];
-      if (row !== undefined) props.onToggle(row);
+      if (row !== undefined) pick(row);
     } else return;
     event.preventDefault();
   };
@@ -130,7 +145,7 @@ export function MultiSelect<T>(props: MultiSelectProps<T>) {
       >
         <ul
           role="listbox"
-          aria-multiselectable="true"
+          aria-multiselectable={props.single === true ? undefined : "true"}
           aria-label={props.label}
           tabindex={props.match === undefined ? 0 : -1}
           class="-mx-1 min-h-0 overflow-y-auto px-1 outline-none"
@@ -149,7 +164,7 @@ export function MultiSelect<T>(props: MultiSelectProps<T>) {
                   "data-cursor:bg-surface-secondary",
                 )}
                 onMouseEnter={() => setCursor(index())}
-                onClick={() => props.onToggle(item)}
+                onClick={() => pick(item)}
               >
                 <Check
                   size={14}

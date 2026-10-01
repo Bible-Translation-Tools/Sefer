@@ -18,9 +18,12 @@ import { Show } from "solid-js";
 import type { BookId } from "#core/book/book";
 import type { Facet, Facets, FindingsFilter } from "#core/findings/filter";
 import type { Producer, Severity } from "#core/findings/finding";
+import { bookName } from "#core/location/canon";
 
 import { t } from "../../i18n";
+import { useShell } from "../../ProjectContext";
 import { Badge, Input, MultiSelect, Switch, ToggleGroup, cx, severityTone } from "../primitives";
+import { metadataOf } from "../workspace/project";
 import { chosen, narrowed, toggled, type FindingsFilterState } from "./findingsFilter";
 
 const countOf = <T,>(rows: readonly Facet<T>[], value: T): number =>
@@ -37,6 +40,9 @@ export interface FindingsFiltersProps {
 
 export function FindingsFilters(props: FindingsFiltersProps) {
   const filter = (): FindingsFilter => props.state.filter();
+  const shell = useShell();
+  /** What the project calls a book, else the English name, else its id. */
+  const nameOf = (bookId: BookId): string => bookName(bookId, metadataOf(shell.project()));
 
   /** "2 of 3" for an allow-list, and nothing at all when it allows everything. */
   const some = (kept: number, total: number): string =>
@@ -95,14 +101,14 @@ export function FindingsFilters(props: FindingsFiltersProps) {
         narrowed={filter().books !== null}
         items={props.books}
         key={(bookId: BookId) => bookId}
-        match={byText}
+        match={(bookId, query) => byText(nameOf(bookId), query) || byText(bookId, query)}
         selected={(bookId) => chosen(filter().books, bookId)}
         onToggle={(bookId) => props.state.update({ books: narrowed(filter().books, bookId) })}
         clear={{ label: t("All books"), onClear: () => props.state.update({ books: null }) }}
       >
         {(bookId) => (
           <>
-            <span class="flex-1">{bookId}</span>
+            <span class="flex-1">{nameOf(bookId)}</span>
             <Badge>{countOf(props.facets.books, bookId)}</Badge>
           </>
         )}

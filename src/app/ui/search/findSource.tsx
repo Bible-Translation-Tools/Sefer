@@ -13,7 +13,7 @@
  */
 
 import { Effect, Option, Result } from "effect";
-import { For, createEffect, createSignal } from "solid-js";
+import { Show, createEffect, createSignal } from "solid-js";
 
 import type { BookId } from "#core/book/book";
 import type { BookText, Excerpt } from "#core/excerpts/excerpts";
@@ -25,7 +25,7 @@ import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import type { Paired } from "../excerpts";
 import { listProjects, type ProjectSummary } from "../landing/summaries";
-import { Select } from "../primitives";
+import { MultiSelect } from "../primitives";
 
 /** One source book: still being read, absent from the source, or read. */
 type Held = { readonly kind: "loading" } | { readonly kind: "missing" } | BookText;
@@ -160,18 +160,39 @@ export function createFindSource(onBound: () => void) {
   /** Is a source shown beside the results? */
   const shown = (): boolean => show() && resource() !== undefined;
 
+  /** The picker's rows: "no source text", then every other project here. */
+  type Row = { readonly root: string; readonly name: string; readonly language: string };
+  const rows = (): readonly Row[] => [
+    { root: NONE, name: t("No source text"), language: "" },
+    ...choices().map((row) => ({ root: row.root, name: row.name, language: row.language })),
+  ];
+  const chosen = (): string => (shown() ? (resource()?.id ?? NONE) : NONE);
+
   const Picker = () => (
-    <Select
-      size="sm"
-      wrapperClass="w-56"
-      aria-label={t("Source text")}
-      data-testid="find-source"
-      value={shown() ? (resource()?.id ?? NONE) : NONE}
-      onChange={(event) => choose(event.currentTarget.value)}
+    <MultiSelect
+      single
+      id="find-source"
+      label={t("Source text")}
+      summary={shown() ? (resource()?.title ?? "") : t("none")}
+      narrowed={shown()}
+      items={rows()}
+      key={(row: Row) => row.root}
+      match={(row, query) =>
+        `${row.name} ${row.language}`.toLowerCase().includes(query.toLowerCase())
+      }
+      placeholder={t("Search texts…")}
+      selected={(row) => row.root === chosen()}
+      onToggle={(row) => choose(row.root)}
     >
-      <option value={NONE}>{t("No source text")}</option>
-      <For each={choices()}>{(row) => <option value={row.root}>{row.name}</option>}</For>
-    </Select>
+      {(row) => (
+        <span class="flex min-w-0 flex-1 flex-col">
+          <span class="truncate">{row.name}</span>
+          <Show when={row.language !== ""}>
+            <span class="text-smallest text-on-surface-tertiary">{row.language}</span>
+          </Show>
+        </span>
+      )}
+    </MultiSelect>
   );
 
   return { resource, shown, pairedOf, Picker };
