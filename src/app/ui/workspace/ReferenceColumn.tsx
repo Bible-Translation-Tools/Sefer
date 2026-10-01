@@ -215,8 +215,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       });
   };
 
-  const hasSource = (): boolean => entries().some((entry) => entry.role === "source");
-
   /** The picker for one slot. A source holds one; references hold many. */
   const Picker = (pickerProps: { readonly role: Role }) => (
     <Popover
@@ -335,15 +333,17 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         {(held) => <Stack list={held.list} book={held.book} />}
       </Show>
 
-      {/* One source, as many references as you like. The pickers live under
-          the panes rather than between them: a pane is a page of scripture,
-          and a button between two pages is a button in the reading. */}
-      <div class="flex shrink-0 flex-col gap-1.5">
-        <Show when={!hasSource()}>
+      {/* One text for now: a source, and only while there is none. The
+          source/reference distinction was not clear to people, so the
+          reference picker is gone until it is; references bound before still
+          show. The picker lives under the pane rather than above it: a pane
+          is a page of scripture, and a button above it is a button in the
+          reading. */}
+      <Show when={!loading() && entries().length === 0}>
+        <div class="flex shrink-0 flex-col gap-1.5">
           <Picker role="source" />
-        </Show>
-        <Picker role="reference" />
-      </div>
+        </div>
+      </Show>
     </aside>
   );
 }

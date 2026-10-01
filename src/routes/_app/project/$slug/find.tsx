@@ -27,7 +27,9 @@ import {
   Input,
   PanelHeader,
   SegmentedControl,
+  Switch,
 } from "#app/ui/primitives";
+import { createFindSource } from "#app/ui/search/findSource";
 import { ShellGate } from "#app/ui/ShellGate";
 import * as Workflows from "#app/workflows/references";
 import type { BookId } from "#core/book/book";
@@ -288,14 +290,17 @@ function Find() {
    * asked.
    */
   const [bound, setBound] = createSignal(Workflows.EMPTY, { name: "boundReferences" });
+  /** Raised when the source picker binds a new source, so the corpus is told. */
+  const [rebound, setRebound] = createSignal(0, { name: "findRebound" });
+  const source = createFindSource(() => setRebound((held) => held + 1));
 
   createEffect(
     // `project.id`, not `root`: the id is the key `Library.bind` writes under,
     // and for a project that declares an identifier the two are different
     // strings (`core/project/project.ts`). Keyed by root, this resolved nothing
     // and the references scope was quietly unavailable.
-    () => shell.project()?.id,
-    (id) => {
+    () => ({ id: shell.project()?.id, tick: rebound() }),
+    ({ id }) => {
       if (id === undefined) {
         setBound(Workflows.EMPTY);
         return;
@@ -561,10 +566,8 @@ function Find() {
    * handed to `run` rather than read back from it for the reason `Over`
    * exists — Solid batches, and the signals are not written yet.
    *
-   * `untrack` around the call says what the search is: a one-time read of the
-   * toggles as they stand. Tracking them here would re-run the search when
-   * "match case" was pressed, which is a change to what the NEXT search means,
-   * not an instruction to run one.
+   * `untrack` around the call keeps the toggles out of THIS effect: they have
+   * their own, below, which re-runs the search without rewriting the box.
    */
   createEffect(
     () => ({ q: asked(), scope: scope() }),
@@ -573,6 +576,23 @@ function Find() {
       untrack(() => {
         void run({ scope: now.scope, text: now.q });
       });
+    },
+  );
+
+  /**
+   * A toggle pressed re-runs the search, as every find box people know does.
+   * Not on mount — the URL effect above has already searched — and through
+   * `commit`, so text typed but not yet entered is what gets searched.
+   */
+  let toggled = false;
+  createEffect(
+    () => [matchCase(), wholeWord(), regex(), markup()],
+    () => {
+      if (!toggled) {
+        toggled = true;
+        return;
+      }
+      untrack(commit);
     },
   );
 
@@ -785,31 +805,34 @@ function Find() {
 
             <SegmentedControl
               label={t("Scope")}
-              value={scope()}
-              onChange={(next) =>
-                ask({
-                  scope: next === "book" ? "book" : next === "reference" ? "reference" : "project",
-                })
-              }
+              value={scope() === "reference" ? "project" : scope()}
+              onChange={(next) => ask({ scope: next === "book" ? "book" : "project" })}
               items={[
-                { value: "book", label: t("This book"), disabled: focusedBook() === undefined },
-                { value: "project", label: t("Whole project") },
                 {
-                  value: "reference",
-                  label: t("Reference"),
-                  disabled: !hasReference(),
-                  title: hasReference()
-                    ? t("{count} reference book(s) bound to this project", {
-                        count: bound().ids.length,
-                      })
-                    : t("Bind a source or reference resource to this project to search it."),
+                  value: "book",
+                  label: t("This book"),
+                  disabled: focusedBook() === undefined || scope() === "reference",
                 },
+                { value: "project", label: t("Whole project"), disabled: scope() === "reference" },
               ]}
             />
 
             <Button variant="primary" size="sm" onClick={commit}>
               {t("Find")}
             </Button>
+
+            {/* Two axes: which text is shown beside yours (the picker), and
+                which text is searched (the switch). Either without the other. */}
+            <div class="flex basis-full flex-wrap items-center gap-3">
+              <span class="text-small text-on-surface-secondary">{t("Source text")}</span>
+              <source.Picker />
+              <Switch
+                label={t("Search the source text")}
+                checked={scope() === "reference"}
+                disabled={!hasReference()}
+                onChange={(on) => ask({ scope: on ? "reference" : "project" })}
+              />
+            </div>
 
             <div class="ms-auto flex items-center gap-1">
               {/* The gap is stated, never swallowed. A reference search counts
@@ -920,7 +943,9 @@ function Find() {
           focus={cursorSid()}
           activeHit={cursorAt()}
           mode={mode()}
-          pairedOf={scope() === "reference" ? pairedOf : undefined}
+          pairedOf={
+            !source.shown() ? undefined : scope() === "reference" ? pairedOf : source.pairedOf
+          }
           empty={
             <EmptyState
               icon={<SearchIcon size={22} />}
