@@ -84,6 +84,7 @@ import {
   Popover,
   Select,
   toasts,
+  usePageLeading,
 } from "../primitives";
 import { RecoveryBanner } from "../recovery/RecoveryBanner";
 import { bookName } from "../workspace/books";
@@ -110,6 +111,7 @@ const keyOf = (bookId: BookId, unitId: string): string => `${bookId}\0${unitId}`
 
 export function ReviewPanel() {
   const shell = useShell();
+  const pageLeading = usePageLeading();
   const navigate = useNavigate();
   const { services } = shell;
   // SAFETY: `strict: false` gives the union of every route's search; both
@@ -1145,6 +1147,7 @@ export function ReviewPanel() {
             the primary button. Everything else is in the menu — the reading
             below is what this screen is for. */}
         <header class="flex min-w-0 flex-wrap items-center gap-2 pe-12" data-review-header>
+          {pageLeading()}
           <h1 class="text-h3 font-semibold text-on-surface-primary">{t("Review")}</h1>
           <Popover
             label={t("What is compared")}

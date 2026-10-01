@@ -392,6 +392,36 @@
   scrollbar-color: var(--surface-tertiary) transparent;
 }
 
+/* A scrollbar that IS the container's right padding: a 16px track, always
+   reserved, with a 6px thumb centred in it — clear of the panel edge beside
+   it, which is a resize handle. No `scrollbar-width` here: Chrome ignores the
+   `::-webkit-scrollbar` rules on an element that sets it, so the standard
+   properties are only the fallback for engines without them (Firefox). */
+@utility scrollbar-padded {
+  scrollbar-gutter: stable;
+  &::-webkit-scrollbar {
+    width: 16px;
+    background: transparent;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+    border: 0;
+  }
+  &::-webkit-scrollbar-thumb {
+    background-color: var(--surface-tertiary);
+    background-clip: padding-box;
+    border: 5px solid transparent;
+    border-radius: 9999px;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--surface-tertiary), var(--on-surface-primary) 25%);
+  }
+  @supports not selector(::-webkit-scrollbar) {
+    scrollbar-width: thin;
+    scrollbar-color: var(--surface-tertiary) transparent;
+  }
+}
+
 /* The reset essentials, in Tailwind's own `base` layer so every utility
    outranks them. Preflight already ships most of this; what stays is the part
    that is ours — the focus ring, the UI family, the tabular table figures. */

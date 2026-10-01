@@ -3,16 +3,15 @@
  *
  * It sits left of the book's title in the editor toolbar, nearest the panel,
  * and on a project
- * screen with no such title (terms, findings, history…) in the same top-left
- * spot, in a narrow column of its own (`PanelToggleColumn`) so it covers
- * nothing. Because the button is outside the panel it survives the panel
+ * screen with no such title (terms, findings, history…) at the start of that
+ * screen's page header, inline with its title (`usePanelToggleLeading`). Because the button is outside the panel it survives the panel
  * being hidden, and is the way back. `Mod-b` does the same, and dragging the
  * panel's edge closed hides it too (`onCollapse` in _app.tsx).
  */
 
+import type { JSX } from "@solidjs/web";
 import PanelLeftClose from "lucide-solid/icons/panel-left-close";
 import PanelLeftOpen from "lucide-solid/icons/panel-left-open";
-import { Show } from "solid-js";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
@@ -34,24 +33,15 @@ export function PanelToggle() {
 }
 
 /**
- * The toggle for a project screen that has no editor toolbar to carry it.
- * Rendered ONCE by the workspace, beside `BackToEditor`, so a screen added
- * later gets it without knowing it exists; the book route's toolbar has its
- * own, next to the title.
+ * The toggle for a project screen that has no editor toolbar to carry it:
+ * handed to that screen's page header (`PageLeading`), so it sits inline
+ * with the title. Provided ONCE by the workspace, so a screen added later
+ * gets it without knowing it exists; the book route's toolbar has its own.
  */
-export function PanelToggleColumn() {
+export function usePanelToggleLeading(): () => JSX.Element | undefined {
   const shell = useShell();
   const screen = useScreen();
   const wanted = (): boolean =>
     shell.project() !== undefined && screen.inProject() && !screen.onEditor();
-  return (
-    <Show when={wanted()}>
-      {/* 24px down, the page's own padding, so this 48px button shares its
-          centre line with the page header (`PanelHeader`'s 48px row) and the
-          project card beside it (`ProjectControl`: 16px down, 64px tall). */}
-      <div class="shrink-0 ps-2 pt-6">
-        <PanelToggle />
-      </div>
-    </Show>
-  );
+  return () => (wanted() ? <PanelToggle /> : undefined);
 }

@@ -10,6 +10,7 @@
  * `onEdit`, and the card swaps this view for a satellite with the caret there.
  */
 
+import { EditorView } from "@codemirror/view";
 import { createEffect, createMemo, createSignal, untrack } from "solid-js";
 
 import type { Analysis } from "#core/galley";
@@ -50,6 +51,12 @@ export interface ExcerptReaderProps {
   readonly onEdit?: (at: number | undefined, point?: { x: number; y: number }) => void;
   /** One click edits, and the reader is a tab stop; otherwise a double-click. */
   readonly direct?: boolean;
+  /**
+   * Handed the view's own scroll-to: `at` (a source offset, the view's
+   * document being the source) brought to the top of whatever scrolls it —
+   * the editor's `scrollIntoView`, as the book editor lands on a verse.
+   */
+  readonly onReveal?: (reveal: (at: number) => void) => void;
 }
 
 export function ExcerptReader(props: ExcerptReaderProps) {
@@ -103,6 +110,17 @@ export function ExcerptReader(props: ExcerptReaderProps) {
       return () => {
         mount.destroy();
       };
+    },
+  );
+
+  createEffect(
+    () => live(),
+    (mount) => {
+      if (mount === undefined || !("view" in mount)) return;
+      const view = mount.view;
+      props.onReveal?.((at) => {
+        view.dispatch({ effects: EditorView.scrollIntoView(at, { y: "start" }) });
+      });
     },
   );
 

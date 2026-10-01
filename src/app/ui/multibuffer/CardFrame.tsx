@@ -99,6 +99,7 @@ export function CardFrame(props: CardFrameProps) {
   return (
     <Card
       padded={props.flush === true}
+      raised={props.condensed !== true}
       size={props.flush === true ? "lg" : "md"}
       {...props.data}
       data-editing={editing() ? "true" : undefined}
@@ -117,7 +118,7 @@ export function CardFrame(props: CardFrameProps) {
         props.flush === true &&
           "transition-[padding,opacity] duration-300 ease-in-out motion-reduce:transition-none",
         props.condensed === true &&
-          "cursor-pointer py-4 opacity-60 hover:opacity-100 focus-visible:opacity-100",
+          "cursor-pointer opacity-60 hover:opacity-100 focus-visible:opacity-100",
       )}
       onClick={() => {
         if (props.condensed === true) props.onActivate?.();

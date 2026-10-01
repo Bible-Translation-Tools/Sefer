@@ -342,7 +342,13 @@ export function StetView(props: StetViewProps) {
    */
   const terms = () => (
     <>
-      <nav aria-label={t("Spiritual terms")} class="min-h-0 flex-1 overflow-y-auto px-4 pt-4 pb-4">
+      {/* Rows line up with the project card above: 16px each side, the right
+          16px being the scrollbar's own track (`scrollbar-padded`), reserved
+          whether or not it scrolls. */}
+      <nav
+        aria-label={t("Spiritual terms")}
+        class="scrollbar-padded min-h-0 flex-1 overflow-y-auto ps-4 pt-4 pb-4"
+      >
         <Show
           when={!(props.loading === true && props.terms.length === 0)}
           fallback={
@@ -378,7 +384,7 @@ export function StetView(props: StetViewProps) {
           data-term={rowProps.term.id}
           aria-expanded={open() ? "true" : "false"}
           data-open={open() ? "" : undefined}
-          class="flex w-full cursor-pointer items-center gap-2 rounded-lg p-3 text-start text-small transition-colors data-open:font-semibold data-open:text-brand not-data-open:text-sidebar-on-surface not-data-open:hover:bg-sidebar-surface-hover"
+          class="flex w-full cursor-pointer items-center gap-2 rounded-lg px-4 py-3 text-start text-small transition-colors data-open:font-semibold data-open:text-brand not-data-open:text-sidebar-on-surface not-data-open:hover:bg-sidebar-surface-hover"
           onClick={() => props.onSelect(rowProps.term.id)}
         >
           <span class="min-w-0 flex-1 truncate">{rowProps.term.term}</span>
@@ -398,7 +404,7 @@ export function StetView(props: StetViewProps) {
         </button>
 
         <Show when={open()}>
-          <div class="flex flex-col gap-2 px-3 pb-3">
+          <div class="flex flex-col gap-2 px-4 pb-3">
             <Show when={rowProps.term.definition !== ""}>
               <Definition text={rowProps.term.definition} />
             </Show>
