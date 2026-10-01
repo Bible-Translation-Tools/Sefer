@@ -68,13 +68,6 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
     },
   );
 
-  // The focused book's row of the shell's `books` store. Same answer as
-  // reading the Book, but only this book's edits wake it.
-  const stamp = () => {
-    const book = shell.focused();
-    return book === undefined ? undefined : shell.stampOf(book.id);
-  };
-
   const dirty = (): boolean => {
     const book = shell.focused();
     return book !== undefined && shell.unsaved(book);
@@ -165,10 +158,6 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                 </div>
 
                 <div class="flex gap-4 px-1 text-smallest tabular-nums text-on-surface-tertiary">
-                  <span data-revision={stamp()?.revision}>
-                    {t("r{revision}", { revision: stamp()?.revision ?? 0 })}
-                  </span>
-                  <span>{t("{length} chars", { length: stamp()?.length ?? 0 })}</span>
                   <span data-dirty={String(dirty())} data-save-state={state()}>
                     {stateLabel()}
                   </span>
