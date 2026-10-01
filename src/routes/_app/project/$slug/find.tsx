@@ -26,11 +26,13 @@ import {
   IconButton,
   Input,
   PanelHeader,
+  MultiSelect,
   SegmentedControl,
   Switch,
 } from "#app/ui/primitives";
 import { createFindSource } from "#app/ui/search/findSource";
 import { ShellGate } from "#app/ui/ShellGate";
+import { metadataOf } from "#app/ui/workspace/project";
 import * as Workflows from "#app/workflows/references";
 import type { BookId } from "#core/book/book";
 import {
@@ -41,6 +43,7 @@ import {
 } from "#core/excerpts/excerpts";
 import { bookHeading, type Analysis } from "#core/galley";
 import type { Address } from "#core/location/address";
+import { bookName, testamentOf } from "#core/location/canon";
 import { createFreshReadings, createReadings } from "#core/search/reading";
 import * as Search from "#core/search/search";
 
@@ -92,7 +95,7 @@ import * as Search from "#core/search/search";
  * — the pair STET renders for a source verse. The reference side is never
  * editable, because there is no Book behind it and nothing to write to.
  */
-type Scope = "book" | "project" | "reference";
+type Scope = "book" | "project" | "ot" | "nt" | "custom" | "reference";
 
 /**
  * The last path segment of a registered reference id.
@@ -333,8 +336,27 @@ function Find() {
   });
 
   const focusedBook = (): BookId | undefined => shell.focused()?.id;
+
+  /** The books a Custom scope searches; empty until somebody picks. */
+  const [custom, setCustom] = createSignal<readonly BookId[]>([], { name: "findCustomBooks" });
+  const projectBooks = (): readonly BookId[] => shell.project()?.books.map((book) => book.id) ?? [];
+  const inTestament = (testament: "ot" | "nt"): readonly BookId[] =>
+    projectBooks().filter((id) => testamentOf(id) === testament);
+  /** Only a project with books in BOTH testaments offers OT and NT: one is the whole project. */
+  const splits = (): boolean => inTestament("ot").length > 0 && inTestament("nt").length > 0;
+
+  /** The books a scope limits the search to, or `undefined` for every book. */
+  const booksFor = (want: Scope): readonly BookId[] | undefined => {
+    if (want === "book") {
+      const focused = focusedBook();
+      return focused === undefined ? undefined : [focused];
+    }
+    if (want === "ot" || want === "nt") return inTestament(want);
+    if (want === "custom") return custom();
+    return undefined;
+  };
   const signature = (q: Search.Query, want: Scope): string =>
-    JSON.stringify([want, focusedBook(), q.text, q.caseSensitive, q.wholeWord, q.regex, markup()]);
+    JSON.stringify([want, booksFor(want), q.text, q.caseSensitive, q.wholeWord, q.regex, markup()]);
 
   /**
    * One search, through whichever door the toggles name.
@@ -356,12 +378,12 @@ function Find() {
     const books = project.books;
     const staticQuery = query(over);
     const want = over?.scope ?? scope();
-    const only = want === "book" ? focusedBook() : undefined;
+    const only = booksFor(want);
     // No limit. Every hit, and the count beside the box is therefore the
     // answer rather than a ceiling — see `Search.MINIMUM_QUERY` for the
     // measurements that say a project-wide find can afford it.
     const options: Search.Options =
-      only === undefined ? { analysisOf } : { books: [only], analysisOf };
+      only === undefined ? { analysisOf } : { books: only, analysisOf };
     if (staticQuery.text === "") {
       setHits([]);
       setReferenceHits([]);
@@ -387,7 +409,7 @@ function Find() {
     // Keep the query itself out of telemetry: it can contain manuscript text.
     const search = shell.services.composition.observability.operation("find.run", {
       "find.scope": want,
-      "find.books": only === undefined ? books.length : 1,
+      "find.books": only === undefined ? books.length : only.length,
       "find.regex": staticQuery.regex === true,
       "find.case": staticQuery.caseSensitive === true,
       "find.whole_word": staticQuery.wholeWord === true,
@@ -466,7 +488,8 @@ function Find() {
     if (project === undefined || book === undefined) return;
     // Not a book search, or not one this list holds: the whole search again.
     if (want === "reference" || !Search.longEnough(staticQuery.text)) return;
-    if (want === "book" && focusedBook() !== bookId) return;
+    const only = booksFor(want);
+    if (only !== undefined && !only.includes(bookId)) return;
     const op = shell.services.composition.observability.operation("find.retake", {
       "find.book": bookId,
       "find.markup": markup(),
@@ -586,7 +609,7 @@ function Find() {
    */
   let toggled = false;
   createEffect(
-    () => [matchCase(), wholeWord(), regex(), markup()],
+    () => [matchCase(), wholeWord(), regex(), markup(), scope() === "custom" ? custom() : 0],
     () => {
       if (!toggled) {
         toggled = true;
@@ -822,7 +845,7 @@ function Find() {
                 size="sm"
                 label={t("Scope")}
                 value={scope() === "reference" ? "project" : scope()}
-                onChange={(next) => ask({ scope: next === "book" ? "book" : "project" })}
+                onChange={(next) => ask({ scope: next })}
                 items={[
                   {
                     value: "book",
@@ -834,8 +857,49 @@ function Find() {
                     label: t("Whole project"),
                     disabled: scope() === "reference",
                   },
+                  ...(splits()
+                    ? [
+                        { value: "ot" as const, label: t("OT"), disabled: scope() === "reference" },
+                        { value: "nt" as const, label: t("NT"), disabled: scope() === "reference" },
+                      ]
+                    : []),
+                  { value: "custom", label: t("Custom"), disabled: scope() === "reference" },
                 ]}
               />
+              {/* Custom: any books of the project, by the names it gives them. */}
+              <Show when={scope() === "custom"}>
+                <MultiSelect
+                  id="find-books"
+                  label={t("Books")}
+                  summary={
+                    custom().length === 0
+                      ? t("none")
+                      : t("{kept} of {total}", {
+                          kept: custom().length,
+                          total: projectBooks().length,
+                        })
+                  }
+                  narrowed={custom().length > 0}
+                  items={projectBooks()}
+                  key={(id: BookId) => id}
+                  match={(id, query) =>
+                    `${id} ${bookName(id, metadataOf(shell.project()))}`
+                      .toLowerCase()
+                      .includes(query.toLowerCase())
+                  }
+                  selected={(id) => custom().includes(id)}
+                  onToggle={(id) =>
+                    setCustom((held) =>
+                      held.includes(id)
+                        ? held.filter((book) => book !== id)
+                        : projectBooks().filter((book) => book === id || held.includes(book)),
+                    )
+                  }
+                  clear={{ label: t("No books"), onClear: () => setCustom([]) }}
+                >
+                  {(id) => <span class="flex-1">{bookName(id, metadataOf(shell.project()))}</span>}
+                </MultiSelect>
+              </Show>
               {/* Which text is shown beside yours, and which is searched:
                   either without the other. */}
               <div class="flex items-center gap-3">
@@ -910,7 +974,12 @@ function Find() {
                     {t("Replace {count} match(es) in {books} book(s) within {scope}.", {
                       count: held.hits.length,
                       books: new Set(held.hits.map((hit) => hit.bookId)).size,
-                      scope: scope() === "book" ? t("this book") : t("the project"),
+                      scope:
+                        scope() === "book"
+                          ? t("this book")
+                          : scope() === "project"
+                            ? t("the project")
+                            : t("the chosen books"),
                     })}
                   </p>
                   <p class="text-on-surface-secondary">
@@ -988,7 +1057,11 @@ function Find() {
 export const Route = createFileRoute("/_app/project/$slug/find")({
   validateSearch: (search: Record<string, unknown>): FindSearch => ({
     ...(typeof search["q"] === "string" && search["q"] !== "" ? { q: search["q"] } : {}),
-    ...(search["scope"] === "book" || search["scope"] === "reference"
+    ...(search["scope"] === "book" ||
+    search["scope"] === "ot" ||
+    search["scope"] === "nt" ||
+    search["scope"] === "custom" ||
+    search["scope"] === "reference"
       ? { scope: search["scope"] }
       : {}),
   }),
