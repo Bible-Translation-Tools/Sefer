@@ -53,12 +53,7 @@ import { mintSlug } from "#core/project/slug";
 import { DEFAULT_JOURNAL_POLICY } from "#core/recovery/recovery";
 import { SaveCoordinator } from "#core/save/saveCoordinator";
 import type { SourceStamp } from "#core/source/source";
-import {
-  anchorFrom,
-  type ChapterRow,
-  type EditorBook,
-  type ProjectionName,
-} from "#editor/index";
+import { anchorFrom, type ChapterRow, type EditorBook, type ProjectionName } from "#editor/index";
 import { detectHost } from "#platform/host";
 
 import { registerShellCommands, type ShellBridge } from "./commands";
@@ -84,6 +79,7 @@ import { sousValues } from "./sousSettings";
 import { checkForChanges } from "./syncActions";
 import { syncPreferences } from "./syncSettings";
 import { applyEditorFontSize } from "./ui/theme";
+import * as Workflows from "./workflows/references";
 
 export type { SaveState } from "./shellStores";
 
@@ -583,13 +579,28 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   // path an edit takes. The findings judged under the old settings stay on
   // screen, marked pending, until that pass's Publication replaces them: a
   // list torn down and rebuilt for a ~100 ms pass is a flash, not news.
+  //
+  // Copied source words is the one check that needs more than a re-judge:
+  // the engine keeps a source's words only if that check was on when the
+  // source was registered. Turned on, the references are sent again first.
+  let copying = sousValues(services.settings.get(keys.sousSettings)).source_copy;
   services.galley.setSettings(sousValues(services.settings.get(keys.sousSettings)));
   const judging = services.runtime.runFork(
     Stream.runForEach(services.settings.changes(keys.sousSettings), (overrides) =>
       Effect.sync(() => {
-        services.galley.setSettings(sousValues(overrides));
-        services.projectAnalysis.rejudge();
+        const next = sousValues(overrides);
+        services.galley.setSettings(next);
         changed({ kind: "corpus.rejudge" });
+        const project = live;
+        const resend = next.source_copy && !copying && project !== undefined;
+        copying = next.source_copy;
+        if (!resend) {
+          services.projectAnalysis.rejudge();
+          return;
+        }
+        void services
+          .run(Workflows.bindReferences(project.id, { fresh: true }))
+          .then(() => services.projectAnalysis.rejudge());
       }),
     ),
   );
@@ -937,6 +948,16 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       unmountRecovery();
     };
     changed({ kind: "project.open" });
+    // The project's source and references, registered with the corpus as it
+    // opens, so the checks against a source text have one without anybody
+    // visiting Find first. In the background; once they are in, ONE book is
+    // invalidated, which is a pass and so a publication that reads them —
+    // not a re-judge, which would re-analyse every book.
+    void services.run(Workflows.bindReferences(ready.id)).then((bound) => {
+      const first = ready.books[0]?.id;
+      if (live === ready && bound.ids.length > 0 && first !== undefined)
+        services.projectAnalysis.invalidate(first);
+    });
     report(t("opened {name} ({count} books)", { name: ready.root, count: ready.books.length }));
   };
 
