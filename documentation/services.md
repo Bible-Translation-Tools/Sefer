@@ -459,7 +459,7 @@ A JSONL journal of edits to the dirty buffer, debounced and compacted. On open, 
 
 ### Overview
 
-One port answered by isomorphic-git over OPFS on Web and git2 0.21 through Rust commands on desktop: commit (with decision-commit parents), mergeBase, log, show, `previousVersions`, branch, resolve, `changedPathsBetween`. Every call runs in its repository's lane — one writer per repository, across tabs by Web Locks — under a lifecycle (absent / opening / ready / busy / unhealthy / closing). Intake gives every arriving project a repository and an arrival commit, adopting an arriving `.git` through an allowlist. History is a list of versions with a diff against working and a per-hunk Revert. `src/core/git`, `src-tauri/src/git.rs`. → [git](architecture/git.md), [desktop](architecture/desktop.md)
+One port answered by isomorphic-git over OPFS on Web and git2 0.21 through Rust commands on desktop: commit (with decision-commit parents), mergeBase, log, show, `previousVersions`, branch, resolve, `changedPathsBetween`. Every call runs in its repository's lane — one writer per repository, across tabs by Web Locks — under a lifecycle (absent / opening / ready / busy / unhealthy / closing). Intake gives every arriving project a repository and an arrival commit, adopting an arriving `.git` through an allowlist. History is a list of versions with a diff against working and a per-hunk Revert; on the Web a book's history comes from the book-change index (built in a worker, extended at each change of HEAD), which fixed Genesis's history on en_ulb and the unbounded walk. `src/core/git`, `src-tauri/src/git.rs`. → [git](architecture/git.md), [desktop](architecture/desktop.md)
 
 ### Constraints and known bugs
 
@@ -467,8 +467,6 @@ The flow needs one top-to-bottom pass before more is added.
 
 - The lifecycle, the lanes and the desktop commands are built but the desktop app has not been run against them; Web Locks across two tabs has not been exercised either (2026-09-30).
 - The only repair an `unhealthy` repository allows is aborting a merge; there is no screen for it.
-- Web `previousVersions` walks the whole log with no `depth`. (Spec §15, bug 14: fixed by the history index, `planning/01-discussing/diff-and-sync-model-2026-09-23.md` §7.)
-- Web `log(repo, path)` (so `previousVersions` and `show` too) fails on real histories: isomorphic-git 1.42 parses every tree it walks and throws `UnsafeFilepathError` on an entry name git itself accepts, and one throw loses the whole result. `WycliffeAssociates/en_ulb`'s 2018 root tree has `00-About_the_ULB\ULB-Intro.md`, so Genesis history fails outright (native git: 156 changes). The `/playground/history-diff` spike walks raw tree objects instead (`src/dev/playground/bookHistory.ts`, matches native `git log -- 01-GEN.usfm` exactly); the port itself is unchanged. (Spec §15, bug 13: fixed when History reads through the index's object reader, §7.)
 
 ### Ideas / future
 

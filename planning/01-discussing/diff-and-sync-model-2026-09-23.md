@@ -66,7 +66,7 @@ On the `git-lifecycle` branch, in the order agreed (lanes, facts and policy, hos
 
 **Where it differs from the text below:**
 
-- **The history index ([§7](#7-the-history-index)) and shallow clone plus deepen are deferred.** Nothing in this build consumes them before History does: the merge base comes from `Git.mergeBase`, and survey diffs only the books `changedPathsBetween` names. §15's 13 and 14 stay open with it.
+- **The history index ([§7](#7-the-history-index)) is built on the Web only, and without shallow clone or deepen.** `src/core/history/bookIndex.ts` (pure, over an `ObjectReader`), answered by isomorphic-git through the pack view in a worker (`src/platform/web/history/`), stored at `/sefer/history/<root>.json`, extended when HEAD moves. The Web Git layer's `log(path)` and `previousVersions` for a top-level book read it, and `show` reads raw trees, which fixes §15's 13 and 14. Desktop keeps git2's native walk, which has neither bug. The sync path still uses `Git.mergeBase` and `changedPathsBetween`; the index's merge base is not wired, because nothing needs it yet. Shallow clone and deepen stay deferred.
 - **No Rust mutex.** Tauri runs non-async commands one at a time; the one writer is the TS lane on both hosts.
 - **The adoption allowlist keeps `refs/tags`** as well as `refs/heads`.
 - **A lifecycle refusal on `Remote` is `Rejected`**, and on `Git` `Refused`, so no caller's error handling changed.
@@ -499,7 +499,7 @@ Never recorded: a path beyond its last segment, a URL, an account name, or any t
 
 ## 15. Bugs this work fixes
 
-Fixed on `git-lifecycle`: 1–12. Open: 13 and 14, which go with the history index.
+Fixed on `git-lifecycle`: all fourteen. 13 and 14 by the history index on the Web (checked on a clone of en_ulb: Genesis, Psalms and Matthew match native `git log -- <book>` exactly, and the oldest Genesis version's bytes match `git show`).
 
 1. Open Books are not reloaded after a pull or Combine, so the next save reverts the incoming work ([§11](#11-receiving)).
 2. Web `pull` can merge automatically; desktop refuses. Receive becomes fetch + fast-forward on both hosts ([§11](#11-receiving)).

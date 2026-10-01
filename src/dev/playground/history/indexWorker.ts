@@ -20,9 +20,9 @@ import { Effect, FileSystem } from "effect";
 
 import { nodeFsView } from "#core/fileSystem/nodeView";
 import { OpfsFileSystemLive } from "#platform/web/fileSystem";
+import { packView } from "#platform/web/history/packView";
 
 import { buildBookIndex, type BookIndex, type BuildReport } from "./bookIndex";
-import { packView } from "./packView";
 
 export interface BuildRequest {
   readonly kind: "build";

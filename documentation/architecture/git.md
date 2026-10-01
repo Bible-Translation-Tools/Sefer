@@ -59,6 +59,39 @@ The one behaviour the two implementations reached differently and had to be brou
 layer refuses an empty receipt list, and `git_commit` did not — on an unborn HEAD it produced an empty
 root commit. It refuses now, in the same words.
 
+## A book's history on the Web
+
+isomorphic-git's `log({ filepath })` and `readBlob({ filepath })` parse every tree they walk, and
+throw `UnsafeFilepathError` on an entry name git itself accepts — `WycliffeAssociates/en_ulb`'s 2018
+root tree has `00-About_the_ULB\ULB-Intro.md` — so one old file nobody asked about lost Genesis's
+whole history (native git: 156 changes). And `log` walked the entire history for every book, unbounded.
+
+So on the Web a top-level book's history comes from the BOOK-CHANGE INDEX
+(`src/core/history/bookIndex.ts`): one walk of the repository recording, per commit and per parent,
+the top-level books whose blob differs, read from RAW trees so no name can refuse it. A book's
+history is then an in-memory walk with git's default simplification — en_ulb's Genesis, Psalms and
+Matthew match native `git log -- <book>` commit for commit, in a few milliseconds — and each version
+carries its blob id, so reading one is one object read with no tree walked. `show` reads raw trees
+too.
+
+- **Core is pure.** The walk, the simplification and the stored format are one module over an
+  `ObjectReader` of four reads (resolve, commit, raw tree, shallow set); core names no Git library.
+- **The Web answers it** with isomorphic-git (`src/platform/web/history/reader.ts`) through the pack
+  view (`packView.ts`, which answers isomorphic-git's per-object filesystem probes from memory), in a
+  worker (`worker.ts`) so a build never stalls the page, and in the page where no worker can start.
+- **It is derived, and current with HEAD.** Stored at `/sefer/history/<root>.json` in the app's own
+  storage — never in the project or `.git` — and held in memory per root. A stale one is extended,
+  walking only the new commits; a missing or old-format one is rebuilt (`store.ts`). en_ulb's full
+  build is about 4 s in a browser.
+- **No lock of its own.** `log` and `previousVersions` run in the repository's shared lane and hold
+  it while the worker reads, so no writer can run under the build; a worker taking the lock itself
+  would queue behind a writer that waits on the page.
+- **Desktop does not need it.** git2's revision walk has neither problem, so `git_log` and
+  `git_previous_versions` stay native. The `history.index` note says what each read cost.
+
+Shallow clone and fetching older history on demand stay deferred: nothing reads past the history a
+full clone already has.
+
 ## One writer per repository
 
 isomorphic-git has no locking, a Web page can have other tabs (and later a worker) on the same OPFS
