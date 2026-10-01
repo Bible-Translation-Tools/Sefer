@@ -71,6 +71,7 @@ import {
   SegmentedControl,
   severityTone,
 } from "../primitives";
+import { SearchDialog } from "../search/SearchDialog";
 import {
   createFindingsFeed,
   foldRuns,
@@ -80,6 +81,7 @@ import {
 } from "./findingsFeed";
 import { createFindingsFilter, VIEWS, type FindingsView } from "./findingsFilter";
 import { FindingsFilters } from "./FindingsFilters";
+import { SousSentence } from "./SousSentence";
 
 /** One finding's line in a card header, before it has been measured. */
 const LINE_HEIGHT = 30;
@@ -282,6 +284,12 @@ export function FindingsPanel() {
     feed.excerpts.views.view(row.excerpt.sid).open.has(runId(row, finding));
   const toggleRun = (row: FindingsRow, finding: Finding): void =>
     feed.excerpts.views.send(row.excerpt.sid, { kind: "open", id: runId(row, finding) });
+  /** A Sous finding's "Why?" the reader has opened: the card's view, like a run. */
+  const whyId = (row: FindingsRow, finding: Finding): string => `why|${runId(row, finding)}`;
+  const isWhyOpen = (row: FindingsRow, finding: Finding): boolean =>
+    feed.excerpts.views.view(row.excerpt.sid).open.has(whyId(row, finding));
+  const toggleWhy = (row: FindingsRow, finding: Finding): void =>
+    feed.excerpts.views.send(row.excerpt.sid, { kind: "open", id: whyId(row, finding) });
 
   const analysisFor = (finding: Finding) =>
     Option.getOrUndefined(shell.services.projectAnalysis.analysis(finding.bookId));
@@ -482,25 +490,54 @@ export function FindingsPanel() {
             <Badge tone={severityTone(finding.severity)}>{finding.severity}</Badge>
           </Show>
           <code class="font-mono text-smallest text-on-surface-tertiary">{finding.code}</code>
-          <span class="min-w-0 flex-1 text-small text-on-surface-secondary">{finding.message}</span>
-          <Show when={folded}>
-            <Button
-              size="sm"
-              variant="secondary"
-              aria-expanded={isOpen(row, finding) ? "true" : "false"}
-              aria-label={
-                isOpen(row, finding)
-                  ? t("Fold {count} identical findings", { count: run?.members.length ?? 0 })
-                  : t("Unfold {count} identical findings", { count: run?.members.length ?? 0 })
-              }
-              class="tabular-nums"
-              icon={isOpen(row, finding) ? <ChevronDown /> : <ChevronRight />}
-              onClick={() => toggleRun(row, finding)}
-            >
-              × {run?.members.length ?? 1}
-            </Button>
+          <span class="min-w-0 flex-1 text-small text-on-surface-secondary">
+            <Show when={finding.described} fallback={finding.message}>
+              {(described) => <SousSentence message={described()} tier="headline" />}
+            </Show>
+          </span>
+          {/* What a Sous sentence compares, as kitchen's queries: here, and what else it names. */}
+          <Show when={finding.comparison}>
+            {(comparison) => <SearchDialog queries={comparison()} />}
           </Show>
+          <div class="flex items-center gap-controls">
+            <Show when={finding.details !== undefined}>
+              <Button
+                size="sm"
+                variant="tertiary"
+                aria-expanded={isWhyOpen(row, finding) ? "true" : "false"}
+                icon={isWhyOpen(row, finding) ? <ChevronDown /> : <ChevronRight />}
+                onClick={() => toggleWhy(row, finding)}
+              >
+                {t("Why?")}
+              </Button>
+            </Show>
+            <Show when={folded}>
+              <Button
+                size="sm"
+                variant="secondary"
+                aria-expanded={isOpen(row, finding) ? "true" : "false"}
+                aria-label={
+                  isOpen(row, finding)
+                    ? t("Fold {count} identical findings", { count: run?.members.length ?? 0 })
+                    : t("Unfold {count} identical findings", { count: run?.members.length ?? 0 })
+                }
+                class="tabular-nums"
+                icon={isOpen(row, finding) ? <ChevronDown /> : <ChevronRight />}
+                onClick={() => toggleRun(row, finding)}
+              >
+                × {run?.members.length ?? 1}
+              </Button>
+            </Show>
+          </div>
         </div>
+
+        <Show when={isWhyOpen(row, finding) ? finding.described : undefined}>
+          {(described) => (
+            <p class="text-small text-on-surface-tertiary" data-why={finding.id}>
+              <SousSentence message={described()} tier="details" />
+            </p>
+          )}
+        </Show>
 
         <Show when={folded && isOpen(row, finding)}>
           <ul class="ms-4 flex flex-col gap-0.5 border-s border-surface-border ps-2">

@@ -107,15 +107,17 @@ returns to.
 It is rendered ONCE, by the `_app` layout chrome above its `<Outlet/>` and outside the scroller, rather than by
 each page: a screen added later gets the door without knowing it exists, no page can forget it or spell
 it differently, and it does not scroll away with the content. The same component registers the
-`editor.back` command, so the palette lists it and Escape performs it — registered there and not in the
+`editor.back` command, so the palette lists it — registered there and not in the
 shell's core set, because "is this a full-page screen" is the ROUTE's question and `ShellBridge`
 deliberately carries no pathname. All three doors navigate to `/project/$slug`, which forwards to the
 remembered book, so they cannot disagree.
 
-Escape works because `installCommandKeys` skips a binding with no modifier while the reader is
-typing into an input, a text area or a contenteditable — which is what `.cm-content` is, so the editor
-and the palette's own search box are covered by one rule. Every other binding holds Mod, so the rule
-costs them nothing.
+`editor.back` has no key. Escape belongs to whatever dialog is open on the screen (the Findings
+search dialog closes on it), and a full-page screen closes only through its X button.
+
+`installCommandKeys` skips a binding with no modifier while the reader is typing into an input, a
+text area or a contenteditable — which is what `.cm-content` is, so the editor and the palette's own
+search box are covered by one rule. Every other binding holds Mod, so the rule costs them nothing.
 
 The recovery banner is mounted on the book route as well as the project route, for the same reason:
 unsaved work found on open is the first thing to answer, and the project page is not where an open

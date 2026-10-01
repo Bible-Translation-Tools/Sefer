@@ -16,6 +16,8 @@
  * offer a translator two places to disagree about what Mark is called.
  */
 
+import { localized, type ProjectMetadata } from "../resources/projectMetadata";
+
 export type Testament = "ot" | "nt";
 
 export interface CanonicalBook {
@@ -102,3 +104,17 @@ const BY_ID: ReadonlyMap<string, CanonicalBook> = new Map(CANON.map((book) => [b
  */
 export const testamentOf = (id: string): Testament =>
   BY_ID.get(id.toUpperCase())?.testament ?? "nt";
+
+/**
+ * What to call a book: what the project calls it, else what the book calls
+ * itself (`heading` — its `\h` or `\toc2`, as the engine reads them, when the
+ * caller holds a parse), else the English canon, else the id itself. Native
+ * first, English second; never blank — the id is always something a reader
+ * can act on.
+ */
+export const bookName = (id: string, metadata?: ProjectMetadata, heading?: string): string => {
+  const local = localized(metadata?.bookNames[id], [metadata?.defaultLocale]);
+  if (local !== "") return local;
+  if (heading !== undefined && heading !== "") return heading;
+  return BY_ID.get(id.toUpperCase())?.name ?? id;
+};

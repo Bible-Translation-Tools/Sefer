@@ -22,6 +22,7 @@ import {
   Switch,
 } from "#app/ui/primitives";
 import { ShellGate } from "#app/ui/ShellGate";
+import { SousSettingsPanel } from "#app/ui/SousSettingsPanel";
 import {
   applyAppearance,
   asDiffPalette,
@@ -395,6 +396,8 @@ function SettingsPage() {
       <Show when={problem() !== ""}>
         <p class="text-small text-on-surface-error">{problem()}</p>
       </Show>
+
+      <SousSettingsPanel />
 
       <Show when={advancedVisible()}>
         <Card class="space-y-1" data-settings-group="diagnostics">
