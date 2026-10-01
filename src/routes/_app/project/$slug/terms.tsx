@@ -199,6 +199,33 @@ function Terms() {
   const allHits = createMemo(() => mapped(allAddresses()), { name: "termAllOccurrences" });
   const hits = (): readonly Occurrence[] => (additional() ? allHits() : curatedHits());
 
+  /**
+   * Every term's core verses that this project has: the denominator of each
+   * row's count in the sidebar, open or not. One read of the books the guide
+   * names, then each term's curated Addresses resolved through those books'
+   * TOCs — the same mapping the open term's list uses, for every term.
+   */
+  const coreTotals = createMemo(
+    (): ReadonlyMap<string, number> => {
+      const held = terms();
+      const coreOf = (term: Term): readonly Address[] => {
+        const curated = term.occurrences.filter((occurrence) => occurrence.curated);
+        return (curated.length > 0 ? curated : term.occurrences).map((each) => each.address);
+      };
+      const wanted = new Set(held.flatMap((term) => coreOf(term).map((address) => address.book)));
+      const books = readBooks(shell, wanted, analyze);
+      const out = new Map<string, number>();
+      for (const term of held) {
+        const addresses = coreOf(term);
+        let count = 0;
+        for (const book of books) count += refOccurrences(book, addresses).length;
+        out.set(term.id, count);
+      }
+      return out;
+    },
+    { name: "termCoreTotals" },
+  );
+
   /** The curated occurrences, by place: what the sidebar lists. */
   const curatedAt = createMemo(
     () => new Set(curatedHits().map((hit) => `${hit.bookId}:${hit.from}`)),
@@ -252,7 +279,9 @@ function Terms() {
       {/* The guide picker beside the title: it decides the source reading
           every card shows. Disabled while there is only one guide. */}
       <PanelHeader
-        title={t("Spiritual terms")}
+        // The term being worked on is the page's title; the screen's own name
+        // until one is chosen.
+        title={selected()?.term ?? t("Spiritual terms")}
         actions={
           <Show when={guides().length > 0}>
             <Select
@@ -308,6 +337,7 @@ function Terms() {
           additional={additional()}
           onAdditional={setAdditional}
           additionalCount={allHits().length - curatedHits().length}
+          coreTotalOf={(id) => coreTotals().get(id) ?? 0}
           isCurated={(excerpt) =>
             excerpt.hits.some((hit) => curatedAt().has(`${hit.bookId}:${hit.from}`))
           }

@@ -6,7 +6,7 @@
  * curated verses this project has, each one a link into the list. Under them,
  * a switch adds the term's ADDITIONAL references to the list on the right —
  * to the list only: the sidebar stays the curated set a reviewer is asked to
- * work through. With the sidebar hidden the same list sits beside the cards.
+ * work through. Hiding the panel hides the list with it.
  * Right, the excerpt list, where every card reads the PAIRED RESOURCE beside
  * the TARGET, and the target is the editable one.
  *
@@ -30,6 +30,7 @@
 import CheckIcon from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";
+import ChevronUp from "lucide-solid/icons/chevron-up";
 import CircleIcon from "lucide-solid/icons/circle";
 import CircleCheckIcon from "lucide-solid/icons/circle-check";
 import PencilIcon from "lucide-solid/icons/pencil";
@@ -42,11 +43,10 @@ import type { Guide, Term } from "#core/stet/stet";
 import type { EditorBook, Funnel } from "#editor/index";
 
 import { t } from "../../i18n";
-import { useShell } from "../../ProjectContext";
 import type { SourceReading } from "../../workflows/stet";
 import type { CardViews } from "../multibuffer/cardViews";
 import { cardPolicy } from "../multibuffer/policy";
-import { Badge, Switch } from "../primitives";
+import { Switch } from "../primitives";
 import { ProjectControl } from "../workspace/ProjectSidebar";
 import { claimSidebar } from "../workspace/sidebarSlot";
 import { excerptCard } from "./cardSpec";
@@ -84,6 +84,8 @@ export interface StetViewProps {
   /** Whether the list also shows the term's additional references. */
   readonly additional: boolean;
   readonly onAdditional: (on: boolean) => void;
+  /** How many core verses this project has for a term: its row's count, open or not. */
+  readonly coreTotalOf: (termId: string) => number;
   /** How many additional references this project has for the open term. */
   readonly additionalCount: number;
   /** Is this card one of the curated verses — one the sidebar lists? */
@@ -119,7 +121,6 @@ function Definition(props: { readonly text: string }) {
 }
 
 export function StetView(props: StetViewProps) {
-  const shell = useShell();
   let goTo: ((key: string) => void) | undefined;
 
   /**
@@ -150,21 +151,38 @@ export function StetView(props: StetViewProps) {
   );
   const listed = (): readonly BookExcerpts[] => [...ordered().core, ...ordered().more];
   const lastCore = (): string | undefined => ordered().core.at(-1)?.excerpts.at(-1)?.sid;
-  const firstMore = (): string | undefined => ordered().more[0]?.excerpts[0]?.sid;
+  const lastListed = (): string | undefined => listed().at(-1)?.excerpts.at(-1)?.sid;
 
   /** The accordion between the core verses and the additional ones: the sidebar switch's twin. */
+  const openTerm = (): Term | undefined => props.terms.find((term) => term.id === props.selected);
+
+  /**
+   * Shaped like a condensed card — its 24px padding and radius, no border and
+   * no fill — so it reads as one more row of the list: the way to the rest of
+   * the term's verses, or back.
+   */
   const Accordion = () => (
     <button
       type="button"
       data-stet-accordion=""
       aria-expanded={props.additional ? "true" : "false"}
-      class="mt-3 flex h-12 w-full cursor-pointer items-center gap-2 rounded-lg px-3 text-start text-small font-semibold text-on-surface-primary transition-colors hover:bg-surface-secondary [&>svg]:size-5"
+      class="mt-3 flex w-full cursor-pointer items-center gap-3 rounded-3xl border border-transparent bg-transparent p-6 text-start text-on-surface-secondary transition-colors hover:bg-on-surface-primary/6 hover:text-on-surface-primary [&>svg]:size-5 [&>svg]:shrink-0"
       onClick={() => props.onAdditional(!props.additional)}
     >
-      <Show when={props.additional} fallback={<ChevronRight aria-hidden="true" />}>
-        <ChevronDown aria-hidden="true" />
+      <span class="flex min-w-0 flex-1 flex-col gap-1 ps-3">
+        <span class="text-small font-bold">
+          {props.additional ? t("Show less") : t("Show more")}
+        </span>
+        <span class="text-small">
+          {t("There are {count} additional verses with the word “{term}”", {
+            count: props.additionalCount,
+            term: openTerm()?.term ?? "",
+          })}
+        </span>
+      </span>
+      <Show when={props.additional} fallback={<ChevronDown aria-hidden="true" />}>
+        <ChevronUp aria-hidden="true" />
       </Show>
-      {t("Additional references ({count})", { count: props.additionalCount })}
     </button>
   );
 
@@ -230,9 +248,6 @@ export function StetView(props: StetViewProps) {
   const CHROME = 164;
   const NEIGHBOUR = 100;
 
-  /** Cards the list shows: the denominator of the count, as approvals are per card. */
-  const inList = (): number => props.groups.reduce((sum, entry) => sum + entry.excerpts.length, 0);
-
   /**
    * The verses approved, per term, by card sid. In memory only: nothing in
    * Sefer stores a settled occurrence yet (`Term.done`), so a reload forgets.
@@ -296,24 +311,31 @@ export function StetView(props: StetViewProps) {
       />
     </Show>
   );
-  const toggleApproved = (sid: string): void => {
+  /**
+   * Approvals of CORE verses, per term: each row's numerator, kept whether
+   * the term is open or not. An additional verse can be approved too; it does
+   * not count here, since the row counts the core set.
+   */
+  const [coreApproved, setCoreApproved] = createSignal<ReadonlyMap<string, ReadonlySet<string>>>(
+    new Map(),
+    { name: "stetCoreApproved" },
+  );
+  const toggleApproved = (excerpt: Excerpt): void => {
     const term = props.selected;
-    const next = new Map(approved());
-    const held = new Set(next.get(term) ?? []);
-    if (held.has(sid)) held.delete(sid);
-    else held.add(sid);
-    next.set(term, held);
-    setApproved(next);
+    const sid = excerpt.sid;
+    const flip = (map: ReadonlyMap<string, ReadonlySet<string>>, on: boolean) => {
+      const next = new Map(map);
+      const held = new Set(next.get(term) ?? []);
+      if (on) held.add(sid);
+      else held.delete(sid);
+      next.set(term, held);
+      return next;
+    };
+    const on = !isApproved(sid);
+    setApproved(flip(approved(), on));
+    if (props.isCurated(excerpt)) setCoreApproved(flip(coreApproved(), on));
   };
-  /** The count's numerator: approved cards among those the list shows. */
-  const approvedInList = (): number => {
-    const held = approved().get(props.selected);
-    if (held === undefined) return 0;
-    let count = 0;
-    for (const group of props.groups)
-      for (const excerpt of group.excerpts) if (held.has(excerpt.sid)) count += 1;
-    return count;
-  };
+  const coreDone = (termId: string): number => coreApproved().get(termId)?.size ?? 0;
 
   /** The open term's curated verses this project has, in list order. */
   const verses = createMemo(
@@ -366,13 +388,16 @@ export function StetView(props: StetViewProps) {
       // USFM shows everything, notes included.
       policy: (mode) => cardPolicy(mode, "hide-notes"),
       condensed: (excerpt) => excerpt.sid !== activeSid(),
-      // Closed, the accordion follows the last core card; open, it heads the first additional one.
-      after: (excerpt) =>
-        !props.additional && props.additionalCount > 0 && excerpt.sid === lastCore() ? (
-          <Accordion />
-        ) : undefined,
-      before: (excerpt) =>
-        props.additional && excerpt.sid === firstMore() ? <Accordion /> : undefined,
+      // The accordion always follows the last core card, open or closed, so
+      // pressing it never moves it: the additional verses appear below it.
+      // The last card of the list carries room after it, so the list does
+      // not end hard against the bottom edge.
+      after: (excerpt) => (
+        <>
+          {props.additionalCount > 0 && excerpt.sid === lastCore() ? <Accordion /> : undefined}
+          {excerpt.sid === lastListed() ? <div aria-hidden="true" class="h-24" /> : undefined}
+        </>
+      ),
       onActivate: (excerpt) => activate(excerpt.sid, "card"),
       status: (excerpt) =>
         isApproved(excerpt.sid) || isEdited(excerpt.sid) ? (
@@ -392,7 +417,7 @@ export function StetView(props: StetViewProps) {
           icon: isApproved(excerpt.sid) ? CircleCheckIcon : CircleIcon,
           pressed: isApproved(excerpt.sid),
           emphasis: "tertiary",
-          onPress: () => toggleApproved(excerpt.sid),
+          onPress: () => toggleApproved(excerpt),
         },
       ],
     },
@@ -436,31 +461,51 @@ export function StetView(props: StetViewProps) {
   );
 
   /** One term, where a book row would be; open, its definition and verses. */
+  /** The current term's row folded away, while its cards stay on the right. */
+  const [folded, setFolded] = createSignal(false, { name: "stetTermFolded" });
+
   function TermRow(rowProps: { readonly term: Term }) {
-    const open = (): boolean => props.selected === rowProps.term.id;
+    /** The term being worked on: its cards are the list on the right. */
+    const current = (): boolean => props.selected === rowProps.term.id;
+    /** Showing its definition and verses. The current term can be folded. */
+    const open = (): boolean => current() && !folded();
     return (
       <li>
         <button
           type="button"
           data-term={rowProps.term.id}
           aria-expanded={open() ? "true" : "false"}
-          data-open={open() ? "" : undefined}
+          data-open={current() ? "" : undefined}
           class="flex w-full cursor-pointer items-center gap-2 rounded-lg px-4 py-3 text-start text-small transition-colors data-open:font-semibold data-open:text-brand not-data-open:text-sidebar-on-surface not-data-open:hover:bg-sidebar-surface-hover"
-          onClick={() => props.onSelect(rowProps.term.id)}
+          onClick={() => {
+            // The current term folds and unfolds; the list on the right stays
+            // on it. Another term is opened, and the list goes to its verses.
+            if (current()) setFolded(!folded());
+            else {
+              setFolded(false);
+              props.onSelect(rowProps.term.id);
+            }
+          }}
         >
           <span class="min-w-0 flex-1 truncate">{rowProps.term.term}</span>
-          {/* Only the open term has a count: the others have not been mapped
-              onto the project, and a placeholder pill would read as a zero. */}
-          <Show when={open()}>
-            <Badge tone="brand">
-              {t("{done}/{total}", { done: approvedInList(), total: inList() })}
-            </Badge>
+          {/* Every row's count, open or not: core verses approved of the core
+              verses this project has. A check before it once all are done. */}
+          <Show when={props.coreTotalOf(rowProps.term.id) > 0}>
+            <Show when={coreDone(rowProps.term.id) >= props.coreTotalOf(rowProps.term.id)}>
+              <CheckIcon aria-label={t("Done")} class="size-5 shrink-0" />
+            </Show>
+            <span class="shrink-0 text-small tabular-nums">
+              {t("{done}/{total}", {
+                done: coreDone(rowProps.term.id),
+                total: props.coreTotalOf(rowProps.term.id),
+              })}
+            </span>
           </Show>
           <Show
             when={open()}
-            fallback={<ChevronRight size={16} aria-hidden="true" class="shrink-0" />}
+            fallback={<ChevronRight aria-hidden="true" class="size-5 shrink-0" />}
           >
-            <ChevronDown size={16} aria-hidden="true" class="shrink-0" />
+            <ChevronDown aria-hidden="true" class="size-5 shrink-0" />
           </Show>
         </button>
 
@@ -506,9 +551,8 @@ export function StetView(props: StetViewProps) {
                 class="w-full justify-between px-3 py-2"
                 checked={props.additional}
                 onChange={props.onAdditional}
-                label={t("Show all ({count})", {
-                  count: inList() + (props.additional ? 0 : props.additionalCount),
-                })}
+                // How many MORE, the same number the accordion on the right gives.
+                label={t("Show {count} more", { count: props.additionalCount })}
               />
             </Show>
           </div>
@@ -540,10 +584,8 @@ export function StetView(props: StetViewProps) {
           : { "--card-room": `${Math.max(160, (room() ?? 0) - CHROME - NEIGHBOUR)}px` }
       }
     >
-      {/* The sidebar hidden, the term list sits beside the cards instead. */}
-      <Show when={!shell.sidebarShowing()}>
-        <aside class="flex w-72 shrink-0 flex-col">{terms()}</aside>
-      </Show>
+      {/* The term list is the panel's: hiding the panel hides it too, and
+          the cards take the width. */}
 
       <ExcerptList
         goneLabel={t("No longer an occurrence")}

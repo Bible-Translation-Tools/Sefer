@@ -142,7 +142,15 @@ export function ExcerptReader(props: ExcerptReaderProps) {
     if (edit === undefined) return;
     const mount = live();
     const point = { x: event.clientX, y: event.clientY };
-    const at = mount === undefined ? null : mount.view.posAtCoords(point);
+    // Best effort: a view just re-clipped (a chapter folded back) can throw
+    // here before it has re-measured. The click still edits — the editor
+    // answers the same point on its own fresh view (`CardEditor`).
+    let at: number | null = null;
+    try {
+      at = mount === undefined ? null : mount.view.posAtCoords(point);
+    } catch {
+      at = null;
+    }
     edit(at ?? undefined, point);
   };
 

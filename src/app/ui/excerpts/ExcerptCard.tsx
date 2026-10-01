@@ -375,7 +375,13 @@ export function ExcerptCard(props: ExcerptCardProps) {
     () => chapterOpen(),
     (open) => {
       if (!open) return;
-      const timer = setTimeout(() => reveal?.(props.excerpt.own.from), 300);
+      // Whichever is showing: the reading, or — opened mid-edit — the editor.
+      const timer = setTimeout(() => {
+        const at = props.excerpt.own.from;
+        if (props.editing && editView !== undefined)
+          editView.dispatch({ effects: EditorView.scrollIntoView(at, { y: "start" }) });
+        else reveal?.(at);
+      }, 300);
       return () => clearTimeout(timer);
     },
   );
