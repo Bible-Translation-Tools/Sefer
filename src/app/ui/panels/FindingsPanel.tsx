@@ -50,6 +50,7 @@ import ChevronRight from "lucide-solid/icons/chevron-right";
 import CircleCheck from "lucide-solid/icons/circle-check";
 import SettingsIcon from "lucide-solid/icons/settings";
 import Wrench from "lucide-solid/icons/wrench";
+import X from "lucide-solid/icons/x";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
 import type { BookId } from "#core/book/book";
@@ -67,7 +68,6 @@ import {
   Badge,
   Button,
   Card,
-  Dialog,
   EmptyState,
   IconButton,
   PanelHeader,
@@ -655,22 +655,16 @@ export function FindingsPanel() {
             facets={summary().facets}
             books={books()}
           />
-          {/* The checks' own settings, here, so turning one off is seen in
-              the list it changes (the same panel as in Settings). */}
+          {/* The checks' own settings, in a column beside the list (below),
+              so turning one off or moving a number is seen in the list and
+              the counts as it happens. */}
           <IconButton
             size="sm"
             label={t("Proofreading settings")}
             icon={<SettingsIcon />}
-            onClick={() => setSettingsOpen(true)}
+            aria-pressed={settingsOpen() ? "true" : "false"}
+            onClick={() => setSettingsOpen((open) => !open)}
           />
-          <Dialog
-            open={settingsOpen()}
-            onOpenChange={setSettingsOpen}
-            title={t("Proofreading settings")}
-            class="max-h-[85vh] w-[min(42rem,92vw)] overflow-y-auto"
-          >
-            <SousSettingsPanel bare />
-          </Dialog>
         </div>
         <Show when={pattern() !== undefined}>
           <p class="flex flex-wrap items-center gap-2 text-smallest text-on-surface-tertiary">
@@ -728,56 +722,77 @@ export function FindingsPanel() {
         )}
       </Show>
 
-      <div
-        class="flex min-h-0 min-w-0 flex-1 flex-col"
-        data-findings={summary().shown}
-        data-view={filters.view()}
-      >
-        <Show
-          when={summary().shown > 0}
-          fallback={
-            <Show
-              when={summary().total > 0}
-              fallback={
+      <div class="flex min-h-0 min-w-0 flex-1 gap-4">
+        <div
+          class="flex min-h-0 min-w-0 flex-1 flex-col"
+          data-findings={summary().shown}
+          data-view={filters.view()}
+        >
+          <Show
+            when={summary().shown > 0}
+            fallback={
+              <Show
+                when={summary().total > 0}
+                fallback={
+                  <EmptyState
+                    icon={<CircleCheck size={22} />}
+                    title={t("Nothing to report — or no project is open.")}
+                  />
+                }
+              >
                 <EmptyState
-                  icon={<CircleCheck size={22} />}
-                  title={t("Nothing to report — or no project is open.")}
+                  title={t("{total} findings, all hidden by the filter.", {
+                    total: summary().total,
+                  })}
                 />
-              }
-            >
-              <EmptyState
-                title={t("{total} findings, all hidden by the filter.", {
-                  total: summary().total,
-                })}
+              </Show>
+            }
+          >
+            <Show when={body()} fallback={<div class="min-h-0 flex-1" aria-busy="true" />}>
+              <ExcerptList
+                goneLabel={t("Resolved")}
+                resultsKey={JSON.stringify(filters.filter())}
+                groups={feed.groups()}
+                views={feed.excerpts.views}
+                outline={feed.outline()}
+                seat={feed.excerpts.seat}
+                seatedOf={feed.excerpts.seatedOf}
+                shownOf={feed.excerpts.shownOf}
+                analyze={feed.excerpts.analyze}
+                onEdited={feed.excerpts.edited}
+                focus={focused()}
+                activeHit={focusedAt()}
+                mode={mode()}
+                card={card}
+                sections={sections}
+                empty={
+                  <EmptyState
+                    icon={<CircleCheck size={22} />}
+                    title={t("Nothing to report in the books that are open.")}
+                  />
+                }
               />
             </Show>
-          }
-        >
-          <Show when={body()} fallback={<div class="min-h-0 flex-1" aria-busy="true" />}>
-            <ExcerptList
-              goneLabel={t("Resolved")}
-              resultsKey={JSON.stringify(filters.filter())}
-              groups={feed.groups()}
-              views={feed.excerpts.views}
-              outline={feed.outline()}
-              seat={feed.excerpts.seat}
-              seatedOf={feed.excerpts.seatedOf}
-              shownOf={feed.excerpts.shownOf}
-              analyze={feed.excerpts.analyze}
-              onEdited={feed.excerpts.edited}
-              focus={focused()}
-              activeHit={focusedAt()}
-              mode={mode()}
-              card={card}
-              sections={sections}
-              empty={
-                <EmptyState
-                  icon={<CircleCheck size={22} />}
-                  title={t("Nothing to report in the books that are open.")}
-                />
-              }
-            />
           </Show>
+        </div>
+        <Show when={settingsOpen()}>
+          <aside
+            aria-label={t("Proofreading settings")}
+            class="flex w-[26rem] shrink-0 flex-col gap-3 overflow-y-auto rounded-lg border border-surface-border bg-surface-primary p-4"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-small font-semibold text-on-surface-primary">
+                {t("Proofreading settings")}
+              </h3>
+              <IconButton
+                size="sm"
+                label={t("Close settings")}
+                icon={<X />}
+                onClick={() => setSettingsOpen(false)}
+              />
+            </div>
+            <SousSettingsPanel bare />
+          </aside>
         </Show>
       </div>
     </main>
