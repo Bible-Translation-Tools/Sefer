@@ -20,6 +20,7 @@ export { IconButton } from "./IconButton";
 export { FilterList } from "./FilterList";
 export { Input } from "./Input";
 export { Kbd } from "./Kbd";
+export { MultiSelect } from "./MultiSelect";
 export { Menu, MenuCheckbox, MenuItem, MenuLabel, MenuRadio, MenuSeparator } from "./Menu";
 export { Popover } from "./Popover";
 export { Resizable } from "./Resizable";
@@ -35,6 +36,7 @@ export {
   TableRow,
   type SortDirection,
 } from "./Table";
+export { ToggleGroup } from "./ToggleGroup";
 export { Toaster } from "./Toaster";
 export { VirtualList, type VirtualSection } from "./VirtualList";
 export { Tooltip } from "./Tooltip";
