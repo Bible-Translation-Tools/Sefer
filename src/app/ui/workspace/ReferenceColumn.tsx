@@ -39,7 +39,7 @@ import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import { listProjects, type ProjectSummary } from "../landing/summaries";
-import { Button, EmptyState, Popover, Resizable } from "../primitives";
+import { Button, EmptyState, MultiSelect, Resizable } from "../primitives";
 import { ReferencePane } from "./ReferencePane";
 
 /** The roles the column shows, in the order it shows them. */
@@ -65,10 +65,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   const { services } = shell;
   const [entries, setEntries] = createSignal<readonly Entry[]>([], { name: "referenceEntries" });
   const [loading, setLoading] = createSignal(true, { name: "referenceLoading" });
-  /** Which slot's picker is open, if any. */
-  const [picking, setPicking] = createSignal<Role | undefined>(undefined, {
-    name: "referencePicking",
-  });
   const [choices, setChoices] = createSignal<readonly ProjectSummary[] | undefined>(undefined, {
     name: "referenceChoices",
   });
@@ -177,7 +173,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   const choose = (role: Role, row: ProjectSummary): void => {
     const project = shell.project();
     if (project === undefined) return;
-    setPicking(undefined);
     setBusy(true);
     void services
       .run(
@@ -215,18 +210,26 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       });
   };
 
-  /** The picker for one slot. A source holds one; references hold many. */
+  /**
+   * The picker for one slot: the same searchable pick-one combobox Find's
+   * source text uses, behind this column's own "Add source…" button.
+   */
   const Picker = (pickerProps: { readonly role: Role }) => (
-    <Popover
+    <MultiSelect
+      single
       label={t("Choose a text")}
-      side="bottom"
-      align="start"
-      class="max-h-[50vh] w-72 overflow-y-auto p-1"
-      open={picking() === pickerProps.role}
-      onOpenChange={(open) => {
-        setPicking(open ? pickerProps.role : undefined);
-        if (open) offer();
-      }}
+      summary=""
+      narrowed={false}
+      items={candidates()}
+      key={(row: ProjectSummary) => row.root}
+      match={(row, query) =>
+        `${row.name} ${row.language}`.toLowerCase().includes(query.toLowerCase())
+      }
+      placeholder={t("Search texts…")}
+      empty={choices() === undefined ? t("Looking…") : t("No other project on this device.")}
+      selected={() => false}
+      onToggle={(row) => choose(pickerProps.role, row)}
+      onOpen={offer}
       trigger={
         <Button
           variant="secondary"
@@ -240,33 +243,17 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         </Button>
       }
     >
-      <Show
-        when={candidates().length > 0}
-        fallback={
-          <p class="px-2 py-3 text-small text-on-surface-tertiary">
-            {choices() === undefined ? t("Looking…") : t("No other project on this device.")}
-          </p>
-        }
-      >
-        <For each={candidates()}>
-          {(row) => (
-            <button
-              type="button"
-              data-testid={`pick-${row.folder}`}
-              class="flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-start transition-colors hover:bg-surface-secondary"
-              onClick={() => choose(pickerProps.role, row)}
-            >
-              <span class="text-small font-medium text-on-surface-primary">{row.name}</span>
-              <span class="text-smallest text-on-surface-tertiary">
-                {row.language === ""
-                  ? t("{count} books", { count: row.books })
-                  : t("{language} · {count} books", { language: row.language, count: row.books })}
-              </span>
-            </button>
-          )}
-        </For>
-      </Show>
-    </Popover>
+      {(row) => (
+        <span data-testid={`pick-${row.folder}`} class="flex min-w-0 flex-1 flex-col">
+          <span class="truncate font-medium">{row.name}</span>
+          <span class="text-smallest text-on-surface-tertiary">
+            {row.language === ""
+              ? t("{count} books", { count: row.books })
+              : t("{language} · {count} books", { language: row.language, count: row.books })}
+          </span>
+        </span>
+      )}
+    </MultiSelect>
   );
 
   /**

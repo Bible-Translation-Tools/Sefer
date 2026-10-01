@@ -48,6 +48,12 @@ export interface MultiSelectProps<T> {
   readonly id?: string;
   /** Pick one: a choice closes the panel. */
   readonly single?: boolean;
+  /** In place of the summary chip: a control of the caller's (Refine's "Add source…"). */
+  readonly trigger?: JSX.Element;
+  /** Said when there are no rows at all, before anything is typed. */
+  readonly empty?: string;
+  /** Told when the panel opens, so a caller can fetch its rows then. */
+  readonly onOpen?: () => void;
 }
 
 export function MultiSelect<T>(props: MultiSelectProps<T>) {
@@ -95,29 +101,32 @@ export function MultiSelect<T>(props: MultiSelectProps<T>) {
       open={open()}
       onOpenChange={(next) => {
         setOpen(next);
+        if (next) props.onOpen?.();
         if (!next) {
           setQuery("");
           setCursor(0);
         }
       }}
       trigger={
-        <button
-          type="button"
-          class={cx(
-            "inline-flex items-center gap-1.5 rounded-md border border-surface-border bg-surface-primary",
-            "px-2.5 py-1.5 text-smallest font-medium text-on-surface-secondary cursor-pointer",
-            "hover:bg-surface-secondary hover:text-on-surface-primary transition-colors",
-            "data-narrowed:border-brand data-narrowed:bg-brand-light data-narrowed:text-brand",
-          )}
-          data-filter-group={props.id}
-          data-narrowed={props.narrowed ? "" : undefined}
-          aria-haspopup="listbox"
-          aria-expanded={open() ? "true" : "false"}
-        >
-          {props.label}
-          <span class="text-on-surface-tertiary">{props.summary}</span>
-          <ChevronDown size={13} aria-hidden="true" />
-        </button>
+        props.trigger ?? (
+          <button
+            type="button"
+            class={cx(
+              "inline-flex items-center gap-1.5 rounded-md border border-surface-border bg-surface-primary",
+              "px-2.5 py-1.5 text-smallest font-medium text-on-surface-secondary cursor-pointer",
+              "hover:bg-surface-secondary hover:text-on-surface-primary transition-colors",
+              "data-narrowed:border-brand data-narrowed:bg-brand-light data-narrowed:text-brand",
+            )}
+            data-filter-group={props.id}
+            data-narrowed={props.narrowed ? "" : undefined}
+            aria-haspopup="listbox"
+            aria-expanded={open() ? "true" : "false"}
+          >
+            {props.label}
+            <span class="text-on-surface-tertiary">{props.summary}</span>
+            <ChevronDown size={13} aria-hidden="true" />
+          </button>
+        )
       }
     >
       <Show when={props.match !== undefined}>
@@ -139,7 +148,9 @@ export function MultiSelect<T>(props: MultiSelectProps<T>) {
         when={shown().length > 0}
         fallback={
           <p class="px-2 py-3 text-center text-smallest text-on-surface-tertiary">
-            {t("Nothing matches {query}", { query: query() })}
+            {query().trim() === "" && props.empty !== undefined
+              ? props.empty
+              : t("Nothing matches {query}", { query: query() })}
           </p>
         }
       >
