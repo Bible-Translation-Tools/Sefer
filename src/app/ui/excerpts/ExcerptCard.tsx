@@ -35,8 +35,11 @@
  * flipped per card. The width is the CARD's (a ResizeObserver), not the
  * window's, because the same card lives in a full-width list and a side panel.
  */
-
+import { ChangeSet, StateField, type Text } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
 import type { JSX } from "@solidjs/web";
+import ChevronDownIcon from "lucide-solid/icons/chevron-down";
+import ChevronUpIcon from "lucide-solid/icons/chevron-up";
 import CodeIcon from "lucide-solid/icons/code";
 import FoldVerticalIcon from "lucide-solid/icons/fold-vertical";
 import SquareArrowOutUpRightIcon from "lucide-solid/icons/square-arrow-out-up-right";
@@ -57,13 +60,14 @@ import { useShell } from "../../ProjectContext";
 import { CardActions, type CardAction } from "../multibuffer/CardAction";
 import { CardEditor } from "../multibuffer/CardEditor";
 import { CardFrame } from "../multibuffer/CardFrame";
-import type { CardEvent, CardView } from "../multibuffer/cardState";
+import type { CardEvent, CardView, ContextStep } from "../multibuffer/cardState";
 import { ContextControl } from "../multibuffer/ContextControl";
 import { cardPolicy } from "../multibuffer/policy";
-import { Button, cx } from "../primitives";
+import { Button, cx, IconButton } from "../primitives";
 import { verseTextOf } from "../review/reading";
 import type { ExcerptCardSpec } from "./cardSpec";
 import { ExcerptReader } from "./ExcerptReader";
+import { lockVerseLabels } from "./lockVerseLabels";
 
 export type { ContextStep } from "../multibuffer/cardState";
 
@@ -295,6 +299,40 @@ export function ExcerptCard(props: ExcerptCardProps) {
     props.onDone();
   };
 
+  /**
+   * A direct card's edit is a SESSION with a way back. Everything typed lands
+   * in the book as it is typed (that is how the editor works); the session
+   * keeps every change composed since it opened (`sessionEdits`), so Cancel
+   * can hand the book the exact inverse and Save only has to stop. `dirty`
+   * is what turns the card's buttons into Save changes / Cancel.
+   */
+  const [dirty, setDirty] = createSignal(false, { name: "excerptDirty" });
+  let editView: EditorView | undefined;
+  let openedOn: Text | undefined;
+  const sessionEdits = StateField.define<ChangeSet>({
+    create: (state) => ChangeSet.empty(state.doc.length),
+    update: (held, transaction) =>
+      transaction.docChanged ? held.compose(transaction.changes) : held,
+  });
+  const sessionWatch = EditorView.updateListener.of((update) => {
+    if (update.docChanged) setDirty(!update.state.field(sessionEdits).empty);
+  });
+  const save = (): void => {
+    setDirty(false);
+    done();
+  };
+  const cancel = (): void => {
+    const view = editView;
+    if (view !== undefined && openedOn !== undefined && dirty()) {
+      const undo = view.state.field(sessionEdits, false)?.invert(openedOn);
+      // Past the card's own filters (the verse-number lock would refuse a
+      // revert that spans a label); the book still admits it as an edit.
+      if (undo !== undefined && !undo.empty) view.dispatch({ changes: undo, filter: false });
+    }
+    setDirty(false);
+    done();
+  };
+
   const reader = () => (
     <ExcerptReader
       analysis={props.excerpt.analysis}
@@ -339,33 +377,44 @@ export function ExcerptCard(props: ExcerptCardProps) {
     () => chapterOpen(),
     (open) => {
       if (!open) return;
-      const timer = setTimeout(() => reveal?.(props.excerpt.own.from), 300);
+      // Whichever is showing: the reading, or — opened mid-edit — the editor.
+      const timer = setTimeout(() => {
+        const at = props.excerpt.own.from;
+        if (props.editing && editView !== undefined)
+          editView.dispatch({ effects: EditorView.scrollIntoView(at, { y: "start" }) });
+        else reveal?.(at);
+      }, 300);
       return () => clearTimeout(timer);
     },
   );
 
   /**
-   * A direct card's edit ends when the reader leaves the box: a press anywhere
-   * outside it, or focus going elsewhere (Tab, a click on something that takes
-   * focus), so the box never looks editable once it cannot be typed into.
+   * A direct card's edit ends when the reader leaves the box — a press
+   * anywhere outside it, or focus going elsewhere — and leaving is a CANCEL:
+   * nothing typed survives a click away. The row of buttons under the box
+   * counts as inside, so pressing Save changes is not first a cancel.
    */
+  let actionsRow: HTMLDivElement | undefined;
+  const inside = (node: Node, frame: HTMLElement): boolean =>
+    frame.contains(node) || actionsRow?.contains(node) === true;
   createEffect(
     () => (direct() && props.editing ? targetBox : undefined),
     (element) => {
       if (element === undefined) return;
       const press = (event: PointerEvent): void => {
-        if (props.editing && event.target instanceof Node && !element.contains(event.target))
-          done();
+        if (props.editing && event.target instanceof Node && !inside(event.target, element))
+          cancel();
       };
       const leave = (event: FocusEvent): void => {
         const next = event.relatedTarget;
-        if (next instanceof Node && element.contains(next)) return;
+        if (next instanceof Node && inside(next, element)) return;
         // After the move lands: focus that only passed through (the editor
         // replacing the reading) has come back by then.
         setTimeout(() => {
           // Still this card's edit: the press may have ended it and another
           // card begun its own since.
-          if (props.editing && !element.contains(document.activeElement)) done();
+          const now = document.activeElement;
+          if (props.editing && !(now !== null && inside(now, element))) cancel();
         }, 0);
       };
       document.addEventListener("pointerdown", press, true);
@@ -400,7 +449,12 @@ export function ExcerptCard(props: ExcerptCardProps) {
             select={props.excerpt.hits[0]}
             analyze={props.analyze}
             label={`excerpt:${props.excerpt.sid}`}
-            onDone={done}
+            extensions={direct() ? [lockVerseLabels, sessionEdits, sessionWatch] : undefined}
+            onView={(view) => {
+              editView = view;
+              openedOn = view?.state.doc;
+            }}
+            onDone={direct() ? cancel : done}
           />
         )}
       </Show>
@@ -631,25 +685,90 @@ export function ExcerptCard(props: ExcerptCardProps) {
                   </div>
                 </div>
                 <Show when={direct()}>
-                  <div data-card-actions class="flex items-center gap-controls">
-                    <CardActions
-                      size="md"
-                      actions={spec().actions?.(props.excerpt, props.rowKey, props.view) ?? []}
-                    />
-                    <Show when={spec().context.kind === "chapter" ? spec().context : undefined}>
-                      {(context) => (
-                        <Button
-                          data-step="chapter"
-                          variant="tertiary"
-                          icon={chapterOpen() ? <FoldVerticalIcon /> : <UnfoldVerticalIcon />}
-                          onClick={() => {
-                            const held = context();
-                            if (held.kind === "chapter") held.step(props.excerpt.sid, "chapter");
-                          }}
-                        >
-                          {chapterOpen() ? t("Show less") : t("Show more")}
-                        </Button>
-                      )}
+                  <div
+                    ref={(element: HTMLDivElement) => {
+                      actionsRow = element;
+                    }}
+                    data-card-actions
+                    class="flex items-center gap-controls"
+                  >
+                    {/* Changed while editing: the only two things to do are
+                        keep it or drop it. */}
+                    <Show
+                      when={props.editing && dirty()}
+                      fallback={
+                        <>
+                          <CardActions
+                            size="md"
+                            actions={
+                              spec().actions?.(props.excerpt, props.rowKey, props.view) ?? []
+                            }
+                          />
+                          <Show
+                            when={spec().context.kind === "chapter" ? spec().context : undefined}
+                          >
+                            {(context) => {
+                              const step = (which: ContextStep): void => {
+                                const held = context();
+                                if (held.kind === "chapter") held.step(props.excerpt.sid, which);
+                              };
+                              const manual = (): boolean => {
+                                const held = context();
+                                return held.kind === "chapter" && held.manual?.() === true;
+                              };
+                              const chapterButton = (
+                                <Button
+                                  data-step="chapter"
+                                  variant="tertiary"
+                                  class={manual() ? "rounded-none border-0" : undefined}
+                                  icon={
+                                    chapterOpen() ? <FoldVerticalIcon /> : <UnfoldVerticalIcon />
+                                  }
+                                  onClick={() => step("chapter")}
+                                >
+                                  {chapterOpen() ? t("Show less") : t("Show more")}
+                                </Button>
+                              );
+                              // Manual: one verse more above, the whole chapter, one
+                              // verse more below — one segmented control.
+                              return (
+                                <Show when={manual()} fallback={chapterButton}>
+                                  <div
+                                    role="group"
+                                    aria-label={t("Context")}
+                                    class="inline-flex h-12 items-stretch divide-x divide-surface-border overflow-hidden rounded-lg border border-surface-border"
+                                  >
+                                    <IconButton
+                                      data-step="up"
+                                      class="rounded-none border-0"
+                                      label={t("Show one more verse above")}
+                                      icon={<ChevronUpIcon />}
+                                      disabled={chapterOpen() || !props.excerpt.more.up}
+                                      onClick={() => step("up")}
+                                    />
+                                    {chapterButton}
+                                    <IconButton
+                                      data-step="down"
+                                      class="rounded-none border-0"
+                                      label={t("Show one more verse below")}
+                                      icon={<ChevronDownIcon />}
+                                      disabled={chapterOpen() || !props.excerpt.more.down}
+                                      onClick={() => step("down")}
+                                    />
+                                  </div>
+                                </Show>
+                              );
+                            }}
+                          </Show>
+                        </>
+                      }
+                    >
+                      <Button variant="primary" data-card-action="save" onClick={save}>
+                        {t("Save changes")}
+                      </Button>
+                      <Button variant="tertiary" data-card-action="cancel" onClick={cancel}>
+                        {t("Cancel")}
+                      </Button>
                     </Show>
                   </div>
                 </Show>

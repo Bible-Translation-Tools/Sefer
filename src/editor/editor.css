@@ -1288,8 +1288,22 @@
 }
 /* The whole chapter showing, it reads as one text: the context at full
    strength, not dimmed round the verse. */
+/* The verse either side of a Spiritual terms card stays dimmed even while
+   it is edited — editable, but plainly not the verse the card is for… */
+[data-direct-target]:not([data-chapter]) .cm-editing .cm-excerpt-context {
+  opacity: 0.55;
+}
 [data-direct-target][data-chapter] .cm-excerpt-context {
   opacity: 1;
+}
+/* …and the verse the card is FOR is picked out of it: a light brand wash
+   behind its text, wrapped line by line, so the eye lands on it as the
+   reading opens on it. */
+[data-direct-target][data-chapter] .cm-excerpt-own {
+  background: color-mix(in srgb, var(--brand-base) 14%, transparent);
+  border-radius: 4px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 /* Hovered, it says it can be clicked: the canvas fill and the light brand
    edge every field takes on hover (`Select`, `Input`: `border-brand/40`). */
