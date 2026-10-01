@@ -32,6 +32,7 @@ import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import CircleIcon from "lucide-solid/icons/circle";
 import CircleCheckIcon from "lucide-solid/icons/circle-check";
+import PencilIcon from "lucide-solid/icons/pencil";
 import { For, Show, createMemo, createSignal, onCleanup } from "solid-js";
 
 import type { BookId } from "#core/book/book";
@@ -241,6 +242,60 @@ export function StetView(props: StetViewProps) {
     { name: "stetApproved" },
   );
   const isApproved = (sid: string): boolean => approved().get(props.selected)?.has(sid) === true;
+
+  /**
+   * Which verses have been edited. A card's own unit, as raw USFM, is taken
+   * the first time it is seen; it is edited while the text the list now holds
+   * differs from that. No hook into the editor: the list re-reads a book's
+   * results as it is typed in, so a fresh excerpt IS the news. In memory, for
+   * the session — the same as approvals.
+   */
+  const baseline = new Map<string, string>();
+  const ownText = (excerpt: Excerpt): string =>
+    excerpt.source.slice(excerpt.own.from - excerpt.span.from, excerpt.own.to - excerpt.span.from);
+  const edits = createMemo(
+    (): ReadonlySet<string> => {
+      const changed = new Set<string>();
+      for (const group of props.groups)
+        for (const excerpt of group.excerpts) {
+          const now = ownText(excerpt);
+          const was = baseline.get(excerpt.sid);
+          if (was === undefined) baseline.set(excerpt.sid, now);
+          else if (was !== now) changed.add(excerpt.sid);
+        }
+      return changed;
+    },
+    { name: "stetEdited" },
+  );
+  const isEdited = (sid: string): boolean => edits().has(sid);
+
+  /**
+   * A verse's status mark, the same on its card and in the sidebar: a pencil
+   * once edited (brand when approved with the edits, quiet until then), a
+   * check when approved as it stood, nothing otherwise.
+   */
+  const Status = (statusProps: { readonly sid: string; readonly size: number }) => (
+    <Show
+      when={isEdited(statusProps.sid)}
+      fallback={
+        <Show when={isApproved(statusProps.sid)}>
+          <CheckIcon
+            size={statusProps.size}
+            aria-label={t("Approved")}
+            class="shrink-0 text-brand"
+          />
+        </Show>
+      }
+    >
+      <PencilIcon
+        size={statusProps.size}
+        aria-label={isApproved(statusProps.sid) ? t("Approved with edits") : t("Edited")}
+        class={
+          isApproved(statusProps.sid) ? "shrink-0 text-brand" : "shrink-0 text-on-surface-secondary"
+        }
+      />
+    </Show>
+  );
   const toggleApproved = (sid: string): void => {
     const term = props.selected;
     const next = new Map(approved());
@@ -320,14 +375,20 @@ export function StetView(props: StetViewProps) {
         props.additional && excerpt.sid === firstMore() ? <Accordion /> : undefined,
       onActivate: (excerpt) => activate(excerpt.sid, "card"),
       status: (excerpt) =>
-        isApproved(excerpt.sid) ? (
-          <CheckIcon size={20} aria-label={t("Approved")} class="text-brand" />
+        isApproved(excerpt.sid) || isEdited(excerpt.sid) ? (
+          <Status sid={excerpt.sid} size={20} />
         ) : undefined,
       actions: (excerpt) => [
         {
           kind: "button",
           id: "approve",
-          label: isApproved(excerpt.sid) ? t("Approved") : t("Approve"),
+          label: isApproved(excerpt.sid)
+            ? isEdited(excerpt.sid)
+              ? t("Approved with edits")
+              : t("Approved")
+            : isEdited(excerpt.sid)
+              ? t("Approve with edits")
+              : t("Approve"),
           icon: isApproved(excerpt.sid) ? CircleCheckIcon : CircleIcon,
           pressed: isApproved(excerpt.sid),
           emphasis: "tertiary",
@@ -429,13 +490,7 @@ export function StetView(props: StetViewProps) {
                       >
                         <span class="flex items-center gap-2">
                           <span class="min-w-0 flex-1 truncate">{excerpt.label}</span>
-                          <Show when={isApproved(excerpt.sid)}>
-                            <CheckIcon
-                              size={16}
-                              aria-label={t("Approved")}
-                              class="shrink-0 text-brand"
-                            />
-                          </Show>
+                          <Status sid={excerpt.sid} size={16} />
                         </span>
                       </button>
                     </li>
