@@ -96,6 +96,11 @@ export interface ShellStores {
   readonly historyDepth: (bookId: BookId) => { readonly undo: number; readonly redo: number };
 
   readonly findings: Accessor<readonly Finding[]>;
+  /**
+   * A re-judge is in flight: the findings shown are the last Publication's,
+   * about to be replaced. A screen dims rather than tearing its list down.
+   */
+  readonly findingsPending: Accessor<boolean>;
   readonly findingCounts: Accessor<{ readonly errors: number; readonly warnings: number }>;
   readonly summaryOf: (bookId: BookId) => BookSummary | undefined;
   readonly bookCensus: Accessor<readonly BookSummary[]>;
@@ -147,6 +152,7 @@ export const makeShellStores = (options: {
   const [findingsList, setFindingsList] = createSignal<readonly Finding[]>([], {
     name: "findings",
   });
+  const [findingsPending, setFindingsPending] = createSignal(false, { name: "findingsPending" });
   const [findingTotals, setFindingTotals] = createSignal(
     { errors: 0, warnings: 0 },
     { name: "findingTotals" },
@@ -174,6 +180,7 @@ export const makeShellStores = (options: {
     // it separately. All three doors are memoised behind the same
     // publication, so asking for all of them costs what asking for one did.
     const list = services.projectAnalysis.findings();
+    setFindingsPending(false);
     let errors = 0;
     let warnings = 0;
     for (const held of list) {
@@ -317,6 +324,7 @@ export const makeShellStores = (options: {
     // the scheduler, and the Publication that follows is what has something
     // new to say.
     if (event.kind === "project.open" || event.kind === "corpus.publish") publishFindings();
+    if (event.kind === "corpus.rejudge") setFindingsPending(true);
   };
 
   /**
@@ -386,6 +394,7 @@ export const makeShellStores = (options: {
     stampOf,
     historyDepth,
     findings,
+    findingsPending,
     findingCounts,
     summaryOf,
     bookCensus,

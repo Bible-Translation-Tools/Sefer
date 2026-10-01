@@ -68,6 +68,7 @@ import {
   Badge,
   Button,
   Card,
+  cx,
   EmptyState,
   IconButton,
   PanelHeader,
@@ -724,7 +725,13 @@ export function FindingsPanel() {
 
       <div class="flex min-h-0 min-w-0 flex-1 gap-4">
         <div
-          class="flex min-h-0 min-w-0 flex-1 flex-col"
+          // While a re-judge is in flight the list stays and dims: the old
+          // findings until the new Publication replaces them, no teardown.
+          class={cx(
+            "flex min-h-0 min-w-0 flex-1 flex-col transition-opacity duration-150",
+            shell.findingsPending() && "opacity-60",
+          )}
+          aria-busy={shell.findingsPending() ? "true" : undefined}
           data-findings={summary().shown}
           data-view={filters.view()}
         >

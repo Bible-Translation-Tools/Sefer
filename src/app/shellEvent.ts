@@ -43,6 +43,12 @@ export type ShellEvent =
   /** A Publication landed: new cross-book findings and a new census. */
   | { readonly kind: "corpus.publish" }
   /**
+   * The proofreading settings changed and the project is being re-judged.
+   * The findings on screen stay until the next Publication replaces them;
+   * this only says one is on its way (`findingsPending`).
+   */
+  | { readonly kind: "corpus.rejudge" }
+  /**
    * A Book was seated, or released back to a plain Book.
    *
    * Both matter because `instantiate` and `release` REPLACE the object that
@@ -74,7 +80,8 @@ export const booksOf = (event: ShellEvent): readonly BookId[] | "all" => {
     case "project.open":
       return "all";
     case "corpus.publish":
-      // A publication changes findings, not save state. No book's row moves.
+    case "corpus.rejudge":
+      // Findings, not save state. No book's row moves.
       return [];
   }
 };

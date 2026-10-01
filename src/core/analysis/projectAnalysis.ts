@@ -185,10 +185,10 @@ export interface ProjectAnalysisService {
   readonly invalidate: (bookId: BookId) => void;
 
   /**
-   * The judging settings changed: drop the publication judged under the old
-   * ones, mark every book stale, and let the scheduler republish once, the way
-   * an edit does. Until it lands there are no Sous findings rather than
-   * findings for settings nobody has now.
+   * The judging settings changed: mark every book stale and let the scheduler
+   * republish once, the way an edit does. The publication judged under the
+   * old settings is kept until that one replaces it, so a screen can show its
+   * findings as pending (`findingsPending`) rather than none at all.
    */
   readonly rejudge: () => void;
 
@@ -773,7 +773,10 @@ const make = (
         arm(bookId);
       },
       rejudge: () => {
-        snapshot = undefined;
+        // The old publication is KEPT until the pass replaces it, as a
+        // refused one is: the screen dims the findings judged under the old
+        // settings for the ~100 ms the pass takes, instead of showing the
+        // project with no proofreading findings at all in between.
         invalidateCaches();
         for (const [bookId, entry] of entries) {
           entry.stale = true;

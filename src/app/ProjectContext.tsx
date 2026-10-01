@@ -269,6 +269,8 @@ export interface Shell {
    * retains the previous answer while the next pass runs rather than blanking.
    */
   readonly findings: Accessor<readonly Finding[]>;
+  /** A re-judge is in flight; the findings shown are about to be replaced. */
+  readonly findingsPending: Accessor<boolean>;
 
   /**
    * Something moved, and this says what — the one door the shell's stores are
@@ -574,16 +576,16 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   // The proofreading settings. Pushed into the engine before any project is
   // attached, so the first publication already judges with them. A change
   // re-judges the project through the scheduler's one debounced pass — the
-  // path an edit takes — and drops the publication judged under the old ones.
+  // path an edit takes. The findings judged under the old settings stay on
+  // screen, marked pending, until that pass's Publication replaces them: a
+  // list torn down and rebuilt for a ~100 ms pass is a flash, not news.
   services.galley.setSettings(sousValues(services.settings.get(keys.sousSettings)));
   const judging = services.runtime.runFork(
     Stream.runForEach(services.settings.changes(keys.sousSettings), (overrides) =>
       Effect.sync(() => {
         services.galley.setSettings(sousValues(overrides));
         services.projectAnalysis.rejudge();
-        // The stores re-read now, so no screen keeps showing findings from
-        // the old settings while the pass runs.
-        changed({ kind: "corpus.publish" });
+        changed({ kind: "corpus.rejudge" });
       }),
     ),
   );
@@ -736,6 +738,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     saveState,
     stampOf,
     findings,
+    findingsPending,
     findingCounts,
     summaryOf,
     bookCensus,
@@ -1367,6 +1370,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     lastLocation,
     finding,
     findings,
+    findingsPending,
     report,
     paletteOpen,
     setPaletteOpen: (open) => {
