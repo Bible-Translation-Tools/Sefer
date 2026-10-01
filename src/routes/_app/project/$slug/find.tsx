@@ -823,7 +823,7 @@ function Find() {
 
             {/* Two axes: which text is shown beside yours (the picker), and
                 which text is searched (the switch). Either without the other. */}
-            <div class="flex basis-full flex-wrap items-center gap-3">
+            <div class="flex flex-wrap items-center gap-3">
               <span class="text-small text-on-surface-secondary">{t("Source text")}</span>
               <source.Picker />
               <Switch

@@ -137,6 +137,11 @@
   color: var(--editor-ink);
   caret-color: var(--editor-accent);
 }
+/* A reference pane is narrower than the 40rem column, so `margin: auto` gives
+   its text no gutter at all; it takes the reading's own breathing room. */
+[data-reference] .cm-mode-regular .cm-content {
+  padding-inline: 1.5rem;
+}
 .cm-mode-regular .cm-cursor {
   border-left-color: var(--editor-accent);
   border-left-width: 2px;
