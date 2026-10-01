@@ -234,7 +234,7 @@ export function AppBar() {
           },
           {
             value: "terms",
-            label: t("Key terms"),
+            label: t("Spiritual terms"),
             icon: <ListChecks aria-hidden="true" />,
             disabled: !open(),
           },

@@ -531,7 +531,7 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
       key: keys.excerptContext,
       label: "Context around a result",
       description:
-        "How many verses or headings a card in Find, Key terms, Findings and Review shows either side of its own verse. Each card's arrows widen it from there.",
+        "How many verses or headings a card in Find, Spiritual terms, Findings and Review shows either side of its own verse. Each card's arrows widen it from there.",
       kind: "number",
       group: "editor",
       min: 0,

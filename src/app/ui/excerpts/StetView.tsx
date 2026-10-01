@@ -342,11 +342,13 @@ export function StetView(props: StetViewProps) {
    */
   const terms = () => (
     <>
-      <nav aria-label={t("Key terms")} class="min-h-0 flex-1 overflow-y-auto px-4 pt-4 pb-4">
+      <nav aria-label={t("Spiritual terms")} class="min-h-0 flex-1 overflow-y-auto px-4 pt-4 pb-4">
         <Show
           when={!(props.loading === true && props.terms.length === 0)}
           fallback={
-            <p class="px-2 py-4 text-small text-on-surface-tertiary">{t("Loading key terms…")}</p>
+            <p class="px-2 py-4 text-small text-on-surface-tertiary">
+              {t("Loading spiritual terms…")}
+            </p>
           }
         >
           <Show
