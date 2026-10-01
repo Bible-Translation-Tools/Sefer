@@ -98,6 +98,9 @@ interface Wire {
   readonly onProgress: (event: GitProgress) => void;
 }
 
+/** The depth git asks for to make a shallow repository whole. */
+const UNSHALLOW = 2_147_483_647;
+
 /** How long a request may go without a byte before it is ended. */
 const STALL_MS = 60_000;
 
@@ -333,12 +336,18 @@ const makeWebRemote = (
       // HEAD symref and checks that branch out, and it writes `origin` itself.
       // The URL is mapped to its content host first, exactly as `attach`
       // does, so what lands in `.git/config` is the same either way.
-      clone: (requested, into) =>
+      //
+      // The Web takes the newest version only unless told otherwise: a tenth
+      // of en_ulb's download, and the history comes later if History asks.
+      clone: (requested, into, cloning) =>
         Effect.gen(function* () {
           const url = identityOf(options.transport, requested);
           const last = { current: { phase: "done", loaded: 0 } satisfies Progress };
           const wire = yield* wireAt(url, into, last, "optional");
-          yield* attempt(() => git.clone({ ...wire, url, singleBranch: true }));
+          const latest = (cloning?.history ?? "latest") === "latest";
+          yield* attempt(() =>
+            git.clone({ ...wire, url, singleBranch: true, ...(latest ? { depth: 1 } : {}) }),
+          );
           return { repo: { root: into } satisfies Repo, progress: last.current };
         }),
 
@@ -412,6 +421,20 @@ const makeWebRemote = (
       fetch: (repo) =>
         transfer(repo, "optional", (wire, branch) =>
           git.fetch({ ...wire, ref: branch, remoteRef: branch, singleBranch: true, prune: true }),
+        ),
+
+      // Everything the shallow boundary left on the server: git's own
+      // "unshallow" is a deepen by the largest depth there is.
+      deepen: (repo) =>
+        transfer(repo, "optional", (wire, branch) =>
+          git.fetch({
+            ...wire,
+            ref: branch,
+            remoteRef: branch,
+            singleBranch: true,
+            depth: UNSHALLOW,
+            tags: false,
+          }),
         ),
 
       // Forward only, and never forced. The work tree is checked out to `to`

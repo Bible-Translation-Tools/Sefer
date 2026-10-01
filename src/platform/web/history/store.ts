@@ -8,9 +8,10 @@
  * wrong answer. The last one per root is also held in memory, so opening book
  * after book reads the file once.
  *
- * A current index is one whose tip is HEAD's. Otherwise it is extended — the
- * build walks only what is new — in a worker where there is one, and in the
- * page where there is not (a test, a host with no workers).
+ * A current index is one whose tip is HEAD's and whose shallow boundary is the
+ * repository's. Otherwise it is extended — the build walks only what is new,
+ * forwards after a fetch and backwards after a deepen — in a worker where
+ * there is one, and in the page where there is not.
  */
 import git from "isomorphic-git";
 
@@ -19,6 +20,7 @@ import {
   buildBookIndex,
   decodeIndex,
   encodeIndex,
+  isCurrent,
   type BookIndex,
   type BuildReport,
 } from "#core/history/bookIndex";
@@ -70,8 +72,9 @@ const held = new Map<string, BookIndex>();
  */
 export const ensureBookIndex = async (fs: IsomorphicFs, root: string): Promise<EnsuredIndex> => {
   const tip = await git.resolveRef({ fs, dir: root, ref: "HEAD" });
+  const shallow = await objectReader(fs, root).shallow();
   const inMemory = held.get(root);
-  if (inMemory !== undefined && inMemory.tip === tip && !inMemory.shallowBoundary)
+  if (inMemory !== undefined && isCurrent(inMemory, tip, shallow))
     return { index: inMemory, how: "held" };
 
   const text = await fs
@@ -79,7 +82,7 @@ export const ensureBookIndex = async (fs: IsomorphicFs, root: string): Promise<E
     .then((found) => String(found))
     .catch(() => undefined);
   const stored = text === undefined ? undefined : decodeIndex(text);
-  if (stored !== undefined && stored.tip === tip && !stored.shallowBoundary) {
+  if (stored !== undefined && isCurrent(stored, tip, shallow)) {
     held.set(root, stored);
     return { index: stored, how: "stored" };
   }

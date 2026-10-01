@@ -66,6 +66,25 @@ export interface Probe {
   readonly empty: boolean;
 }
 
+/**
+ * How much history a clone takes.
+ *
+ * - `latest` — the newest version only (depth 1): a tenth of en_ulb's
+ *   download, and all that sync ever needs, because every commit either side
+ *   makes afterwards sits on top of it. Older history comes later, by
+ *   `deepen`, if History is ever opened. What a reference text wants.
+ * - `all` — the whole history, now.
+ *
+ * Left unsaid, each host chooses: the Web takes `latest`, because a browser
+ * on a low-end device or a slow connection is where a full clone hurts;
+ * desktop takes `all`.
+ */
+export type CloneHistory = "latest" | "all";
+
+export interface CloneOptions {
+  readonly history?: CloneHistory;
+}
+
 export interface RemoteService {
   /**
    * A fresh clone of `url` into `into`, with `origin` recorded as `attach`
@@ -79,6 +98,7 @@ export interface RemoteService {
   readonly clone: (
     url: string,
     into: string,
+    options?: CloneOptions,
   ) => Effect.Effect<{ readonly repo: Repo; readonly progress: Progress }, RemoteError>;
   /** Records `url` as the repository's origin. Does not transfer anything. */
   readonly attach: (repo: Repo, url: string) => Effect.Effect<void, RemoteError>;
@@ -108,6 +128,12 @@ export interface RemoteService {
    */
   readonly probe: (url: string) => Effect.Effect<Probe, RemoteError>;
   readonly fetch: (repo: Repo) => Effect.Effect<Progress, RemoteError>;
+  /**
+   * Fetches the history a `latest` clone left on the server, all of it, for
+   * the current branch. Moves no branch and no file; a repository with its
+   * whole history already gets nothing.
+   */
+  readonly deepen: (repo: Repo) => Effect.Effect<Progress, RemoteError>;
   /**
    * Moves the checked-out branch forward to `to` and brings the work tree
    * with it — only ever forward: `Rejected` unless `to` descends from HEAD.

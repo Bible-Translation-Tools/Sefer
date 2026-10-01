@@ -175,6 +175,8 @@ export const TauriGitLive: Layer.Layer<Git> = Layer.succeed(Git, {
       Option.fromNullishOr,
     ),
 
+  shallow: (repo) => call<boolean>("git_is_shallow", { root: repo.root }),
+
   changedPathsBetween: (repo, from, to) =>
     Effect.map(
       call<readonly WireChangedPath[]>("git_changed_paths_between", {

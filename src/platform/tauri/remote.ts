@@ -182,7 +182,11 @@ const makeTauriRemote = (
       // git2's clone builder: it checks out the branch the server's HEAD
       // names and records `origin` itself. Desktop reaches any host, so the
       // URL goes through as given, exactly as `attach` takes it.
-      clone: (url, into) =>
+      //
+      // Desktop takes the whole history unless told otherwise: it has the
+      // disk and the native speed, and a translator's laptop is not where a
+      // clone hurts. A reference text asks for the latest only.
+      clone: (url, into, cloning) =>
         Effect.gen(function* () {
           const credential = Option.getOrNull(yield* credentialFor(url));
           const wire = yield* call<WireProgress>("git_clone", {
@@ -190,6 +194,7 @@ const makeTauriRemote = (
             root: into,
             username: credential?.username ?? null,
             token: credential?.token ?? null,
+            depth: cloning?.history === "latest" ? 1 : null,
           });
           const progress = progressOf(wire);
           yield* PubSub.publish(events, progress);
@@ -239,6 +244,7 @@ const makeTauriRemote = (
           } satisfies Probe;
         }),
       fetch: (repo) => transfer("git_fetch", repo, "optional"),
+      deepen: (repo) => transfer("git_deepen", repo, "optional"),
       // Local: no origin, no credential. The forward-only and safe-checkout
       // refusals are git2's, in Rust.
       fastForward: (repo, to) => call<void>("git_fast_forward", { root: repo.root, to }),

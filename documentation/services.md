@@ -482,7 +482,7 @@ The flow needs one top-to-bottom pass before more is added.
 
 ### Overview
 
-Clone, probe, fetch, fast-forward and push against a Gitea (WACS) server — no pull, no forced checkout, no force push — plus the Gitea account half (sign-in, tokens). The CONTENT HOST is the identity on both hosts — what `origin` names and a sign-in is filed under; on the Web every request goes through the transport (`src/core/remote/transport.ts`, the proxy that fronts each host), applied inside the HTTP clients and stored nowhere. `src/core/remote`, `platform/{web,tauri}/remote.ts`. → [git](architecture/git.md), [configuration](architecture/configuration.md)
+Clone (the newest version only on the Web and for reference texts, the whole history on desktop; History deepens on first open), probe, fetch, fast-forward and push against a Gitea (WACS) server — no pull, no forced checkout, no force push — plus the Gitea account half (sign-in, tokens). The CONTENT HOST is the identity on both hosts — what `origin` names and a sign-in is filed under; on the Web every request goes through the transport (`src/core/remote/transport.ts`, the proxy that fronts each host), applied inside the HTTP clients and stored nowhere. `src/core/remote`, `platform/{web,tauri}/remote.ts`. → [git](architecture/git.md), [configuration](architecture/configuration.md)
 
 ### Constraints and known bugs
 
@@ -492,7 +492,7 @@ Clone, probe, fetch, fast-forward and push against a Gitea (WACS) server — no 
 
 ### Ideas / future
 
-- Shallow clone and deepen, and the history index, are deferred until History needs them.
+- Deepening in the background, in chunks, if one fetch of a large history proves too slow on a poor connection; today it is one fetch, the first time History opens.
 
 ## Sync
 

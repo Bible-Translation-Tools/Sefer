@@ -65,6 +65,8 @@ command per port member, and the whole `Git` port is answered — no member refu
 | `git_remote_url`            | `Remote.origin`                            | `Remote` |
 | `git_fetch`                 | `Remote.fetch`                             | `Remote` |
 | `git_fetch_ref`             | `Remote.fetchRef`                          | `Remote` |
+| `git_deepen`                | `Remote.deepen`                            | `Remote` |
+| `git_is_shallow`            | `Git.shallow`                              | `Git`    |
 | `git_probe`                 | `Remote.probe`                             | `Remote` |
 | `git_fast_forward`          | `Remote.fastForward`                       | `Remote` |
 | `git_push`                  | `Remote.push`, and `publish`'s second half | `Remote` |

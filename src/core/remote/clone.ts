@@ -18,12 +18,14 @@ import { Effect, FileSystem } from "effect";
 import type { Repo } from "../git/git";
 import { excludeSeferFolder } from "../git/intake";
 import { appendArrival } from "../project/provenance";
-import { Remote, type Progress, type RemoteError } from "./remote";
+import { Remote, type CloneOptions, type Progress, type RemoteError } from "./remote";
 
 /**
  * Clones `url` into `into`, the project folder itself.
  *
  * `catalogueId` is the Find row's `owner/repo`, when the clone started there.
+ * `options.history` is how much history to take now; left unsaid, the host
+ * chooses (`CloneHistory`). A reference text asks for `latest`.
  *
  * Returns the `Repo` and the last progress the transfer reported, so a caller
  * can show what arrived. Not atomic: a failed clone may leave a partial folder,
@@ -34,6 +36,7 @@ export const cloneRepository = (
   url: string,
   into: string,
   catalogueId?: string,
+  options?: CloneOptions,
 ): Effect.Effect<
   { readonly repo: Repo; readonly progress: Progress },
   RemoteError,
@@ -42,7 +45,7 @@ export const cloneRepository = (
   Effect.gen(function* () {
     const remote = yield* Remote;
     const fileSystem = yield* FileSystem.FileSystem;
-    const cloned = yield* remote.clone(url, into);
+    const cloned = yield* remote.clone(url, into, options);
     // This device's corner stays out of the repository from the first
     // moment, before provenance writes into it. A clone's HEAD is its
     // arrival, so there is nothing to commit.

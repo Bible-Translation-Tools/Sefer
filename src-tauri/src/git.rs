@@ -863,6 +863,7 @@ pub fn git_clone(
     root: String,
     username: Option<String>,
     token: Option<String>,
+    depth: Option<i32>,
 ) -> Result<GitProgress, String> {
     let received = Arc::new(AtomicUsize::new(0));
     let total = Arc::new(AtomicUsize::new(0));
@@ -878,6 +879,11 @@ pub fn git_clone(
     }
     let mut options = FetchOptions::new();
     options.remote_callbacks(callbacks);
+    // A depth is "the newest version only" (a reference text); none is the
+    // whole history, desktop's default.
+    if let Some(depth) = depth {
+        options.depth(depth);
+    }
     RepoBuilder::new()
         .fetch_options(options)
         .clone(&url, Path::new(&root))
@@ -887,6 +893,42 @@ pub fn git_clone(
         loaded: received.load(Ordering::Relaxed),
         total: Some(total.load(Ordering::Relaxed)),
     })
+}
+
+/// Fetches everything a shallow clone left on the server, for the current
+/// branch: libgit2's "unshallow" is the largest depth there is. Moves no
+/// branch and no file.
+#[tauri::command]
+pub fn git_deepen(
+    root: String,
+    remote: String,
+    username: Option<String>,
+    token: Option<String>,
+) -> Result<GitProgress, String> {
+    let repo = open_repo(&root)?;
+    let branch = current_branch(&repo)?;
+    let mut handle = repo
+        .find_remote(&remote)
+        .map_err(|error| fail(CONFLICT, error.message()))?;
+    let refspec = format!("+refs/heads/{branch}:refs/remotes/{remote}/{branch}");
+    let mut options = FetchOptions::new();
+    options.remote_callbacks(remote_callbacks(credential_pair(&username, &token)));
+    options.depth(i32::MAX);
+    handle
+        .fetch(&[refspec.as_str()], Some(&mut options), None)
+        .map_err(transport_failure)?;
+    let stats = handle.stats();
+    Ok(GitProgress {
+        phase: "deepen".to_string(),
+        loaded: stats.received_objects(),
+        total: Some(stats.total_objects()),
+    })
+}
+
+/// Is older history missing from this repository?
+#[tauri::command]
+pub fn git_is_shallow(root: String) -> Result<bool, String> {
+    Ok(open_repo(&root)?.is_shallow())
 }
 
 #[tauri::command]

@@ -294,6 +294,16 @@ const makeWebGit = (
         Option.none<CommitId>,
       ),
 
+    // git writes `.git/shallow` for a clone with a depth, and removes it once
+    // the history is whole.
+    shallow: (repo) =>
+      attempt("Io", () =>
+        fs
+          .readFile(`${repo.root}/.git/shallow`, "utf8")
+          .then((text) => String(text).trim() !== "")
+          .catch(() => false),
+      ),
+
     branch: (repo) =>
       Effect.map(
         attempt("Io", () => git.currentBranch({ fs, dir: repo.root, fullname: false })),

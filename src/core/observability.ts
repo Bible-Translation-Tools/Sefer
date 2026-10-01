@@ -110,6 +110,8 @@ export type OperationName =
   | "sync.transfer"
   /** Asking the shared project what changed: on open, or after a refused send. */
   | "sync.check"
+  /** Bringing a newest-version clone's older history to the device, from History. */
+  | "history.deepen"
   /** The key-terms guide for one locale, decoded and listed. */
   | "terms.load"
   /** One term's references mapped onto the project, and its source side read. */

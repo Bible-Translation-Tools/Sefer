@@ -43,6 +43,7 @@ export const serialiseGit = (git: GitService, repositories: RepositoriesService)
     logFrom: (repo, ref) => read(repo.root, git.logFrom(repo, ref)),
     resolve: (repo, ref) => read(repo.root, git.resolve(repo, ref)),
     branch: (repo) => read(repo.root, git.branch(repo)),
+    shallow: (repo) => read(repo.root, git.shallow(repo)),
     changedPathsBetween: (repo, from, to) =>
       read(repo.root, git.changedPathsBetween(repo, from, to)),
     show: (repo, rev, path) => read(repo.root, git.show(repo, rev, path)),
@@ -67,7 +68,8 @@ export const serialiseRemote = (
   return {
     // The folder does not exist yet; the lane is still the one a later open
     // of it will ask for, so a second clone into the same folder waits.
-    clone: (url, into) => write(into, "clone", remote.clone(url, into)),
+    clone: (url, into, options) => write(into, "clone", remote.clone(url, into, options)),
+    deepen: (repo) => write(repo.root, "deepen", remote.deepen(repo)),
     attach: (repo, url) => write(repo.root, "attach", remote.attach(repo, url)),
     attachAs: (repo, name, url) => write(repo.root, "attach", remote.attachAs(repo, name, url)),
     urlOf: (repo, name) => read(repo.root, remote.urlOf(repo, name)),

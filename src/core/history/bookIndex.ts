@@ -46,7 +46,7 @@ export interface IndexedCommit {
   readonly shallow?: true;
 }
 
-const INDEX_VERSION = 2;
+const INDEX_VERSION = 3;
 
 export interface BookIndex {
   readonly version: typeof INDEX_VERSION;
@@ -56,7 +56,19 @@ export interface BookIndex {
   readonly commits: readonly IndexedCommit[];
   /** Older history exists but is not in this repository yet. */
   readonly shallowBoundary: boolean;
+  /**
+   * The commits the walk stopped at because their parents were not local,
+   * ascending. The index is current while the repository's shallow set is
+   * exactly this; a deepen changes it, and the next read extends backwards.
+   */
+  readonly boundary: readonly string[];
 }
+
+/** Is `index` the one for this tip and this shallow boundary? */
+export const isCurrent = (index: BookIndex, tip: string, shallow: ReadonlySet<string>): boolean =>
+  index.tip === tip &&
+  index.boundary.length === shallow.size &&
+  index.boundary.every((id) => shallow.has(id));
 
 export interface BuildReport {
   readonly commits: number;
@@ -235,7 +247,16 @@ export const buildBookIndex = async (
   }
   options.onProgress?.(out.length);
   return {
-    index: { version: INDEX_VERSION, tip, commits: out, shallowBoundary: boundary },
+    index: {
+      version: INDEX_VERSION,
+      tip,
+      commits: out,
+      shallowBoundary: boundary,
+      boundary: out
+        .filter((commit) => commit.shallow === true)
+        .map((commit) => commit.id)
+        .sort(),
+    },
     report: { commits: out.length, reused, read: readCount },
   };
 };

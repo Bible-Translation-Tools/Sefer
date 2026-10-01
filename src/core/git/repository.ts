@@ -35,6 +35,7 @@ export type WriteKind =
   | "commit"
   | "attach"
   | "fetch"
+  | "deepen"
   | "fast-forward"
   | "receive"
   | "combine"

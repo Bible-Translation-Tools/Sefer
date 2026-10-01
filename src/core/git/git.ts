@@ -151,6 +151,11 @@ export interface GitService {
   /** The branch HEAD is on; `None` on a detached or unborn HEAD. */
   readonly branch: (repo: Repo) => Effect.Effect<Option.Option<string>, GitError>;
   /**
+   * Is older history missing from this device — a `latest` clone not yet
+   * deepened? History says so rather than showing a short past as the whole.
+   */
+  readonly shallow: (repo: Repo) => Effect.Effect<boolean, GitError>;
+  /**
    * Repository-relative paths whose content differs between two revs, with the
    * kind seen FROM `from` TO `to` — a path absent at `from` is `added`, one
    * absent at `to` is `deleted`.

@@ -89,8 +89,30 @@ too.
 - **Desktop does not need it.** git2's revision walk has neither problem, so `git_log` and
   `git_previous_versions` stay native. The `history.index` note says what each read cost.
 
-Shallow clone and fetching older history on demand stay deferred: nothing reads past the history a
-full clone already has.
+### How much history a clone takes
+
+`Remote.clone(url, into, { history })` takes `latest` (depth 1) or `all`, and the CALLER chooses;
+left unsaid, the host does — the Web takes `latest`, desktop `all`. For en_ulb a full clone is about
+16 MB and a depth-1 clone about 1.6 MB: on a 1 Mbps connection, two minutes against fifteen seconds
+before the project opens, and a full pack is held in the page's memory while history is read. A
+reference text (a catalogue gateway row today) asks for `latest` on every host, because nobody reads
+its past.
+
+Sync needs nothing older. Every commit either side makes after the clone sits on top of the version
+it took, so the merge base receive and Combine look for is that version or newer, and ahead and
+behind stay a set difference over commits both sides hold. A push from a shallow repository is fine:
+the server has the history.
+
+Only History reads further back. `Git.shallow(repo)` says the past on the device is short, and the
+History screen says so; the first time it opens on such a project in a session it runs
+`Remote.deepen(repo)` — every older commit for the branch in one fetch (git's "unshallow", the largest
+depth there is), in the exclusive lane — and reads again, and a button retries when that failed. The
+index notices: it records the boundary commits it stopped at, is current only while the repository's
+shallow set is exactly those, and extends backwards after a deepen. There is no background deepening,
+so a project nobody opens History on never downloads its old history.
+
+Checked on the sandbox, on the Web: a `latest` clone (2 s), a send from it, a receive into it, and
+History deepening it in under a second, after which its index matched the server's 35 commits.
 
 ## One writer per repository
 
