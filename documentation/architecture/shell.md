@@ -19,7 +19,7 @@ Wiring facts that carry meaning, not taste:
 
 ## State: `src/app/ProjectContext.tsx`
 
-The open `Project`, the focused book, the mode, the clipped chapter, the findings cursor and the status line live in one Solid context above the router. TanStack owns navigation, not lifetimes: a route match is destroyed on every navigation, and a Project owns Book lifetimes.
+The open `Project`, the focused book, the mode, the clipped chapter and the findings cursor live in one Solid context above the router. TanStack owns navigation, not lifetimes: a route match is destroyed on every navigation, and a Project owns Book lifetimes.
 
 `shell.unsaved(book)` reads that book's row of the save-state store: `unsaved` when Save holds a
 baseline for it and `SaveCoordinator.dirty(book)` says the text differs. The row is computed when an

@@ -37,9 +37,9 @@ test("the built application mounts", async ({ page }) => {
   const failures = watchFailures(page);
 
   await page.goto("/");
-  // The shell's status line is the last thing the application renders, so it
-  // standing in for "booted" is not arbitrary — it means composition finished.
-  await expect(page.locator("[data-testid='status-line']")).toBeVisible({ timeout: 30_000 });
+  // The app bar renders only once the shell is ready, so it standing in for
+  // "booted" is not arbitrary — it means composition finished.
+  await expect(page.locator("[data-testid='app-bar']")).toBeVisible({ timeout: 30_000 });
 
   expect(failures, failures.join("\n")).toEqual([]);
 });
@@ -50,7 +50,7 @@ test("a deep link resolves through the SPA fallback", async ({ page }) => {
   // Not the root: this is the assertion about `not_found_handling`, and only a
   // path the server has no file for can make it.
   await page.goto("/projects");
-  await expect(page.locator("[data-testid='status-line']")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator("[data-testid='app-bar']")).toBeVisible({ timeout: 30_000 });
 
   expect(failures, failures.join("\n")).toEqual([]);
 });

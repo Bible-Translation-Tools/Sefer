@@ -1,7 +1,6 @@
 /**
  * The shell's state: the open Project, the services, and the handful of UI
- * choices that outlive a route (mode, clipped chapter, the findings cursor,
- * the status line).
+ * choices that outlive a route (mode, clipped chapter, the findings cursor).
  *
  * Why here and not in the router: TanStack owns navigation, not lifetimes
  * (documentation/architecture/composition.md). A Project owns Book lifetimes
@@ -278,7 +277,6 @@ export interface Shell {
    */
   readonly changed: (event: ShellEvent) => void;
 
-  readonly status: Accessor<string>;
   readonly report: (message: string) => void;
   readonly paletteOpen: Accessor<boolean>;
   readonly setPaletteOpen: (open: boolean) => void;
@@ -532,7 +530,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     for (const stop of edits.held.values()) stop();
     edits.held.clear();
   };
-  const [status, setStatus] = createSignal("", { name: "status" });
   const [paletteOpen, setPaletteOpen] = createSignal(false, { name: "paletteOpen" });
   const [cursor, setCursor] = createSignal(0, { name: "findingCursor" });
   const [reveal, setReveal] = createSignal<Reveal | undefined>(undefined, { name: "reveal" });
@@ -693,7 +690,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
 
   const persist = <S,>(key: SettingKey<S>, value: S): void => {
     // `Effect.result` because a rejected preference is a note, not a crash:
-    // the value is already on screen, and the shell's status line is where a
+    // the value is already on screen, and the shell's report is where a
     // refusal belongs.
     void services.run(Effect.result(services.settings.set(key, value)));
   };
@@ -725,7 +722,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   }
 
   const report = (message: string): void => {
-    setStatus(message);
     services.composition.observability.note("shell.report", "consumed", message);
   };
 
@@ -1371,7 +1367,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     lastLocation,
     finding,
     findings,
-    status,
     report,
     paletteOpen,
     setPaletteOpen: (open) => {

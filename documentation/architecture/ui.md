@@ -315,7 +315,7 @@ retranslated one. `data-testid` is that handle.
 **The rule.** Kebab-case, `<area>-<thing>`, and the area is the piece of chrome
 a reader would name — e.g. `app-bar-home`, `sidebar-book-PHM`, `toolbar-undo`,
 `kebab-export-zip`, `chapter-tile-3`, `location-next`, `palette-input`,
-`status-commands`, `editor-host`. A book id or a chapter label keeps its own
+`editor-host`. A book id or a chapter label keeps its own
 spelling (`sidebar-book-3JN`, `chapter-tile-intro`) — it is an identifier, not
 prose, and lower-casing it would make the selector disagree with the URL.
 
@@ -329,7 +329,7 @@ drives it, and an id nothing uses is a name to keep in step for no reader.
 project button, its Go-to box, each book row and each chapter tile; the
 toolbar, its search box, Undo, Redo, Findings, the kebab and each of the
 kebab's items; the location bar with its two crumbs and its two arrows; the
-command palette and its input; the status line and its Commands button; and
+command palette and its input; and
 the editor card and the CodeMirror host inside it.
 
 There are still no behavioural UI tests (see below). These ids exist so that a verification

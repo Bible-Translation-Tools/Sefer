@@ -1,12 +1,12 @@
 import { Outlet, createFileRoute, useRouterState } from "@tanstack/solid-router";
 import { Show, onCleanup, untrack } from "solid-js";
 
-import { installCommandKeys, runCommand } from "#app/commands";
+import { installCommandKeys } from "#app/commands";
 import { t } from "#app/i18n";
 import { readyShell, useShell, useShellState } from "#app/ProjectContext";
 import { SIDEBAR_WIDTH } from "#app/settings";
 import { CommandPalette } from "#app/ui/CommandPalette";
-import { Kbd, PageLeading, Resizable, Toaster } from "#app/ui/primitives";
+import { PageLeading, Resizable, Toaster } from "#app/ui/primitives";
 import { AppBar } from "#app/ui/workspace/AppBar";
 import { BackToEditor } from "#app/ui/workspace/BackToEditor";
 import { usePanelToggleLeading } from "#app/ui/workspace/PanelToggle";
@@ -159,35 +159,6 @@ function Chrome() {
             <Workspace />
           </Show>
         </div>
-
-        {/* The status line, one compact row at the foot of the content column.
-            It is the shell's only permanent readout — which storage this
-            composition got, what the last operation said, and the one chord
-            that reaches everything else. */}
-        <footer
-          data-testid="status-line"
-          class="flex items-center gap-3 border-t border-sidebar-border bg-surface-primary px-3 py-1 text-smallest text-on-surface-tertiary"
-        >
-          {/* Blank while it boots, like every other short wait: a word here
-              for the half second before the shell exists is only a flash. */}
-          <Show when={shell()} fallback={<span aria-hidden="true">&nbsp;</span>}>
-            {(ready) => (
-              <>
-                <span data-storage={ready().services.storage}>{ready().services.storage}</span>
-                <span class="truncate">{ready().status()}</span>
-                <button
-                  type="button"
-                  data-testid="status-commands"
-                  class="ms-auto flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 transition-colors hover:bg-surface-secondary hover:text-on-surface-secondary"
-                  onClick={() => runCommand("palette.open")}
-                >
-                  {t("Commands")}
-                  <Kbd>Mod-K</Kbd>
-                </button>
-              </>
-            )}
-          </Show>
-        </footer>
       </div>
 
       <Show when={shell()}>
