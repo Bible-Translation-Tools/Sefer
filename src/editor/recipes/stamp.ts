@@ -11,10 +11,11 @@
  * not is live — no selection, no caret, no measuring — which is exactly what a
  * card at rest does not need, and what the satellite Edit opens provides.
  *
- * Why a variant and not the default: a card as a real view can later carry
- * what only a live view can (diagnostics on hover, a caret, the pairing
- * highlight). The stamp buys the cost of one view instead of twenty; this file
- * is here to measure that trade, switched by the "Result cards" setting.
+ * Result cards no longer use it: the measurement said a real view per card is
+ * fast enough, and the "Result cards" setting is gone. Its one user is the
+ * diff's "was" block (`DiffCard`'s `wasBlock`), a block widget inside the diff
+ * view, where a nested live editor would need a lifetime the widget does not
+ * have.
  *
  * ## How a stamp is taken
  *

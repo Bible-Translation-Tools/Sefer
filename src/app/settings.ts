@@ -269,13 +269,6 @@ export interface ShellKeys {
    */
   readonly excerptContext: SettingKey<number>;
   /**
-   * How a result card draws its read-only body: `editor`, a read-only
-   * CodeMirror view per card, or `stamp`, static HTML copied from one hidden
-   * view's rendering (`src/editor/recipes/stamp.ts`). A measurement switch
-   * while the two are compared; read when a card mounts.
-   */
-  readonly excerptRenderer: SettingKey<string>;
-  /**
    * How `/review` draws a difference: `split` (the two texts side by side),
    * `unified` (one text, the other's words struck through where they were),
    * or `auto`, split when the reading is wide enough for two columns.
@@ -419,7 +412,6 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     ),
     enableReplaceAll: settings.register("find.enableReplaceAll", Schema.Boolean, false),
     excerptContext: settings.register("excerpts.context", Schema.Number, 0),
-    excerptRenderer: settings.register("excerpts.renderer", Schema.String, "editor"),
     reviewLayout: settings.register("review.layout", Schema.String, "auto"),
     reviewScope: settings.register("review.scope", Schema.String, "changes"),
     contentHost: settings.register("network.contentHost", Schema.String, ""),
@@ -612,18 +604,6 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
       max: 10000,
       step: 100,
       unit: "ms",
-    },
-    {
-      key: keys.excerptRenderer,
-      label: "Result cards",
-      description:
-        "How result cards draw their text until you edit one: an editor view each, or static HTML copied from one hidden editor. For comparing the two.",
-      kind: "choice",
-      group: "advanced",
-      options: [
-        { value: "editor", label: "Editor views" },
-        { value: "stamp", label: "Stamped HTML" },
-      ],
     },
     {
       key: keys.enableReplaceAll,

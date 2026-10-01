@@ -42,7 +42,7 @@ export {
   type Satellite,
 } from "./recipes/satellite";
 export { mountReader, type ReaderMount } from "./recipes/reader";
-export { mountStamp, type StampMount } from "./recipes/stamp";
+export { mountStamp } from "./recipes/stamp";
 export {
   liveDiff,
   mountDiffView,
