@@ -24,6 +24,7 @@ import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { Badge, Input, MultiSelect, ToggleGroup, cx, severityTone } from "../primitives";
 import { metadataOf } from "../workspace/project";
+import { codeLabel, producerLabel } from "./findingLabels";
 import { chosen, narrowed, toggled, type FindingsFilterState } from "./findingsFilter";
 
 const countOf = <T,>(rows: readonly Facet<T>[], value: T): number =>
@@ -88,7 +89,7 @@ export function FindingsFilters(props: FindingsFiltersProps) {
       >
         {(facet) => (
           <>
-            <span class="flex-1">{t(facet.value)}</span>
+            <span class="flex-1">{producerLabel(facet.value)}</span>
             <Badge>{facet.count}</Badge>
           </>
         )}
@@ -122,14 +123,18 @@ export function FindingsFilters(props: FindingsFiltersProps) {
           narrowed={filter().codes !== null}
           items={props.facets.codes}
           key={(facet: Facet<string>) => facet.value}
-          match={(facet, query) => byText(facet.value, query)}
+          match={(facet, query) =>
+            byText(codeLabel(facet.value), query) || byText(facet.value, query)
+          }
           selected={(facet) => chosen(filter().codes, facet.value)}
           onToggle={(facet) => props.state.update({ codes: narrowed(filter().codes, facet.value) })}
           clear={{ label: t("All codes"), onClear: () => props.state.update({ codes: null }) }}
         >
           {(facet) => (
             <>
-              <code class="flex-1 truncate font-mono">{facet.value}</code>
+              <span class="flex-1 truncate" title={facet.value}>
+                {codeLabel(facet.value)}
+              </span>
               <Badge>{facet.count}</Badge>
             </>
           )}

@@ -72,6 +72,7 @@ import {
   severityTone,
 } from "../primitives";
 import { SearchDialog } from "../search/SearchDialog";
+import { codeLabel } from "./findingLabels";
 import {
   createFindingsFeed,
   foldRuns,
@@ -489,7 +490,9 @@ export function FindingsPanel() {
           <Show when={severitiesOf(row).length > 1}>
             <Badge tone={severityTone(finding.severity)}>{finding.severity}</Badge>
           </Show>
-          <code class="font-mono text-smallest text-on-surface-tertiary">{finding.code}</code>
+          <span class="text-smallest text-on-surface-tertiary" title={finding.code}>
+            {codeLabel(finding.code)}
+          </span>
           <span class="min-w-0 flex-1 text-small text-on-surface-secondary">
             <Show when={finding.described} fallback={finding.message}>
               {(described) => <SousSentence message={described()} tier="headline" />}
