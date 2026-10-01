@@ -13,7 +13,7 @@
  * functions the keystroke path calls, so they are plain and synchronous.
  */
 
-import { declaredVersion } from "@wycliffeassociates/scripture-kitchen/reader";
+import { declaredVersion, USFM_VERSIONS } from "@wycliffeassociates/scripture-kitchen/reader";
 import type { Dish, DiagnosticView } from "@wycliffeassociates/scripture-kitchen/reader";
 import {
   Category,
@@ -286,10 +286,23 @@ export const diagnosticName = (finding: DiagnosticView): string => finding.code(
 export const diagnosticFixLabel = (finding: DiagnosticView): string | null =>
   finding.code().fixLabel;
 
+/**
+ * The rendered message. Kitchen's `message()` fills `{anchor}` and `{second}`
+ * but not `{aux}` (the expected number, the numbering cap), so "expected
+ * {aux}" reached the screen; it is filled here from the row's own aux until
+ * kitchen does it (planning/00-ideas/scripture-kitchen-asks.md). A `version`
+ * aux is read as an index into `USFM_VERSIONS`, the encoding `usfmVersion`
+ * uses; any other aux is a plain number.
+ */
 export const diagnosticMessage = (
   finding: DiagnosticView,
   slice: (from: number, to: number) => string,
-): string => finding.message(slice);
+): string => {
+  const aux = finding.aux();
+  const shown =
+    finding.code().aux === "version" ? (USFM_VERSIONS[aux] ?? String(aux)) : String(aux);
+  return finding.message(slice).replace("{aux}", shown);
+};
 
 /**
  * The severity this finding carries in a document declaring `usfmVersion`, or
