@@ -22,7 +22,7 @@ import { bookName } from "#core/location/canon";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { Badge, Input, MultiSelect, Switch, ToggleGroup, cx, severityTone } from "../primitives";
+import { Badge, Input, MultiSelect, ToggleGroup, cx, severityTone } from "../primitives";
 import { metadataOf } from "../workspace/project";
 import { chosen, narrowed, toggled, type FindingsFilterState } from "./findingsFilter";
 
@@ -150,15 +150,8 @@ export function FindingsFilters(props: FindingsFiltersProps) {
         onInput={(event) => props.state.update({ text: event.currentTarget.value })}
       />
 
-      {/* TODO(2026-10-01, Will): hidden until we decide what replaces the
-          "Hide stale" switch on this screen; the filter logic still holds. */}
-      <Switch
-        id="findings-hide-stale"
-        class="hidden"
-        checked={filter().hideStale}
-        onChange={(on) => props.state.update({ hideStale: on })}
-        label={t("Hide stale")}
-      />
+      {/* TODO(2026-10-01, Will): no "Hide stale" switch until we decide what
+          replaces it on this screen; the filter field and its logic hold. */}
     </div>
   );
 }

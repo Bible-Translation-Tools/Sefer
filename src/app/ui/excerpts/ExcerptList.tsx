@@ -14,7 +14,7 @@
  */
 
 import type { JSX } from "@solidjs/web";
-import { For, createMemo, createSignal, onCleanup, untrack } from "solid-js";
+import { createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
 import type { BookId } from "#core/book/book";
 import {
@@ -28,10 +28,9 @@ import type { Analysis } from "#core/galley";
 import type { EditorBook, Funnel } from "#editor/index";
 
 import { t } from "../../i18n";
-import { useShell } from "../../ProjectContext";
 import { CardList } from "../multibuffer/CardList";
 import type { CardViews } from "../multibuffer/cardViews";
-import { cx, type VirtualSection } from "../primitives";
+import type { VirtualSection } from "../primitives";
 import { claimSidebar } from "../workspace/sidebarSlot";
 import type { ExcerptCardSpec, OutlineSpec } from "./cardSpec";
 import { ExcerptCard, type Paired } from "./ExcerptCard";
@@ -132,7 +131,6 @@ const estimate = (excerpt: Excerpt): number => {
 };
 
 export function ExcerptList(props: ExcerptListProps) {
-  const shell = useShell();
   /**
    * The section last gone to from an outline — what the outline highlights.
    * The one clicked, not the one scrolled under: every card names its own
@@ -243,8 +241,8 @@ export function ExcerptList(props: ExcerptListProps) {
 
   // The outline goes where the project's contents normally are: on a screen
   // of results the sidebar navigates the results (`workspace/sidebarSlot.ts`).
-  // Claimed for as long as this list is mounted; the column below is only for
-  // a reader who has hidden the sidebar.
+  // Claimed for as long as this list is mounted. A reader who has hidden the
+  // sidebar has hidden the outline too: there is no second column of books.
   // Read once: whether a screen owns its sidebar is fixed when it mounts.
   if (untrack(() => props.claimsSidebar) !== false)
     onCleanup(
@@ -263,36 +261,6 @@ export function ExcerptList(props: ExcerptListProps) {
 
   return (
     <div class="flex min-h-0 flex-1 gap-4">
-      <nav
-        aria-label={props.sections?.title ?? t("Books with results")}
-        class={cx(
-          "hidden w-40 shrink-0 flex-col gap-0.5 overflow-y-auto",
-          !shell.sidebarShowing() && props.claimsSidebar !== false && "md:flex",
-        )}
-      >
-        <For each={props.outline}>
-          {(row) => (
-            <button
-              type="button"
-              data-outline={row.bookId}
-              aria-current={current() === row.bookId ? "true" : undefined}
-              onClick={() => go(row.bookId, row.bookId)}
-              class={cx(
-                "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-start text-small transition-colors",
-                current() === row.bookId
-                  ? "bg-sidebar-surface-active font-medium text-brand"
-                  : "text-on-surface-secondary hover:bg-surface-secondary",
-              )}
-            >
-              <span class="truncate">{props.sections?.label?.(row) ?? row.bookId}</span>
-              <span class="ms-auto text-smallest tabular-nums text-on-surface-tertiary">
-                {row.count}
-              </span>
-            </button>
-          )}
-        </For>
-      </nav>
-
       <CardList<Excerpt>
         sections={sections()}
         bookOf={(excerpt) => excerpt.bookId}
