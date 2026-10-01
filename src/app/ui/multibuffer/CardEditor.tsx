@@ -26,14 +26,16 @@
 
 import { Compartment, Prec, type Extension } from "@codemirror/state";
 import { keymap, type EditorView } from "@codemirror/view";
-import { createEffect, createSignal, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, untrack } from "solid-js";
 
 import type { Analysis } from "#core/galley";
 import {
   analyzer,
   clippedToScope,
   markedRanges,
-  modeView,
+  policyKey,
+  policyView,
+  type EditorPolicy,
   mountSatellite,
   readingLayer,
   reclip,
@@ -50,7 +52,8 @@ export interface CardEditorProps {
   readonly book: EditorBook;
   /** The card's stretch of the book, in source offsets. Widening re-clips. */
   readonly range: { readonly from: number; readonly to: number };
-  readonly mode: "regular" | "usfm";
+  /** How the text is drawn and guarded (`editorPolicy`); the Book judges edits under it too. */
+  readonly policy: EditorPolicy;
   /** The stylesheet's surface: `cm-excerpt` unless the card has its own. */
   readonly surface?: string;
   /** The book's own memo, so the satellite never parses a second time. */
@@ -78,10 +81,12 @@ export interface CardEditorProps {
   readonly onDone: () => void;
 }
 
-const viewFor = (mode: "regular" | "usfm", surface: string) =>
-  modeView(mode === "usfm" ? "usfm" : "default", surface);
-
 export function CardEditor(props: CardEditorProps) {
+  /** Compared by what it says, so an equal policy rebuilt upstream reconfigures nothing. */
+  const policy = createMemo(() => props.policy, {
+    name: "cardPolicy",
+    equals: (a, b) => policyKey(a) === policyKey(b),
+  });
   const [host, setHost] = createSignal<HTMLDivElement | undefined>(undefined, {
     name: "cardEditorHost",
   });
@@ -114,12 +119,7 @@ export function CardEditor(props: CardEditorProps) {
         editable: true,
         label: untrack(() => props.label),
         extensions: [
-          mode.of(
-            viewFor(
-              untrack(() => props.mode),
-              surface,
-            ),
-          ),
+          mode.of(policyView(untrack(policy), surface)),
           analyzer.of(untrack(() => props.analyze)),
           readingLayer,
           clippedToScope(),
@@ -170,11 +170,11 @@ export function CardEditor(props: CardEditorProps) {
   // The mode, dispatched into the live view: a projection is presentation, not
   // an edit, so the caret, the selection and the scroll survive the switch.
   createEffect(
-    () => ({ held: live(), name: props.mode }),
-    ({ held, name }) => {
+    () => ({ held: live(), next: policy() }),
+    ({ held, next }) => {
       if (held === undefined) return;
       const surface = untrack(() => props.surface) ?? "cm-excerpt";
-      held.satellite.view.dispatch({ effects: held.mode.reconfigure(viewFor(name, surface)) });
+      held.satellite.view.dispatch({ effects: held.mode.reconfigure(policyView(next, surface)) });
     },
   );
 

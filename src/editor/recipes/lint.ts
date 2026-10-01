@@ -54,9 +54,68 @@ interface Finding {
   fixLabel: string | null;
   fix: { from: number; to: number; insert: string }[] | null;
   hidden: boolean;
+  /** Moved onto an empty number's place (`SLOT_FINDINGS`): the space after its box. */
+  point: boolean;
   line: number;
   stamp: EngineStamp;
 }
+
+/**
+ * Findings drawn where the reader can act on them, not dropped as hidden: an
+ * empty verse or chapter number. Its marker is hidden in regular mode, so the
+ * finding's span is too, and the default hidden test would drop it — leaving an
+ * empty number the reader can neither see flagged nor explain. So these are a
+ * named exception by default: the finding becomes a point at the empty number's
+ * box, and the Fix is the engine's own removal of the marker.
+ *
+ * The wording is Sefer's until kitchen's catalogue carries it; it moves there
+ * with the copy and i18n pass.
+ */
+const SLOT_FINDINGS: Readonly<Record<string, { kind: "v" | "c"; message: string }>> = {
+  "verse-without-designator": {
+    kind: "v",
+    message: "Either type a verse number here, or remove the verse marker.",
+  },
+  "chapter-without-designator": {
+    kind: "c",
+    message: "Either type a chapter number here, or remove the chapter marker.",
+  },
+};
+
+/**
+ * An empty number's place for a marker inside `[from, to]`: where the number
+ * goes (the box, where its content starts), the one space after it that is the
+ * finding's underline, and the whole marker as the Fix removes it — `\v` and
+ * the space that was its number's delimiter, as Backspace at the box does.
+ */
+const slotAt = (
+  state: EditorState,
+  kind: "v" | "c",
+  from: number,
+  to: number,
+):
+  | { readonly from: number; readonly to: number; readonly marker: { from: number; to: number } }
+  | undefined => {
+  const s = structureAt(state);
+  const at = (markerFrom: number, place: number) => {
+    const spaced = state.doc.sliceString(place, place + 1) === " ";
+    const end = spaced ? place + 1 : place;
+    return { from: place, to: end, marker: { from: markerFrom, to: end } };
+  };
+  if (kind === "v") {
+    const v = s.verses.find((row) => row.markerFrom >= from && row.markerFrom <= to);
+    return v === undefined ? undefined : at(v.markerFrom, v.contentFrom);
+  }
+  for (const line of s.lines)
+    if (line.from >= from && line.from <= to) return at(line.from, line.contentFrom);
+  return undefined;
+};
+
+/** What the Fix says when the engine offers none for an empty number. */
+const SLOT_FIX_LABEL: Readonly<Record<"v" | "c", string>> = {
+  v: "remove the verse marker",
+  c: "remove the chapter marker",
+};
 
 export type HiddenTest = (state: EditorState, from: number, to: number) => boolean;
 
@@ -79,23 +138,47 @@ function findings(state: EditorState, isHidden?: HiddenTest): Finding[] {
   for (const f of analysis.dish.diagnostics) {
     const severity = diagnosticSeverity(f, version);
     const at = f.span();
+    const name = diagnosticName(f);
+    const asSlot = SLOT_FINDINGS[name];
+    const slot = asSlot === undefined ? undefined : slotAt(state, asSlot.kind, at.from, at.to);
     out.push({
       code: f.code().code,
-      name: diagnosticName(f),
+      name,
       severity,
-      from: at.from,
-      to: at.to,
+      from: slot?.from ?? at.from,
+      to: slot?.to ?? at.to,
       second: f.second(),
-      message: diagnosticMessage(f, slice),
-      fixLabel: diagnosticFixLabel(f),
-      fix: f.fix(),
-      hidden: isHidden ? isHidden(state, at.from, at.to) : false,
+      message:
+        slot !== undefined && asSlot !== undefined ? asSlot.message : diagnosticMessage(f, slice),
+      // The engine's own fix when it offers one; for an empty number with none,
+      // the deliberate delete itself: the marker and its space.
+      fixLabel:
+        slot !== undefined && asSlot !== undefined && f.fix() === null
+          ? SLOT_FIX_LABEL[asSlot.kind]
+          : diagnosticFixLabel(f),
+      fix:
+        slot !== undefined && f.fix() === null
+          ? [{ from: slot.marker.from, to: slot.marker.to, insert: "" }]
+          : f.fix(),
+      hidden: slot === undefined && isHidden ? isHidden(state, at.from, at.to) : false,
+      point: slot !== undefined,
       line: state.doc.lineAt(Math.min(at.from, state.doc.length)).number,
       stamp,
     });
   }
   done();
-  return out;
+  // An empty number's forced space is its delimiter-to-be, not surplus: the
+  // engine's "reducible whitespace" there would offer to delete it and turn
+  // `\v  the` into `\v the`, verse "the". Dropped where it touches an empty
+  // number's place.
+  const places = out.filter((f) => f.point);
+  return places.length === 0
+    ? out
+    : out.filter(
+        (f) =>
+          f.name !== "delimiter-surplus" ||
+          !places.some((p) => f.from <= p.to + 1 && f.to >= p.from - 1),
+      );
 }
 
 function applyFix(
@@ -227,10 +310,16 @@ export function usfmLinter(
           const stamp = f.stamp;
           out.push({
             from: f.from,
-            to: Math.max(f.to, f.from + 1),
+            // A slot finding covers the one space after the empty number's box,
+            // so hovering the box reaches it; it draws nothing (`usfm-lint-slot`).
+            to: f.point ? f.to : Math.max(f.to, f.from + 1),
             severity: f.severity,
             source: `onion/${f.name}`,
-            markClass: SEVERITY_CLASS[f.severity] ?? "usfm-lint-info",
+            // An empty number's finding draws nothing of its own: the box is
+            // the mark, and the range only keeps the hover and the Fix on it.
+            markClass: f.point
+              ? "usfm-lint-slot"
+              : (SEVERITY_CLASS[f.severity] ?? "usfm-lint-info"),
             message: f.message,
             actions:
               fix === null

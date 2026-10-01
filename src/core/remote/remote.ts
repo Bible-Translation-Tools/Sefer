@@ -1,6 +1,6 @@
 /**
  * The Remote port: the online jobs a translator approves explicitly — clone
- * a repository into a new folder, attach one to a URL, fetch, pull, push —
+ * a repository into a new folder, attach one to a URL, fetch, fast-forward, push —
  * plus publishing a project somewhere it did not exist. Sefer is local-first, so
  * nothing here ever runs as a side effect of editing; every method is a job
  * someone asked for, and `progress()` exists so a long transfer can be shown
@@ -55,6 +55,38 @@ export class RemoteError extends Data.TaggedError("RemoteError")<{
   readonly description?: string | undefined;
 }> {}
 
+/**
+ * What a URL is, asked of the server without transferring anything but its
+ * refs: the branch its HEAD names and where that branch points. `empty` is a
+ * repository with no branch yet — somewhere a first send can go.
+ */
+export interface Probe {
+  readonly defaultBranch: Option.Option<string>;
+  readonly head: Option.Option<string>;
+  readonly empty: boolean;
+}
+
+/**
+ * How much history a clone takes.
+ *
+ * - `latest` — the newest version only (depth 1): a tenth of en_ulb's
+ *   download, and all that sync ever needs, because every commit either side
+ *   makes afterwards sits on top of it. Older history comes later, by
+ *   `deepen`, if History is ever opened. What a reference text wants.
+ * - `all` — the whole history, now.
+ *
+ * Left unsaid, it is `latest` on every host: a slow or metered connection is
+ * the same cost on a laptop as in a browser.
+ */
+export type CloneHistory = "latest" | "all";
+
+export interface CloneOptions {
+  readonly history?: CloneHistory;
+}
+
+/** How much older history a deepen brings: that many more commits back, or all of it. */
+export type Deepen = number | "all";
+
 export interface RemoteService {
   /**
    * A fresh clone of `url` into `into`, with `origin` recorded as `attach`
@@ -68,9 +100,20 @@ export interface RemoteService {
   readonly clone: (
     url: string,
     into: string,
+    options?: CloneOptions,
   ) => Effect.Effect<{ readonly repo: Repo; readonly progress: Progress }, RemoteError>;
   /** Records `url` as the repository's origin. Does not transfer anything. */
   readonly attach: (repo: Repo, url: string) => Effect.Effect<void, RemoteError>;
+  /** `attach` for a remote other than `origin` — somewhere else to send to. */
+  readonly attachAs: (repo: Repo, name: string, url: string) => Effect.Effect<void, RemoteError>;
+  /** The URL recorded for the remote `name`, or `None`. */
+  readonly urlOf: (repo: Repo, name: string) => Effect.Effect<Option.Option<string>, RemoteError>;
+  /**
+   * Fetches one named ref from `origin` — one no branch refspec covers — into
+   * the local ref `into`, and answers the commit it names. Nothing in the work
+   * tree moves.
+   */
+  readonly fetchRef: (repo: Repo, from: string, into: string) => Effect.Effect<string, RemoteError>;
   /**
    * The URL `attach` recorded, or `None` when this project has none.
    *
@@ -80,29 +123,41 @@ export interface RemoteService {
    * "not attached yet" is the ordinary state of a project someone just made.
    */
   readonly origin: (repo: Repo) => Effect.Effect<Option.Option<string>, RemoteError>;
+  /**
+   * Asks `url` what it is without cloning it: the cheapest "are we up to
+   * date?", and the answer a URL field shows before anything is attached.
+   * Anonymous unless a credential is held for the host.
+   */
+  readonly probe: (url: string) => Effect.Effect<Probe, RemoteError>;
   readonly fetch: (repo: Repo) => Effect.Effect<Progress, RemoteError>;
-  readonly pull: (repo: Repo) => Effect.Effect<Progress, RemoteError>;
-  readonly push: (repo: Repo) => Effect.Effect<Progress, RemoteError>;
+  /**
+   * Fetches older history a `latest` clone left on the server, for the
+   * current branch: `more` commits further back, or `all` of it. Moves no
+   * branch and no file; a repository with its whole history gets nothing.
+   */
+  readonly deepen: (repo: Repo, more: Deepen) => Effect.Effect<Progress, RemoteError>;
+  /**
+   * Whether this host brings the rest of a `latest` clone's history in the
+   * background once the clone has returned, when the caller left the choice
+   * to it. Desktop does — off the window's thread — so the project opens on
+   * the newest version and its past arrives while somebody works. The Web
+   * does not: a browser tab is where the download is the cost, and History
+   * asks for what it needs.
+   */
+  readonly backfills: boolean;
+  /**
+   * Moves the checked-out branch forward to `to` and brings the work tree
+   * with it — only ever forward: `Rejected` unless `to` descends from HEAD.
+   *
+   * The checkout is SAFE, never forced: a file with changes no commit holds
+   * is not overwritten, and the move is refused whole rather than half made.
+   * Only files that differ between the two commits are written.
+   */
+  readonly fastForward: (repo: Repo, to: string) => Effect.Effect<void, RemoteError>;
+  /** Sends the checked-out branch to `to`, `origin` unless named. */
+  readonly push: (repo: Repo, to?: string) => Effect.Effect<Progress, RemoteError>;
   /** Creates the project on `target` and pushes it there for the first time. */
   readonly publish: (repo: Repo, target: string) => Effect.Effect<void, RemoteError>;
-  /**
-   * Points `branch` at `toCommit` and makes the work tree match it.
-   *
-   * The half of Combine that no read can do: the shared project's versions
-   * become the base, and this device's work is replayed on top afterwards.
-   * It transfers nothing, but it lives on this port because the sync surface
-   * is the only thing that has any business asking for it.
-   *
-   * It is a FORCED move — anything uncommitted in the work tree is gone — so a
-   * caller must have committed or read out whatever it means to replay before
-   * calling. `branch` must be the branch HEAD is on; moving a branch out from
-   * under a different checked-out one is `Rejected`.
-   */
-  readonly moveBranch: (
-    repo: Repo,
-    branch: string,
-    toCommit: string,
-  ) => Effect.Effect<void, RemoteError>;
   /**
    * Throws away a half-finished merge: the work tree goes back to HEAD and the
    * merge state is cleared. This is what Resolve does.

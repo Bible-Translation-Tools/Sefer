@@ -33,12 +33,14 @@ import FolderOpen from "lucide-solid/icons/folder-open";
 import { For, Show, createSignal, onCleanup, untrack } from "solid-js";
 
 import { lastSegment } from "#core/fileSystem/path";
+import { intakeRepository, type IntakeResult } from "#core/git/intake";
 import { Observability, type Verdict } from "#core/observability";
 import { cloneRepository } from "#core/remote/clone";
 import { Gitea, type RemoteRepo } from "#core/remote/gitea";
 import { remoteVerdict } from "#core/remote/remote";
 import { classify, commit, stage } from "#core/resources/import";
 
+import { APP_AUTHOR } from "../../author";
 import { registerCommand } from "../../commands";
 import { describe, reasonOf, remoteReasonOf } from "../../describe";
 import { contentHostFor } from "../../endpoints";
@@ -72,6 +74,13 @@ interface Progress {
   /** "12 of 66 files" while a step is running; the steps alone say too little. */
   readonly detail?: string;
 }
+
+/** What intake did, as the import operation's fields. */
+const intakeAttrs = (intake: IntakeResult) => ({
+  "import.adopted": intake.adopted,
+  "import.arrival": intake.arrival !== undefined,
+  ...(intake.fallback === undefined ? {} : { "import.fallback": intake.fallback }),
+});
 
 export function ImportHub(props: {
   /**
@@ -173,7 +182,20 @@ export function ImportHub(props: {
         commit(services.fileSystem, staged, { root: into }, "folder"),
         "import.commit",
       );
-      operation.attr({ "import.kind": kind, "import.books": books.length });
+      const arrived = await run(
+        intakeRepository({
+          root: into,
+          written: staged.files,
+          from: lastSegment(source),
+          author: APP_AUTHOR,
+        }),
+        "import.intake",
+      );
+      operation.attr({
+        "import.kind": kind,
+        "import.books": books.length,
+        ...intakeAttrs(arrived),
+      });
 
       finished(
         t("Ready"),
@@ -275,10 +297,20 @@ export function ImportHub(props: {
         commit(services.fileSystem, staged, { root: into }, source),
         "import.commit",
       );
+      const arrived = await run(
+        intakeRepository({
+          root: into,
+          written: staged.files,
+          from: picked.name,
+          author: APP_AUTHOR,
+        }),
+        "import.intake",
+      );
       operation.attr({
         "import.kind": kind,
         "import.books": books.length,
         "import.files": picked.files.length,
+        ...intakeAttrs(arrived),
       });
 
       finished(

@@ -113,7 +113,9 @@ function Terms() {
         if (Result.isFailure(found)) {
           guide.end("failed", { "terms.reason": found.failure.reason });
           setProblem(
-            t("Could not read the key-terms guide: {reason}", { reason: found.failure.reason }),
+            t("Could not read the spiritual-terms guide: {reason}", {
+              reason: found.failure.reason,
+            }),
           );
           setTerms([]);
           return;
@@ -250,11 +252,11 @@ function Terms() {
       {/* The guide picker beside the title: it decides the source reading
           every card shows. Disabled while there is only one guide. */}
       <PanelHeader
-        title={t("Key terms")}
+        title={t("Spiritual terms")}
         actions={
           <Show when={guides().length > 0}>
             <Select
-              aria-label={t("Key terms guide")}
+              aria-label={t("Spiritual terms guide")}
               value={locale()}
               disabled={guides().length < 2}
               onChange={(event) => ask({ locale: event.currentTarget.value, term: undefined })}
@@ -325,6 +327,6 @@ export const Route = createFileRoute("/_app/project/$slug/terms")({
       ? { locale: search["locale"] }
       : {}),
   }),
-  head: () => ({ meta: [{ title: "Sefer — key terms" }] }),
+  head: () => ({ meta: [{ title: "Sefer — spiritual terms" }] }),
   component: () => <ShellGate>{() => <Terms />}</ShellGate>,
 });

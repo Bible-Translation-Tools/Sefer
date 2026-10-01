@@ -18,6 +18,7 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    git::configure_timeouts();
     let mut builder = tauri::Builder::default()
         // `fs` backs the FileSystem port, `dialog` the Dialogs port, `os` the
         // locale HostInfo reports, `opener` the "reveal in Finder" affordances.
@@ -49,13 +50,17 @@ pub fn run() {
             git::git_resolve_ref,
             git::git_current_branch,
             git::git_changed_paths_between,
-            git::git_move_branch,
+            git::git_merge_base,
+            git::git_fast_forward,
+            git::git_probe,
+            git::git_fetch_ref,
             git::git_abort_merge,
             git::git_ensure_remote,
             git::git_remote_url,
             git::git_clone,
             git::git_fetch,
-            git::git_pull,
+            git::git_deepen,
+            git::git_is_shallow,
             git::git_push,
             credentials::credentials_get,
             credentials::credentials_set,

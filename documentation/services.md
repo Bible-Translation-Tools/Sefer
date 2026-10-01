@@ -7,7 +7,7 @@ One section per service: what it is in plain words, what is wrong or constrained
 ## Where to focus (as of 2026-09-25)
 
 1. **Location** — done: every place question goes through Citation, Address and Location over the engine's TOC, and no regex reads a designator. Anchors (for comments) are the next piece, when comments start. See [Location](#location-and-reference) and [the Location chapter](architecture/location.md).
-2. **Git, top to bottom** — history time travel is next, and the pull/push/lifecycle flow needs one careful pass before anything else is added to it. See [Git](#git).
+2. **Git, top to bottom** — the lifecycle pass is built on the `git-lifecycle` branch (2026-09-30): one writer per repository, receive as a fast-forward through the Books, Combine as a decision commit, intake, check on open and send on save. History time travel is next. See [Git](#git).
 3. **One diff and sync model** — after the primitives settle: stop reading every book (the line diff is retired, 2026-09-27), one change classification for History, Review and Cloud. See [Diff](#diff) and `planning/01-discussing/diff-and-sync-model-2026-09-23.md`.
 4. **Data safety in Recovery** — done on the review branch (2026-09-28): a journal knows the text it started from by hash, and one subscriber on the canonical edit feed backs up every book. What is left is a damaged journal's valid prefix, and a recovery unit test (a candidate in the testing chapter). See [Recovery](#recovery).
 
@@ -91,7 +91,7 @@ Schema-validated preferences persisted as JSON through `writeFileAtomic`. Each m
 
 ### Constraints and known bugs
 
-- Nothing calls the engine's `setSettings` yet; the first caller must invalidate the findings caches by hand.
+- The proofreading (Sous) settings are one global key, `sous.settings`, holding only what the reader changed from kitchen's defaults (`src/app/sousSettings.ts`); they are not per project.
 
 ### Ideas / future
 
@@ -167,13 +167,14 @@ A bounded ring of events, spans and verdicts, and a second ring of 200 for `fail
 
 ### Overview
 
-The pinned Scripture Kitchen WASM build (tagged git dependency, v0.1.8). Onion parses, Sous proofreads, and Galley composes both. It is one in-process synchronous handle: `analyze`, `setExtensions` (the process-wide marker table), the corpus (`update`, `updateReference`, `publish`), `find`, `lint`, `toc`, `mask`, `diff`/`merge`, `formatEdits`, `skeleton`/`overlay`, `hash`. `src/core/galley`; loading happens in `src/platform/{web,node}/galley.ts`. → [galley](architecture/galley.md)
+The pinned Scripture Kitchen WASM build (tagged git dependency, v0.1.8). Onion parses, Sous proofreads, and Galley composes both. It is one in-process synchronous handle: `analyze`, `setExtensions` (the process-wide marker table), the corpus (`update`, `updateReference`, `publish`), `find`, `lint`, `toc`, `mask`, `diff`/`merge`, `formatEdits`, `skeleton`/`overlay`, `hash`, and the judging settings (`settings`/`setSettings`, the whole set, through kitchen's generated `fromSettings`/`toSettings`). It also re-exports kitchen's finding descriptors (`describeFinding`, the English catalog) and the typed settings list (`SOUS_SETTINGS`). `src/core/galley`; loading happens in `src/platform/{web,node}/galley.ts`. → [galley](architecture/galley.md)
 
 ### Constraints and known bugs
 
 - `Tree.spansIn`/`Tree.enclosing` (engine-ask 9) are available and unused: nothing yet needs a markup extent.
 - `setExtensions` is process-wide: the marker table a project opens with is the one every parse reads until the next open — reference texts, review sides and loose parses included. Legacy `\s5` is registered as `standalone` only for a project whose texts already contain it (the policy table is `LEGACY_MARKERS` in `src/app/legacyMarkers.ts`; empty means nothing registered); opening a project without it clears the registration. en_ulb: 20,353 findings → 1,316. Detection is the one deliberate regex over markup, because it must run before the first parse. Stripping `\s5` from text is a separate choice. → [galley](architecture/galley.md#the-marker-table-setextensions)
 - Still open upstream: the Sous character census (engine-asks 2) and chapter labels (engine-asks 4).
+- Not yet asked (2026-09-30): tile the TOC so a unit's opening block markers belong to it. Today a verse that opens a paragraph starts its unit at `\v`, and the `\s5` and `\p` before it trail the previous unit (Mark 14:6). A card is its TOC unit and does not widen itself, so Backspace at such a card's first verse cannot reach the paragraph break that visibly opens it. The ask: attach a `\p` (and like openers) forward to the unit it opens rather than back as trailing text.
 - Not yet asked: an unknown marker closes its paragraph at the end of its line (the recovery `\s5` caused before it was registered). The editor treats unknown markers as passthrough, and for the paragraph to flow through one the engine would have to leave it open, as it does for a registered standalone.
 
 ### Ideas / future
@@ -185,7 +186,7 @@ The pinned Scripture Kitchen WASM build (tagged git dependency, v0.1.8). Onion p
 
 ### Overview
 
-Sefer's whole-project consumer of Galley. It analyses every book when a project opens and re-analyses on a debounce. It holds the cross-book results, reference texts and the character inventory, each stamped for freshness. `src/core/analysis/projectAnalysis.ts`. → [findings](architecture/findings.md), [inventory](architecture/inventory.md)
+Sefer's whole-project consumer of Galley. It analyses every book when a project opens and re-analyses on a debounce. It holds the cross-book results, reference texts and the character inventory, each stamped for freshness. `rejudge()` is the door for a settings change: it drops the publication judged under the old settings, marks every book stale and lets the one debounced pass republish. `src/core/analysis/projectAnalysis.ts`. → [findings](architecture/findings.md), [inventory](architecture/inventory.md)
 
 ### Constraints and known bugs
 
@@ -316,7 +317,7 @@ One `Finding` shape over engine diagnostics and project checks, with a semantic 
 ### Constraints and known bugs
 
 - The inventory only lists characters the engine made a claim about; it waits on the Sous census.
-- Who localises rule messages is undecided.
+- A Sous finding's message is kitchen's descriptor rendered through its English ICU catalog (`src/core/findings/messages.ts`, `intl-messageformat`, locale `en`). Onion's messages are still the engine's catalogue strings, and there is no second language yet.
 
 ### Ideas / future
 
@@ -349,17 +350,20 @@ Offered repairs applied through the Book, with a triple staleness check. Engine 
 
 ### Overview
 
-Project find over the reading text, in JavaScript over the engine's mask map (`findInReading`). Literal or regex, case and whole-word switches, stamped hits, and reference-project hits drawn beside the verse. Replace all sits behind the Advanced setting `find.enableReplaceAll`. `src/core/search`, the `/find` route. → [search](architecture/search.md)
+Project find over the reading text, in JavaScript over the engine's mask map (`findInReading`). Literal or regex, case and whole-word switches, stamped hits, and reference-project hits drawn beside the verse. Replace all sits behind the Advanced setting `find.enableReplaceAll`. `src/core/search`, the `/find` route. A query needs two characters (`longEnough`), except a single non-letter glyph such as "—", which searches. Search is a module, so other screens ask it in place: `SearchDialog` (`src/app/ui/search`) is Findings' magnifying glass, showing kitchen's queries for a Sous finding (`Finding.comparison`) one column per purpose, literals through the engine's `findAll` and regexes over the verse-text reading. → [search](architecture/search.md)
 
 ### Constraints and known bugs
 
 - A hit that spans markup cannot be replaced (`Stale`).
 - A hit's `address` is there only when the caller's analysis describes exactly the scanned text (`Options.analysisOf`); otherwise it is absent. There is no fallback scanner. A bound reference is parsed once per exact text by `/find`, on its first hit.
 - `Hit.projected` is declared and never set; delete it next time search is touched.
+- Find compiles a typed regex without the `u` flag, so `\p{L}` matches nothing there. `Query.unicode` turns it on; only `SearchDialog`'s kitchen regexes set it.
+- Find's URL carries only `q` and `scope`. Regex, case, whole word and markup are local toggles that start off, so a link cannot open Find on a pattern, and `SearchDialog` has no "Open in Find".
 
 ### Ideas / future
 
-- None.
+- **Find's toggles in the URL.** `regex`, `case`, `word` and `markup` search params seeded into the toggles, plus Unicode for a pattern (a `unicode` param, or try `u` and fall back when it will not compile). About 30 lines; any Find becomes linkable and each `SearchDialog` column gets "Open in Find" back.
+- **Only offer a comparison where both sides are worth reading.** A casing finding that "appears only here" gives a Here column of the one verse already on screen and a Usually column of hundreds of ordinary spellings, which says nothing the sentence did not. Either filter casing out in `comparisonOf`, or hide the button for any lane when the here count is one; the second would also hide a one-off swapped pair, where the usual list may still help.
 
 ## Excerpts
 
@@ -375,8 +379,13 @@ The multibuffer shared by Find, Key terms and Findings: occurrences grouped by T
 - Cards follow the seat: while a book is seated (open in the editor, or a card editing it) every card of it applies the seat's published changes. Lazily: a card whose clip a change touches repaints on the next frame, the rest catch up 400 ms after typing pauses, so twenty followers cost a keystroke nothing measurable (they cost ~30 ms applied eagerly).
 - Opening a big project and searching at once is slow (13 s first results measured) because the project's background analysis holds the thread; the cards are not the cost there.
 - The context setting is read when a list opens; changing it does not move an open list.
+- Every excerpt reader should follow the global Regular/USFM mode unless a card is explicitly flipped to USFM; not yet checked across Find, Key terms and Findings (noted 2026-09-30).
+- Widening is off at a verse marker: in `rates—\v 19 |the`, Backspace deletes the `9` rather than the space, and selecting from the `9` to the `t` deletes the whole `19` (noted 2026-09-30).
+- A card with condensing (Key terms) keeps every card's body mounted and opens or closes it by a CSS row transition, so the card closing and the card opening move in the same frames and nothing is remounted; the condensed line is the engine's verse text of the card's own unit (`verseTextOf`, `readerMask(text, "verseText")`).
 
 ### Ideas / future
+
+- **Converge Find's excerpt editor and Key terms'** (2026-09-30). The designer's Key terms card (direct edit, condensed, one active card) and Find's (satellite on Edit) should differ in layout, not in editor behaviour: both compose the same pieces — `cardPolicy`, the satellite's deletion keys and motion, its tracer — and anything still wired to one only is the code being wrong, not a feature. Until then, a behaviour fixed in one is checked in the other.
 
 - The verse-markup lock (all markup immutable inside a small window) as a matrix policy toggle.
 - Diff review by verses as this card, with the actions slot picking a side and an intra-word diff body.
@@ -400,12 +409,13 @@ There is one diff: the engine's decision units, addressed by sid (`core/diff/ske
 - The plan: `planning/01-discussing/diff-and-sync-model-2026-09-23.md`. Skip by stamp, read only changed books, one change classification shared by History, Review and Cloud, — History and `projectSource` are on decision units and `core/diff/diff.ts` is deleted (2026-09-27); what remains is skipping the read by stamp.
 - The diff UI redesign is paused on `/project/$slug/playground`.
 - **Default baseline: the file on disk against the working session, not the last commit.**
+- **Open: files that aren't scripture** (a manifest, a versification file, `metadata.json`) have no comparison view. The agreed shape is `@codemirror/merge`'s read-only view, pick one side, behind Advanced; when it lands, the INVARIANTS rule becomes "Scripture diffs are sid-aligned". Until then Combine refuses a non-scripture file both sides changed.
 
 ## Review
 
 ### Overview
 
-The one compare screen, `/review`. Both sides are pickers over a `CompareSource` (the working project, a folder, a zip, a recorded version, or the saved file). The differences are drawn on the texts as the editor reads them: cards per change across every book, or the whole book; split or unified; decisions per unit, card or book, next/previous change (`Alt-F5`). You decide, then Apply, and Record a version (save + commit). The app bar's More menu opens it (Compare). `src/core/compare`, `src/app/ui/review`. → [review](architecture/review.md)
+The one compare screen, `/review`. Both sides are pickers over a `CompareSource` (the working project, a folder, a zip, a recorded version, the saved file, or the shared project — where each change says whether it changed there, here or in both places, and Record a version settles the difference). The differences are drawn on the texts as the editor reads them: cards per change across every book, or the whole book; split or unified; decisions per unit, card or book, next/previous change (`Alt-F5`). You decide, then Apply, and Record a version (save + commit). The app bar's More menu opens it (Compare). `src/core/compare`, `src/app/ui/review`. → [review](architecture/review.md)
 
 ### Constraints and known bugs
 
@@ -458,23 +468,19 @@ A JSONL journal of edits to the dirty buffer, debounced and compacted. On open, 
 
 ### Overview
 
-One port answered by isomorphic-git over OPFS on Web and git2 through Rust commands on desktop: commit, log, show, `previousVersions`, branch, resolve, `changedPathsBetween`, `moveBranch`, `abortMerge`. History is a list of versions with a diff against working and a per-hunk Revert. `src/core/git`, `src-tauri/src/git.rs`. → [git](architecture/git.md), [desktop](architecture/desktop.md)
+One port answered by isomorphic-git over OPFS on Web and git2 0.21 through Rust commands on desktop: commit (with decision-commit parents), mergeBase, log, show, `previousVersions`, branch, resolve, `changedPathsBetween`. Every call runs in its repository's lane — one writer per repository, across tabs by Web Locks — under a lifecycle (absent / opening / ready / busy / unhealthy / closing). Intake gives every arriving project a repository and an arrival commit, adopting an arriving `.git` through an allowlist. History is a list of versions with a diff against working and a per-hunk Revert; on the Web a book's history comes from the book-change index (built in a worker, extended at each change of HEAD), which fixed Genesis's history on en_ulb and the unbounded walk. `src/core/git`, `src-tauri/src/git.rs`. → [git](architecture/git.md), [desktop](architecture/desktop.md)
 
 ### Constraints and known bugs
 
 The flow needs one top-to-bottom pass before more is added.
 
-- Desktop pull (`git.rs:776`) force-checks-out the incoming tree and does not first look for uncommitted changes on disk. Under explicit save the "uncommitted change" is usually a saved-but-unrecorded book, and it would be overwritten.
-- Desktop push has no rejection callback: a push the server refuses (for example, not a fast-forward) can look like success.
-- The commit author is hard-coded as `Sefer <sefer@localhost>` in three places.
-- There is no repository lifecycle (absent / busy / unhealthy / closing), and mutations are not serialised against each other.
-- Web `previousVersions` walks the whole log with no `depth`.
-- Web `log(repo, path)` (so `previousVersions` and `show` too) fails on real histories: isomorphic-git 1.42 parses every tree it walks and throws `UnsafeFilepathError` on an entry name git itself accepts, and one throw loses the whole result. `WycliffeAssociates/en_ulb`'s 2018 root tree has `00-About_the_ULB\ULB-Intro.md`, so Genesis history fails outright (native git: 156 changes). The `/playground/history-diff` spike walks raw tree objects instead (`src/dev/playground/bookHistory.ts`, matches native `git log -- 01-GEN.usfm` exactly); the port itself is unchanged.
+- The lifecycle, the lanes and the desktop commands are built but the desktop app has not been run against them; Web Locks across two tabs has not been exercised either (2026-09-30).
+- The only repair an `unhealthy` repository allows is aborting a merge; there is no screen for it.
 
 ### Ideas / future
 
-- **Measured direction (2026-09-25, `planning/01-discussing/local-review-and-history-plan.md` in the main checkout):** a pack-cached filesystem view under the Web port (37 s → ~2 s for a full walk; isomorphic-git's per-object probing is the cost), then a durable book-change index built at clone and extended at fetch (en_ulb: 4 s, 0.7 MB gzipped; any book's history in ~3 ms), two-point comparison from root trees (42 ms), and common-ancestor / changed-on-both-sides facts for incoming work.
-- **Next up:** book time travel: a read-only historical pane with previous/next, and a bounded log. Then chapter filtering via Location, with a per-(blob, chapter) hash cache and an LRU. Plan: `planning/01-discussing/next-git-considerations.md`, which folds into the diff and sync model.
+- **Measured direction (2026-09-25, Appendix A of `planning/01-discussing/diff-and-sync-model-2026-09-23.md`):** a pack-cached filesystem view under the Web port (37 s → ~2 s for a full walk; isomorphic-git's per-object probing is the cost), then a durable book-change index built at clone and extended at fetch (en_ulb: 4 s, 0.7 MB gzipped; any book's history in ~3 ms), two-point comparison from root trees (42 ms), and common-ancestor / changed-on-both-sides facts for incoming work.
+- **Next up:** book time travel: a read-only historical pane with previous/next, and a bounded log. Then chapter filtering via Location, with a per-(blob, chapter) hash cache and an LRU. Plan: `planning/01-discussing/diff-and-sync-model-2026-09-23.md`, the one Git lifecycle spec.
 - Detect Git changes made outside Sefer; add "back to latest" and an unhealthy-repository recovery flow.
 
 ---
@@ -485,26 +491,29 @@ The flow needs one top-to-bottom pass before more is added.
 
 ### Overview
 
-Clone, fetch, pull, push and branch moves against a Gitea (WACS) server, plus the Gitea account half (sign-in, tokens). The CONTENT HOST is the identity on both hosts — what `origin` names and a sign-in is filed under; on the Web every request goes through the transport (`src/core/remote/transport.ts`, the proxy that fronts each host), applied inside the HTTP clients and stored nowhere. `src/core/remote`, `platform/{web,tauri}/remote.ts`. → [git](architecture/git.md), [configuration](architecture/configuration.md)
+Clone (the newest version only unless the caller asks for all; desktop backfills the rest in steps behind the clone, the Web when History asks, a reference text never), probe, fetch, fast-forward and push against a Gitea (WACS) server — no pull, no forced checkout, no force push — plus the Gitea account half (sign-in, tokens). The CONTENT HOST is the identity on both hosts — what `origin` names and a sign-in is filed under; on the Web every request goes through the transport (`src/core/remote/transport.ts`, the proxy that fronts each host), applied inside the HTTP clients and stored nowhere. `src/core/remote`, `platform/{web,tauri}/remote.ts`. → [git](architecture/git.md), [configuration](architecture/configuration.md)
 
 ### Constraints and known bugs
 
 - Desktop transfer progress is a `TODO(seam)` (`platform/tauri/remote.ts:141`).
 - Desktop `git_clone` (git2 `RepoBuilder`) compiles but has not been run against a server; the web clone was checked on `main` and `master` repositories through the prod proxy, and (2026-09-25) stores the content host as `origin`.
+- Suggested changes (forks and pull requests, `core/remote/suggestions.ts`) are built but not exercised against a second account. They join the app at four seams and can be cut out; [git](architecture/git.md#suggested-changes).
 
 ### Ideas / future
 
-- None.
+- Deepening in the background, in chunks, if one fetch of a large history proves too slow on a poor connection; today it is one fetch, the first time History opens.
 
 ## Sync
 
 ### Overview
 
-The `/cloud` screen. It reads the two clocks and sorts the project into one of nine states, plans what a Receive would change, and Combines. Scripture text is never merged automatically. `src/core/sync`, `app/ui/cloud`. → [sync](architecture/sync.md)
+The `/cloud` screen. It reads the two clocks and sorts the project into one of ten states, plans what a Receive would change from change facts and one overlap policy, receives by fast-forward, and Combines as one decision commit; a contested book is settled in Review against the shared project. The check on open and send on save run per project, on by default. Scripture text is never merged automatically. `src/core/sync`, `app/ui/cloud`. → [sync](architecture/sync.md)
 
 ### Constraints and known bugs
 
 - A contested book's link opens Review for the project, not that book: Review takes no book in its URL.
+- A direct reload onto `/cloud?fixture=1` has shown a blank screen; not yet known whether that predates the lifecycle work.
+- The overlap scope is `book` everywhere; `chapter` and `verse` exist in the policy with no setting.
 
 ### Ideas / future
 
@@ -565,7 +574,7 @@ Stable resource identities bound to project roles (`source`, `reference`, `tn`, 
 
 ### Overview
 
-Rename, delete, archive, export, metadata and checksum refresh. `src/core/admin/projectAdmin.ts`, `app/projectCommands.ts`, `YourProjects.tsx`. → [git](architecture/git.md), [landing](architecture/landing.md)
+Rename (this device's name only, in `.sefer/project.json`), delete, archive, export, metadata and checksum refresh. `src/core/admin/projectAdmin.ts`, `app/projectCommands.ts`, `YourProjects.tsx`. → [git](architecture/git.md), [landing](architecture/landing.md)
 
 ### Constraints and known bugs
 

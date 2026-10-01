@@ -256,13 +256,19 @@ export function motionKeys(): readonly KeyBinding[] {
   ];
 }
 
-export function usfmKeys(): readonly KeyBinding[] {
+/**
+ * Backspace and Delete as the book's rules have them — the owned sets, the
+ * box of an empty number, an immortal passed to what is behind it — for every
+ * surface that edits the book, the canonical editor and a card's satellite
+ * alike. Without them a satellite's Backspace was CodeMirror's plain "delete
+ * a character", which the Book could only refuse or let through: none of the
+ * keypress rules reached a card.
+ */
+export function deletionKeys(): readonly KeyBinding[] {
   const backspace = () =>
     traced("guardedBackspace", guardedBackspace(structureAt, planAt, PAINT_PORT));
   const del = () => traced("guardedDelete", guardedDelete(structureAt, planAt, PAINT_PORT));
   return [
-    ...motionKeys(),
-    { key: "Enter", run: traced("guardedEnter", guardedEnter(structureAt, planAt)) },
     { key: "Backspace", run: backspace() },
     {
       key: "Backspace",
@@ -271,6 +277,14 @@ export function usfmKeys(): readonly KeyBinding[] {
     { key: "Delete", run: del() },
     { key: "Ctrl-d", run: del() },
     { key: "Ctrl-h", run: backspace() },
+  ];
+}
+
+export function usfmKeys(): readonly KeyBinding[] {
+  return [
+    ...motionKeys(),
+    { key: "Enter", run: traced("guardedEnter", guardedEnter(structureAt, planAt)) },
+    ...deletionKeys(),
     { key: "Mod-Alt-1", run: traced("setBlockMarker", setBlockMarker(structureAt, "q1")) },
     { key: "Mod-Alt-0", run: traced("setBlockMarker", setBlockMarker(structureAt, "p")) },
     // The structured insertions (`core/insert.ts`). Bound here as well as in

@@ -50,15 +50,18 @@ import {
   type Occurrence,
 } from "#core/excerpts/excerpts";
 import type { Analysis } from "#core/galley";
-import type { EditorBook, Funnel, MarkedRange } from "#editor/index";
+import { type EditorBook, type EditorPolicy, type Funnel, type MarkedRange } from "#editor/index";
 
 import { t } from "../../i18n";
+import { useShell } from "../../ProjectContext";
 import { CardActions, type CardAction } from "../multibuffer/CardAction";
 import { CardEditor } from "../multibuffer/CardEditor";
 import { CardFrame } from "../multibuffer/CardFrame";
 import type { CardEvent, CardView } from "../multibuffer/cardState";
 import { ContextControl } from "../multibuffer/ContextControl";
-import { Button, Card, cx, IconButton } from "../primitives";
+import { cardPolicy } from "../multibuffer/policy";
+import { Button, cx, IconButton } from "../primitives";
+import { verseTextOf } from "../review/reading";
 import type { ExcerptCardSpec } from "./cardSpec";
 import { ExcerptReader } from "./ExcerptReader";
 
@@ -197,22 +200,12 @@ const highlighted = (
   return out;
 };
 
-/**
- * One line's worth of plain reading from raw USFM, for a condensed card:
- * footnotes and cross references dropped, verse numbers and every other
- * marker stripped, whitespace collapsed. A teaser, not a projection — the
- * card shows the real reading once it is active.
- */
-const plainLine = (usfm: string): string =>
-  usfm
-    .replace(/\\(f|x|fe)\s[\s\S]*?\\\1\*/g, " ")
-    .replace(/\\v\s+\S+/g, " ")
-    .replace(/\\\+?[A-Za-z0-9-]+\*?/g, " ")
-    .replace(/\|[^\\\s]*/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+/** A region that opens and closes by its row: 300ms, and not at all under reduced motion. */
+const collapsible =
+  "grid transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none";
 
 export function ExcerptCard(props: ExcerptCardProps) {
+  const shell = useShell();
   const [book, setBook] = createSignal<EditorBook | undefined>(undefined, {
     name: "excerptBook",
   });
@@ -280,6 +273,8 @@ export function ExcerptCard(props: ExcerptCardProps) {
 
   const direct = (): boolean => props.spec.edit.kind === "direct";
   const chapterOpen = (): boolean => props.excerpt.extent.chapter === true;
+  /** The screen's matrix in the card's mode; reader, satellite and paired side share it. */
+  const policy = (): EditorPolicy => props.spec.policy?.(mode()) ?? cardPolicy(mode());
 
   const edit = (caret?: number, where?: { x: number; y: number }): void => {
     if (targetBox !== undefined) setHold(targetBox.offsetHeight);
@@ -308,7 +303,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
     <ExcerptReader
       analysis={props.excerpt.analysis}
       span={props.excerpt.span}
-      mode={mode()}
+      policy={policy()}
       marks={marks()}
       label={`excerpt:${props.excerpt.sid}`}
       follow={props.follow}
@@ -402,7 +397,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
           <CardEditor
             book={seated()}
             range={props.excerpt.span}
-            mode={mode()}
+            policy={policy()}
             marks={marks()}
             at={at()}
             point={point()}
@@ -451,7 +446,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
               <ExcerptReader
                 analysis={view().excerpt.analysis}
                 span={view().excerpt.span}
-                mode={mode()}
+                policy={policy()}
                 marks={view().marks}
                 label={`paired:${props.excerpt.sid}`}
               />
@@ -475,6 +470,8 @@ export function ExcerptCard(props: ExcerptCardProps) {
   );
 
   const spec = (): ExcerptCardSpec => props.spec;
+  /** Does this screen condense cards at all (Key terms)? Then every card carries its line. */
+  const condensable = (): boolean => props.spec.condensed !== undefined;
   const condensed = (): boolean => props.spec.condensed?.(props.excerpt, props.rowKey) === true;
   const status = (): JSX.Element | undefined => props.spec.status?.(props.excerpt, props.rowKey);
   // A card condensed while it was being edited hands the edit back, so the
@@ -532,217 +529,174 @@ export function ExcerptCard(props: ExcerptCardProps) {
   };
 
   /**
-   * The open and close, animated: when the card condenses, opens, or shows its
-   * chapter, its height eases from what it was to what it is over 300ms.
-   * `settled` is the last height the observer saw — the OLD one when the
-   * effect runs, because the observer only reports after the next layout.
+   * The condensed line: what the editor shows of the card's own verse, in the
+   * engine's reading (`verseTextOf`), not a projection of Sefer's own.
    */
-  const [box, setBox] = createSignal<HTMLDivElement | undefined>(undefined, {
-    name: "excerptCardBox",
-  });
-  let settled: number | undefined;
-  createEffect(
-    () => box(),
-    (element) => {
-      if (element === undefined) return;
-      const observer = new ResizeObserver(([entry]) => {
-        if (entry !== undefined && element.getAnimations().length === 0)
-          settled = entry.borderBoxSize[0]?.blockSize ?? element.offsetHeight;
-      });
-      observer.observe(element);
-      return () => observer.disconnect();
-    },
-  );
-  createEffect(
-    () => ({ shape: `${condensed()}:${chapterOpen()}`, element: box() }),
-    ({ element }, previous) => {
-      if (element === undefined || previous === undefined || settled === undefined) return;
-      const from = settled;
-      const to = element.offsetHeight;
-      if (Math.abs(to - from) < 2) return;
-      if (globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true) return;
-      // Clipped only while it moves, so the card's corners and shadow are
-      // its own the rest of the time.
-      element.style.overflow = "hidden";
-      const motion = element.animate([{ height: `${from}px` }, { height: `${to}px` }], {
-        duration: 300,
-        easing: "ease-in-out",
-      });
-      const release = (): void => {
-        element.style.overflow = "";
-        settled = element.offsetHeight;
-      };
-      motion.onfinish = release;
-      motion.oncancel = release;
-    },
+  const teaser = createMemo(
+    () =>
+      condensable()
+        ? verseTextOf(shell.services.galley, props.excerpt.analysis.text, props.excerpt.own)
+        : "",
+    { name: "excerptTeaser" },
   );
 
   return (
-    <div ref={setBox}>
+    <div>
       {props.spec.before?.(props.excerpt, props.rowKey)}
-      <Show
-        when={!condensed()}
-        fallback={
-          // Condensed: the place, one truncated line of each side, the status;
-          // dimmed, and a click makes it the active card.
-          <Card
-            size="lg"
-            padded={false}
-            raised={false}
-            data-sid={props.excerpt.sid}
-            data-condensed=""
-            class="cursor-pointer p-6 opacity-60 transition-opacity hover:opacity-100"
-            onClick={() => props.spec.onActivate?.(props.excerpt, props.rowKey)}
-          >
-            <div class="flex items-center gap-2">
-              <h3 class="shrink-0 ps-3 text-small font-bold text-on-surface-primary tabular-nums">
-                {props.excerpt.label}
-              </h3>
-              <span class="flex shrink-0">{status()}</span>
-            </div>
-            <div
-              class={cx(
-                "grid gap-2 pt-1 text-small text-on-surface-primary",
-                props.paired !== undefined && "grid-cols-2",
-              )}
-            >
-              <Show when={props.paired !== undefined}>
-                <p class="truncate px-3 font-scripture">
-                  {pairedStatic()?.text ?? pairedNone()?.message ?? ""}
-                </p>
-              </Show>
-              <p class="truncate px-3 font-scripture">
-                {plainLine(
-                  props.excerpt.source.slice(
-                    props.excerpt.own.from - props.excerpt.span.from,
-                    props.excerpt.own.to - props.excerpt.span.from,
-                  ),
-                )}
-              </p>
-            </div>
-          </Card>
-        }
-      >
-        <CardFrame
-          data={{ "data-sid": props.excerpt.sid, "data-mode": mode() }}
-          current={current()}
-          title={spec().title?.(props.excerpt, props.rowKey, props.view) ?? props.excerpt.label}
-          gone={props.gone}
-          info={
-            <>
-              {/* The status sits right after the heading, open or condensed. */}
-              <Show when={status()}>{(mark) => <span class="flex shrink-0">{mark()}</span>}</Show>
-              {spec().info?.(props.excerpt, props.rowKey, props.view)}
-              {/* Not when the card carries notes: findings list themselves line
+      <CardFrame
+        data={{ "data-sid": props.excerpt.sid, "data-mode": mode() }}
+        current={current()}
+        condensed={condensed()}
+        onActivate={() => props.spec.onActivate?.(props.excerpt, props.rowKey)}
+        title={spec().title?.(props.excerpt, props.rowKey, props.view) ?? props.excerpt.label}
+        gone={props.gone}
+        info={
+          <>
+            {/* The status sits right after the heading, open or condensed. */}
+            <Show when={status()}>{(mark) => <span class="flex shrink-0">{mark()}</span>}</Show>
+            {spec().info?.(props.excerpt, props.rowKey, props.view)}
+            {/* Not when the card carries notes: findings list themselves line
                 by line under the header, and "2 matches" above them would be
                 the same count said twice in another vocabulary. */}
-              <Show when={notes() === undefined && props.excerpt.hits.length > 1}>
-                <span class="text-smallest text-on-surface-tertiary">
-                  {t("{count} matches", { count: props.excerpt.hits.length })}
-                </span>
-              </Show>
-            </>
-          }
-          headerActions={usfmAction()}
-          edit={
-            spec().edit.kind === "satellite"
-              ? { kind: "edit", editing: props.editing, onEdit: () => edit(), onDone: done }
-              : { kind: "none" }
-          }
-          open={openAction()}
-          notes={notes()}
-          context={
-            // Only the stepped control lives in the footer; a card with none, or
-            // with the one expand control under its target, draws no footer.
-            spec().context.kind !== "steps" ? undefined : (
-              <Show when={spec().context.kind === "steps" ? spec().context : undefined}>
-                {(context) => (
-                  <ContextControl
-                    extent={props.excerpt.extent}
-                    canUp={props.excerpt.more.up}
-                    canDown={props.excerpt.more.down}
-                    onStep={(step) => {
-                      const held = context();
-                      if (held.kind === "steps") held.step(props.excerpt.sid, step);
-                    }}
-                  />
-                )}
-              </Show>
-            )
-          }
-          flush={direct()}
-          actions={direct() ? undefined : spec().actions?.(props.excerpt, props.rowKey, props.view)}
+            <Show when={notes() === undefined && props.excerpt.hits.length > 1}>
+              <span class="text-smallest text-on-surface-tertiary">
+                {t("{count} matches", { count: props.excerpt.hits.length })}
+              </span>
+            </Show>
+          </>
+        }
+        headerActions={usfmAction()}
+        edit={
+          spec().edit.kind === "satellite"
+            ? { kind: "edit", editing: props.editing, onEdit: () => edit(), onDone: done }
+            : { kind: "none" }
+        }
+        open={openAction()}
+        notes={notes()}
+        context={
+          // Only the stepped control lives in the footer; a card with none, or
+          // with the one expand control under its target, draws no footer.
+          spec().context.kind !== "steps" ? undefined : (
+            <Show when={spec().context.kind === "steps" ? spec().context : undefined}>
+              {(context) => (
+                <ContextControl
+                  extent={props.excerpt.extent}
+                  canUp={props.excerpt.more.up}
+                  canDown={props.excerpt.more.down}
+                  onStep={(step) => {
+                    const held = context();
+                    if (held.kind === "steps") held.step(props.excerpt.sid, step);
+                  }}
+                />
+              )}
+            </Show>
+          )
+        }
+        flush={direct()}
+        actions={direct() ? undefined : spec().actions?.(props.excerpt, props.rowKey, props.view)}
+      >
+        {/* Open and condensed are the SAME frame with two regions, and the
+              switch is a CSS row transition: no node is replaced, and the
+              card closing and the card opening move in the same frames. The
+              closed region is inert, so its controls leave the tab order. */}
+        <div
+          class={cx(collapsible, condensed() ? "grid-rows-[0fr]" : "grid-rows-[1fr]")}
+          inert={condensed()}
         >
-          <div
-            ref={setBody}
-            data-layout={props.paired === undefined ? "single" : wide() ? "side" : "stacked"}
-            class={cx(
-              props.paired !== undefined && "grid gap-2",
-              props.paired !== undefined && !direct() && "p-2",
-              props.paired !== undefined && (wide() ? "grid-cols-2 items-start" : "grid-cols-1"),
-            )}
-          >
-            <Show when={props.paired !== undefined}>{pairedSide}</Show>
-            {/* The whole chapter is a long read: the target scrolls inside the
+          <div class="min-h-0 overflow-hidden">
+            <div
+              ref={setBody}
+              data-layout={props.paired === undefined ? "single" : wide() ? "side" : "stacked"}
+              class={cx(
+                props.paired !== undefined && "grid gap-2",
+                props.paired !== undefined && !direct() && "p-2",
+                props.paired !== undefined && (wide() ? "grid-cols-2 items-start" : "grid-cols-1"),
+              )}
+            >
+              <Show when={props.paired !== undefined}>{pairedSide}</Show>
+              {/* The whole chapter is a long read: the target scrolls inside the
               card past 60% of the screen, so one card cannot become the list. */}
-            {/* A direct card's target is drawn as the input it is: one outline,
+              {/* A direct card's target is drawn as the input it is: one outline,
               grey at rest and the editor's own brand one while editing
               (`editor.css`, `[data-direct-target]`). Its controls
               sit under it, in its column, so they start at its left edge. */}
-            <div class="flex min-w-0 flex-col gap-2">
-              {/* Two boxes: the FRAME, which never scrolls and draws the
-                  outline, and inside it the part that scrolls once the whole
-                  chapter is showing — so the outline stays round the box
-                  rather than scrolling away with the text. */}
-              <div
-                ref={(element: HTMLDivElement) => {
-                  targetBox = element;
-                }}
-                style={hold() === undefined ? undefined : { "min-height": `${hold()}px` }}
-                data-direct-target={direct() ? "" : undefined}
-                data-editing={direct() && props.editing ? "" : undefined}
-                data-chapter={direct() && chapterOpen() ? "" : undefined}
-                class={cx("min-w-0", direct() && "cursor-pointer")}
-              >
+              <div class="flex min-w-0 flex-col gap-2">
+                {/* Two boxes: the FRAME, which never scrolls and draws the
+                    outline, and inside it the part that scrolls once the whole
+                    chapter is showing — so the outline stays round the box
+                    rather than scrolling away with the text. */}
                 <div
-                  class={cx(
-                    chapterOpen() &&
-                      "scrollbar-padded max-h-[var(--card-room,60vh)] overflow-y-auto",
-                    // Inside the outline (2px in, 1.5px thick) and as round,
-                    // so scrolled text is cut off at the border, not past it.
-                    direct() && "m-[3.5px] rounded-[8.5px]",
-                  )}
+                  ref={(element: HTMLDivElement) => {
+                    targetBox = element;
+                  }}
+                  style={hold() === undefined ? undefined : { "min-height": `${hold()}px` }}
+                  data-direct-target={direct() ? "" : undefined}
+                  data-editing={direct() && props.editing ? "" : undefined}
+                  data-chapter={direct() && chapterOpen() ? "" : undefined}
+                  class={cx("min-w-0", direct() && "cursor-pointer")}
                 >
-                  {target}
-                </div>
-              </div>
-              <Show when={direct()}>
-                <div data-card-actions class="flex items-center gap-controls">
-                  <CardActions
-                    size="md"
-                    actions={spec().actions?.(props.excerpt, props.rowKey, props.view) ?? []}
-                  />
-                  <Show when={spec().context.kind === "chapter" ? spec().context : undefined}>
-                    {(context) => (
-                      <Button
-                        data-step="chapter"
-                        variant="tertiary"
-                        icon={chapterOpen() ? <FoldVerticalIcon /> : <UnfoldVerticalIcon />}
-                        onClick={() => {
-                          const held = context();
-                          if (held.kind === "chapter") held.step(props.excerpt.sid, "chapter");
-                        }}
-                      >
-                        {chapterOpen() ? t("Show less") : t("Show more")}
-                      </Button>
+                  <div
+                    class={cx(
+                      chapterOpen() &&
+                        "scrollbar-padded max-h-[var(--card-room,60vh)] overflow-y-auto",
+                      // Inside the outline (2px in, 1.5px thick) and as round,
+                      // so scrolled text is cut off at the border, not past it.
+                      direct() && "m-[3.5px] rounded-[8.5px]",
                     )}
-                  </Show>
+                  >
+                    {target}
+                  </div>
                 </div>
-              </Show>
+                <Show when={direct()}>
+                  <div data-card-actions class="flex items-center gap-controls">
+                    <CardActions
+                      size="md"
+                      actions={spec().actions?.(props.excerpt, props.rowKey, props.view) ?? []}
+                    />
+                    <Show when={spec().context.kind === "chapter" ? spec().context : undefined}>
+                      {(context) => (
+                        <Button
+                          data-step="chapter"
+                          variant="tertiary"
+                          icon={chapterOpen() ? <FoldVerticalIcon /> : <UnfoldVerticalIcon />}
+                          onClick={() => {
+                            const held = context();
+                            if (held.kind === "chapter") held.step(props.excerpt.sid, "chapter");
+                          }}
+                        >
+                          {chapterOpen() ? t("Show less") : t("Show more")}
+                        </Button>
+                      )}
+                    </Show>
+                  </div>
+                </Show>
+              </div>
             </div>
           </div>
-        </CardFrame>
-      </Show>
+        </div>
+        <Show when={condensable()}>
+          <div
+            aria-hidden={condensed() ? undefined : "true"}
+            class={cx(collapsible, condensed() ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}
+          >
+            <div class="min-h-0 overflow-hidden">
+              <div
+                class={cx(
+                  "grid gap-2 text-small text-on-surface-primary",
+                  props.paired !== undefined && "grid-cols-2",
+                )}
+              >
+                <Show when={props.paired !== undefined}>
+                  <p class="truncate px-3 font-scripture">
+                    {pairedStatic()?.text ?? pairedNone()?.message ?? ""}
+                  </p>
+                </Show>
+                <p class="truncate px-3 font-scripture">{teaser()}</p>
+              </div>
+            </div>
+          </div>
+        </Show>
+      </CardFrame>
       {props.spec.after?.(props.excerpt, props.rowKey)}
     </div>
   );

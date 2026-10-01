@@ -31,6 +31,7 @@ import type { Origin, Receipt, Refusal } from "#core/book/book";
 import type { Change } from "#core/source/source";
 
 import type { DocStructure } from "./core/docStructure";
+import type { Tracer } from "./core/instrument";
 import type { Mode } from "./core/kernel";
 import type { AssignmentDelta } from "./core/registry";
 
@@ -87,6 +88,12 @@ export interface Funnel {
   undo(): boolean;
   redo(): boolean;
   depth(): { readonly undo: number; readonly redo: number };
+  /**
+   * The Book's own tracer, so a surface's keypress decisions — a card's
+   * Backspace verdict — land on the same Observability ring as the Book's
+   * judgement of the edit they produce. Absent, the surface traces locally.
+   */
+  tracer?(): Tracer | null;
 }
 
 /** `Change[]` from a CodeMirror `ChangeSet`, in before-text coordinates. */

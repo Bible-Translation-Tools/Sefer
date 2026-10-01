@@ -275,6 +275,14 @@ export const DEFAULT_BUILD_OPTS: BuildOpts = {};
 export interface BuildOpts {
   window?: { from: number; to: number } | null;
   range?: { from: number; to: number } | null;
+  /**
+   * The surface's own clip — a card's stretch of the book, `recipes/satellite`'s
+   * scope — for what is ANCHORED at a boundary rather than spread over a span:
+   * a chapter's notes sit after its last line, one character before the next
+   * chapter's `\c`, so a clip starting there touches that chapter's span and
+   * would draw its notes above the excerpt. `null` when the whole book shows.
+   */
+  clip?: { from: number; to: number } | null;
   highlight?: string | null;
   focus?: { from: number; to: number } | null;
 }
@@ -390,7 +398,9 @@ export function buildRegular(
       add.push({
         from: r.box,
         to: r.box,
-        deco: Decoration.widget({ widget: new EmptySlotWidget(r.kind), side: -1 }),
+        // AFTER the number's place (side 1), so the caret there sits on the
+        // box's left edge — inside the outline — rather than past it.
+        deco: Decoration.widget({ widget: new EmptySlotWidget(r.kind), side: 1 }),
       });
   };
 
@@ -527,8 +537,11 @@ export function buildRegular(
     }
     hideAll(note.hidden);
   }
+  const clip = opts.clip;
   for (const ap of plan.apparatus) {
     if (outside(ap.chapter.from, ap.chapter.to)) continue;
+    // Drawn where it is anchored, so shown only when that point is in the clip.
+    if (clip !== null && clip !== undefined && (ap.at < clip.from || ap.at > clip.to)) continue;
     add.push({
       from: ap.at,
       to: ap.at,

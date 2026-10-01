@@ -41,16 +41,20 @@ import {
   type VersionMismatch,
 } from "#core/galley";
 import { Git, type GitService } from "#core/git/git";
+import { InProcessLockLive, Repositories, RepositoriesLive } from "#core/git/repository";
+import { serialiseGit, serialiseRemote } from "#core/git/serialised";
 import { Credentials, type CredentialsService } from "#core/host/credentials";
 import { Dialogs, type DialogsService } from "#core/host/dialogs";
 import { HostInfo, type HostInfoService, type HostPaths } from "#core/host/hostInfo";
 import { Settings, SettingsLive, type SettingsService } from "#core/host/settings";
 import { NoUpdaterLive, Updater, type UpdaterService } from "#core/host/updater";
 import { Observability } from "#core/observability";
+import { METADATA_FILE } from "#core/project/discovery";
 import type { Seat } from "#core/project/project";
 import { Recovery, RecoveryLive, type RecoveryService } from "#core/recovery/recovery";
 import { Gitea, GiteaLive, type GiteaService, type HttpFetch } from "#core/remote/gitea";
 import { Remote, type RemoteService } from "#core/remote/remote";
+import { Suggestions, SuggestionsLive } from "#core/remote/suggestions";
 import { parseTransport, through } from "#core/remote/transport";
 import { Library, LibraryLive, type LibraryService } from "#core/resources/library";
 import {
@@ -76,6 +80,7 @@ import { OpfsFileSystemLive } from "#platform/web/fileSystem";
 import { WebGalleyLive } from "#platform/web/galley";
 import { WebGitLive } from "#platform/web/git";
 import { OPFS_ROOT, WEB_PATHS, WebHostInfoLive } from "#platform/web/hostInfo";
+import { WebLocksLive } from "#platform/web/locks";
 import { WebRemoteLive } from "#platform/web/remote";
 
 import type { Composition } from "./composition";
@@ -148,7 +153,9 @@ export type Domain =
   | ProjectAnalysis
   | Library
   | Git
+  | Repositories
   | Gitea
+  | Suggestions
   | Remote
   | ProjectAdmin;
 
@@ -279,11 +286,16 @@ const saveLayer: Layer.Layer<
       // `ingredientFor` answers both questions at once — which project this
       // path belongs to, and what the ingredient is called inside it — and a
       // path under no `metadata.json` is a folder of loose USFM, not an error.
+      // The metadata path is answered whenever the book belongs to a burrito,
+      // so Record a version commits it with the book: a checksum written and
+      // never recorded would leave the project unrecorded after every save.
       onSaved: (receipt) =>
         Effect.flatMap(ingredientFor(fileSystem, receipt.path), (found) =>
           Option.isNone(found)
-            ? Effect.void
-            : Effect.asVoid(admin.refreshChecksums(found.value.root, [found.value.name])),
+            ? Effect.succeed([])
+            : Effect.as(admin.refreshChecksums(found.value.root, [found.value.name]), [
+                `${found.value.root}/${METADATA_FILE}`,
+              ]),
         ),
     });
   }),
@@ -343,11 +355,15 @@ const domainLayer = (
         headers: { ...init?.headers, "X-Requested-With": appId },
       });
 
+  const accountFetch =
+    tauri === undefined ? webFetch(appIdFor(build)) : globalThis.fetch.bind(globalThis);
   const account = Layer.provideMerge(
-    GiteaLive({
-      fetch: tauri === undefined ? webFetch(appIdFor(build)) : globalThis.fetch.bind(globalThis),
-      platform: tauri === undefined ? "web" : "desktop",
-    }),
+    Layer.provideMerge(
+      // Suggested changes (forks and pull requests): one topology among
+      // several, and this is its one registration.
+      SuggestionsLive({ fetch: accountFetch }),
+      GiteaLive({ fetch: accountFetch, platform: tauri === undefined ? "web" : "desktop" }),
+    ),
     // Desktop persists tokens in the OS keychain. The Web host has no secure
     // store and persists to `localStorage` anyway, deliberately: a session
     // that did not survive a reload was not a session. The trade is written
@@ -434,19 +450,22 @@ const domainLayer = (
           ProjectAnalysisLive,
           // Imported resources and the role bindings a project reads them through.
           LibraryLive({ libraryRoot: `${paths.appData}/library` }),
-          // History: git2 through Tauri commands on desktop, isomorphic-git over
-          // the same FileSystem port in a browser.
-          tauri === undefined ? WebGitLive : tauri.TauriGitLive,
-          // Transfer. Both hosts take the content host, which is what a
-          // project's `origin` names; the Web also takes the transport it is
-          // reached through (git2 is not a browser origin and needs none).
-          tauri === undefined
-            ? WebRemoteLive({
-                contentHost: endpoints.contentHost,
-                transport: parseTransport(endpoints.webTransport),
-                appId: appIdFor(build),
-              })
-            : tauri.TauriRemoteLive({ endpoint: endpoints.contentHost }),
+          // History and transfer, every call in its repository's lane.
+          laned(
+            // git2 through Tauri commands on desktop, isomorphic-git over the
+            // same FileSystem port in a browser.
+            tauri === undefined ? WebGitLive : tauri.TauriGitLive,
+            // Both hosts take the content host, which is what a project's
+            // `origin` names; the Web also takes the transport it is reached
+            // through (git2 is not a browser origin and needs none).
+            tauri === undefined
+              ? WebRemoteLive({
+                  contentHost: endpoints.contentHost,
+                  transport: parseTransport(endpoints.webTransport),
+                  appId: appIdFor(build),
+                })
+              : tauri.TauriRemoteLive({ endpoint: endpoints.contentHost }),
+          ),
           // Save, Recovery, and — rename, delete, metadata, export — ProjectAdmin.
           saveAndRecovery,
         );
@@ -457,6 +476,36 @@ const domainLayer = (
   );
 
   return Layer.provideMerge(modules, Layer.merge(host, fileSystem));
+};
+
+/**
+ * The hosts' Git and Remote, wrapped so every call runs in its repository's
+ * lane, plus `Repositories` itself for anything that watches a repository's
+ * state. The lifecycle looks at a repository through the host's own `Git`,
+ * never the wrapped one, so a look can never wait on a lane.
+ *
+ * Web Locks wherever the platform has them (every browser, and both desktop
+ * webviews), so the one-writer rule spans tabs and workers; an in-process lock
+ * otherwise.
+ */
+const laned = <EG, RG, ER, RR>(
+  hostGit: Layer.Layer<Git, EG, RG>,
+  hostRemote: Layer.Layer<Remote, ER, RR>,
+) => {
+  const lock =
+    typeof navigator === "object" && "locks" in navigator ? WebLocksLive : InProcessLockLive;
+  const repositories = Layer.provide(RepositoriesLive, Layer.merge(hostGit, lock));
+  const git = Layer.effect(
+    Git,
+    Effect.map(Effect.all([Git, Repositories]), ([inner, lanes]) => serialiseGit(inner, lanes)),
+  ).pipe(Layer.provide(Layer.merge(hostGit, repositories)));
+  const remote = Layer.effect(
+    Remote,
+    Effect.map(Effect.all([Remote, Repositories]), ([inner, lanes]) =>
+      serialiseRemote(inner, lanes),
+    ),
+  ).pipe(Layer.provide(Layer.merge(hostRemote, repositories)));
+  return Layer.mergeAll(git, remote, repositories);
 };
 
 /**

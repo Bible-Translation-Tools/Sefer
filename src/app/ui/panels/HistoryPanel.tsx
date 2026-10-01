@@ -36,10 +36,13 @@ import { revertUnits } from "#core/diff/units";
 import { unitReference, type DecisionUnit } from "#core/galley";
 import type { Commit, Version } from "#core/git/git";
 import { Git, repositoryPath } from "#core/git/git";
+import { Remote, type Deepen } from "#core/remote/remote";
 import { decode } from "#core/source/source";
 
+import { remoteReasonOf } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
+import { syncStatus } from "../../syncStatus";
 import { Badge, Button, Card, Dialog, EmptyState, PanelHeader, toasts } from "../primitives";
 import { bookName } from "../workspace/books";
 import { metadataOf } from "../workspace/project";
@@ -72,6 +75,12 @@ interface Confirmation {
   readonly run: () => void;
 }
 
+/** How many commits further back one step of older history goes. */
+const HISTORY_STEP = 10;
+
+/** Projects whose older history this session has already gone to fetch. */
+const deepened = new Set<string>();
+
 export function HistoryPanel() {
   const shell = useShell();
   const navigate = useNavigate();
@@ -87,6 +96,14 @@ export function HistoryPanel() {
   });
   /** HEAD's blobs: the baseline the top row is measured against. */
   const version = createRecordedVersion(shell);
+  /**
+   * Whether older history is on this device. A project cloned with its
+   * newest version only (the Web's default) has a short past until it is
+   * deepened, and the list must not pass that off as the whole.
+   */
+  const [older, setOlder] = createSignal<"whole" | "missing" | "loading" | "failed">("whole", {
+    name: "historyOlder",
+  });
 
   /**
    * One pass over the repository. Every git call goes through `Effect.result`
@@ -106,6 +123,7 @@ export function HistoryPanel() {
             return { kind: "absent", reason: opened.failure.reason } as const;
           const repo = opened.success;
           const commits = yield* Effect.result(git.log(repo));
+          const shallow = yield* Effect.orElseSucceed(git.shallow(repo), () => false);
           const perBook = new Map<BookId, readonly Version[]>();
           for (const book of project.books) {
             const inside = repositoryPath(project.root, book.path);
@@ -117,6 +135,7 @@ export function HistoryPanel() {
             kind: "read",
             commits: Result.isSuccess(commits) ? commits.success : [],
             perBook,
+            shallow,
           } as const;
         }),
       )
@@ -133,7 +152,47 @@ export function HistoryPanel() {
         setLog(answer.commits);
         setVersions(answer.perBook);
         version.refresh();
+        setOlder((now) => (answer.shallow ? (now === "loading" ? now : "missing") : "whole"));
+        // The first time History opens on a project with its newest version
+        // only, one step further back is fetched without being asked: opening
+        // History is the asking. Once per project per session, so a failure is not
+        // retried on every visit; the button below retries.
+        if (answer.shallow && !deepened.has(project.root) && syncStatus.interfaceUp()) {
+          deepened.add(project.root);
+          loadOlder(HISTORY_STEP);
+        }
       });
+  };
+
+  /** Fetch older history a newest-version clone left on the server, then read again. */
+  const loadOlder = (more: Deepen): void => {
+    const project = shell.project();
+    if (project === undefined) return;
+    setOlder("loading");
+    const operation = shell.services.composition.observability.operation("history.deepen", {
+      "history.more": String(more),
+    });
+    void shell.services
+      .run(
+        Effect.gen(function* () {
+          const git = yield* Git;
+          const remote = yield* Remote;
+          return yield* remote.deepen(yield* git.open(project.root), more);
+        }),
+      )
+      .then(
+        (progress) => {
+          operation.end("passed", { "history.loaded": progress.loaded });
+          // `load` reads `shallow` again: a step that did not reach the
+          // beginning leaves the card offering more.
+          setOlder("missing");
+          load();
+        },
+        (cause: unknown) => {
+          operation.end("failed", { "history.reason": remoteReasonOf(cause) ?? "unknown" });
+          setOlder("failed");
+        },
+      );
   };
   // One read of the open project, at setup. `load` is not a derivation.
   untrack(load);
@@ -312,6 +371,31 @@ export function HistoryPanel() {
       >
         <div class="grid items-start gap-4 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
           <div class="space-y-3 lg:sticky lg:top-6">
+            <Show when={older() !== "whole"}>
+              <Card class="space-y-2" data-history-older={older()}>
+                <p class="text-small text-on-surface-secondary">
+                  {older() === "loading"
+                    ? t("Bringing the older history to this device…")
+                    : older() === "failed"
+                      ? t(
+                          "The older history could not be brought to this device. What is here is recent history only.",
+                        )
+                      : t(
+                          "Only recent history is on this device. The older history is on the shared project.",
+                        )}
+                </p>
+                <Show when={older() !== "loading"}>
+                  <div class="flex gap-2">
+                    <Button variant="secondary" size="sm" onClick={() => loadOlder(HISTORY_STEP)}>
+                      {t("Load {count} more", { count: HISTORY_STEP })}
+                    </Button>
+                    <Button variant="tertiary" size="sm" onClick={() => loadOlder("all")}>
+                      {t("Load all")}
+                    </Button>
+                  </div>
+                </Show>
+              </Card>
+            </Show>
             <Show when={problem() !== ""}>
               <Card class="space-y-2" data-history-problem={problem()}>
                 <Show

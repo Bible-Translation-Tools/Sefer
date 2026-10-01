@@ -77,10 +77,11 @@ Opening a project lands on the WORK, not on a census. `workspace.lastLocation` i
 project root holding `{ bookId, chapter, at }`; `focus` and every chapter change write it (debounced, like
 the sidebar width — a record rewrite per click is a file write per click), and two places read it:
 
-- **`/project/$slug`** forwards to the remembered book as soon as the project is open. The book is
-  checked against the project first, so a book that has since been removed falls back to the census
-  rather than to a not-found. `shell.landingTarget(root)` answers the same question for an Open, before
-  the project is open.
+- **`/project/$slug`** is not a screen: it forwards to the remembered book as soon as the project is
+  open. The book is checked against the project first, so a book that has since been removed falls
+  back to the project's first book rather than to a not-found; a project with no books says so. Every
+  "take me to my work" — `/`, the app bar's home, `BackToEditor` — goes through this one route, so
+  the decision is made once.
 - **`BackToEditor`** uses it as the way back from a full-page screen (settings, findings, history,
   review), returning to the remembered book.
 
@@ -106,15 +107,17 @@ returns to.
 It is rendered ONCE, by the `_app` layout chrome above its `<Outlet/>` and outside the scroller, rather than by
 each page: a screen added later gets the door without knowing it exists, no page can forget it or spell
 it differently, and it does not scroll away with the content. The same component registers the
-`editor.back` command, so the palette lists it and Escape performs it — registered there and not in the
+`editor.back` command, so the palette lists it — registered there and not in the
 shell's core set, because "is this a full-page screen" is the ROUTE's question and `ShellBridge`
 deliberately carries no pathname. All three doors navigate to `/project/$slug`, which forwards to the
 remembered book, so they cannot disagree.
 
-Escape works because `installCommandKeys` skips a binding with no modifier while the reader is
-typing into an input, a text area or a contenteditable — which is what `.cm-content` is, so the editor
-and the palette's own search box are covered by one rule. Every other binding holds Mod, so the rule
-costs them nothing.
+`editor.back` has no key. Escape belongs to whatever dialog is open on the screen (the Findings
+search dialog closes on it), and a full-page screen closes only through its X button.
+
+`installCommandKeys` skips a binding with no modifier while the reader is typing into an input, a
+text area or a contenteditable — which is what `.cm-content` is, so the editor and the palette's own
+search box are covered by one rule. Every other binding holds Mod, so the rule costs them nothing.
 
 The recovery banner is mounted on the book route as well as the project route, for the same reason:
 unsaved work found on open is the first thing to answer, and the project page is not where an open
@@ -275,9 +278,11 @@ An Effect-returning command is run on the app runtime by the runner `registerShe
 
 ## Routes and tokens
 
-Top level: `/`, `/projects`, `/settings`, `/start/create`, the dev-only `/dev/fixture`, and `/design` (outside the `_app` chrome). Under `/project/$slug`: the census (index), `book/$book`, `find`, `findings`, `history` (`?review=1` redirects to `review`), `inventory`, `terms`, `review`, `cloud` and `playground`. A project's slug is minted by `shell.slugFor(root)` and kept in the `projectSlugs` setting, so a bookmark keeps working; slugs minted this session are also held in memory and read first by `rootForSlug`, because a setting only answers a new value once the settings file is written and a click mints and navigates in the same tick. `find` owns its search params and derives its whole state from them, so a link into it from the app bar or the toolbar changes the screen that is already mounted. File routes under `src/routes`; `src/routeTree.gen.ts` is generated — never edit it.
+Top level: `/`, `/projects`, `/settings`, `/start/create`, the dev-only `/dev/fixture`, and `/design` (outside the `_app` chrome). Under `/project/$slug`: the index (a redirect to the work, above), `book/$book`, `find`, `findings`, `history` (`?review=1` redirects to `review`), `inventory`, `terms`, `review`, `cloud` and `playground`. A project's slug is minted by `shell.slugFor(root)` and kept in the `projectSlugs` setting, so a bookmark keeps working; slugs minted this session are also held in memory and read first by `rootForSlug`, because a setting only answers a new value once the settings file is written and a click mints and navigates in the same tick. `find` owns its search params and derives its whole state from them, so a link into it from the app bar or the toolbar changes the screen that is already mounted. File routes under `src/routes`; `src/routeTree.gen.ts` is generated — never edit it.
 
 `src/app/ui/tokens.css` is the design system as plain custom properties, ported from the v1 editor's vanilla-extract contract so the two read as one product, and it is also the Tailwind v4 configuration: an `@theme` block mints a utility from every semantic name. Components use the semantic names (`bg-surface-primary`), never the ramps. Dark is a token swap under `[data-theme="dark"]` and `prefers-color-scheme`, never Tailwind's `dark:` variant. The reusable components live in `src/app/ui/primitives/`, which is the only place corvu is imported. `src/app/ui/app.css` is the one global stylesheet and holds only the `<body>` ground and the CodeMirror frame. See [the UI layer](ui.md).
+
+**Waits look the same everywhere.** A pending route, the shell booting and a project or book opening all draw `DelayedSpinner` (`src/app/ui/primitives/DelayedSpinner.tsx`): blank for `PENDING_MS` (750ms), then a spinner, never a word. The router's `defaultPendingMs` is the same constant, but the component holds the delay itself, because a route chunk still loading suspends straight to the pending component without the router's timer.
 
 Every user-visible string goes through `t()` (`src/app/i18n.ts`) — an identity with `{param}` interpolation. The point is the seam; Lingui replaces the body later.
 

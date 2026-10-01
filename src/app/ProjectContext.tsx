@@ -44,6 +44,7 @@ import { navigateTarget } from "#core/findings/findings";
 import type { Inventory } from "#core/findings/inventory";
 import * as Fixes from "#core/fixes/fixes";
 import { tocViewOf } from "#core/galley";
+import { Repositories } from "#core/git/repository";
 import type { SettingKey } from "#core/host/settings";
 import { chaptersAddress, type Address } from "#core/location/address";
 import { resolve } from "#core/location/locate";
@@ -69,6 +70,7 @@ import { t } from "./i18n";
 import { registerLegacyMarkers } from "./legacyMarkers";
 import { createLocation, type Location } from "./location";
 import { registerProjectCommands } from "./projectCommands";
+import { noteRenamed } from "./projectNames";
 import { composeServices, fixtureRequested, type Services } from "./services";
 import {
   shellKeys,
@@ -80,6 +82,9 @@ import {
 } from "./settings";
 import type { ShellEvent } from "./shellEvent";
 import { makeShellStores, type SaveState } from "./shellStores";
+import { sousValues } from "./sousSettings";
+import { checkForChanges } from "./syncActions";
+import { syncPreferences } from "./syncSettings";
 import { applyEditorFontSize } from "./ui/theme";
 
 export type { SaveState } from "./shellStores";
@@ -253,8 +258,6 @@ export interface Shell {
    * project from a full-page screen). Held as a preference, so it survives a restart.
    */
   readonly lastLocation: (root: string) => LastLocation | undefined;
-  /** The path an Open of `root` should land on: the remembered book, or the census. */
-  readonly landingTarget: (root: string) => LandingTarget;
 
   /** The finding the "next/previous finding" commands point at. */
   readonly finding: Accessor<Finding | undefined>;
@@ -398,21 +401,6 @@ export interface Shell {
  * without either of them importing route ids.
  */
 export type Navigate = UseNavigateResult<string>;
-
-/**
- * Where an Open of a project should land, as the ROUTER's own shape rather
- * than a path string.
- *
- * Not a string: a discriminated pair of typed targets cannot be wrong about a
- * route that moved, which a string silently can, and needs no cast past the
- * typed route union.
- */
-export type LandingTarget =
-  | { readonly to: "/project/$slug"; readonly params: { readonly slug: string } }
-  | {
-      readonly to: "/project/$slug/book/$book";
-      readonly params: { readonly slug: string; readonly book: string };
-    };
 
 /** One row of `shell.recentProjects`: a root, its folder name, and when. */
 export interface RecentProject {
@@ -584,6 +572,26 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   );
   onCleanup(() => {
     Effect.runFork(Fiber.interrupt(backing));
+  });
+
+  // The proofreading settings. Pushed into the engine before any project is
+  // attached, so the first publication already judges with them. A change
+  // re-judges the project through the scheduler's one debounced pass — the
+  // path an edit takes — and drops the publication judged under the old ones.
+  services.galley.setSettings(sousValues(services.settings.get(keys.sousSettings)));
+  const judging = services.runtime.runFork(
+    Stream.runForEach(services.settings.changes(keys.sousSettings), (overrides) =>
+      Effect.sync(() => {
+        services.galley.setSettings(sousValues(overrides));
+        services.projectAnalysis.rejudge();
+        // The stores re-read now, so no screen keeps showing findings from
+        // the old settings while the pass runs.
+        changed({ kind: "corpus.publish" });
+      }),
+    ),
+  );
+  onCleanup(() => {
+    Effect.runFork(Fiber.interrupt(judging));
   });
 
   // The scripture size. Applied to the document rather than held for a
@@ -792,6 +800,10 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     const closing = services.composition.observability.operation("project.close", {
       "project.books": staticOpen.books.length,
     });
+    // The repository's lane first: it waits for any running receive or
+    // combine to finish handing its Books their text, and refuses new work,
+    // so nothing applies to a Book of a project that is already closed.
+    await services.run(Effect.flatMap(Repositories, (lanes) => lanes.close(staticOpen.root)));
     await services.run(Effect.provideService(staticOpen.close(), Observability, closing));
     closing.end("passed");
   };
@@ -887,6 +899,15 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     live = ready;
     setProject(ready);
     setCursor(0);
+    // A name chosen on this device lives in `.sefer/project.json`, never in
+    // the project's own metadata, so the header learns it the way it learns a
+    // rename made this session.
+    void services.run(services.admin.recordedName(root)).then((recorded) => {
+      if (Option.isSome(recorded)) noteRenamed(root, recorded.value);
+    });
+    // "Check for changes on open": in the background, never before the
+    // editor — it only asks and fetches, and never moves a file.
+    if (syncPreferences(services.settings, root).checkOnOpen) void checkForChanges(services, ready);
     // A seat swap replaces the Book object, so every row derived from one has
     // to be re-taken. One subscription for the whole project, not one per
     // book, and it is the Project's own announcement rather than a guess.
@@ -1137,25 +1158,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
 
   const lastLocation = (root: string): LastLocation | undefined => locations()[root];
 
-  /**
-   * Where an Open of `root` should land.
-   *
-   * The remembered book when there is one, and the project's census otherwise.
-   * The book is NOT checked against the project here — the project may not be
-   * open yet when this is asked — so the route that lands falls back to the
-   * census when the book turns out to be gone.
-   */
-  const landingTarget = (root: string): LandingTarget => {
-    const slug = slugFor(root);
-    const held = lastLocation(root);
-    return held === undefined
-      ? { to: "/project/$slug", params: { slug } }
-      : {
-          to: "/project/$slug/book/$book",
-          params: { slug, book: encodeURIComponent(held.bookId) },
-        };
-  };
-
   const aim = (bookId: BookId, from: number, to?: number, at?: RevealAt): void => {
     setReveal({ bookId, from, to, at });
   };
@@ -1367,7 +1369,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     noteCaret,
     noteChapterAtTop,
     lastLocation,
-    landingTarget,
     finding,
     findings,
     status,

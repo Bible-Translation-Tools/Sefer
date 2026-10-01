@@ -13,8 +13,10 @@
  * later gets the door without knowing it exists, and no page can forget it or
  * spell it differently.
  *
- * The same component registers `editor.back`, so the palette lists it and
- * Escape performs it. Registered here rather than in the shell's core set
+ * The same component registers `editor.back`, so the palette lists it. It has
+ * no key: Escape belongs to whatever dialog is open on the screen, and a
+ * screen closes only through this button. Registered here rather than in the
+ * shell's core set
  * because the question "is this a full-page screen" is the ROUTE's, and the
  * `ShellBridge` deliberately does not carry a pathname.
  */
@@ -56,10 +58,8 @@ export function BackToEditor() {
     if (shell.project() === undefined) return;
     // The PARENT route, and nothing cleverer. `/project/$slug` already knows
     // where the work is — it forwards to the remembered book, and falls back
-    // to the book list when that book is gone — so asking it is one door
-    // instead of two answers that can disagree. Resolving
-    // `shell.landingTarget(root)` here would make the same decision a second
-    // time from the same inputs.
+    // to the first book when that one is gone — so asking it is one door
+    // instead of two answers that can disagree.
     void navigate({ to: "/project/$slug", params: { slug: shell.slug() } });
   };
 
@@ -67,9 +67,6 @@ export function BackToEditor() {
     registerCommand({
       id: "editor.back",
       title: t("Back to the editor"),
-      // A bare key, so `installCommandKeys` will not claim it while the reader
-      // is typing into a box, a text area or the editor itself.
-      keys: "Escape",
       when: away,
       run: back,
     }),

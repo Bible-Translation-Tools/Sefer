@@ -11,13 +11,14 @@
 //! repository-relative and are re-checked here, because a receipt path that
 //! escaped the project is a bug we refuse rather than commit.
 
+use std::collections::HashMap;
 use std::path::{Component, Path};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use git2::{
     build::{CheckoutBuilder, RepoBuilder},
-    Cred, Delta, ErrorCode, FetchOptions, ObjectType, Oid, PushOptions, RemoteCallbacks,
+    Cred, Delta, Direction, ErrorCode, FetchOptions, ObjectType, Oid, PushOptions, RemoteCallbacks,
     Repository, RepositoryInitOptions, RepositoryState, ResetType, Signature, Sort, Status,
     StatusOptions,
 };
@@ -56,6 +57,14 @@ pub struct GitProgress {
     pub phase: String,
     pub loaded: usize,
     pub total: Option<usize>,
+}
+
+/// Mirrors the `Remote` port's `Probe`: what a URL is, from its refs alone.
+#[derive(Serialize)]
+pub struct GitProbe {
+    pub default_branch: Option<String>,
+    pub head: Option<String>,
+    pub empty: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -126,6 +135,62 @@ fn transport_failure(error: git2::Error) -> String {
 /// has nothing to answer with reports a public fetch as an auth failure.
 /// Push is the other way round and always carries one; `git_push` says so in
 /// its signature.
+/// One writer per repository, across every window of this process.
+///
+/// The TS side's lanes already make one window's git work take turns, but a
+/// lane lives in one webview, and the network commands below run off the
+/// main thread so a slow transfer does not freeze the window. So every
+/// command that WRITES a repository takes that repository's lock here first,
+/// whichever thread and whichever window it came from. Reads take none:
+/// libgit2 replaces refs and objects atomically, so a read sees a whole
+/// before or a whole after.
+static WRITERS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
+
+/// The lock for `root`, keyed by the path as the TS side names it (it always
+/// names a project the same way; canonicalising would fail for a clone's
+/// folder that does not exist yet).
+fn writer(root: &str) -> Arc<Mutex<()>> {
+    let key = root.trim_end_matches(['/', '\\']).to_string();
+    let mut held = WRITERS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    Arc::clone(held.entry(key).or_default())
+}
+
+/// Runs `work` holding `root`'s writer lock. A panic in another writer
+/// poisons the mutex; the repository is no worse for it, so the lock is
+/// taken anyway.
+fn writing<T>(root: &str, work: impl FnOnce() -> T) -> T {
+    let lock = writer(root);
+    let _held = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    work()
+}
+
+/// Runs a blocking command off the main thread: Tauri runs a plain command
+/// there, and one waiting on the network froze the window.
+async fn off_thread<T: Send + 'static>(
+    work: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|error| fail(IO, error.to_string()))?
+}
+
+/// A transfer that stops moving is ended: it holds its repository's lane, and
+/// a server that stalls would otherwise hold it — and every Record a version
+/// waiting on it — indefinitely. libgit2's server timeout is per read, so a
+/// slow transfer that is still arriving is never cut off. Called once, first
+/// thing in `run`, because these options are process globals.
+pub fn configure_timeouts() {
+    // SAFETY: libgit2's options are unsynchronised globals; `run` calls this
+    // before Tauri spawns a thread or any command can reach libgit2.
+    unsafe {
+        let _ = git2::opts::set_server_connect_timeout_in_milliseconds(15_000);
+        let _ = git2::opts::set_server_timeout_in_milliseconds(60_000);
+    }
+}
+
 fn remote_callbacks(credential: Option<(&str, &str)>) -> RemoteCallbacks<'static> {
     let mut callbacks = RemoteCallbacks::new();
     if let Some((username, token)) = credential {
@@ -195,16 +260,16 @@ fn commit_of(commit: &git2::Commit<'_>) -> GitCommit {
 fn current_branch(repo: &Repository) -> Result<String, String> {
     match repo.head() {
         Ok(head) => match head.shorthand() {
-            Some(name) => Ok(name.to_string()),
-            None => Err(fail(CONFLICT, "HEAD is detached; no branch to use")),
+            Ok(name) => Ok(name.to_string()),
+            Err(_) => Err(fail(CONFLICT, "HEAD is detached; no branch to use")),
         },
         Err(error) if error.code() == ErrorCode::UnbornBranch => {
             let reference = repo
                 .find_reference("HEAD")
                 .map_err(|error| fail(CONFLICT, error.message()))?;
             match reference.symbolic_target() {
-                Some(target) => Ok(target.trim_start_matches("refs/heads/").to_string()),
-                None => Ok("main".to_string()),
+                Ok(Some(target)) => Ok(target.trim_start_matches("refs/heads/").to_string()),
+                _ => Ok(DEFAULT_BRANCH.to_string()),
             }
         }
         Err(error) => Err(fail(CONFLICT, error.message())),
@@ -231,6 +296,10 @@ fn author_signature(name: &str, email: &str) -> Result<Signature<'static>, Strin
     };
     Signature::now(name, email).map_err(io)
 }
+
+/// The branch a repository Sefer creates starts on; `src/core/git/git.ts`
+/// names the same one for the Web host.
+const DEFAULT_BRANCH: &str = "master";
 
 const DEFAULT_AUTHOR_NAME: &str = "Sefer";
 const DEFAULT_AUTHOR_EMAIL: &str = "sefer@localhost";
@@ -298,15 +367,17 @@ pub fn git_open(root: String) -> Result<(), String> {
 /// Idempotent: initialising a repository that already exists opens it.
 #[tauri::command]
 pub fn git_init(root: String) -> Result<(), String> {
-    if Repository::open(&root).is_ok() {
-        return Ok(());
-    }
-    std::fs::create_dir_all(&root).map_err(|error| fail(IO, error.to_string()))?;
-    let mut options = RepositoryInitOptions::new();
-    options.initial_head("main");
-    Repository::init_opts(&root, &options)
-        .map(|_| ())
-        .map_err(io)
+    writing(&root.clone(), move || {
+        if Repository::open(&root).is_ok() {
+            return Ok(());
+        }
+        std::fs::create_dir_all(&root).map_err(|error| fail(IO, error.to_string()))?;
+        let mut options = RepositoryInitOptions::new();
+        options.initial_head(DEFAULT_BRANCH);
+        Repository::init_opts(&root, &options)
+            .map(|_| ())
+            .map_err(io)
+    })
 }
 
 #[tauri::command]
@@ -318,7 +389,7 @@ pub fn git_status(root: String) -> Result<Vec<GitChangedPath>, String> {
 
     let mut out = Vec::new();
     for entry in statuses.iter() {
-        let Some(path) = entry.path() else { continue };
+        let Ok(path) = entry.path() else { continue };
         let flags = entry.status();
         // Order matters: a path can carry several bits at once (staged as new
         // and modified again in the work tree), and the port names one kind.
@@ -361,61 +432,87 @@ pub fn git_commit(
     message: String,
     author_name: String,
     author_email: String,
+    also_parents: Option<Vec<String>>,
 ) -> Result<String, String> {
-    if paths.is_empty() {
-        return Err(fail(
-            REFUSED,
-            "nothing to commit: Save produced no receipts",
-        ));
-    }
-    let repo = open_repo(&root)?;
-    let mut index = repo.index().map_err(io)?;
-
-    for raw in &paths {
-        let relative = relative_path(raw)?;
-        if Path::new(&root).join(relative).exists() {
-            index.add_path(relative).map_err(io)?;
-        } else {
-            index.remove_path(relative).map_err(io)?;
+    writing(&root.clone(), move || {
+        // A join records something true with no file of its own; anything else
+        // with no receipts is a bug upstream.
+        let also = also_parents.unwrap_or_default();
+        if paths.is_empty() && also.is_empty() {
+            return Err(fail(
+                REFUSED,
+                "nothing to commit: Save produced no receipts",
+            ));
         }
-    }
-    index.write().map_err(io)?;
+        let repo = open_repo(&root)?;
+        let mut index = repo.index().map_err(io)?;
 
-    let tree_oid = index.write_tree().map_err(io)?;
-    let tree = repo.find_tree(tree_oid).map_err(io)?;
-    let parent = repo
-        .head()
-        .ok()
-        .and_then(|head| head.target())
-        .and_then(|oid| repo.find_commit(oid).ok());
-
-    if let Some(existing) = &parent {
-        if existing.tree_id() == tree_oid {
-            return Ok(existing.id().to_string());
+        for raw in &paths {
+            let relative = relative_path(raw)?;
+            if Path::new(&root).join(relative).exists() {
+                index.add_path(relative).map_err(io)?;
+            } else {
+                index.remove_path(relative).map_err(io)?;
+            }
         }
-    } else if tree.is_empty() {
-        // No parent AND nothing in the tree: every named path was a deletion
-        // of something never recorded. A root commit here would be an empty
-        // first version, which records nothing and misleads the history.
-        return Err(fail(
-            REFUSED,
-            "nothing to commit: none of the saved paths exist",
-        ));
-    }
+        // The staging stays in memory until the commit exists: a commit that fails
+        // must not leave the on-disk index holding paths no commit records, or the
+        // next ordinary commit would carry them.
 
-    let signature = author_signature(&author_name, &author_email)?;
-    let parents: Vec<&git2::Commit<'_>> = parent.iter().collect();
-    let oid = repo
-        .commit(
-            Some("HEAD"),
-            &signature,
-            &signature,
-            &message,
-            &tree,
-            &parents,
-        )
-        .map_err(io)?;
-    Ok(oid.to_string())
+        let tree_oid = index.write_tree().map_err(io)?;
+        let tree = repo.find_tree(tree_oid).map_err(io)?;
+        let parent = repo
+            .head()
+            .ok()
+            .and_then(|head| head.target())
+            .and_then(|oid| repo.find_commit(oid).ok());
+
+        // A decision commit joins another history even when its tree is HEAD's
+        // own (every decision kept this side's text), so only a plain commit
+        // takes the "nothing changed" shortcut.
+        let mut joined = Vec::with_capacity(also.len());
+        for rev in &also {
+            let oid = resolve_commit(&repo, rev)?
+                .ok_or_else(|| fail(CONFLICT, format!("{rev} names no commit")))?;
+            joined.push(repo.find_commit(oid).map_err(io)?);
+        }
+        if !joined.is_empty() && parent.is_none() {
+            return Err(fail(
+                CONFLICT,
+                "a commit joining another history needs a HEAD to join it to",
+            ));
+        }
+
+        if let Some(existing) = &parent {
+            if joined.is_empty() && existing.tree_id() == tree_oid {
+                index.write().map_err(io)?;
+                return Ok(existing.id().to_string());
+            }
+        } else if tree.is_empty() {
+            // No parent AND nothing in the tree: every named path was a deletion
+            // of something never recorded. A root commit here would be an empty
+            // first version, which records nothing and misleads the history.
+            return Err(fail(
+                REFUSED,
+                "nothing to commit: none of the saved paths exist",
+            ));
+        }
+
+        let signature = author_signature(&author_name, &author_email)?;
+        let parents: Vec<&git2::Commit<'_>> = parent.iter().chain(joined.iter()).collect();
+        let oid = repo
+            .commit(
+                Some("HEAD"),
+                &signature,
+                &signature,
+                &message,
+                &tree,
+                &parents,
+            )
+            .map_err(io)?;
+        index.write().map_err(io)?;
+        Ok(oid.to_string())
+    })
 }
 
 /// Newest first. With `path`, only the commits that changed that path.
@@ -556,6 +653,22 @@ pub fn git_changed_paths_between(
     Ok(out)
 }
 
+/// The best common ancestor of two revs, from commit ancestry alone; `None`
+/// when they share no history.
+#[tauri::command]
+pub fn git_merge_base(root: String, a: String, b: String) -> Result<Option<String>, String> {
+    let repo = open_repo(&root)?;
+    let left =
+        resolve_commit(&repo, &a)?.ok_or_else(|| fail(CONFLICT, format!("{a} names no commit")))?;
+    let right =
+        resolve_commit(&repo, &b)?.ok_or_else(|| fail(CONFLICT, format!("{b} names no commit")))?;
+    match repo.merge_base(left, right) {
+        Ok(oid) => Ok(Some(oid.to_string())),
+        Err(error) if error.code() == ErrorCode::NotFound => Ok(None),
+        Err(error) => Err(io(error)),
+    }
+}
+
 /// `rev` as a commit id, or `None` when nothing by that name exists.
 fn resolve_commit(repo: &Repository, rev: &str) -> Result<Option<Oid>, String> {
     match repo.revparse_single(rev) {
@@ -587,50 +700,53 @@ fn tree_at<'repo>(repo: &'repo Repository, rev: &str) -> Result<git2::Tree<'repo
 // The two work-tree moves the sync surface needs
 //
 // Both are local — no transport, no credential — but they exist FOR the sync
-// surface: Combine is a branch move plus a replay, and Resolve is an abort.
-// They sit on the `Remote` port because that is where the sync surface reaches
-// for them; they are here because git2 is what performs them.
+// surface: a receive is a fast-forward, and Resolve is an abort. They sit on
+// the `Remote` port because that is where the sync surface reaches for them;
+// they are here because git2 is what performs them.
 // ---------------------------------------------------------------------------
 
-/// Points `branch` at `to_commit` and makes the work tree match.
+/// Moves the checked-out branch forward to `to` and brings the work tree
+/// with it — the receive half of a fast-forward, after a fetch.
 ///
-/// This is half of Combine: the shared project's versions become the base. It
-/// is a FORCED checkout — anything uncommitted in the work tree is lost — so a
-/// caller must have committed (or read out) the work it intends to replay
-/// before calling this. Combine does exactly that, which is why it is safe
-/// there and nowhere else.
-///
-/// The branch must be the one HEAD is on. Moving a branch out from under a
-/// checked-out different branch is a foot-gun with no caller, so it is refused.
+/// Forward only: `Rejected` unless `to` descends from HEAD. And SAFE, never
+/// forced: the tree is checked out first with HEAD left where it is, so a
+/// file with changes no commit holds refuses the whole move before the
+/// branch has moved. libgit2 writes only the files that differ.
 #[tauri::command]
-pub fn git_move_branch(root: String, branch: String, to_commit: String) -> Result<(), String> {
-    let repo = open_repo(&root)?;
-    let target = resolve_commit(&repo, &to_commit)?
-        .ok_or_else(|| fail(CONFLICT, format!("{to_commit} names no commit")))?;
-
-    if repo.state() != RepositoryState::Clean {
-        return Err(fail(
-            CONFLICT,
-            "a merge or rebase is in progress; finish or abort it first",
-        ));
-    }
-    let head = current_branch(&repo)?;
-    if head != branch {
-        return Err(fail(
-            CONFLICT,
-            format!(
-                "HEAD is on {head}, not {branch}; cannot move a branch that is not checked out"
-            ),
-        ));
-    }
-
-    let reference = format!("refs/heads/{branch}");
-    repo.reference(&reference, target, true, "sefer: move branch")
-        .map_err(io)?;
-    repo.set_head(&reference).map_err(io)?;
-    repo.checkout_head(Some(CheckoutBuilder::new().force()))
-        .map_err(io)?;
-    Ok(())
+pub fn git_fast_forward(root: String, to: String) -> Result<(), String> {
+    writing(&root.clone(), move || {
+        let repo = open_repo(&root)?;
+        if repo.state() != RepositoryState::Clean {
+            return Err(fail(
+                CONFLICT,
+                "a merge or rebase is in progress; finish or abort it first",
+            ));
+        }
+        let branch = current_branch(&repo)?;
+        let target = resolve_commit(&repo, &to)?
+            .ok_or_else(|| fail(CONFLICT, format!("{to} names no commit")))?;
+        let head = repo.head().ok().and_then(|head| head.target());
+        if head == Some(target) {
+            return Ok(());
+        }
+        if let Some(head) = head {
+            let forward = repo.graph_descendant_of(target, head).map_err(io)?;
+            if !forward {
+                return Err(fail(
+                    REJECTED,
+                    format!("{to} does not descend from {branch}; not a fast-forward"),
+                ));
+            }
+        }
+        let commit = repo.find_commit(target).map_err(io)?;
+        repo.checkout_tree(commit.as_object(), Some(CheckoutBuilder::new().safe()))
+            .map_err(|error| fail(REJECTED, error.message()))?;
+        let reference = format!("refs/heads/{branch}");
+        repo.reference(&reference, target, true, "sefer: fast-forward")
+            .map_err(io)?;
+        repo.set_head(&reference).map_err(io)?;
+        Ok(())
+    })
 }
 
 /// Throws away a half-finished merge: the work tree goes back to HEAD and the
@@ -641,18 +757,20 @@ pub fn git_move_branch(root: String, branch: String, to_commit: String) -> Resul
 /// rather than undoing a transfer.
 #[tauri::command]
 pub fn git_abort_merge(root: String) -> Result<(), String> {
-    let repo = open_repo(&root)?;
-    if repo.state() == RepositoryState::Clean {
-        return Err(fail(CONFLICT, "no merge is in progress"));
-    }
-    let head = repo
-        .head()
-        .map_err(|error| fail(CONFLICT, error.message()))?
-        .peel(ObjectType::Commit)
-        .map_err(|error| fail(CONFLICT, error.message()))?;
-    repo.reset(&head, ResetType::Hard, None).map_err(io)?;
-    repo.cleanup_state().map_err(io)?;
-    Ok(())
+    writing(&root.clone(), move || {
+        let repo = open_repo(&root)?;
+        if repo.state() == RepositoryState::Clean {
+            return Err(fail(CONFLICT, "no merge is in progress"));
+        }
+        let head = repo
+            .head()
+            .map_err(|error| fail(CONFLICT, error.message()))?
+            .peel(ObjectType::Commit)
+            .map_err(|error| fail(CONFLICT, error.message()))?;
+        repo.reset(&head, ResetType::Hard, None).map_err(io)?;
+        repo.cleanup_state().map_err(io)?;
+        Ok(())
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -663,17 +781,19 @@ pub fn git_abort_merge(root: String) -> Result<(), String> {
 /// Transfers nothing — this is the port's `attach`.
 #[tauri::command]
 pub fn git_ensure_remote(root: String, name: String, url: String) -> Result<(), String> {
-    let repo = open_repo(&root)?;
-    // Bound to a local: the `Result<Remote<'_>, _>` the match scrutinises
-    // borrows `repo`, and a tail expression would outlive it.
-    let outcome = match repo.find_remote(&name) {
-        Ok(_) => repo.remote_set_url(&name, &url).map_err(io),
-        Err(error) if error.code() == ErrorCode::NotFound => {
-            repo.remote(&name, &url).map(|_| ()).map_err(io)
-        }
-        Err(error) => Err(io(error)),
-    };
-    outcome
+    writing(&root.clone(), move || {
+        let repo = open_repo(&root)?;
+        // Bound to a local: the `Result<Remote<'_>, _>` the match scrutinises
+        // borrows `repo`, and a tail expression would outlive it.
+        let outcome = match repo.find_remote(&name) {
+            Ok(_) => repo.remote_set_url(&name, &url).map_err(io),
+            Err(error) if error.code() == ErrorCode::NotFound => {
+                repo.remote(&name, &url).map(|_| ()).map_err(io)
+            }
+            Err(error) => Err(io(error)),
+        };
+        outcome
+    })
 }
 
 /// The URL recorded for `name`, or `None` when the repository has no such
@@ -683,7 +803,7 @@ pub fn git_ensure_remote(root: String, name: String, url: String) -> Result<(), 
 pub fn git_remote_url(root: String, name: String) -> Result<Option<String>, String> {
     let repo = open_repo(&root)?;
     let outcome = match repo.find_remote(&name) {
-        Ok(remote) => Ok(remote.url().map(|url| url.to_string())),
+        Ok(remote) => Ok(remote.url().ok().map(|url| url.to_string())),
         Err(error) if error.code() == ErrorCode::NotFound => Ok(None),
         Err(error) => Err(io(error)),
     };
@@ -715,6 +835,72 @@ fn fetch_branch(
     })
 }
 
+/// What `url` is, from its refs alone: no clone, no repository on disk.
+/// Anonymous unless both halves of a credential are given, as `git_fetch` is.
+fn git_probe_now(
+    url: String,
+    username: Option<String>,
+    token: Option<String>,
+) -> Result<GitProbe, String> {
+    let mut remote = git2::Remote::create_detached(url.as_str()).map_err(transport_failure)?;
+    let connection = remote
+        .connect_auth(
+            Direction::Fetch,
+            Some(remote_callbacks(credential_pair(&username, &token))),
+            None,
+        )
+        .map_err(transport_failure)?;
+    let heads = connection.list().map_err(transport_failure)?;
+    let head = heads
+        .iter()
+        .find(|entry| entry.name() == "HEAD")
+        .map(|entry| entry.oid().to_string());
+    let empty = !heads
+        .iter()
+        .any(|entry| entry.name().starts_with("refs/heads/"));
+    // An empty repository has no HEAD to name a branch, and says so as an
+    // error rather than an empty answer.
+    let default_branch = connection.default_branch().ok().and_then(|name| {
+        name.as_str()
+            .ok()
+            .map(|name| name.trim_start_matches("refs/heads/").to_string())
+    });
+    Ok(GitProbe {
+        default_branch,
+        head,
+        empty,
+    })
+}
+
+/// One named ref from `remote` — one no branch refspec covers, such as a
+/// suggestion's `refs/pull/<n>/head` — into the local ref `into`. Answers the
+/// commit it names. Nothing in the work tree moves.
+fn git_fetch_ref_now(
+    root: String,
+    remote: String,
+    from: String,
+    into: String,
+    username: Option<String>,
+    token: Option<String>,
+) -> Result<String, String> {
+    let repo = open_repo(&root)?;
+    let mut handle = repo
+        .find_remote(&remote)
+        .map_err(|error| fail(CONFLICT, error.message()))?;
+    let mut options = FetchOptions::new();
+    options.remote_callbacks(remote_callbacks(credential_pair(&username, &token)));
+    let refspec = format!("+{from}:{into}");
+    handle
+        .fetch(&[refspec.as_str()], Some(&mut options), None)
+        .map_err(transport_failure)?;
+    let target = repo
+        .find_reference(&into)
+        .map_err(|_| fail(REJECTED, format!("{from} is not on {remote}")))?
+        .target()
+        .ok_or_else(|| fail(REJECTED, format!("{from} is not on {remote}")))?;
+    Ok(target.to_string())
+}
+
 /// A fresh clone of `url` into `root`, on the branch the server's HEAD names.
 ///
 /// `RepoBuilder` rather than init-then-fetch because the default branch is the
@@ -722,12 +908,12 @@ fn fetch_branch(
 /// init has already guessed `main`. The remote is named `origin`, which is the
 /// name every other command here transfers through. Anonymous unless both
 /// halves of a credential are given, as `git_fetch` is.
-#[tauri::command]
-pub fn git_clone(
+fn git_clone_now(
     url: String,
     root: String,
     username: Option<String>,
     token: Option<String>,
+    depth: Option<i32>,
 ) -> Result<GitProgress, String> {
     let received = Arc::new(AtomicUsize::new(0));
     let total = Arc::new(AtomicUsize::new(0));
@@ -743,6 +929,11 @@ pub fn git_clone(
     }
     let mut options = FetchOptions::new();
     options.remote_callbacks(callbacks);
+    // A depth is "the newest version only" (a reference text); none is the
+    // whole history, desktop's default.
+    if let Some(depth) = depth {
+        options.depth(depth);
+    }
     RepoBuilder::new()
         .fetch_options(options)
         .clone(&url, Path::new(&root))
@@ -754,8 +945,76 @@ pub fn git_clone(
     })
 }
 
+/// Fetches older history a shallow clone left on the server, for the current
+/// branch: `more` commits further back, or all of it when `None` — libgit2's
+/// "unshallow" is the largest depth there is. libgit2 has no relative deepen,
+/// so "more" is asked for as an absolute depth: the commits already reachable
+/// from the tracking ref, plus `more`. Moves no branch and no file.
+///
+/// Async, unlike the other commands: Tauri runs a plain command on the main
+/// thread, so a deepen waiting on the network froze the window, and desktop
+/// runs these in the background while somebody works. The TS side's
+/// exclusive lane is what keeps it from racing another writer.
 #[tauri::command]
-pub fn git_fetch(
+pub async fn git_deepen(
+    root: String,
+    remote: String,
+    more: Option<i32>,
+    username: Option<String>,
+    token: Option<String>,
+) -> Result<GitProgress, String> {
+    off_thread(move || {
+        writing(&root.clone(), || {
+            deepen(&root, &remote, more, username, token)
+        })
+    })
+    .await
+}
+
+fn deepen(
+    root: &str,
+    remote: &str,
+    more: Option<i32>,
+    username: Option<String>,
+    token: Option<String>,
+) -> Result<GitProgress, String> {
+    let repo = open_repo(root)?;
+    let branch = current_branch(&repo)?;
+    let depth = match more {
+        None => i32::MAX,
+        Some(more) => {
+            let tracking = format!("refs/remotes/{remote}/{branch}");
+            let mut walk = repo.revwalk().map_err(io)?;
+            walk.push_ref(&tracking).map_err(io)?;
+            let held = i32::try_from(walk.count()).unwrap_or(i32::MAX);
+            held.saturating_add(more.max(1))
+        }
+    };
+    let mut handle = repo
+        .find_remote(remote)
+        .map_err(|error| fail(CONFLICT, error.message()))?;
+    let refspec = format!("+refs/heads/{branch}:refs/remotes/{remote}/{branch}");
+    let mut options = FetchOptions::new();
+    options.remote_callbacks(remote_callbacks(credential_pair(&username, &token)));
+    options.depth(depth);
+    handle
+        .fetch(&[refspec.as_str()], Some(&mut options), None)
+        .map_err(transport_failure)?;
+    let stats = handle.stats();
+    Ok(GitProgress {
+        phase: "deepen".to_string(),
+        loaded: stats.received_objects(),
+        total: Some(stats.total_objects()),
+    })
+}
+
+/// Is older history missing from this repository?
+#[tauri::command]
+pub fn git_is_shallow(root: String) -> Result<bool, String> {
+    Ok(open_repo(&root)?.is_shallow())
+}
+
+fn git_fetch_now(
     root: String,
     remote: String,
     username: Option<String>,
@@ -766,70 +1025,6 @@ pub fn git_fetch(
     fetch_branch(&repo, &remote, &branch, credential_pair(&username, &token))
 }
 
-/// Fetch, then fast-forward the current branch onto the remote's tip.
-///
-/// Sefer deliberately does not merge here. A three-way merge of USFM is a
-/// decision a translator has to make with the text in front of them, so a
-/// divergent history is reported as `Conflict` and the sync surface asks —
-/// rather than producing conflict markers inside scripture.
-#[tauri::command]
-pub fn git_pull(
-    root: String,
-    remote: String,
-    username: Option<String>,
-    token: Option<String>,
-) -> Result<GitProgress, String> {
-    let repo = open_repo(&root)?;
-    let branch = current_branch(&repo)?;
-    let transferred = fetch_branch(&repo, &remote, &branch, credential_pair(&username, &token))?;
-
-    let remote_ref = format!("refs/remotes/{remote}/{branch}");
-    let target = match repo.find_reference(&remote_ref) {
-        Ok(reference) => reference.target(),
-        Err(error) if error.code() == ErrorCode::NotFound => None,
-        Err(error) => return Err(io(error)),
-    };
-    let Some(target) = target else {
-        // Nothing on the remote for this branch. The fetch succeeded, so this
-        // is "up to date with an empty remote", not a failure.
-        return Ok(GitProgress {
-            phase: "up-to-date".to_string(),
-            loaded: transferred.loaded,
-            total: transferred.total,
-        });
-    };
-
-    let fetched = repo.find_annotated_commit(target).map_err(io)?;
-    let (analysis, _) = repo.merge_analysis(&[&fetched]).map_err(io)?;
-
-    if analysis.is_up_to_date() {
-        return Ok(GitProgress {
-            phase: "up-to-date".to_string(),
-            loaded: transferred.loaded,
-            total: transferred.total,
-        });
-    }
-    if !analysis.is_fast_forward() && !analysis.is_unborn() {
-        return Err(fail(
-            CONFLICT,
-            format!("local {branch} has diverged from {remote}/{branch}"),
-        ));
-    }
-
-    let reference = format!("refs/heads/{branch}");
-    repo.reference(&reference, target, true, "sefer pull: fast-forward")
-        .map_err(io)?;
-    repo.set_head(&reference).map_err(io)?;
-    repo.checkout_head(Some(CheckoutBuilder::new().force()))
-        .map_err(io)?;
-
-    Ok(GitProgress {
-        phase: "fast-forward".to_string(),
-        loaded: transferred.loaded,
-        total: transferred.total,
-    })
-}
-
 /// Pushes `branch` (HEAD's branch when absent) to `remote`.
 ///
 /// A non-fast-forward is `Rejected`, not `Io`: it is the one transport failure
@@ -838,8 +1033,7 @@ pub fn git_pull(
 /// Unlike fetch and pull this takes a credential rather than an `Option`:
 /// nobody pushes anonymously, so a missing sign-in is refused on the TS side
 /// before it reaches here rather than being discovered as a 401 mid-transfer.
-#[tauri::command]
-pub fn git_push(
+fn git_push_now(
     root: String,
     remote: String,
     branch: Option<String>,
@@ -869,16 +1063,120 @@ pub fn git_push(
         });
     }
 
+    // libgit2 refuses a non-fast-forward itself, before sending ("cannot push
+    // non-fastforwardable reference"). A ref the SERVER then refuses — a
+    // protected branch, a hook — is reported only through this callback, and
+    // `push` itself still returns Ok, so without it that refusal reads as a
+    // sent push.
+    let refused = Arc::new(Mutex::new(None::<String>));
+    {
+        let refused = Arc::clone(&refused);
+        callbacks.push_update_reference(move |name, status| {
+            if let Some(reason) = status {
+                if let Ok(mut held) = refused.lock() {
+                    *held = Some(format!("{name}: {reason}"));
+                }
+            }
+            Ok(())
+        });
+    }
+
     let mut options = PushOptions::new();
     options.remote_callbacks(callbacks);
     let refspec = format!("refs/heads/{branch}:refs/heads/{branch}");
     handle
         .push(&[refspec.as_str()], Some(&mut options))
         .map_err(transport_failure)?;
+    let refusal = refused.lock().ok().and_then(|mut held| held.take());
+    if let Some(reason) = refusal {
+        return Err(fail(REJECTED, format!("push rejected: {reason}")));
+    }
 
     Ok(GitProgress {
         phase: "push".to_string(),
         loaded: sent.load(Ordering::Relaxed),
         total: Some(expected.load(Ordering::Relaxed)),
     })
+}
+
+// ---------------------------------------------------------------------------
+// The network commands, off the main thread
+// ---------------------------------------------------------------------------
+//
+// Each waits on the network, so each runs on a blocking thread rather than
+// Tauri's main one, and each that writes a repository holds its writer lock.
+
+/// What `url` is, from its refs alone. Writes nothing, so it takes no lock.
+#[tauri::command]
+pub async fn git_probe(
+    url: String,
+    username: Option<String>,
+    token: Option<String>,
+) -> Result<GitProbe, String> {
+    off_thread(move || git_probe_now(url, username, token)).await
+}
+
+#[tauri::command]
+pub async fn git_fetch_ref(
+    root: String,
+    remote: String,
+    from: String,
+    into: String,
+    username: Option<String>,
+    token: Option<String>,
+) -> Result<String, String> {
+    off_thread(move || {
+        writing(&root.clone(), move || {
+            git_fetch_ref_now(root, remote, from, into, username, token)
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn git_clone(
+    url: String,
+    root: String,
+    username: Option<String>,
+    token: Option<String>,
+    depth: Option<i32>,
+) -> Result<GitProgress, String> {
+    off_thread(move || {
+        writing(&root.clone(), move || {
+            git_clone_now(url, root, username, token, depth)
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn git_fetch(
+    root: String,
+    remote: String,
+    username: Option<String>,
+    token: Option<String>,
+) -> Result<GitProgress, String> {
+    off_thread(move || {
+        writing(&root.clone(), move || {
+            git_fetch_now(root, remote, username, token)
+        })
+    })
+    .await
+}
+
+/// A push writes the local tracking ref, so it holds the writer lock too.
+#[tauri::command]
+pub async fn git_push(
+    root: String,
+    remote: String,
+    branch: Option<String>,
+    username: String,
+    token: String,
+) -> Result<GitProgress, String> {
+    off_thread(move || {
+        writing(&root.clone(), move || {
+            git_push_now(root, remote, branch, username, token)
+        })
+    })
+    .await
 }

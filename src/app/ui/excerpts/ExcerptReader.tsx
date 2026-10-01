@@ -11,12 +11,14 @@
  */
 
 import { EditorView } from "@codemirror/view";
-import { createEffect, createSignal, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, untrack } from "solid-js";
 
 import type { Analysis } from "#core/galley";
 import {
   mountReader,
   mountStamp,
+  policyKey,
+  type EditorPolicy,
   type Funnel,
   type MarkedRange,
   type ReaderMount,
@@ -31,7 +33,8 @@ import "#editor/editor.css";
 export interface ExcerptReaderProps {
   readonly analysis: Analysis;
   readonly span: { readonly from: number; readonly to: number };
-  readonly mode: "regular" | "usfm";
+  /** How the text is drawn and guarded (`editorPolicy`): the screen's choice, not the card's. */
+  readonly policy: EditorPolicy;
   readonly marks: readonly MarkedRange[];
   /** Names the view in the timing ring. */
   readonly label: string;
@@ -56,8 +59,6 @@ export interface ExcerptReaderProps {
   readonly onReveal?: (reveal: (at: number) => void) => void;
 }
 
-const projectionOf = (mode: "regular" | "usfm") => (mode === "usfm" ? "usfm" : "default");
-
 export function ExcerptReader(props: ExcerptReaderProps) {
   const [host, setHost] = createSignal<HTMLDivElement | undefined>(undefined, {
     name: "readerHost",
@@ -70,17 +71,32 @@ export function ExcerptReader(props: ExcerptReaderProps) {
   const stamped =
     shell.services.settings.get(shellKeys(shell.services.settings).excerptRenderer) === "stamp";
 
+  /**
+   * The parse, compared by identity before the mount effect sees it. Reading
+   * `props.analysis` also reads `props.excerpt`, and widening a card hands it
+   * a NEW excerpt over the SAME parse; without this the effect's compute
+   * returned a fresh `{ parent, analysis }` on every widen, and the view was
+   * destroyed and remounted — the card collapsed for a frame and the list
+   * below it jumped — where `reclip` was all it needed.
+   */
+  const analysis = createMemo(() => props.analysis, { name: "readerAnalysis" });
+  /** The same, for the policy: a screen that rebuilds an equal policy moves nothing. */
+  const policy = createMemo(() => props.policy, {
+    name: "readerPolicy",
+    equals: (a, b) => policyKey(a) === policyKey(b),
+  });
+
   // Rebuilt only for a different parse — a different text. Everything else a
   // card changes (its range, its marks, the mode) moves the live view.
   createEffect(
-    () => ({ parent: host(), analysis: props.analysis }),
+    () => ({ parent: host(), analysis: analysis() }),
     ({ parent, analysis }) => {
       if (parent === undefined) return;
       const mount = (stamped ? mountStamp : mountReader)({
         parent,
         analysis,
         range: untrack(() => props.span),
-        mode: projectionOf(untrack(() => props.mode)),
+        policy: untrack(policy),
         marks: untrack(() => props.marks),
         surface: "cm-excerpt",
         label: untrack(() => props.label),
@@ -113,8 +129,8 @@ export function ExcerptReader(props: ExcerptReaderProps) {
     ({ mount, span }) => mount?.reclip(span),
   );
   createEffect(
-    () => ({ mount: live(), mode: props.mode }),
-    ({ mount, mode }) => mount?.setMode(projectionOf(mode)),
+    () => ({ mount: live(), policy: policy() }),
+    ({ mount, policy }) => mount?.setPolicy(policy),
   );
   createEffect(
     () => ({ mount: live(), marks: props.marks }),

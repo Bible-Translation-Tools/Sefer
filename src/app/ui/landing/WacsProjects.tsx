@@ -503,9 +503,14 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
           // The index learns about the project in the same pipeline, the moment
           // its files and history are on disk, so the list and its links are
           // right before the card says it is done.
-          cloneRepository(entry.gitUrl, into, entry.id).pipe(
-            Effect.andThen(rememberProject(services.projectsRoot, into, undefined)),
-          ),
+          // A gateway text is read beside a translation, never worked in: its
+          // newest version is all it needs, on every host.
+          cloneRepository(
+            entry.gitUrl,
+            into,
+            entry.id,
+            entry.type === "gateway" ? { history: "latest" } : undefined,
+          ).pipe(Effect.andThen(rememberProject(services.projectsRoot, into, undefined))),
           Observability,
           operation,
         ),

@@ -11,9 +11,10 @@ The rules every module keeps. Each one is short on purpose; the chapter that own
 
 ## Disk
 
-- **Only Save writes a book.** Everything automatic is the recovery journal of the dirty buffer. Save writes back the file's dominant EOL and BOM. → [review](architecture/review.md), [recovery](architecture/recovery.md)
+- **Only Save writes a book.** Everything automatic is the recovery journal of the dirty buffer. Save writes back the file's dominant EOL and BOM. One exception (2026-09-30): a receive's fast-forward writes the bytes Git holds, and hands the Book that text through `SaveCoordinator.takeDisk(book, "incoming")` in the same step, so the Book and its baseline never lag the file. Intake writing a new project's files is not an edit to a Book, so it is not an exception. → [review](architecture/review.md), [recovery](architecture/recovery.md), [sync](architecture/sync.md)
 - **Durable modules never touch the editor.** Save takes a Book and returns a receipt; Recovery journals changes; Git commits files. They see stamps, not CodeMirror.
-- **Scripture text is never merged automatically.** → [sync](architecture/sync.md)
+- **Scripture text is never merged automatically.** Sefer never starts git's merge: a receive only fast-forwards, and joining two histories is a decision commit whose files are text a person or the policy chose. → [sync](architecture/sync.md)
+- **One writer per repository.** Every mutation of a `.git` runs in that root's exclusive lane and every ref-walking read in its shared lane, across tabs (Web Locks) as well as within one. Composition wraps both hosts' ports once, so no caller takes a lane. → [git](architecture/git.md)
 
 ## Hosts and Effect
 

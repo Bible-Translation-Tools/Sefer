@@ -33,13 +33,14 @@ import git from "isomorphic-git";
 import http from "isomorphic-git/http/web";
 
 import { nodeFsView, type IsomorphicFs } from "#core/fileSystem/nodeView";
-import type { Repo } from "#core/git/git";
+import { DEFAULT_BRANCH, type Repo } from "#core/git/git";
 import { Credentials, type CredentialsService } from "#core/host/credentials";
 import { Gitea, type GiteaService } from "#core/remote/gitea";
 import { createOnGitea, hostOf } from "#core/remote/onGitea";
 import {
   Remote,
   RemoteError,
+  type Probe,
   type Progress,
   type RemoteFailureReason,
   type RemoteService,
@@ -66,16 +67,6 @@ export interface WebRemoteOptions {
 
 /** The remote Sefer attaches and transfers; one per project, always. */
 const ORIGIN = "origin";
-
-/** The default branch `WebGitLive.init` creates, and the one we transfer. */
-const DEFAULT_BRANCH = "main";
-
-/**
- * Who a merge commit is by when a pull has to make one. The same identity
- * `git.commit` uses in `src/app/commands.ts`; a merge is Sefer's bookkeeping,
- * not something the translator authored.
- */
-const MERGE_AUTHOR = { name: "Sefer", email: "sefer@localhost" };
 
 /** How many progress events a slow reader may fall behind before losing some. */
 const PROGRESS_DEPTH = 64;
@@ -107,6 +98,12 @@ interface Wire {
   readonly onProgress: (event: GitProgress) => void;
 }
 
+/** The depth git asks for to make a shallow repository whole. */
+const UNSHALLOW = 2_147_483_647;
+
+/** How long a request may go without a byte before it is ended. */
+const STALL_MS = 60_000;
+
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
@@ -135,7 +132,7 @@ const classify = (error: unknown): RemoteError => {
   if (/401|403|authentication|authorization|access denied|forbidden/iu.test(message)) {
     return fail("Unauthorized", message);
   }
-  if (/network|offline|enotfound|econn|cors|failed to fetch/iu.test(message)) {
+  if (/network|offline|enotfound|econn|cors|failed to fetch|stalled|aborted/iu.test(message)) {
     return fail("Network", message);
   }
   // An unrecognised throw is still a refusal of the request, never a success.
@@ -161,15 +158,53 @@ const makeWebRemote = (
 
     // isomorphic-git's client, with every request sent through the transport.
     // The one place a proxy URL exists; everything outside sees content hosts.
+    //
+    // And a request that stops moving is ended: a transfer holds its
+    // repository's lane, and a proxy that stalls would otherwise hold it —
+    // and every Record a version waiting on it — for as long as the browser
+    // cares to wait. The clock restarts with every chunk, so a slow transfer
+    // that is still arriving is never cut off.
     const transported: typeof http = {
-      request: (request) =>
-        http.request({ ...request, url: through(options.transport, request.url) }),
+      request: async (request) => {
+        const controller = new AbortController();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const restart = (): void => {
+          if (timer !== undefined) clearTimeout(timer);
+          timer = setTimeout(
+            () => controller.abort(new Error(`stalled: nothing for ${STALL_MS / 1000} s`)),
+            STALL_MS,
+          );
+        };
+        restart();
+        try {
+          const response = await http.request({
+            ...request,
+            url: through(options.transport, request.url),
+            signal: controller.signal,
+          });
+          const chunks = response.body;
+          const body = async function* (): AsyncGenerator<Uint8Array> {
+            try {
+              for await (const chunk of chunks ?? []) {
+                restart();
+                yield chunk;
+              }
+            } finally {
+              if (timer !== undefined) clearTimeout(timer);
+            }
+          };
+          return { ...response, body: body() };
+        } catch (error) {
+          if (timer !== undefined) clearTimeout(timer);
+          throw error;
+        }
+      },
     };
 
-    const originUrl = (repo: Repo): Effect.Effect<string, RemoteError> =>
+    const urlNamed = (repo: Repo, name = ORIGIN): Effect.Effect<string, RemoteError> =>
       Effect.gen(function* () {
         const remotes = yield* attempt(() => git.listRemotes({ fs, dir: repo.root }));
-        const found = remotes.find((entry) => entry.remote === ORIGIN);
+        const found = remotes.find((entry) => entry.remote === name);
         if (found === undefined) {
           return yield* Effect.fail(fail("Unavailable", "this project has no remote attached yet"));
         }
@@ -188,22 +223,27 @@ const makeWebRemote = (
      * never a proxy's. A URL pasted from a proxy is mapped back to the host it
      * fronts, so whatever a caller hands in, `.git/config` names the server.
      */
-    const attach = (repo: Repo, requested: string): Effect.Effect<void, RemoteError> =>
+    const attachAs = (
+      repo: Repo,
+      name: string,
+      requested: string,
+    ): Effect.Effect<void, RemoteError> =>
       Effect.gen(function* () {
         const url = identityOf(options.transport, requested);
         const remotes = yield* attempt(() => git.listRemotes({ fs, dir: repo.root }));
-        const existing = remotes.find((entry) => entry.remote === ORIGIN);
+        const existing = remotes.find((entry) => entry.remote === name);
         if (existing?.url === url) return;
         // `force` alone is not enough on every isomorphic-git version, and a
         // stale origin URL is the one thing that would push a translator's work
         // to the wrong repository. Delete, then add.
         if (existing !== undefined) {
-          yield* attempt(() => git.deleteRemote({ fs, dir: repo.root, remote: ORIGIN }));
+          yield* attempt(() => git.deleteRemote({ fs, dir: repo.root, remote: name }));
         }
-        yield* attempt(() =>
-          git.addRemote({ fs, dir: repo.root, remote: ORIGIN, url, force: true }),
-        );
+        yield* attempt(() => git.addRemote({ fs, dir: repo.root, remote: name, url, force: true }));
       });
+
+    const attach = (repo: Repo, requested: string): Effect.Effect<void, RemoteError> =>
+      attachAs(repo, ORIGIN, requested);
 
     /**
      * Everything an isomorphic-git transfer call needs, assembled once.
@@ -216,14 +256,15 @@ const makeWebRemote = (
       repo: Repo,
       last: { current: Progress },
       auth: "required" | "optional",
+      name = ORIGIN,
     ): Effect.Effect<Wire, RemoteError> =>
       Effect.gen(function* () {
         // No endpoint check here, and that is deliberate: a transfer goes to
         // the URL the PROJECT was attached to, which `attach` has already put
         // on this build's endpoint. What the endpoint gates is starting
         // something new — cloning, publishing — and those check it themselves.
-        const url = yield* originUrl(repo);
-        return yield* wireAt(url, repo.root, last, auth);
+        const url = yield* urlNamed(repo, name);
+        return { ...(yield* wireAt(url, repo.root, last, auth)), remote: name };
       });
 
     /** `wireFor` for a URL rather than a project: what a clone starts from. */
@@ -237,7 +278,7 @@ const makeWebRemote = (
         const held = yield* credentials.get(hostOf(url));
         // Push is the only transfer nobody can do anonymously. Refusing it
         // here rather than letting the server answer 401 is what turns "sign
-        // in first" into advice instead of a status code; fetch and pull run
+        // in first" into advice instead of a status code; fetch and probe run
         // without a credential, because WACS content is public and cloning a
         // translation is how somebody gets started.
         if (auth === "required" && Option.isNone(held)) {
@@ -280,10 +321,11 @@ const makeWebRemote = (
       repo: Repo,
       auth: "required" | "optional",
       call: (wire: Wire, branch: string) => Promise<unknown>,
+      name = ORIGIN,
     ): Effect.Effect<Progress, RemoteError> =>
       Effect.gen(function* () {
         const last = { current: { phase: "done", loaded: 0 } satisfies Progress };
-        const wire = yield* wireFor(repo, last, auth);
+        const wire = yield* wireFor(repo, last, auth, name);
         const branch = yield* branchOf(repo);
         yield* attempt(() => call(wire, branch));
         return last.current;
@@ -294,16 +336,49 @@ const makeWebRemote = (
       // HEAD symref and checks that branch out, and it writes `origin` itself.
       // The URL is mapped to its content host first, exactly as `attach`
       // does, so what lands in `.git/config` is the same either way.
-      clone: (requested, into) =>
+      //
+      // The newest version only unless told otherwise: a tenth of en_ulb's
+      // download, and the history comes later if History asks.
+      clone: (requested, into, cloning) =>
         Effect.gen(function* () {
           const url = identityOf(options.transport, requested);
           const last = { current: { phase: "done", loaded: 0 } satisfies Progress };
           const wire = yield* wireAt(url, into, last, "optional");
-          yield* attempt(() => git.clone({ ...wire, url, singleBranch: true }));
+          const latest = (cloning?.history ?? "latest") === "latest";
+          yield* attempt(() =>
+            git.clone({ ...wire, url, singleBranch: true, ...(latest ? { depth: 1 } : {}) }),
+          );
           return { repo: { root: into } satisfies Repo, progress: last.current };
         }),
 
       attach,
+      attachAs,
+
+      urlOf: (repo, name) =>
+        Effect.map(
+          attempt(() => git.listRemotes({ fs, dir: repo.root })),
+          (remotes) => Option.fromNullishOr(remotes.find((entry) => entry.remote === name)?.url),
+        ),
+
+      // One named ref from origin, into a local ref of the caller's choosing:
+      // a suggestion's head (`refs/pull/<n>/head`), which no branch refspec
+      // covers. isomorphic-git answers the commit it fetched; the local ref
+      // is written from that.
+      fetchRef: (repo, from, into) =>
+        Effect.gen(function* () {
+          const last = { current: { phase: "done", loaded: 0 } satisfies Progress };
+          const wire = yield* wireFor(repo, last, "optional");
+          const fetched = yield* attempt(() =>
+            git.fetch({ ...wire, ref: from, remoteRef: from, singleBranch: true, tags: false }),
+          );
+          const head = fetched.fetchHead;
+          if (head === null || head === undefined)
+            return yield* Effect.fail(fail("Rejected", `${from} is not on the shared project`));
+          yield* attempt(() =>
+            git.writeRef({ fs, dir: repo.root, ref: into, value: head, force: true }),
+          );
+          return head;
+        }),
 
       // The read half of `attach`. `None` is "nothing attached", which is the
       // ordinary state of a project that has never been published.
@@ -313,6 +388,33 @@ const makeWebRemote = (
           (remotes) => Option.fromNullishOr(remotes.find((entry) => entry.remote === ORIGIN)?.url),
         ),
 
+      // Refs only, over the same transport and headers a transfer uses. The
+      // URL is mapped to its content host first, as `attach` maps it, so a
+      // proxy URL and the server's own URL give the same answer.
+      probe: (requested) =>
+        Effect.gen(function* () {
+          const url = identityOf(options.transport, requested);
+          const last = { current: { phase: "done", loaded: 0 } satisfies Progress };
+          const wire = yield* wireAt(url, "", last, "optional");
+          const info = yield* attempt(() =>
+            git.getRemoteInfo2({
+              http: wire.http,
+              url,
+              headers: wire.headers,
+              ...(wire.onAuth === undefined ? {} : { onAuth: wire.onAuth }),
+              protocolVersion: 1,
+            }),
+          );
+          const refs = info.refs ?? [];
+          const head = refs.find((entry) => entry.ref === "HEAD");
+          const heads = refs.filter((entry) => entry.ref.startsWith("refs/heads/"));
+          return {
+            defaultBranch: Option.fromNullishOr(head?.target?.replace(/^refs\/heads\//u, "")),
+            head: Option.fromNullishOr(head?.oid),
+            empty: heads.length === 0,
+          } satisfies Probe;
+        }),
+
       // A bare fetch: it updates the remote-tracking refs and touches no file
       // in the work tree, which is what makes it the safe thing to offer
       // someone who wants to know whether anything arrived.
@@ -321,21 +423,69 @@ const makeWebRemote = (
           git.fetch({ ...wire, ref: branch, remoteRef: branch, singleBranch: true, prune: true }),
         ),
 
-      // `pull` may write files and may need to make a merge commit, so it
-      // carries an author. Fast-forward is not forced: a genuine divergence
-      // must surface as `Rejected` rather than being silently resolved.
-      pull: (repo) =>
+      backfills: false,
+
+      // `more` commits past the shallow boundary (a relative deepen), or all
+      // of it: git's own "unshallow" is a deepen by the largest depth there is.
+      deepen: (repo, more) =>
         transfer(repo, "optional", (wire, branch) =>
-          git.pull({ ...wire, ref: branch, singleBranch: true, author: MERGE_AUTHOR }),
+          git.fetch({
+            ...wire,
+            ref: branch,
+            remoteRef: branch,
+            singleBranch: true,
+            tags: false,
+            ...(more === "all" ? { depth: UNSHALLOW } : { depth: more, relative: true }),
+          }),
         ),
+
+      // Forward only, and never forced. The work tree is checked out to `to`
+      // first, with HEAD left alone, so a checkout that refuses (a file with
+      // changes no commit holds) leaves the branch where it was; the branch is
+      // moved only once the files are there.
+      fastForward: (repo, to) =>
+        Effect.gen(function* () {
+          const branch = yield* attempt(() =>
+            git.currentBranch({ fs, dir: repo.root, fullname: false }),
+          );
+          if (typeof branch !== "string")
+            return yield* Effect.fail(fail("Rejected", "HEAD is not on a branch"));
+          const head = yield* Effect.orElseSucceed(
+            attempt(() => git.resolveRef({ fs, dir: repo.root, ref: "HEAD" })),
+            () => undefined,
+          );
+          if (head === to) return;
+          if (head !== undefined) {
+            const forward = yield* attempt(() =>
+              git.isDescendent({ fs, dir: repo.root, oid: to, ancestor: head, depth: -1 }),
+            );
+            if (!forward)
+              return yield* Effect.fail(
+                fail("Rejected", `${to} does not descend from ${branch}; not a fast-forward`),
+              );
+          }
+          yield* attempt(() => git.checkout({ fs, dir: repo.root, ref: to, noUpdateHead: true }));
+          yield* attempt(() =>
+            git.writeRef({
+              fs,
+              dir: repo.root,
+              ref: `refs/heads/${branch}`,
+              value: to,
+              force: true,
+            }),
+          );
+        }),
 
       // A browser push over smart-HTTP normally takes one 401 on
       // `info/refs?service=git-receive-pack` before isomorphic-git calls
       // `onAuth` and retries; that first refusal is expected and never reaches
       // `classify` unless the retry fails too.
-      push: (repo) =>
-        transfer(repo, "required", (wire, branch) =>
-          git.push({ ...wire, ref: branch, remoteRef: branch }),
+      push: (repo, to) =>
+        transfer(
+          repo,
+          "required",
+          (wire, branch) => git.push({ ...wire, ref: branch, remoteRef: branch }),
+          to ?? ORIGIN,
         ),
 
       /**
@@ -361,36 +511,6 @@ const makeWebRemote = (
           yield* transfer(repo, "required", (wire, branch) =>
             git.push({ ...wire, ref: branch, remoteRef: branch }),
           );
-        }),
-
-      /**
-       * Combine's branch move: `writeRef` then a forced `checkout`, which is
-       * exactly what v1 did. Refused unless `branch` is the checked-out one,
-       * so the two hosts refuse the same thing — git2 checks it in Rust.
-       */
-      moveBranch: (repo, branch, toCommit) =>
-        Effect.gen(function* () {
-          const head = yield* branchOf(repo);
-          if (head !== branch) {
-            return yield* Effect.fail(
-              fail(
-                "Rejected",
-                `HEAD is on ${head}, not ${branch}; cannot move a branch that is not checked out`,
-              ),
-            );
-          }
-          yield* attempt(() =>
-            git.writeRef({
-              fs,
-              dir: repo.root,
-              ref: `refs/heads/${branch}`,
-              value: toCommit,
-              force: true,
-            }),
-          );
-          // Forced, because the point is to make the work tree BE the base the
-          // replay sits on. The caller has already committed what it replays.
-          yield* attempt(() => git.checkout({ fs, dir: repo.root, ref: branch, force: true }));
         }),
 
       // isomorphic-git throws when there is no `MERGE_HEAD`, which is the

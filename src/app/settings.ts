@@ -18,6 +18,7 @@ import { PRODUCERS, SEVERITIES } from "#core/findings/filter";
 import type { SettingKey, SettingsService } from "#core/host/settings";
 import { DEFAULT_JOURNAL_POLICY } from "#core/recovery/recovery";
 
+import { SousOverrides } from "./sousSettings";
 import { DEFAULT_EDITOR_FONT_SIZE, EDITOR_FONT_SIZE_RANGE } from "./ui/theme";
 
 /**
@@ -317,6 +318,13 @@ export interface ShellKeys {
    */
   readonly findingsFilter: SettingKey<FindingsFilterPreference>;
   /**
+   * The proofreading settings the reader changed from kitchen's defaults
+   * (`src/app/sousSettings.ts`). Global, like every key here. Edited by its
+   * own card on `/settings`, generated from kitchen's list, so it is not in
+   * `shellSettings`.
+   */
+  readonly sousSettings: SettingKey<SousOverrides>;
+  /**
    * Is the project sidebar showing, or hidden?
    * Written by `PanelToggle`, `Mod-b` and dragging the panel closed, and read
    * once when the shell is built.
@@ -426,6 +434,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
       FindingsFilterPreference,
       FINDINGS_FILTER_DEFAULT,
     ),
+    sousSettings: settings.register("sous.settings", SousOverrides, {}),
     sidebarOpen: settings.register("workspace.sidebarOpen", Schema.Boolean, true),
     sidebarWidth: settings.register("workspace.sidebarWidth", Schema.Number, SIDEBAR_WIDTH.default),
     fontSize: settings.register("shell.fontSize", Schema.Number, 16),
@@ -522,7 +531,7 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
       key: keys.excerptContext,
       label: "Context around a result",
       description:
-        "How many verses or headings a card in Find, Key terms, Findings and Review shows either side of its own verse. Each card's arrows widen it from there.",
+        "How many verses or headings a card in Find, Spiritual terms, Findings and Review shows either side of its own verse. Each card's arrows widen it from there.",
       kind: "number",
       group: "editor",
       min: 0,

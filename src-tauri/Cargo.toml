@@ -30,7 +30,7 @@ tauri-plugin-opener = "2"
 tauri-plugin-os = "2"
 # The Git port's desktop half. `https` is the transport Gitea/WACS needs; ssh
 # is deliberately absent because Sefer authenticates with a token, never a key.
-git2 = { version = "0.20", features = ["https"] }
+git2 = { version = "0.21", features = ["https"] }
 
 
 [dev-dependencies]

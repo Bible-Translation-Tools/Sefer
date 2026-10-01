@@ -216,6 +216,20 @@ export function GlyphDetail(props: GlyphDetailProps) {
     </Show>
   );
 
+  /** What the corpus does instead, under a row's label, when the row says. */
+  const usualLine = (row: PatternRow) =>
+    row.usual === undefined ? null : (
+      <span class="block text-smallest font-normal text-on-surface-tertiary">{row.usual}</span>
+    );
+
+  /** The usual class on each side, once per table: every row of a side shares it. */
+  const placementUsual = (): string => {
+    const cells = props.glyph.placement;
+    const before = cells.find((cell) => cell.prev?.usual !== undefined)?.prev?.usual;
+    const after = cells.find((cell) => cell.next?.usual !== undefined)?.next?.usual;
+    return [before, after].filter((part) => part !== undefined).join(" · ");
+  };
+
   const fraction = (row: PatternRow) => (
     <>
       <TableCell class="text-end font-mono text-smallest tabular-nums">
@@ -292,6 +306,7 @@ export function GlyphDetail(props: GlyphDetailProps) {
                           {row.channel === "ExactNeighbor" ? t("exactly") : t("any of the pool")}
                         </span>
                       </span>
+                      {usualLine(row)}
                     </TableCell>
                     {fraction(row)}
                     <TableCell class="text-end font-mono text-smallest tabular-nums">
@@ -309,7 +324,7 @@ export function GlyphDetail(props: GlyphDetailProps) {
       <Show when={props.glyph.placement.length > 0}>
         <Section
           title={t("How it attaches to words")}
-          note={t("what class of character the engine found on each side")}
+          note={placementUsual() || t("what class of character the engine found on each side")}
         >
           <Table>
             <TableHead>
@@ -379,7 +394,28 @@ export function GlyphDetail(props: GlyphDetailProps) {
               <For each={props.glyph.runShape}>
                 {(row) => (
                   <TableRow>
-                    <TableCell class="font-medium">{row.label}</TableCell>
+                    <TableCell class="font-medium">
+                      {row.label}
+                      <Show when={row.clusters.length > 0}>
+                        <span class="flex flex-wrap gap-1 pt-1">
+                          <For each={row.clusters}>
+                            {(cluster) => (
+                              <code
+                                class={cx(
+                                  "rounded-xs bg-surface-secondary px-1 text-smallest font-normal",
+                                  cluster.recurring
+                                    ? "text-on-surface-tertiary"
+                                    : "text-on-surface-primary",
+                                )}
+                              >
+                                {cluster.text} ×{cluster.count}
+                              </code>
+                            )}
+                          </For>
+                        </span>
+                      </Show>
+                      {usualLine(row)}
+                    </TableCell>
                     {fraction(row)}
                     <TableCell class="text-end">{sitesButton(row)}</TableCell>
                   </TableRow>
@@ -409,7 +445,10 @@ export function GlyphDetail(props: GlyphDetailProps) {
               <For each={props.glyph.other}>
                 {(row) => (
                   <TableRow>
-                    <TableCell class="font-medium">{row.label}</TableCell>
+                    <TableCell class="font-medium">
+                      {row.label}
+                      {usualLine(row)}
+                    </TableCell>
                     <TableCell class="font-mono text-smallest text-on-surface-tertiary">
                       {row.channel}
                     </TableCell>

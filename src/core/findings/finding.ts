@@ -27,6 +27,7 @@
 
 import type { BookId } from "../book/book";
 import {
+  booksByPattern,
   diagnosticMessage,
   diagnosticName,
   diagnosticSeverity,
@@ -35,9 +36,17 @@ import {
   type DiagnosticView,
   type EngineStamp,
   type Finding as CorpusFinding,
+  type FindingMessage,
+  type FindingQuery,
   type FindingsSnapshot,
+  markBefore,
+  type MarkBefore,
+  type MaskMap,
+  type Pattern,
 } from "../galley";
 import type { SourceStamp } from "../source/source";
+import { comparisonOf } from "./compare";
+import { describeSous, render } from "./messages";
 
 /**
  * The three rungs a reader is shown. The per-book lint's `hint` folds into
@@ -73,8 +82,23 @@ export interface Finding {
   /** The producer's stable code: a catalogue name, or `sous.<lane>`. */
   readonly code: string;
   readonly producer: Producer;
-  /** Panel text. Quotes the document; never goes to telemetry. */
+  /**
+   * Panel text, plain: a Sous finding's headline. Quotes the document; never
+   * goes to telemetry.
+   */
   readonly message: string;
+  /**
+   * A Sous finding's supporting numbers — what is usual, how often, where —
+   * as plain text, for behind a "Why?". Quotes the document, like `message`.
+   */
+  readonly details?: string;
+  /**
+   * What both of a Sous finding's sentences are rendered from: kitchen's id,
+   * its parameters, and the searches behind them (`queries`). A
+   * screen that draws each mark as a keycap renders from this
+   * (`messages.ts`'s `renderRich`), never by parsing `message`.
+   */
+  readonly described?: FindingMessage;
   /** UTF-16 offsets into the text `stamp`/`engine` name. */
   readonly from: number;
   readonly to: number;
@@ -92,6 +116,13 @@ export interface Finding {
    * mean re-walking the snapshot for every row.
    */
   readonly pattern?: number;
+  /**
+   * What a Sous sentence compares, as kitchen's queries (`./compare.ts`):
+   * the form here, and what else the sentence names. Absent when there is
+   * nothing to search. Quotes the document, so never goes to telemetry, like
+   * `message`.
+   */
+  readonly comparison?: readonly FindingQuery[];
 }
 
 const identify = (
@@ -218,18 +249,48 @@ const corpusSeverity = (finding: CorpusFinding): Severity => {
   }
 };
 
-const plural = (n: number, one: string, many: string): string => (n === 1 ? one : many);
+/** A published book, as the Sous readers need it back. */
+export interface PublishedBook {
+  readonly bookId: BookId;
+  readonly stamp: SourceStamp;
+  readonly engine: EngineStamp;
+  /** The text the publication measured, which `stamp` names. */
+  readonly text: string;
+  /** What the reader calls the book. */
+  readonly name: string;
+  /**
+   * The book's reading map (`GalleyService.mask`), asked for only when a
+   * Casing message wants the mark before its word.
+   */
+  readonly mask?: () => MaskMap | undefined;
+}
 
-/** `+` marks a lane the engine clamped, so the number reads as "at least". */
-const atLeast = (n: number, saturated: boolean): string => `${n}${saturated ? "+" : ""}`;
+/** Enough reading before a word to find the mark in front of it. */
+const BEFORE_WINDOW = 32;
 
 /**
- * A glyph the message can quote. Zero means the channel judges no scalar (the
- * word lanes carry a hash instead), and the pooled-digit sentinel is above the
- * Unicode range, so one bounds check rejects both without a constant.
+ * The mark before source offset `at`, read from the verse text the engine
+ * judged (markers removed, as `markBefore` requires) rather than the USFM,
+ * where `\q2` between `;` and `He` would read as the digit 2. Only the last
+ * few kept spans before `at` are joined: `markBefore` walks back over space
+ * and quotation marks and stops at the first other character.
  */
-const glyphText = (glyph: number): string | null =>
-  glyph > 0 && glyph <= 0x10ffff ? String.fromCodePoint(glyph) : null;
+const markBeforeIn = (text: string, mask: MaskMap, at: number): MarkBefore | undefined => {
+  // The last kept span starting before `at`: the ranges are in source order.
+  let low = 0;
+  let high = mask.rangeCount;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if (mask.range(mid).sourceFrom < at) low = mid + 1;
+    else high = mid;
+  }
+  let reading = "";
+  for (let row = low - 1; row >= 0 && reading.length < BEFORE_WINDOW; row -= 1) {
+    const range = mask.range(row);
+    reading = text.slice(range.sourceFrom, Math.min(range.sourceTo, at)) + reading;
+  }
+  return markBefore(reading, reading.length);
+};
 
 const corpusCode = (finding: CorpusFinding, channel: string | undefined): string => {
   switch (finding.kind) {
@@ -246,49 +307,6 @@ const corpusCode = (finding: CorpusFinding, channel: string | undefined): string
   }
 };
 
-const corpusMessage = (
-  finding: CorpusFinding,
-  pattern:
-    | { readonly channel: string; readonly glyph: number; readonly shareBp: number }
-    | undefined,
-): string => {
-  switch (finding.kind) {
-    case "Hygiene": {
-      const { class: hygiene, run, saturated } = finding.hygiene;
-      return `${atLeast(run, saturated)} ${plural(run, "character", "characters")} of ${hygiene}`;
-    }
-    case "Presence": {
-      const { kind, keys, saturated } = finding.presence;
-      const verses = `${atLeast(keys, saturated)} ${plural(keys, "verse", "verses")}`;
-      if (kind === "Missing") return `${verses} the source has are missing here`;
-      if (kind === "Extra") return `${verses} here are not in the source`;
-      return `${verses} here are empty`;
-    }
-    case "SourceCopy": {
-      const { run, eligible, saturated } = finding.sourceCopy;
-      return `${atLeast(run, saturated)} consecutive ${plural(run, "word", "words")} also in the paired source verse, of ${eligible} eligible`;
-    }
-    case "LengthProportionality": {
-      const { bookScope, projectScope } = finding.digest;
-      const book = bookScope === null ? "n/a" : bookScope.toFixed(2);
-      const project = projectScope === null ? "n/a" : projectScope.toFixed(2);
-      return `verse length is out of proportion with the source (book ${book}, project ${project})`;
-    }
-    case "Convention": {
-      const reasons = finding.convention.reasons;
-      if (pattern === undefined) return `unconventional here (${reasons.join(", ")})`;
-      const glyph = glyphText(pattern.glyph);
-      const what = glyph === null ? "this word" : `“${glyph}”`;
-      // The channel is usually also one of the reasons; naming it twice reads
-      // as a bug. The rarity lane convicts on scarcity, so its share is zero
-      // by construction and "0.0% of sites" would too.
-      const lanes = [pattern.channel, ...reasons.filter((reason) => reason !== pattern.channel)];
-      const share = pattern.shareBp > 0 ? `, ${(pattern.shareBp / 100).toFixed(2)}% of sites` : "";
-      return `${what} is used unconventionally for this project (${lanes.join(", ")}${share})`;
-    }
-  }
-};
-
 /**
  * Sous corpus findings → findings, for a whole publication.
  *
@@ -298,6 +316,10 @@ const corpusMessage = (
  * because a finding without a provable stamp cannot be checked for freshness
  * and so cannot be navigated to or fixed.
  *
+ * `text` is the book's text as it was published, so a message can quote the
+ * finding's own words (the engine keys a word by hash), and `name` is what
+ * the reader calls the book, for a message that names one.
+ *
  * A publication whose coordinates are UTF-8 byte offsets is dropped whole: the
  * offsets in the one shape are UTF-16 code units into canonical LF text, and
  * silently mixing spaces is exactly the class of bug the stamps exist to
@@ -306,14 +328,37 @@ const corpusMessage = (
  */
 export const fromSnapshot = (
   snapshot: FindingsSnapshot,
-  resolveBook: (
-    id: string,
-  ) =>
-    | { readonly bookId: BookId; readonly stamp: SourceStamp; readonly engine: EngineStamp }
-    | undefined,
+  resolveBook: (id: string) => PublishedBook | undefined,
 ): readonly Finding[] => {
   if (snapshot.coordinateSpace !== "utf16") return [];
   const patterns = snapshot.patterns();
+  const bookCount = snapshot.length;
+  const bookName = (index: number): string => {
+    const book = snapshot.book(index);
+    if (book === undefined) return String(index + 1);
+    return resolveBook(book.id)?.name ?? book.key;
+  };
+  // Which books hold each pattern, so a two-book spread is named, not counted.
+  const patternBooks = booksByPattern(snapshot);
+  // A Casing message says what the project does after the mark before its
+  // word; the reading map that finds that mark is asked for once per book,
+  // and only by a book that has one.
+  const masks = new Map<string, MaskMap | undefined>();
+  const before = (
+    resolved: PublishedBook,
+    finding: CorpusFinding,
+    pattern: Pattern | undefined,
+  ): { readonly before?: MarkBefore } => {
+    if (pattern?.key.kind !== "Casing" || resolved.mask === undefined) return {};
+    // A map of any other revision than the one published names other offsets.
+    if (!masks.has(resolved.bookId)) {
+      const mask = resolved.mask();
+      masks.set(resolved.bookId, mask?.sourceLen === resolved.text.length ? mask : undefined);
+    }
+    const mask = masks.get(resolved.bookId);
+    const mark = mask === undefined ? undefined : markBeforeIn(resolved.text, mask, finding.from);
+    return mark === undefined ? {} : { before: mark };
+  };
   const out: Finding[] = [];
   for (let index = 0; index < snapshot.length; index += 1) {
     const book = snapshot.book(index);
@@ -325,18 +370,30 @@ export const fromSnapshot = (
       const pattern =
         finding.kind === "Convention" ? patterns[finding.convention.pattern] : undefined;
       const code = corpusCode(finding, pattern?.channel);
+      const described = describeSous(finding, pattern, {
+        siteText: resolved.text.slice(finding.from, finding.to),
+        bookCount,
+        bookName,
+        patternBooks,
+        snapshot,
+        ...before(resolved, finding, pattern),
+      });
+      const comparison = comparisonOf(described);
       out.push({
         id: identify("sous", resolved.bookId, code, finding.from, finding.to),
         bookId: resolved.bookId,
         severity: corpusSeverity(finding),
         code,
         producer: "sous",
-        message: corpusMessage(finding, pattern),
+        message: render(described, "headline"),
+        details: render(described, "details"),
+        described,
         from: finding.from,
         to: finding.to,
         stamp: resolved.stamp,
         engine: resolved.engine,
         ...(finding.kind === "Convention" ? { pattern: finding.convention.pattern } : {}),
+        ...(comparison === undefined ? {} : { comparison }),
       });
     }
   }

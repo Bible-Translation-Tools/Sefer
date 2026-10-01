@@ -52,11 +52,12 @@ import {
   type Receipt,
 } from "../book/book";
 import { describesExactly, type Analysis } from "../galley/analysis";
+import type { EngineHit } from "../galley/galley";
 import { tocViewOf } from "../galley/location";
 import type { Address } from "../location/address";
 import { addressAt } from "../location/locate";
 import type { Change, SourceStamp } from "../source/source";
-import type { Readings } from "./reading";
+import type { Reading, Readings } from "./reading";
 
 export interface Query {
   /** Literal text, or a regular expression source when `regex` is set. */
@@ -65,6 +66,12 @@ export interface Query {
   /** Both edges of the match must sit against a non-word character. */
   readonly wholeWord?: boolean;
   readonly regex?: boolean;
+  /**
+   * Compile a regex in Unicode mode (`u`), for `\p{L}` and friends. Off for
+   * what a person types into Find, because `u` also turns a loose escape a
+   * person might type (`\-` outside a class) into a syntax error.
+   */
+  readonly unicode?: boolean;
 }
 
 export interface Options {
@@ -89,6 +96,12 @@ export interface Options {
    * a marker to make up for it.
    */
   readonly analysisOf?: (id: string) => Analysis | undefined;
+  /**
+   * About how many characters of the containing line `preview` keeps —
+   * `PREVIEW_WIDTH` when omitted, which is a one-line result card. A caller
+   * with room to wrap (a dialog) asks for more.
+   */
+  readonly previewWidth?: number;
 }
 
 /**
@@ -109,6 +122,8 @@ export interface Hit {
    */
   readonly address?: Address;
   readonly preview: string;
+  /** Where the match is inside `preview`, in its own UTF-16 offsets, to mark it. */
+  readonly previewMatch: { readonly from: number; readonly to: number };
   /**
    * Where the hit sits in the reading — what a reader sees in visual mode.
    *
@@ -179,6 +194,25 @@ const PREVIEW_WIDTH = 90;
  */
 export const MINIMUM_QUERY = 2;
 
+/** A letter, a digit or a space: the single characters the bound is about. */
+const COMMON = /^[\p{L}\p{N}\s]$/u;
+
+/**
+ * Is `text` long enough to search the whole project?
+ *
+ * `MINIMUM_QUERY` characters, with one exception: a single character that is
+ * not a letter, a digit or a space. The rows above are about "a", which is a
+ * word being typed and a quarter of a million hits. "—" or "“" is a question
+ * asked on purpose, usually by someone checking one glyph, and it is rare in
+ * a way "a" is not. Counted in code points, so a character outside the BMP is
+ * one character and not two.
+ */
+export const longEnough = (text: string): boolean => {
+  const chars = [...text];
+  if (chars.length >= MINIMUM_QUERY) return true;
+  return chars.length === 1 && !COMMON.test(text);
+};
+
 const WORD = /[\p{L}\p{N}_]/u;
 
 const isWordChar = (text: string, index: number): boolean =>
@@ -246,33 +280,45 @@ const isLowSurrogateAt = (text: string, index: number): boolean => {
 
 /**
  * The containing line, narrowed to about `PREVIEW_WIDTH` characters around the
- * match so a result card gets one short string. Truncated edges are marked
- * with an ellipsis, and boundaries are nudged off surrogate pairs so the
- * preview never contains a lone surrogate.
+ * match so a result card gets one short string, and where the match sits in
+ * it. Truncated edges are marked with an ellipsis, and boundaries are nudged
+ * off surrogate pairs so the preview never contains a lone surrogate.
  */
-const previewAt = (text: string, from: number, to: number): string => {
+const previewAt = (
+  text: string,
+  from: number,
+  to: number,
+  width: number = PREVIEW_WIDTH,
+): Pick<Hit, "preview" | "previewMatch"> => {
   const lineStart = text.lastIndexOf("\n", from - 1) + 1;
   const lineEndAt = text.indexOf("\n", from);
   const lineEnd = lineEndAt < 0 ? text.length : lineEndAt;
 
   let start = lineStart;
   let end = lineEnd;
-  if (lineEnd - lineStart > PREVIEW_WIDTH) {
-    const slack = Math.max(0, PREVIEW_WIDTH - (Math.min(to, lineEnd) - from));
+  if (lineEnd - lineStart > width) {
+    const slack = Math.max(0, width - (Math.min(to, lineEnd) - from));
     start = Math.max(lineStart, from - Math.floor(slack / 2));
-    end = Math.min(lineEnd, start + PREVIEW_WIDTH);
-    start = Math.max(lineStart, end - PREVIEW_WIDTH);
+    end = Math.min(lineEnd, start + width);
+    start = Math.max(lineStart, end - width);
   }
   if (isLowSurrogateAt(text, start)) start += 1;
   if (isLowSurrogateAt(text, end)) end -= 1;
 
-  const body = text.slice(start, end).trim();
-  return `${start > lineStart ? "…" : ""}${body}${end < lineEnd ? "…" : ""}`;
+  const raw = text.slice(start, end);
+  const body = raw.trim();
+  const lead = start > lineStart ? 1 : 0;
+  const offset = lead - (raw.length - raw.trimStart().length) - start;
+  const clamp = (at: number): number => Math.min(Math.max(at + offset, lead), lead + body.length);
+  return {
+    preview: `${lead === 1 ? "…" : ""}${body}${end < lineEnd ? "…" : ""}`,
+    previewMatch: { from: clamp(from), to: clamp(to) },
+  };
 };
 
 const matcherFor = (query: Query): Result.Result<RegExp, SearchError> => {
   const source = query.regex ? query.text : escapeLiteral(query.text);
-  const flags = query.caseSensitive === true ? "g" : "gi";
+  const flags = `g${query.caseSensitive === true ? "" : "i"}${query.unicode === true ? "u" : ""}`;
   try {
     return Result.succeed(new RegExp(source, flags));
   } catch (error) {
@@ -339,7 +385,7 @@ export const find = (
           from,
           to,
           ...withAddress(addressOf(from)),
-          preview: previewAt(text, from, to),
+          ...previewAt(text, from, to, options?.previewWidth),
         });
         if (limit !== undefined && hits.length >= limit) return Result.succeed(hits);
       }
@@ -430,13 +476,70 @@ export const findInReading = (
         // Cut from the READING, so the preview reads as the reader sees it —
         // no markers, no footnote bodies — which is the whole point of
         // searching this side.
-        preview: previewAt(text, from, to),
+        ...previewAt(text, from, to, options?.previewWidth),
         ...(pieces.length > 1 ? { pieces } : {}),
       });
       if (limit !== undefined && hits.length >= limit) return Result.succeed(hits);
     }
   }
   return Result.succeed(hits);
+};
+
+/**
+ * The engine's own find hits (`GalleyService.findAll`) as `Hit`s, for a
+ * literal whose words rule and case fold should be the engine's — kitchen's
+ * Sous queries name `findAll` as their door.
+ *
+ * The engine's `projected` range is an offset into the same verse-text
+ * reading `readings` cuts, so the preview is cut from that reading exactly as
+ * `findInReading` cuts one, and the match inside it is known. A hit whose book
+ * is not among `books`, or has no reading yet, is dropped: it has no stamp to
+ * bind to.
+ */
+export const fromEngine = (
+  readings: Readings,
+  books: readonly Book[],
+  found: readonly EngineHit[],
+  options?: Options,
+): readonly Hit[] => {
+  const byId = new Map<string, Book>(books.map((book) => [book.id, book]));
+  // Hits arrive book by book, so each book is looked up once.
+  let held:
+    | {
+        readonly id: string;
+        readonly stamp: SourceStamp;
+        readonly reading?: Reading;
+        readonly addressOf: AddressOf;
+      }
+    | undefined;
+  const hits: Hit[] = [];
+  for (const hit of found) {
+    const first = hit.source[0];
+    if (hit.bookId === undefined || first === undefined) continue;
+    if (held?.id !== hit.bookId) {
+      const book = byId.get(hit.bookId);
+      if (book === undefined) continue;
+      const { text, stamp } = book.source();
+      const reading = readings.of({ id: book.id, text, stamp });
+      held = {
+        id: book.id,
+        stamp,
+        ...(reading === undefined ? {} : { reading }),
+        addressOf: lazily(() => addressesOf(options?.analysisOf, book.id, book.id, text)),
+      };
+    }
+    if (held.reading === undefined) continue;
+    hits.push({
+      bookId: held.reading.bookId,
+      stamp: held.stamp,
+      from: first.from,
+      to: first.to,
+      ...withAddress(held.addressOf(first.from)),
+      ...previewAt(held.reading.text, hit.projected.from, hit.projected.to, options?.previewWidth),
+      ...(hit.source.length > 1 ? { pieces: hit.source } : {}),
+    });
+  }
+  return hits;
 };
 
 // ---------------------------------------------------------------------------
@@ -555,7 +658,7 @@ export const findInReferences = (
       hits.push({
         source: reference.id,
         projected: { from, to },
-        preview: previewAt(text, from, to),
+        ...previewAt(text, from, to, options?.previewWidth),
         ...withAddress(addressOf(first.from)),
         from: first.from,
         to: first.to,

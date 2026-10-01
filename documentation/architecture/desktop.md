@@ -59,20 +59,26 @@ command per port member, and the whole `Git` port is answered — no member refu
 | `git_resolve_ref`           | `Git.resolve`                              | `Git`    |
 | `git_current_branch`        | `Git.branch`                               | `Git`    |
 | `git_changed_paths_between` | `Git.changedPathsBetween`                  | `Git`    |
+| `git_merge_base`            | `Git.mergeBase`                            | `Git`    |
 | `git_clone`                 | `Remote.clone`                             | `Remote` |
 | `git_ensure_remote`         | `Remote.attach`                            | `Remote` |
 | `git_remote_url`            | `Remote.origin`                            | `Remote` |
 | `git_fetch`                 | `Remote.fetch`                             | `Remote` |
-| `git_pull`                  | `Remote.pull`                              | `Remote` |
+| `git_fetch_ref`             | `Remote.fetchRef`                          | `Remote` |
+| `git_deepen` (async)        | `Remote.deepen`                            | `Remote` |
+| `git_is_shallow`            | `Git.shallow`                              | `Git`    |
+| `git_probe`                 | `Remote.probe`                             | `Remote` |
+| `git_fast_forward`          | `Remote.fastForward`                       | `Remote` |
 | `git_push`                  | `Remote.push`, and `publish`'s second half | `Remote` |
-| `git_move_branch`           | `Remote.moveBranch`                        | `Remote` |
 | `git_abort_merge`           | `Remote.abortMerge`                        | `Remote` |
 
 Every command returns `Result<T, String>` where the string is `"<Reason>: <detail>"` — the vocabulary
 is in `src-tauri/src/errors.rs` (`NotARepository`, `Io`, `Conflict`, `Refused`, `AuthFailed`,
 `Offline`, `Rejected`). The TS adapters read only the prefix, so libgit2's prose can change without
 breaking the mapping. `remote_callbacks_for_token` and the transport classifier are ported from the v1
-app. `pull` fast-forwards or reports `Conflict`: Sefer never merges USFM behind a translator's back.
+app. There is no pull: a receive is a fetch and then `git_fast_forward`, which moves only forward, and
+Sefer never starts a merge of USFM behind a translator's back. The crate is git2 0.21; 0.20's
+`Remote::list()` handed back a null slice for an empty remote, which is what `git_probe` reads.
 
 ### What the Rust side promises
 
@@ -82,7 +88,8 @@ These are the semantics the two hosts must agree on, and where they are enforced
   `relative_path` re-checks each one is inside the work tree. The TS adapter has already run core's
   `repositoryPath`; Rust checks again because this process can write anywhere the user can.
 - **Nothing to commit is refused.** An empty path list is `Refused` in the Web layer's own words, and
-  so is a list whose paths all turn out to be deletions of things never recorded. Without that, an
+  so is a list whose paths all turn out to be deletions of things never recorded — unless the commit
+  names `also_parents`, when an empty list is a decision commit that records the join alone. Without that, an
   unborn HEAD produced an empty root commit — a first version holding no scripture.
 - **Committing an unchanged tree is not an error.** It returns the existing HEAD id rather than
   adding an empty version to the timeline a translator reads.
@@ -92,21 +99,42 @@ These are the semantics the two hosts must agree on, and where they are enforced
 - **Rename detection is off** in `git_changed_paths_between`. libgit2 would report a moved book as one
   rename; the Web layer's tree walk reports a delete and an add. The plan a translator reads is about
   paths, so both hosts say delete-and-add.
-- **`git_move_branch` is a forced checkout** and refuses any branch that is not the one HEAD is on.
+- **`git_fast_forward` is a safe checkout, forward only.** It refuses a target the branch is not an
+  ancestor of, and a file with changes no commit holds refuses the move before anything is written.
+- **A push the server refused is a refusal.** `push_update_reference` reports a per-ref rejection
+  (non-fast-forward, a protected branch) as `Rejected`; before, libgit2 returned success and the
+  screen said "sent".
+- **Network commands run off the main thread.** Tauri runs a plain command on the main thread, so a
+  clone, fetch, push, probe, ref fetch or deepen waiting on the network froze the window. Those six
+  are `async` and run on a blocking thread (`off_thread`); the local commands stay plain, because
+  they are quick.
+- **One writer per repository, in Rust too.** `src/core/git/repository.ts`'s lanes make one window's
+  git work take turns, but a lane lives in one webview. So every command that writes a repository —
+  init, commit, fast-forward, abort-merge, attach, clone, fetch, ref fetch, push, deepen — takes that
+  repository's lock (`writing`) first, whichever window or thread it came from. Reads take none:
+  libgit2 replaces refs and objects atomically. Within one window the lane means a writer never
+  waits on this lock; across windows, a plain writer can wait on the main thread behind another
+  window's transfer, which the 60 s stall timeout bounds.
   **`git_abort_merge` refuses when nothing is in progress** — it is a hard reset underneath, and on a
   clean repository that would discard unsaved work rather than undo a transfer.
 
 `src/core/git/contract.ts` is the acceptance suite, and it cannot reach this Layer: `invoke` needs a
-Tauri runtime and a Node harness has none. So the contract's own case — init, empty status, one saved
-file, one commit, then `log`/`show`/`previousVersions` agreeing — plus one case per command lives as
-`#[cfg(test)] mod tests` in `src-tauri/src/git.rs`, against real repositories in temp directories.
-`cargo test` in `src-tauri/` runs them. That is not the repository's "no tests" rule being bent: the
-rule is about locking UI behaviour while the surfaces move, and nothing there renders anything.
+Tauri runtime and a Node harness has none. A Rust restatement of it once lived in `git.rs` as
+`#[cfg(test)] mod tests`; it was removed on 2026-09-26 with every other new test, under the rule
+that tests wait until behaviour is locked. `cargo test` runs nothing today, so the desktop commands
+are proved only by running the app.
 
-The commit identity goes through one function, `author_signature`. Sefer has no author setting yet —
-the fixed "Sefer <sefer@localhost>" is written three times, in `src/app/ui/review/ReviewPanel.tsx`,
-`src/app/ui/cloud/CloudScreen.tsx` and `src/platform/web/remote.ts` — so on desktop that function is
-the single place a real identity has to land.
+- **Transfers end when they stop moving.** `configure_timeouts` (called first in `run`) sets
+  libgit2's connect timeout to 15 s and its per-read timeout to 60 s: a stalled server would
+  otherwise hold the repository's lane, and every Record a version behind it, indefinitely. A slow
+  transfer that is still arriving is never cut off.
+- **A failed commit leaves the index alone.** `git_commit` stages in memory and writes the index only
+  once the commit exists.
+
+The commit identity goes through one function, `author_signature`, and arrives from TS:
+`src/app/author.ts` is the one answer on both hosts — the signed-in username, else the name this
+device was given, and "Sefer" only for an import's arrival — with an empty email rather than an
+invented one.
 
 ## The updater
 

@@ -65,10 +65,12 @@ export type MetadataPatch = Partial<BurritoMetadata>;
 
 export interface ProjectAdminService {
   /**
-   * Renames the project as people see it, not the folder on disk: a burrito's
-   * `identification.name` is rewritten in place, and a project without
-   * metadata records the name in `.sefer/project.json`. Moving the folder is a
-   * separate job with different consequences (open books, git remotes).
+   * Renames the project as people see it ON THIS DEVICE, not the folder on
+   * disk and not its metadata: the name goes in `.sefer/project.json`, which
+   * the repository never records. A burrito's `identification.name` is left
+   * alone — it travels with the project, and two people renaming it would be
+   * a difference nobody can reconcile. Moving the folder is a separate job
+   * with different consequences (open books, git remotes).
    */
   readonly rename: (root: string, name: string) => Effect.Effect<void, AdminError>;
   /** Removes the project folder, but only after `confirm` answers true. */
@@ -79,14 +81,12 @@ export interface ProjectAdminService {
    */
   readonly metadata: (root: string) => Effect.Effect<Option.Option<ProjectMetadata>, AdminError>;
   /**
-   * The name a `rename` recorded for a project that has no burrito to carry
-   * one — `.sefer/project.json`'s `name`, and `None` when there is no such
-   * file or it says nothing.
+   * The name a `rename` recorded on this device — `.sefer/project.json`'s
+   * `name`, and `None` when there is no such file or it says nothing.
    *
-   * It exists because `rename` has always WRITTEN this file and nothing has
-   * ever read it: renaming a folder of loose USFM reported success and changed
-   * nothing anybody could see. The burrito is still the first answer; this is
-   * the second, and the folder's own name is the third.
+   * The FIRST answer for what a project is called: a name somebody chose
+   * here outranks the one its metadata declares, and the folder's own name
+   * comes last.
    *
    * Never fails. A project whose private corner is unreadable is a project
    * with no recorded name, which is the ordinary case anyway.
@@ -135,18 +135,10 @@ const ioFailure = (error: PlatformError.PlatformError): AdminError =>
     description: error.reason.description ?? error.message,
   });
 
-/** The locale a rename writes into: the project's own default, or the one already there. */
-const nameLocale = (metadata: BurritoMetadata): string => {
-  const declared = metadata.meta.defaultLocale;
-  if (declared !== undefined) return declared;
-  const existing = Object.keys(metadata.identification.name).at(0);
-  return existing ?? "en";
-};
-
 /**
  * What a shared copy of a project does NOT carry.
  *
- * `.sefer/` is Sefer's own corner — provenance, a fallback name — and it
+ * `.sefer/` is Sefer's own corner — provenance, the name chosen here — and it
  * describes this device's history with the project, not the project. A
  * `.sefer-tmp` sibling is an atomic write that was interrupted. `.git` is a
  * repository, which is a transfer of its own (`Remote`), not a folder to zip.
@@ -342,21 +334,11 @@ const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminServic
   return {
     rename: (root, name) =>
       Effect.gen(function* () {
-        const raw = yield* rawMetadata(root);
-        if (Option.isSome(raw)) {
-          const current = yield* burrito(root);
-          if (Option.isSome(current)) {
-            const locale = nameLocale(current.value);
-            const identification = {
-              ...current.value.identification,
-              name: { ...current.value.identification.name, [locale]: name },
-            };
-            yield* writeMetadata(root, { ...raw.value, identification });
-            return;
-          }
-        }
-        // No burrito metadata to carry the name, so Sefer keeps it in its own
-        // corner rather than inventing a metadata.json the project never had.
+        // The name is this device's, in Sefer's own corner, and never the
+        // project's metadata: `metadata.json` travels with the project, and a
+        // name two people changed there is a difference nobody can reconcile.
+        // `.sefer/` is excluded from the repository, so this never reaches a
+        // commit and someone else's rename never overwrites it.
         yield* Effect.mapError(
           fileSystem.makeDirectory(`${root}/.sefer`, { recursive: true }),
           ioFailure,

@@ -46,7 +46,7 @@ import {
   Stream,
 } from "effect";
 
-import { trustedBy, type Book, type BookId } from "../book/book";
+import { trustedBy, type Book, type BookId, type Origin } from "../book/book";
 import { writeFileAtomic } from "../fileSystem/atomic";
 import { Observability, type ObservabilityService } from "../observability";
 import type { ExternalChange } from "../project/project";
@@ -65,6 +65,12 @@ export interface SaveReceipt {
   /** Byte length of the bytes actually written, in the file's own form. */
   readonly bytes: number;
   readonly at: number;
+  /**
+   * Other files this save made current — a burrito's `metadata.json`, whose
+   * ingredient checksums describe this book. Sefer wrote them, so they are
+   * receipts too, and they belong in the same commit as the book.
+   */
+  readonly also: readonly string[];
 }
 
 type SaveFailure =
@@ -151,6 +157,31 @@ export interface SaveCoordinatorService {
     change: ExternalChange,
     choice: ResolveChoice,
   ) => Effect.Effect<Option.Option<Baseline>, SaveError>;
+  /**
+   * Hands `book` the text its file holds now, as ONE trusted edit through the
+   * funnel, and makes that text the baseline — `resolve`'s `takeDisk`, for a
+   * file that changed because Sefer itself put new bytes there (a receive's
+   * checkout). `origin` is how the edit is recorded; history shows a received
+   * change as `incoming`, never as a revert.
+   *
+   * Nothing is applied when the book already holds that text, when
+   * `expect` is given and the book has moved past it (typing landed after
+   * the caller decided this book could be replaced), or when `expect` is
+   * `"keep"`: a person decided this book's text in Review, and the file
+   * moving forward underneath it must not undo that decision. The baseline moves to
+   * the file's text either way: a book whose file moved on must never keep
+   * measuring "unsaved" against bytes that are gone, or the next save would
+   * write the old text back over the new one without a difference ever
+   * being shown. Answers whether the text was applied.
+   *
+   * Refused when the file is not canonical text, or when the book's rules
+   * refuse the edit — and then the book is left as it was.
+   */
+  readonly takeDisk: (
+    book: Book,
+    origin: Origin,
+    expect?: SourceStamp | "keep",
+  ) => Effect.Effect<boolean, SaveError>;
   /** The per-path write queue. Save is the only owner of write ordering. */
   readonly serialize: (
     path: string,
@@ -180,8 +211,12 @@ export interface SaveCoordinatorOptions {
    * rather than a decorator around the service: a wrapper outside could be
    * bypassed by the one caller that matters. A failure is ignored — the
    * project's own bytes are already written.
+   *
+   * It answers the paths it keeps current for this book, written or not, and
+   * they become the receipt's `also`: a file that already matched is staged
+   * as a no-op, and one an earlier failed commit left behind is recorded now.
    */
-  readonly onSaved?: (receipt: SaveReceipt) => Effect.Effect<void, unknown>;
+  readonly onSaved?: (receipt: SaveReceipt) => Effect.Effect<readonly string[], unknown>;
 }
 
 /**
@@ -353,6 +388,7 @@ const make = (
           ...(hash === undefined ? {} : { hash }),
           bytes: bytes.length,
           at,
+          also: [],
         };
         // 5 the baseline Diff consumes
         baselines.set(book.id, {
@@ -380,8 +416,9 @@ const make = (
             });
         }
         // 8 what composition hangs off a completed write (see `onSaved`).
-        if (options.onSaved !== undefined) yield* Effect.ignore(options.onSaved(receipt));
-        return receipt;
+        if (options.onSaved === undefined) return receipt;
+        const also = yield* Effect.orElseSucceed(options.onSaved(receipt), () => []);
+        return { ...receipt, also };
       });
 
     /** Reads the file back and says whether it differs from what we wrote. */
@@ -405,7 +442,9 @@ const make = (
       });
 
     /** The on-disk text as a Baseline-shaped value, for `compare` and `takeDisk`. */
-    const readDisk = (change: ExternalChange): Effect.Effect<Baseline, SaveError> =>
+    const readDisk = (
+      change: Pick<ExternalChange, "bookId" | "path">,
+    ): Effect.Effect<Baseline, SaveError> =>
       Effect.gen(function* () {
         const bytes = yield* Effect.mapError(fileSystem.readFile(change.path), (error) => {
           const reason = failureFor(error);
@@ -436,6 +475,56 @@ const make = (
           // file's mtime and the port's stat is optional on some hosts.
           savedAt: Date.now(),
         };
+      });
+
+    const takeDisk = (
+      book: Book,
+      origin: Origin,
+      expect?: SourceStamp | "keep",
+    ): Effect.Effect<boolean, SaveError> =>
+      Effect.gen(function* () {
+        remember(book);
+        const disk = yield* readDisk({ bookId: book.id, path: book.path });
+        const stamp = book.source().stamp;
+        const moved =
+          expect === "keep" ||
+          (expect !== undefined &&
+            (stamp.revision !== expect.revision || stamp.length !== expect.length));
+        const apply = !moved && book.source().text !== disk.text;
+        if (apply) {
+          // ONE change replacing the whole text, through the funnel: the
+          // editor's rules judge it, history records one event, and every
+          // reader sees it publish like any other edit.
+          const applied = book.apply(
+            [{ from: 0, to: book.source().text.length, insert: disk.text }],
+            origin,
+            trustedBy("save.takeDisk"),
+          );
+          if (Result.isFailure(applied))
+            return yield* Effect.fail(
+              refuse(book, "Refused", `${origin} refused by ${applied.failure.rule}`),
+            );
+        }
+        // The file's text is the baseline now. When it was applied its stamp
+        // is the book's, after the edit; when the book moved on, the stamp is
+        // the file's own, so `dirty` falls to the hash and says "unsaved".
+        baselines.set(book.id, {
+          ...disk,
+          stamp: apply || !moved ? book.source().stamp : disk.stamp,
+          savedAt: Date.now(),
+        });
+        // "keep" is asked for, not a race lost: the baseline follows the file
+        // and the Book's text stands by design.
+        observability?.note(
+          "baseline.take",
+          moved && expect !== "keep" ? "declined" : "rewrote",
+          expect === "keep" ? "baseline only" : moved ? "book moved" : undefined,
+          {
+            "book.id": book.id,
+            "book.origin": origin,
+          },
+        );
+        return apply;
       });
 
     return {
@@ -485,29 +574,16 @@ const make = (
                 description: "no open Book to revert; open it before taking disk",
               }),
             );
-          const disk = yield* readDisk(change);
-          // ONE change replacing the whole text, through the funnel: the
-          // editor's rules judge it, history records one event, and every
-          // reader sees it publish like any other edit.
-          const applied = book.apply(
-            [{ from: 0, to: book.source().text.length, insert: disk.text }],
-            "revert",
-            trustedBy("save.takeDisk"),
-          );
-          if (Result.isFailure(applied))
-            return yield* Effect.fail(
-              refuse(book, "Refused", `revert refused by ${applied.failure.rule}`),
-            );
+          yield* takeDisk(book, "revert");
           conflicts.delete(change.bookId);
-          // The disk text is now what both sides hold, so it is the baseline;
-          // its stamp is the book's post-revert stamp, not the decoded 0.
-          baselines.set(book.id, { ...disk, stamp: book.source().stamp, savedAt: Date.now() });
           observability?.note("conflict.resolve", "rewrote", undefined, {
             "book.id": book.id,
             "save.choice": "takeDisk",
           });
           return Option.none();
         }),
+
+      takeDisk,
 
       serialize,
 

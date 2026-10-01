@@ -30,13 +30,14 @@ Both halves are drawn by the one `linter`, so there is one gutter, one popover a
 
 ## The one shape
 
-`Finding { id, bookId, severity, code, producer, message, from, to, stamp, engine, fix? }` — `src/core/findings/finding.ts` is the only place either producer is translated into it.
+`Finding { id, bookId, severity, code, producer, message, details?, described?, from, to, stamp, engine, fix? }` — `src/core/findings/finding.ts` is the only place either producer is translated into it.
 
 - `severity` is `error | warning | info`. Onion's `hint` folds into `info`; a code that says nothing at the document's declared `\usfm` version (and the whole `form` category) is **dropped**, so the census counts stay honest.
 - Sous carries no severity ladder at all, so Sefer's presentation policy is stated once in `corpusSeverity`: Hygiene is an error (a control character or a conflict marker is a defect in the file), Presence is a warning, everything statistical is info.
 - `code` is the catalogue name for Onion (`unknown-marker`) and `sous.<lane>[.<class>]` for Sous (`sous.hygiene.C0Control`, `sous.convention.Rarity`).
 - `id` is `producer:bookId:code:from-to`. **Row indices are not durable identities** — the next publication renumbers everything — so identity is semantic, and two rows with the same code at the same span are one finding.
 - `from`/`to` are UTF-16 offsets into the text the stamps name, exactly as the engine reported them. Nothing shifts an offset. A Sous publication whose `coordinateSpace` is UTF-8 is dropped whole rather than mixed with UTF-16 findings.
+- `message` is plain panel text; for a Sous finding it is the headline, and `details` and `described` are its second tier ("What a Sous finding says", below).
 - `fix` is a **pointer** (`{ kind: 'engine', diagnosticIndex }`), not the edits: a panel of four hundred findings resolves none of them.
 - `Finding` carries no Address. A chapter:verse address is only derivable from a table of contents, and one from another revision names the wrong verse with total confidence — so `navigateTarget(finding)` returns only the book and span, and a label comes from `shell.location.addressAt`, which names a place only when the analysis it is handed matches the finding's engine stamp.
 
@@ -103,6 +104,8 @@ Core cannot navigate. `navigateTarget` returns a value; the shell calls `project
 **The filters are dropdowns, in one row.** Severity, Producer, Books and Codes each fold into a Popover; the text filter and "Hide stale" stay inline, because a text filter is the control a reader reaches for without planning to and a search box behind a menu is a search box nobody uses. Each trigger says what its group is narrowed to and wears the brand tint when it is hiding something — a folded filter that does not say it is filtering is exactly how a reader comes to believe a project is clean.
 
 **`?code=` and `?pattern=` are accepted, and neither is authoritative.** `/inventory` links here with "the other sites of this convention"; the link was already being sent and was silently dropped, because a route that does not validate a search param does not receive it. `code` seeds the Codes filter — a seed, not a lock. `pattern` is different and deliberately is NOT a `FindingsFilter` field: it is an address another screen hands over for one visit, not a preference anybody sets, so it narrows the list the page calls "all" and the header's "N of TOTAL shown" stays honest about the question that was asked. A banner says the list is narrowed and offers the way out.
+
+**A Sous finding carries what its sentence compares.** `Finding.comparison` (`src/core/findings/compare.ts`) is kitchen's own queries for the message (`described.queries`, `sous-messages.md` "Queries"), passed through whole when there is a `this` query among them and absent otherwise (hygiene, presence, source copy, the lengths). Each query has a purpose — `this` (the form here), `alternative` (what the reader might write instead), `others` (the comparison the details name) — and is either a literal (needle, `caseSensitive`, `wholeWord`) or a Unicode regex kitchen built from escaped marks and fixed classes (a class beside a mark, a case after one). Sefer writes none of them and keeps no probe of its own. The line carries a magnifying glass (`SearchDialog`) that shows them as lists without leaving the page ([search](search.md), "Asking from another screen"). The searches read the verse text, not the stream Sous measured, so their counts are close to the sentence's rather than promised equal: on en_ulb GEN 48:20's `'.` is 3 and EXO 38:26's `—\p{Nd}` is 2, as their sentences say, while JOB 12:23's `he` is 6,940 against the sentence's 6,889.
 
 **A card's reference is derived, or there is no card.** An excerpt exists only because a parse of the text the finding was measured in placed it, so "Philemon 1:4" on a card is a fact. Nothing here ever guesses a verse: a chapter and verse from another revision would name the wrong place with total confidence, which is the failure the two stamps exist to prevent.
 
@@ -182,4 +185,30 @@ Presence is a `warning` because a verse coverage gap is usually real and occasio
 
 The two new channels are convictions like any other and reach `/inventory` through the same pattern table; see [Character inventory](inventory.md).
 
-The header's snapshot id now changes when the settings change, not only when the text does. That costs `ProjectAnalysis` nothing today: its finding, cross-book and inventory caches are keyed on nothing at all and are dropped wholesale whenever a publication lands or a book changes. A settings surface that flipped a lane WITHOUT touching any text would have to invalidate them by hand; nothing calls `setSettings` yet, and this is the note for whoever writes the first caller.
+## What a Sous finding says
+
+```text
+describeFinding(finding, pattern, { siteText: "He", bookCount: 66, bookName, patternBooks, snapshot, before })
+  → { id: "convention.casing", params: { word: "He", usualWord: "he", … }, queries: [ … ] }
+headline  “He” is capitalized here; this project writes “he” (6,889 times).
+details   Of its 6,893 uses in the middle of a sentence, this form appears 4 times, in 3 of 66
+          books. After [;], the next word is lowercase 4,367 of 4,891 times.
+```
+
+Kitchen decides why a squiggle fired and names it as a message id with parameters (`sous-messages.ts`); its English catalog (`sous-messages.en.json`, ICU MessageFormat) is the wording, a headline and details per id. `src/core/findings/messages.ts` is Sefer's only formatter: one `intl-messageformat` per id and tier, cached, locale `en`. Sefer writes no finding sentence of its own, and every Sous kind — hygiene, presence, source copy, length and every convention channel, `BookRate` included — goes through it. The `code` is unchanged (`sous.convention.<Channel>`).
+
+- **One headline.** A site matching several rows names only its finest pattern, and only that pattern is described. The reasons list is no longer printed.
+- **The words come from the text.** The engine keys a word by hash, so `fromSnapshot`'s resolver hands back the published text with each book (`PublishedBook.text`, the held analysis the publication measured) and `siteText` is its slice at the finding's UTF-16 span. The same resolver names a book for `BookRate` (`PublishedBook.name`, through `bookName` in `core/location/canon.ts`).
+- **Two tiers.** `message` is the headline: one fact, and at most one alternative the reader might write. `details` is the supporting numbers — what is usual, how often, where — and the Findings panel shows it behind a "Why?" on the line, opened per line in the card's view like a folded run. The editor's squiggle popover shows the headline only.
+- **Marks are keycaps.** The catalog wraps every mark it quotes in `<g>`, because `“"”` cannot be read. `render` gives plain text with the tag dropped and the mark kept (`message`, `details`: tooltips, the text filter, the fold's identity); `renderRich` hands each mark to the caller, and `SousSentence` (`src/app/ui/panels/`) draws it as a `Kbd`. A screen renders rich from `described`, never by parsing `message` back.
+- **The context is complete.** `bookName` is the display name ("all in Isaiah"). `patternBooks` is kitchen's `booksByPattern(snapshot)`, built once per `fromSnapshot`, so a two-book spread is named rather than counted. `snapshot` is the publication, which answers `before`: for a Casing finding only, `PublishedBook.mask` (the book's `verseText` mask through `GalleyService.mask`, asked for once per book and ignored when its source length is not the published text's) supplies the last few kept spans before the word, and kitchen's `markBefore` reads the mark from that reading with the markers out — a raw `\q2` between `;` and `He` would read as a digit.
+- **Queries run on demand.** `described.queries` is kitchen's searches behind the message (`Finding.comparison` above). Nothing runs them until the reader opens the magnifying glass.
+- Both tiers quote the document, so they stay panel text and never reach telemetry.
+
+## Proofreading settings
+
+`/settings` has a Proofreading card (`src/app/ui/SousSettingsPanel.tsx`) generated from kitchen's `SOUS_SETTINGS`: grouped by kitchen's `group`, each row kitchen's label, its plain description above the control, the control by `kind` (switch; number within its range; a share-bp shown as a percent), the default and a reset, and one Reset all. Sefer's only copy is the three group headings (`SOUS_GROUPS`, typed `satisfies Record<SousSettingGroup, …>`).
+
+They are stored globally, like every other preference, as one key (`sous.settings`) holding only the values the reader changed. `sousValues` fills the rest from kitchen's defaults and ignores a stored value that no longer fits its key's kind or range, so a setting kitchen adds or drops needs no migration.
+
+`ProjectContext` hands the engine the whole set before any project attaches, and on every change calls `galley.setSettings`, then `ProjectAnalysis.rejudge()`: the publication judged under the old settings is dropped, every book is marked stale, and the scheduler's one debounced pass re-analyzes and republishes once — the path an edit takes. The stores are told at once, so no screen keeps showing findings from the old settings while the pass runs; the snapshot id hashes the whole config, so the engine reuses nothing judged under it either.

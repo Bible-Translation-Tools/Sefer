@@ -69,7 +69,11 @@ function ClockLine(props: {
 }
 
 export function ProjectCard(props: { readonly sync: Sync; readonly projectName: string }) {
-  const copy = () => stateCopy(props.sync.state);
+  const copy = () =>
+    stateCopy(props.sync.state, {
+      sendRefused: props.sync.reading.sendRefused,
+      signedIn: props.sync.reading.signedIn,
+    });
   const local = () => props.sync.clocks.local;
   const shared = () => props.sync.clocks.shared;
 

@@ -115,3 +115,29 @@ export const recordedSource = (
         : Effect.succeed({ text: held.text, stamp: held.stamp });
     }),
 });
+
+/**
+ * The shared project's newest version, as the last check fetched it, as one
+ * side: the blobs at the branch's remote-tracking ref, read once per commit
+ * exactly as `recordedSource` reads HEAD. Read-only — the shared project is
+ * changed by sending, never by a review writing into it.
+ */
+export const sharedSource = (
+  shared: RecordedTexts,
+  label = "The shared project",
+): CompareSource => ({
+  id: `remote:${shared.head ?? "none"}`,
+  label: shared.head === undefined ? `${label} (nothing checked yet)` : label,
+  kind: "remote",
+  canApply: false,
+
+  books: () => Effect.sync(() => [...shared.texts.keys()]),
+
+  read: (bookId) =>
+    Effect.suspend(() => {
+      const held = shared.texts.get(bookId);
+      return held === undefined
+        ? failCompare("Absent", `${bookId} is not in the shared project`)
+        : Effect.succeed({ text: held.text, stamp: held.stamp });
+    }),
+});

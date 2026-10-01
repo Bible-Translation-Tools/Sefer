@@ -14,6 +14,7 @@ import { unitReference, type DecisionUnit } from "#core/galley/diff";
 import { repositoryPath, type Repo } from "#core/git/git";
 import { deriveDeltaScope, type ChapterChangeScope } from "#core/history/delta";
 import { BoundedLru } from "#core/history/window";
+import { packView, type PackView } from "#platform/web/history/packView";
 
 import { pathHistory, readBlobById, type PathCommit, type PathHistoryEnd } from "./bookHistory";
 import type { Bench } from "./experiment";
@@ -29,7 +30,6 @@ import {
   type IndexedCommit,
 } from "./history/bookIndex";
 import { ensureIndex } from "./history/indexStore";
-import { packView, type PackView } from "./history/packView";
 import { inOrder } from "./units";
 
 /** Decoded book texts by blob id; neighbouring slides share one string. */

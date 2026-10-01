@@ -66,6 +66,8 @@ The two paths differ in the FIRST step only:
 
 Intake also does the two things a picker leaves to its caller: it strips the one folder every entry shares (so a zipped `small-nt/…` classifies exactly as the folder `small-nt` does, with `metadata.json` at the root where the classifier looks), and it drops `__MACOSX`, `.DS_Store` and friends. It is reached through a **dynamic import** — from the import hub, and from Review's zip and folder sources (`src/app/ui/review/sources.ts`) — so the zip decoder is fetched by the people who import something and never sits in the first load — and the desktop bundle never carries it at all.
 
+Every import then ends in one more step, `intakeRepository` (`src/core/git/intake.ts`, run by the import hub for a zip, a folder and a clone alike): the project leaves with a repository and an ARRIVAL COMMIT of the files the import wrote. An arriving `.git` is adopted through an allowlist or replaced, and `.sefer/` is excluded from commits ([git](git.md), Intake).
+
 The progress dialog counts files while the write runs, because an import of sixty-six books is long enough that a spinner is not an answer.
 
 ## Projects Available on WACS: the Catalogue port

@@ -21,13 +21,13 @@ export const metadataOf = (project: Project | undefined): ProjectMetadata | unde
   project === undefined ? undefined : Option.getOrUndefined(project.metadata());
 
 /**
- * The project's name: what this session renamed it to, else what the burrito
- * calls it, else the folder's own name.
+ * The project's name: what it was called on this device (a rename, now or
+ * before this open), else what the burrito calls it, else the folder's own
+ * name.
  *
- * The rename overlay comes FIRST because the open `Project` holds the metadata
- * it decoded when it was opened — a rename rewrites that file underneath it,
- * and this header would otherwise keep showing the old name until the project
- * was closed and opened again.
+ * The device's name comes FIRST, and from the overlay, because the open
+ * `Project` holds only the metadata it decoded when it was opened, and a
+ * device-local name never touches that.
  */
 export const projectName = (project: Project | undefined): string => {
   if (project === undefined) return "";

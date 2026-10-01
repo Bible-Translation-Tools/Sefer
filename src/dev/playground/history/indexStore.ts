@@ -21,7 +21,8 @@ import type { ObservabilityService } from "#core/observability";
 import { decodeIndex, encodeIndex, type BookIndex } from "./bookIndex";
 import type { BuildRequest, WorkerMessage } from "./indexWorker";
 
-const INDEX_DIR = "/sefer/history";
+// Its own folder: the app keeps its index (a newer format) in /sefer/history.
+const INDEX_DIR = "/sefer/history-playground";
 
 const pathOf = (root: string): string => `${INDEX_DIR}/${encodeURIComponent(root)}.json`;
 

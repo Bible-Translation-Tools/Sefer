@@ -40,12 +40,6 @@ export type ShellEvent =
   | { readonly kind: "journal.restore"; readonly books: readonly BookId[] }
   /** A project opened. Every book is new, so every book is news. */
   | { readonly kind: "project.open" }
-  /**
-   * A pull or a push finished. No book list: a transfer moves the repository
-   * under the whole project, and which books it touched is git's answer, not
-   * one we currently ask for.
-   */
-  | { readonly kind: "remote.transfer" }
   /** A Publication landed: new cross-book findings and a new census. */
   | { readonly kind: "corpus.publish" }
   /**
@@ -65,8 +59,8 @@ export type ShellEvent =
 /**
  * The Books an event moved, or `"all"` when it moved the project as a whole.
  *
- * `"all"` is not a shrug — it is the honest answer for the two events that
- * replace the project under the UI. Everything else names its Books, and that
+ * `"all"` is not a shrug — it is the honest answer for the one event that
+ * replaces the project under the UI. Everything else names its Books, and that
  * is what keeps a keystroke in RUT from touching PSA's row.
  */
 export const booksOf = (event: ShellEvent): readonly BookId[] | "all" => {
@@ -78,7 +72,6 @@ export const booksOf = (event: ShellEvent): readonly BookId[] | "all" => {
     case "seat.close":
       return event.books;
     case "project.open":
-    case "remote.transfer":
       return "all";
     case "corpus.publish":
       // A publication changes findings, not save state. No book's row moves.

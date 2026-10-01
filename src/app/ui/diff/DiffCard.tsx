@@ -41,6 +41,7 @@ import { CardEditor } from "../multibuffer/CardEditor";
 import { CardFrame } from "../multibuffer/CardFrame";
 import type { CardEvent, CardView, ContextStep } from "../multibuffer/cardState";
 import { ContextControl } from "../multibuffer/ContextControl";
+import { cardPolicy } from "../multibuffer/policy";
 import { Badge, cx } from "../primitives";
 import { hunkKind, type Hunk } from "./hunks";
 import { hunkPaint, sidePaint, type Controls } from "./paint";
@@ -70,7 +71,7 @@ export const wasBlock =
         parent: block,
         analysis: baseline,
         range: unit.baseline,
-        mode,
+        policy: cardPolicy(mode === "usfm" ? "usfm" : "regular"),
         marks: (unit.status === "modified" ? (unit.text?.baseline ?? []) : [])
           .filter((run) => run.kind !== "unchanged" && (run.what === "text" || mode === "usfm"))
           .map((run) => ({ from: run.from, to: run.to, class: "cm-diff-removed" })),
@@ -102,6 +103,12 @@ export function DiffCard(props: {
   readonly view: CardView;
   readonly onView: (event: CardEvent) => void;
   readonly controls: Controls | undefined;
+  /**
+   * Who changed this passage since the two sides last agreed, when that is
+   * known — only in a review against the shared project, where "keep mine"
+   * on a passage only the other side changed would silently undo their work.
+   */
+  readonly origin?: "there" | "here" | "both" | undefined;
   /** Column captions in a split: what each source calls itself. */
   readonly currentLabel: string;
   readonly baselineLabel: string;
@@ -361,6 +368,17 @@ export function DiffCard(props: {
       info={
         <>
           <span class="text-smallest text-on-surface-tertiary">{status()}</span>
+          <Show when={props.origin}>
+            {(origin) => (
+              <Badge tone={origin() === "both" ? "warning" : "muted"}>
+                {origin() === "there"
+                  ? t("Changed there")
+                  : origin() === "here"
+                    ? t("Changed here")
+                    : t("Changed in both places")}
+              </Badge>
+            )}
+          </Show>
           <Show when={hunkKind(props.hunk.units)}>
             {(kind) => (
               <Badge tone="muted" data-diff-kind={kind()}>
@@ -434,7 +452,7 @@ export function DiffCard(props: {
                 <CardEditor
                   book={seated()}
                   range={props.hunk.current}
-                  mode={usfm() ? "usfm" : "regular"}
+                  policy={cardPolicy(usfm() ? "usfm" : "regular")}
                   surface="cm-diff cm-diff-card"
                   analyze={props.analyze ?? (() => props.sides.current)}
                   extensions={liveDiff(

@@ -18,11 +18,10 @@
  * which books keep this device's version and a dialog names them.
  */
 
-import { Effect, Fiber, type FileSystem, Stream } from "effect";
+import { Effect, Fiber, Stream } from "effect";
 import CloudIcon from "lucide-solid/icons/cloud";
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 
-import type { Galley } from "#core/galley";
 import { Git } from "#core/git/git";
 import { Observability, type Attrs, type Operation, type Verdict } from "#core/observability";
 import { Remote, remoteVerdict } from "#core/remote/remote";
@@ -31,6 +30,8 @@ import {
   CombineError,
   emptyPlan,
   previewCombine,
+  receive,
+  ReceiveError,
   sync,
   wantsPlan,
   type CombineReplay,
@@ -38,34 +39,30 @@ import {
   type SyncActionId,
 } from "#core/sync";
 
+import { authorOrApp } from "../../author";
 import { describe, remoteReasonOf } from "../../describe";
 import { rememberSync } from "../../diagnostics";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { Button, Card, Dialog, EmptyState, PanelHeader } from "../primitives";
+import type { Domain } from "../../services";
+import { destination } from "../../syncActions";
+import { syncStatus } from "../../syncStatus";
+import { Button, Card, Dialog, EmptyState, PanelHeader, toasts } from "../primitives";
 import { createAccount } from "./account";
 import { AccountCard } from "./AccountCard";
 import { ActionCard } from "./ActionCard";
-import { bookFromPath, combineRefusal, combineTrouble, narrate } from "./copy";
+import { bookFromPath, combineRefusal, combineTrouble, narrate, receiveRefusal } from "./copy";
 import { DevStateSwitcher } from "./DevStateSwitcher";
 import { fixtureFacts, fixtureReplay, fixtureStateRequested } from "./fixture";
 import { IncomingPlanCard } from "./IncomingPlanCard";
-import { createNetworkStatus } from "./network";
 import { ProjectCard } from "./ProjectCard";
 import { readSync, type ReadSyncOptions, type SyncFacts } from "./reading";
 import { SharedProjectCard, type SharedProjectActions } from "./SharedProjectCard";
+import { SuggestionsCard } from "./SuggestionsCard";
+import { SyncSettingsCard } from "./SyncSettingsCard";
 
 /** A project's folder name, which is what a person calls it. */
 const projectName = (root: string): string => root.slice(root.lastIndexOf("/") + 1);
-
-/**
- * Who the combined version is by.
- *
- * Sefer, not the translator: the one version a combine records is bookkeeping
- * over versions they already authored, the same identity `src/app/commands.ts`
- * commits a save under and the Web host writes a merge under.
- */
-const COMBINE_AUTHOR = { name: "Sefer", email: "sefer@localhost" } as const;
 
 /**
  * A combine's failure, as the sentence a translator reads.
@@ -78,11 +75,16 @@ const explainCombine = (cause: unknown): string | undefined => {
   return cause.refusal === undefined ? combineTrouble(cause.state) : combineRefusal(cause.refusal);
 };
 
+const explainReceive = (cause: unknown): string | undefined =>
+  cause instanceof ReceiveError && cause.refusal !== undefined
+    ? receiveRefusal(cause.refusal, cause.books)
+    : undefined;
+
 export function CloudScreen() {
   const shell = useShell();
   const { services } = shell;
   const account = createAccount(shell);
-  const network = createNetworkStatus();
+  const network = syncStatus;
 
   const [facts, setFacts] = createSignal<SyncFacts | undefined>(undefined, { name: "syncFacts" });
   const [fetchedAt, setFetchedAt] = createSignal<number | undefined>(undefined, {
@@ -172,9 +174,12 @@ export function CloudScreen() {
     if (project === undefined || fixtureState() !== undefined) return undefined;
     return {
       root: project.root,
+      project,
       host: account.host,
       online: network.online(),
       lastFailure: network.lastFailure(),
+      checking: network.checking(project.root),
+      sendRefused: network.sendRefused(),
       fetchedAt: fetchedAt(),
     };
   };
@@ -295,9 +300,7 @@ export function CloudScreen() {
    */
   const transfer = (
     action: SyncActionId,
-    work: (
-      root: string,
-    ) => Effect.Effect<unknown, unknown, Git | Remote | FileSystem.FileSystem | Galley>,
+    work: (root: string) => Effect.Effect<unknown, unknown, Domain>,
     explain?: (cause: unknown) => string | undefined,
   ): void => {
     const project = shell.project();
@@ -352,12 +355,35 @@ export function CloudScreen() {
       return yield* remote.fetch(yield* git.open(root));
     });
 
-  const pull = (root: string) =>
-    Effect.gen(function* () {
-      const git = yield* Git;
-      const remote = yield* Remote;
-      return yield* remote.pull(yield* git.open(root));
-    });
+  // A receive moves the Books with the files, so it needs the open project,
+  // not just its folder.
+  const pull = () => {
+    const project = shell.project();
+    if (project === undefined) return Effect.fail(new Error("no project is open"));
+    return Effect.tap(receive({ project }), (received) =>
+      Effect.sync(() => {
+        // What a receive could not finish is said, not left for the next save
+        // to find: a book file that arrived or went (the book set is fixed
+        // while a project is open), and a book whose saved text could not be
+        // read back.
+        if (received.reopen.length > 0)
+          toasts.info({
+            title: t("Reopen the project to see every book"),
+            message: t("{books} arrived or were removed.", {
+              books: received.reopen.map(bookFromPath).join(", "),
+            }),
+          });
+        if (received.unsettled.length > 0)
+          toasts.error({
+            title: t("Some books could not be read back"),
+            message: t("{books}: their text is kept; review before saving.", {
+              books: received.unsettled.join(", "),
+            }),
+            autoClose: false,
+          });
+      }),
+    );
+  };
 
   const push = (root: string) =>
     Effect.gen(function* () {
@@ -382,7 +408,7 @@ export function CloudScreen() {
     });
 
   /**
-   * The first of Combine's two presses: work out what WOULD be replayed, and
+   * The first of Combine's two presses: work out what WOULD be joined, and
    * put that to the person.
    *
    * The preview is local and asks the shared project nothing — it reads the
@@ -403,7 +429,7 @@ export function CloudScreen() {
     setProblem("");
     setBusy(true);
     void services
-      .run(previewCombine(project.root))
+      .run(previewCombine(project))
       .then((decision) => {
         if (decision.ok) setCombining(decision.replay);
         else setProblem(combineRefusal(decision.refusal));
@@ -436,19 +462,31 @@ export function CloudScreen() {
           return;
         }
         setConfirming(false);
-        transfer(action, pull);
+        transfer(action, pull, explainReceive);
         return;
       case "combine":
-        // Two presses, like a pull, and for a stronger reason: this one
-        // rewrites the work tree. The first press names the books that keep
-        // this device's version; the second runs the replay in `src/core/sync`
-        // — see documentation/architecture/sync.md, "Combine".
+        // Two presses, like a receive, and for a stronger reason: this one
+        // records and sends. The first press names the books that keep this
+        // device's version and the ones that arrive; the second runs the
+        // combine in `src/core/sync` — see documentation/architecture/sync.md.
         if (combining() === undefined) {
           askToCombine();
           return;
         }
         setCombining(undefined);
-        transfer(action, (root) => combine({ root, author: COMBINE_AUTHOR }), explainCombine);
+        transfer(
+          action,
+          () => {
+            const project = shell.project();
+            return project === undefined
+              ? Effect.void
+              : Effect.flatMap(
+                  Effect.all([authorOrApp(), Effect.promise(() => destination(services, project))]),
+                  ([author, sendTo]) => combine({ project, author, sendTo }),
+                );
+          },
+          explainCombine,
+        );
         return;
       case "resolve":
         transfer(action, abortMerge);
@@ -514,6 +552,17 @@ export function CloudScreen() {
                   onRun={() => run(held().primary)}
                 />
 
+                <Show when={shell.project()?.root}>
+                  {(root) => <SyncSettingsCard root={root()} />}
+                </Show>
+
+                {/* Suggested changes: one topology among several, one card. */}
+                <Show when={shell.project()}>
+                  {(project) => (
+                    <SuggestionsCard project={project()} signedIn={held().reading.signedIn} />
+                  )}
+                </Show>
+
                 <Show when={held().primary === "attach" || held().primary === "publish"}>
                   <SharedProjectCard
                     account={account}
@@ -560,9 +609,17 @@ export function CloudScreen() {
                             {(path) => <li data-cloud-book={path}>{bookFromPath(path)}</li>}
                           </For>
                         </ul>
+                        <Show when={replay().taking.length > 0}>
+                          <p>{t("These arrive from the shared project:")}</p>
+                          <ul class="list-disc space-y-1 pl-5" data-cloud="combine-taking">
+                            <For each={replay().taking}>
+                              {(path) => <li data-cloud-book={path}>{bookFromPath(path)}</li>}
+                            </For>
+                          </ul>
+                        </Show>
                         <p class="text-on-surface-secondary">
                           {t(
-                            "Everything else becomes the shared project's. No scripture text is merged line by line, and if anything goes wrong on the way this device is put back exactly as it is now.",
+                            "No scripture text is merged line by line, and if recording goes wrong this device is put back exactly as it is now.",
                           )}
                         </p>
                       </div>

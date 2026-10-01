@@ -13,11 +13,11 @@
  *  2. The credential comes from the host `Credentials` service, keyed by the
  *     origin of the remote's URL — a token belongs to a Gitea instance, not to
  *     one repository. Tokens never reach a project file. Nobody signed in is
- *     an ANSWER, not a failure: WACS content is public, so fetch and pull run
+ *     an ANSWER, not a failure: WACS content is public, so fetch and probe run
  *     anonymously and only push insists on a credential.
- *  3. A pull fast-forwards or reports `Rejected`. Sefer does not merge USFM
- *     behind a translator's back; conflict markers inside scripture are worse
- *     than a question.
+ *  3. A receive only fast-forwards (`fastForward`), or reports `Rejected`.
+ *     Sefer does not merge USFM behind a translator's back; conflict markers
+ *     inside scripture are worse than a question.
  *
  * `publish` needs the Gitea API to create the repository, which is the one
  * thing git2 cannot do, so it goes through the same `Gitea` service the Web
@@ -33,6 +33,7 @@ import { createOnGitea, hostOf } from "#core/remote/onGitea";
 import {
   Remote,
   RemoteError,
+  type Probe,
   type Progress,
   type RemoteFailureReason,
   type RemoteService,
@@ -50,6 +51,13 @@ export interface TauriRemoteOptions {
 }
 
 /** The wire shape of `git.rs`'s `GitProgress`. */
+/** The wire shape of `git.rs`'s `GitProbe`. */
+interface WireProbe {
+  readonly default_branch: string | null;
+  readonly head: string | null;
+  readonly empty: boolean;
+}
+
 interface WireProgress {
   readonly phase: string;
   readonly loaded: number;
@@ -106,13 +114,11 @@ const makeTauriRemote = (
     // wait or let a long fetch grow the heap.
     const events = yield* PubSub.sliding<Progress>({ capacity: PROGRESS_DEPTH });
 
-    const originUrl = (repo: Repo): Effect.Effect<string, RemoteError> =>
-      Effect.flatMap(
-        call<string | null>("git_remote_url", { root: repo.root, name: ORIGIN }),
-        (url) =>
-          url === null
-            ? Effect.fail(fail("Unavailable", "this project has no remote attached yet"))
-            : Effect.succeed(url),
+    const originUrl = (repo: Repo, name = ORIGIN): Effect.Effect<string, RemoteError> =>
+      Effect.flatMap(call<string | null>("git_remote_url", { root: repo.root, name }), (url) =>
+        url === null
+          ? Effect.fail(fail("Unavailable", "this project has no remote attached yet"))
+          : Effect.succeed(url),
       );
 
     /**
@@ -144,9 +150,10 @@ const makeTauriRemote = (
       command: string,
       repo: Repo,
       auth: "required" | "optional",
+      name = ORIGIN,
     ): Effect.Effect<Progress, RemoteError> =>
       Effect.gen(function* () {
-        const url = yield* originUrl(repo);
+        const url = yield* originUrl(repo, name);
         const held = yield* credentialFor(url);
         // Push is the only transfer nobody can do anonymously, and refusing it
         // here rather than letting the server answer 401 is what turns "sign
@@ -159,7 +166,7 @@ const makeTauriRemote = (
         const credential = Option.getOrNull(held);
         const wire = yield* call<WireProgress>(command, {
           root: repo.root,
-          remote: ORIGIN,
+          remote: name,
           username: credential?.username ?? null,
           token: credential?.token ?? null,
         });
@@ -175,7 +182,10 @@ const makeTauriRemote = (
       // git2's clone builder: it checks out the branch the server's HEAD
       // names and records `origin` itself. Desktop reaches any host, so the
       // URL goes through as given, exactly as `attach` takes it.
-      clone: (url, into) =>
+      //
+      // The newest version only unless told otherwise, as on the Web: a slow
+      // or metered connection costs a laptop the same.
+      clone: (url, into, cloning) =>
         Effect.gen(function* () {
           const credential = Option.getOrNull(yield* credentialFor(url));
           const wire = yield* call<WireProgress>("git_clone", {
@@ -183,6 +193,7 @@ const makeTauriRemote = (
             root: into,
             username: credential?.username ?? null,
             token: credential?.token ?? null,
+            depth: (cloning?.history ?? "latest") === "latest" ? 1 : null,
           });
           const progress = progressOf(wire);
           yield* PubSub.publish(events, progress);
@@ -190,6 +201,26 @@ const makeTauriRemote = (
         }),
 
       attach,
+      attachAs: (repo, name, url) =>
+        call<void>("git_ensure_remote", { root: repo.root, name, url }),
+      urlOf: (repo, name) =>
+        Effect.map(
+          call<string | null>("git_remote_url", { root: repo.root, name }),
+          Option.fromNullishOr,
+        ),
+      fetchRef: (repo, from, into) =>
+        Effect.gen(function* () {
+          const url = yield* originUrl(repo);
+          const credential = Option.getOrNull(yield* credentialFor(url));
+          return yield* call<string>("git_fetch_ref", {
+            root: repo.root,
+            remote: ORIGIN,
+            from,
+            into,
+            username: credential?.username ?? null,
+            token: credential?.token ?? null,
+          });
+        }),
       // `git_remote_url` already answers `string | null`, so the read half of
       // attach costs desktop no new Rust.
       origin: (repo) =>
@@ -197,9 +228,42 @@ const makeTauriRemote = (
           call<string | null>("git_remote_url", { root: repo.root, name: ORIGIN }),
           Option.fromNullishOr,
         ),
+      probe: (url) =>
+        Effect.gen(function* () {
+          const credential = Option.getOrNull(yield* credentialFor(url));
+          const wire = yield* call<WireProbe>("git_probe", {
+            url,
+            username: credential?.username ?? null,
+            token: credential?.token ?? null,
+          });
+          return {
+            defaultBranch: Option.fromNullishOr(wire.default_branch),
+            head: Option.fromNullishOr(wire.head),
+            empty: wire.empty,
+          } satisfies Probe;
+        }),
       fetch: (repo) => transfer("git_fetch", repo, "optional"),
-      pull: (repo) => transfer("git_pull", repo, "optional"),
-      push: (repo) => transfer("git_push", repo, "required"),
+      backfills: true,
+      deepen: (repo, more) =>
+        Effect.gen(function* () {
+          const url = yield* originUrl(repo);
+          const credential = Option.getOrNull(yield* credentialFor(url));
+          const progress = progressOf(
+            yield* call<WireProgress>("git_deepen", {
+              root: repo.root,
+              remote: ORIGIN,
+              more: more === "all" ? null : more,
+              username: credential?.username ?? null,
+              token: credential?.token ?? null,
+            }),
+          );
+          yield* PubSub.publish(events, progress);
+          return progress;
+        }),
+      // Local: no origin, no credential. The forward-only and safe-checkout
+      // refusals are git2's, in Rust.
+      fastForward: (repo, to) => call<void>("git_fast_forward", { root: repo.root, to }),
+      push: (repo, to) => transfer("git_push", repo, "required", to ?? ORIGIN),
       publish: (repo, target) =>
         Effect.gen(function* () {
           const url = target.startsWith("http")
@@ -213,12 +277,8 @@ const makeTauriRemote = (
           yield* attach(repo, url);
           yield* transfer("git_push", repo, "required");
         }),
-      // The two local moves. No origin, no credential, no transport — git2
-      // does the whole thing, and the refusals (a branch that is not checked
-      // out, a repository with no merge in progress) are enforced in Rust.
-      moveBranch: (repo, branch, toCommit) =>
-        call<void>("git_move_branch", { root: repo.root, branch, toCommit }),
-
+      // Local: no origin, no credential, no transport. The refusal (a
+      // repository with no merge in progress) is enforced in Rust.
       abortMerge: (repo) => call<void>("git_abort_merge", { root: repo.root }),
 
       progress: () => Stream.fromPubSub(events),

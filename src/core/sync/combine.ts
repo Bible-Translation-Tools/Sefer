@@ -1,44 +1,35 @@
 /**
- * Combine: keep my work as one version on top of the shared project's.
+ * Combine: join the shared project's work and this device's, as one decision
+ * commit, and send it.
  *
- * This is the diverged move, and the only one Sefer offers for a divergence.
- * It is a REPLAY, not a merge: the cloud's versions become the base, this
- * device's books are written back on top of them, and the whole lot is
- * recorded as exactly one version. No scripture text is ever merged line by
- * line — a book both sides touched refuses the entire combine before anything
- * is written, and goes to Compare where a person decides.
+ * This is the diverged move. Both sides have commits the other lacks, and
+ * neither side's history is rewritten: the commit Combine records has TWO
+ * parents — this device's tip and the shared project's — and its files are
+ * the final text. Nothing is replayed, nothing is rebased, git's merge never
+ * runs, and sending the result is a fast-forward on every remote that holds
+ * either tip. Only the final text matters.
+ *
+ * What the final text is, per file:
+ *
+ * - changed only on this device — this device's, as HEAD already holds it;
+ * - changed only on the other side — theirs, written into the work tree and
+ *   into the Book;
+ * - changed on both — never here. The policy sends that book to a person
+ *   (Compare), and the whole combine refuses before anything is written.
  *
  * The file is in two halves, and the split is what makes the policy testable:
  *
- * 1. `planCombine` is PURE. One survey in, one decision out: which paths get
- *    replayed, or which rule said no. Every refusal below is reachable in a
- *    unit test with no repository (`./combine.test.ts`).
- * 2. `combine` is the Effect program over the Git, Remote and FileSystem
- *    ports. It gathers the survey, asks the pure half, and — only if the
- *    answer is yes — performs the seven steps.
- *
- * ## The seven steps
- *
- * 1. fetch, so the cloud's head is this second's and not the screen's.
- * 2. resolve the cloud's head off the remote-tracking ref; refuse if absent.
- * 3. read this device's bytes for every locally changed path, at HEAD.
- * 4. move the branch onto the cloud's head — the work tree becomes theirs.
- * 5. write this device's bytes back over it.
- * 6. commit them as ONE version.
- * 7. push.
- *
- * ## The transaction
- *
- * Step 4 is the point of no return the ports can express, so everything that
- * could refuse happens before it and every failure after it is undone: the
- * branch goes back to the version it was on, and the forced checkout that
- * comes with `moveBranch` restores the work tree. `CombineError.state` says
- * which of three situations the repository is actually in, because "it failed"
- * is not an answer a person can act on.
+ * 1. `planCombine` is PURE. One survey in, one decision out: which paths
+ *    arrive, or which rule said no.
+ * 2. `combine` is the Effect program over the ports: fetch, gather, ask the
+ *    pure half, and — only if it says yes — write, record and send, in the
+ *    repository's exclusive lane.
  */
 
 import { Data, Effect, FileSystem, Option, type PlatformError, Result } from "effect";
 
+import { ProjectAdmin } from "../admin/projectAdmin";
+import type { BookId } from "../book/book";
 import { parentPath } from "../fileSystem/path";
 import type { Galley } from "../galley";
 import {
@@ -47,32 +38,44 @@ import {
   type CommitId,
   Git,
   type GitError,
+  repositoryPath,
   type Repo,
   type SaveReceiptLike,
 } from "../git/git";
+import { Repositories } from "../git/repository";
+import { METADATA_FILE } from "../project/discovery";
+import type { Project } from "../project/project";
 import { Remote, type RemoteError } from "../remote/remote";
-import { combinePlan, emptyPlan, type IncomingPlan } from "./plan";
+import { SaveCoordinator } from "../save/saveCoordinator";
+import type { SourceStamp } from "../source/source";
+import {
+  booksByPath,
+  classify,
+  giveBack,
+  handOver,
+  isScripture,
+  type Applied,
+  type Classified,
+} from "./classify";
+import { DEFAULT_OVERLAP, judge, type Overlap } from "./policy";
 import { notIn, trackingRef } from "./state";
-import { mergeBase, surveyIncoming } from "./survey";
 
 /**
  * Why a combine did not run. Every one of these is decided BEFORE anything is
  * written, and each is a different sentence on the screen.
  *
- * - `no-branch` — HEAD is detached or unborn; there is no branch to move.
- * - `no-work-here` — this repository has no versions to replay.
+ * - `no-branch` — HEAD is detached or unborn; there is no branch to join onto.
+ * - `no-work-here` — this repository has no commits.
  * - `no-cloud-copy` — the shared project has no copy of this branch.
- * - `no-shared-version` — the two histories have no version in common, so
+ * - `no-shared-version` — the two histories have no commit in common, so
  *   there is no base to measure "what I changed" against.
  * - `not-diverged` — one of the two sides has nothing the other lacks, so the
  *   right move is an ordinary send or receive rather than a combine.
  * - `contested` — both sides changed the same file. Never merged; compared.
- * - `unrecorded-work` — files are written but not recorded as a version, and
- *   the branch move is forced: they would be discarded.
- * - `deletion` — a book was deleted on this device. `Git.commit` stages
- *   receipts, and a receipt cannot say "this file is gone", so the replay
- *   would silently resurrect it.
- * - `nothing-to-replay` — the versions on this device changed no file.
+ * - `deletion` — the other side deleted a file. `Git.commit` stages receipts,
+ *   and a receipt cannot say "this file is gone".
+ * - `moved` — a book the other side changed was typed into, or opened, while
+ *   the combine read it. Nothing was written; pressing again reads it afresh.
  */
 export type CombineRefusal =
   | "no-branch"
@@ -81,21 +84,22 @@ export type CombineRefusal =
   | "no-shared-version"
   | "not-diverged"
   | "contested"
-  | "unrecorded-work"
   | "deletion"
-  | "nothing-to-replay";
+  | "moved";
 
 /**
  * What state the repository is in when a combine fails.
  *
  * - `untouched` — nothing was written. Every refusal, and every failure up to
- *   and including the branch move.
- * - `restored` — a step after the move failed and the repository was put back
- *   on the version it was on, work tree and all. Nothing reached the cloud.
- * - `stranded` — the move happened and the restore ALSO failed. The only state
- *   that needs a person, which is why it has a word of its own.
+ *   the first write.
+ * - `restored` — the other side's files were written, the commit failed, and
+ *   those files were put back as they were. Nothing was recorded or sent.
+ * - `recorded` — the combination is recorded on this device, and sending it
+ *   failed. Nothing is lost; the next send carries it.
+ * - `stranded` — the commit failed AND putting the files back failed too. The
+ *   only state that needs a person, which is why it has a word of its own.
  */
-export type CombineState = "untouched" | "restored" | "stranded";
+export type CombineState = "untouched" | "restored" | "recorded" | "stranded";
 
 export class CombineError extends Data.TaggedError("CombineError")<{
   /** Which rule said no, or `undefined` when a port failed instead. */
@@ -108,47 +112,49 @@ export class CombineError extends Data.TaggedError("CombineError")<{
 interface CombineSurvey {
   /** The branch HEAD is on; `undefined` on a detached or unborn HEAD. */
   readonly branch: string | undefined;
-  /** This device's newest version. */
+  /** This device's newest commit. */
   readonly localHead: CommitId | undefined;
-  /** The shared project's newest version, off the remote-tracking ref. */
+  /** The shared project's newest commit, off the remote-tracking ref. */
   readonly cloudHead: CommitId | undefined;
-  /** The last version both sides hold. */
+  /** The best common ancestor of the two. */
   readonly base: CommitId | undefined;
-  /** Versions this device has that the cloud does not. */
+  /** Commits this device has that the cloud does not. */
   readonly ahead: number;
-  /** Versions the cloud has that this device does not. */
+  /** Commits the cloud has that this device does not. */
   readonly behind: number;
-  /** What would arrive — the contested books are read off this. */
-  readonly incoming: IncomingPlan;
-  /** Paths this device changed since the base. */
+  /** Paths this device changed since the base, committed. */
   readonly changed: readonly ChangedPath[];
   /** Paths the cloud changed since the base. */
   readonly cloudChanged: readonly ChangedPath[];
-  /** Files written but not yet recorded as a version. */
-  readonly uncommitted: number;
+  /** Paths with changes no commit holds yet. */
+  readonly unrecorded: readonly string[];
+  /** Scripture books the policy sends to a person. */
+  readonly review: readonly string[];
 }
 
-/** The replay, once it is allowed: exactly what gets written and recorded. */
+/** The combination, once it is allowed: exactly what arrives and what is recorded. */
 export interface CombineReplay {
   readonly branch: string;
-  /** The version this device is on now, and the one a rollback returns to. */
+  /** This device's tip: the decision commit's first parent. */
   readonly from: CommitId;
-  /** The cloud's version the replay sits on top of. */
+  /** The shared project's tip: its second. */
   readonly onto: CommitId;
-  /** Repository-relative, ascending — the books written back on top. */
+  /** Repository-relative, ascending — what this device changed, which stays. */
   readonly paths: readonly string[];
+  /** Repository-relative, ascending — what the other side changed, which arrives. */
+  readonly taking: readonly string[];
   readonly message: string;
 }
 
-export type CombineDecision =
+type CombineDecision =
   | { readonly ok: true; readonly replay: CombineReplay }
   | { readonly ok: false; readonly refusal: CombineRefusal; readonly detail: string };
 
-/** The one version's message. Git-facing, so it may say what it means. */
+/** The decision commit's message. Git-facing, so it may say what it means. */
 export const combineMessage = (books: number): string =>
   books === 1
-    ? "Combine: 1 book on top of the cloud"
-    : `Combine: ${books} books on top of the cloud`;
+    ? "Combined with the shared project: 1 book"
+    : `Combined with the shared project: ${books} books`;
 
 const no = (refusal: CombineRefusal, detail: string): CombineDecision => ({
   ok: false,
@@ -162,60 +168,51 @@ const no = (refusal: CombineRefusal, detail: string): CombineDecision => ({
  * It reads top to bottom as "is there a combine to do at all", then "is it
  * safe", then "can the ports express it". Contested outranks every mechanical
  * objection below it on purpose: when two people wrote the same book, that is
- * the thing to say, not that some third file happens to be unsaved.
+ * the thing to say.
  */
 const planCombine = (survey: CombineSurvey): CombineDecision => {
   if (survey.branch === undefined) {
-    return no("no-branch", "HEAD is detached or unborn; there is no branch to move");
+    return no("no-branch", "HEAD is detached or unborn; there is no branch to join onto");
   }
   if (survey.localHead === undefined) {
-    return no("no-work-here", "this repository has no commits to replay");
+    return no("no-work-here", "this repository has no commits");
   }
   if (survey.cloudHead === undefined) {
     return no("no-cloud-copy", `${trackingRef(survey.branch)} does not exist`);
   }
   if (survey.base === undefined) {
-    return no(
-      "no-shared-version",
-      "the two histories have no commit in common; there is no base to replay from",
-    );
+    return no("no-shared-version", "the two histories have no commit in common");
   }
-
-  const proposal = combinePlan(survey.ahead, survey.behind, survey.incoming);
-  if (!proposal.safe) {
-    if (proposal.contested.length > 0) {
-      return no("contested", `both sides changed ${proposal.contested.join(", ")}`);
-    }
+  if (survey.ahead === 0 || survey.behind === 0) {
     return no("not-diverged", `not a divergence: ${survey.ahead} ahead, ${survey.behind} behind`);
   }
-
-  // Scripture is settled by the book-level check above; this catches
-  // everything else two people can both have touched — a manifest, a
-  // versification file — where "keep mine" would be a silent decision rather
-  // than a stated one.
-  const theirs = new Set(survey.cloudChanged.map((entry) => entry.path));
-  const both = survey.changed.filter((entry) => theirs.has(entry.path)).map((entry) => entry.path);
+  if (survey.review.length > 0) {
+    return no("contested", `both sides changed ${survey.review.join(", ")}`);
+  }
+  // Scripture is settled by the policy above; this catches every other file
+  // two people can both have touched — a manifest, a versification file, or
+  // one with changes here no commit holds — where taking theirs would be a
+  // silent decision rather than a stated one.
+  const mine = new Set([...survey.changed.map((entry) => entry.path), ...survey.unrecorded]);
+  // `metadata.json` is not a decision: its checksums describe the files, and
+  // are worked out again from the combined ones.
+  const both = survey.cloudChanged
+    .filter(
+      (entry) => !isScripture(entry.path) && entry.path !== METADATA_FILE && mine.has(entry.path),
+    )
+    .map((entry) => entry.path);
   if (both.length > 0) return no("contested", `both sides changed ${both.join(", ")}`);
 
-  if (survey.uncommitted > 0) {
-    return no(
-      "unrecorded-work",
-      `${survey.uncommitted} file(s) are written but not recorded; the branch move would discard them`,
-    );
-  }
-
-  const deleted = survey.changed
+  const deleted = survey.cloudChanged
     .filter((entry) => entry.kind === "deleted")
     .map((entry) => entry.path);
   if (deleted.length > 0) {
-    return no("deletion", `a replay cannot carry a deletion: ${deleted.join(", ")}`);
+    return no("deletion", `a combine cannot carry a deletion yet: ${deleted.join(", ")}`);
   }
 
+  const taking = survey.cloudChanged.map((entry) => entry.path).sort((a, b) => a.localeCompare(b));
   const paths = survey.changed.map((entry) => entry.path).sort((a, b) => a.localeCompare(b));
-  if (paths.length === 0) {
-    return no("nothing-to-replay", "the versions on this device changed no file");
-  }
-
+  const books = new Set([...paths, ...taking].filter(isScripture)).size;
   return {
     ok: true,
     replay: {
@@ -223,21 +220,34 @@ const planCombine = (survey: CombineSurvey): CombineDecision => {
       from: survey.localHead,
       onto: survey.cloudHead,
       paths,
-      message: combineMessage(paths.length),
+      taking,
+      message: combineMessage(books),
     },
   };
 };
 
 /** What a combine leaves behind when it works. */
 export interface CombineResult {
-  /** The one version it recorded. */
+  /** The decision commit. */
   readonly commit: CommitId;
-  /** The cloud version it sits on. */
   readonly onto: CommitId;
-  /** The version this device was on before. */
   readonly from: CommitId;
   readonly paths: readonly string[];
+  readonly taking: readonly string[];
+  /** Books handed the other side's text. */
+  readonly reloaded: readonly BookId[];
 }
+
+/** One receipt per path; the first one names it. */
+const dedupe = (repo: Repo, receipts: readonly SaveReceiptLike[]): readonly SaveReceiptLike[] => {
+  const seen = new Set<string>();
+  return receipts.filter((receipt) => {
+    const key = Option.getOrElse(repositoryPath(repo.root, receipt.path), () => receipt.path);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
 
 /** A port failure, carrying its reason forward so the shell can classify it. */
 const fromPort =
@@ -255,14 +265,35 @@ const fromDisk =
     new CombineError({ refusal: undefined, state, description: String(error) });
 
 export interface CombineOptions {
-  /** The project's work tree. */
-  readonly root: string;
-  /** Who the one version is by. */
+  /** The open project: its Books are "mine", and the ones a combine reloads. */
+  readonly project: Project;
+  /** Who the decision commit is by. */
   readonly author: Author;
+  readonly overlap?: Overlap;
+  /**
+   * Books a person has just settled in Review against the other side: each
+   * one's text in the project IS the decision — saved and recorded as it is,
+   * whatever either side changed, and never overwritten by the other side's
+   * file.
+   */
+  readonly settled?: ReadonlySet<BookId>;
+  /** The ref "theirs" is read from — the shared project's tracking ref unless named. */
+  readonly theirs?: string;
+  /** Where the decision commit is sent — `origin` unless named. */
+  readonly sendTo?: string;
+  /** The decision commit's message, when the caller has a better one than the count. */
+  readonly message?: string;
+}
+
+interface Gathered {
+  readonly decision: CombineDecision;
+  /** Books a person decided in Review, by path: kept as the editor holds them. */
+  readonly decided: readonly string[];
+  readonly classified: Classified;
 }
 
 /**
- * Everything `planCombine` needs, read out of one repository.
+ * Everything `planCombine` needs, read out of one repository and the Books.
  *
  * Shared by the preview and the move itself so the screen cannot offer a
  * combine the program then refuses — the only difference between the two is
@@ -270,52 +301,86 @@ export interface CombineOptions {
  */
 const gather = (
   repo: Repo,
-): Effect.Effect<CombineDecision, CombineError, Git | FileSystem.FileSystem | Galley> =>
+  project: Project,
+  overlap: Overlap,
+  settled: ReadonlySet<BookId> = new Set(),
+  theirs?: string,
+): Effect.Effect<Gathered, CombineError, Git | FileSystem.FileSystem | Galley> =>
   Effect.gen(function* () {
     const git = yield* Git;
     const untouched = fromPort("untouched");
 
     const branch = Option.getOrUndefined(yield* Effect.mapError(git.branch(repo), untouched));
-    const tracking = branch === undefined ? undefined : trackingRef(branch);
-    // 2. The cloud's head. `None` is an answer — "nothing has been sent yet" —
+    const tracking = branch === undefined ? undefined : (theirs ?? trackingRef(branch));
+    // The cloud's head. `None` is an answer — "nothing has been sent yet" —
     // so it becomes a refusal rather than a fault.
     const cloudHead =
       tracking === undefined
         ? undefined
         : Option.getOrUndefined(yield* Effect.mapError(git.resolve(repo, tracking), untouched));
+    const localHead = Option.getOrUndefined(
+      yield* Effect.mapError(git.resolve(repo, "HEAD"), untouched),
+    );
+    const base =
+      localHead === undefined || cloudHead === undefined
+        ? undefined
+        : Option.getOrUndefined(
+            yield* Effect.mapError(git.mergeBase(repo, localHead, cloudHead), untouched),
+          );
 
-    const localLog = yield* Effect.mapError(git.log(repo), untouched);
+    const localLog =
+      localHead === undefined ? [] : yield* Effect.mapError(git.log(repo), untouched);
     const remoteLog =
       tracking === undefined || cloudHead === undefined
         ? []
         : yield* Effect.mapError(git.logFrom(repo, tracking), untouched);
-    const base = mergeBase(localLog, remoteLog);
-    const localHead = localLog[0]?.id;
 
-    const incoming =
-      tracking === undefined || base === undefined
-        ? undefined
-        : yield* surveyIncoming(repo, { tracking, base, behind: notIn(remoteLog, localLog) });
-    const status = yield* Effect.mapError(git.status(repo), untouched);
-    // What THIS device changed since the base: the same walk the incoming plan
-    // does, in the other direction.
     const changed =
       base === undefined || localHead === undefined
         ? []
-        : yield* Effect.mapError(git.changedPathsBetween(repo, base.id, localHead), untouched);
+        : yield* Effect.mapError(git.changedPathsBetween(repo, base, localHead), untouched);
+    const cloudChanged =
+      base === undefined || cloudHead === undefined
+        ? []
+        : yield* Effect.mapError(git.changedPathsBetween(repo, base, cloudHead), untouched);
+    const status = yield* Effect.mapError(git.status(repo), untouched);
 
-    return planCombine({
-      branch,
-      localHead,
-      cloudHead,
-      base: base?.id,
-      ahead: notIn(localLog, remoteLog).length,
-      behind: notIn(remoteLog, localLog).length,
-      incoming: incoming?.plan ?? emptyPlan,
-      changed,
-      cloudChanged: incoming?.changed ?? [],
-      uncommitted: status.changed.length,
-    });
+    const books = booksByPath(repo, project);
+    const classified: Classified =
+      base === undefined || cloudHead === undefined
+        ? { facts: [], stamps: new Map<string, SourceStamp>(), theirs: new Map<string, string>() }
+        : yield* classify(repo, books, base, cloudHead, cloudChanged);
+    const verdicts = judge(classified.facts, overlap);
+    // `combine` would need a unit-level merge, which Sefer does not do by
+    // itself: below the book scope it still goes to a person here.
+    const needsPerson = classified.facts.filter(
+      (_, index) => verdicts[index] === "review" || verdicts[index] === "combine",
+    );
+    const decided = [...books].filter(([, book]) => settled.has(book.id)).map(([path]) => path);
+    const review = needsPerson
+      .filter((book) => !decided.includes(book.path))
+      .map((book) => book.bookId);
+
+    return {
+      decided,
+      decision: planCombine({
+        branch,
+        localHead,
+        cloudHead,
+        base,
+        ahead: notIn(localLog, remoteLog).length,
+        behind: notIn(remoteLog, localLog).length,
+        changed,
+        // A decided book is this side's: it is not taken from the other side,
+        // and its saved-but-unrecorded file is the decision, not a conflict.
+        cloudChanged: cloudChanged.filter((entry) => !decided.includes(entry.path)),
+        unrecorded: status.changed
+          .map((entry) => entry.path)
+          .filter((path) => !decided.includes(path)),
+        review,
+      }),
+      classified,
+    };
   });
 
 /**
@@ -327,38 +392,74 @@ const gather = (
  * have moved between the dialog opening and the button being pressed.
  */
 export const previewCombine = (
-  root: string,
+  project: Project,
 ): Effect.Effect<CombineDecision, CombineError, Git | FileSystem.FileSystem | Galley> =>
-  Effect.flatMap(
-    Effect.flatMap(Git, (git) => Effect.mapError(git.open(root), fromPort("untouched"))),
-    gather,
-  );
+  Effect.gen(function* () {
+    const git = yield* Git;
+    const repo = yield* Effect.mapError(git.open(project.root), fromPort("untouched"));
+    return (yield* gather(repo, project, DEFAULT_OVERLAP)).decision;
+  });
 
 /**
- * The whole move, over the ports.
+ * The whole move, in the repository's exclusive lane.
  *
- * Everything before the branch move is a read, so a refusal or a failed fetch
- * leaves the repository exactly as it was. Everything after it is inside one
- * rollback: if writing, recording or sending fails, the branch goes back and
- * the forced checkout restores the work tree, and the error says so.
+ * Everything before the first write is a read, so a refusal or a failed fetch
+ * leaves the repository exactly as it was. The other side's files are then
+ * written and recorded; if recording fails they are put back. Once recorded,
+ * the Books take the new text, and a failed send leaves a combination that
+ * the next send carries.
  */
 export const combine = (
   options: CombineOptions,
-): Effect.Effect<CombineResult, CombineError, Git | Remote | FileSystem.FileSystem | Galley> =>
+): Effect.Effect<
+  CombineResult,
+  CombineError,
+  Git | Remote | Repositories | SaveCoordinator | FileSystem.FileSystem | Galley
+> =>
+  Effect.gen(function* () {
+    const repositories = yield* Repositories;
+    const git = yield* Git;
+    const remote = yield* Remote;
+    // Ask the shared project what it has NOW — before the exclusive lane, so a
+    // slow network holds the lane only for its own transfer. The screen's
+    // reading may be minutes old; this is seconds, and the send is
+    // fast-forward only, so a head that moves in between is refused, never
+    // overwritten.
+    const repo = yield* Effect.mapError(git.open(options.project.root), fromPort("untouched"));
+    yield* Effect.mapError(remote.fetch(repo), fromPort("untouched"));
+    return yield* Effect.catchTag(
+      repositories.exclusive(options.project.root, "combine", program(options)),
+      "RepositoryError",
+      (error) =>
+        Effect.fail(
+          new CombineError({
+            refusal: undefined,
+            state: "untouched",
+            description: error.description,
+          }),
+        ),
+    );
+  });
+
+const program = (options: CombineOptions) =>
   Effect.gen(function* () {
     const git = yield* Git;
     const remote = yield* Remote;
+    const save = yield* SaveCoordinator;
     const fileSystem = yield* FileSystem.FileSystem;
     const untouched = fromPort("untouched");
+    const project = options.project;
 
-    const repo: Repo = yield* Effect.mapError(git.open(options.root), untouched);
+    const repo: Repo = yield* Effect.mapError(git.open(project.root), untouched);
 
-    // 1. Ask the shared project what it has NOW. The screen's reading may be
-    // minutes old, and a combine onto a stale head is the one way this move
-    // could lose somebody else's version.
-    yield* Effect.mapError(remote.fetch(repo), untouched);
-
-    const decision = yield* gather(repo);
+    const gathered = yield* gather(
+      repo,
+      project,
+      options.overlap ?? DEFAULT_OVERLAP,
+      options.settled,
+      options.theirs,
+    );
+    const decision = gathered.decision;
     if (!decision.ok) {
       return yield* Effect.fail(
         new CombineError({
@@ -370,73 +471,174 @@ export const combine = (
     }
     const replay = decision.replay;
 
-    // 3. This device's bytes, read out of the object database while they are
-    // still reachable — after the move the work tree no longer holds them.
-    const held: { readonly path: string; readonly bytes: Uint8Array }[] = [];
-    for (const path of replay.paths) {
-      held.push({
-        path,
-        bytes: yield* Effect.mapError(git.show(repo, replay.from, path), untouched),
-      });
-    }
-
-    // 4. The point of no return: the work tree becomes the cloud's.
-    yield* Effect.mapError(remote.moveBranch(repo, replay.branch, replay.onto), untouched);
-
-    const rest = Effect.gen(function* () {
-      const failed = fromDisk("restored");
-      // 5. Write this device's books back over the cloud's.
-      for (const file of held) {
-        const full = `${repo.root}/${file.path}`;
-        yield* Effect.mapError(
-          fileSystem.makeDirectory(parentPath(full), { recursive: true }),
-          failed,
-        );
-        yield* Effect.mapError(fileSystem.writeFile(full, file.bytes), failed);
-      }
-      // 6. Exactly one version. The receipts are the paths just written, which
-      // is the rule Save commits under too: nothing rides along.
-      const receipts: readonly SaveReceiptLike[] = held.map((file) => ({
-        path: file.path,
-        // The port carries a stamp only to keep a receipt recognisable at a
-        // glance; the length is the one field that is true of committed bytes.
-        stamp: { revision: 0, length: file.bytes.length },
-      }));
-      const commit = yield* Effect.mapError(
-        git.commit(repo, receipts, replay.message, options.author),
-        fromPort("restored"),
-      );
-      // 7. Nothing on the cloud changed until this line.
-      yield* Effect.mapError(remote.push(repo), fromPort("restored"));
-      return commit;
-    });
-
-    const outcome = yield* Effect.result(rest);
-    if (Result.isFailure(outcome)) {
-      const failure = outcome.failure;
-      const undone = yield* Effect.result(remote.moveBranch(repo, replay.branch, replay.from));
-      if (Result.isFailure(undone)) {
-        return yield* Effect.fail(
-          new CombineError({
-            refusal: undefined,
-            state: "stranded",
-            description: `${failure.description}; and putting the branch back on ${replay.from} failed: ${undone.failure.reason}`,
-          }),
-        );
-      }
+    // The Books take the other side's text first, all or none, in one step
+    // no keystroke can interrupt — so typing never lands between "this book
+    // may be replaced" and the replacing. Nothing on disk has moved yet, so
+    // a Book that moved is a refusal with nothing to undo.
+    const handed = yield* handOver(
+      repo,
+      project,
+      gathered.classified,
+      replay.taking.filter(isScripture),
+      "incoming",
+    );
+    if (!handed.ok)
       return yield* Effect.fail(
         new CombineError({
-          refusal: undefined,
-          state: "restored",
-          description: failure.description,
+          refusal: "moved" in handed ? "moved" : undefined,
+          state: "untouched",
+          description:
+            "moved" in handed
+              ? `changed while combining: ${handed.moved.join(", ")}`
+              : `${handed.refused} was refused by ${handed.rule}`,
         }),
+      );
+    const applied: readonly Applied[] = handed.applied;
+    const untouchedAfterHandOver = (error: CombineError) =>
+      Effect.flatMap(giveBack(applied), () => Effect.fail(error));
+
+    // What each file the combine writes holds now (HEAD's bytes, or nothing),
+    // so a failed commit can put the work tree back exactly. `metadata.json`
+    // is among them whenever the project has one: its checksums are worked
+    // out again below.
+    const metadataHere = yield* Effect.orElseSucceed(
+      fileSystem.exists(`${repo.root}/${METADATA_FILE}`),
+      () => false,
+    );
+    const touched = [...new Set([...replay.taking, ...(metadataHere ? [METADATA_FILE] : [])])];
+    const before: { readonly path: string; readonly bytes: Uint8Array | undefined }[] = [];
+    for (const path of touched)
+      before.push({
+        path,
+        bytes: yield* Effect.orElseSucceed(
+          Effect.map(
+            fileSystem.readFile(`${repo.root}/${path}`),
+            (bytes): Uint8Array | undefined => bytes,
+          ),
+          () => undefined,
+        ),
+      });
+    const arriving: { readonly path: string; readonly bytes: Uint8Array }[] = [];
+    for (const path of replay.taking) {
+      const bytes = yield* Effect.result(git.show(repo, replay.onto, path));
+      if (Result.isFailure(bytes)) return yield* untouchedAfterHandOver(untouched(bytes.failure));
+      arriving.push({ path, bytes: bytes.success });
+    }
+
+    const write = (path: string, bytes: Uint8Array) =>
+      Effect.gen(function* () {
+        const full = `${repo.root}/${path}`;
+        yield* fileSystem.makeDirectory(parentPath(full), { recursive: true });
+        yield* fileSystem.writeFile(full, bytes);
+      });
+
+    // The decided books' text goes to their files first, through Save, so
+    // the decision commit records exactly what the person chose — and what
+    // each save kept current beside its book.
+    const books = booksByPath(repo, project);
+    const decidedBooks = gathered.decided.flatMap((path) => {
+      const book = books.get(path);
+      return book === undefined || !save.dirty(book) ? [] : [book];
+    });
+    const saved = yield* Effect.result(save.saveAll(decidedBooks));
+    if (Result.isFailure(saved))
+      return yield* untouchedAfterHandOver(
+        new CombineError({
+          refusal: undefined,
+          state: "untouched",
+          description: saved.failure.description ?? saved.failure.reason,
+        }),
+      );
+
+    const admin = Option.getOrUndefined(yield* Effect.serviceOption(ProjectAdmin));
+    const recorded = yield* Effect.result(
+      Effect.gen(function* () {
+        for (const file of arriving)
+          yield* Effect.mapError(write(file.path, file.bytes), fromDisk("restored"));
+        // The checksums describe the files, so they are worked out again over
+        // the combined ones rather than taken from either side.
+        if (metadataHere && admin !== undefined)
+          yield* Effect.mapError(
+            admin.refreshChecksums(repo.root),
+            (error) =>
+              new CombineError({
+                refusal: undefined,
+                state: "restored",
+                description: error.description ?? error.reason,
+              }),
+          );
+        // The receipts are the paths just written: nothing rides along. With
+        // none, the commit is the join alone, which is what it records.
+        const receipts: readonly SaveReceiptLike[] = [
+          ...arriving.map((file) => ({
+            path: file.path,
+            // The port carries a stamp only to keep a receipt recognisable at
+            // a glance; the length is the one field true of these bytes.
+            stamp: { revision: 0, length: file.bytes.length },
+          })),
+          ...saved.success.flatMap((receipt) => [
+            { path: receipt.path, stamp: receipt.stamp },
+            ...receipt.also.map((path) => ({ path, stamp: receipt.stamp })),
+          ]),
+          ...(metadataHere ? [{ path: METADATA_FILE, stamp: { revision: 0, length: 0 } }] : []),
+        ];
+        return yield* Effect.mapError(
+          git.commit(
+            repo,
+            dedupe(repo, receipts),
+            options.message ?? replay.message,
+            options.author,
+            {
+              alsoParents: [replay.onto],
+            },
+          ),
+          fromPort("restored"),
+        );
+      }),
+    );
+    if (Result.isFailure(recorded)) {
+      const failure = recorded.failure;
+      const undone = yield* Effect.result(
+        Effect.forEach(before, (file) =>
+          file.bytes === undefined
+            ? fileSystem.remove(`${repo.root}/${file.path}`, { force: true })
+            : write(file.path, file.bytes),
+        ),
+      );
+      yield* giveBack(applied);
+      return yield* Effect.fail(
+        Result.isFailure(undone)
+          ? new CombineError({
+              refusal: undefined,
+              state: "stranded",
+              description: `${failure.description}; and putting the files back failed: ${String(undone.failure)}`,
+            })
+          : new CombineError({
+              refusal: undefined,
+              state: "restored",
+              description: failure.description,
+            }),
       );
     }
 
+    // The baselines follow the files. A Book typed into since the hand-over
+    // keeps its typing, on top of the other side's text, as unsaved work.
+    const reloaded: BookId[] = applied.map((entry) => entry.book.id);
+    const now = booksByPath(repo, project);
+    for (const path of replay.taking) {
+      const book = now.get(path);
+      if (book === undefined || !isScripture(path)) continue;
+      yield* Effect.ignore(save.takeDisk(book, "incoming", "keep"));
+    }
+
+    // Nothing on the cloud changed until this line.
+    yield* Effect.mapError(remote.push(repo, options.sendTo), fromPort("recorded"));
     return {
-      commit: outcome.success,
+      commit: recorded.success,
       onto: replay.onto,
       from: replay.from,
       paths: replay.paths,
+      taking: replay.taking,
+      reloaded,
     };
   });

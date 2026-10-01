@@ -25,6 +25,7 @@ import type {
   CombineRefusal,
   CombineState,
   IncomingPlan,
+  ReceiveRefusal,
   SyncActionId,
   SyncState,
 } from "#core/sync";
@@ -56,8 +57,28 @@ export interface StateCopy {
   readonly tone: BadgeTone;
 }
 
-export const stateCopy = (state: SyncState): StateCopy => {
+/**
+ * What the reading adds to a state's words: whether the last failure was a
+ * send (the work was saved, only the sending did not happen), and whether
+ * anyone is signed in (a refusal to someone signed in is not a sign-in
+ * problem — it is permission).
+ */
+export interface StateContext {
+  readonly sendRefused?: boolean | undefined;
+  readonly signedIn?: boolean | undefined;
+}
+
+export const stateCopy = (state: SyncState, context: StateContext = {}): StateCopy => {
   switch (state) {
+    case "checking":
+      return {
+        chip: t("Checking"),
+        headline: t("Checking the shared project"),
+        detail: t(
+          "Sefer is asking the shared project what has changed. Your work is saved here, and you can keep working.",
+        ),
+        tone: "muted",
+      };
     case "detached":
       return {
         chip: t("Not shared"),
@@ -119,14 +140,36 @@ export const stateCopy = (state: SyncState): StateCopy => {
       return {
         chip: t("Offline"),
         headline: t("You're offline"),
-        detail: t("Your work is still saved here. You can send it once you're back online."),
+        detail:
+          context.sendRefused === true
+            ? t(
+                "Saved on this device. Not sent yet: you're offline. Sefer sends it the next time you save or open this project. Your work is safe here.",
+              )
+            : t("Your work is still saved here. You can send it once you're back online."),
         tone: "muted",
       };
     case "unauthorized":
+      // Signed in and still refused: a missing permission or an expired
+      // sign-in, which both hosts report as the same reason — so the words say
+      // both, and signing in again stays the one button.
+      if (context.signedIn === true)
+        return {
+          chip: t("Can't send"),
+          headline: t("This account can't send to the shared project"),
+          detail: t(
+            "Saved on this device. Not sent: this account may not have permission to write to the shared project, or its sign-in has expired. Your work is safe here.",
+          ),
+          tone: "warning",
+        };
       return {
         chip: t("Sign in again"),
         headline: t("Sign in to keep sharing"),
-        detail: t("Sending and receiving updates is paused until you sign in again."),
+        detail:
+          context.sendRefused === true
+            ? t(
+                "Saved on this device. Not sent: sign in to send your changes to the shared project. Your work is safe here.",
+              )
+            : t("Sending and receiving updates is paused until you sign in again."),
         tone: "error",
       };
   }
@@ -194,13 +237,13 @@ export const narrate = (
       );
     case "combine":
       // Both counts, because the whole question a person is weighing here is
-      // "what happens to my N versions, and to their M". The last clause is
-      // the promise the transaction actually keeps: everything up to the send
-      // is local, and a failure anywhere puts this device back as it was.
+      // "what happens to my N versions, and to their M". Both are kept, and
+      // one new version joins them. The last clause is the promise the move
+      // keeps: everything up to the send is local.
       return plural(
         counts.ahead,
-        "Your {count} version becomes one version on top of the shared project's {behind}. Nothing in the shared project changes until it is sent.",
-        "Your {count} versions become one version on top of the shared project's {behind}. Nothing in the shared project changes until it is sent.",
+        "Your {count} version and the shared project's {behind} are both kept, joined by one new version. Nothing in the shared project changes until it is sent.",
+        "Your {count} versions and the shared project's {behind} are both kept, joined by one new version. Nothing in the shared project changes until it is sent.",
         { behind: counts.behind },
       );
     case "compare":
@@ -265,7 +308,7 @@ export const planSummary = (plan: IncomingPlan): string => {
 /**
  * A book's name from the file that holds it — "41-MRK.usfm" → "Mark".
  *
- * Combine names the books it is about to replay before it reads a byte of
+ * Combine names the books it is about to join before it reads a byte of
  * them, so there is no `\id` marker to go on yet; the file name is what a
  * project has. An unrecognised stem falls through `bookName` unchanged, which
  * shows the file rather than inventing a book.
@@ -285,15 +328,42 @@ export const bookFromPath = (path: string): string => {
  * ends by saying where the work is, because a refused transfer is exactly when
  * somebody wonders.
  */
+/** Why a receive did not run, in the words the screen uses. */
+export const receiveRefusal = (refusal: ReceiveRefusal, books: readonly string[] = []): string => {
+  switch (refusal) {
+    case "review":
+      return t(
+        "You and the shared project both changed {books}, so nothing was received. Compare the two versions and decide what to keep. Your work is untouched.",
+        { books: books.join(", ") },
+      );
+    case "diverged":
+      return t(
+        "This device has versions the shared project does not have yet, so its updates were not received on their own. Combine them instead. Nothing has changed.",
+      );
+    case "no-cloud-copy":
+      return t("The shared project has no copy of this work yet. Publish it first.");
+    case "no-shared-version":
+      return t(
+        "This project and the shared project have no version in common, so there is nothing to build on. Nothing has changed.",
+      );
+    case "unrecorded":
+      return t(
+        "Some files the shared project changed have changes here that aren't kept as a version yet, so nothing was received. Save them first. Your work is untouched.",
+      );
+    case "moved":
+      return t(
+        "A book changed while the updates were arriving, so nothing was received. Try again. Your work is untouched.",
+      );
+    case "no-branch":
+      return t("There is nothing here to receive into. Your work is exactly as you left it.");
+  }
+};
+
 export const combineRefusal = (refusal: CombineRefusal): string => {
   switch (refusal) {
     case "contested":
       return t(
         "You and the shared project both changed the same book, so nothing was combined. Compare the two versions and decide what to keep. Your work is untouched.",
-      );
-    case "unrecorded-work":
-      return t(
-        "There is work here that has not been recorded as a version yet. Record it first — combining would discard it. Nothing has changed.",
       );
     case "no-cloud-copy":
       return t("The shared project has no copy of this work yet. Publish it first.");
@@ -307,11 +377,14 @@ export const combineRefusal = (refusal: CombineRefusal): string => {
       );
     case "deletion":
       return t(
-        "A book was deleted here, and a combine cannot carry a deletion. Send your changes instead. Nothing has changed.",
+        "The shared project deleted a file, and a combine cannot carry a deletion yet. Nothing has changed.",
+      );
+    case "moved":
+      return t(
+        "A book changed while the two were being combined, so nothing was. Try again. Your work is untouched.",
       );
     case "no-branch":
     case "no-work-here":
-    case "nothing-to-replay":
       return t("There is nothing here to combine. Your work is exactly as you left it.");
   }
 };
@@ -330,6 +403,10 @@ export const combineTrouble = (state: CombineState): string => {
     case "restored":
       return t(
         "This device was put back exactly as it was, and nothing reached the shared project. You can try again.",
+      );
+    case "recorded":
+      return t(
+        "Your work and the shared project's are combined on this device, but sending them did not finish. Nothing is lost — the next send carries it.",
       );
     case "stranded":
       return t(

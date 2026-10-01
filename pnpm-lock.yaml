@@ -161,8 +161,8 @@ importers:
         specifier: ^2.12.0
         version: 2.12.0
       '@wycliffeassociates/scripture-kitchen':
-        specifier: github:WycliffeAssociates/scripture-kitchen#v0.1.8
-        version: https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/f8dd7e83c5d1a71e898d76e193051b9506035a82
+        specifier: github:WycliffeAssociates/scripture-kitchen#v0.1.9
+        version: https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/5fe3f72cee3b887f5e3aca55ea701832da361437
       buffer:
         specifier: 6.0.3
         version: 6.0.3
@@ -172,6 +172,9 @@ importers:
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
+      intl-messageformat:
+        specifier: ^12.1.2
+        version: 12.1.2
       isomorphic-git:
         specifier: 1.42.2
         version: 1.42.2
@@ -770,6 +773,15 @@ packages:
 
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
+
+  '@formatjs/fast-memoize@3.1.7':
+    resolution: {integrity: sha512-zXfhLpvA6T7+efdt9JLbBwZ00tT7NsBMDVnDu8rpHeNNv8KfRZAMo2gkG0k9lK/Nzc//3kJ9pImsfuJxk3KhUA==}
+
+  '@formatjs/icu-messageformat-parser@3.5.20':
+    resolution: {integrity: sha512-DUzCb2iskGDKvLU7P+nz/rjpmN59luoTRbWHFFNYNnZTxWCKvwPI94rNll99TGZaI6XoTbDF0QGegk21GFrQZQ==}
+
+  '@formatjs/icu-skeleton-parser@2.1.12':
+    resolution: {integrity: sha512-ca7tZMLpfHX3sUD7hP6gE/qr6Iq89EDd3ZLeRhbsB7r0UD55DGJq+tmFLzrGrnx5StahUevQmQQVtbDRHsfDHA==}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -2199,9 +2211,9 @@ packages:
   '@vitest/utils@5.0.1':
     resolution: {integrity: sha512-E9+yEA+jsfaoxZcUHFzEqUrQcoNh2EwrPT5efIqkUPUwD5Ua2Li9BRWaYeRwvzvdLgTSVrre8oKNeyrfg7KkdQ==}
 
-  '@wycliffeassociates/scripture-kitchen@https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/f8dd7e83c5d1a71e898d76e193051b9506035a82':
-    resolution: {gitHosted: true, integrity: sha512-qKwNEuxIxH4YOC4IrzshcROvo3RYTx9w37l2evum5bsxIvF7hvmpqNTuIlVXjYs3lKjKhkWDmP8KevnlNhAZDA==, tarball: https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/f8dd7e83c5d1a71e898d76e193051b9506035a82}
-    version: 0.1.8
+  '@wycliffeassociates/scripture-kitchen@https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/5fe3f72cee3b887f5e3aca55ea701832da361437':
+    resolution: {gitHosted: true, integrity: sha512-g9PZaxTmMmz2Ke3zNt++doPSS6xCctQLpFW6hpAPPDfdTrPkCLMRcvh/S12iNmcj8+rp8ILDnenS17Yr+ufK3g==, tarball: https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/5fe3f72cee3b887f5e3aca55ea701832da361437}
+    version: 0.1.9
 
   abort-controller@3.0.0:
     resolution: {integrity: sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==}
@@ -2669,6 +2681,9 @@ packages:
 
   inline-style-parser@0.2.7:
     resolution: {integrity: sha512-Nb2ctOyNR8DqQoR0OwRG95uNWIC0C1lCgf5Naz5H6Ji72KZ8OcFZLz2P5sNgwlyoJ8Yif11oMuYs5pBQa86csA==}
+
+  intl-messageformat@12.1.2:
+    resolution: {integrity: sha512-Y7ZnMtT/04nVJnjf1/x/AkfP5we/iN0AhckDdlFPtnetk6/VTuj2OPW5SE7steMd3UNaOtky4KJJY6jwyvWfJg==}
 
   is-callable@1.2.7:
     resolution: {integrity: sha512-1BC0BVFhS/p0qtw6enp8e+8OD0UrK0oFLztSjNzhcKA3WDuJxxAPXzPuPtKkjEY9UUoEWlX/8fgKeu2S8i9JTA==}
@@ -4147,6 +4162,14 @@ snapshots:
 
   '@floating-ui/utils@0.2.12': {}
 
+  '@formatjs/fast-memoize@3.1.7': {}
+
+  '@formatjs/icu-messageformat-parser@3.5.20':
+    dependencies:
+      '@formatjs/icu-skeleton-parser': 2.1.12
+
+  '@formatjs/icu-skeleton-parser@2.1.12': {}
+
   '@humanfs/core@0.19.2':
     dependencies:
       '@humanfs/types': 0.15.0
@@ -5244,7 +5267,7 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.1
 
-  '@wycliffeassociates/scripture-kitchen@https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/f8dd7e83c5d1a71e898d76e193051b9506035a82': {}
+  '@wycliffeassociates/scripture-kitchen@https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/5fe3f72cee3b887f5e3aca55ea701832da361437': {}
 
   abort-controller@3.0.0:
     dependencies:
@@ -5748,6 +5771,11 @@ snapshots:
   inherits@2.0.4: {}
 
   inline-style-parser@0.2.7: {}
+
+  intl-messageformat@12.1.2:
+    dependencies:
+      '@formatjs/fast-memoize': 3.1.7
+      '@formatjs/icu-messageformat-parser': 3.5.20
 
   is-callable@1.2.7: {}
 

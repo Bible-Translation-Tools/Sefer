@@ -30,7 +30,7 @@ Read only the guidance relevant to the task:
 - [Review](documentation/architecture/review.md): read before touching `/review`, `src/app/ui/review`, `src/core/compare`, `src/core/save` or `src/core/recovery`; covers the `CompareSource` port and why BOTH sides are pickers, the decision unit and the engine door behind it, what Apply writes and refuses, the explicit-only save model, and the working-state backup.
 - [Dev-only routes](documentation/dev-only-routes.md): every route behind `__SEFER_DESIGN__` or `import.meta.env.DEV`, the grep that finds them, and each one's URL on the `dev` channel; update it when a gate changes.
 - [The design surface](documentation/architecture/design.md): read before touching `/design`, `src/dev/design`, `src/dev/annotate` or the `__SEFER_DESIGN__` define; covers the three build modes and why the switch is a `define`, the path boundaries, the floating annotator, and how the designer hands work over.
-- [Cloud sync](documentation/architecture/sync.md): read before touching `/cloud`, `src/core/sync` or the Remote port; covers the nine states, the two clocks, the incoming plan, and why scripture text is never merged automatically.
+- [Cloud sync](documentation/architecture/sync.md): read before touching `/cloud`, `src/core/sync` or the Remote port; covers the ten states, the two clocks, the incoming plan, and why scripture text is never merged automatically.
 
 `src/App.tsx` calls `composeApplication()` exactly once; services reach components through `useComposition()` (`src/app/CompositionContext.tsx`).
 

@@ -15,6 +15,12 @@ import { Context, Data, Effect, Option } from "effect";
 import { escapesRoot, normalisePath } from "../fileSystem/path";
 import type { SourceStamp } from "../source/source";
 
+/**
+ * The branch a repository Sefer creates starts on. A clone takes whatever
+ * branch the server's HEAD names instead; this is only for `init`.
+ */
+export const DEFAULT_BRANCH = "master";
+
 /** A commit's object id, opaque to core: a hex SHA on both hosts today. */
 export type CommitId = string;
 
@@ -55,6 +61,15 @@ export interface ChangedPath {
   readonly kind: ChangeKind;
 }
 
+/**
+ * `alsoParents` makes a decision commit: HEAD stays the first parent and these
+ * follow, so the commit joins the other side's history to ours. The tree is
+ * still exactly what the receipts staged; git's merge never runs.
+ */
+export interface CommitOptions {
+  readonly alsoParents?: readonly CommitId[];
+}
+
 export interface Status {
   readonly changed: readonly ChangedPath[];
 }
@@ -92,16 +107,31 @@ export interface GitService {
   readonly status: (repo: Repo) => Effect.Effect<Status, GitError>;
   /**
    * Stages exactly the receipt paths and commits them. Nothing is committed
-   * that Save did not write: an untracked scratch file, a stray editor
+   * that Sefer did not write: an untracked scratch file, a stray editor
    * backup, or a receipt whose path falls outside `repo.root` (which is
    * `Refused`) never reaches a commit.
+   *
+   * An empty receipt list is `Refused` — an empty commit records nothing
+   * true — except when `alsoParents` joins another history: the join is
+   * the thing recorded, even when the other side changed no file.
    */
   readonly commit: (
     repo: Repo,
     receipts: readonly SaveReceiptLike[],
     message: string,
     author: Author,
+    options?: CommitOptions,
   ) => Effect.Effect<CommitId, GitError>;
+  /**
+   * The best common ancestor of two revs, from commit ancestry alone — no
+   * tree is read. `None` when they share no history (or, in a shallow
+   * repository, none that is here yet).
+   */
+  readonly mergeBase: (
+    repo: Repo,
+    a: string,
+    b: string,
+  ) => Effect.Effect<Option.Option<CommitId>, GitError>;
   /** Newest first. With `path`, only commits that touched that path. */
   readonly log: (repo: Repo, path?: string) => Effect.Effect<readonly Commit[], GitError>;
   /**
@@ -120,6 +150,11 @@ export interface GitService {
   readonly resolve: (repo: Repo, ref: string) => Effect.Effect<Option.Option<CommitId>, GitError>;
   /** The branch HEAD is on; `None` on a detached or unborn HEAD. */
   readonly branch: (repo: Repo) => Effect.Effect<Option.Option<string>, GitError>;
+  /**
+   * Is older history missing from this device — a `latest` clone not yet
+   * deepened? History says so rather than showing a short past as the whole.
+   */
+  readonly shallow: (repo: Repo) => Effect.Effect<boolean, GitError>;
   /**
    * Repository-relative paths whose content differs between two revs, with the
    * kind seen FROM `from` TO `to` — a path absent at `from` is `added`, one
