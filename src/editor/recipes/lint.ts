@@ -39,6 +39,7 @@ import type { SourceStamp } from "#core/source/source";
 import { analyzed, analyzer } from "../core/analyzer";
 import { structureAt } from "../core/docStructure";
 import { PAINT_PORT } from "../core/editorState";
+import { carryForward } from "../core/forward";
 import { reportOutcome } from "../core/instrument";
 import { trusted } from "../core/kernel";
 import { span } from "../core/timing";
@@ -248,19 +249,19 @@ const setCorpusFindings = StateEffect.define<readonly CorpusFinding[]>();
  * Sink 1's second source: the Sous findings for the instantiated book.
  *
  * Held rather than computed, because no amount of work in this process can
- * produce them — they are a whole-corpus product. The update rule is the
- * freshness rule in two lines: a document change invalidates every offset in
- * the set, and the set is DROPPED rather than mapped through the changes.
- * Mapping would produce a plausible underline in the wrong place, which is the
- * failure the stamps exist to prevent; the next publication brings a correct
- * set within the scheduler's quiet window.
+ * produce them — they are a whole-corpus product. Through an edit they follow
+ * the one rule a card's marks do (`core/forward.ts`): a finding the edit did
+ * not touch is mapped and stays where its text went; one it touched goes, since
+ * it no longer describes what was just typed. The next publication, within the
+ * scheduler's quiet window, paints what is true — including what the edit
+ * introduced. (They used to be dropped wholesale, so every underline in the
+ * book blinked out on each keystroke.)
  */
 const sousField = StateField.define<readonly CorpusFinding[]>({
   create: () => NO_CORPUS,
   update(held, tr) {
-    if (tr.docChanged) return NO_CORPUS;
     for (const effect of tr.effects) if (effect.is(setCorpusFindings)) return effect.value;
-    return held;
+    return tr.docChanged ? carryForward(held, tr.changes) : held;
   },
 });
 

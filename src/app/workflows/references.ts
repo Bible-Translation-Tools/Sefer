@@ -94,6 +94,15 @@ const booksOf = (
  */
 export const bindReferences = (
   projectId: string,
+  options?: {
+    /**
+     * Register every reference again even when its text is unchanged. The
+     * engine keeps a reference's WORDS only if the copied-words check was on
+     * when it was registered, and an unchanged text is skipped by checksum —
+     * so turning that check on needs the references sent afresh.
+     */
+    readonly fresh?: boolean;
+  },
 ): Effect.Effect<BoundReferences, never, Library | ProjectAnalysis | FileSystem.FileSystem> =>
   Effect.gen(function* () {
     const library = yield* Library;
@@ -117,6 +126,7 @@ export const bindReferences = (
 
     const books: ReferenceText[] = [];
     for (const resource of resources) books.push(...(yield* booksOf(fileSystem, resource)));
+    if (options?.fresh === true) yield* analysis.attachReferences([]);
     const ids = yield* analysis.attachReferences(books);
     return { resources, ids };
   });

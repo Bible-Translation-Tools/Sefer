@@ -29,6 +29,7 @@ import { deletionKeys, motionKeys, viewLayer } from "../core/compose";
 import { DEFAULT_BUILD_OPTS } from "../core/decorations";
 import { borrowedStructure, structureAt, structureField } from "../core/docStructure";
 import { optsFacet, PAINT_PORT } from "../core/editorState";
+import { touchedBy } from "../core/forward";
 import { localTracer, tracer } from "../core/instrument";
 import { isVisual, modeFacet, trusted } from "../core/kernel";
 import { assignment } from "../core/registry";
@@ -315,14 +316,10 @@ const markField = StateField.define<DecorationSet>({
     // goes at once rather than riding along until the screen's next results
     // arrive; those paint whatever is true. Context shading is not a claim
     // about the text, and stays.
-    const touched: { from: number; to: number }[] = [];
-    tr.changes.iterChangedRanges((_fromA, _toA, fromB, toB) =>
-      touched.push({ from: fromB, to: toB }),
-    );
+    // The one rule for a published range through an edit (`core/forward.ts`).
+    const touched = touchedBy(tr.changes);
     return marks.map(tr.changes).update({
-      filter: (from, to, value) =>
-        value.spec.class === CONTEXT_CLASS ||
-        !touched.some((range) => range.from <= to && range.to >= from),
+      filter: (from, to, value) => value.spec.class === CONTEXT_CLASS || !touched(from, to),
     });
   },
   provide: (field) => EditorView.decorations.from(field),

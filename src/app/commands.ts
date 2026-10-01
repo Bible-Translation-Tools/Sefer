@@ -523,10 +523,20 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       keys: "Mod-Shift-f",
       when: hasProject,
       run: () => {
+        // A selection in the editor is the question: a few words on one line
+        // land in the box and are searched, as every editor's find does.
+        // Anything longer, multi-line or reaching into markup opens Find empty.
+        const state = bridge.focused()?.state;
+        const range = state?.selection.main;
+        const picked =
+          state === undefined || range === undefined || range.empty
+            ? ""
+            : state.sliceDoc(range.from, range.to).trim();
+        const usable = picked !== "" && picked.length <= 200 && !/[\n\\]/.test(picked);
         void bridge.navigate({
           to: "/project/$slug/find",
           params: { slug: bridge.slug() },
-          search: {},
+          search: usable ? { q: picked } : {},
         });
       },
     }),

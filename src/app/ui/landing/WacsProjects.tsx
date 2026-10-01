@@ -5,8 +5,10 @@
  *
  * The rows come from `src/app/catalogue.ts`: the Language API's consolidated
  * repos, joined with langnames for region, alternate names and the gateway
- * flag. **Gateway languages are left out** — this table is for a translation
- * team finding its own work. A row's date is the most recent update across
+ * flag. Translations show by default — this table is mostly a translation
+ * team finding its own work — and a toggle swaps in the gateway languages.
+ * Which of the two a download is FOR (edit vs read) is not modelled yet; see
+ * planning/00-ideas/resource-kinds.md. A row's date is the most recent update across
  * every repo of its language — blank until the API carries one (see
  * `catalogue.ts`).
  *
@@ -53,6 +55,7 @@ import {
   MenuRadio,
   MenuSeparator,
   PanelHeader,
+  SegmentedControl,
   Tooltip,
   VirtualList,
   cx,
@@ -110,7 +113,7 @@ const sortChoices = (column: Column): readonly (readonly [SortDirection, string]
       ];
 
 /** What one catalogue row is tall, before it has been measured. */
-const ROW_HEIGHT = 57;
+const ROW_HEIGHT = 75;
 
 const ariaSort = (sort: SortDirection): "none" | "ascending" | "descending" =>
   sort === "asc" ? "ascending" : sort === "desc" ? "descending" : "none";
@@ -267,6 +270,10 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
     name: "catalogueDirection",
   });
   const [busy, setBusy] = createSignal("", { name: "catalogueBusy" });
+  /** Which half of the catalogue is shown — see the file header. */
+  const [kind, setKind] = createSignal<CatalogueEntry["type"]>("translation", {
+    name: "catalogueKind",
+  });
   /** Which column's header menu is open; "" for none. */
   const [menuFor, setMenuFor] = createSignal<Column | "">("", { name: "catalogueMenu" });
   /** Regions to keep; empty keeps every region (the "All regions" choice). */
@@ -312,9 +319,7 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
         "catalogue.gateways": all.filter((entry) => entry.type === "gateway").length,
         "catalogue.enriched": enriched,
       });
-      // Gateway languages are not offered here at all — see the file header.
-      const translations = all.filter((entry) => entry.type !== "gateway");
-      setEntries(translations);
+      setEntries(all);
     })
     .catch((cause: unknown) => {
       browsing.end(catalogueVerdict(cause), catalogueFailureAttrs(cause));
@@ -345,10 +350,15 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
       const needle = query().trim().toLowerCase();
       const keep = regionFilter();
       return (entries() ?? []).filter((entry) => {
+        if (entry.type !== kind()) return false;
+        // Gateway texts are the ones WA publishes; other owners' gateway-language
+        // repos are somebody's own work, not a source to read from.
+        if (kind() === "gateway" && entry.owner.toLowerCase() !== "wa-catalog") return false;
         if (keep.size > 0 && (entry.region === undefined || !keep.has(entry.region))) return false;
         if (needle === "") return true;
         return (
           entry.code.toLowerCase().includes(needle) ||
+          entry.id.toLowerCase().includes(needle) ||
           entry.naturalName.toLowerCase().includes(needle) ||
           entry.anglicizedName.toLowerCase().includes(needle) ||
           entry.alternateNames.some((name) => name.toLowerCase().includes(needle))
@@ -541,6 +551,16 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
     <section class="flex min-h-0 flex-1 flex-col gap-3">
       <div class="flex flex-wrap items-center gap-3">
         <PanelHeader title={t("Projects Available on WACS")} class="me-auto" />
+        <SegmentedControl
+          size="sm"
+          label={t("Which languages")}
+          items={[
+            { value: "translation", label: t("Translations") },
+            { value: "gateway", label: t("Gateway languages") },
+          ]}
+          value={kind()}
+          onChange={setKind}
+        />
         <Input
           type="search"
           size="lg"
@@ -745,6 +765,10 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
                     <Show when={item().english !== ""}>
                       <span class="ms-2 text-on-surface-tertiary">{item().english}</span>
                     </Show>
+                    {/* The repo itself, so two rows of one language can be told apart. */}
+                    <div class="truncate font-mono text-smallest text-on-surface-tertiary">
+                      {entry().id}
+                    </div>
                   </div>
                   <div role="cell" class="text-on-surface-secondary">
                     {entry().region ?? "—"}

@@ -48,7 +48,9 @@ import { Option, Result } from "effect";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import CircleCheck from "lucide-solid/icons/circle-check";
+import SettingsIcon from "lucide-solid/icons/settings";
 import Wrench from "lucide-solid/icons/wrench";
+import X from "lucide-solid/icons/x";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
 import type { BookId } from "#core/book/book";
@@ -66,12 +68,17 @@ import {
   Badge,
   Button,
   Card,
+  cx,
   EmptyState,
+  IconButton,
   PanelHeader,
   SegmentedControl,
   severityTone,
 } from "../primitives";
+import { createFindSource } from "../search/findSource";
 import { SearchDialog } from "../search/SearchDialog";
+import { SousSettingsPanel } from "../SousSettingsPanel";
+import { codeLabel } from "./findingLabels";
 import {
   createFindingsFeed,
   foldRuns,
@@ -95,6 +102,13 @@ export function FindingsPanel() {
   });
   const [note, setNote] = createSignal("");
   const [cursor, setCursor] = createSignal(0, { name: "findingsCursor" });
+  const [settingsOpen, setSettingsOpen] = createSignal(false, { name: "findingsSettingsOpen" });
+  /**
+   * The source text beside each finding's verse, as Find shows it: read-only,
+   * and optional. Choosing one (or none) binds the project's source, and the
+   * picker itself re-registers the corpus and re-judges.
+   */
+  const source = createFindSource(() => {});
   /**
    * Has the reader moved the cursor yet?
    *
@@ -489,7 +503,9 @@ export function FindingsPanel() {
           <Show when={severitiesOf(row).length > 1}>
             <Badge tone={severityTone(finding.severity)}>{finding.severity}</Badge>
           </Show>
-          <code class="font-mono text-smallest text-on-surface-tertiary">{finding.code}</code>
+          <span class="text-smallest text-on-surface-tertiary" title={finding.code}>
+            {codeLabel(finding.code)}
+          </span>
           <span class="min-w-0 flex-1 text-small text-on-surface-secondary">
             <Show when={finding.described} fallback={finding.message}>
               {(described) => <SousSentence message={described()} tier="headline" />}
@@ -640,7 +656,25 @@ export function FindingsPanel() {
           rarely, and on a project of sixty-six books the book chips alone used
           to push the findings below the fold. */}
       <Card class="space-y-2">
-        <FindingsFilters state={filters} facets={summary().facets} books={books()} />
+        <div class="flex items-start gap-2">
+          <FindingsFilters
+            class="min-w-0 flex-1"
+            state={filters}
+            facets={summary().facets}
+            books={books()}
+          />
+          <source.Picker />
+          {/* The checks' own settings, in a column beside the list (below),
+              so turning one off or moving a number is seen in the list and
+              the counts as it happens. */}
+          <IconButton
+            size="sm"
+            label={t("Proofreading settings")}
+            icon={<SettingsIcon />}
+            aria-pressed={settingsOpen() ? "true" : "false"}
+            onClick={() => setSettingsOpen((open) => !open)}
+          />
+        </div>
         <Show when={pattern() !== undefined}>
           <p class="flex flex-wrap items-center gap-2 text-smallest text-on-surface-tertiary">
             <Badge tone="brand">{t("one pattern")}</Badge>
@@ -697,56 +731,84 @@ export function FindingsPanel() {
         )}
       </Show>
 
-      <div
-        class="flex min-h-0 min-w-0 flex-1 flex-col"
-        data-findings={summary().shown}
-        data-view={filters.view()}
-      >
-        <Show
-          when={summary().shown > 0}
-          fallback={
-            <Show
-              when={summary().total > 0}
-              fallback={
+      <div class="flex min-h-0 min-w-0 flex-1 gap-4">
+        <div
+          // While a re-judge is in flight the list stays and dims: the old
+          // findings until the new Publication replaces them, no teardown.
+          class={cx(
+            "flex min-h-0 min-w-0 flex-1 flex-col transition-opacity duration-150",
+            shell.findingsPending() && "opacity-60",
+          )}
+          aria-busy={shell.findingsPending() ? "true" : undefined}
+          data-findings={summary().shown}
+          data-view={filters.view()}
+        >
+          <Show
+            when={summary().shown > 0}
+            fallback={
+              <Show
+                when={summary().total > 0}
+                fallback={
+                  <EmptyState
+                    icon={<CircleCheck size={22} />}
+                    title={t("Nothing to report — or no project is open.")}
+                  />
+                }
+              >
                 <EmptyState
-                  icon={<CircleCheck size={22} />}
-                  title={t("Nothing to report — or no project is open.")}
+                  title={t("{total} findings, all hidden by the filter.", {
+                    total: summary().total,
+                  })}
                 />
-              }
-            >
-              <EmptyState
-                title={t("{total} findings, all hidden by the filter.", {
-                  total: summary().total,
-                })}
+              </Show>
+            }
+          >
+            <Show when={body()} fallback={<div class="min-h-0 flex-1" aria-busy="true" />}>
+              <ExcerptList
+                goneLabel={t("Resolved")}
+                resultsKey={JSON.stringify(filters.filter())}
+                groups={feed.groups()}
+                views={feed.excerpts.views}
+                outline={feed.outline()}
+                seat={feed.excerpts.seat}
+                seatedOf={feed.excerpts.seatedOf}
+                shownOf={feed.excerpts.shownOf}
+                analyze={feed.excerpts.analyze}
+                onEdited={feed.excerpts.edited}
+                focus={focused()}
+                activeHit={focusedAt()}
+                mode={mode()}
+                card={card}
+                sections={sections}
+                pairedOf={source.shown() ? source.pairedOf : undefined}
+                empty={
+                  <EmptyState
+                    icon={<CircleCheck size={22} />}
+                    title={t("Nothing to report in the books that are open.")}
+                  />
+                }
               />
             </Show>
-          }
-        >
-          <Show when={body()} fallback={<div class="min-h-0 flex-1" aria-busy="true" />}>
-            <ExcerptList
-              goneLabel={t("Resolved")}
-              resultsKey={JSON.stringify(filters.filter())}
-              groups={feed.groups()}
-              views={feed.excerpts.views}
-              outline={feed.outline()}
-              seat={feed.excerpts.seat}
-              seatedOf={feed.excerpts.seatedOf}
-              shownOf={feed.excerpts.shownOf}
-              analyze={feed.excerpts.analyze}
-              onEdited={feed.excerpts.edited}
-              focus={focused()}
-              activeHit={focusedAt()}
-              mode={mode()}
-              card={card}
-              sections={sections}
-              empty={
-                <EmptyState
-                  icon={<CircleCheck size={22} />}
-                  title={t("Nothing to report in the books that are open.")}
-                />
-              }
-            />
           </Show>
+        </div>
+        <Show when={settingsOpen()}>
+          <aside
+            aria-label={t("Proofreading settings")}
+            class="flex w-[26rem] shrink-0 flex-col gap-3 overflow-y-auto rounded-lg border border-surface-border bg-surface-primary p-4"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-small font-semibold text-on-surface-primary">
+                {t("Proofreading settings")}
+              </h3>
+              <IconButton
+                size="sm"
+                label={t("Close settings")}
+                icon={<X />}
+                onClick={() => setSettingsOpen(false)}
+              />
+            </div>
+            <SousSettingsPanel bare />
+          </aside>
         </Show>
       </div>
     </main>

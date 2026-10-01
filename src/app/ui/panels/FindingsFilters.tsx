@@ -2,8 +2,8 @@
  * The findings panel's filter toolbar — one row above the list.
  *
  * Severity is three values, so it is shown whole as a `ToggleGroup`. Producer
- * is a short `MultiSelect`; books and codes are long, so theirs are searchable
- * (a combobox). Each folded trigger says what it is filtering to, so the row is
+ * is a short `MultiSelect`; codes are long, so theirs is searchable (a
+ * combobox). Books are the shared `BookScope`, the control Find scopes by. Each folded trigger says what it is filtering to, so the row is
  * a handful of controls and a search box.
  *
  * Every control is still subtractive: it hides rows, it never deletes a
@@ -13,7 +13,7 @@
  */
 
 import Search from "lucide-solid/icons/search";
-import { Show } from "solid-js";
+import { Show, createEffect, createSignal, untrack } from "solid-js";
 
 import type { BookId } from "#core/book/book";
 import type { Facet, Facets, FindingsFilter } from "#core/findings/filter";
@@ -22,8 +22,19 @@ import { bookName } from "#core/location/canon";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { Badge, Input, MultiSelect, Switch, ToggleGroup, cx, severityTone } from "../primitives";
+import {
+  Badge,
+  BookScope,
+  Input,
+  MultiSelect,
+  scopeBooks,
+  ToggleGroup,
+  cx,
+  severityTone,
+  type BookScopeKind,
+} from "../primitives";
 import { metadataOf } from "../workspace/project";
+import { codeLabel, producerLabel } from "./findingLabels";
 import { chosen, narrowed, toggled, type FindingsFilterState } from "./findingsFilter";
 
 const countOf = <T,>(rows: readonly Facet<T>[], value: T): number =>
@@ -43,6 +54,34 @@ export function FindingsFilters(props: FindingsFiltersProps) {
   const shell = useShell();
   /** What the project calls a book, else the English name, else its id. */
   const nameOf = (bookId: BookId): string => bookName(bookId, metadataOf(shell.project()));
+
+  // The scope is this control's; the filter holds only the books it means.
+  // Reopened, a narrowed filter reads as Custom over the books it held.
+  const [kind, setKind] = createSignal<BookScopeKind>(
+    untrack(() => (filter().books === null ? "project" : "custom")),
+    { name: "findingsScope" },
+  );
+  const [custom, setCustom] = createSignal<readonly BookId[]>(
+    untrack(() => filter().books ?? []),
+    {
+      name: "findingsCustomBooks",
+    },
+  );
+  /** This book: the open one, else the one last open (Findings has no editor of its own). */
+  const thisBook = (): BookId | undefined => {
+    const project = shell.project();
+    return (
+      shell.focused()?.id ??
+      (project === undefined ? undefined : shell.lastLocation(project.root)?.bookId)
+    );
+  };
+  createEffect(
+    () => ({ kind: kind(), custom: custom(), focused: thisBook(), books: props.books }),
+    (now) => {
+      const books = scopeBooks(now.kind, now.books, now.focused, now.custom) ?? null;
+      untrack(() => props.state.update({ books }));
+    },
+  );
 
   /** "2 of 3" for an allow-list, and nothing at all when it allows everything. */
   const some = (kept: number, total: number): string =>
@@ -88,31 +127,26 @@ export function FindingsFilters(props: FindingsFiltersProps) {
       >
         {(facet) => (
           <>
-            <span class="flex-1">{t(facet.value)}</span>
+            <span class="flex-1">{producerLabel(facet.value)}</span>
             <Badge>{facet.count}</Badge>
           </>
         )}
       </MultiSelect>
 
-      <MultiSelect
-        id="book"
-        label={t("Books")}
-        summary={narrowedSummary(filter().books, props.books.length)}
-        narrowed={filter().books !== null}
-        items={props.books}
-        key={(bookId: BookId) => bookId}
-        match={(bookId, query) => byText(nameOf(bookId), query) || byText(bookId, query)}
-        selected={(bookId) => chosen(filter().books, bookId)}
-        onToggle={(bookId) => props.state.update({ books: narrowed(filter().books, bookId) })}
-        clear={{ label: t("All books"), onClear: () => props.state.update({ books: null }) }}
-      >
-        {(bookId) => (
-          <>
-            <span class="flex-1">{nameOf(bookId)}</span>
-            <Badge>{countOf(props.facets.books, bookId)}</Badge>
-          </>
-        )}
-      </MultiSelect>
+      {/* Which books: the same control Find scopes by. It sets the books
+          filter; This book follows the book you last had open. */}
+      <BookScope
+        value={kind()}
+        onChange={setKind}
+        books={props.books.map((id) => ({
+          id,
+          name: nameOf(id),
+          count: countOf(props.facets.books, id),
+        }))}
+        custom={custom()}
+        onCustom={setCustom}
+        hasFocused={thisBook() !== undefined}
+      />
 
       <Show when={props.facets.codes.length > 0}>
         <MultiSelect
@@ -122,14 +156,18 @@ export function FindingsFilters(props: FindingsFiltersProps) {
           narrowed={filter().codes !== null}
           items={props.facets.codes}
           key={(facet: Facet<string>) => facet.value}
-          match={(facet, query) => byText(facet.value, query)}
+          match={(facet, query) =>
+            byText(codeLabel(facet.value), query) || byText(facet.value, query)
+          }
           selected={(facet) => chosen(filter().codes, facet.value)}
           onToggle={(facet) => props.state.update({ codes: narrowed(filter().codes, facet.value) })}
           clear={{ label: t("All codes"), onClear: () => props.state.update({ codes: null }) }}
         >
           {(facet) => (
             <>
-              <code class="flex-1 truncate font-mono">{facet.value}</code>
+              <span class="flex-1 truncate" title={facet.value}>
+                {codeLabel(facet.value)}
+              </span>
               <Badge>{facet.count}</Badge>
             </>
           )}
@@ -150,15 +188,8 @@ export function FindingsFilters(props: FindingsFiltersProps) {
         onInput={(event) => props.state.update({ text: event.currentTarget.value })}
       />
 
-      {/* TODO(2026-10-01, Will): hidden until we decide what replaces the
-          "Hide stale" switch on this screen; the filter logic still holds. */}
-      <Switch
-        id="findings-hide-stale"
-        class="hidden"
-        checked={filter().hideStale}
-        onChange={(on) => props.state.update({ hideStale: on })}
-        label={t("Hide stale")}
-      />
+      {/* TODO(2026-10-01, Will): no "Hide stale" switch until we decide what
+          replaces it on this screen; the filter field and its logic hold. */}
     </div>
   );
 }

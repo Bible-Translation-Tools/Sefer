@@ -26,11 +26,14 @@ import {
   IconButton,
   Input,
   PanelHeader,
-  SegmentedControl,
+  BookScope,
+  scopeBooks,
+  type BookScopeKind,
   Switch,
 } from "#app/ui/primitives";
 import { createFindSource } from "#app/ui/search/findSource";
 import { ShellGate } from "#app/ui/ShellGate";
+import { metadataOf } from "#app/ui/workspace/project";
 import * as Workflows from "#app/workflows/references";
 import type { BookId } from "#core/book/book";
 import {
@@ -41,6 +44,7 @@ import {
 } from "#core/excerpts/excerpts";
 import { bookHeading, type Analysis } from "#core/galley";
 import type { Address } from "#core/location/address";
+import { bookName } from "#core/location/canon";
 import { createFreshReadings, createReadings } from "#core/search/reading";
 import * as Search from "#core/search/search";
 
@@ -92,7 +96,7 @@ import * as Search from "#core/search/search";
  * — the pair STET renders for a source verse. The reference side is never
  * editable, because there is no Book behind it and nothing to write to.
  */
-type Scope = "book" | "project" | "reference";
+type Scope = BookScopeKind | "reference";
 
 /**
  * The last path segment of a registered reference id.
@@ -333,8 +337,21 @@ function Find() {
   });
 
   const focusedBook = (): BookId | undefined => shell.focused()?.id;
+
+  /** The books a Custom scope searches; empty until somebody picks. */
+  const [custom, setCustom] = createSignal<readonly BookId[]>([], { name: "findCustomBooks" });
+  const projectBooks = (): readonly BookId[] => shell.project()?.books.map((book) => book.id) ?? [];
+  /** The book scope on show; a source search keeps the project's. */
+  const bookScope = (): BookScopeKind => {
+    const held = scope();
+    return held === "reference" ? "project" : held;
+  };
+
+  /** The books a scope limits the search to, or `undefined` for every book. */
+  const booksFor = (want: Scope): readonly BookId[] | undefined =>
+    want === "reference" ? undefined : scopeBooks(want, projectBooks(), focusedBook(), custom());
   const signature = (q: Search.Query, want: Scope): string =>
-    JSON.stringify([want, focusedBook(), q.text, q.caseSensitive, q.wholeWord, q.regex, markup()]);
+    JSON.stringify([want, booksFor(want), q.text, q.caseSensitive, q.wholeWord, q.regex, markup()]);
 
   /**
    * One search, through whichever door the toggles name.
@@ -356,12 +373,12 @@ function Find() {
     const books = project.books;
     const staticQuery = query(over);
     const want = over?.scope ?? scope();
-    const only = want === "book" ? focusedBook() : undefined;
+    const only = booksFor(want);
     // No limit. Every hit, and the count beside the box is therefore the
     // answer rather than a ceiling — see `Search.MINIMUM_QUERY` for the
     // measurements that say a project-wide find can afford it.
     const options: Search.Options =
-      only === undefined ? { analysisOf } : { books: [only], analysisOf };
+      only === undefined ? { analysisOf } : { books: only, analysisOf };
     if (staticQuery.text === "") {
       setHits([]);
       setReferenceHits([]);
@@ -387,7 +404,7 @@ function Find() {
     // Keep the query itself out of telemetry: it can contain manuscript text.
     const search = shell.services.composition.observability.operation("find.run", {
       "find.scope": want,
-      "find.books": only === undefined ? books.length : 1,
+      "find.books": only === undefined ? books.length : only.length,
       "find.regex": staticQuery.regex === true,
       "find.case": staticQuery.caseSensitive === true,
       "find.whole_word": staticQuery.wholeWord === true,
@@ -466,7 +483,8 @@ function Find() {
     if (project === undefined || book === undefined) return;
     // Not a book search, or not one this list holds: the whole search again.
     if (want === "reference" || !Search.longEnough(staticQuery.text)) return;
-    if (want === "book" && focusedBook() !== bookId) return;
+    const only = booksFor(want);
+    if (only !== undefined && !only.includes(bookId)) return;
     const op = shell.services.composition.observability.operation("find.retake", {
       "find.book": bookId,
       "find.markup": markup(),
@@ -586,7 +604,7 @@ function Find() {
    */
   let toggled = false;
   createEffect(
-    () => [matchCase(), wholeWord(), regex(), markup()],
+    () => [matchCase(), wholeWord(), regex(), markup(), scope() === "custom" ? custom() : 0],
     () => {
       if (!toggled) {
         toggled = true;
@@ -818,23 +836,17 @@ function Find() {
             </div>
 
             <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <SegmentedControl
-                size="sm"
-                label={t("Scope")}
-                value={scope() === "reference" ? "project" : scope()}
-                onChange={(next) => ask({ scope: next === "book" ? "book" : "project" })}
-                items={[
-                  {
-                    value: "book",
-                    label: t("This book"),
-                    disabled: focusedBook() === undefined || scope() === "reference",
-                  },
-                  {
-                    value: "project",
-                    label: t("Whole project"),
-                    disabled: scope() === "reference",
-                  },
-                ]}
+              <BookScope
+                value={bookScope()}
+                onChange={(next) => ask({ scope: next })}
+                books={projectBooks().map((id) => ({
+                  id,
+                  name: bookName(id, metadataOf(shell.project())),
+                }))}
+                custom={custom()}
+                onCustom={setCustom}
+                hasFocused={focusedBook() !== undefined}
+                disabled={scope() === "reference"}
               />
               {/* Which text is shown beside yours, and which is searched:
                   either without the other. */}
@@ -910,7 +922,12 @@ function Find() {
                     {t("Replace {count} match(es) in {books} book(s) within {scope}.", {
                       count: held.hits.length,
                       books: new Set(held.hits.map((hit) => hit.bookId)).size,
-                      scope: scope() === "book" ? t("this book") : t("the project"),
+                      scope:
+                        scope() === "book"
+                          ? t("this book")
+                          : scope() === "project"
+                            ? t("the project")
+                            : t("the chosen books"),
                     })}
                   </p>
                   <p class="text-on-surface-secondary">
@@ -988,7 +1005,11 @@ function Find() {
 export const Route = createFileRoute("/_app/project/$slug/find")({
   validateSearch: (search: Record<string, unknown>): FindSearch => ({
     ...(typeof search["q"] === "string" && search["q"] !== "" ? { q: search["q"] } : {}),
-    ...(search["scope"] === "book" || search["scope"] === "reference"
+    ...(search["scope"] === "book" ||
+    search["scope"] === "ot" ||
+    search["scope"] === "nt" ||
+    search["scope"] === "custom" ||
+    search["scope"] === "reference"
       ? { scope: search["scope"] }
       : {}),
   }),
