@@ -371,6 +371,24 @@ That one path covers both contested and diverged, so both sides' commits are kep
 - `Remote.moveBranch` loses its only caller, `combine.ts` steps 4–5, which become "write the final files, commit with both parents".
 - Combine's other refusals stay. `contested` stops being a refusal and becomes the way into Review, and `deletion` stays until a receipt can say "this file is gone". `CombineError.state` shrinks to `untouched | on-disk`.
 
+## 11a. Test-drive findings and decisions (2026-10-01)
+
+From driving the git-lifecycle work in two browsers (Chrome and Firefox on one project). What happened: the "you have changes" notice and the promised plan lived only in the cloud panel, the plan never showed, and **Accept changes** on a purely-behind project fast-forwarded silently.
+
+**Decided (Will):**
+
+- **Recording never waits on the remote.** Record a version always records locally. The remote gets its say at **push**.
+- **Every difference is seen.** If this device is not on the shared project's commit — behind, ahead-and-behind, any book or none in common — what came in is shown before it lands. Not only conflicts, not only fast-forwards. ("We are never moving text without people laying eyes on it.")
+- **Clear dirty before receiving.** Unsaved edits cannot be rebased onto incoming text: the Journal holds offsets against a hash, and the checkout changes the hash. So `behind | diverged` while `dirty` has one first step, **Record your changes**, and only then the incoming. This blocks receiving, never local work.
+- **It happens in the body, not the cloud panel.** The diff surface a person is already looking at (Review's) carries the state machine, with its information and actions together:
+  - recorded here, not shared, nothing incoming → "Saved on this device. Last checked the shared project at <time>." · **Send my changes** · **Check now**;
+  - auto-send on, and it went → "Saved on this device and in the shared project.";
+  - the shared project moved → "Your version is saved on this device. The shared project has changes from elsewhere; see them before yours can be shared." The incoming opens in the same surface as decision cards (theirs against yours, §11's labels), and accepting writes into the buffer, then Record a version makes the decision commit (§11) and the send goes through;
+  - purely behind and clean → still shown: what came in, read-only, then one action to take it.
+- **The check on open shows in the workspace:** a banner (or the cloud control turning a colour) — "Changes from another device · Review" — opening that same surface. Cloud gets its own place in the chrome, not only the kebab.
+
+**History reuses the multibuffer** (planning/00-ideas/history-view-semantics.md): a version's change by default, a header switch for "compared with your text now", Adopt on hover, and the same opt-in card behaviours Find, Findings and Key terms use — step by one TOC unit, whole chapter, fold back, analysis funnelling, editability, locked verse numbers — as props on one surface, not re-implemented per screen.
+
 ## 12. Record a version: Save, then commit
 
 - **One action.** Save writes the Books' files (`saveAll`), then one commit records them. The kebab offers only Save & Review. "Skip review of my changes" is the only way to save without the screen.
