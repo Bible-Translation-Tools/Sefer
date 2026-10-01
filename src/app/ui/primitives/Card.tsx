@@ -18,7 +18,7 @@ import type { ComponentProps, JSX } from "@solidjs/web";
 import { merge, omit } from "solid-js";
 
 import { cx, type ClassValue } from "./cx";
-import { usePageLeading } from "./pageLeading";
+import { usePageDoor, usePageLeading } from "./pageLeading";
 
 export interface CardProps extends ComponentProps<"section"> {
   /** Off when the body is a full-bleed list or table. */
@@ -57,10 +57,18 @@ export interface PanelHeaderProps {
 
 export function PanelHeader(props: PanelHeaderProps) {
   const leading = usePageLeading();
+  const door = usePageDoor();
   return (
     // At least 48px, an md control's height, so a page's title shares one
-    // centre line with the panel toggle and the project card beside it.
-    <div class={cx("flex min-h-12 flex-wrap items-center gap-3", props.class)}>
+    // centre line with the panel toggle and the project card beside it. A
+    // page header under the workspace's × leaves it its 48px and a gap.
+    <div
+      class={cx(
+        "flex min-h-12 flex-wrap items-center gap-3",
+        props.level !== 3 && door() && "pe-14",
+        props.class,
+      )}
+    >
       {/* A page's header leads with what the layout gives it (the panel
           toggle); a card's does not. */}
       {props.level === 3 ? undefined : leading()}

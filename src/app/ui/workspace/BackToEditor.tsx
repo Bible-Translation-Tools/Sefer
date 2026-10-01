@@ -33,18 +33,23 @@ import { bookName } from "./books";
 import { metadataOf } from "./project";
 import { useScreen } from "./screen";
 
+/**
+ * Is there work behind this screen to go back TO? The work is the editor
+ * (`useScreen`); every other screen is a panel over the top of it and needs
+ * a door out, as soon as a project is open — except Key terms, which is a
+ * mode like the editor's, left through the mode switcher. The workspace also
+ * hands this to page headers (`PageDoor`), so they keep clear of the ×.
+ */
+export function useBackToEditorShown(): () => boolean {
+  const shell = useShell();
+  const screen = useScreen();
+  return () => shell.project() !== undefined && !screen.onMode();
+}
+
 export function BackToEditor() {
   const shell = useShell();
   const navigate = useNavigate();
-  const screen = useScreen();
-
-  /**
-   * Is there work behind this screen to go back TO? The work is the editor
-   * (`useScreen`); every other screen is a panel over the top of it and needs
-   * a door out, as soon as a project is open — except Key terms, which is a
-   * mode like the editor's, left through the mode switcher.
-   */
-  const away = (): boolean => shell.project() !== undefined && !screen.onMode();
+  const away = useBackToEditorShown();
 
   const label = (): string => {
     const project = shell.project();

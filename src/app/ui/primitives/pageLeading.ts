@@ -11,3 +11,12 @@ import { createContext, useContext } from "solid-js";
 export const PageLeading = createContext<() => JSX.Element | undefined>(() => undefined);
 
 export const usePageLeading = (): (() => JSX.Element | undefined) => useContext(PageLeading);
+
+/**
+ * Does the workspace draw its door out (`BackToEditor`, the × pinned top
+ * right) over this page? Then a page header keeps clear of it, so its actions
+ * never sit under the button.
+ */
+export const PageDoor = createContext<() => boolean>(() => false);
+
+export const usePageDoor = (): (() => boolean) => useContext(PageDoor);

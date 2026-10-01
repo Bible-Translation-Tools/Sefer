@@ -6,9 +6,9 @@ import { t } from "#app/i18n";
 import { readyShell, useShell, useShellState } from "#app/ProjectContext";
 import { SIDEBAR_WIDTH } from "#app/settings";
 import { CommandPalette } from "#app/ui/CommandPalette";
-import { PageLeading, Resizable, Toaster } from "#app/ui/primitives";
+import { PageDoor, PageLeading, Resizable, Toaster } from "#app/ui/primitives";
 import { AppBar } from "#app/ui/workspace/AppBar";
-import { BackToEditor } from "#app/ui/workspace/BackToEditor";
+import { BackToEditor, useBackToEditorShown } from "#app/ui/workspace/BackToEditor";
 import { usePanelToggleLeading } from "#app/ui/workspace/PanelToggle";
 import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
 import { sidebarClaim } from "#app/ui/workspace/sidebarSlot";
@@ -70,6 +70,7 @@ function Workspace() {
   const minWidth = SIDEBAR_WIDTH.min;
   const maxWidth = SIDEBAR_WIDTH.max;
   const panelToggle = usePanelToggleLeading();
+  const door = useBackToEditorShown();
   return (
     <Resizable.Root
       class="h-full"
@@ -115,12 +116,14 @@ function Workspace() {
         {/* The panel toggle for project screens without the editor's
             toolbar leads each screen's page header, inline with its title. */}
         <PageLeading value={panelToggle}>
-          <div class="relative h-full min-w-0">
-            <BackToEditor />
-            <div class="h-full overflow-y-auto">
-              <Outlet />
+          <PageDoor value={door}>
+            <div class="relative h-full min-w-0">
+              <BackToEditor />
+              <div class="h-full overflow-y-auto">
+                <Outlet />
+              </div>
             </div>
-          </div>
+          </PageDoor>
         </PageLeading>
       </Resizable.Panel>
     </Resizable.Root>
