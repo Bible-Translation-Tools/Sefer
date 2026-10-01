@@ -231,3 +231,37 @@ The duplicate and missing headings argue against modelling notes as records for 
 ## First proof, when it is time
 
 Macula Greek as the first kind, read-only: `places` (the caret's verse → its clauses), `search` (the faceted UI over `dimensions`/`facets`, results as cards), no `edit`. It exercises everything but editing with a resource that already has the right shape. Then TN read-only, then TN editable — the first non-USFM writable unit, and the test of whether the Book machinery really is about text rather than about USFM.
+
+## Addendum: what a project is FOR (2026-10-01, master at 6fb2b41)
+
+Not decided. Written down so it can be understood before anything is built. It came from a demo ask: on `/projects`, separate the projects you edit from the texts you read.
+
+### What the code does today
+
+- **Two registries that do not know about each other.**
+  - The project index (`.sefer/projects.json`, `core/project/projectIndex.ts`) is every project on the device, with name, language, books, last opened and how it arrived (`from`). It has no field for purpose.
+  - The Library (`library.json`, `core/resources/library.ts`) keeps a resource's **kind** (what it is: burrito, Resource Container, loose USFM) apart from its **role** in one project (what it is for: `source`, `reference`, `notes`, `glossary`, `tn`, `tw`, `tq`). The `Role` type is left open, and a role can hold many resources.
+- **The WACS table** (`landing/WacsProjects.tsx`) gets `type: "translation" | "gateway"` from langnames' `gw` flag, falling back to the `wa-catalog` owner (`app/catalogue.ts`). As of this addendum a toggle shows one half or the other; before it, gateway rows were dropped. A gateway download clones with `history: "latest"` ("read beside a translation, never worked in"), but it still goes through `rememberProject`, so it becomes an ordinary project row and appears in "Projects loaded into Sefer".
+- **Source vs reference** are both Library roles. They differ only in what they mean: a source is what the translation was made from, a reference is something to consult. `workflows/references.ts` deliberately merges them for search and overlay. Find's source picker (`search/findSource.tsx`) lists **every other project on the device** and binds the one chosen under `source`. So any project can be a source today, and nothing marks a text as reading-only.
+
+### The suggestion
+
+1. **Purpose is a list, not a bool.** Something like `uses: ("edit" | "read" | …)[]` on a project, open-ended the way `Role` is. A gateway brought in deliberately to refine is `["edit", "read"]`. Two things to keep in mind:
+   - The index file is versioned, so adding the field is `v: 4`. The existing repair would re-describe every row once, defaulting from `from`: an arrival from `wa-catalog` or a gateway is `read`, anything else `edit`.
+   - These are capabilities of the PROJECT ("can be a target", "can be read beside one"). They are different from the Library's per-project roles ("is the source _of_ project X"), and both are needed.
+2. **Every import gives a purpose.**
+   - WACS translation → `edit`.
+   - WACS gateway → `read`.
+   - Zip, folder or clone → `edit`, with an advanced option to choose. Choosing covers the person who deliberately clones our source texts to refine them internally.
+3. **Screens filter by purpose.** "Projects loaded into Sefer" lists `edit`; a second list holds the `read` texts; the source picker offers only `read`. The edit/read split is the coarse filter for which project lists show, and roles are the fine-grained one.
+4. **Folders on disk by purpose: last.** Once purpose is in the index, it can choose the folder an import lands in. Moving folders that already exist is the risky part and waits.
+
+### How this meets resource kinds: translation notes
+
+TN should never be searched by Find, but it should sit beside the main editor as notes. That is already the shape the role/kind split gives, without new flags:
+
+- **The role** says what a resource is for in this project (`tn`).
+- **The kind's capabilities** (above: Places, Search, Edit) say what it can do.
+- **Each screen asks for the roles it reads.** Find reads `source` and `reference` (`bindReferences`), and a notes pane would read `tn`.
+
+So the question to settle here is whether `uses` on a project is needed at all, or whether "edit" is just "has no role in another project and is a USFM kind". Deciding it alongside this document, not before it, is the point of writing it down.
