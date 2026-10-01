@@ -55,7 +55,6 @@ import { SaveCoordinator } from "#core/save/saveCoordinator";
 import type { SourceStamp } from "#core/source/source";
 import {
   anchorFrom,
-  structureAt,
   type ChapterRow,
   type EditorBook,
   type ProjectionName,
@@ -521,8 +520,13 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
         book.changes(() => {
           // A book the main editor is showing is reported by the editor itself.
           if (editsReported(bookId)) return;
-          const analysis = structureAt(book.state).analysis;
-          if (analysis !== null) services.projectAnalysis.supply(bookId, analysis);
+          // `invalidate`, not `supply`: a card's own analysis was not parsed
+          // through the engine's id door, so handing it over left the corpus
+          // on the old text and the next publication re-judged the book as
+          // it was before the edit (no new Doubled, no moved finding). The
+          // debounced pass parses it through the id door instead — one parse
+          // per pass, not per keystroke.
+          services.projectAnalysis.invalidate(bookId);
           changed({ kind: "book.apply", books: [bookId] });
         }),
       );
