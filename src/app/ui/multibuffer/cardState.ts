@@ -20,13 +20,11 @@ export interface CardView {
   readonly extent?: Extent;
   /** This card alone in USFM, over the screen's mode. */
   readonly usfm: boolean;
-  /** The reader's flip of the paired side's width default. */
-  readonly pairedFlip: boolean;
   /** Lines inside the card the reader has unfolded — Findings' identical runs. */
   readonly open: ReadonlySet<string>;
 }
 
-export const CARD_VIEW: CardView = { usfm: false, pairedFlip: false, open: new Set() };
+export const CARD_VIEW: CardView = { usfm: false, open: new Set() };
 
 /**
  * What a reader can do to a card. `from` on a step is the screen's starting
@@ -35,7 +33,6 @@ export const CARD_VIEW: CardView = { usfm: false, pairedFlip: false, open: new S
 export type CardEvent =
   | { readonly kind: "step"; readonly step: ContextStep; readonly from: Extent }
   | { readonly kind: "usfm" }
-  | { readonly kind: "pairedFlip" }
   | { readonly kind: "open"; readonly id: string };
 
 /**
@@ -78,8 +75,6 @@ export const reduce = (view: CardView, event: CardEvent): CardView => {
       return { ...view, extent: stepExtent(view.extent ?? event.from, event.step) };
     case "usfm":
       return { ...view, usfm: !view.usfm };
-    case "pairedFlip":
-      return { ...view, pairedFlip: !view.pairedFlip };
     case "open":
       return { ...view, open: flip(view.open, event.id) };
   }

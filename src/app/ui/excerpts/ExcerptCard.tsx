@@ -60,7 +60,7 @@ import { CardFrame } from "../multibuffer/CardFrame";
 import type { CardEvent, CardView } from "../multibuffer/cardState";
 import { ContextControl } from "../multibuffer/ContextControl";
 import { cardPolicy } from "../multibuffer/policy";
-import { Button, cx, IconButton } from "../primitives";
+import { Button, cx } from "../primitives";
 import { verseTextOf } from "../review/reading";
 import type { ExcerptCardSpec } from "./cardSpec";
 import { ExcerptReader } from "./ExcerptReader";
@@ -225,7 +225,6 @@ export function ExcerptCard(props: ExcerptCardProps) {
   const [wide, setWide] = createSignal(true, { name: "excerptWide" });
   /** The reader's: this card alone in USFM, and the paired side's width flipped. */
   const usfm = (): boolean => props.view.usfm;
-  const pairedFlip = (): boolean => props.view.pairedFlip;
   const mode = (): "regular" | "usfm" => (props.mode === "usfm" || usfm() ? "usfm" : "regular");
 
   createEffect(
@@ -253,14 +252,11 @@ export function ExcerptCard(props: ExcerptCardProps) {
     { name: "excerptMarks" },
   );
 
-  /** Stacked, the paired side shows only its own unit — unless flipped. */
-  const collapsed = (): boolean => (wide() ? pairedFlip() : !pairedFlip());
-
   const pairedView = createMemo(
     () => {
       const paired = props.paired;
       if (paired?.kind !== "text") return undefined;
-      const excerpt = pairedExcerpt(paired.book, props.excerpt, paired.hits, collapsed());
+      const excerpt = pairedExcerpt(paired.book, props.excerpt, paired.hits, false);
       if (excerpt === undefined) return undefined;
       return { excerpt, marks: marksOf(excerpt, paired.hits, undefined, undefined) };
     },
@@ -417,21 +413,8 @@ export function ExcerptCard(props: ExcerptCardProps) {
 
   const pairedSide = (
     <section data-paired={props.paired?.kind} aria-label={props.paired?.name} class="min-w-0">
-      {/* No box and no name: the reading sits on the card itself. The header
-          is only drawn when it has the fold control to carry; the name stays
-          the section's label for a screen reader. */}
-      <Show when={pairedView()}>
-        <header class="flex items-center gap-2 px-3 pt-1.5 text-smallest text-on-surface-tertiary">
-          <IconButton
-            size="sm"
-            class="ms-auto"
-            label={collapsed() ? t("Show the same range") : t("Show only the match")}
-            icon={collapsed() ? <UnfoldVerticalIcon /> : <FoldVerticalIcon />}
-            aria-pressed={collapsed() ? "false" : "true"}
-            onClick={() => props.onView({ kind: "pairedFlip" })}
-          />
-        </header>
-      </Show>
+      {/* No box and no name: the reading sits on the card itself; the name
+          stays the section's label for a screen reader. */}
       <Show when={pairedText()}>
         {(text) => (
           <Show
