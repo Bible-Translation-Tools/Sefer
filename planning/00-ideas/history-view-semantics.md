@@ -35,3 +35,19 @@ Will's questions:
    per row.
 
 1 and 2 fix the confusion; 3 and 4 can follow.
+
+## Decided (Will, 2026-10-01)
+
+- A version shows its own change by default, like a dev tool's log. The
+  confusion was exactly that it did not.
+- "Compare with your text now" is a correct, explicit action, not the default.
+- **Adopt this change**: not shown by default; offered on hover (or with a
+  fine pointer). It writes that change into your buffer, nothing more — not
+  a git revert, not a file checkout. An unsaved edit until Save & Review.
+- Local vs remote: no marking while everything is shared. Only when there
+  are local commits, a divider in the gutter area: "Only on this device".
+- Open: where the explicit compare lives in the UI. The excerpt card is not
+  set up as a compound component for a third row; one way is an editor with
+  no margin by default and the compare as one more row tacked on below.
+
+Priority: above the terms experiment.

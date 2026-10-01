@@ -40,3 +40,17 @@ The STET catalogue and guide fixture already map a term to its places; this
 generalises that to any term the translator types, with B as the thing being
 checked. The card list, scope and source pairing it would show are the ones
 Find and Findings already share.
+
+## Explicit first, LCS as a suggestion (2026-10-01)
+
+Will's worry: LCS may not work, given affixes and noise. So:
+
+- **Primary: explicit.** The translator says what B must contain — a stem
+  ("grac"), or a short pattern where inflection splits it. Predictable,
+  checkable by anyone, and Find's literal / whole-word / regex matching
+  already does it.
+- **Secondary: LCS pre-fills that box**, with its coverage shown ("in 41 of
+  46 verses"). Low coverage says "type your own". A wrong suggestion costs
+  one edit, never a wrong result — which is what makes it safe to try.
+
+Lower priority than History.
