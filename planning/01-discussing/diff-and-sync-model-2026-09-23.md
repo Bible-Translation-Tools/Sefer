@@ -385,7 +385,8 @@ From driving the git-lifecycle work in two browsers (Chrome and Firefox on one p
   - auto-send on, and it went → "Saved on this device and in the shared project.";
   - the shared project moved → "Your version is saved on this device. The shared project has changes from elsewhere; see them before yours can be shared." The incoming opens in the same surface as decision cards (theirs against yours, §11's labels), and accepting writes into the buffer, then Record a version makes the decision commit (§11) and the send goes through;
   - purely behind and clean → still shown: what came in, read-only, then one action to take it.
-- **The check on open shows in the workspace:** a banner (or the cloud control turning a colour) — "Changes from another device · Review" — opening that same surface. Cloud gets its own place in the chrome, not only the kebab.
+- **The check on open shows in the workspace as a banner** — "Changes from another device · Review" — opening that same surface. More prominent than a quiet icon, for this audience. Cloud stays in the kebab for now (Will, 2026-10-01); its own icon can come later.
+- **Hundreds apart is still one compare** (§11): the tips are compared, the merge base only labels who changed what, and one decision commit with both tips as parents joins the histories. No rebase, no force push, no stepping through commits.
 
 **History reuses the multibuffer** (planning/00-ideas/history-view-semantics.md): a version's change by default, a header switch for "compared with your text now", Adopt on hover, and the same opt-in card behaviours Find, Findings and Key terms use — step by one TOC unit, whole chapter, fold back, analysis funnelling, editability, locked verse numbers — as props on one surface, not re-implemented per screen.
 
