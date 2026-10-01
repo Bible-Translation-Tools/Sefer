@@ -16,6 +16,7 @@
  * engine the whole set and re-judges the project once.
  */
 
+import { Dynamic } from "@solidjs/web";
 import { Effect, Fiber, Result, Stream } from "effect";
 import RotateCcw from "lucide-solid/icons/rotate-ccw";
 import { For, Show, createSignal, onCleanup } from "solid-js";
@@ -48,7 +49,12 @@ const shown = (key: SousSettingKey, value: boolean | number): string => {
 // are exactly the groups, in the order it declares them.
 const GROUPS = Object.keys(SOUS_GROUPS) as readonly SousSettingGroup[];
 
-export function SousSettingsPanel() {
+export interface SousSettingsPanelProps {
+  /** Inside a dialog (Findings' settings): no card around it, the dialog is one. */
+  readonly bare?: boolean;
+}
+
+export function SousSettingsPanel(props: SousSettingsPanelProps) {
   const services = useServices();
   const key = shellKeys(services.settings).sousSettings;
   const [overrides, setOverrides] = createSignal<SousOverrides>(services.settings.get(key), {
@@ -134,7 +140,11 @@ export function SousSettingsPanel() {
   };
 
   return (
-    <Card class="space-y-4" data-settings-group="proofreading">
+    <Dynamic
+      component={props.bare === true ? "div" : Card}
+      class="space-y-4"
+      data-settings-group="proofreading"
+    >
       <PanelHeader
         level={3}
         title={t("Proofreading")}
@@ -199,6 +209,6 @@ export function SousSettingsPanel() {
       <Show when={problem() !== ""}>
         <p class="text-small text-on-surface-error">{problem()}</p>
       </Show>
-    </Card>
+    </Dynamic>
   );
 }

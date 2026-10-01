@@ -48,6 +48,7 @@ import { Option, Result } from "effect";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import CircleCheck from "lucide-solid/icons/circle-check";
+import SettingsIcon from "lucide-solid/icons/settings";
 import Wrench from "lucide-solid/icons/wrench";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
@@ -66,12 +67,15 @@ import {
   Badge,
   Button,
   Card,
+  Dialog,
   EmptyState,
+  IconButton,
   PanelHeader,
   SegmentedControl,
   severityTone,
 } from "../primitives";
 import { SearchDialog } from "../search/SearchDialog";
+import { SousSettingsPanel } from "../SousSettingsPanel";
 import { codeLabel } from "./findingLabels";
 import {
   createFindingsFeed,
@@ -96,6 +100,7 @@ export function FindingsPanel() {
   });
   const [note, setNote] = createSignal("");
   const [cursor, setCursor] = createSignal(0, { name: "findingsCursor" });
+  const [settingsOpen, setSettingsOpen] = createSignal(false, { name: "findingsSettingsOpen" });
   /**
    * Has the reader moved the cursor yet?
    *
@@ -643,7 +648,30 @@ export function FindingsPanel() {
           rarely, and on a project of sixty-six books the book chips alone used
           to push the findings below the fold. */}
       <Card class="space-y-2">
-        <FindingsFilters state={filters} facets={summary().facets} books={books()} />
+        <div class="flex items-start gap-2">
+          <FindingsFilters
+            class="min-w-0 flex-1"
+            state={filters}
+            facets={summary().facets}
+            books={books()}
+          />
+          {/* The checks' own settings, here, so turning one off is seen in
+              the list it changes (the same panel as in Settings). */}
+          <IconButton
+            size="sm"
+            label={t("Proofreading settings")}
+            icon={<SettingsIcon />}
+            onClick={() => setSettingsOpen(true)}
+          />
+          <Dialog
+            open={settingsOpen()}
+            onOpenChange={setSettingsOpen}
+            title={t("Proofreading settings")}
+            class="max-h-[85vh] w-[min(42rem,92vw)] overflow-y-auto"
+          >
+            <SousSettingsPanel bare />
+          </Dialog>
+        </div>
         <Show when={pattern() !== undefined}>
           <p class="flex flex-wrap items-center gap-2 text-smallest text-on-surface-tertiary">
             <Badge tone="brand">{t("one pattern")}</Badge>
