@@ -40,7 +40,7 @@ import { borrowedStructure, structureAt, type DocStructure } from "../core/docSt
 import { renderRangeField, setRenderRange } from "../core/render";
 import { span } from "../core/timing";
 import type { Funnel } from "../funnel";
-import { modeView, type ProjectionName } from "../views";
+import { policyKey, policyView, type EditorPolicy } from "../views";
 import {
   clipEffect,
   clipped,
@@ -54,14 +54,15 @@ export interface StampOptions {
   readonly parent: HTMLElement;
   readonly analysis: Analysis;
   readonly range: { readonly from: number; readonly to: number };
-  readonly mode: ProjectionName;
+  /** How the stamp draws: the surface's behaviour matrix (`editorPolicy`). */
+  readonly policy: EditorPolicy;
   readonly marks: readonly MarkedRange[];
   readonly surface: string;
   readonly label: string;
 }
 
 export interface StampMount {
-  setMode(mode: ProjectionName): void;
+  setPolicy(policy: EditorPolicy): void;
   reclip(range: { readonly from: number; readonly to: number }): void;
   remark(marks: readonly MarkedRange[]): void;
   /** Follow a seat: re-stamp from its text as it changes. See `ReaderMount.follow`. */
@@ -99,10 +100,10 @@ const stateFor = (
   doc: string | Text,
   parse: () => DocStructure | null,
   analyze: () => Analysis,
-  mode: ProjectionName,
+  policy: EditorPolicy,
   surface: string,
 ): EditorState => {
-  const name = `${mode} ${surface}`;
+  const name = `${policyKey(policy)} ${surface}`;
   let byMode = states.get(key);
   if (byMode === undefined) {
     byMode = new Map();
@@ -118,7 +119,7 @@ const stateFor = (
       borrowedStructure.of(parse),
       readingLayer,
       viewLayer(),
-      modeView(mode, surface),
+      policyView(policy, surface),
       clipped(start),
       renderRangeField.init(() => start),
       markedRanges([]),
@@ -134,7 +135,7 @@ const stateFor = (
 const pressRange = (
   state: EditorState,
   key: object,
-  mode: ProjectionName,
+  policy: EditorPolicy,
   surface: string,
   range: { readonly from: number; readonly to: number },
   marks: readonly MarkedRange[],
@@ -170,7 +171,7 @@ const pressRange = (
   // The state after pressing is the one to hand back next time: states are
   // values, and the press has moved this one on.
   const byMode = states.get(key);
-  byMode?.set(`${mode} ${surface}`, view.state);
+  byMode?.set(`${policyKey(policy)} ${surface}`, view.state);
   return {
     outer: view.dom.className,
     scroller: view.scrollDOM.className,
@@ -202,7 +203,7 @@ const mapMarks = (marks: readonly MarkedRange[], changes: ChangeSet): readonly M
 
 export function mountStamp(options: StampOptions): StampMount {
   const { analysis, surface } = options;
-  let mode = options.mode;
+  let policy = options.policy;
   let range = options.range;
   let marks = options.marks;
   let followed: Funnel | undefined;
@@ -222,7 +223,7 @@ export function mountStamp(options: StampOptions): StampMount {
           doc,
           () => host.structure(),
           () => analysis,
-          mode,
+          policy,
           surface,
         ),
       };
@@ -234,7 +235,7 @@ export function mountStamp(options: StampOptions): StampMount {
         analysis.text,
         () => lent.get(analysis) ?? null,
         () => analysis,
-        mode,
+        policy,
         surface,
       ),
     };
@@ -246,7 +247,7 @@ export function mountStamp(options: StampOptions): StampMount {
     const done = span("stamp", options.label);
     const { state, key } = current();
     if (!lent.has(analysis) && followed === undefined) lent.set(analysis, structureAt(state));
-    draw(options.parent, pressRange(state, key, mode, surface, range, marks));
+    draw(options.parent, pressRange(state, key, policy, surface, range, marks));
     done();
   };
 
@@ -263,9 +264,9 @@ export function mountStamp(options: StampOptions): StampMount {
   };
 
   return {
-    setMode: (next) => {
-      if (next === mode) return;
-      mode = next;
+    setPolicy: (next) => {
+      if (policyKey(next) === policyKey(policy)) return;
+      policy = next;
       stamp();
     },
     reclip: (next) => {

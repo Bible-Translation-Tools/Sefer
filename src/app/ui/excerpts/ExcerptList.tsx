@@ -14,7 +14,7 @@
  */
 
 import type { JSX } from "@solidjs/web";
-import { For, createMemo, createSignal, onCleanup } from "solid-js";
+import { For, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
 import type { BookId } from "#core/book/book";
 import {
@@ -91,6 +91,14 @@ export interface ExcerptListProps {
    * one-line rows of released cards go: they belong to the old results.
    */
   readonly resultsKey?: string;
+  /**
+   * False when the screen puts its own navigation in the sidebar (Key terms'
+   * term list): the list then claims nothing, and the screen scrolls it
+   * through `goTo`.
+   */
+  readonly claimsSidebar?: boolean;
+  /** Handed the list's scroll: go to row `key`, the card sid by default. */
+  readonly goTo?: (go: (key: string) => void) => void;
 }
 
 /** Roughly one line of the scripture serif at the list's width. */
@@ -160,7 +168,7 @@ export function ExcerptList(props: ExcerptListProps) {
     const held = built.get(group);
     if (held !== undefined) return held;
     const made: VirtualSection<Excerpt> = {
-      key: group.bookId,
+      key: props.sections?.sectionKey?.(group) ?? group.bookId,
       rows: group.excerpts.map((excerpt) => {
         // `static`: the memo is the tracking scope, and the key is read here
         // rather than by a function that outlives it.
@@ -237,19 +245,21 @@ export function ExcerptList(props: ExcerptListProps) {
   // of results the sidebar navigates the results (`workspace/sidebarSlot.ts`).
   // Claimed for as long as this list is mounted; the column below is only for
   // a reader who has hidden the sidebar.
-  onCleanup(
-    claimSidebar(() => (
-      <ResultsOutline
-        title={props.sections?.title ?? t("Results")}
-        groups={props.groups}
-        outline={props.outline}
-        active={current()}
-        label={(row) => props.sections?.label?.(row) ?? row.name}
-        keyOf={keyOf}
-        onGo={go}
-      />
-    )),
-  );
+  // Read once: whether a screen owns its sidebar is fixed when it mounts.
+  if (untrack(() => props.claimsSidebar) !== false)
+    onCleanup(
+      claimSidebar(() => (
+        <ResultsOutline
+          title={props.sections?.title ?? t("Results")}
+          groups={props.groups}
+          outline={props.outline}
+          active={current()}
+          label={(row) => props.sections?.label?.(row) ?? row.name}
+          keyOf={keyOf}
+          onGo={go}
+        />
+      )),
+    );
 
   return (
     <div class="flex min-h-0 flex-1 gap-4">
@@ -257,7 +267,7 @@ export function ExcerptList(props: ExcerptListProps) {
         aria-label={props.sections?.title ?? t("Books with results")}
         class={cx(
           "hidden w-40 shrink-0 flex-col gap-0.5 overflow-y-auto",
-          !shell.sidebarShowing() && "md:flex",
+          !shell.sidebarShowing() && props.claimsSidebar !== false && "md:flex",
         )}
       >
         <For each={props.outline}>
@@ -297,6 +307,7 @@ export function ExcerptList(props: ExcerptListProps) {
         focus={props.focus}
         ref={(scrollTo) => {
           goTo = scrollTo;
+          props.goTo?.(scrollTo);
         }}
         empty={props.empty}
         card={(excerpt, key, session) => (

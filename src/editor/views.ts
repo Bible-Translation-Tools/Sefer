@@ -31,9 +31,47 @@ const projectionFor = (mode: ProjectionName): AssignmentDelta =>
 const modeOf = (name: ProjectionName): Mode => (name === "usfm" ? "usfm" : "regular");
 
 /**
- * The three things a projection IS on a surface, as one extension: the
- * `assignment` delta (which classes paint how), the `modeFacet` the rules and
- * the paint port read, and the `cm-mode-*` class the stylesheet keys on.
+ * One named projection on a surface: the policy of that name alone
+ * (`policyView`, below, says what that installs). The canonical editor and the
+ * note editor pick by name; a card surface takes an `EditorPolicy`.
+ */
+export const modeView = (name: ProjectionName, surface?: string): Extension =>
+  policyView({ mode: modeOf(name), presets: [name] }, surface);
+
+/**
+ * How a surface draws and guards its text: the behaviour matrix it opts into.
+ *
+ * `mode` is how markup reads (`regular` projects it, `usfm` shows it), and
+ * `presets` are named `PROJECTIONS` laid over the default registry in order,
+ * later winning — so "hidden notes" is `editorPolicy("regular", "hide-notes")`
+ * and locked verse numbers in USFM is `editorPolicy("usfm", "lock-designators")`.
+ * A surface asks for a policy; it never translates a toggle into a projection
+ * itself, and nothing branches on the names — they are data, looked up here.
+ *
+ * The policy is judged as well as painted: a satellite carries its surface's
+ * deltas to the Book (`SurfaceTerms.projection`), so what a policy hides and
+ * freezes is also what the Book refuses there.
+ */
+export interface EditorPolicy {
+  readonly mode: Mode;
+  readonly presets: readonly ProjectionName[];
+}
+
+/** A policy: the mode's own projection, then each preset over it. */
+export const editorPolicy = (mode: Mode, ...presets: readonly ProjectionName[]): EditorPolicy => ({
+  mode,
+  presets: [mode === "usfm" ? "usfm" : "default", ...presets],
+});
+
+/** One string per distinct policy, for a cache or a comparison. */
+export const policyKey = (policy: EditorPolicy): string =>
+  `${policy.mode}:${policy.presets.join("+")}`;
+
+/**
+ * The three things a policy IS on a surface, as one extension: an
+ * `assignment` delta per preset (which classes paint how, and how mutable),
+ * the `modeFacet` the rules and the paint port read, and the `cm-mode-*`
+ * class the stylesheet keys on.
  *
  * One rule, stated once, because every surface that shows USFM needs all
  * three and in step — a projection without its mode paints one way and is
@@ -50,16 +88,13 @@ const modeOf = (name: ProjectionName): Mode => (name === "usfm" ? "usfm" : "regu
  * regular reading projection collapses a note to its caller — the very text
  * that surface exists to show.
  */
-export const modeView = (name: ProjectionName, surface?: string): Extension => {
-  const mode = modeOf(name);
-  return [
-    assignment.of(projectionFor(name)),
-    modeFacet.of(mode),
-    EditorView.editorAttributes.of({
-      class: surface === undefined ? `cm-mode-${mode}` : `cm-mode-${mode} ${surface}`,
-    }),
-  ];
-};
+export const policyView = (policy: EditorPolicy, surface?: string): Extension => [
+  ...policy.presets.map((name) => assignment.of(projectionFor(name))),
+  modeFacet.of(policy.mode),
+  EditorView.editorAttributes.of({
+    class: surface === undefined ? `cm-mode-${policy.mode}` : `cm-mode-${policy.mode} ${surface}`,
+  }),
+];
 
 /**
  * The transaction that clips the editor to one chapter, by ordinal (0-based

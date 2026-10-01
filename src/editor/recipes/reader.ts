@@ -38,7 +38,7 @@ import { borrowedStructure, structureAt, type DocStructure } from "../core/docSt
 import { renderRangeField } from "../core/render";
 import { span } from "../core/timing";
 import { fromCanonical, type Funnel } from "../funnel";
-import { modeView, type ProjectionName } from "../views";
+import { policyKey, policyView, type EditorPolicy } from "../views";
 import {
   clipped,
   markedRanges,
@@ -60,7 +60,8 @@ export interface ReaderOptions {
   readonly analysis: Analysis;
   /** What to show, in source coordinates. Snapped to whole lines here. */
   readonly range: { readonly from: number; readonly to: number };
-  readonly mode: ProjectionName;
+  /** How the reader draws: the surface's behaviour matrix (`editorPolicy`). */
+  readonly policy: EditorPolicy;
   readonly marks: readonly MarkedRange[];
   /** The stylesheet's name for the surface — `cm-excerpt`. */
   readonly surface: string;
@@ -70,7 +71,7 @@ export interface ReaderOptions {
 
 export interface ReaderMount {
   readonly view: EditorView;
-  setMode(mode: ProjectionName): void;
+  setPolicy(policy: EditorPolicy): void;
   /** Shows another range of the same text; the view is kept, not rebuilt. */
   reclip(range: { readonly from: number; readonly to: number }): void;
   remark(marks: readonly MarkedRange[]): void;
@@ -120,7 +121,7 @@ export function mountReader(options: ReaderOptions): ReaderMount {
       borrowedStructure.of(() => lent.get(analysis) ?? null),
       readingLayer,
       viewLayer(),
-      projection.of(modeView(options.mode, options.surface)),
+      projection.of(policyView(options.policy, options.surface)),
       clipped(wholeLinesOf(text, options.range)),
       // The render window starts as the clip. Left to itself it starts as
       // nothing, which the decorator reads as "the whole document" — every
@@ -142,7 +143,7 @@ export function mountReader(options: ReaderOptions): ReaderMount {
   // every Solid effect runs once on mount with what the view was built with —
   // costs nothing. A reconfigure rebuilds every decoration, and on a list that
   // mounts a card per frame while scrolling that was the largest single cost.
-  let mode = options.mode;
+  let policy = options.policy;
   let clip = wholeLinesOf(text, options.range);
   let marks = options.marks;
   let detach: (() => void) | undefined;
@@ -180,10 +181,10 @@ export function mountReader(options: ReaderOptions): ReaderMount {
 
   return {
     view,
-    setMode: (next) => {
-      if (next === mode) return;
-      mode = next;
-      view.dispatch({ effects: projection.reconfigure(modeView(next, options.surface)) });
+    setPolicy: (next) => {
+      if (policyKey(next) === policyKey(policy)) return;
+      policy = next;
+      view.dispatch({ effects: projection.reconfigure(policyView(next, options.surface)) });
     },
     reclip: (range) => {
       // A range is in the canonical text's coordinates: catch up first.

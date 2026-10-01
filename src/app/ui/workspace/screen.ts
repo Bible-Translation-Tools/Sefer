@@ -21,6 +21,11 @@ export interface Screen {
    * book. Every other screen sits over the top of it.
    */
   readonly onEditor: () => boolean;
+  /**
+   * A mode's own screen — Refine's, the editor, or Key terms. The mode
+   * switcher is the way between them, so neither needs a door back.
+   */
+  readonly onMode: () => boolean;
   /** Inside a project's routes: the editor, or a project screen over it. */
   readonly inProject: () => boolean;
 }
@@ -31,9 +36,11 @@ export const useScreen = (): Screen => {
   const inProject = useRouterState({
     select: (state) => state.matches.some((match) => match.routeId === "/_app/project/$slug"),
   });
+  const onEditor = (): boolean =>
+    leaf() === "/_app/project/$slug/book/$book" || leaf() === "/_app/project/$slug/";
   return {
-    onEditor: () =>
-      leaf() === "/_app/project/$slug/book/$book" || leaf() === "/_app/project/$slug/",
+    onEditor,
+    onMode: () => onEditor() || leaf() === "/_app/project/$slug/terms",
     inProject,
   };
 };

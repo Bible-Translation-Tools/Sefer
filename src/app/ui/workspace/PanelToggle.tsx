@@ -24,7 +24,6 @@ export function PanelToggle() {
   const showing = (): boolean => shell.sidebarShowing();
   return (
     <IconButton
-      size="sm"
       data-testid="panel-toggle"
       aria-expanded={showing() ? "true" : "false"}
       label={showing() ? t("Hide the project panel") : t("Show the project panel")}
@@ -47,7 +46,10 @@ export function PanelToggleColumn() {
     shell.project() !== undefined && screen.inProject() && !screen.onEditor();
   return (
     <Show when={wanted()}>
-      <div class="shrink-0 px-2 pt-6">
+      {/* 24px down, the page's own padding, so this 48px button shares its
+          centre line with the page header (`PanelHeader`'s 48px row) and the
+          project card beside it (`ProjectControl`: 16px down, 64px tall). */}
+      <div class="shrink-0 ps-2 pt-6">
         <PanelToggle />
       </div>
     </Show>

@@ -22,15 +22,18 @@ import { cx, type ClassValue } from "./cx";
 export interface CardProps extends ComponentProps<"section"> {
   /** Off when the body is a full-bleed list or table. */
   readonly padded?: boolean;
+  /** `md` (default): 12px radius, 16px padding. `lg`: twice `md`'s 12, 24px radius and padding. */
+  readonly size?: "md" | "lg";
 }
 
 export function Card(props: CardProps) {
-  const rest = omit(props, "padded", "class");
+  const rest = omit(props, "padded", "size", "class");
   const merged = merge(rest, {
     get class() {
       return cx(
-        "rounded-lg border border-surface-border bg-surface-primary shadow-small",
-        props.padded === false ? undefined : "p-4",
+        "border border-surface-border bg-surface-primary shadow-small",
+        props.size === "lg" ? "rounded-3xl" : "rounded-lg",
+        props.padded === false ? undefined : props.size === "lg" ? "p-6" : "p-4",
         props.class,
       );
     },
@@ -50,7 +53,9 @@ export interface PanelHeaderProps {
 
 export function PanelHeader(props: PanelHeaderProps) {
   return (
-    <div class={cx("flex flex-wrap items-center gap-3", props.class)}>
+    // At least 48px, an md control's height, so a page's title shares one
+    // centre line with the panel toggle and the project card beside it.
+    <div class={cx("flex min-h-12 flex-wrap items-center gap-3", props.class)}>
       <div class="min-w-0">
         {props.level === 3 ? (
           <h3 class="truncate text-h4 font-semibold text-on-surface-primary">{props.title}</h3>

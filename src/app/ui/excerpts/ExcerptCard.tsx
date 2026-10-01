@@ -50,15 +50,18 @@ import {
   type Occurrence,
 } from "#core/excerpts/excerpts";
 import type { Analysis } from "#core/galley";
-import type { EditorBook, Funnel, MarkedRange } from "#editor/index";
+import { type EditorBook, type EditorPolicy, type Funnel, type MarkedRange } from "#editor/index";
 
 import { t } from "../../i18n";
-import type { CardAction } from "../multibuffer/CardAction";
+import { useShell } from "../../ProjectContext";
+import { CardActions, type CardAction } from "../multibuffer/CardAction";
 import { CardEditor } from "../multibuffer/CardEditor";
 import { CardFrame } from "../multibuffer/CardFrame";
 import type { CardEvent, CardView } from "../multibuffer/cardState";
 import { ContextControl } from "../multibuffer/ContextControl";
-import { cx, IconButton } from "../primitives";
+import { cardPolicy } from "../multibuffer/policy";
+import { Button, cx, IconButton } from "../primitives";
+import { verseTextOf } from "../review/reading";
 import type { ExcerptCardSpec } from "./cardSpec";
 import { ExcerptReader } from "./ExcerptReader";
 
@@ -194,7 +197,12 @@ const highlighted = (
   return out;
 };
 
+/** A region that opens and closes by its row: 300ms, and not at all under reduced motion. */
+const collapsible =
+  "grid transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none";
+
 export function ExcerptCard(props: ExcerptCardProps) {
+  const shell = useShell();
   const [book, setBook] = createSignal<EditorBook | undefined>(undefined, {
     name: "excerptBook",
   });
@@ -260,7 +268,12 @@ export function ExcerptCard(props: ExcerptCardProps) {
   const current = (): boolean =>
     props.active !== undefined && props.excerpt.hits.some((hit) => hit.from === props.active);
 
+  const direct = (): boolean => props.spec.edit.kind === "direct";
+  /** The screen's matrix in the card's mode; reader, satellite and paired side share it. */
+  const policy = (): EditorPolicy => props.spec.policy?.(mode()) ?? cardPolicy(mode());
+
   const edit = (caret?: number, where?: { x: number; y: number }): void => {
+    if (targetBox !== undefined) setHold(targetBox.offsetHeight);
     setAt(caret);
     setPoint(where);
     props.onEdit();
@@ -271,39 +284,58 @@ export function ExcerptCard(props: ExcerptCardProps) {
   };
 
   const done = (): void => {
+    setHold(undefined);
     setBook(undefined);
     setAt(undefined);
     props.onDone();
   };
 
+  const reader = () => (
+    <ExcerptReader
+      analysis={props.excerpt.analysis}
+      span={props.excerpt.span}
+      policy={policy()}
+      marks={marks()}
+      label={`excerpt:${props.excerpt.sid}`}
+      follow={props.follow}
+      onEdit={props.spec.edit.kind === "none" ? undefined : edit}
+      direct={direct()}
+    />
+  );
+
+  /**
+   * The target's height, held from the click until the editor has drawn: the
+   * reading stays on screen while the book is seated, and the box keeps its
+   * size through the swap, so the card does not shrink and regrow.
+   */
+  const [hold, setHold] = createSignal<number | undefined>(undefined, { name: "excerptHold" });
+  let targetBox: HTMLDivElement | undefined;
+  createEffect(
+    () => props.editing && book() !== undefined,
+    (drawn) => {
+      if (!drawn) return;
+      // Two frames: one for the editor to mount, one for it to lay out.
+      requestAnimationFrame(() => requestAnimationFrame(() => setHold(undefined)));
+    },
+  );
+
   const target = (
-    <Show
-      when={props.editing}
-      fallback={
-        <ExcerptReader
-          analysis={props.excerpt.analysis}
-          span={props.excerpt.span}
-          mode={mode()}
-          marks={marks()}
-          label={`excerpt:${props.excerpt.sid}`}
-          follow={props.follow}
-          onEdit={props.spec.edit.kind === "satellite" ? edit : undefined}
-        />
-      }
-    >
+    <Show when={props.editing} fallback={reader()}>
       <Show
         when={book()}
         fallback={
-          <p class="px-3 py-2 text-small text-on-surface-tertiary">
-            {refused() ? t("That book could not be opened for editing.") : t("Opening…")}
-          </p>
+          <Show when={refused()} fallback={reader()}>
+            <p class="px-3 py-2 text-small text-on-surface-tertiary">
+              {t("That book could not be opened for editing.")}
+            </p>
+          </Show>
         }
       >
         {(seated) => (
           <CardEditor
             book={seated()}
             range={props.excerpt.span}
-            mode={mode()}
+            policy={policy()}
             marks={marks()}
             at={at()}
             point={point()}
@@ -317,21 +349,19 @@ export function ExcerptCard(props: ExcerptCardProps) {
     </Show>
   );
 
+  const chapterOpen = (): boolean => props.excerpt.extent.chapter === true;
+
   const pairedText = () => (props.paired?.kind === "text" ? props.paired : undefined);
   const pairedStatic = () => (props.paired?.kind === "static" ? props.paired : undefined);
   const pairedNone = () => (props.paired?.kind === "none" ? props.paired : undefined);
 
   const pairedSide = (
-    <section
-      data-paired={props.paired?.kind}
-      aria-label={props.paired?.name}
-      class="min-w-0 rounded-md border border-surface-border bg-surface-secondary/60"
-    >
-      <header class="flex items-center gap-2 px-3 pt-1.5 text-smallest text-on-surface-tertiary">
-        <span class="truncate" title={props.paired?.name}>
-          {props.paired?.name}
-        </span>
-        <Show when={pairedView()}>
+    <section data-paired={props.paired?.kind} aria-label={props.paired?.name} class="min-w-0">
+      {/* No box and no name: the reading sits on the card itself. The header
+          is only drawn when it has the fold control to carry; the name stays
+          the section's label for a screen reader. */}
+      <Show when={pairedView()}>
+        <header class="flex items-center gap-2 px-3 pt-1.5 text-smallest text-on-surface-tertiary">
           <IconButton
             size="sm"
             class="ms-auto"
@@ -340,8 +370,8 @@ export function ExcerptCard(props: ExcerptCardProps) {
             aria-pressed={collapsed() ? "false" : "true"}
             onClick={() => props.onView({ kind: "pairedFlip" })}
           />
-        </Show>
-      </header>
+        </header>
+      </Show>
       <Show when={pairedText()}>
         {(text) => (
           <Show
@@ -356,7 +386,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
               <ExcerptReader
                 analysis={view().excerpt.analysis}
                 span={view().excerpt.span}
-                mode={mode()}
+                policy={policy()}
                 marks={view().marks}
                 label={`paired:${props.excerpt.sid}`}
               />
@@ -366,7 +396,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
       </Show>
       <Show when={pairedStatic()}>
         {(reading) => (
-          <p class="px-3 py-2 font-scripture text-body leading-relaxed text-on-surface-secondary">
+          <p class="px-3 py-2 font-scripture text-body leading-[2] text-on-surface-primary">
             {highlighted(reading().text, reading().spans)}
           </p>
         )}
@@ -380,6 +410,18 @@ export function ExcerptCard(props: ExcerptCardProps) {
   );
 
   const spec = (): ExcerptCardSpec => props.spec;
+  /** Does this screen condense cards at all (Key terms)? Then every card carries its line. */
+  const condensable = (): boolean => props.spec.condensed !== undefined;
+  const condensed = (): boolean => props.spec.condensed?.(props.excerpt, props.rowKey) === true;
+  const status = (): JSX.Element | undefined => props.spec.status?.(props.excerpt, props.rowKey);
+  // A card condensed while it was being edited hands the edit back, so the
+  // list does not keep a seat open for a card with no editor showing.
+  createEffect(
+    () => condensed() && props.editing,
+    (stale) => {
+      if (stale) done();
+    },
+  );
   const offerUsfm = (): boolean => {
     const usfmSwitch = spec().usfm;
     return (
@@ -426,61 +468,165 @@ export function ExcerptCard(props: ExcerptCardProps) {
     };
   };
 
+  /**
+   * The condensed line: what the editor shows of the card's own verse, in the
+   * engine's reading (`verseTextOf`), not a projection of Sefer's own.
+   */
+  const teaser = createMemo(
+    () =>
+      condensable()
+        ? verseTextOf(shell.services.galley, props.excerpt.analysis.text, props.excerpt.own)
+        : "",
+    { name: "excerptTeaser" },
+  );
+
   return (
-    <CardFrame
-      data={{ "data-sid": props.excerpt.sid, "data-mode": mode() }}
-      current={current()}
-      title={spec().title?.(props.excerpt, props.rowKey, props.view) ?? props.excerpt.label}
-      gone={props.gone}
-      info={
-        <>
-          {spec().info?.(props.excerpt, props.rowKey, props.view)}
-          {/* Not when the card carries notes: findings list themselves line
-              by line under the header, and "2 matches" above them would be
-              the same count said twice in another vocabulary. */}
-          <Show when={notes() === undefined && props.excerpt.hits.length > 1}>
-            <span class="text-smallest text-on-surface-tertiary">
-              {t("{count} matches", { count: props.excerpt.hits.length })}
-            </span>
-          </Show>
-        </>
-      }
-      headerActions={usfmAction()}
-      edit={
-        spec().edit.kind === "satellite"
-          ? { kind: "edit", editing: props.editing, onEdit: () => edit(), onDone: done }
-          : { kind: "none" }
-      }
-      open={openAction()}
-      notes={notes()}
-      context={
-        <Show when={spec().context.kind === "steps" ? spec().context : undefined}>
-          {(context) => (
-            <ContextControl
-              extent={props.excerpt.extent}
-              canUp={props.excerpt.more.up}
-              canDown={props.excerpt.more.down}
-              onStep={(step) => {
-                const held = context();
-                if (held.kind === "steps") held.step(props.excerpt.sid, step);
-              }}
-            />
-          )}
-        </Show>
-      }
-      actions={spec().actions?.(props.excerpt, props.rowKey, props.view)}
-    >
-      <div
-        ref={setBody}
-        data-layout={props.paired === undefined ? "single" : wide() ? "side" : "stacked"}
-        class={cx(
-          props.paired !== undefined && "grid gap-2 p-2",
-          props.paired !== undefined && (wide() ? "grid-cols-2 items-start" : "grid-cols-1"),
-        )}
+    <div>
+      {props.spec.before?.(props.excerpt, props.rowKey)}
+      <CardFrame
+        data={{ "data-sid": props.excerpt.sid, "data-mode": mode() }}
+        current={current()}
+        condensed={condensed()}
+        onActivate={() => props.spec.onActivate?.(props.excerpt, props.rowKey)}
+        title={spec().title?.(props.excerpt, props.rowKey, props.view) ?? props.excerpt.label}
+        gone={props.gone}
+        info={
+          <>
+            {/* The status sits right after the heading, open or condensed. */}
+            <Show when={status()}>{(mark) => <span class="flex shrink-0">{mark()}</span>}</Show>
+            {spec().info?.(props.excerpt, props.rowKey, props.view)}
+            {/* Not when the card carries notes: findings list themselves line
+                by line under the header, and "2 matches" above them would be
+                the same count said twice in another vocabulary. */}
+            <Show when={notes() === undefined && props.excerpt.hits.length > 1}>
+              <span class="text-smallest text-on-surface-tertiary">
+                {t("{count} matches", { count: props.excerpt.hits.length })}
+              </span>
+            </Show>
+          </>
+        }
+        headerActions={usfmAction()}
+        edit={
+          spec().edit.kind === "satellite"
+            ? { kind: "edit", editing: props.editing, onEdit: () => edit(), onDone: done }
+            : { kind: "none" }
+        }
+        open={openAction()}
+        notes={notes()}
+        context={
+          // Only the stepped control lives in the footer; a card with none, or
+          // with the one expand control under its target, draws no footer.
+          spec().context.kind !== "steps" ? undefined : (
+            <Show when={spec().context.kind === "steps" ? spec().context : undefined}>
+              {(context) => (
+                <ContextControl
+                  extent={props.excerpt.extent}
+                  canUp={props.excerpt.more.up}
+                  canDown={props.excerpt.more.down}
+                  onStep={(step) => {
+                    const held = context();
+                    if (held.kind === "steps") held.step(props.excerpt.sid, step);
+                  }}
+                />
+              )}
+            </Show>
+          )
+        }
+        flush={direct()}
+        actions={direct() ? undefined : spec().actions?.(props.excerpt, props.rowKey, props.view)}
       >
-        <Show when={props.paired !== undefined}>{pairedSide}</Show>
-        <div class="min-w-0">{target}</div>
-      </div>
-    </CardFrame>
+        {/* Open and condensed are the SAME frame with two regions, and the
+              switch is a CSS row transition: no node is replaced, and the
+              card closing and the card opening move in the same frames. The
+              closed region is inert, so its controls leave the tab order. */}
+        <div
+          class={cx(collapsible, condensed() ? "grid-rows-[0fr]" : "grid-rows-[1fr]")}
+          inert={condensed()}
+        >
+          <div class="min-h-0 overflow-hidden">
+            <div
+              ref={setBody}
+              data-layout={props.paired === undefined ? "single" : wide() ? "side" : "stacked"}
+              class={cx(
+                props.paired !== undefined && "grid gap-2",
+                props.paired !== undefined && !direct() && "p-2",
+                props.paired !== undefined && (wide() ? "grid-cols-2 items-start" : "grid-cols-1"),
+              )}
+            >
+              <Show when={props.paired !== undefined}>{pairedSide}</Show>
+              {/* The whole chapter is a long read: the target scrolls inside the
+              card past 60% of the screen, so one card cannot become the list. */}
+              {/* A direct card's target is drawn as the input it is: one outline,
+              grey at rest and the editor's own brand one while editing
+              (`editor.css`, `[data-direct-target]`). Its controls
+              sit under it, in its column, so they start at its left edge. */}
+              <div class="flex min-w-0 flex-col gap-2">
+                <div
+                  ref={(element: HTMLDivElement) => {
+                    targetBox = element;
+                  }}
+                  style={hold() === undefined ? undefined : { "min-height": `${hold()}px` }}
+                  data-direct-target={direct() ? "" : undefined}
+                  data-editing={direct() && props.editing ? "" : undefined}
+                  class={cx(
+                    "min-w-0",
+                    chapterOpen() && "max-h-[var(--card-room,60vh)] overflow-y-auto",
+                    direct() && "cursor-text",
+                  )}
+                >
+                  {target}
+                </div>
+                <Show when={direct()}>
+                  <div data-card-actions class="flex items-center gap-controls">
+                    <CardActions
+                      size="md"
+                      actions={spec().actions?.(props.excerpt, props.rowKey, props.view) ?? []}
+                    />
+                    <Show when={spec().context.kind === "chapter" ? spec().context : undefined}>
+                      {(context) => (
+                        <Button
+                          data-step="chapter"
+                          variant="tertiary"
+                          icon={chapterOpen() ? <FoldVerticalIcon /> : <UnfoldVerticalIcon />}
+                          onClick={() => {
+                            const held = context();
+                            if (held.kind === "chapter") held.step(props.excerpt.sid, "chapter");
+                          }}
+                        >
+                          {chapterOpen() ? t("Show less") : t("Show more")}
+                        </Button>
+                      )}
+                    </Show>
+                  </div>
+                </Show>
+              </div>
+            </div>
+          </div>
+        </div>
+        <Show when={condensable()}>
+          <div
+            aria-hidden={condensed() ? undefined : "true"}
+            class={cx(collapsible, condensed() ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}
+          >
+            <div class="min-h-0 overflow-hidden">
+              <div
+                class={cx(
+                  "grid gap-2 text-small text-on-surface-primary",
+                  props.paired !== undefined && "grid-cols-2",
+                )}
+              >
+                <Show when={props.paired !== undefined}>
+                  <p class="truncate px-3 font-scripture">
+                    {pairedStatic()?.text ?? pairedNone()?.message ?? ""}
+                  </p>
+                </Show>
+                <p class="truncate px-3 font-scripture">{teaser()}</p>
+              </div>
+            </div>
+          </div>
+        </Show>
+      </CardFrame>
+      {props.spec.after?.(props.excerpt, props.rowKey)}
+    </div>
   );
 }

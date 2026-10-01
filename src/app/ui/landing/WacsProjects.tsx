@@ -589,7 +589,7 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
               scrolling or not, so the columns line up without measuring. */}
           <div
             role="rowgroup"
-            class="scrollbar-subtle shrink-0 overflow-hidden [scrollbar-gutter:stable] border-b border-surface-border bg-surface-secondary"
+            class="scrollbar-subtle shrink-0 overflow-hidden [scrollbar-gutter:stable] border-b border-surface-border"
           >
             <div
               role="row"
@@ -627,7 +627,9 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
                           class="flex w-full cursor-pointer items-center gap-1.5 p-4 text-start data-first:ps-8 font-medium text-inherit transition-colors hover:bg-surface-tertiary hover:text-on-surface-primary data-open:bg-surface-tertiary"
                           data-open={menuFor() === column ? "" : undefined}
                         >
-                          {label()}
+                          {/* The label grows, so the sort and filter icons
+                              sit at the cell's far right. */}
+                          <span class="min-w-0 flex-1 truncate">{label()}</span>
                           {sortOf(column) === "asc" ? (
                             <ArrowUp size={14} aria-hidden="true" />
                           ) : sortOf(column) === "desc" ? (

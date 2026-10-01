@@ -39,9 +39,10 @@ export function BackToEditor() {
   /**
    * Is there work behind this screen to go back TO? The work is the editor
    * (`useScreen`); every other screen is a panel over the top of it and needs
-   * a door out, as soon as a project is open.
+   * a door out, as soon as a project is open — except Key terms, which is a
+   * mode like the editor's, left through the mode switcher.
    */
-  const away = (): boolean => shell.project() !== undefined && !screen.onEditor();
+  const away = (): boolean => shell.project() !== undefined && !screen.onMode();
 
   const label = (): string => {
     const project = shell.project();

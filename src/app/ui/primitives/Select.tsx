@@ -21,8 +21,8 @@ export type SelectSize = "sm" | "md";
 
 const field = variants({
   base: [
-    "w-full appearance-none rounded-md border border-surface-border bg-surface-primary",
-    "pe-7 ps-2.5 text-on-surface-primary transition-colors cursor-pointer",
+    "w-full appearance-none border border-surface-border bg-surface-primary",
+    "text-on-surface-primary transition-colors cursor-pointer",
     "hover:border-brand/40 focus:border-brand disabled:cursor-not-allowed",
     // The prominent chapter picker (`data-prominent`) steps forward when the
     // reader has asked to read one chapter at a time.
@@ -30,8 +30,10 @@ const field = variants({
   ].join(" "),
   variants: {
     size: {
-      sm: "h-7 text-smallest",
-      md: "h-9 text-small",
+      sm: "h-7 rounded-md ps-2.5 pe-7 text-smallest",
+      // The app's control size, as `Button` and `Input`: 48px, 12px sides and
+      // radius, 14px text; the end padding clears the 20px chevron.
+      md: "h-12 rounded-lg ps-3 pe-10 text-small",
     },
   },
   defaults: { size: "md" },
@@ -56,8 +58,10 @@ export function Select(props: SelectProps) {
       <select {...merged} />
       <ChevronDown
         aria-hidden="true"
-        size={14}
-        class="pointer-events-none absolute end-2 text-on-surface-tertiary"
+        class={cx(
+          "pointer-events-none absolute text-on-surface-tertiary",
+          props.size === "sm" ? "end-2 size-3.5" : "end-3 size-5",
+        )}
       />
     </span>
   );

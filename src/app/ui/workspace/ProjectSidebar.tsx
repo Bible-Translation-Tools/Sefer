@@ -28,7 +28,7 @@ import { chaptersAddress, introAddress, type Address } from "#core/location/addr
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { Badge, Input, SegmentedControl } from "../primitives";
+import { Badge, IconButton, Input, SegmentedControl } from "../primitives";
 import { bookName, testamentOf, type Testament } from "./books";
 import { metadataOf, projectLanguage, projectName } from "./project";
 
@@ -53,9 +53,13 @@ const chapterOf = (address: Address | undefined): number | undefined => {
 };
 
 export function ProjectSidebar() {
-  const navigate = useNavigate();
   const shell = useShell();
   const [query, setQuery] = createSignal("", { name: "sidebarQuery" });
+  const [searchOpen, setSearchOpen] = createSignal(false, { name: "sidebarSearchOpen" });
+  const closeSearch = () => {
+    setQuery("");
+    setSearchOpen(false);
+  };
   /**
    * The testament somebody picked, and the book that was focused when they
    * did. Derived, not synced by an effect: a choice holds until the editor
@@ -194,10 +198,10 @@ export function ProjectSidebar() {
       },
       { name: "sidebarChapters" },
     );
-    // An open book is one block with its grid: the canvas colour behind the
-    // row and its chapters, so the two read as one thing.
+    // No block behind an open book: its chapters are bare numbers, and the
+    // current one is the white tile with a brand border and text.
     return (
-      <li class={open() ? "rounded-lg bg-surface-canvas" : undefined}>
+      <li>
         <button
           type="button"
           data-testid={`sidebar-book-${rowProps.row.id}`}
@@ -221,7 +225,7 @@ export function ProjectSidebar() {
             // Indented to the book's icon (the row's 12px padding). As many
             // columns as 3.75rem tiles — 12px padding round a 14px label as
             // wide as "Intro" — fit, so a wider panel shows more. 1px apart.
-            class="grid grid-cols-[repeat(auto-fill,minmax(3.75rem,1fr))] gap-px px-3 pb-3"
+            class="grid grid-cols-[repeat(auto-fill,minmax(3.75rem,1fr))] gap-px px-3 pt-1 pb-3"
           >
             <For each={chapters()}>
               {(chapter) => (
@@ -231,7 +235,7 @@ export function ProjectSidebar() {
                     data-chapter={chapter.index}
                     data-testid={`chapter-tile-${chapter.intro ? "intro" : chapter.label}`}
                     data-current={focused() && currentChapter() === chapter.index ? "" : undefined}
-                    class="h-12 w-full cursor-pointer truncate rounded-lg border px-3 text-center text-small font-medium tabular-nums transition-colors data-current:border-brand data-current:bg-surface-primary data-current:font-semibold data-current:text-brand not-data-current:border-transparent not-data-current:text-on-surface-secondary not-data-current:hover:bg-surface-primary"
+                    class="h-12 w-full cursor-pointer truncate rounded-lg border px-3 text-center text-small font-medium tabular-nums transition-colors data-current:border-brand data-current:bg-surface-primary data-current:font-semibold data-current:text-brand not-data-current:border-transparent not-data-current:text-on-surface-secondary not-data-current:hover:bg-surface-canvas"
                     onClick={() => openChapter(rowProps.row.id, chapter)}
                   >
                     {chapter.label}
@@ -248,59 +252,12 @@ export function ProjectSidebar() {
   // With no project open the panel says what it is for — its books arrive
   // with a project — and the project control above it is the way to one.
 
-  const path = useRouterState({ select: (state) => state.location.pathname });
-  const choosing = (): boolean => path() === "/" || path().startsWith("/start");
-
   return (
     <div
       class="flex h-full flex-col border-e border-sidebar-border bg-sidebar-surface"
       data-testid="sidebar"
     >
-      <div class="px-4 pt-4 pb-2">
-        {/* With no project open the button is an invitation rather than a
-            label: two lines of brand text and an arrow. Same destination. */}
-        <Show
-          when={shell.project()}
-          fallback={
-            <button
-              type="button"
-              data-testid="sidebar-project"
-              class="flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-brand bg-brand-light p-4 text-start text-brand transition-colors hover:bg-sidebar-surface-hover"
-              onClick={() => void navigate({ to: "/projects" })}
-            >
-              <span class="flex min-w-0 flex-1 flex-col gap-1 leading-normal">
-                <span class="block truncate text-h4 leading-normal font-bold">
-                  {t("Find a Project")}
-                </span>
-                <span class="block truncate text-body leading-normal">
-                  {t("Projects available on WACS")}
-                </span>
-              </span>
-              <ArrowRight size={20} aria-hidden="true" class="shrink-0" />
-            </button>
-          }
-        >
-          <button
-            type="button"
-            data-testid="sidebar-project"
-            data-current={choosing() ? "" : undefined}
-            class="flex w-full cursor-pointer items-center gap-2 rounded-2xl border bg-surface-primary p-4 text-start transition-colors hover:bg-sidebar-surface-hover data-current:border-brand data-current:bg-brand-light not-data-current:border-surface-border"
-            onClick={() => void navigate({ to: "/projects" })}
-          >
-            <span class="min-w-0 flex-1">
-              <span class="block truncate text-small font-bold text-on-surface-primary">
-                {projectName(shell.project())}
-              </span>
-              <Show when={projectLanguage(shell.project()) !== ""}>
-                <span class="block truncate text-smallest text-on-surface-tertiary">
-                  {projectLanguage(shell.project())}
-                </span>
-              </Show>
-            </span>
-            <ChevronDown size={16} aria-hidden="true" class="shrink-0 text-on-surface-tertiary" />
-          </button>
-        </Show>
-      </div>
+      <ProjectControl />
 
       <Show
         when={shell.project()}
@@ -316,28 +273,51 @@ export function ProjectSidebar() {
           </div>
         }
       >
+        {/* The search is an icon beside the testament switch; it opens the
+            field below, and closes again from Escape or an empty blur. */}
         <div class="flex flex-col gap-2 px-4 pb-2">
-          <Input
-            type="search"
-            data-testid="sidebar-search"
-            icon={<SearchIcon />}
-            aria-label={t("Search for book and chapter")}
-            // An example, not a description: it fits the narrow panel and
-            // shows what the search understands. The label keeps the words.
-            placeholder={t("Mark 5")}
-            value={query()}
-            onInput={(event) => setQuery(event.currentTarget.value)}
-          />
-          <SegmentedControl
-            label={t("Testament")}
-            class="w-full"
-            items={[
-              { value: "ot", label: t("Old Testament"), shortLabel: t("Old") },
-              { value: "nt", label: t("New Testament"), shortLabel: t("New") },
-            ]}
-            value={testament()}
-            onChange={pickTestament}
-          />
+          <div class="flex items-center gap-controls">
+            <SegmentedControl
+              label={t("Testament")}
+              class="min-w-0 flex-1"
+              items={[
+                { value: "ot", label: t("Old Testament"), shortLabel: t("Old") },
+                { value: "nt", label: t("New Testament"), shortLabel: t("New") },
+              ]}
+              value={testament()}
+              onChange={pickTestament}
+            />
+            <IconButton
+              label={t("Search for book and chapter")}
+              data-testid="sidebar-search-toggle"
+              aria-pressed={searchOpen() ? "true" : "false"}
+              icon={<SearchIcon />}
+              onClick={() => {
+                if (searchOpen()) closeSearch();
+                else setSearchOpen(true);
+              }}
+            />
+          </div>
+          <Show when={searchOpen()}>
+            <Input
+              ref={(el: HTMLInputElement) => queueMicrotask(() => el.focus())}
+              type="search"
+              data-testid="sidebar-search"
+              icon={<SearchIcon />}
+              aria-label={t("Search for book and chapter")}
+              // An example, not a description: it fits the narrow panel and
+              // shows what the search understands. The label keeps the words.
+              placeholder={t("Mark 5")}
+              value={query()}
+              onInput={(event) => setQuery(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") closeSearch();
+              }}
+              onBlur={() => {
+                if (query().trim() === "") setSearchOpen(false);
+              }}
+            />
+          </Show>
         </div>
 
         <nav aria-label={t("Books")} class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
@@ -366,6 +346,66 @@ export function ProjectSidebar() {
         <footer class="border-t border-sidebar-border p-4">
           <Badge tone="brand">{t("Update available")}</Badge>
         </footer>
+      </Show>
+    </div>
+  );
+}
+
+/**
+ * The project control at the top of the sidebar: the open project, which goes
+ * to the project list, or with none open an invitation to find one. Exported
+ * so a screen that claims the sidebar (Key terms) keeps it above its own list.
+ */
+export function ProjectControl() {
+  const navigate = useNavigate();
+  const shell = useShell();
+  const path = useRouterState({ select: (state) => state.location.pathname });
+  const choosing = (): boolean => path() === "/" || path().startsWith("/start");
+
+  return (
+    <div class="px-4 pt-4 pb-2">
+      {/* With no project open the button is an invitation rather than a
+        label: two lines of brand text and an arrow. Same destination. */}
+      <Show
+        when={shell.project()}
+        fallback={
+          <button
+            type="button"
+            data-testid="sidebar-project"
+            class="flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-brand bg-brand-light p-4 text-start text-brand transition-colors hover:bg-button-primary-surface hover:text-button-primary-on-surface"
+            onClick={() => void navigate({ to: "/projects" })}
+          >
+            <span class="flex min-w-0 flex-1 flex-col gap-1 leading-normal">
+              <span class="block truncate text-h4 leading-normal font-bold">
+                {t("Find a Project")}
+              </span>
+              <span class="block truncate text-body leading-normal">
+                {t("Projects available on WACS")}
+              </span>
+            </span>
+            <ArrowRight size={20} aria-hidden="true" class="shrink-0" />
+          </button>
+        }
+      >
+        <button
+          type="button"
+          data-testid="sidebar-project"
+          data-current={choosing() ? "" : undefined}
+          class="flex h-16 w-full cursor-pointer items-center gap-2 rounded-2xl border bg-surface-primary px-4 text-start transition-colors hover:bg-sidebar-surface-hover data-current:border-brand data-current:bg-brand-light not-data-current:border-surface-border"
+          onClick={() => void navigate({ to: "/projects" })}
+        >
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-small font-bold text-on-surface-primary">
+              {projectName(shell.project())}
+            </span>
+            <Show when={projectLanguage(shell.project()) !== ""}>
+              <span class="block truncate text-smallest text-on-surface-tertiary">
+                {projectLanguage(shell.project())}
+              </span>
+            </Show>
+          </span>
+          <ChevronDown size={16} aria-hidden="true" class="shrink-0 text-on-surface-tertiary" />
+        </button>
       </Show>
     </div>
   );

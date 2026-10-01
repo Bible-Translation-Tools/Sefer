@@ -64,7 +64,15 @@ export {
 } from "./recipes/emptyBlocks";
 
 // Views: a projection on a surface (`modeView`), and the chapter clip.
-export { modeView, pickChapter, type ProjectionName } from "./views";
+export {
+  editorPolicy,
+  modeView,
+  pickChapter,
+  policyKey,
+  policyView,
+  type EditorPolicy,
+  type ProjectionName,
+} from "./views";
 
 // The read-only reference pane: another resource's book, same projection.
 export { mountReference, type ReferenceMount } from "./recipes/reference";

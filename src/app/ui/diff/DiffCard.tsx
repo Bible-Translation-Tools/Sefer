@@ -41,6 +41,7 @@ import { CardEditor } from "../multibuffer/CardEditor";
 import { CardFrame } from "../multibuffer/CardFrame";
 import type { CardEvent, CardView, ContextStep } from "../multibuffer/cardState";
 import { ContextControl } from "../multibuffer/ContextControl";
+import { cardPolicy } from "../multibuffer/policy";
 import { Badge, cx } from "../primitives";
 import { hunkKind, type Hunk } from "./hunks";
 import { hunkPaint, sidePaint, type Controls } from "./paint";
@@ -70,7 +71,7 @@ export const wasBlock =
         parent: block,
         analysis: baseline,
         range: unit.baseline,
-        mode,
+        policy: cardPolicy(mode === "usfm" ? "usfm" : "regular"),
         marks: (unit.status === "modified" ? (unit.text?.baseline ?? []) : [])
           .filter((run) => run.kind !== "unchanged" && (run.what === "text" || mode === "usfm"))
           .map((run) => ({ from: run.from, to: run.to, class: "cm-diff-removed" })),
@@ -451,7 +452,7 @@ export function DiffCard(props: {
                 <CardEditor
                   book={seated()}
                   range={props.hunk.current}
-                  mode={usfm() ? "usfm" : "regular"}
+                  policy={cardPolicy(usfm() ? "usfm" : "regular")}
                   surface="cm-diff cm-diff-card"
                   analyze={props.analyze ?? (() => props.sides.current)}
                   extensions={liveDiff(

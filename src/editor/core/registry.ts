@@ -340,6 +340,11 @@ export const PROJECTIONS: Record<string, AssignmentDelta> = {
   },
   "hide-notes": { "note.caller": { paint: "none" } },
   "hide-verse-numbers": { "slot.v": { paint: "none" } },
+  // A verse number as a pip no key takes: hidden and immortal, which the pip
+  // clamp draws as the verse pip and keeps immortal. For a surface whose place
+  // IS its verse — a card — where renumbering or deleting a verse would leave
+  // the card pointing at nothing.
+  "lock-verse-numbers": { "slot.v": { paint: "none", mutability: "immortal" } },
 };
 
 export const assignment = Facet.define<AssignmentDelta, Assignment>({

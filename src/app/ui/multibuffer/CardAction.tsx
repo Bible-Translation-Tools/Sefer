@@ -50,7 +50,11 @@ const pressedOf = (action: CardAction): "true" | "false" | undefined =>
  * toggle from the keyboard leaves focus on the button it pressed. (Drawn from
  * each new action object, the button was replaced and focus went with it.)
  */
-export function CardActionButton(props: { readonly action: Accessor<CardAction> }): JSX.Element {
+export function CardActionButton(props: {
+  readonly action: Accessor<CardAction>;
+  /** `sm` in a card's footer; `md`, the app's control size, where a screen draws them itself. */
+  readonly size?: "sm" | "md";
+}): JSX.Element {
   const asIcon = () => {
     const action = props.action();
     return action.kind === "icon" ? action : undefined;
@@ -64,7 +68,7 @@ export function CardActionButton(props: { readonly action: Accessor<CardAction> 
       <Show when={asIcon()}>
         {(action) => (
           <IconButton
-            size="sm"
+            size={props.size ?? "sm"}
             label={action().label}
             icon={<Dynamic component={action().icon} />}
             aria-pressed={pressedOf(action())}
@@ -76,7 +80,7 @@ export function CardActionButton(props: { readonly action: Accessor<CardAction> 
       <Show when={asButton()}>
         {(action) => (
           <Button
-            size="sm"
+            size={props.size ?? "sm"}
             variant={action().emphasis ?? "secondary"}
             icon={action().icon === undefined ? undefined : <Dynamic component={action().icon} />}
             aria-pressed={pressedOf(action())}
@@ -93,10 +97,13 @@ export function CardActionButton(props: { readonly action: Accessor<CardAction> 
 }
 
 /** A run of actions, in order, one button per id. */
-export function CardActions(props: { readonly actions: readonly CardAction[] }): JSX.Element {
+export function CardActions(props: {
+  readonly actions: readonly CardAction[];
+  readonly size?: "sm" | "md";
+}): JSX.Element {
   return (
     <For each={props.actions} keyed={(action) => action.id}>
-      {(action) => <CardActionButton action={action} />}
+      {(action) => <CardActionButton action={action} size={props.size} />}
     </For>
   );
 }

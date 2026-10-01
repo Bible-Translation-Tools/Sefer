@@ -340,15 +340,19 @@
   letter-spacing: -0.02em;
 }
 
+/* An empty verse or chapter number: the outline is the place, the caret sits
+   on its left edge, and a typed digit fills it. About one superscript digit
+   wide with no margin of its own, so emptying a number barely moves the words
+   beside it. It is its diagnostic's whole mark (`recipes/lint.ts`,
+   SLOT_FINDINGS): the finding draws nothing of its own. */
 .cm-mode-regular .usfm-slot {
   display: inline-block;
-  width: 0.9em;
-  height: 0.9em;
+  width: 0.6em;
+  height: 0.8em;
   border: 1px dashed var(--editor-slot-line);
   background: var(--editor-slot-bg);
   border-radius: 2px;
   vertical-align: super;
-  margin-right: 0.3em;
   cursor: text;
 }
 .cm-mode-regular .usfm-slot-c {
@@ -839,6 +843,10 @@
   text-decoration-skip-ink: none;
   text-underline-offset: 3px;
 }
+/* An empty number's finding: the dashed box beside it is the whole mark. */
+.cm-host .cm-editor .cm-lintRange.usfm-lint-slot {
+  text-decoration: none;
+}
 .cm-host .cm-editor .cm-lintRange-error {
   text-decoration-color: var(--on-surface-error);
 }
@@ -1238,6 +1246,26 @@
    clipping never cuts it. Not an `outline` on the host: that paints UNDER the
    editor's own layers, and a card with a gutter (Review's, which CodeMirror
    stacks above the text) covered it. */
+/* A direct card (Key terms) is drawn as a field: at rest, a grey outline in
+   exactly the place the editor's brand one (below) takes while editing, so
+   there is one box and it only changes colour. 12px inside it on every side. */
+[data-direct-target] {
+  position: relative;
+}
+[data-direct-target]:not([data-editing])::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+  pointer-events: none;
+}
+[data-direct-target] .cm-excerpt .cm-content {
+  padding: 12px;
+  /* Double spacing, as the guide's reading beside it (`ExcerptCard`). */
+  line-height: 2;
+}
+
 .cm-editing,
 .cm-diff-live {
   position: relative;

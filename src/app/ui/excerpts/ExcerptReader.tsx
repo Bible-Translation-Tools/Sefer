@@ -10,12 +10,14 @@
  * `onEdit`, and the card swaps this view for a satellite with the caret there.
  */
 
-import { createEffect, createSignal, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, untrack } from "solid-js";
 
 import type { Analysis } from "#core/galley";
 import {
   mountReader,
   mountStamp,
+  policyKey,
+  type EditorPolicy,
   type Funnel,
   type MarkedRange,
   type ReaderMount,
@@ -30,7 +32,8 @@ import "#editor/editor.css";
 export interface ExcerptReaderProps {
   readonly analysis: Analysis;
   readonly span: { readonly from: number; readonly to: number };
-  readonly mode: "regular" | "usfm";
+  /** How the text is drawn and guarded (`editorPolicy`): the screen's choice, not the card's. */
+  readonly policy: EditorPolicy;
   readonly marks: readonly MarkedRange[];
   /** Names the view in the timing ring. */
   readonly label: string;
@@ -45,9 +48,9 @@ export interface ExcerptReaderProps {
    * and the satellite — laid out identically — answers it.
    */
   readonly onEdit?: (at: number | undefined, point?: { x: number; y: number }) => void;
+  /** One click edits, and the reader is a tab stop; otherwise a double-click. */
+  readonly direct?: boolean;
 }
-
-const projectionOf = (mode: "regular" | "usfm") => (mode === "usfm" ? "usfm" : "default");
 
 export function ExcerptReader(props: ExcerptReaderProps) {
   const [host, setHost] = createSignal<HTMLDivElement | undefined>(undefined, {
@@ -61,17 +64,32 @@ export function ExcerptReader(props: ExcerptReaderProps) {
   const stamped =
     shell.services.settings.get(shellKeys(shell.services.settings).excerptRenderer) === "stamp";
 
+  /**
+   * The parse, compared by identity before the mount effect sees it. Reading
+   * `props.analysis` also reads `props.excerpt`, and widening a card hands it
+   * a NEW excerpt over the SAME parse; without this the effect's compute
+   * returned a fresh `{ parent, analysis }` on every widen, and the view was
+   * destroyed and remounted — the card collapsed for a frame and the list
+   * below it jumped — where `reclip` was all it needed.
+   */
+  const analysis = createMemo(() => props.analysis, { name: "readerAnalysis" });
+  /** The same, for the policy: a screen that rebuilds an equal policy moves nothing. */
+  const policy = createMemo(() => props.policy, {
+    name: "readerPolicy",
+    equals: (a, b) => policyKey(a) === policyKey(b),
+  });
+
   // Rebuilt only for a different parse — a different text. Everything else a
   // card changes (its range, its marks, the mode) moves the live view.
   createEffect(
-    () => ({ parent: host(), analysis: props.analysis }),
+    () => ({ parent: host(), analysis: analysis() }),
     ({ parent, analysis }) => {
       if (parent === undefined) return;
       const mount = (stamped ? mountStamp : mountReader)({
         parent,
         analysis,
         range: untrack(() => props.span),
-        mode: projectionOf(untrack(() => props.mode)),
+        policy: untrack(policy),
         marks: untrack(() => props.marks),
         surface: "cm-excerpt",
         label: untrack(() => props.label),
@@ -93,8 +111,8 @@ export function ExcerptReader(props: ExcerptReaderProps) {
     ({ mount, span }) => mount?.reclip(span),
   );
   createEffect(
-    () => ({ mount: live(), mode: props.mode }),
-    ({ mount, mode }) => mount?.setMode(projectionOf(mode)),
+    () => ({ mount: live(), policy: policy() }),
+    ({ mount, policy }) => mount?.setPolicy(policy),
   );
   createEffect(
     () => ({ mount: live(), marks: props.marks }),
@@ -111,17 +129,31 @@ export function ExcerptReader(props: ExcerptReaderProps) {
     },
   );
 
+  const editAt = (event: MouseEvent): void => {
+    const edit = props.onEdit;
+    if (edit === undefined) return;
+    const mount = live();
+    const point = { x: event.clientX, y: event.clientY };
+    const at = mount !== undefined && "view" in mount ? mount.view.posAtCoords(point) : null;
+    edit(at ?? undefined, point);
+  };
+
   return (
     <div
       class="cm-host"
       ref={setHost}
+      tabindex={props.direct === true && props.onEdit !== undefined ? 0 : undefined}
       onDblClick={(event) => {
-        const edit = props.onEdit;
-        if (edit === undefined) return;
-        const mount = live();
-        const point = { x: event.clientX, y: event.clientY };
-        const at = mount !== undefined && "view" in mount ? mount.view.posAtCoords(point) : null;
-        edit(at ?? undefined, point);
+        if (props.direct !== true) editAt(event);
+      }}
+      onClick={(event) => {
+        if (props.direct === true) editAt(event);
+      }}
+      onKeyDown={(event) => {
+        if (props.direct === true && event.key === "Enter") {
+          event.preventDefault();
+          props.onEdit?.(undefined);
+        }
       }}
     />
   );
