@@ -758,114 +758,131 @@ function Find() {
         when={shell.project()}
         fallback={<p class="text-small text-on-surface-tertiary">{t("Open a project first.")}</p>}
       >
+        {/* Two rows, each one height. The first says WHAT to look for: the
+            box, how it matches, and Find. The second says WHERE and BESIDE
+            WHAT: the scope, the source text and which text is searched, then
+            the place in the results. */}
         <Card>
-          <div class="flex flex-wrap items-center gap-2">
-            <Input
-              ref={setBox}
-              type="search"
-              icon={<SearchIcon />}
-              wrapperClass="w-72"
-              placeholder={t("Find in project")}
-              value={text()}
-              onInput={(event) => setText(event.currentTarget.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") commit();
-              }}
-            />
-            <div class="flex items-center gap-0.5">
-              <IconButton
-                size="sm"
-                label={t("Match case")}
-                icon={<CaseSensitiveIcon />}
-                aria-pressed={matchCase() ? "true" : "false"}
-                onClick={() => setMatchCase((held) => !held)}
+          <div class="flex flex-col gap-3">
+            <div class="flex items-center gap-2">
+              <Input
+                ref={setBox}
+                type="search"
+                icon={<SearchIcon />}
+                wrapperClass="min-w-0 flex-1"
+                placeholder={t("Find in project")}
+                value={text()}
+                onInput={(event) => setText(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") commit();
+                }}
               />
-              <IconButton
-                size="sm"
-                label={t("Whole word")}
-                icon={<WholeWordIcon />}
-                aria-pressed={wholeWord() ? "true" : "false"}
-                onClick={() => setWholeWord((held) => !held)}
-              />
-              <IconButton
-                size="sm"
-                label={t("Regular expression")}
-                icon={<RegexIcon />}
-                aria-pressed={regex() ? "true" : "false"}
-                onClick={() => setRegex((held) => !held)}
-              />
-              <IconButton
-                size="sm"
-                label={t("Search the markup, not the reading")}
-                icon={<CodeIcon />}
-                aria-pressed={markup() ? "true" : "false"}
-                onClick={() => setMarkup((held) => !held)}
-              />
-            </div>
-
-            <SegmentedControl
-              label={t("Scope")}
-              value={scope() === "reference" ? "project" : scope()}
-              onChange={(next) => ask({ scope: next === "book" ? "book" : "project" })}
-              items={[
-                {
-                  value: "book",
-                  label: t("This book"),
-                  disabled: focusedBook() === undefined || scope() === "reference",
-                },
-                { value: "project", label: t("Whole project"), disabled: scope() === "reference" },
-              ]}
-            />
-
-            <Button variant="primary" size="sm" onClick={commit}>
-              {t("Find")}
-            </Button>
-
-            {/* Two axes: which text is shown beside yours (the picker), and
-                which text is searched (the switch). Either without the other. */}
-            <div class="flex flex-wrap items-center gap-3">
-              <source.Picker />
-              <Switch
-                label={t("Search the source text")}
-                checked={scope() === "reference"}
-                disabled={!hasReference()}
-                onChange={(on) => ask({ scope: on ? "reference" : "project" })}
-              />
-            </div>
-
-            <div class="ms-auto flex items-center gap-1">
-              {/* The gap is stated, never swallowed. A reference search counts
-                  hits in SOMEBODY ELSE'S book; the cards count verses this
-                  project has. A reference book this project has not translated
-                  yet makes those two numbers differ, and saying only the second
-                  would quietly lose the difference. */}
-              <Show when={scope() === "reference" && referenceHits().length !== feedHits().length}>
-                <span class="text-smallest tabular-nums text-on-surface-tertiary">
-                  {t("{count} in the reference", { count: referenceHits().length })}
-                </span>
-              </Show>
-              <span
-                class="text-small tabular-nums text-on-surface-tertiary"
-                data-count={feedHits().length}
+              {/* How the text matches, as one group the box's height. */}
+              <div
+                role="group"
+                aria-label={t("Match options")}
+                class="flex h-12 shrink-0 items-center gap-0.5 rounded-lg border border-surface-border bg-surface-secondary px-1.5"
               >
-                {feedHits().length === 0
-                  ? t("0 results")
-                  : t("{at}/{total}", { at: cursor() + 1, total: feedHits().length })}
-              </span>
-              <IconButton
+                <IconButton
+                  size="sm"
+                  label={t("Match case")}
+                  icon={<CaseSensitiveIcon />}
+                  aria-pressed={matchCase() ? "true" : "false"}
+                  onClick={() => setMatchCase((held) => !held)}
+                />
+                <IconButton
+                  size="sm"
+                  label={t("Whole word")}
+                  icon={<WholeWordIcon />}
+                  aria-pressed={wholeWord() ? "true" : "false"}
+                  onClick={() => setWholeWord((held) => !held)}
+                />
+                <IconButton
+                  size="sm"
+                  label={t("Regular expression")}
+                  icon={<RegexIcon />}
+                  aria-pressed={regex() ? "true" : "false"}
+                  onClick={() => setRegex((held) => !held)}
+                />
+                <IconButton
+                  size="sm"
+                  label={t("Search the markup, not the reading")}
+                  icon={<CodeIcon />}
+                  aria-pressed={markup() ? "true" : "false"}
+                  onClick={() => setMarkup((held) => !held)}
+                />
+              </div>
+              <Button variant="primary" class="shrink-0" onClick={commit}>
+                {t("Find")}
+              </Button>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <SegmentedControl
                 size="sm"
-                label={t("Previous match")}
-                icon={<ChevronUpIcon />}
-                disabled={feedHits().length === 0}
-                onClick={() => step(-1)}
+                label={t("Scope")}
+                value={scope() === "reference" ? "project" : scope()}
+                onChange={(next) => ask({ scope: next === "book" ? "book" : "project" })}
+                items={[
+                  {
+                    value: "book",
+                    label: t("This book"),
+                    disabled: focusedBook() === undefined || scope() === "reference",
+                  },
+                  {
+                    value: "project",
+                    label: t("Whole project"),
+                    disabled: scope() === "reference",
+                  },
+                ]}
               />
-              <IconButton
-                size="sm"
-                label={t("Next match")}
-                icon={<ChevronDownIcon />}
-                disabled={feedHits().length === 0}
-                onClick={() => step(1)}
-              />
+              {/* Which text is shown beside yours, and which is searched:
+                  either without the other. */}
+              <div class="flex items-center gap-3">
+                <source.Picker />
+                <Switch
+                  label={t("Search the source text")}
+                  checked={scope() === "reference"}
+                  disabled={!hasReference()}
+                  onChange={(on) => ask({ scope: on ? "reference" : "project" })}
+                />
+              </div>
+              <div class="ms-auto flex items-center gap-1">
+                {/* The gap is stated, never swallowed. A reference search counts
+                    hits in SOMEBODY ELSE'S book; the cards count verses this
+                    project has. A reference book this project has not translated
+                    yet makes those two numbers differ, and saying only the second
+                    would quietly lose the difference. */}
+                <Show
+                  when={scope() === "reference" && referenceHits().length !== feedHits().length}
+                >
+                  <span class="text-smallest tabular-nums text-on-surface-tertiary">
+                    {t("{count} in the reference", { count: referenceHits().length })}
+                  </span>
+                </Show>
+                <span
+                  class="text-small tabular-nums text-on-surface-tertiary"
+                  data-count={feedHits().length}
+                >
+                  {feedHits().length === 0
+                    ? t("0 results")
+                    : t("{at}/{total}", { at: cursor() + 1, total: feedHits().length })}
+                </span>
+                <IconButton
+                  size="sm"
+                  label={t("Previous match")}
+                  icon={<ChevronUpIcon />}
+                  disabled={feedHits().length === 0}
+                  onClick={() => step(-1)}
+                />
+                <IconButton
+                  size="sm"
+                  label={t("Next match")}
+                  icon={<ChevronDownIcon />}
+                  disabled={feedHits().length === 0}
+                  onClick={() => step(1)}
+                />
+              </div>
             </div>
           </div>
         </Card>
