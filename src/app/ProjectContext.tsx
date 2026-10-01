@@ -50,7 +50,8 @@ import { resolve } from "#core/location/locate";
 import { Observability } from "#core/observability";
 import { openProject as openProjectEffect, type Project } from "#core/project/project";
 import { mintSlug } from "#core/project/slug";
-import { DEFAULT_JOURNAL_POLICY } from "#core/recovery/recovery";
+import { DEFAULT_JOURNAL_POLICY, type Restorable } from "#core/recovery/recovery";
+import { pendingOnOpen } from "#core/recovery/reopen";
 import { SaveCoordinator } from "#core/save/saveCoordinator";
 import type { SourceStamp } from "#core/source/source";
 import { anchorFrom, type ChapterRow, type EditorBook, type ProjectionName } from "#editor/index";
@@ -106,6 +107,14 @@ export interface Shell {
   readonly project: Accessor<Project | undefined>;
   /** Opening replaces whatever was open; the previous project is closed. */
   readonly openProject: (root: string) => Promise<void>;
+  /**
+   * Unsaved work found when the open project opened, or `undefined` while the
+   * check is still running. Started beside the analysis, so it has answered
+   * by the time the editor could draw; the book screen waits for it, and the
+   * banner above the editor never arrives after it.
+   */
+  readonly recoveryOffer: Accessor<readonly Restorable[] | undefined>;
+  readonly setRecoveryOffer: (offer: readonly Restorable[]) => void;
   readonly closeProject: () => Promise<void>;
 
   /** The book the editor route shows, instantiated and journalled. */
@@ -796,10 +805,16 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     return list.length === 0 ? undefined : list[cursor() % list.length];
   };
 
+  const [recoveryOffer, setRecoveryOffer] = createSignal<readonly Restorable[] | undefined>(
+    undefined,
+    { name: "recoveryOffer" },
+  );
+
   const closeProject = async (): Promise<void> => {
     // A deliberate one-time read: we close exactly the project that was open
     // when the call was made, not whatever is open when the await returns.
     const staticOpen = untrack(() => project());
+    setRecoveryOffer(undefined);
     unwatchSeats?.();
     unwatchSeats = undefined;
     live = undefined;
@@ -871,6 +886,18 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       return;
     }
     const ready = opened.success;
+    // Unsaved work, asked now: journal IO beside the analysis below, which is
+    // the slow half of an open. Off in Advanced, the answer is "none".
+    if (services.settings.get(keys.offerRecovery)) {
+      void services
+        .run(pendingOnOpen(services.recovery, ready.id, (text) => services.galley.hash(text)))
+        .then(
+          (found) => {
+            if (opening?.root === root || live === ready) setRecoveryOffer(found);
+          },
+          () => setRecoveryOffer([]),
+        );
+    } else setRecoveryOffer([]);
     // The engine's marker table, BEFORE the first parse of this project: the
     // legacy markers its texts already use, and none otherwise — which also
     // clears what the previous project installed. `legacyMarkers.ts` is the
@@ -1366,6 +1393,8 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     services,
     project,
     openProject,
+    recoveryOffer,
+    setRecoveryOffer,
     closeProject,
     focused,
     focus,

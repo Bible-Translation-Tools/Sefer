@@ -69,14 +69,16 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
   );
 
   return (
-    <main class="relative flex h-full min-h-0 min-w-0 flex-col gap-3 p-4">
+    <main class="flex h-full min-h-0 min-w-0 flex-col gap-3 p-4">
       {/* Above everything, and on THIS route as well as the project page:
           unsaved work found on open is the first thing to answer, and opening
           a project now lands on the book rather than on the census, so a
           banner mounted only there is a banner nobody sees. */}
-      <RecoveryBanner floating />
+      <RecoveryBanner />
+      {/* The editor waits for the recovery answer too: it is asked beside the
+          analysis and lands first, so the banner above is never late. */}
       <Show
-        when={shell.focused()}
+        when={shell.recoveryOffer() !== undefined ? shell.focused() : undefined}
         fallback={
           /* Opening a book parses it; blank unless a big one runs long. */
           <div class="h-full" data-opening={props.bookId}>

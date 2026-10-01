@@ -42,16 +42,14 @@
 
 import { Effect, Result } from "effect";
 import History from "lucide-solid/icons/history";
-import { Show, createEffect, createSignal, untrack } from "solid-js";
+import { Show, createSignal } from "solid-js";
 
 import type { Restorable } from "#core/recovery/recovery";
-import { pendingOnOpen } from "#core/recovery/reopen";
 
 import { describe } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { shellKeys } from "../../settings";
-import { Button, Card, cx, PanelHeader, toasts } from "../primitives";
+import { Button, Card, PanelHeader, toasts } from "../primitives";
 
 /** When the work was last journalled, over every offered journal. */
 const lastTouched = (journals: readonly Restorable[]): string => {
@@ -69,40 +67,15 @@ const lastTouched = (journals: readonly Restorable[]): string => {
   });
 };
 
-export interface RecoveryBannerProps {
-  /**
-   * Over the content rather than above it (the book screen): the check
-   * answers after the editor has drawn, and a banner pushing the editor down
-   * as it arrives is a layout shift.
-   */
-  readonly floating?: boolean;
-}
-
-export function RecoveryBanner(props: RecoveryBannerProps) {
+export function RecoveryBanner() {
   const shell = useShell();
-  const [offered, setOffered] = createSignal<readonly Restorable[]>([], { name: "recovered" });
+  // The shell asked when the project opened (`ProjectContext.openProject`),
+  // so the answer is in before the editor draws.
+  const offered = (): readonly Restorable[] => shell.recoveryOffer() ?? [];
+  const setOffered = (
+    next: readonly Restorable[] | ((was: readonly Restorable[]) => readonly Restorable[]),
+  ): void => shell.setRecoveryOffer(typeof next === "function" ? next(offered()) : next);
   const [busy, setBusy] = createSignal(false, { name: "recoveryBusy" });
-
-  // One pass per open project. Keyed on the project's id rather than on any
-  // edit event, so an edit does not re-run an IO check whose answer cannot
-  // have changed: journalling during this session is the ReviewPanel's
-  // subject, not this one's.
-  createEffect(
-    () => shell.project()?.id,
-    (id) => {
-      // Off in Advanced: backups are still written; only the question goes.
-      const asking = untrack(() =>
-        shell.services.settings.get(shellKeys(shell.services.settings).offerRecovery),
-      );
-      if (id === undefined || !asking) {
-        setOffered([]);
-        return;
-      }
-      void shell.services
-        .run(pendingOnOpen(shell.services.recovery, id, (text) => shell.services.galley.hash(text)))
-        .then((found) => setOffered(found));
-    },
-  );
 
   const books = (): number => offered().length;
 
@@ -248,70 +221,57 @@ export function RecoveryBanner(props: RecoveryBannerProps) {
 
   return (
     <Show when={books() > 0}>
-      <div
-        class={cx(
-          props.floating === true &&
-            "pointer-events-none absolute inset-x-4 top-4 z-30 flex justify-center",
-        )}
-      >
-        <Card
-          data-recovery={books()}
-          class={cx(
-            "border-on-surface-warning/40 space-y-3",
-            props.floating === true && "pointer-events-auto w-full max-w-2xl shadow-large",
-          )}
-        >
-          <PanelHeader
-            level={3}
-            title={
-              <span class="flex items-center gap-2">
-                <span
-                  class="flex size-7 items-center justify-center rounded-md bg-surface-warning text-on-surface-warning"
-                  aria-hidden="true"
-                >
-                  <History size={16} />
-                </span>
-                {t("Unsaved work from your last session")}
+      <Card data-recovery={books()} class="border-on-surface-warning/40 space-y-3">
+        <PanelHeader
+          level={3}
+          title={
+            <span class="flex items-center gap-2">
+              <span
+                class="flex size-7 items-center justify-center rounded-md bg-surface-warning text-on-surface-warning"
+                aria-hidden="true"
+              >
+                <History size={16} />
               </span>
-            }
-            subtitle={t("{count} book(s), last backed up {when}", {
-              count: books(),
-              when: lastTouched(offered()),
-            })}
-            actions={
-              <>
-                <Button
-                  size="sm"
-                  variant="primary"
-                  loading={busy()}
-                  data-recovery-restore
-                  onClick={restoreAll}
-                >
-                  {t("Restore all")}
-                </Button>
-                <Button size="sm" disabled={busy()} data-recovery-discard onClick={discardAll}>
-                  {t("Discard all")}
-                </Button>
-              </>
-            }
-          />
-          <p class="text-small text-on-surface-secondary">
-            {t(
-              "These edits were never recorded. Restore all puts them back in the editor, unsaved — Save & Review then shows every changed book beside the file on disk, where you can keep or revert any of it. Discard all throws them away.",
-            )}
-          </p>
-          <Show when={offered().filter((journal) => journal.stale === true).length}>
-            {(count) => (
-              <p class="text-small text-on-surface-warning" data-recovery-stale={count()}>
-                {t(
-                  "{count} of them no longer match their file — it changed after this work was backed up — so they cannot be put back, only discarded.",
-                  { count: count() },
-                )}
-              </p>
-            )}
-          </Show>
-        </Card>
-      </div>
+              {t("Unsaved work from your last session")}
+            </span>
+          }
+          subtitle={t("{count} book(s), last backed up {when}", {
+            count: books(),
+            when: lastTouched(offered()),
+          })}
+          actions={
+            <>
+              <Button
+                size="sm"
+                variant="primary"
+                loading={busy()}
+                data-recovery-restore
+                onClick={restoreAll}
+              >
+                {t("Restore all")}
+              </Button>
+              <Button size="sm" disabled={busy()} data-recovery-discard onClick={discardAll}>
+                {t("Discard all")}
+              </Button>
+            </>
+          }
+        />
+        <p class="text-small text-on-surface-secondary">
+          {t(
+            "These edits were never recorded. Restore all puts them back in the editor, unsaved — Save & Review then shows every changed book beside the file on disk, where you can keep or revert any of it. Discard all throws them away.",
+          )}
+        </p>
+        <Show when={offered().filter((journal) => journal.stale === true).length}>
+          {(count) => (
+            <p class="text-small text-on-surface-warning" data-recovery-stale={count()}>
+              {t(
+                "{count} of them no longer match their file — it changed after this work was backed up — so they cannot be put back, only discarded.",
+                { count: count() },
+              )}
+            </p>
+          )}
+        </Show>
+      </Card>
     </Show>
   );
 }
