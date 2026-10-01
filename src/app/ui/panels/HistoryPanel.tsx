@@ -37,7 +37,7 @@ import { unitReference, type DecisionUnit } from "#core/galley";
 import type { Commit, Version } from "#core/git/git";
 import { Git, repositoryPath } from "#core/git/git";
 import { Remote, type Deepen } from "#core/remote/remote";
-import { decode } from "#core/source/source";
+import { decode, type Source } from "#core/source/source";
 
 import { remoteReasonOf } from "../../describe";
 import { t } from "../../i18n";
@@ -51,6 +51,7 @@ import {
   Dialog,
   EmptyState,
   PanelHeader,
+  SegmentedControl,
   toasts,
 } from "../primitives";
 import { bookName } from "../workspace/books";
@@ -60,6 +61,7 @@ import {
   changesOf,
   recordedChanges,
   unsavedChanges,
+  versionChanges,
   type BookChanges,
 } from "./changes";
 import { DiffView } from "./DiffView";
@@ -100,6 +102,15 @@ export function HistoryPanel() {
   const [problem, setProblem] = createSignal("");
   const [selected, setSelected] = createSignal<string>(WORKING, { name: "selectedCommit" });
   const [shown, setShown] = createSignal<readonly BookChanges[]>([], { name: "shownDiff" });
+  /**
+   * What a selected version is compared with. `version` (the default) is what
+   * that version itself changed, against each book's version before it, as a
+   * log shows a commit. `now` is the version against the text in hand, the
+   * explicit second question.
+   */
+  const [compare, setCompare] = createSignal<"version" | "now">("version", {
+    name: "historyCompare",
+  });
   const [confirming, setConfirming] = createSignal<Confirmation | undefined>(undefined, {
     name: "confirmRevert",
   });
@@ -219,12 +230,29 @@ export function HistoryPanel() {
       .get(bookId)
       ?.find((version) => version.commit.id === id);
 
+  /** The book's version just older than `id`'s, from its own newest-first list. */
+  const previousOf = (bookId: BookId, id: string): Version | undefined => {
+    const list = versions().get(bookId) ?? [];
+    const at = list.findIndex((version) => version.commit.id === id);
+    return at < 0 ? undefined : list[at + 1];
+  };
+
+  /** One version's text of a book, decoded; `undefined` when it cannot be read. */
+  const textOf = async (version: Version): Promise<Source | undefined> => {
+    const bytes = await shell.services.run(Effect.result(version.bytes()));
+    if (Result.isFailure(bytes)) return undefined;
+    const decoded = decode(bytes.success);
+    return Result.isFailure(decoded) ? undefined : decoded.success;
+  };
+
   /**
-   * The selected side, as a diff against the working text.
+   * The selected side's diff.
    *
-   * The top row reads the recorded baseline; a commit reads its own blobs.
-   * Either way the RIGHT side is the book in hand, so every diff on this
-   * screen is "how what I have differs from that", read the same way round.
+   * The top row is always the text in hand against the recorded baseline. A
+   * commit, by default, shows what it changed: each book it touched, its
+   * previous version against this one. With `compare` set to `now` it shows
+   * this version against the book in hand instead, read the same way round
+   * as the top row.
    */
   const recompute = async (): Promise<void> => {
     const project = shell.project();
@@ -238,6 +266,26 @@ export function HistoryPanel() {
       return;
     }
     const out: BookChanges[] = [];
+    if (compare() === "version") {
+      for (const bookId of booksIn(id)) {
+        const book = project.book(bookId);
+        const version = versionOf(bookId, id);
+        if (book === undefined || version === undefined) continue;
+        const after = await textOf(version);
+        if (after === undefined) continue;
+        const previous = previousOf(bookId, id);
+        const before = previous === undefined ? undefined : await textOf(previous);
+        const changes = versionChanges(
+          shell.services.galley,
+          book,
+          before === undefined ? undefined : { bookId, stamp: before.stamp, text: before.text },
+          { bookId, stamp: after.stamp, text: after.text },
+        );
+        if (changes.firstTime === true || changeCount(changes) > 0) out.push(changes);
+      }
+      setShown(out);
+      return;
+    }
     for (const bookId of booksIn(id)) {
       const book = project.book(bookId);
       const blob = versionOf(bookId, id);
@@ -275,7 +323,7 @@ export function HistoryPanel() {
 
   createEffect(
     () =>
-      `${selected()}:${versions().size}:${version.recorded().head ?? ""}:${diffed()
+      `${selected()}:${compare()}:${versions().size}:${version.recorded().head ?? ""}:${diffed()
         .map((bookId) => shell.stampOf(bookId)?.revision ?? -1)
         .join(",")}`,
     () => {
@@ -329,6 +377,9 @@ export function HistoryPanel() {
       run: () => announce(changes.bookId, revertSome(changes, changes.changes?.units ?? [])),
     });
   };
+
+  /** Revert is offered where the right side is the book in hand. */
+  const reverting = (): boolean => selected() === WORKING || compare() === "now";
 
   const selectedCommit = (): Commit | undefined =>
     log()?.find((commit) => commit.id === selected());
@@ -542,7 +593,23 @@ export function HistoryPanel() {
               subtitle={
                 selected() === WORKING
                   ? t("The text in the editor against the last recorded version.")
-                  : t("Working text against {hash}.", { hash: selected().slice(0, 7) })
+                  : compare() === "version"
+                    ? t("What this version changed.")
+                    : t("This version compared with your text now.")
+              }
+              actions={
+                <Show when={selected() !== WORKING}>
+                  <SegmentedControl<"version" | "now">
+                    size="sm"
+                    label={t("Compare")}
+                    value={compare()}
+                    onChange={setCompare}
+                    items={[
+                      { value: "version", label: t("What changed in this version") },
+                      { value: "now", label: t("Compared with your text now") },
+                    ]}
+                  />
+                </Show>
               }
             />
 
@@ -553,7 +620,9 @@ export function HistoryPanel() {
                   title={
                     selected() === WORKING
                       ? t("Everything on screen is already in the latest version.")
-                      : t("This version matches the text in hand.")
+                      : compare() === "version"
+                        ? t("This version changed no book's text.")
+                        : t("This version matches the text in hand.")
                   }
                 />
               }
@@ -593,7 +662,8 @@ export function HistoryPanel() {
                           {t("{count} line(s)", { count: changes.added })}
                         </Badge>
                       </Show>
-                      <Show when={changes.firstTime !== true}>
+                      {/* Reverting only means something against the text in hand. */}
+                      <Show when={changes.firstTime !== true && reverting()}>
                         <Button
                           size="sm"
                           variant="tertiary"
@@ -608,7 +678,7 @@ export function HistoryPanel() {
                     <Show when={changes.firstTime !== true}>
                       <DiffView
                         changes={changes.changes}
-                        onRevert={(unit) => revertUnit(changes, unit)}
+                        onRevert={reverting() ? (unit) => revertUnit(changes, unit) : undefined}
                       />
                     </Show>
                   </section>

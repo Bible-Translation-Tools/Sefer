@@ -30,7 +30,7 @@
 import { Option, Result } from "effect";
 
 import type { Book, BookId } from "#core/book/book";
-import { unitChanges, type BaselineLike, type UnitChanges } from "#core/diff/units";
+import { textChanges, unitChanges, type BaselineLike, type UnitChanges } from "#core/diff/units";
 import type { GalleyService } from "#core/galley";
 
 import type { Shell } from "../../ProjectContext";
@@ -72,6 +72,43 @@ export const changesOf = (
   baseline: BaselineLike,
 ): BookChanges => {
   const found = unitChanges(galley, book, baseline);
+  const changes = Result.isSuccess(found) ? found.success : undefined;
+  const units = changes?.units ?? [];
+  return {
+    bookId: book.id,
+    path: book.path,
+    book,
+    changes,
+    added: units.filter((unit) => unit.status === "added").length,
+    removed: units.filter((unit) => unit.status === "deleted").length,
+    modified: units.filter((unit) => unit.status !== "added" && unit.status !== "deleted").length,
+  };
+};
+
+/**
+ * What ONE version did to one book: its text against the book's version before
+ * it, as a log shows a commit. `before` absent is the earliest version this
+ * device holds of the book, shown as its first. Read-only — neither side is
+ * the book in hand, so nothing here can be reverted from it.
+ */
+export const versionChanges = (
+  galley: GalleyService,
+  book: Book,
+  before: BaselineLike | undefined,
+  after: BaselineLike,
+): BookChanges => {
+  if (before === undefined)
+    return {
+      bookId: book.id,
+      path: book.path,
+      book,
+      changes: undefined,
+      added: lines(after.text).length,
+      removed: 0,
+      modified: 0,
+      firstTime: true,
+    };
+  const found = textChanges(galley, book.id, after.stamp, before.text, after.text);
   const changes = Result.isSuccess(found) ? found.success : undefined;
   const units = changes?.units ?? [];
   return {
