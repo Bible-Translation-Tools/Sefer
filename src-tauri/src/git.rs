@@ -11,9 +11,10 @@
 //! repository-relative and are re-checked here, because a receipt path that
 //! escaped the project is a bug we refuse rather than commit.
 
+use std::collections::HashMap;
 use std::path::{Component, Path};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use git2::{
     build::{CheckoutBuilder, RepoBuilder},
@@ -134,6 +135,48 @@ fn transport_failure(error: git2::Error) -> String {
 /// has nothing to answer with reports a public fetch as an auth failure.
 /// Push is the other way round and always carries one; `git_push` says so in
 /// its signature.
+/// One writer per repository, across every window of this process.
+///
+/// The TS side's lanes already make one window's git work take turns, but a
+/// lane lives in one webview, and the network commands below run off the
+/// main thread so a slow transfer does not freeze the window. So every
+/// command that WRITES a repository takes that repository's lock here first,
+/// whichever thread and whichever window it came from. Reads take none:
+/// libgit2 replaces refs and objects atomically, so a read sees a whole
+/// before or a whole after.
+static WRITERS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
+
+/// The lock for `root`, keyed by the path as the TS side names it (it always
+/// names a project the same way; canonicalising would fail for a clone's
+/// folder that does not exist yet).
+fn writer(root: &str) -> Arc<Mutex<()>> {
+    let key = root.trim_end_matches(['/', '\\']).to_string();
+    let mut held = WRITERS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    Arc::clone(held.entry(key).or_default())
+}
+
+/// Runs `work` holding `root`'s writer lock. A panic in another writer
+/// poisons the mutex; the repository is no worse for it, so the lock is
+/// taken anyway.
+fn writing<T>(root: &str, work: impl FnOnce() -> T) -> T {
+    let lock = writer(root);
+    let _held = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    work()
+}
+
+/// Runs a blocking command off the main thread: Tauri runs a plain command
+/// there, and one waiting on the network froze the window.
+async fn off_thread<T: Send + 'static>(
+    work: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|error| fail(IO, error.to_string()))?
+}
+
 /// A transfer that stops moving is ended: it holds its repository's lane, and
 /// a server that stalls would otherwise hold it — and every Record a version
 /// waiting on it — indefinitely. libgit2's server timeout is per read, so a
@@ -324,15 +367,17 @@ pub fn git_open(root: String) -> Result<(), String> {
 /// Idempotent: initialising a repository that already exists opens it.
 #[tauri::command]
 pub fn git_init(root: String) -> Result<(), String> {
-    if Repository::open(&root).is_ok() {
-        return Ok(());
-    }
-    std::fs::create_dir_all(&root).map_err(|error| fail(IO, error.to_string()))?;
-    let mut options = RepositoryInitOptions::new();
-    options.initial_head(DEFAULT_BRANCH);
-    Repository::init_opts(&root, &options)
-        .map(|_| ())
-        .map_err(io)
+    writing(&root.clone(), move || {
+        if Repository::open(&root).is_ok() {
+            return Ok(());
+        }
+        std::fs::create_dir_all(&root).map_err(|error| fail(IO, error.to_string()))?;
+        let mut options = RepositoryInitOptions::new();
+        options.initial_head(DEFAULT_BRANCH);
+        Repository::init_opts(&root, &options)
+            .map(|_| ())
+            .map_err(io)
+    })
 }
 
 #[tauri::command]
@@ -389,83 +434,85 @@ pub fn git_commit(
     author_email: String,
     also_parents: Option<Vec<String>>,
 ) -> Result<String, String> {
-    // A join records something true with no file of its own; anything else
-    // with no receipts is a bug upstream.
-    let also = also_parents.unwrap_or_default();
-    if paths.is_empty() && also.is_empty() {
-        return Err(fail(
-            REFUSED,
-            "nothing to commit: Save produced no receipts",
-        ));
-    }
-    let repo = open_repo(&root)?;
-    let mut index = repo.index().map_err(io)?;
-
-    for raw in &paths {
-        let relative = relative_path(raw)?;
-        if Path::new(&root).join(relative).exists() {
-            index.add_path(relative).map_err(io)?;
-        } else {
-            index.remove_path(relative).map_err(io)?;
+    writing(&root.clone(), move || {
+        // A join records something true with no file of its own; anything else
+        // with no receipts is a bug upstream.
+        let also = also_parents.unwrap_or_default();
+        if paths.is_empty() && also.is_empty() {
+            return Err(fail(
+                REFUSED,
+                "nothing to commit: Save produced no receipts",
+            ));
         }
-    }
-    // The staging stays in memory until the commit exists: a commit that fails
-    // must not leave the on-disk index holding paths no commit records, or the
-    // next ordinary commit would carry them.
+        let repo = open_repo(&root)?;
+        let mut index = repo.index().map_err(io)?;
 
-    let tree_oid = index.write_tree().map_err(io)?;
-    let tree = repo.find_tree(tree_oid).map_err(io)?;
-    let parent = repo
-        .head()
-        .ok()
-        .and_then(|head| head.target())
-        .and_then(|oid| repo.find_commit(oid).ok());
-
-    // A decision commit joins another history even when its tree is HEAD's
-    // own (every decision kept this side's text), so only a plain commit
-    // takes the "nothing changed" shortcut.
-    let mut joined = Vec::with_capacity(also.len());
-    for rev in &also {
-        let oid = resolve_commit(&repo, rev)?
-            .ok_or_else(|| fail(CONFLICT, format!("{rev} names no commit")))?;
-        joined.push(repo.find_commit(oid).map_err(io)?);
-    }
-    if !joined.is_empty() && parent.is_none() {
-        return Err(fail(
-            CONFLICT,
-            "a commit joining another history needs a HEAD to join it to",
-        ));
-    }
-
-    if let Some(existing) = &parent {
-        if joined.is_empty() && existing.tree_id() == tree_oid {
-            index.write().map_err(io)?;
-            return Ok(existing.id().to_string());
+        for raw in &paths {
+            let relative = relative_path(raw)?;
+            if Path::new(&root).join(relative).exists() {
+                index.add_path(relative).map_err(io)?;
+            } else {
+                index.remove_path(relative).map_err(io)?;
+            }
         }
-    } else if tree.is_empty() {
-        // No parent AND nothing in the tree: every named path was a deletion
-        // of something never recorded. A root commit here would be an empty
-        // first version, which records nothing and misleads the history.
-        return Err(fail(
-            REFUSED,
-            "nothing to commit: none of the saved paths exist",
-        ));
-    }
+        // The staging stays in memory until the commit exists: a commit that fails
+        // must not leave the on-disk index holding paths no commit records, or the
+        // next ordinary commit would carry them.
 
-    let signature = author_signature(&author_name, &author_email)?;
-    let parents: Vec<&git2::Commit<'_>> = parent.iter().chain(joined.iter()).collect();
-    let oid = repo
-        .commit(
-            Some("HEAD"),
-            &signature,
-            &signature,
-            &message,
-            &tree,
-            &parents,
-        )
-        .map_err(io)?;
-    index.write().map_err(io)?;
-    Ok(oid.to_string())
+        let tree_oid = index.write_tree().map_err(io)?;
+        let tree = repo.find_tree(tree_oid).map_err(io)?;
+        let parent = repo
+            .head()
+            .ok()
+            .and_then(|head| head.target())
+            .and_then(|oid| repo.find_commit(oid).ok());
+
+        // A decision commit joins another history even when its tree is HEAD's
+        // own (every decision kept this side's text), so only a plain commit
+        // takes the "nothing changed" shortcut.
+        let mut joined = Vec::with_capacity(also.len());
+        for rev in &also {
+            let oid = resolve_commit(&repo, rev)?
+                .ok_or_else(|| fail(CONFLICT, format!("{rev} names no commit")))?;
+            joined.push(repo.find_commit(oid).map_err(io)?);
+        }
+        if !joined.is_empty() && parent.is_none() {
+            return Err(fail(
+                CONFLICT,
+                "a commit joining another history needs a HEAD to join it to",
+            ));
+        }
+
+        if let Some(existing) = &parent {
+            if joined.is_empty() && existing.tree_id() == tree_oid {
+                index.write().map_err(io)?;
+                return Ok(existing.id().to_string());
+            }
+        } else if tree.is_empty() {
+            // No parent AND nothing in the tree: every named path was a deletion
+            // of something never recorded. A root commit here would be an empty
+            // first version, which records nothing and misleads the history.
+            return Err(fail(
+                REFUSED,
+                "nothing to commit: none of the saved paths exist",
+            ));
+        }
+
+        let signature = author_signature(&author_name, &author_email)?;
+        let parents: Vec<&git2::Commit<'_>> = parent.iter().chain(joined.iter()).collect();
+        let oid = repo
+            .commit(
+                Some("HEAD"),
+                &signature,
+                &signature,
+                &message,
+                &tree,
+                &parents,
+            )
+            .map_err(io)?;
+        index.write().map_err(io)?;
+        Ok(oid.to_string())
+    })
 }
 
 /// Newest first. With `path`, only the commits that changed that path.
@@ -667,37 +714,39 @@ fn tree_at<'repo>(repo: &'repo Repository, rev: &str) -> Result<git2::Tree<'repo
 /// branch has moved. libgit2 writes only the files that differ.
 #[tauri::command]
 pub fn git_fast_forward(root: String, to: String) -> Result<(), String> {
-    let repo = open_repo(&root)?;
-    if repo.state() != RepositoryState::Clean {
-        return Err(fail(
-            CONFLICT,
-            "a merge or rebase is in progress; finish or abort it first",
-        ));
-    }
-    let branch = current_branch(&repo)?;
-    let target = resolve_commit(&repo, &to)?
-        .ok_or_else(|| fail(CONFLICT, format!("{to} names no commit")))?;
-    let head = repo.head().ok().and_then(|head| head.target());
-    if head == Some(target) {
-        return Ok(());
-    }
-    if let Some(head) = head {
-        let forward = repo.graph_descendant_of(target, head).map_err(io)?;
-        if !forward {
+    writing(&root.clone(), move || {
+        let repo = open_repo(&root)?;
+        if repo.state() != RepositoryState::Clean {
             return Err(fail(
-                REJECTED,
-                format!("{to} does not descend from {branch}; not a fast-forward"),
+                CONFLICT,
+                "a merge or rebase is in progress; finish or abort it first",
             ));
         }
-    }
-    let commit = repo.find_commit(target).map_err(io)?;
-    repo.checkout_tree(commit.as_object(), Some(CheckoutBuilder::new().safe()))
-        .map_err(|error| fail(REJECTED, error.message()))?;
-    let reference = format!("refs/heads/{branch}");
-    repo.reference(&reference, target, true, "sefer: fast-forward")
-        .map_err(io)?;
-    repo.set_head(&reference).map_err(io)?;
-    Ok(())
+        let branch = current_branch(&repo)?;
+        let target = resolve_commit(&repo, &to)?
+            .ok_or_else(|| fail(CONFLICT, format!("{to} names no commit")))?;
+        let head = repo.head().ok().and_then(|head| head.target());
+        if head == Some(target) {
+            return Ok(());
+        }
+        if let Some(head) = head {
+            let forward = repo.graph_descendant_of(target, head).map_err(io)?;
+            if !forward {
+                return Err(fail(
+                    REJECTED,
+                    format!("{to} does not descend from {branch}; not a fast-forward"),
+                ));
+            }
+        }
+        let commit = repo.find_commit(target).map_err(io)?;
+        repo.checkout_tree(commit.as_object(), Some(CheckoutBuilder::new().safe()))
+            .map_err(|error| fail(REJECTED, error.message()))?;
+        let reference = format!("refs/heads/{branch}");
+        repo.reference(&reference, target, true, "sefer: fast-forward")
+            .map_err(io)?;
+        repo.set_head(&reference).map_err(io)?;
+        Ok(())
+    })
 }
 
 /// Throws away a half-finished merge: the work tree goes back to HEAD and the
@@ -708,18 +757,20 @@ pub fn git_fast_forward(root: String, to: String) -> Result<(), String> {
 /// rather than undoing a transfer.
 #[tauri::command]
 pub fn git_abort_merge(root: String) -> Result<(), String> {
-    let repo = open_repo(&root)?;
-    if repo.state() == RepositoryState::Clean {
-        return Err(fail(CONFLICT, "no merge is in progress"));
-    }
-    let head = repo
-        .head()
-        .map_err(|error| fail(CONFLICT, error.message()))?
-        .peel(ObjectType::Commit)
-        .map_err(|error| fail(CONFLICT, error.message()))?;
-    repo.reset(&head, ResetType::Hard, None).map_err(io)?;
-    repo.cleanup_state().map_err(io)?;
-    Ok(())
+    writing(&root.clone(), move || {
+        let repo = open_repo(&root)?;
+        if repo.state() == RepositoryState::Clean {
+            return Err(fail(CONFLICT, "no merge is in progress"));
+        }
+        let head = repo
+            .head()
+            .map_err(|error| fail(CONFLICT, error.message()))?
+            .peel(ObjectType::Commit)
+            .map_err(|error| fail(CONFLICT, error.message()))?;
+        repo.reset(&head, ResetType::Hard, None).map_err(io)?;
+        repo.cleanup_state().map_err(io)?;
+        Ok(())
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -730,17 +781,19 @@ pub fn git_abort_merge(root: String) -> Result<(), String> {
 /// Transfers nothing — this is the port's `attach`.
 #[tauri::command]
 pub fn git_ensure_remote(root: String, name: String, url: String) -> Result<(), String> {
-    let repo = open_repo(&root)?;
-    // Bound to a local: the `Result<Remote<'_>, _>` the match scrutinises
-    // borrows `repo`, and a tail expression would outlive it.
-    let outcome = match repo.find_remote(&name) {
-        Ok(_) => repo.remote_set_url(&name, &url).map_err(io),
-        Err(error) if error.code() == ErrorCode::NotFound => {
-            repo.remote(&name, &url).map(|_| ()).map_err(io)
-        }
-        Err(error) => Err(io(error)),
-    };
-    outcome
+    writing(&root.clone(), move || {
+        let repo = open_repo(&root)?;
+        // Bound to a local: the `Result<Remote<'_>, _>` the match scrutinises
+        // borrows `repo`, and a tail expression would outlive it.
+        let outcome = match repo.find_remote(&name) {
+            Ok(_) => repo.remote_set_url(&name, &url).map_err(io),
+            Err(error) if error.code() == ErrorCode::NotFound => {
+                repo.remote(&name, &url).map(|_| ()).map_err(io)
+            }
+            Err(error) => Err(io(error)),
+        };
+        outcome
+    })
 }
 
 /// The URL recorded for `name`, or `None` when the repository has no such
@@ -784,8 +837,7 @@ fn fetch_branch(
 
 /// What `url` is, from its refs alone: no clone, no repository on disk.
 /// Anonymous unless both halves of a credential are given, as `git_fetch` is.
-#[tauri::command]
-pub fn git_probe(
+fn git_probe_now(
     url: String,
     username: Option<String>,
     token: Option<String>,
@@ -823,8 +875,7 @@ pub fn git_probe(
 /// One named ref from `remote` — one no branch refspec covers, such as a
 /// suggestion's `refs/pull/<n>/head` — into the local ref `into`. Answers the
 /// commit it names. Nothing in the work tree moves.
-#[tauri::command]
-pub fn git_fetch_ref(
+fn git_fetch_ref_now(
     root: String,
     remote: String,
     from: String,
@@ -857,8 +908,7 @@ pub fn git_fetch_ref(
 /// init has already guessed `main`. The remote is named `origin`, which is the
 /// name every other command here transfers through. Anonymous unless both
 /// halves of a credential are given, as `git_fetch` is.
-#[tauri::command]
-pub fn git_clone(
+fn git_clone_now(
     url: String,
     root: String,
     username: Option<String>,
@@ -913,9 +963,12 @@ pub async fn git_deepen(
     username: Option<String>,
     token: Option<String>,
 ) -> Result<GitProgress, String> {
-    tauri::async_runtime::spawn_blocking(move || deepen(&root, &remote, more, username, token))
-        .await
-        .map_err(|error| fail(IO, error.to_string()))?
+    off_thread(move || {
+        writing(&root.clone(), || {
+            deepen(&root, &remote, more, username, token)
+        })
+    })
+    .await
 }
 
 fn deepen(
@@ -961,8 +1014,7 @@ pub fn git_is_shallow(root: String) -> Result<bool, String> {
     Ok(open_repo(&root)?.is_shallow())
 }
 
-#[tauri::command]
-pub fn git_fetch(
+fn git_fetch_now(
     root: String,
     remote: String,
     username: Option<String>,
@@ -981,8 +1033,7 @@ pub fn git_fetch(
 /// Unlike fetch and pull this takes a credential rather than an `Option`:
 /// nobody pushes anonymously, so a missing sign-in is refused on the TS side
 /// before it reaches here rather than being discovered as a 401 mid-transfer.
-#[tauri::command]
-pub fn git_push(
+fn git_push_now(
     root: String,
     remote: String,
     branch: Option<String>,
@@ -1046,4 +1097,86 @@ pub fn git_push(
         loaded: sent.load(Ordering::Relaxed),
         total: Some(expected.load(Ordering::Relaxed)),
     })
+}
+
+// ---------------------------------------------------------------------------
+// The network commands, off the main thread
+// ---------------------------------------------------------------------------
+//
+// Each waits on the network, so each runs on a blocking thread rather than
+// Tauri's main one, and each that writes a repository holds its writer lock.
+
+/// What `url` is, from its refs alone. Writes nothing, so it takes no lock.
+#[tauri::command]
+pub async fn git_probe(
+    url: String,
+    username: Option<String>,
+    token: Option<String>,
+) -> Result<GitProbe, String> {
+    off_thread(move || git_probe_now(url, username, token)).await
+}
+
+#[tauri::command]
+pub async fn git_fetch_ref(
+    root: String,
+    remote: String,
+    from: String,
+    into: String,
+    username: Option<String>,
+    token: Option<String>,
+) -> Result<String, String> {
+    off_thread(move || {
+        writing(&root.clone(), move || {
+            git_fetch_ref_now(root, remote, from, into, username, token)
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn git_clone(
+    url: String,
+    root: String,
+    username: Option<String>,
+    token: Option<String>,
+    depth: Option<i32>,
+) -> Result<GitProgress, String> {
+    off_thread(move || {
+        writing(&root.clone(), move || {
+            git_clone_now(url, root, username, token, depth)
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn git_fetch(
+    root: String,
+    remote: String,
+    username: Option<String>,
+    token: Option<String>,
+) -> Result<GitProgress, String> {
+    off_thread(move || {
+        writing(&root.clone(), move || {
+            git_fetch_now(root, remote, username, token)
+        })
+    })
+    .await
+}
+
+/// A push writes the local tracking ref, so it holds the writer lock too.
+#[tauri::command]
+pub async fn git_push(
+    root: String,
+    remote: String,
+    branch: Option<String>,
+    username: String,
+    token: String,
+) -> Result<GitProgress, String> {
+    off_thread(move || {
+        writing(&root.clone(), move || {
+            git_push_now(root, remote, branch, username, token)
+        })
+    })
+    .await
 }

@@ -116,9 +116,8 @@ host fills the history in behind a clone whose caller left the choice to it: des
 does not. `cloneRepository` then forks the backfill and returns at once, so the project opens on the
 newest version. The backfill deepens 200 commits at a time — each step one short turn of the lane, so
 a Record a version never waits behind the whole download — until the repository is whole, and stops
-quietly when a step fails or the project closes; History offers the rest. `git_deepen` is the one
-async desktop command, run off the window's thread, because a plain Tauri command runs on the main
-thread and a fetch waiting on the network froze the window. On the Web nothing older is downloaded
+quietly when a step fails or the project closes; History offers the rest. Like every desktop
+network command it runs off the window's thread ([desktop](desktop.md)). On the Web nothing older is downloaded
 for a project whose History is never opened. A caller that says `latest` (a reference text) gets no
 backfill on either host.
 
@@ -150,8 +149,8 @@ closing`, the order of its cases being the policy: closing refuses new work whil
 - **Nobody calls it.** `src/core/git/serialised.ts` wraps both hosts' `Git` and `Remote` once, in
   composition (`laned()` in `src/app/services.ts`), so no host can forget a lane and no caller knows
   lanes exist. A lifecycle refusal keeps each port's own error — `GitError` `Refused`, `RemoteError`
-  `Rejected` — so no caller's handling changes. The desktop side needs no Rust mutex: Tauri runs
-  non-async commands one at a time.
+  `Rejected` — so no caller's handling changes. A lane lives in one webview, so desktop also locks
+  per repository in Rust, across windows ([desktop](desktop.md)).
 
 `ProjectContext` closes the root's lifecycle when a project closes.
 

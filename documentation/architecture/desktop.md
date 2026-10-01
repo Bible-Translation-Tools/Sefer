@@ -104,8 +104,17 @@ These are the semantics the two hosts must agree on, and where they are enforced
 - **A push the server refused is a refusal.** `push_update_reference` reports a per-ref rejection
   (non-fast-forward, a protected branch) as `Rejected`; before, libgit2 returned success and the
   screen said "sent".
-- **One writer is the TS lane's job.** Tauri runs non-async commands one at a time on the main
-  thread, so there is no Rust mutex; `src/core/git/repository.ts` owns "who may touch `.git`".
+- **Network commands run off the main thread.** Tauri runs a plain command on the main thread, so a
+  clone, fetch, push, probe, ref fetch or deepen waiting on the network froze the window. Those six
+  are `async` and run on a blocking thread (`off_thread`); the local commands stay plain, because
+  they are quick.
+- **One writer per repository, in Rust too.** `src/core/git/repository.ts`'s lanes make one window's
+  git work take turns, but a lane lives in one webview. So every command that writes a repository —
+  init, commit, fast-forward, abort-merge, attach, clone, fetch, ref fetch, push, deepen — takes that
+  repository's lock (`writing`) first, whichever window or thread it came from. Reads take none:
+  libgit2 replaces refs and objects atomically. Within one window the lane means a writer never
+  waits on this lock; across windows, a plain writer can wait on the main thread behind another
+  window's transfer, which the 60 s stall timeout bounds.
   **`git_abort_merge` refuses when nothing is in progress** — it is a hard reset underneath, and on a
   clean repository that would discard unsaved work rather than undo a transfer.
 
