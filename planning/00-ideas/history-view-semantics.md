@@ -20,3 +20,18 @@ Will's questions:
 3. Do rows need to say local vs remote (recorded here and not yet pushed, or
    only on the shared project)?
 4. The wording "Working text against <sha>" half-works; settle it with (1).
+
+## Recommendation (Claude, 2026-10-01)
+
+1. A selected version shows ITS OWN change by default: that commit against
+   its parent. "Edited John" then shows the John change, not "nothing".
+2. "Compare with your text now" is an explicit second action on a version,
+   worded that way, replacing the default "Working text against <sha>".
+3. Read-only, with "Restore this" per change: the old wording goes into the
+   editor through Book.apply, never the file — an unsaved edit until Save &
+   Review records it. "Revert file" becomes "Restore this book as it was".
+4. Local vs remote only where it means something: a "Not shared yet" divider
+   above unpushed versions, and the existing shallow-history card. No badge
+   per row.
+
+1 and 2 fix the confusion; 3 and 4 can follow.
