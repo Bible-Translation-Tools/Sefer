@@ -384,11 +384,11 @@ and it is neither the file nor a version.
 A write that fails records nothing — there is no half-recorded version. A
 commit that fails after a write that succeeded is reported as exactly that: the
 files **are** on disk and no version holds them. That is the only way the third
-status state, `on disk, not recorded`, can be reached, and the book status line
-names it rather than saying "saved" and leaving the reader to find out later.
+status state, `on disk, not recorded`, can be reached.
 
-The status line's three words are `unsaved`, `recorded`, and `on disk, not
-recorded`. `recorded` is inferred rather than read from git on every keystroke,
+`ProjectContext.saveState`'s three states are `unsaved`, `recorded`, and `on
+disk, not recorded`. The book screen no longer shows them in a line under the
+editor (removed 2026-10-01 as developer readout). `recorded` is inferred rather than read from git on every keystroke,
 and that inference is only sound because of this model: writing the file and
 recording the version are one action, so a book that matches the file matches
 the last version too. `ProjectContext.saveState` holds the one exception, fed

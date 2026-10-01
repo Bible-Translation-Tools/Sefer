@@ -68,32 +68,6 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
     },
   );
 
-  const dirty = (): boolean => {
-    const book = shell.focused();
-    return book !== undefined && shell.unsaved(book);
-  };
-
-  /**
-   * The status line's three words, and none of them is "saved".
-   *
-   * Sefer writes the file only when a version is recorded, so "saved" would
-   * have had to mean two different things a second apart. What a reader needs
-   * to know is whether the work exists anywhere but the editor and the backup
-   * ("unsaved"), whether it is in the history ("recorded"), or whether it
-   * reached the file with no version behind it ("on disk, not recorded") —
-   * which happens when a write succeeds and the commit after it does not.
-   */
-  const state = (): "unsaved" | "onDisk" | "recorded" => {
-    const book = shell.focused();
-    return book === undefined ? "recorded" : shell.saveState(book);
-  };
-
-  const stateLabel = (): string => {
-    const held = state();
-    if (held === "unsaved") return t("unsaved");
-    return held === "onDisk" ? t("on disk, not recorded") : t("recorded");
-  };
-
   return (
     <main class="flex h-full min-h-0 min-w-0 flex-col gap-3 p-4">
       {/* Above everything, and on THIS route as well as the project page:
@@ -155,12 +129,6 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                   <Show when={book().id} keyed>
                     <BookEditor book={book()} />
                   </Show>
-                </div>
-
-                <div class="flex gap-4 px-1 text-smallest tabular-nums text-on-surface-tertiary">
-                  <span data-dirty={String(dirty())} data-save-state={state()}>
-                    {stateLabel()}
-                  </span>
                 </div>
               </Resizable.Panel>
             </Resizable.Root>
