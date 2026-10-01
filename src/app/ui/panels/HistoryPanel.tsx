@@ -43,7 +43,16 @@ import { remoteReasonOf } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { syncStatus } from "../../syncStatus";
-import { Badge, Button, Card, Dialog, EmptyState, PanelHeader, toasts } from "../primitives";
+import {
+  Badge,
+  Button,
+  Card,
+  DelayedSpinner,
+  Dialog,
+  EmptyState,
+  PanelHeader,
+  toasts,
+} from "../primitives";
 import { bookName } from "../workspace/books";
 import { metadataOf } from "../workspace/project";
 import {
@@ -346,7 +355,6 @@ export function HistoryPanel() {
     <main class="min-w-0 space-y-4 p-6">
       <PanelHeader
         title={t("History")}
-        subtitle={t("What git recorded, newest first — and, at the top, what it has not.")}
         actions={
           <>
             <Button icon={<RefreshCw />} onClick={load}>
@@ -426,7 +434,9 @@ export function HistoryPanel() {
               </Card>
             </Show>
 
-            <Card padded={false} class="overflow-hidden" aria-label={t("Timeline")}>
+            {/* Its own scroller: a long history scrolls inside the card, and
+                the column stays one screen tall beside the changes. */}
+            <Card padded={false} class="max-h-[70vh] overflow-y-auto" aria-label={t("Timeline")}>
               <ul class="divide-y divide-surface-border" data-commits={log()?.length ?? 0}>
                 <li>
                   <button
@@ -470,6 +480,12 @@ export function HistoryPanel() {
                   </button>
                 </li>
 
+                {/* The first read of the log: the shared short-wait spinner. */}
+                <Show when={log() === undefined && problem() === ""}>
+                  <li>
+                    <DelayedSpinner />
+                  </li>
+                </Show>
                 <For each={log() ?? []}>
                   {(commit) => (
                     <li>
@@ -510,7 +526,7 @@ export function HistoryPanel() {
               </ul>
             </Card>
 
-            <Show when={problem() === "" && (log()?.length ?? 0) === 0}>
+            <Show when={problem() === "" && log()?.length === 0}>
               <p class="px-1 text-smallest text-on-surface-tertiary">{t("No commits yet.")}</p>
             </Show>
           </div>
