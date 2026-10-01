@@ -62,6 +62,7 @@ import * as Fixes from "#core/fixes/fixes";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
+import * as Workflows from "../../workflows/references";
 import { excerptCard, ExcerptList, type ExcerptCardSpec, type OutlineSpec } from "../excerpts";
 import type { CardAction } from "../multibuffer/CardAction";
 import {
@@ -75,6 +76,7 @@ import {
   SegmentedControl,
   severityTone,
 } from "../primitives";
+import { createFindSource } from "../search/findSource";
 import { SearchDialog } from "../search/SearchDialog";
 import { SousSettingsPanel } from "../SousSettingsPanel";
 import { codeLabel } from "./findingLabels";
@@ -102,6 +104,16 @@ export function FindingsPanel() {
   const [note, setNote] = createSignal("");
   const [cursor, setCursor] = createSignal(0, { name: "findingsCursor" });
   const [settingsOpen, setSettingsOpen] = createSignal(false, { name: "findingsSettingsOpen" });
+  /**
+   * The source text beside each finding's verse, as Find shows it: read-only,
+   * and optional. Choosing one binds the project's source, which also hands
+   * it to the corpus (`bindReferences`), the registration the source-text
+   * checks read.
+   */
+  const source = createFindSource(() => {
+    const id = shell.project()?.id;
+    if (id !== undefined) void shell.services.run(Workflows.bindReferences(id));
+  });
   /**
    * Has the reader moved the cursor yet?
    *
@@ -656,6 +668,7 @@ export function FindingsPanel() {
             facets={summary().facets}
             books={books()}
           />
+          <source.Picker />
           {/* The checks' own settings, in a column beside the list (below),
               so turning one off or moving a number is seen in the list and
               the counts as it happens. */}
@@ -772,6 +785,7 @@ export function FindingsPanel() {
                 mode={mode()}
                 card={card}
                 sections={sections}
+                pairedOf={source.shown() ? source.pairedOf : undefined}
                 empty={
                   <EmptyState
                     icon={<CircleCheck size={22} />}

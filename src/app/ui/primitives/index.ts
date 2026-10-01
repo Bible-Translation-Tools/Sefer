@@ -41,3 +41,4 @@ export { Toaster } from "./Toaster";
 export { VirtualList, type VirtualSection } from "./VirtualList";
 export { Tooltip } from "./Tooltip";
 export * as toasts from "./toasts";
+export { BookScope, scopeBooks, type BookScopeKind } from "./BookScope";

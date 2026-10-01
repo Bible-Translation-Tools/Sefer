@@ -26,8 +26,9 @@ import {
   IconButton,
   Input,
   PanelHeader,
-  MultiSelect,
-  SegmentedControl,
+  BookScope,
+  scopeBooks,
+  type BookScopeKind,
   Switch,
 } from "#app/ui/primitives";
 import { createFindSource } from "#app/ui/search/findSource";
@@ -43,7 +44,7 @@ import {
 } from "#core/excerpts/excerpts";
 import { bookHeading, type Analysis } from "#core/galley";
 import type { Address } from "#core/location/address";
-import { bookName, testamentOf } from "#core/location/canon";
+import { bookName } from "#core/location/canon";
 import { createFreshReadings, createReadings } from "#core/search/reading";
 import * as Search from "#core/search/search";
 
@@ -95,7 +96,7 @@ import * as Search from "#core/search/search";
  * — the pair STET renders for a source verse. The reference side is never
  * editable, because there is no Book behind it and nothing to write to.
  */
-type Scope = "book" | "project" | "ot" | "nt" | "custom" | "reference";
+type Scope = BookScopeKind | "reference";
 
 /**
  * The last path segment of a registered reference id.
@@ -340,21 +341,15 @@ function Find() {
   /** The books a Custom scope searches; empty until somebody picks. */
   const [custom, setCustom] = createSignal<readonly BookId[]>([], { name: "findCustomBooks" });
   const projectBooks = (): readonly BookId[] => shell.project()?.books.map((book) => book.id) ?? [];
-  const inTestament = (testament: "ot" | "nt"): readonly BookId[] =>
-    projectBooks().filter((id) => testamentOf(id) === testament);
-  /** Only a project with books in BOTH testaments offers OT and NT: one is the whole project. */
-  const splits = (): boolean => inTestament("ot").length > 0 && inTestament("nt").length > 0;
+  /** The book scope on show; a source search keeps the project's. */
+  const bookScope = (): BookScopeKind => {
+    const held = scope();
+    return held === "reference" ? "project" : held;
+  };
 
   /** The books a scope limits the search to, or `undefined` for every book. */
-  const booksFor = (want: Scope): readonly BookId[] | undefined => {
-    if (want === "book") {
-      const focused = focusedBook();
-      return focused === undefined ? undefined : [focused];
-    }
-    if (want === "ot" || want === "nt") return inTestament(want);
-    if (want === "custom") return custom();
-    return undefined;
-  };
+  const booksFor = (want: Scope): readonly BookId[] | undefined =>
+    want === "reference" ? undefined : scopeBooks(want, projectBooks(), focusedBook(), custom());
   const signature = (q: Search.Query, want: Scope): string =>
     JSON.stringify([want, booksFor(want), q.text, q.caseSensitive, q.wholeWord, q.regex, markup()]);
 
@@ -841,65 +836,18 @@ function Find() {
             </div>
 
             <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <SegmentedControl
-                size="sm"
-                label={t("Scope")}
-                value={scope() === "reference" ? "project" : scope()}
+              <BookScope
+                value={bookScope()}
                 onChange={(next) => ask({ scope: next })}
-                items={[
-                  {
-                    value: "book",
-                    label: t("This book"),
-                    disabled: focusedBook() === undefined || scope() === "reference",
-                  },
-                  {
-                    value: "project",
-                    label: t("Whole project"),
-                    disabled: scope() === "reference",
-                  },
-                  ...(splits()
-                    ? [
-                        { value: "ot" as const, label: t("OT"), disabled: scope() === "reference" },
-                        { value: "nt" as const, label: t("NT"), disabled: scope() === "reference" },
-                      ]
-                    : []),
-                  { value: "custom", label: t("Custom"), disabled: scope() === "reference" },
-                ]}
+                books={projectBooks().map((id) => ({
+                  id,
+                  name: bookName(id, metadataOf(shell.project())),
+                }))}
+                custom={custom()}
+                onCustom={setCustom}
+                hasFocused={focusedBook() !== undefined}
+                disabled={scope() === "reference"}
               />
-              {/* Custom: any books of the project, by the names it gives them. */}
-              <Show when={scope() === "custom"}>
-                <MultiSelect
-                  id="find-books"
-                  label={t("Books")}
-                  summary={
-                    custom().length === 0
-                      ? t("none")
-                      : t("{kept} of {total}", {
-                          kept: custom().length,
-                          total: projectBooks().length,
-                        })
-                  }
-                  narrowed={custom().length > 0}
-                  items={projectBooks()}
-                  key={(id: BookId) => id}
-                  match={(id, query) =>
-                    `${id} ${bookName(id, metadataOf(shell.project()))}`
-                      .toLowerCase()
-                      .includes(query.toLowerCase())
-                  }
-                  selected={(id) => custom().includes(id)}
-                  onToggle={(id) =>
-                    setCustom((held) =>
-                      held.includes(id)
-                        ? held.filter((book) => book !== id)
-                        : projectBooks().filter((book) => book === id || held.includes(book)),
-                    )
-                  }
-                  clear={{ label: t("No books"), onClear: () => setCustom([]) }}
-                >
-                  {(id) => <span class="flex-1">{bookName(id, metadataOf(shell.project()))}</span>}
-                </MultiSelect>
-              </Show>
               {/* Which text is shown beside yours, and which is searched:
                   either without the other. */}
               <div class="flex items-center gap-3">
