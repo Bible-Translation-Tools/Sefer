@@ -186,7 +186,7 @@ The pinned Scripture Kitchen WASM build (tagged git dependency, v0.1.8). Onion p
 
 ### Overview
 
-Sefer's whole-project consumer of Galley. It analyses every book when a project opens and re-analyses on a debounce. It holds the cross-book results, reference texts and the character inventory, each stamped for freshness. `rejudge()` is the door for a settings change: it drops the publication judged under the old settings, marks every book stale and lets the one debounced pass republish. `src/core/analysis/projectAnalysis.ts`. → [findings](architecture/findings.md), [inventory](architecture/inventory.md)
+Sefer's whole-project consumer of Galley. It analyses every book when a project opens and re-analyses on a debounce. It holds the cross-book results, reference texts and the character inventory, each stamped for freshness. `rejudge()` is the door for a settings change: it marks every book stale and lets the one debounced pass republish, keeping the old publication until that one replaces it, so Findings dims rather than empties (`findingsPending`). References (the project's source) register on project open, and again when Copied source words is turned on. `src/core/analysis/projectAnalysis.ts`. → [findings](architecture/findings.md), [inventory](architecture/inventory.md)
 
 ### Constraints and known bugs
 
@@ -196,6 +196,7 @@ Sefer's whole-project consumer of Galley. It analyses every book when a project 
 ### Ideas / future
 
 - A per-project Scope that closes with the project.
+- Defer the first `corpus.publish` until after the editor mounts: it is ~321 ms of the ~620 ms `project.open` on x-en-ulb (warm, 2026-10-01), about a third of the time to the editor. Left as is for now (sub-second, sync wasm on the main thread either way); typing before it lands is safe, since an edit only re-arms the scheduler.
 
 ---
 
@@ -595,7 +596,7 @@ Rename (this device's name only, in `.sefer/project.json`), delete, archive, exp
 
 ### Overview
 
-Composed exactly once (`composeApplication`), with services reached through `useComposition()`. It covers the command registry with `when()`, the routes under `/project/$slug/…`, ProjectContext, and event → core → stores. `src/app`, `src/routes`. → [shell](architecture/shell.md), [composition](architecture/composition.md) Every seated book's edits reach the shell, whichever surface made them: ProjectContext subscribes to each seat the Project announces and reports `book.apply` (and supplies the parse to ProjectAnalysis), except for the book the main editor shows, which `BookEditor` reports with its gesture trace. Before 2026-09-28 an edit made in a card (Find, Findings, Review) was invisible to the stamp and the corpus until the card released the book.
+Composed exactly once (`composeApplication`), with services reached through `useComposition()`. It covers the command registry with `when()`, the routes under `/project/$slug/…`, ProjectContext, and event → core → stores. `src/app`, `src/routes`. → [shell](architecture/shell.md), [composition](architecture/composition.md) Every seated book's edits reach the shell, whichever surface made them: ProjectContext subscribes to each seat the Project announces and reports `book.apply` (and invalidates the book in ProjectAnalysis, so the pass re-parses it through the engine's id door; a card's own parse was not made through it), except for the book the main editor shows, which `BookEditor` reports with its gesture trace. Before 2026-09-28 an edit made in a card (Find, Findings, Review) was invisible to the stamp and the corpus until the card released the book.
 
 ### Constraints and known bugs
 
