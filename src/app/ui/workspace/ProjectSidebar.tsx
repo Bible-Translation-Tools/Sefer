@@ -2,7 +2,8 @@
  * The project sidebar: which project is open, and where in it you are.
  *
  * Top to bottom: the project (name, and language with its code); a search box
- * that ONLY filters the list below it — it never navigates; a testament
+ * that filters the list below it, and on Enter takes the book — to the
+ * chapter it names, if it names one (`typedPlace`); a testament
  * switch; and the books of that testament as an accordion, each opening onto
  * a four-column grid of its chapters.
  *
@@ -24,13 +25,14 @@ import SearchIcon from "lucide-solid/icons/search";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
 import { tocViewOf } from "#core/galley";
-import { chaptersAddress, introAddress, type Address } from "#core/location/address";
+import { chaptersAddress, introAddress } from "#core/location/address";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { Badge, IconButton, Input, SegmentedControl } from "../primitives";
 import { bookName, testamentOf, type Testament } from "./books";
 import { metadataOf, projectLanguage, projectName } from "./project";
+import { chapterOf, typedChapter } from "./typedPlace";
 
 interface Row {
   readonly id: string;
@@ -45,15 +47,9 @@ interface Chapter {
   readonly intro: boolean;
 }
 
-/** The chapter a typed place names, if it names one: "Luke 3" and "Luke 3:1" do, "Luke" does not. */
-const chapterOf = (address: Address | undefined): number | undefined => {
-  if (address?.kind === "chapters") return address.from;
-  if (address?.kind === "verses") return address.from.chapter;
-  return undefined;
-};
-
 export function ProjectSidebar() {
   const shell = useShell();
+  const navigate = useNavigate();
   const [query, setQuery] = createSignal("", { name: "sidebarQuery" });
   const [searchOpen, setSearchOpen] = createSignal(false, { name: "sidebarSearchOpen" });
   const closeSearch = () => {
@@ -132,6 +128,23 @@ export function ProjectSidebar() {
     },
     { name: "sidebarShown" },
   );
+
+  /**
+   * Enter takes the book: to the chapter the text names when it names one
+   * ("mark 3"), else the first book on show, as the palette's "Go to" does.
+   */
+  const takeSearch = (): void => {
+    const place = typedChapter(shell.location, query());
+    const first = shown()[0];
+    if (place !== undefined) shell.showReference(place);
+    else if (first !== undefined)
+      void navigate({
+        to: "/project/$slug/book/$book",
+        params: { slug: shell.slug(), book: encodeURIComponent(first.id) },
+      });
+    else return;
+    closeSearch();
+  };
 
   const isOpen = (id: string): boolean => {
     if ((search()?.chapter ?? "") !== "") return true;
@@ -312,6 +325,7 @@ export function ProjectSidebar() {
               onInput={(event) => setQuery(event.currentTarget.value)}
               onKeyDown={(event) => {
                 if (event.key === "Escape") closeSearch();
+                if (event.key === "Enter") takeSearch();
               }}
               onBlur={() => {
                 if (query().trim() === "") setSearchOpen(false);

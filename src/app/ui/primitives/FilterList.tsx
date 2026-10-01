@@ -29,7 +29,8 @@ export interface FilterListProps<T> {
   /** Stable per item, for keying and for the current-row mark. */
   readonly key: (item: T) => string;
   readonly children: (item: T) => JSX.Element;
-  readonly onPick: (item: T) => void;
+  /** `query` is what was typed, for a picker that reads more than the row from it. */
+  readonly onPick: (item: T, query: string) => void;
   /** The key of the row to mark as where you already are. */
   readonly current?: string;
   readonly placeholder?: string;
@@ -55,7 +56,7 @@ export function FilterList<T>(props: FilterListProps<T>) {
   };
 
   const take = (item: T | undefined): void => {
-    if (item !== undefined) props.onPick(item);
+    if (item !== undefined) props.onPick(item, query().trim());
   };
 
   const keys = (event: KeyboardEvent): void => {
@@ -104,7 +105,7 @@ export function FilterList<T>(props: FilterListProps<T>) {
                   // Pointer and keyboard agree on which row is live, so moving
                   // the mouse over a row and pressing Enter takes that row.
                   onMouseEnter={() => setCursor(index())}
-                  onClick={() => props.onPick(item)}
+                  onClick={() => props.onPick(item, query().trim())}
                 >
                   {props.children(item)}
                 </button>

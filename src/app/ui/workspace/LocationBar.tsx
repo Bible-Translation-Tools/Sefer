@@ -31,6 +31,7 @@ import { useShell } from "../../ProjectContext";
 import { FilterList, IconButton, Popover } from "../primitives";
 import { bookName, CANON } from "./books";
 import { metadataOf } from "./project";
+import { typedChapter } from "./typedPlace";
 
 export interface LocationBarProps {
   /** The chapter row at the top of the viewport, as the editor measured it. */
@@ -207,11 +208,24 @@ export function LocationBar(props: LocationBarProps) {
           key={(book) => book.id}
           // The CODE as well as the name: a translator types "mrk" as readily
           // as "Mark", and a project may hold a book the canon does not name.
+          // "mark 3" as well: the words the palette reads narrow it to Mark,
+          // and taking Mark then goes to chapter 3 (`typedPlace`).
           match={(book, query) => {
             const needle = fold(query);
-            return fold(book.name).includes(needle) || book.id.toLowerCase().includes(needle);
+            return (
+              fold(book.name).includes(needle) ||
+              book.id.toLowerCase().includes(needle) ||
+              shell.location.books(query).includes(book.id)
+            );
           }}
-          onPick={(book) => goToBook(book.id)}
+          onPick={(book, query) => {
+            const place = typedChapter(shell.location, query, book.id);
+            if (place === undefined) goToBook(book.id);
+            else {
+              setPicking(false);
+              shell.showReference(place);
+            }
+          }}
         >
           {(book) => (
             <>
