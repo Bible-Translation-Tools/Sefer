@@ -8,8 +8,10 @@
  *
  * The picker is the same binding Refine's reference column makes — every
  * other project on this device, registered with the Library and bound under
- * `source` — so choosing one here is choosing it there. "No source text" only
- * hides the column on this screen; it does not unbind anything.
+ * `source` — so choosing one here is choosing it there. "No source text"
+ * unbinds it: the project then has no source, so nothing is drawn beside the
+ * results and the checks against a source text stop running. Either way the
+ * references are re-registered with the corpus and the project re-judged.
  */
 
 import { Effect, Option, Result } from "effect";
@@ -23,6 +25,7 @@ import type { Resource } from "#core/resources/library";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
+import * as Workflows from "../../workflows/references";
 import type { Paired } from "../excerpts";
 import { listProjects, type ProjectSummary } from "../landing/summaries";
 import { MultiSelect } from "../primitives";
@@ -40,7 +43,6 @@ export function createFindSource(onBound: () => void) {
   const [resource, setResource] = createSignal<Resource | undefined>(undefined, {
     name: "findSource",
   });
-  const [show, setShow] = createSignal(true, { name: "findSourceShown" });
   const [choices, setChoices] = createSignal<readonly ProjectSummary[]>([], {
     name: "findSourceChoices",
   });
@@ -83,20 +85,16 @@ export function createFindSource(onBound: () => void) {
   const choose = (root: string): void => {
     const project = shell.project();
     if (project === undefined) return;
-    if (root === NONE) {
-      setShow(false);
-      return;
-    }
-    setShow(true);
-    if (resource()?.id === root) return;
     const previous = resource();
+    if ((previous?.id ?? NONE) === root) return;
     void services
       .run(
         Effect.result(
           Effect.gen(function* () {
-            const added = yield* services.library.add(root);
             if (previous !== undefined)
               yield* services.library.unbind(project.id, "source", previous.id);
+            if (root === NONE) return undefined;
+            const added = yield* services.library.add(root);
             yield* services.library.bind(project.id, "source", added.id);
             return added;
           }),
@@ -110,6 +108,10 @@ export function createFindSource(onBound: () => void) {
           return;
         }
         setTick((held) => held + 1);
+        // The corpus follows the binding, and the source-text checks with it.
+        void services
+          .run(Workflows.bindReferences(project.id))
+          .then(() => services.projectAnalysis.rejudge());
         onBound();
       });
   };
@@ -144,7 +146,7 @@ export function createFindSource(onBound: () => void) {
   const pairedOf = (excerpt: Excerpt): Paired | undefined => {
     read();
     const source = resource();
-    if (!show() || source === undefined) return undefined;
+    if (source === undefined) return undefined;
     const held = bookOf(source, excerpt.bookId);
     if ("analysis" in held) return { kind: "text", name: source.title, book: held, hits: [] };
     return {
@@ -158,7 +160,7 @@ export function createFindSource(onBound: () => void) {
   };
 
   /** Is a source shown beside the results? */
-  const shown = (): boolean => show() && resource() !== undefined;
+  const shown = (): boolean => resource() !== undefined;
 
   /** The picker's rows: "no source text", then every other project here. */
   type Row = { readonly root: string; readonly name: string; readonly language: string };

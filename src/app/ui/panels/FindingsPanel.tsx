@@ -62,7 +62,6 @@ import * as Fixes from "#core/fixes/fixes";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import * as Workflows from "../../workflows/references";
 import { excerptCard, ExcerptList, type ExcerptCardSpec, type OutlineSpec } from "../excerpts";
 import type { CardAction } from "../multibuffer/CardAction";
 import {
@@ -106,14 +105,10 @@ export function FindingsPanel() {
   const [settingsOpen, setSettingsOpen] = createSignal(false, { name: "findingsSettingsOpen" });
   /**
    * The source text beside each finding's verse, as Find shows it: read-only,
-   * and optional. Choosing one binds the project's source, which also hands
-   * it to the corpus (`bindReferences`), the registration the source-text
-   * checks read.
+   * and optional. Choosing one (or none) binds the project's source, and the
+   * picker itself re-registers the corpus and re-judges.
    */
-  const source = createFindSource(() => {
-    const id = shell.project()?.id;
-    if (id !== undefined) void shell.services.run(Workflows.bindReferences(id));
-  });
+  const source = createFindSource(() => {});
   /**
    * Has the reader moved the cursor yet?
    *
