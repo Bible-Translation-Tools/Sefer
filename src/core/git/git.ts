@@ -10,7 +10,7 @@
  * `src/platform/tauri/git.ts` are the Layers; `contract.ts` is the one suite
  * both must pass.
  */
-import { Context, Data, Effect, Option } from "effect";
+import { Context, Data, Effect, Option, Result } from "effect";
 
 import { escapesRoot, normalisePath } from "../fileSystem/path";
 import type { SourceStamp } from "../source/source";
@@ -177,7 +177,56 @@ export interface GitService {
     repo: Repo,
     path: string,
   ) => Effect.Effect<readonly Version[], GitError>;
+  /**
+   * History's whole timeline in one call: HEAD's commits newest first, each
+   * of `paths`' versions, and — given `shared`, a ref — which commits that
+   * ref reaches (`undefined` when there is no such ref). The Web answers it
+   * from its book-change index in one read; a host without one composes
+   * `log`, `previousVersions` and `logFrom` (`composedTimeline`).
+   */
+  readonly timeline: (
+    repo: Repo,
+    paths: readonly string[],
+    shared?: string,
+  ) => Effect.Effect<GitTimeline, GitError>;
 }
+
+export interface GitTimeline {
+  readonly commits: readonly Commit[];
+  /** By the path as asked; a path that fails to read is absent. */
+  readonly versions: ReadonlyMap<string, readonly Version[]>;
+  readonly shared: ReadonlySet<CommitId> | undefined;
+}
+
+/** `timeline` from the per-path calls, for a host with no index to answer it at once. */
+export const composedTimeline =
+  (git: Pick<GitService, "log" | "logFrom" | "resolve" | "previousVersions">) =>
+  (repo: Repo, paths: readonly string[], shared?: string): Effect.Effect<GitTimeline, GitError> =>
+    Effect.gen(function* () {
+      const commits = yield* git.log(repo);
+      const versions = new Map<string, readonly Version[]>();
+      for (const path of paths) {
+        const found = yield* Effect.result(git.previousVersions(repo, path));
+        if (Result.isSuccess(found)) versions.set(path, found.success);
+      }
+      return { commits, versions, shared: yield* sharedFrom(git, repo, shared) };
+    });
+
+/** The commits `ref` reaches, or `undefined` when there is no such ref. */
+export const sharedFrom = (
+  git: Pick<GitService, "logFrom" | "resolve">,
+  repo: Repo,
+  ref: string | undefined,
+): Effect.Effect<ReadonlySet<CommitId> | undefined, GitError> =>
+  Effect.gen(function* () {
+    if (ref === undefined) return undefined;
+    const tip = yield* Effect.orElseSucceed(git.resolve(repo, ref), () => Option.none<CommitId>());
+    if (Option.isNone(tip)) return undefined;
+    const reached = yield* Effect.result(git.logFrom(repo, ref));
+    return Result.isSuccess(reached)
+      ? new Set(reached.success.map((commit) => commit.id))
+      : undefined;
+  });
 
 export class Git extends Context.Service<Git, GitService>()("Git") {}
 

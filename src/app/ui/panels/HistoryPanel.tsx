@@ -3,11 +3,12 @@
  * the sidebar's History tab (`ChangesHistorySidebar`) — what is not recorded
  * yet is the Changes tab, which is Review.
  *
- * The timeline is `git.log` plus one `git.previousVersions` per book, and that
- * second call is what makes the rest of the panel cheap: it answers "which
- * commits touched this book" AND hands back a `bytes()` thunk, so a commit row
- * can name the books it changed without reading a single blob, and reading one
- * happens only when somebody selects that commit.
+ * The timeline is one `git.timeline` call — the log, every book's versions and
+ * what the shared project has, which the Web answers from one read of its book
+ * index. Each version answers "which commits touched this book" AND hands back
+ * a `bytes()` thunk, so a commit row can name the books it changed without
+ * reading a single blob, and reading one happens only when somebody selects
+ * that commit.
  *
  * A version shows what IT changed: each book it touched, that book's previous
  * version against this one, as a log shows a commit. Nothing here writes a
@@ -202,31 +203,35 @@ export function HistoryPanel() {
           ].join("|");
           const known = timelines.get(project.root);
           if (!fresh && known !== undefined && known.tips === tips) return known.timeline;
-          const commits = yield* Effect.result(git.log(repo));
           const shallow = yield* Effect.orElseSucceed(git.shallow(repo), () => false);
-          // What the shared project already has, as of the last check: every
-          // commit reachable from the remote-tracking ref. `undefined` when
-          // there is none to compare with — never sent, or no shared project —
-          // and then the timeline marks nothing.
-          let shared: ReadonlySet<string> | undefined;
-          if (Option.isSome(branch)) {
-            const theirs = yield* Effect.result(git.logFrom(repo, trackingRef(branch.value)));
-            if (Result.isSuccess(theirs))
-              shared = new Set(theirs.success.map((commit) => commit.id));
-          }
-          const perBook = new Map<BookId, readonly Version[]>();
+          // The log, every book's versions, and what the shared project already
+          // has (every commit its remote-tracking ref reaches; `undefined` when
+          // there is none, and then the timeline marks nothing) — in one call,
+          // which the Web answers from one read of its book index.
+          const paths = new Map<string, BookId>();
           for (const book of project.books) {
             const inside = repositoryPath(project.root, book.path);
-            if (inside._tag === "None") continue;
-            const found = yield* Effect.result(git.previousVersions(repo, inside.value));
-            if (Result.isSuccess(found)) perBook.set(book.id, found.success);
+            if (Option.isSome(inside)) paths.set(inside.value, book.id);
           }
+          const read = yield* Effect.result(
+            git.timeline(
+              repo,
+              [...paths.keys()],
+              Option.isSome(branch) ? trackingRef(branch.value) : undefined,
+            ),
+          );
+          const perBook = new Map<BookId, readonly Version[]>();
+          if (Result.isSuccess(read))
+            for (const [path, list] of read.success.versions) {
+              const bookId = paths.get(path);
+              if (bookId !== undefined) perBook.set(bookId, list);
+            }
           const timeline: Timeline = {
             kind: "read",
-            commits: Result.isSuccess(commits) ? commits.success : [],
+            commits: Result.isSuccess(read) ? read.success.commits : [],
             perBook,
             shallow,
-            shared,
+            shared: Result.isSuccess(read) ? read.success.shared : undefined,
           };
           timelines.set(project.root, { tips, timeline });
           return timeline;

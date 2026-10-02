@@ -20,6 +20,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Effect, Layer, Option } from "effect";
 
 import {
+  composedTimeline,
   Git,
   GitError,
   relativeOrRefuse,
@@ -103,7 +104,8 @@ const show = (repo: Repo, rev: string, path: string): Effect.Effect<Uint8Array, 
     return new Uint8Array(bytes);
   });
 
-export const TauriGitLive: Layer.Layer<Git> = Layer.succeed(Git, {
+/** git2 per call; `timeline` composes them, as there is no index on desktop. */
+const tauriGit = {
   open: (root) => Effect.as(call<void>("git_open", { root }), { root }),
   init: (root) => Effect.as(call<void>("git_init", { root }), { root }),
 
@@ -204,4 +206,9 @@ export const TauriGitLive: Layer.Layer<Git> = Layer.succeed(Git, {
         bytes: () => show(repo, wire.id, relative),
       }));
     }),
+} satisfies Omit<GitService, "timeline">;
+
+export const TauriGitLive: Layer.Layer<Git> = Layer.succeed(Git, {
+  ...tauriGit,
+  timeline: composedTimeline(tauriGit),
 } satisfies GitService);

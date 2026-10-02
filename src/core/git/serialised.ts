@@ -50,6 +50,7 @@ export const serialiseGit = (git: GitService, repositories: RepositoriesService)
     // The list is read in the lane; each version's bytes are read later, by
     // id, which needs none.
     previousVersions: (repo, path) => read(repo.root, git.previousVersions(repo, path)),
+    timeline: (repo, paths, shared) => read(repo.root, git.timeline(repo, paths, shared)),
   };
 };
 

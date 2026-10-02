@@ -83,7 +83,12 @@ too.
   storage — never in the project or `.git` — and held in memory per root. A stale one is extended,
   walking only the new commits; a missing or old-format one is rebuilt (`store.ts`). en_ulb's full
   build is about 4 s in a browser.
-- **No lock of its own.** `log` and `previousVersions` run in the repository's shared lane and hold
+- **History reads it once.** `timeline(repo, paths, shared?)` is the whole History tab in one port
+  call: the index's commits are HEAD's log, each book's versions are a walk over them, and the shared
+  project's commits are what its tip reaches inside the index (a tip ahead of HEAD falls back to
+  `logFrom`). Asked per book, the 66 calls each re-resolved HEAD and re-read `.git/shallow` before
+  reaching the held index. Desktop composes the per-path calls (`composedTimeline`).
+- **No lock of its own.** `log`, `previousVersions` and `timeline` run in the repository's shared lane and hold
   it while the worker reads, so no writer can run under the build; a worker taking the lock itself
   would queue behind a writer that waits on the page.
 - **Desktop does not need it.** git2's revision walk has neither problem, so `git_log` and

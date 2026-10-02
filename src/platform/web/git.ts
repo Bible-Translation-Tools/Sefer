@@ -17,6 +17,7 @@ import {
   type Commit,
   type CommitId,
   type CommitOptions,
+  composedTimeline,
   Git,
   GitError,
   type GitFailureReason,
@@ -24,10 +25,17 @@ import {
   type Repo,
   relativeOrRefuse,
   type SaveReceiptLike,
+  sharedFrom,
   type Status,
   type Version,
 } from "#core/git/git";
-import { bookHistoryFrom, entryIn, isIndexedBook } from "#core/history/bookIndex";
+import {
+  bookHistoryFrom,
+  entryIn,
+  isIndexedBook,
+  reachableFrom,
+  type BookVersion,
+} from "#core/history/bookIndex";
 import { Observability } from "#core/observability";
 
 import { ensureBookIndex } from "./history/store";
@@ -128,7 +136,8 @@ const makeWebGit = (
    * name git accepts nor a long history can stop it — and current with HEAD,
    * extending only what is new.
    */
-  const bookHistory = (repo: Repo, filepath: string) =>
+  /** The book-change index, current with HEAD: read, or extended, once per ask. */
+  const indexOf = (repo: Repo) =>
     Effect.gen(function* () {
       const started = performance.now();
       const ensured = yield* attempt("Io", () => ensureBookIndex(fs, repo.root));
@@ -145,7 +154,28 @@ const makeWebGit = (
           },
         ),
       );
-      return bookHistoryFrom(ensured.index, filepath);
+      return ensured.index;
+    });
+  const bookHistory = (repo: Repo, filepath: string) =>
+    Effect.map(indexOf(repo), (index) => bookHistoryFrom(index, filepath));
+
+  /** A version from the index: its blob id is known, so its bytes are one read by id. */
+  const versionFrom =
+    (repo: Repo, filepath: string) =>
+    (version: BookVersion): Version => ({
+      commit: asCommit(version),
+      bytes: () =>
+        version.blob === null
+          ? Effect.fail(
+              new GitError({
+                reason: "Conflict",
+                description: `${filepath} was removed in ${version.commit.id}`,
+              }),
+            )
+          : attempt("Conflict", async () => {
+              const blob = version.blob ?? "";
+              return (await git.readBlob({ fs, dir: repo.root, oid: blob })).blob;
+            }),
     });
 
   const asCommit = (version: {
@@ -174,7 +204,7 @@ const makeWebGit = (
       return entries.map(commitOf);
     });
 
-  return {
+  const service: Omit<GitService, "timeline"> = {
     open: (root) =>
       Effect.gen(function* () {
         const present = yield* Effect.orElseSucceed(
@@ -349,23 +379,51 @@ const makeWebGit = (
             commit,
             bytes: () => show(repo, commit.id, path),
           }));
-        return (yield* bookHistory(repo, filepath)).map((version): Version => ({
-          commit: asCommit(version),
-          bytes: () =>
-            version.blob === null
-              ? Effect.fail(
-                  new GitError({
-                    reason: "Conflict",
-                    description: `${filepath} was removed in ${version.commit.id}`,
-                  }),
-                )
-              : attempt("Conflict", async () => {
-                  const blob = version.blob ?? "";
-                  return (await git.readBlob({ fs, dir: repo.root, oid: blob })).blob;
-                }),
-        }));
+        return (yield* bookHistory(repo, filepath)).map(versionFrom(repo, filepath));
       }),
   };
+
+  // History's timeline from ONE read of the index: its commits are HEAD's
+  // log, newest first; each book's versions are a walk over them; and the
+  // shared project's commits are what its tip reaches inside the index. A
+  // repository the index cannot be built for (no HEAD yet) composes the
+  // per-path calls instead.
+  const timeline: GitService["timeline"] = (repo, paths, shared) =>
+    Effect.gen(function* () {
+      const built = yield* Effect.result(indexOf(repo));
+      if (built._tag === "Failure") return yield* composedTimeline(service)(repo, paths, shared);
+      const index = built.success;
+      const versions = new Map<string, readonly Version[]>();
+      for (const path of paths) {
+        const filepath = yield* Effect.result(relativeOrRefuse(repo, path));
+        if (filepath._tag === "Failure") continue;
+        if (isIndexedBook(filepath.success))
+          versions.set(
+            path,
+            bookHistoryFrom(index, filepath.success).map(versionFrom(repo, filepath.success)),
+          );
+        else {
+          const found = yield* Effect.result(service.previousVersions(repo, path));
+          if (found._tag === "Success") versions.set(path, found.success);
+        }
+      }
+      let reached: ReadonlySet<string> | undefined;
+      if (shared !== undefined) {
+        const tip = yield* Effect.orElseSucceed(service.resolve(repo, shared), () =>
+          Option.none<string>(),
+        );
+        reached = Option.isNone(tip) ? undefined : reachableFrom(index, tip.value);
+        if (Option.isSome(tip) && reached === undefined)
+          reached = yield* sharedFrom(service, repo, shared);
+      }
+      return {
+        commits: index.commits.map((commit) => asCommit({ commit })),
+        versions,
+        shared: reached,
+      };
+    });
+
+  return { ...service, timeline };
 };
 
 export const WebGitLive: Layer.Layer<Git, never, FileSystem.FileSystem> = Layer.effect(
