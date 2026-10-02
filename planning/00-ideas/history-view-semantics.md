@@ -1,6 +1,43 @@
-# History: what a selected version shows (2026-10-01, deferred)
+# History: what a selected version shows (2026-10-01, built)
 
-Found in the PO-demo test drive. Not for the demo.
+Found in the PO-demo test drive. Built on master 2026-10-01 (`b4ea264`,
+`6f8cfb6`); unpushed with the rest of master at the time of writing.
+
+## Built, and what is left to test
+
+Built:
+
+- A version shows its own change (against its parent) by default.
+- "Compared with your text now" is the explicit second view.
+- History draws its changes with Review's own reader (`ReviewReader`), and
+  `DiffView` is gone.
+- **Adopt** on a card writes that version's wording into the buffer, as one
+  unsaved edit that Undo takes back. It appears on hover where there is a
+  fine pointer, and is always shown on touch.
+- An **"Only on this device"** divider sits above versions the shared project
+  does not have, with "On the shared project" below it. There is no divider
+  when everything is shared.
+
+Tested:
+
+- **Fixture:** Adopt is hidden until hover. Adopting sets the verse, and the
+  "now" view is then empty.
+- **x-en-ulb** (38 versions, all shared): no divider, cards and Adopt render,
+  and there are no errors.
+
+To test:
+
+1. **The divider when it should show.** Record a version with sending off,
+   then open History. Expect "Only on this device" above that version.
+   Don't do this in a project cloned from WycliffeAssociates/en_ulb; the
+   sandbox is Will_Kelly/x-en-ulb.
+2. **The sidebar.** History now takes over the left sidebar with its changed
+   books, as Review does. Is that right for History, or should it keep the
+   project sidebar?
+3. **Adopt across a whole chapter.** Adopt a card in the whole-chapter view,
+   then Undo. Expect one undo step.
+4. **"Now" after Adopt** for a version several commits back. Expect only the
+   passages Adopt did not take to remain.
 
 Today a selected commit is diffed against the WORKING text ("Working text
 against 3b83a12."), not against its parent. So:

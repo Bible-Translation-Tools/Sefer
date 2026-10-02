@@ -49,9 +49,10 @@ Sefer.
   directory has to work with no network at all.
 - **The code path is shared.** Unzipping, or reading a folder, feeds the same
   rendering pipeline as a clone.
-- **Keep the git history.** Wherever a source carries history, from the
-  network or from a folder, layer it in. That means reshaping and
-  concatenating the files, not adding submodules.
+- **Import the intent, not their commits** (revised 2026-10-02 pm; see
+  "History"). Each arrival is one commit of ours, crediting the Writer
+  authors. Whether a teammate is still in Writer comes from the upstream
+  check.
 
 **What we read and what we trust:**
 
@@ -85,13 +86,53 @@ Sefer.
 
 **The network as a tap, and sources as a prerequisite:**
 
-- **The network as a "tap"**, in Homebrew's sense. It is a place that offers
+- **The network as a "tap"**, in Homebrew's sense. It is a place that candidates
   books, opt-in because it is network-heavy.
   - Mostly the consolidated project is the one place that matters.
   - During a migration, checking the tap for newer BTT Writer commits is
     useful, and those commits go through the same diff code.
 - **Auto-pull source texts** that a project's manifest lists (below). This
   comes first, because it builds the resolver this plan also needs.
+
+## Naming, against the glossary (2026-10-02 pm)
+
+Audited against `documentation/glossary.md`. Three collisions and two
+renames.
+
+- **"Source" is taken.** It is the canonical editable text of one Book (agreed
+  term). The glossary says outright: do not call the paired side "source".
+  - The text a project translates from is a **Paired resource** (agreed), and
+    the declared link is a **Role** (provisional): "the declared relationship
+    a Resource has to a Project".
+  - Burrito's `relationships[]` with `relationType: "source"` is exactly a
+    Role whose Resource is not on this device yet.
+  - So code says **relationship** or **related resource**. "source" appears
+    only where it is Burrito's or the RC's own literal (`relationType`,
+    `dublin_core.source`), or product copy ("source text").
+- **Module: `src/core/resources/relationships.ts`,** not
+  `relationshipSource.ts`.
+  - It is named for the Burrito field it reads, beside `burrito.ts` and
+    `resourceContainer.ts`.
+  - `relationshipSource` would read as "where a relationship came from".
+  - The type is **`RelatedResource`** `{ relation, authority, id, revision?,
+version? }`, read from Burrito `relationships`, RC `source` and BTT
+    Writer `source_translations` alike. It replaces this note's `RelatedResource`.
+  - Not `ResourceRef`. "Reference" is product copy for a reference text, and
+    "ref" is git's word.
+- **"Offer" goes.** It was a weird domain word; it is now a **Candidate**,
+  which is what the data section already called them.
+  - A candidate is one book from one place: `BookCandidate`, in
+    `src/core/migrate/candidate.ts`.
+  - **Choosing a candidate** is the step.
+  - Producers **list candidates**.
+- **"Arrival commit" is agreed** as the first commit an import makes, the files
+  it wrote, authored "Sefer". A book brought in later, or an update from a
+  Writer project, is the same idea for one file, so it extends that term
+  rather than inventing one: a **book arrival**.
+- **"Upstream" is new.** It means a git remote that something here was
+  obtained from, and is checked against. The project's own `origin` is the
+  one upstream with a product name already (Shared project), so it stays
+  that. This needs a glossary row when it is built.
 
 ## What the data says (probed 2026-10-02, `bwc`)
 
@@ -232,31 +273,31 @@ corrections.
     our Effect schemas.
   - Effect would be a heavy dependency for a "no deps" utility.
 
-## The contract: a book offer
+## The contract: a book candidate
 
 The neutral shape is "here is a book, with its text and maybe its history". The
-ecosystem-specific parts are only in who makes offers.
+ecosystem-specific parts are only in who lists candidates.
 
 ```ts
-interface BookOffer {
+interface BookCandidate {
   readonly book: BookCode; // claimed: from the manifest, or the API's book_slug
   readonly language: string;
   readonly resource: string;
   readonly origin: Origin; // { kind: "tap", tap, owner, repo, url } | { kind: "folder" | "zip", name }
   readonly hints: { status?: "Primary" | "Active" | "Inactive"; modified?: string };
-  readonly open: Effect<StagedBook, OfferError>; // the bytes, and the history when there is any
+  readonly open: Effect<StagedBook, CandidateError>; // the bytes, and the history when there is any
 }
 ```
 
 **Three producers:**
 
-| Producer   | How it makes offers                                                                                                                                | Network |
+| Producer   | How it lists candidates                                                                                                                            | Network |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
 | **Folder** | A BTT Writer project directory, or many of them. BTT Writer's working copies carry a `.git`.                                                       | none    |
 | **Zip**    | One zip, or several. Each entry is one project, or the zip is one project. The `.tstudio` backup is a zip; whether it carries `.git` is to verify. | none    |
-| **Tap**    | The Language API query above, one offer per row. `open` clones into staging.                                                                       | yes     |
+| **Tap**    | The Language API query above, one candidate per row. `open` clones into staging.                                                                   | yes     |
 
-**One door after `open`.** Every offer goes through one recognizer and one
+**One door after `open`.** Every candidate goes through one recognizer and one
 validator, wherever it came from.
 
 1. **`recognize(tree)`** decides the shape. BTT Writer joins `burrito`,
@@ -267,7 +308,7 @@ validator, wherever it came from.
    - Everything else is optional and carried along.
 2. **`render(tree) → USFM`**, pure. It runs on any commit's tree, which is
    what makes layering the history possible.
-3. **`validate(usfm, claimedBook)`** refuses the offer (that offer only, not
+3. **`validate(usfm, claimedBook)`** refuses the candidate (that candidate only, not
    the run) when:
    - the parse is not exactly one book;
    - the `\id` disagrees with the claim;
@@ -284,16 +325,16 @@ validator, wherever it came from.
 **The cross-book check.** Validation can't catch the 1JN/1PE case: BTT Writer
 chunks carry no `\id`, so we stamp the claimed one, and the text parses fine
 as "1 John". What catches it is health plus one comparison across all
-offers: **a book whose opening verses match another book's offer** ("this
-text also appears as Jude"). That needs every offer rendered, so it runs on
-the assembly screen, not per offer.
+candidates: **a book whose opening verses match another book's candidate** ("this
+text also appears as Jude"). That needs every candidate rendered, so it runs on
+the assembly screen, not per candidate.
 
 ## User flow
 
 **The way in.** Projects page → Import → **Migrate from Writer** (working
 name).
 
-- **Pick the books.** It offers three tiles: Folder, Zip, and "From the
+- **Pick the books.** It candidates three tiles: Folder, Zip, and "From the
   catalogue (online)". Several inputs can be combined in one run, for example
   a zip for Psalms plus the catalogue for the rest.
 - **Inside a project:** Books → **Add a book…**. This opens the same flow,
@@ -303,13 +344,13 @@ name).
 headings, with a count for each ("NT 27 of 27 · OT 39 of 39").
 
 - **Defaults, per book:**
-  - the one offer, if there is only one;
+  - the one candidate, if there is only one;
   - otherwise the one Primary;
   - otherwise the newest Active;
-  - a book that has only Inactive offers is left out, with a note.
-- Inactive offers are hidden behind "Show inactive (38)".
-- **A row with one offer** shows its health and needs nothing from the person.
-- **A row with more than one offer** is marked **"Choose"**. The header says
+  - a book that has only Inactive candidates is left out, with a note.
+- Inactive candidates are hidden behind "Show inactive (38)".
+- **A row with one candidate** shows its health and needs nothing from the person.
+- **A row with more than one candidate** is marked **"Choose"**. The header says
   "3 books need a choice". Assemble is enabled when every row is either
   settled or left out.
 
@@ -317,7 +358,7 @@ headings, with a count for each ("NT 27 of 27 · OT 39 of 39").
 Repository" mockup, one book at a time, with Next and Previous between the
 contested books.
 
-- **Tabs**, one per offer: the owner, plus a star for Primary.
+- **Tabs**, one per candidate: the owner, plus a star for Primary.
 - **A metadata line:**
   - date;
   - chapters;
@@ -326,7 +367,7 @@ contested books.
 - **Use this one.**
 - **The body** is the book read as text: the reader, not an editor.
 - **Added to the mockup: "Differences from …"**, a choice of another tab.
-  When set, the body becomes Review's reader with the two offers as its two
+  When set, the body becomes Review's reader with the two candidates as its two
   sides. Review already treats both sides as pickers (the `CompareSource`
   port), so this is the same diff, before there is a project.
   - On a narrow screen the comparison replaces the reader.
@@ -350,10 +391,10 @@ contested books.
 - rights.
 
 **Assemble.** This writes the repository (below), opens the project, runs the
-USFM checks, and pulls the listed sources (below). Both `metadata.json` and
+USFM checks, and pulls the paired resources the metadata lists (below). Both `metadata.json` and
 `manifest.yaml` are written.
 
-- History shows each book's own commits.
+- History shows one book arrival per book, crediting its Writer authors.
 - Nothing is sent: the project sends through ordinary sync, to a repository
   the person names.
 
@@ -363,11 +404,11 @@ opt-in setting, off by default because it is network-heavy.
 - When on, the check on open probes each book's `Book-Upstream`. One that has
   moved past its `Book-Upstream-Commit` has new work.
 - The new work arrives through the same render and the same diff, as a
-  three-way with a real base (see "History", option B). It is shown as
+  three-way with a real base (see "History"). It is shown as
   Review's decision units, the way sync's incoming plan works.
 - Scripture text is never merged automatically.
 
-## Sources (first in this scope of work)
+## Paired resources a project lists (first in this scope of work)
 
 Agreed 2026-10-02: plan this first. It builds the resolver and the upstream
 check that the migration needs as well.
@@ -409,11 +450,11 @@ repository `<language>_<identifier>`.
 
 **BTT Writer's** `source_translations[]` (`language_id`, `resource_id`,
 `version`) is the RC form in another shape. It reads into the same
-`SourceRef`.
+`RelatedResource`.
 
 ### Resolving a reference
 
-One pure rule over what a clone already shows. `SourceRef {language,
+One pure rule over what a clone already shows. `RelatedResource {language,
 resource, version?}` resolves to `{url, commit, how, note?}`.
 
 **Probed 2026-10-02:**
@@ -488,12 +529,12 @@ tier-3 resources bound by role. Nothing here moves when the kinds land.
 
 | Piece                    | Where                                              | What                                                                                                                 |
 | ------------------------ | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Source refs              | `src/core/resources/sourceRef.ts` (pure)           | Read from Burrito relationships, RC `source` and BTT Writer `source_translations`; the resolution rule.              |
+| Source refs              | `src/core/resources/relationships.ts` (pure)       | Read from Burrito relationships, RC `source` and BTT Writer `source_translations`; the resolution rule.              |
 | Upstream                 | `src/core/remote/upstream.ts`                      | `Upstream {url, ref, commit}`; `check` over `Remote.probe`; batched.                                                 |
 | Burrito writer           | `src/core/resources/burrito.ts`, plus an RC writer | One `ProjectMetadata` written into both files.                                                                       |
-| Offers                   | `src/core/migrate/offer.ts`                        | The `BookOffer` contract; grouping by (language, resource, book); defaults. Pure.                                    |
-| Folder and zip producers | `src/core/migrate/local.ts` over `FileSystem`      | One offer per BTT Writer project found.                                                                              |
-| Tap producer             | `src/app/catalogue.ts`                             | `bookOffers(lang)`: the query above. `open` uses the existing clone into staging.                                    |
+| Candidates               | `src/core/migrate/candidate.ts`                    | The `BookCandidate` contract; grouping by (language, resource, book); defaults. Pure.                                |
+| Folder and zip producers | `src/core/migrate/local.ts` over `FileSystem`      | One candidate per BTT Writer project found.                                                                          |
+| Tap producer             | `src/app/catalogue.ts`                             | `bookCandidates(lang)`: the query above. `open` uses the existing clone into staging.                                |
 | BTT Writer shape         | `src/core/migrate/bttWriter.ts` (pure)             | The lenient manifest Schema, `recognize`, `render`.                                                                  |
 | Validate and health      | `src/core/migrate/check.ts`                        | Over Galley's parse and the onion checks; the cross-book opening match.                                              |
 | Plan and assembly        | `src/core/migrate/plan.ts`, `assemble.ts`          | A plan keyed by book code; an Effect over `Git` and `FileSystem`.                                                    |
@@ -503,11 +544,11 @@ tier-3 resources bound by role. Nothing here moves when the kinds land.
 
 - `sources.resolve`, with `how`;
 - `upstream.check`;
-- `migrate.offers`;
-- `migrate.open`, per offer;
+- `migrate.candidates`;
+- `migrate.open`, per candidate;
 - `migrate.assemble`.
 
-A refused offer or source ends `refused` for that row only.
+A refused candidate or source ends `refused` for that row only.
 
 ### Rendering a chunked book to USFM
 
@@ -519,145 +560,129 @@ A refused offer or source ends `refused` for that row only.
 The front matter is ours, not the translator's. It is written once, at the
 arrival (below), and never pushed back into their history.
 
-## History: keep the commits, reshape at the arrival
+## History: import the intent, don't keep their commits
 
-**Will's question (2026-10-02).** We have to add front matter and
-concatenate, so can we keep the history at all, without rewriting it?
-Unless "the intent of history" can be kept without the actual commits? And
-what does a flat repository do to following the upstream BTT Writer
-repositories?
+**Third pass (superseded):** keep BTT Writer's real commits as a second parent,
+and reshape them once, at the arrival.
 
-There are two ways. The first pass of this note chose A. **This pass
-recommends B.**
+**Will, 2026-10-02 pm:** nobody wants to flick through changes made when the
+book was folders of chunk files. Showing them as a file means piping every
+commit through the normaliser, which is not what actually happened and adds
+complexity. Maybe it isn't worth keeping? What is worth having, during a
+migration, is seeing that a teammate is still working in Writer.
 
-### A. Rewrite: keep the intent, not the commits
+**Agreed, and that splits the two cleanly.**
 
-Each BTT Writer commit `C` is rewritten as `C′`, whose tree is just the
-rendered `NN-BOOK.usfm`, with the same author, dates and message, and a
-trailer naming `C`. The chain then joins the project through a two-parent
-arrival.
+### C. Import the intent: our commits, their attribution
 
-- **For:** `git log -- 44-JHN.usfm` and `git blame` work in any git tool.
-- **Against:**
-  - **Every SHA is new.** The upstream relation exists only in trailers, so
-    following upstream means re-deriving our chain from theirs.
-  - **The renderer becomes a contract.** Any fix to `render` changes every
-    `C′`, so a re-import no longer lines up.
-  - **It is a rewrite,** which is the thing Will doesn't want.
+- **Their commits never enter our repository**, rewritten or otherwise.
+- **Each arrival is one commit of ours.** That covers the first import of a
+  book, and every later update from its Writer project. Its diff is the
+  normalised change:
+  - for the first import, the whole book;
+  - for an update, `render(their new head)` against `render(the commit we
+last took)`, as decision units.
+- **The message carries the intent without the objects:**
 
-### B. Keep: the real commits, reshaped once at the arrival
+  ```text
+  1 John: work from mary_chishimba/bwc_1jn_text_reg
 
-The BTT Writer history comes in **unchanged**: the same objects and the same
-SHAs as upstream. The book joins the project with one arrival commit:
+  12 saves in Writer, 2026-09-17 to 2026-10-01, by bwile_refinement.
 
-```text
-parents: [project tip, upstream tip C]       (C is their real commit)
-tree:    project tip's tree + NN-BOOK.usfm (= render(tree(C)), with front matter)
-         + metadata.json / manifest.yaml updated
-message: Bring in 1 John from mary_chishimba/bwc_1jn_text_reg
-         Book-Upstream: 1JN https://content.bibletranslationtools.org/mary_chishimba/bwc_1jn_text_reg
-         Book-Upstream-Commit: <C>
-```
+  Upstream: https://content.bibletranslationtools.org/mary_chishimba/bwc_1jn_text_reg
+  Upstream-Commit: b593d979…
+  Co-authored-by: bwile_refinement <…>
+  ```
 
-This is the "layer our last commit on top as part of finalization" you
-described. It is possible because git lets a merge commit hold any tree:
-nothing forces the result to contain its second parent's files.
+  `Co-authored-by` credits the Writer authors in our History, and on any git
+  host, without carrying their trees.
 
-**For:**
+- **"Is someone still in Writer?"** comes from the upstream CHECK, not from
+  history. If a Writer project's head has moved past the commit we last took,
+  someone is still working there, and the check can say who and when, from
+  that remote's newest commits. History does not need to hold any of it.
+- **Updates are never a fast-forward.** They are always a normalisation
+  through the importer, as Will put it.
+  - When an update and our edits touch the same verse, it goes to Review's
+    decisions: their new text against ours, with the base `render(the commit
+we last took)`, fetched from the upstream when needed.
+  - Text is never merged automatically.
 
-- **Nothing is rewritten.** Their commits are byte-for-byte theirs.
-- **The front matter and the reshape live in exactly one commit,** which is
-  ours.
-- **Following upstream becomes plain git.**
-  1. `probe` their URL.
-  2. If their head descends from `Book-Upstream-Commit`, there are new
-     commits.
-  3. Fetch them. They are ordinary objects in the same store, a few KB each.
-- **The base for a three-way merge is real.** It is `render(tree(C))`, and
-  `C` is in our repository. Then:
-  - their change is `render(new tip)` against that base;
-  - ours is the current file against that base;
-  - Review's decision units take it from there. Verses only one side touched
-    can be offered as one-click takes.
-  - Nothing is applied automatically.
-- **The renderer is not a contract.** Fixing `render` changes nothing already
-  recorded; the next arrival just renders better.
-- **Copies collapse by themselves.** Moffat's and bwile_refinement's 1JN are
-  the same objects.
+### What C removes from this note
 
-**Against:**
+- **The top risk is gone.** History no longer has to follow a second parent
+  through a BTT Writer-shaped tree, or render old commits through a lens.
+- **There is no renderer contract on old commits,** and nothing of theirs to
+  store.
+- **No 66 unrelated roots, and no `git merge` foot-gun.**
 
-- **`git log -- 44-JHN.usfm` in a plain git tool stops at the arrival.**
-  Before it, the file did not exist; the history is under `01/01.txt` and so
-  on.
-  - Sefer's History can follow it anyway: when it walks into an arrival's
-    second parent, it reads those commits through the BTT Writer lens
-    (`render`).
-  - Then "what this version changed" works per book, as History does now.
-    That is "keep the intent" done at read time, not by rewriting.
-  - Will and the designer, and the translators, see the history through
-    Sefer, not the git CLI, so this is the right side to give up.
-- **The second-parent trees are BTT Writer's shape** (`01/`, `manifest.json`
-  at their root).
-  - A person running `git merge` on the CLI against one of those upstreams
-    would make a mess.
-  - Sefer never runs a git merge; it writes these commits itself.
-- **66 roots in one repository.** Git doesn't mind, and Gitea doesn't either.
-  Size is the BTT Writer objects, 51–102 KB per book for `bwc`.
+**What C gives up:** a single save from three months ago in Writer is not
+inspectable in Sefer. It still exists on the Writer project's own repository,
+which the arrival names.
 
-**Where the "follow" lives.** The upstream link is in the arrival trailers,
-so a second device that clones the project knows which upstream each book
-follows. Nothing is in `.sefer/` or in refs that intake would strip
-(`KEEP_REFS`).
+### Where the book ↔ upstream relationship lives
 
-- Choosing a different candidate later is just a new arrival, with a new
-  trailer.
-- **Whether to check** is a device setting ("Check Writer projects for new
-  work", off by default), because it is up to 66 probes.
+Formally it is `Upstream { books: BookCode[], url, ref, commit, at }`.
 
-**Folders and zips with a `.git`** (a BTT Writer working directory) come in
-the same way: their objects are copied in, and the arrival is the same.
+- `books` is a list. A Writer project is one book, but a consolidated project
+  taken as a whole (or a Burrito with a scope) is many.
+- `commit` is the last upstream commit whose work we took.
+- One upstream per book: no Bible prints John twice, and none follows two
+  repositories for it.
 
-- On desktop that is git2.
-- On the Web, isomorphic-git cannot fetch from a path, so the objects are
-  walked and written; small, but code to write.
-- A source with no `.git` arrives as one ordinary commit.
+**It is recorded in a committed file, `.upstreams.json` at the project root,**
+rewritten in each book arrival's commit.
 
-**Attach history** (books already present, as all of `bwc_reg`'s are) is the
-same arrival with the tip's tree unchanged. Their history appears behind the
-text, and the follow link starts from there.
+- **Not in git trailers alone.** Projects are cloned shallow by default (the
+  git-lifecycle `latest` clone), so a second device often does not have the
+  commit that carried the trailer. A file at the tip is always there.
+  - The trailers stay, as the human-readable record in History.
+  - The file is what code reads.
+- **Not in `.sefer/`.** That is this device's corner, and intake keeps it out
+  of every commit. A teammate needs to know which Writer project 1 John
+  follows.
+- **Not in the Burrito.** `relationships` relate a whole burrito to another
+  burrito, and none of the five `relationType`s means "an earlier home of
+  one of my books". Bending one would mislead every other Burrito reader.
+- **A dotfile, outside both metadata files.** It is not a Burrito ingredient
+  and not an RC project, so other tools ignore it. Removing it costs nothing
+  but the checking.
+- **Whether to check is a device setting** ("Check Writer projects for new
+  work", off by default), because it can be 66 probes. The record is shared;
+  the habit is per person.
 
-**Shallow clones.** The migration clones BTT Writer repositories in full: 31
-to 81 commits, which is small. A shallow upstream would leave a second parent
-whose ancestors are missing, and History already has to handle that case
-(the shallow-history card).
+**Paired resources** cloned from a remote (en_ulb) record their upstream in
+the Library row on this device, not in this file. They are this device's
+copies, already per-device in `library.json`, and the project itself names
+them through its Burrito `relationships`.
 
 ## Risks and costs
 
-**History must follow merges.** Our Web history index and `log(filepath)`
-must walk into an arrival's second parent and apply the BTT Writer lens there.
-Without that, B's history is invisible in Sefer.
+**Rendering cost** is paid once per book arrival, not per commit, and it is
+small: 60–200 chunk blobs per book. An update renders two commits (ours and
+their new head).
 
-- Check this first.
-- Old repositories have odd tree entries (the `UnsafeFilepathError` lesson).
-
-**Lens cost on the Web.** Reading a book's 50 commits through `render` means
-reading 60–200 chunk blobs per commit.
-
-- Memoize by blob oid and by chapter-tree oid.
-- It is paid when History is opened, not at assembly.
+**Fetching a base on update.** The base is `render(the commit we last
+took)`, and that commit is on the Writer project's remote, not in our
+repository. An update clones the Writer project into staging: 51–102 KB for
+`bwc`, so it is cheap. If the commit has been force-pushed away, the update
+falls back to a two-way comparison and says so.
 
 **Tap volume.** A whole-Bible migration is up to 66 clones.
 
 - Clone a few at a time, with progress per row.
 - Back off on HTTP 429.
 
+**`.upstreams.json` can be edited by hand,** or merged badly by a teammate.
+It is decoded through a Schema on read. A file that does not decode means "no
+upstreams known", and nothing is checked; that is the safe failure.
+
 ## Questions for Will
 
-1. **History shape.** B (keep the real commits; reshape and front matter in
-   one arrival commit) over A (rewrite)? This note recommends B.
-2. **Two versions of one source** (ULB 24-02 and 21-05). Bind both, or bind
-   the newer and record both?
+1. **Upstream record.** A committed `.upstreams.json` (recommended), or
+   somewhere else?
+2. **Two versions of one paired resource** (ULB 24-02 and 21-05). Bind both,
+   or bind the newer and record both?
 3. **`revision`.** The resolved commit SHA, as recommended, with the human
    version kept in the RC `source`?
 4. **The id authority's name.** `wacs::`? It is ours to choose, and it should
