@@ -1,10 +1,11 @@
 # Assembling a Bible from single-book projects (BTT Writer migration) (2026-10-02)
 
-**Status:** idea, second pass. Will agreed the direction on 2026-10-02 (see
-"Decided" below), and nothing is authorized to build yet. Written from Will's
-description and a live probe of the Language API and the content host for
-`bwc` (Bwile). The first pass covered one network source; this pass makes
-folder, zip and network three sources behind one contract.
+**Status:** idea, agreed in direction through 2026-10-02. Nothing is built.
+**Pick up Monday 2026-10-05, together with
+[resource kinds](../01-discussing/resource-kinds-2026-10-01.md).** The order
+is: paired resources (step 1), then this migration, then resource kinds and
+TN. Step 1's decisions are in "Step 1 settled", near the end. The sections
+from "Naming" on supersede earlier wording where they differ.
 
 **This supersedes**
 [WACS language downloads](../01-discussing/wacs-language-downloads-2026-09-24.md),
@@ -249,9 +250,9 @@ corrections.
      collapsed. Keep the first spelling seen.
    - A team list in one string ("Kapiso Gershom, Salt Mwinuna, …") stays one
      entry. Splitting on commas would break names that contain one.
-2. **Sources, de-duplicated** on (language, identifier, version). `bwc_reg`'s
+1. **Sources, de-duplicated** on (language, identifier, version). `bwc_reg`'s
    two ULB versions are distinct and both stay.
-3. **Sources as proper Burrito relationships, not only RC `source`.** See
+1. **Sources as proper Burrito relationships, not only RC `source`.** See
    "Sources" below.
 
 **Write both files; read the Burrito.**
@@ -811,7 +812,7 @@ now.
 - **Internal staff** (revising en_tn, for example) must still be able to load
   one directly and work in it.
 
-**Proposal: a default, not a lock.**
+**Decided (Will, 2026-10-02): a default, not a lock.**
 
 - **One field, `purpose: "translate" | "reference"`, on the device's project
   index** (`.sefer/projects.json`, `v: 5`).
@@ -856,14 +857,11 @@ text sees it move once, and "Edit it as your own project" moves it back.
 
 ## Questions for Will
 
-1. **Purpose.** Is a default (`translate` | `reference`, per device, set at
-   arrival, switchable from the editor) enough for ops, or do they need
-   reference projects to refuse edits?
-2. **`revision`.** The resolved commit SHA, as recommended, with the human
+1. **`revision`.** The resolved commit SHA, as recommended, with the human
    version kept in the RC `source`?
-3. **The id authority's name.** `wacs::`? It is ours to choose, and it
+2. **The id authority's name.** `wacs::`? It is ours to choose, and it
    should be one value across the organisation's tools.
-4. **The converter.** Which one built `bwc_reg`? `render` should match it,
+3. **The converter.** Which one built `bwc_reg`? `render` should match it,
    or say where it differs.
-5. **What "Active" means.** Who would know? The defaults treat it as "second
+4. **What "Active" means.** Who would know? The defaults treat it as "second
    choice".
