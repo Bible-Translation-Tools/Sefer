@@ -89,7 +89,9 @@ import {
 import { RecoveryBanner } from "../recovery/RecoveryBanner";
 import { BackToEditor } from "../workspace/BackToEditor";
 import { bookName } from "../workspace/books";
+import { ChangesHistorySidebar } from "../workspace/ChangesHistorySidebar";
 import { metadataOf } from "../workspace/project";
+import { claimSidebar } from "../workspace/sidebarSlot";
 import { ReviewReader, type ReviewBook } from "./ReviewReader";
 import { sourceChoices, type SourceChoice } from "./sources";
 
@@ -132,6 +134,16 @@ export function ReviewPanel() {
   };
   /** Is one side the shared project? Then recording also takes what it changed. */
   const againstShared = (): boolean => rightId() === "shared" || leftId() === "shared";
+  // The sidebar's Changes tab with nothing under it, for a review with no
+  // reader: nothing differs, or nothing is compared yet. The reader's own claim
+  // replaces it while it is mounted, and the History tab stays one click away.
+  onCleanup(
+    claimSidebar(() => (
+      <ChangesHistorySidebar active="changes" changes={0}>
+        <p class="px-6 pt-3 text-small text-on-surface-tertiary">{t("Nothing differs.")}</p>
+      </ChangesHistorySidebar>
+    )),
+  );
   const version = createRecordedVersion(shell);
   const shared = createRecordedVersion(shell, "shared", theirsRef);
   // The last version both sides had in common: what "who changed this" is

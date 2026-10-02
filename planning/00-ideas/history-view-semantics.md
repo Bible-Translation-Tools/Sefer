@@ -66,8 +66,14 @@ Checked unified at 1440 px and split at 2200 px.
 Not tested: a passage one side lacks (an added or removed verse), and
 Undo after Adopt-before.
 
-Open: should History be a sidebar beside the editor (Zed's Changes | History)
-instead of its own screen? See the conversation of 2026-10-02.
+**Third pass (2026-10-02, built): History is the sidebar's History tab.**
+Review and History share one sidebar panel with two tabs, Changes and History,
+the way Zed's git panel does. The route picks the tab. The timeline lives in
+the History tab, with Reload at its top, and the main area shows only the
+selected version (`?commit=<id>`; the newest when none is given). The "Not yet
+recorded" row, its Revert file, and the screen's own Save & Review are gone:
+that row was the Changes tab. Save & Review is the way in for now. Opening this
+panel from the editor, as Zed's left dock does, is not built.
 
 Today a selected commit is diffed against the WORKING text ("Working text
 against 3b83a12."), not against its parent. So:

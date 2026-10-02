@@ -206,8 +206,12 @@ Choosing another source starts over: no decisions, and the takes already
 written stay as ordinary edits. Recovered work is the one recovery banner every
 project screen shows, and only when there is some. The reading's own toolbar is the second row: scope, the kind
 filter, a View menu (layout, USFM markup), next and previous. The project
-sidebar becomes the review's outline — each book that differs, decided of
-total — as Find's becomes its results.
+sidebar becomes a two-tab panel, Changes and History
+(`workspace/ChangesHistorySidebar.tsx`, as Zed's git panel has them). Review is
+the Changes tab: each book that differs, decided of total, as Find's sidebar
+becomes its results. History is the other tab: the timeline, with the selected
+version's changes in the main area (`?commit=<id>`) and Adopt on either side of
+a card. The route picks the tab, so Back and Forward move between them.
 
 The differences are drawn ON the two texts, as the editor reads them — the
 diff view recipe (`#editor` `mountDiffView`) paints units and word runs on each

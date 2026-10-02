@@ -1,20 +1,13 @@
 /**
  * "What have I changed?", as History and Review both need to ask it.
  *
- * There are TWO baselines and they answer different questions, so both live
- * here rather than one being mistaken for the other:
- *
- *   * `unsavedChanges` is against the last write to DISK
- *     (`SaveCoordinator.baseline`) — what the file holds right now. This is
- *     the REVIEW answer: under explicit-only saving the file is exactly the
- *     thing a reader has not yet agreed to change, and the books that differ
- *     from it are the books they are about to record.
- *   * `recordedChanges` is against the last recorded VERSION (the blob at
- *     HEAD, read by `recorded.ts`). That is HISTORY's question — "what has
- *     happened since the last commit" — and it is the wrong one for Review.
- *     Under explicit-only saving the file IS a decision, and reviewing against
- *     HEAD would show an untouched 66-book project opened without a
- *     repository as "66 books to record".
+ * `unsavedChanges` is against the last write to DISK
+ * (`SaveCoordinator.baseline`) — what the file holds right now. This is the
+ * REVIEW answer, the sidebar's Changes tab: under explicit-only saving the
+ * file is exactly the thing a reader has not yet agreed to change, and the
+ * books that differ from it are the books they are about to record. History
+ * asks a different question — what one recorded version changed — through
+ * `versionChanges`, and the last recorded version is not a baseline anywhere.
  *
  * Nothing here subscribes to a Book — each walk reads `shell.stampOf` to
  * make the answer reactive, which is the single-subscription rule the shell
@@ -35,7 +28,6 @@ import type { GalleyService } from "#core/galley";
 
 import type { Shell } from "../../ProjectContext";
 import { lines } from "./format";
-import type { Recorded } from "./recorded";
 
 export interface BookChanges {
   readonly bookId: BookId;
@@ -120,48 +112,6 @@ export const versionChanges = (
     removed: units.filter((unit) => unit.status === "deleted").length,
     modified: units.filter((unit) => unit.status !== "added" && unit.status !== "deleted").length,
   };
-};
-
-/**
- * Every book whose working text differs from the last RECORDED version.
- *
- * This is the review answer, and it does not care what is on disk: a file
- * written by a commit that then failed is still not in the history. A book
- * HEAD has never seen is
- * reported as `firstTime`, so "nothing recorded yet" reads as five books about
- * to be recorded rather than as a clean project.
- */
-export const recordedChanges = (shell: Shell, recorded: Recorded): readonly BookChanges[] => {
-  const project = shell.project();
-  if (project === undefined || !recorded.read) return [];
-  const out: BookChanges[] = [];
-  for (const book of project.books) {
-    // The dependency, per book: this diff is against the book's WORKING text,
-    // so it moves when that text moves and when nothing else does. `recorded`
-    // is the caller's own signal and is already tracked where it is read.
-    shell.stampOf(book.id);
-    const at = recorded.texts.get(book.id);
-    if (at === undefined) {
-      out.push({
-        bookId: book.id,
-        path: book.path,
-        book,
-        changes: undefined,
-        added: lines(book.source().text).length,
-        removed: 0,
-        modified: 0,
-        firstTime: true,
-      });
-      continue;
-    }
-    const changed = changesOf(shell.services.galley, book, {
-      bookId: book.id,
-      stamp: at.stamp,
-      text: at.text,
-    });
-    if (changeCount(changed) > 0) out.push(changed);
-  }
-  return out;
 };
 
 /**

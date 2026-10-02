@@ -1,5 +1,7 @@
 /**
- * The project's history: what git recorded, and what has not been recorded yet.
+ * The project's history: one recorded version's changes, with the timeline in
+ * the sidebar's History tab (`ChangesHistorySidebar`) — what is not recorded
+ * yet is the Changes tab, which is Review.
  *
  * The timeline is `git.log` plus one `git.previousVersions` per book, and that
  * second call is what makes the rest of the panel cheap: it answers "which
@@ -7,29 +9,17 @@
  * can name the books it changed without reading a single blob, and reading one
  * happens only when somebody selects that commit.
  *
- * The diff is `core/diff` between the working text and the selected side, and
- * Revert means exactly one thing everywhere in the product: `diff.revert`
- * through `book.apply` with `trustedBy("diff.revert")`, refused when the book
- * has moved since the hunk was measured. It moves the TEXT IN THE EDITOR and
- * nothing else — no file is written here and no version is recorded — so Undo
- * takes it back, and it is behind a confirmation because scripture is not
- * something to replace by accident.
- *
- * The top row is what has not been recorded, because "where am I now" is the
- * question people come to a history for first. Its baseline is the blob at
- * HEAD (`recorded.ts`), NOT `SaveCoordinator.baseline`: the disk is not the
- * history, and a write whose commit failed would otherwise report as recorded.
- * What the disk baseline still answers is the small "not yet written" note
- * beside it.
+ * A version shows what IT changed: each book it touched, that book's previous
+ * version against this one, as a log shows a commit. Nothing here writes a
+ * file: Adopt puts one side's wording into the editor through `book.apply`, an
+ * ordinary edit that Undo takes back and Record a version keeps.
  */
 
-import { useNavigate } from "@tanstack/solid-router";
+import { useNavigate, useSearch } from "@tanstack/solid-router";
 import { Effect, Option, Result } from "effect";
 import GitCommitVertical from "lucide-solid/icons/git-commit-vertical";
-import PencilLine from "lucide-solid/icons/pencil-line";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
-import Undo2 from "lucide-solid/icons/undo-2";
-import { For, Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
 import type { Book, BookId } from "#core/book/book";
 import { diffSkeleton } from "#core/diff/skeleton";
@@ -52,45 +42,34 @@ import type { CardAction } from "../multibuffer/CardAction";
 import {
   Badge,
   Button,
-  Card,
   DelayedSpinner,
-  Dialog,
   EmptyState,
+  IconButton,
   PanelHeader,
   toasts,
 } from "../primitives";
 import { ReviewReader, type ReviewBook } from "../review/ReviewReader";
 import { bookName } from "../workspace/books";
+import { ChangesHistorySidebar } from "../workspace/ChangesHistorySidebar";
 import { metadataOf } from "../workspace/project";
+import { claimSidebar } from "../workspace/sidebarSlot";
 import {
   changeCount,
   changesOf,
-  recordedChanges,
   unsavedChanges,
   versionChanges,
   type BookChanges,
 } from "./changes";
 import { ago, dated, exact } from "./format";
-import { createRecordedVersion } from "./recorded";
 import { YoursRow } from "./YoursRow";
 
-/** The not-yet-recorded row's id in the selection. A commit id is 40 hex digits. */
-const WORKING = "working";
-
-/** The one row look, shared by the top row and every commit row. */
+/** A timeline row's look. */
 const ROW = [
   "flex w-full cursor-pointer flex-col gap-1 px-3.5 py-3 text-start transition-colors",
   "hover:bg-surface-secondary",
   "aria-[current=true]:bg-brand-light",
   "aria-[current=true]:shadow-[inset_0.1875rem_0_0_0_var(--brand-base)]",
 ].join(" ");
-
-interface Confirmation {
-  readonly title: string;
-  readonly description: string;
-  readonly label: string;
-  readonly run: () => void;
-}
 
 /** Your text against both sides of a selected version, for one book. */
 interface Yours {
@@ -129,7 +108,6 @@ export function HistoryPanel() {
     name: "gitVersions",
   });
   const [problem, setProblem] = createSignal("");
-  const [selected, setSelected] = createSignal<string>(WORKING, { name: "selectedCommit" });
   const [shown, setShown] = createSignal<readonly BookChanges[]>([], { name: "shownDiff" });
   /** Commit ids the shared project has; `undefined` when there is nothing to compare with. */
   const [shared, setShared] = createSignal<ReadonlySet<string> | undefined>(undefined, {
@@ -148,15 +126,22 @@ export function HistoryPanel() {
   const [yoursOpen, setYoursOpen] = createSignal<ReadonlySet<string>>(new Set(), {
     name: "historyYoursOpen",
   });
-  const choose = (id: string): void => {
-    setSelected(id);
-    setYoursOpen(new Set<string>());
+  // SAFETY: `strict: false` gives the union of every route's search; `commit`
+  // is read as `unknown` and narrowed (the route validated it already).
+  const search = useSearch({ strict: false }) as () => { readonly commit?: unknown };
+  /** The version shown: the URL's, else the newest. Empty while the log is read. */
+  const selected = (): string => {
+    const asked = search().commit;
+    return typeof asked === "string" ? asked : (log()?.[0]?.id ?? "");
   };
-  const [confirming, setConfirming] = createSignal<Confirmation | undefined>(undefined, {
-    name: "confirmRevert",
-  });
-  /** HEAD's blobs: the baseline the top row is measured against. */
-  const version = createRecordedVersion(shell);
+  const choose = (id: string): void => {
+    setYoursOpen(new Set<string>());
+    void navigate({
+      to: "/project/$slug/history",
+      params: { slug: shell.slug() },
+      search: { commit: id },
+    });
+  };
   /**
    * Whether older history is on this device. A project cloned with its
    * newest version only (the Web's default) has a short past until it is
@@ -225,7 +210,6 @@ export function HistoryPanel() {
         setLog(answer.commits);
         setVersions(answer.perBook);
         setShared(answer.shared);
-        version.refresh();
         setOlder((now) => (answer.shallow ? (now === "loading" ? now : "missing") : "whole"));
         // The first time History opens on a project with its newest version
         // only, one step further back is fetched without being asked: opening
@@ -302,19 +286,14 @@ export function HistoryPanel() {
   /**
    * The selected side's diff.
    *
-   * The top row is always the text in hand against the recorded baseline. A
-   * commit shows what it changed: each book it touched, its previous version
+   * What a version changed: each book it touched, its previous version
    * against this one. Where your text stands against either is `yours`, below.
    */
   const recompute = async (): Promise<void> => {
     const project = shell.project();
     const id = selected();
-    if (project === undefined) {
+    if (project === undefined || id === "") {
       setShown([]);
-      return;
-    }
-    if (id === WORKING) {
-      setShown(notRecorded());
       return;
     }
     const out: BookChanges[] = [];
@@ -337,27 +316,10 @@ export function HistoryPanel() {
     setShown(out);
   };
 
-  /**
-   * The books this side is a diff OF, which is what decides when it restales.
-   *
-   * The working row diffs every book against the recorded baseline. A commit
-   * diffs two recorded texts, which no keystroke moves: where your text
-   * stands against them is `yours`, which follows the edits itself. Naming
-   * the books is what lets a keystroke in Genesis leave this panel alone —
-   * behind `shell.tick()` every edit anywhere re-ran it, blob fetch and
-   * decode included.
-   */
-  const diffed = (): readonly BookId[] => {
-    const id = selected();
-    if (id !== WORKING) return [];
-    return shell.project()?.books.map((book) => book.id) ?? [];
-  };
-
+  // A version diffs two recorded texts, which no keystroke moves: where your
+  // text stands against them is `yours`, which follows the edits itself.
   createEffect(
-    () =>
-      `${selected()}:${versions().size}:${version.recorded().head ?? ""}:${diffed()
-        .map((bookId) => shell.stampOf(bookId)?.revision ?? -1)
-        .join(",")}`,
+    () => `${selected()}:${versions().size}`,
     () => {
       // The compute above IS the dependency list. Everything this reads is a
       // one-time snapshot of the state that key already describes, so
@@ -369,34 +331,6 @@ export function HistoryPanel() {
       });
     },
   );
-
-  /** `bookId` because a revert is an edit to ONE book, and says so. */
-  const announce = (
-    bookId: BookId,
-    done: Result.Result<unknown, { readonly reason: string }>,
-  ): void => {
-    if (Result.isFailure(done)) {
-      toasts.error({ title: t("Revert refused"), message: t(done.failure.reason) });
-      return;
-    }
-    toasts.success({ title: t("Reverted") });
-    shell.changed({ kind: "book.apply", books: [bookId] });
-  };
-
-  /** One unit, or a whole book's: the engine's edits, one apply, one Undo. */
-  const revertSome = (changes: BookChanges, units: readonly DecisionUnit[]) =>
-    changes.changes === undefined
-      ? Result.fail({ reason: "nothing to revert" })
-      : revertUnits(shell.services.galley, changes.book, changes.changes, units);
-
-  const revertFile = (changes: BookChanges): void => {
-    setConfirming({
-      title: t("Revert every change in {book}?", { book: nameOf(changes.bookId) }),
-      label: t("Revert {count} change(s)", { count: changeCount(changes) }),
-      description: t("One edit, so one Undo takes the whole thing back."),
-      run: () => announce(changes.bookId, revertSome(changes, changes.changes?.units ?? [])),
-    });
-  };
 
   /** USFM or the reading, in the reader below; History's own, not Review's. */
   const [markup, setMarkup] = createSignal(false, { name: "historyMarkup" });
@@ -447,7 +381,7 @@ export function HistoryPanel() {
   const yours = createMemo(
     (): ReadonlyMap<BookId, Yours> => {
       const out = new Map<BookId, Yours>();
-      if (selected() === WORKING) return out;
+      if (selected() === "") return out;
       const held = shown().filter((changes) => changes.firstTime !== true);
       for (const changes of held) void shell.stampOf(changes.bookId)?.revision;
       // The reads above are the dependencies; the diffs below are snapshots of them.
@@ -606,37 +540,148 @@ export function HistoryPanel() {
   const selectedCommit = (): Commit | undefined =>
     log()?.find((commit) => commit.id === selected());
 
-  /** What the latest recorded version does not hold yet: the review answer. */
-  const notRecorded = (): readonly BookChanges[] => recordedChanges(shell, version.recorded());
+  /** Books not yet written to disk: the Changes tab's count. */
+  const unsaved = (): number => unsavedChanges(shell).length;
 
-  /** The other question, kept small: what has not reached the file yet. */
-  const notWritten = (): readonly BookChanges[] => unsavedChanges(shell);
-
-  /** The one way to Save & Review from this screen, so both doors agree. */
+  /** Save & Review, from a project with nothing recorded yet. */
   const review = (): void => {
-    void navigate({
-      to: "/project/$slug/history",
-      params: { slug: shell.slug() },
-      search: { review: true },
-    });
+    void navigate({ to: "/project/$slug/review", params: { slug: shell.slug() } });
   };
 
   /** What a person calls a book: the project's own name for it, else the canon's. */
   const nameOf = (bookId: BookId): string => bookName(bookId, metadataOf(shell.project()));
 
+  /** A version's row in the timeline: what it says, who, when, and the books it touched. */
+  const Row = (props: { readonly commit: Commit }) => (
+    <button
+      type="button"
+      data-commit={props.commit.id}
+      aria-current={selected() === props.commit.id ? "true" : undefined}
+      class={ROW}
+      onClick={() => choose(props.commit.id)}
+    >
+      <span class="w-full truncate text-small font-medium text-on-surface-primary">
+        {props.commit.message}
+      </span>
+      <span class="flex w-full flex-wrap items-center gap-x-2 gap-y-1 text-smallest text-on-surface-tertiary">
+        <span>{props.commit.author.name}</span>
+        <span aria-hidden="true">·</span>
+        <time datetime={new Date(props.commit.at).toISOString()} title={exact(props.commit.at)}>
+          {ago(props.commit.at)}
+        </time>
+        <span aria-hidden="true">·</span>
+        <span class="font-mono">{props.commit.id.slice(0, 7)}</span>
+      </span>
+    </button>
+  );
+
+  /**
+   * The timeline is the sidebar's History tab, as Review's changed books are
+   * its Changes tab: one panel, two tabs, the route says which.
+   */
+  onCleanup(
+    claimSidebar(() => (
+      <ChangesHistorySidebar active="history" changes={unsaved()}>
+        <div class="flex items-center gap-2 px-4 pt-3 pb-2">
+          <p class="min-w-0 flex-1 px-2 text-small text-on-surface-secondary">
+            {t("{count} version(s)", { count: log()?.length ?? 0 })}
+          </p>
+          <IconButton
+            size="sm"
+            variant="subtle"
+            label={t("Reload")}
+            icon={<RefreshCw />}
+            onClick={load}
+          />
+        </div>
+        <nav aria-label={t("Timeline")} class="min-h-0 flex-1 overflow-y-auto pb-4">
+          <ul class="divide-y divide-sidebar-border" data-commits={log()?.length ?? 0}>
+            {/* The first read of the log: the shared short-wait spinner. */}
+            <Show when={log() === undefined && problem() === ""}>
+              <li class="px-4 py-3">
+                <DelayedSpinner />
+              </li>
+            </Show>
+            <For each={log() ?? []}>
+              {(commit, index) => (
+                <>
+                  {/* Only when some versions are not shared yet: a divider
+                      above them, and one where the shared ones begin. */}
+                  <Show when={index() === 0 && onlyHere(commit.id)}>
+                    <li
+                      data-history-divider="local"
+                      class="px-5 py-1 text-smallest font-medium text-on-surface-warning"
+                    >
+                      {t("Only on this device")}
+                    </li>
+                  </Show>
+                  <Show
+                    when={
+                      index() > 0 &&
+                      !onlyHere(commit.id) &&
+                      onlyHere((log() ?? [])[index() - 1]?.id ?? "")
+                    }
+                  >
+                    <li
+                      data-history-divider="shared"
+                      class="px-5 py-1 text-smallest font-medium text-on-surface-tertiary"
+                    >
+                      {t("On the shared project")}
+                    </li>
+                  </Show>
+                  <li>
+                    <Row commit={commit} />
+                  </li>
+                </>
+              )}
+            </For>
+          </ul>
+          <Show when={older() !== "whole"}>
+            <div class="space-y-2 px-5 pt-3" data-history-older={older()}>
+              <p class="text-smallest text-on-surface-secondary">
+                {older() === "loading"
+                  ? t("Bringing the older history to this device…")
+                  : older() === "failed"
+                    ? t(
+                        "The older history could not be brought to this device. What is here is recent history only.",
+                      )
+                    : t(
+                        "Only recent history is on this device. The older history is on the shared project.",
+                      )}
+              </p>
+              <Show when={older() !== "loading"}>
+                <div class="flex gap-2">
+                  <Button variant="secondary" size="sm" onClick={() => loadOlder(HISTORY_STEP)}>
+                    {t("Load {count} more", { count: HISTORY_STEP })}
+                  </Button>
+                  <Button variant="tertiary" size="sm" onClick={() => loadOlder("all")}>
+                    {t("Load all")}
+                  </Button>
+                </div>
+              </Show>
+            </div>
+          </Show>
+        </nav>
+      </ChangesHistorySidebar>
+    )),
+  );
+
   return (
-    <main class="min-w-0 space-y-4 p-6">
+    <main class="flex h-full min-w-0 flex-col gap-4 p-6" data-history>
       <PanelHeader
-        title={t("History")}
-        actions={
-          <>
-            <Button icon={<RefreshCw />} onClick={load}>
-              {t("Reload")}
-            </Button>
-            <Button variant="primary" onClick={review}>
-              {t("Save & Review")}
-            </Button>
-          </>
+        title={selectedCommit()?.message ?? t("History")}
+        subtitle={
+          <Show when={selectedCommit()}>
+            {(commit) => (
+              <span class="flex flex-wrap items-center gap-x-2">
+                <span>{commit().author.name}</span>
+                <span aria-hidden="true">·</span>
+                <time datetime={new Date(commit().at).toISOString()}>{dated(commit().at)}</time>
+                <span aria-hidden="true">·</span>
+                <span class="font-mono">{commit().id.slice(0, 7)}</span>
+              </span>
+            )}
+          </Show>
         }
       />
 
@@ -650,345 +695,120 @@ export function HistoryPanel() {
           />
         }
       >
-        <div class="grid items-start gap-4 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
-          <div class="space-y-3 lg:sticky lg:top-6">
-            <Show when={older() !== "whole"}>
-              <Card class="space-y-2" data-history-older={older()}>
-                <p class="text-small text-on-surface-secondary">
-                  {older() === "loading"
-                    ? t("Bringing the older history to this device…")
-                    : older() === "failed"
-                      ? t(
-                          "The older history could not be brought to this device. What is here is recent history only.",
-                        )
-                      : t(
-                          "Only recent history is on this device. The older history is on the shared project.",
-                        )}
-                </p>
-                <Show when={older() !== "loading"}>
-                  <div class="flex gap-2">
-                    <Button variant="secondary" size="sm" onClick={() => loadOlder(HISTORY_STEP)}>
-                      {t("Load {count} more", { count: HISTORY_STEP })}
-                    </Button>
-                    <Button variant="tertiary" size="sm" onClick={() => loadOlder("all")}>
-                      {t("Load all")}
-                    </Button>
-                  </div>
-                </Show>
-              </Card>
-            </Show>
-            <Show when={problem() !== ""}>
-              <Card class="space-y-2" data-history-problem={problem()}>
-                <Show
-                  when={problem() === "NotARepository"}
-                  fallback={
-                    <>
-                      <p class="text-small text-on-surface-secondary">
-                        {t("Sefer could not read this project's history.")}
-                      </p>
-                      <p class="text-smallest text-on-surface-tertiary">
-                        {t("The repository refused the read: {reason}.", { reason: problem() })}
-                      </p>
-                    </>
-                  }
-                >
-                  <p class="text-small text-on-surface-secondary">
-                    {t("Nothing has been recorded for this project yet.")}
-                  </p>
-                  <p class="text-smallest text-on-surface-tertiary">
-                    {t(
-                      "Your unsaved work is kept safe as you type, but your books are only written to disk when you Save & Review. That records a version you can come back to — the first one creates the repository.",
-                    )}
-                  </p>
-                  <Button variant="primary" size="sm" onClick={review}>
-                    {t("Save & Review")}
-                  </Button>
-                </Show>
-              </Card>
-            </Show>
-
-            {/* Its own scroller: a long history scrolls inside the card, and
-                the column stays one screen tall beside the changes. */}
-            <Card padded={false} class="max-h-[70vh] overflow-y-auto" aria-label={t("Timeline")}>
-              <ul class="divide-y divide-surface-border" data-commits={log()?.length ?? 0}>
-                <li>
-                  <button
-                    type="button"
-                    data-commit={WORKING}
-                    aria-current={selected() === WORKING ? "true" : undefined}
-                    class={ROW}
-                    onClick={() => choose(WORKING)}
-                  >
-                    <div class="flex w-full items-center gap-2">
-                      <PencilLine
-                        size={14}
-                        class="shrink-0 text-on-surface-tertiary"
-                        aria-hidden="true"
-                      />
-                      <span class="min-w-0 flex-1 truncate text-small font-semibold text-on-surface-primary">
-                        {t("Not yet recorded")}
-                      </span>
-                      <Show when={notRecorded().length > 0}>
-                        <Badge tone="warning">{notRecorded().length}</Badge>
-                      </Show>
-                    </div>
-                    <div class="flex w-full flex-wrap items-center gap-x-2 gap-y-1 text-smallest text-on-surface-tertiary">
-                      <Show
-                        when={notRecorded().length > 0}
-                        fallback={<span>{t("Every book is in the latest version.")}</span>}
-                      >
-                        <span>
-                          {t("{count} book(s) changed since the last version", {
-                            count: notRecorded().length,
-                          })}
-                        </span>
-                      </Show>
-                      <Show when={notWritten().length > 0}>
-                        <span aria-hidden="true">·</span>
-                        <span>
-                          {t("{count} not yet written to disk", { count: notWritten().length })}
-                        </span>
-                      </Show>
-                    </div>
-                  </button>
-                </li>
-
-                {/* The first read of the log: the shared short-wait spinner. */}
-                <Show when={log() === undefined && problem() === ""}>
-                  <li>
-                    <DelayedSpinner />
-                  </li>
-                </Show>
-                <For each={log() ?? []}>
-                  {(commit, index) => (
-                    <>
-                      {/* Only when some versions are not shared yet: a divider
-                        above them, and one where the shared ones begin. */}
-                      <Show when={index() === 0 && onlyHere(commit.id)}>
-                        <li
-                          data-history-divider="local"
-                          class="bg-surface-secondary px-3 py-1 text-smallest font-medium text-on-surface-warning"
-                        >
-                          {t("Only on this device")}
-                        </li>
-                      </Show>
-                      <Show
-                        when={
-                          index() > 0 &&
-                          !onlyHere(commit.id) &&
-                          onlyHere((log() ?? [])[index() - 1]?.id ?? "")
-                        }
-                      >
-                        <li
-                          data-history-divider="shared"
-                          class="bg-surface-secondary px-3 py-1 text-smallest font-medium text-on-surface-tertiary"
-                        >
-                          {t("On the shared project")}
-                        </li>
-                      </Show>
-                      <li>
-                        <button
-                          type="button"
-                          data-commit={commit.id}
-                          aria-current={selected() === commit.id ? "true" : undefined}
-                          class={ROW}
-                          onClick={() => choose(commit.id)}
-                        >
-                          <div class="flex w-full items-center gap-2">
-                            <Badge class="font-mono">{commit.id.slice(0, 7)}</Badge>
-                            <span class="min-w-0 flex-1 truncate text-small font-medium text-on-surface-primary">
-                              {commit.message}
-                            </span>
-                          </div>
-                          <div class="flex w-full flex-wrap items-center gap-x-2 gap-y-1 text-smallest text-on-surface-tertiary">
-                            <span>{commit.author.name}</span>
-                            <span aria-hidden="true">·</span>
-                            <time
-                              datetime={new Date(commit.at).toISOString()}
-                              title={exact(commit.at)}
-                            >
-                              {ago(commit.at)}
-                            </time>
-                            <For each={booksIn(commit.id)}>
-                              {(bookId) => (
-                                <span title={bookId}>
-                                  <Badge tone="brand">{nameOf(bookId)}</Badge>
-                                </span>
-                              )}
-                            </For>
-                          </div>
-                        </button>
-                      </li>
-                    </>
-                  )}
-                </For>
-              </ul>
-            </Card>
-
-            <Show when={problem() === "" && log()?.length === 0}>
-              <p class="px-1 text-smallest text-on-surface-tertiary">{t("No commits yet.")}</p>
-            </Show>
-          </div>
-
-          <Card class="min-w-0 space-y-4" aria-label={t("Changes")}>
-            <PanelHeader
-              level={3}
-              title={
-                selected() === WORKING
-                  ? t("Not yet recorded")
-                  : (selectedCommit()?.message ?? t("Selected version"))
-              }
-              subtitle={
-                selected() === WORKING
-                  ? t("The text in the editor against the last recorded version.")
-                  : t("What this version changed.")
-              }
-            />
-
+        <Show
+          when={problem() === ""}
+          fallback={
             <Show
-              when={shown().length > 0}
+              when={problem() === "NotARepository"}
               fallback={
                 <EmptyState
-                  title={
-                    selected() === WORKING
-                      ? t("Everything on screen is already in the latest version.")
-                      : t("This version changed no book's text.")
-                  }
+                  title={t("Sefer could not read this project's history.")}
+                  description={t("The repository refused the read: {reason}.", {
+                    reason: problem(),
+                  })}
                 />
               }
             >
+              <EmptyState
+                icon={<GitCommitVertical size={22} />}
+                title={t("Nothing has been recorded for this project yet.")}
+                description={t(
+                  "Your unsaved work is kept safe as you type, but your books are only written to disk when you Save & Review. That records a version you can come back to — the first one creates the repository.",
+                )}
+                action={
+                  <Button variant="primary" size="sm" onClick={review}>
+                    {t("Save & Review")}
+                  </Button>
+                }
+              />
+            </Show>
+          }
+        >
+          <Show
+            when={shown().length > 0}
+            fallback={
+              <EmptyState
+                title={
+                  log()?.length === 0
+                    ? t("No versions yet.")
+                    : selected() === ""
+                      ? t("Reading the history…")
+                      : t("This version changed no book's text.")
+                }
+              />
+            }
+          >
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-2" data-history-books>
               <For each={shown()}>
                 {(changes) => (
-                  <section class="space-y-2" data-diff-book={changes.bookId}>
-                    <div class="flex flex-wrap items-center gap-2">
-                      <strong class="text-small font-semibold text-on-surface-primary">
-                        {nameOf(changes.bookId)}
-                      </strong>
-                      <code class="min-w-0 truncate font-mono text-smallest text-on-surface-tertiary">
-                        {changes.path}
-                      </code>
-                      <Show
-                        when={changes.firstTime === true}
-                        fallback={
-                          <>
-                            <Badge tone="warning">
-                              {t("{count} change(s)", { count: changeCount(changes) })}
+                  <span class="flex items-center gap-2" data-diff-book={changes.bookId}>
+                    <strong class="text-small font-semibold text-on-surface-primary">
+                      {nameOf(changes.bookId)}
+                    </strong>
+                    <Show
+                      when={changes.firstTime === true}
+                      fallback={
+                        <>
+                          <Badge tone="warning">
+                            {t("{count} change(s)", { count: changeCount(changes) })}
+                          </Badge>
+                          <Show when={changes.added > 0}>
+                            <Badge tone="success">
+                              {t("+{count} added", { count: changes.added })}
                             </Badge>
-                            <Show when={changes.added > 0}>
-                              <Badge tone="success">
-                                {t("+{count} added", { count: changes.added })}
-                              </Badge>
-                            </Show>
-                            <Show when={changes.removed > 0}>
-                              <Badge tone="error">
-                                {t("−{count} removed", { count: changes.removed })}
-                              </Badge>
-                            </Show>
-                          </>
-                        }
-                      >
-                        <Badge tone="brand">{t("first version")}</Badge>
-                        <Badge tone="success">
-                          {t("{count} line(s)", { count: changes.added })}
-                        </Badge>
-                      </Show>
-                      {/* Against the last version, a book can go back. A version's
-                          change is adopted a card at a time, never a whole side:
-                          taking a book wholesale is Review's. */}
-                      <Show when={selected() === WORKING && changes.firstTime !== true}>
-                        <Button
-                          size="sm"
-                          variant="tertiary"
-                          class="ms-auto"
-                          icon={<Undo2 />}
-                          onClick={() => revertFile(changes)}
-                        >
-                          {t("Revert file")}
-                        </Button>
-                      </Show>
-                    </div>
-                  </section>
+                          </Show>
+                          <Show when={changes.removed > 0}>
+                            <Badge tone="error">
+                              {t("−{count} removed", { count: changes.removed })}
+                            </Badge>
+                          </Show>
+                        </>
+                      }
+                    >
+                      <Badge tone="brand">{t("first version")}</Badge>
+                    </Show>
+                  </span>
                 )}
               </For>
-              {/* The changes themselves: the multibuffer Review reads with —
-                  the same cards, steps, chapter and fold-back, Open in the
-                  book. Against the last version a card can put that passage
-                  back (Take); for a version's own change, Adopt on either side
-                  (on hover) writes that side's wording into your text, and
-                  "Yours differs" opens your text against this version. Neither
-                  writes a file. */}
-              <Show when={reviewBooks().length > 0}>
-                <div class="flex h-[70vh] min-h-0 flex-col" data-history-reader>
-                  <ReviewReader
-                    books={reviewBooks()}
-                    decision={() => undefined}
-                    decide={(bookId, units, side) => {
-                      if (side !== "baseline") return;
-                      const changes = shown().find((held) => held.bookId === bookId);
-                      if (changes !== undefined) announce(bookId, revertSome(changes, units));
-                    }}
-                    decidable={selected() === WORKING}
-                    sides={selected() === WORKING ? undefined : sidesOf}
-                    usfm={markup()}
-                    onUsfm={setMarkup}
-                    currentLabel={
-                      selected() === WORKING
-                        ? t("Your text")
-                        : t("This version · {when}", {
-                            when: dated(selectedCommit()?.at ?? Date.now()),
-                          })
-                    }
-                    baselineLabel={(bookId) => {
-                      const id = selected();
-                      if (id === WORKING) return t("Last version");
-                      const before = previousOf(bookId, id);
-                      return before === undefined
-                        ? t("Before it")
-                        : t("Before it · {when}", { when: dated(before.commit.at) });
-                    }}
-                    currentShort={selected() === WORKING ? t("yours") : t("this version")}
-                    baselineShort={selected() === WORKING ? t("the last version") : t("before")}
-                    selected={focusBook()}
-                    onSelect={setFocusBook}
-                    seat={seatBook}
-                    onEdited={(bookId) => shell.changed({ kind: "book.apply", books: [bookId] })}
-                    currentFirst={false}
-                  />
-                </div>
-              </Show>
+            </div>
+            {/* The changes themselves: the multibuffer Review reads with —
+                the same cards, steps, chapter and fold-back, Open in the
+                book. Adopt on either side (on hover) writes that side's
+                wording into your text, and "Yours differs" opens your text
+                against this version. Neither writes a file. */}
+            <Show when={reviewBooks().length > 0}>
+              <div class="flex min-h-0 flex-1 flex-col" data-history-reader>
+                <ReviewReader
+                  books={reviewBooks()}
+                  decision={() => undefined}
+                  decide={() => {}}
+                  decidable={false}
+                  claimSidebar={false}
+                  sides={sidesOf}
+                  usfm={markup()}
+                  onUsfm={setMarkup}
+                  currentLabel={t("This version · {when}", {
+                    when: dated(selectedCommit()?.at ?? Date.now()),
+                  })}
+                  baselineLabel={(bookId) => {
+                    const before = previousOf(bookId, selected());
+                    return before === undefined
+                      ? t("Before it")
+                      : t("Before it · {when}", { when: dated(before.commit.at) });
+                  }}
+                  currentShort={t("this version")}
+                  baselineShort={t("before")}
+                  selected={focusBook()}
+                  onSelect={setFocusBook}
+                  seat={seatBook}
+                  onEdited={(bookId) => shell.changed({ kind: "book.apply", books: [bookId] })}
+                  currentFirst={false}
+                />
+              </div>
             </Show>
-          </Card>
-        </div>
+          </Show>
+        </Show>
       </Show>
-
-      <Dialog
-        open={confirming() !== undefined}
-        onOpenChange={(open) => {
-          if (!open) setConfirming(undefined);
-        }}
-        title={confirming()?.title ?? ""}
-        description={confirming()?.description}
-        footer={
-          <>
-            <Button onClick={() => setConfirming(undefined)}>{t("Cancel")}</Button>
-            <Button
-              variant="danger"
-              onClick={() => {
-                confirming()?.run();
-                setConfirming(undefined);
-              }}
-            >
-              {confirming()?.label ?? t("Revert")}
-            </Button>
-          </>
-        }
-      >
-        <p class="text-small text-on-surface-secondary">
-          {t(
-            "This changes the text in the editor. It does not write a file and does not record a version.",
-          )}
-        </p>
-      </Dialog>
     </main>
   );
 }
