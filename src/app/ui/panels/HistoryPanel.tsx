@@ -100,6 +100,25 @@ const HISTORY_STEP = 10;
 /** Projects whose older history this session has already gone to fetch. */
 const deepened = new Set<string>();
 
+/** One read of a project's timeline: what the panel draws, all of it derived from git. */
+interface Timeline {
+  readonly kind: "read";
+  readonly commits: readonly Commit[];
+  readonly perBook: ReadonlyMap<BookId, readonly Version[]>;
+  readonly shallow: boolean;
+  readonly shared: ReadonlySet<string> | undefined;
+}
+
+/**
+ * The last timeline read per project, and the two tips it was read at (HEAD
+ * and the shared project's). Moving between the Changes and History tabs
+ * remounts this panel; with both tips where they were, nothing the timeline
+ * is made of can have moved, so it is drawn from here instead of walking the
+ * log and every book's versions again. Reload, a deepen, or a moved tip reads
+ * it afresh.
+ */
+const timelines = new Map<string, { readonly tips: string; readonly timeline: Timeline }>();
+
 export function HistoryPanel() {
   const shell = useShell();
   const navigate = useNavigate();
@@ -157,7 +176,7 @@ export function HistoryPanel() {
    * fixture, where nothing has ever run `git init` — reports itself once and
    * leaves the top row working.
    */
-  const load = (): void => {
+  const load = (fresh = false): void => {
     const project = shell.project();
     if (project === undefined) return;
     void shell.services
@@ -168,13 +187,27 @@ export function HistoryPanel() {
           if (Result.isFailure(opened))
             return { kind: "absent", reason: opened.failure.reason } as const;
           const repo = opened.success;
+          // The tips the timeline is made from, and the books it is read for:
+          // with all of them where they were, the held timeline is this one.
+          const branch = yield* Effect.orElseSucceed(git.branch(repo), () => Option.none<string>());
+          const tipOf = (ref: string) =>
+            Effect.map(
+              Effect.orElseSucceed(git.resolve(repo, ref), () => Option.none<string>()),
+              (tip) => Option.getOrElse(tip, () => "-"),
+            );
+          const tips = [
+            yield* tipOf("HEAD"),
+            Option.isSome(branch) ? yield* tipOf(trackingRef(branch.value)) : "-",
+            project.books.map((book) => book.id).join(","),
+          ].join("|");
+          const known = timelines.get(project.root);
+          if (!fresh && known !== undefined && known.tips === tips) return known.timeline;
           const commits = yield* Effect.result(git.log(repo));
           const shallow = yield* Effect.orElseSucceed(git.shallow(repo), () => false);
           // What the shared project already has, as of the last check: every
           // commit reachable from the remote-tracking ref. `undefined` when
           // there is none to compare with — never sent, or no shared project —
           // and then the timeline marks nothing.
-          const branch = yield* Effect.orElseSucceed(git.branch(repo), () => Option.none<string>());
           let shared: ReadonlySet<string> | undefined;
           if (Option.isSome(branch)) {
             const theirs = yield* Effect.result(git.logFrom(repo, trackingRef(branch.value)));
@@ -188,13 +221,15 @@ export function HistoryPanel() {
             const found = yield* Effect.result(git.previousVersions(repo, inside.value));
             if (Result.isSuccess(found)) perBook.set(book.id, found.success);
           }
-          return {
+          const timeline: Timeline = {
             kind: "read",
             commits: Result.isSuccess(commits) ? commits.success : [],
             perBook,
             shallow,
             shared,
-          } as const;
+          };
+          timelines.set(project.root, { tips, timeline });
+          return timeline;
         }),
       )
       .then((answer) => {
@@ -244,7 +279,7 @@ export function HistoryPanel() {
           // `load` reads `shallow` again: a step that did not reach the
           // beginning leaves the card offering more.
           setOlder("missing");
-          load();
+          load(true);
         },
         (cause: unknown) => {
           operation.end("failed", { "history.reason": remoteReasonOf(cause) ?? "unknown" });
@@ -591,7 +626,7 @@ export function HistoryPanel() {
             variant="subtle"
             label={t("Reload")}
             icon={<RefreshCw />}
-            onClick={load}
+            onClick={() => load(true)}
           />
         </div>
         <nav aria-label={t("Timeline")} class="min-h-0 flex-1 overflow-y-auto pb-4">
