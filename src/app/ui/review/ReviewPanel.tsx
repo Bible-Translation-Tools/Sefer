@@ -87,6 +87,7 @@ import {
   usePageLeading,
 } from "../primitives";
 import { RecoveryBanner } from "../recovery/RecoveryBanner";
+import { BackToEditor } from "../workspace/BackToEditor";
 import { bookName } from "../workspace/books";
 import { metadataOf } from "../workspace/project";
 import { ReviewReader, type ReviewBook } from "./ReviewReader";
@@ -1146,7 +1147,7 @@ export function ReviewPanel() {
             pickers; how far along the review is, is a count; the one write is
             the primary button. Everything else is in the menu — the reading
             below is what this screen is for. */}
-        <header class="flex min-w-0 flex-wrap items-center gap-2 pe-12" data-review-header>
+        <header class="flex min-w-0 flex-wrap items-center gap-2" data-review-header>
           {pageLeading()}
           <h1 class="text-h3 font-semibold text-on-surface-primary">{t("Review")}</h1>
           <Popover
@@ -1287,6 +1288,7 @@ export function ReviewPanel() {
                 </p>
               </Show>
             </Menu>
+            <BackToEditor />
           </div>
         </header>
 

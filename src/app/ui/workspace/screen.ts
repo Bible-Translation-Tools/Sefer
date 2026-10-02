@@ -8,8 +8,8 @@
  * a compile error. `_app` is the pathless layout every workspace screen sits
  * under, so it is part of the ID while absent from the URL (`routes/_app.tsx`).
  *
- * One answer for the chrome that has to know: `BackToEditor` shows its door
- * off the editor, and `usePanelToggleLeading` puts the panel toggle in the page
+ * One answer for the chrome that has to know: `BackToEditor` draws its door
+ * inside a project, and `usePanelToggleLeading` puts the panel toggle in the page
  * header of project screens that have no editor toolbar to carry it.
  */
 

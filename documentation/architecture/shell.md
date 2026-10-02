@@ -99,17 +99,23 @@ book an aim had named lands on the remembered place.
 
 ## The way back: `editor.back`
 
-Every full-page route — findings, history, review, find, terms, inventory, cloud, settings,
-the projects list — replaces the editor entirely. The way back is `src/app/ui/workspace/BackToEditor.tsx`, one
-`data-testid="back-to-editor"` button pinned to the top-right of the routed content, naming the book it
-returns to.
+Every full-page route — findings, history, review, find, inventory, cloud — replaces the editor
+entirely. The way back is `src/app/ui/workspace/BackToEditor.tsx`, in two pieces: `useBackToEditor()`
+is the behaviour, and `<BackToEditor />` is the default UI for it, a `data-testid="back-to-editor"` ×
+button naming the book it returns to, with no position of its own.
 
-It is rendered ONCE, by the `_app` layout chrome above its `<Outlet/>` and outside the scroller, rather than by
-each page: a screen added later gets the door without knowing it exists, no page can forget it or spell
-it differently, and it does not scroll away with the content. The same component registers the
-`editor.back` command, so the palette lists it — registered there and not in the
-shell's core set, because "is this a full-page screen" is the ROUTE's question and `ShellBridge`
-deliberately carries no pathname. All three doors navigate to `/project/$slug`, which forwards to the
+The hook answers `undefined` off a project's routes (asked of the route, `useScreen().inProject`, never
+of a pathname), so settings and the projects list have no door; the app bar's Home is the way back
+from there. Inside them it answers the label and a `go`, and registers the `editor.back` command, so
+the palette lists it on any screen that draws the door — registered there and not in the shell's core
+set, because "is this a full-page screen" is the ROUTE's question and `ShellBridge` deliberately
+carries no pathname.
+
+A screen puts the button where it wants it. By default every page-level `PanelHeader` ends with it:
+the `_app` layout hands `PanelHeader` the button through the `PageDoor` context, so a screen added
+later still gets a door without knowing it exists. `door={false}` opts a header out, for a screen that
+places it itself; a header that is not a `PanelHeader` (Review's) places it directly. It sits in the
+header, so it scrolls with a screen whose header scrolls. All three doors navigate to `/project/$slug`, which forwards to the
 remembered book, so they cannot disagree.
 
 `editor.back` has no key. Escape belongs to whatever dialog is open on the screen (the Findings

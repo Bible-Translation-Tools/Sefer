@@ -52,6 +52,11 @@ export interface PanelHeaderProps {
   readonly actions?: JSX.Element;
   /** `h2` on a page, `h3` inside a card. */
   readonly level?: 2 | 3;
+  /**
+   * A page header ends with the layout's door out (Back to the editor). Off
+   * for a screen that places `BackToEditor` somewhere else itself.
+   */
+  readonly door?: boolean;
   readonly class?: ClassValue;
 }
 
@@ -60,15 +65,8 @@ export function PanelHeader(props: PanelHeaderProps) {
   const door = usePageDoor();
   return (
     // At least 48px, an md control's height, so a page's title shares one
-    // centre line with the panel toggle and the project card beside it. A
-    // page header under the workspace's × leaves it its 48px and a gap.
-    <div
-      class={cx(
-        "flex min-h-12 flex-wrap items-center gap-3",
-        props.level !== 3 && door() && "pe-14",
-        props.class,
-      )}
-    >
+    // centre line with the panel toggle and the project card beside it.
+    <div class={cx("flex min-h-12 flex-wrap items-center gap-3", props.class)}>
       {/* A page's header leads with what the layout gives it (the panel
           toggle); a card's does not. */}
       {props.level === 3 ? undefined : leading()}
@@ -82,8 +80,17 @@ export function PanelHeader(props: PanelHeaderProps) {
           <p class="mt-0.5 text-small text-on-surface-tertiary">{props.subtitle}</p>
         )}
       </div>
-      {props.actions !== undefined && (
-        <div class="ms-auto flex flex-wrap items-center gap-controls">{props.actions}</div>
+      {/* A page's header ends with the way back to the book, after its own
+          actions; a card's does not. One row, so the door hugs the actions. */}
+      {props.level === 3 || props.door === false ? (
+        props.actions !== undefined && (
+          <div class="ms-auto flex flex-wrap items-center gap-controls">{props.actions}</div>
+        )
+      ) : (
+        <div class="ms-auto flex flex-wrap items-center gap-controls">
+          {props.actions}
+          {door()}
+        </div>
       )}
     </div>
   );

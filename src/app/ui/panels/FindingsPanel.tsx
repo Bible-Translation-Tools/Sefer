@@ -633,9 +633,7 @@ export function FindingsPanel() {
 
   return (
     <main class="flex h-full min-w-0 flex-col gap-4 p-6" data-findings-panel>
-      {/* `pe-12`: the screen's close button sits in the corner above this row. */}
       <PanelHeader
-        class="pe-12"
         title={t("Findings")}
         actions={
           <>
