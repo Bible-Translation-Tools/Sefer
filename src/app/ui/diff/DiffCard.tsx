@@ -19,10 +19,11 @@
 
 import type { EditorView } from "@codemirror/view";
 import type { JSX } from "@solidjs/web";
+import CheckIcon from "lucide-solid/icons/check";
 import CodeIcon from "lucide-solid/icons/code";
 import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
-import type { Analysis } from "#core/galley";
+import type { Analysis, MergeSide } from "#core/galley";
 import type { DecisionUnit } from "#core/galley/diff";
 import {
   liveDiff,
@@ -365,6 +366,32 @@ export function DiffCard(props: {
           },
         ];
 
+  /**
+   * The side every change in this card is decided for, if they agree: its
+   * caption says so, in brand with a check, rather than a wash over the text.
+   */
+  const chosen = (): MergeSide | undefined => {
+    const controls = props.controls;
+    const units = props.hunk.units;
+    if (controls === undefined || units.length === 0) return undefined;
+    const sides = new Set(units.map((unit) => controls.decision(unit)));
+    return sides.size === 1 ? [...sides][0] : undefined;
+  };
+  const caption = (side: MergeSide, label: string) => (
+    <span
+      class={cx(
+        "flex min-w-0 items-center gap-1 truncate",
+        chosen() === side && "font-medium text-brand",
+      )}
+      data-diff-chosen={chosen() === side ? "" : undefined}
+    >
+      <Show when={chosen() === side}>
+        <CheckIcon size={12} aria-hidden="true" class="shrink-0" />
+      </Show>
+      <span class="truncate">{label}</span>
+    </span>
+  );
+
   const status = (): string =>
     props.hunk.units.length === 0
       ? ""
@@ -440,7 +467,7 @@ export function DiffCard(props: {
               props.currentFirst === true && "order-last",
             )}
           >
-            <span class="min-w-0 truncate">{props.baselineLabel}</span>
+            {caption("baseline", props.baselineLabel)}
             <Show when={props.sideActions?.baseline.length}>
               <span class="ms-auto flex shrink-0 items-center gap-1">
                 <CardActions actions={props.sideActions?.baseline ?? []} />
@@ -448,7 +475,7 @@ export function DiffCard(props: {
             </Show>
           </div>
           <div class="flex min-w-0 items-center gap-2 px-3 py-0.5">
-            <span class="min-w-0 truncate">{props.currentLabel}</span>
+            {caption("current", props.currentLabel)}
             <Show when={props.sideActions?.current.length}>
               <span class="ms-auto flex shrink-0 items-center gap-1">
                 <CardActions actions={props.sideActions?.current ?? []} />

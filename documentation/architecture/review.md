@@ -281,9 +281,10 @@ counter says where you are.
 side's text, ↶ takes the other's, pressing the chosen one again clears it. A
 card, in its header ("Keep all here", "Take all here"). A book, from its
 row's menu in the sidebar (and the Whole book toolbar), over the changes the
-filter shows; the row counts how many are decided. A decided unit stops shouting: kept is
-underlined quietly, taken gets a neutral wash. Strikeout means removed words and
-nothing else. There is no project-wide bulk
+filter shows; the row counts how many are decided. A decided unit stops shouting and puts
+nothing over the text: a card whose changes are all decided one way says so in
+that side's column caption, in brand with a check ("✓ In the editor"), beside
+the pressed button. Strikeout means removed words and nothing else. There is no project-wide bulk
 decision beyond Clear: "keep every markup-only change in Genesis" is a
 question somebody can answer, and one click over every change in the project
 is not.

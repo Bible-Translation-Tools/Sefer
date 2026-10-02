@@ -1103,17 +1103,14 @@
 .cm-diff-markup-unit {
   background-color: color-mix(in srgb, var(--on-surface-tertiary) 8%, transparent);
 }
-/* A decided unit stops shouting. Strikeout means removed words and nothing
-   else, so a decision is never drawn as one: kept is a quiet underline, taken
-   a neutral wash (the other side's text will stand here). */
-.cm-diff-kept {
-  background-color: transparent;
-  text-decoration: underline dotted color-mix(in srgb, var(--brand-base) 60%, transparent);
-  text-underline-offset: 4px;
-}
+/* A decided unit stops shouting, and puts nothing over the text: a wash or an
+   underline under the words was too faint to read as a choice and still sat
+   between the reader and the text. The choice is said where the side is
+   named — a card's column caption turns brand, with a check (`DiffCard`) —
+   and by the pressed Keep / Take buttons. The classes stay as hooks. */
+.cm-diff-kept,
 .cm-diff-taken {
-  background-color: color-mix(in srgb, var(--on-surface-tertiary) 14%, transparent);
-  border-radius: 2px;
+  background-color: transparent;
 }
 /* Kept words are settled. Under a TAKE they stay marked: in
    an editable review, what differs there now is the reader's own fix. */
