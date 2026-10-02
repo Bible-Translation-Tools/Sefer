@@ -57,19 +57,8 @@ export type Context =
   | { readonly kind: "none" }
   /** The default steps — a unit up or down, the whole chapter, fold — told to `step`. */
   | { readonly kind: "steps"; readonly step: (sid: string, step: ContextStep) => void }
-  /**
-   * Key terms': Show more / Show less for the whole chapter, under the target.
-   * `manual()` adds a previous-verse and a next-verse button either side of it,
-   * one segmented control.
-   */
-  | {
-      readonly kind: "chapter";
-      readonly step: (sid: string, step: ContextStep) => void;
-      readonly manual?: () => boolean;
-    };
-
-/** Spiritual terms' design tweak: how a card's context is shown. */
-export type ContextMode = "simple" | "manual";
+  /** One expand control, at the footer's end: the whole chapter, or back. Key terms'. */
+  | { readonly kind: "chapter"; readonly step: (sid: string, step: ContextStep) => void };
 
 export type Open =
   | { readonly kind: "none" }

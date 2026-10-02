@@ -38,8 +38,6 @@
 import { ChangeSet, StateField, type Text } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import type { JSX } from "@solidjs/web";
-import ChevronDownIcon from "lucide-solid/icons/chevron-down";
-import ChevronUpIcon from "lucide-solid/icons/chevron-up";
 import CodeIcon from "lucide-solid/icons/code";
 import FoldVerticalIcon from "lucide-solid/icons/fold-vertical";
 import SquareArrowOutUpRightIcon from "lucide-solid/icons/square-arrow-out-up-right";
@@ -60,10 +58,10 @@ import { useShell } from "../../ProjectContext";
 import { CardActions, type CardAction } from "../multibuffer/CardAction";
 import { CardEditor } from "../multibuffer/CardEditor";
 import { CardFrame } from "../multibuffer/CardFrame";
-import type { CardEvent, CardView, ContextStep } from "../multibuffer/cardState";
+import type { CardEvent, CardView } from "../multibuffer/cardState";
 import { ContextControl } from "../multibuffer/ContextControl";
 import { cardPolicy } from "../multibuffer/policy";
-import { Button, cx, IconButton } from "../primitives";
+import { Button, cx } from "../primitives";
 import { verseTextOf } from "../review/reading";
 import type { ExcerptCardSpec } from "./cardSpec";
 import { ExcerptReader } from "./ExcerptReader";
@@ -707,58 +705,20 @@ export function ExcerptCard(props: ExcerptCardProps) {
                           <Show
                             when={spec().context.kind === "chapter" ? spec().context : undefined}
                           >
-                            {(context) => {
-                              const step = (which: ContextStep): void => {
-                                const held = context();
-                                if (held.kind === "chapter") held.step(props.excerpt.sid, which);
-                              };
-                              const manual = (): boolean => {
-                                const held = context();
-                                return held.kind === "chapter" && held.manual?.() === true;
-                              };
-                              const chapterButton = (
-                                <Button
-                                  data-step="chapter"
-                                  variant="tertiary"
-                                  class={manual() ? "rounded-none border-0" : undefined}
-                                  icon={
-                                    chapterOpen() ? <FoldVerticalIcon /> : <UnfoldVerticalIcon />
-                                  }
-                                  onClick={() => step("chapter")}
-                                >
-                                  {chapterOpen() ? t("Show less") : t("Show more")}
-                                </Button>
-                              );
-                              // Manual: one verse more above, the whole chapter, one
-                              // verse more below — one segmented control.
-                              return (
-                                <Show when={manual()} fallback={chapterButton}>
-                                  <div
-                                    role="group"
-                                    aria-label={t("Context")}
-                                    class="inline-flex h-12 items-stretch divide-x divide-surface-border overflow-hidden rounded-lg border border-surface-border"
-                                  >
-                                    <IconButton
-                                      data-step="up"
-                                      class="rounded-none border-0"
-                                      label={t("Show one more verse above")}
-                                      icon={<ChevronUpIcon />}
-                                      disabled={chapterOpen() || !props.excerpt.more.up}
-                                      onClick={() => step("up")}
-                                    />
-                                    {chapterButton}
-                                    <IconButton
-                                      data-step="down"
-                                      class="rounded-none border-0"
-                                      label={t("Show one more verse below")}
-                                      icon={<ChevronDownIcon />}
-                                      disabled={chapterOpen() || !props.excerpt.more.down}
-                                      onClick={() => step("down")}
-                                    />
-                                  </div>
-                                </Show>
-                              );
-                            }}
+                            {(context) => (
+                              <Button
+                                data-step="chapter"
+                                variant="tertiary"
+                                icon={chapterOpen() ? <FoldVerticalIcon /> : <UnfoldVerticalIcon />}
+                                onClick={() => {
+                                  const held = context();
+                                  if (held.kind === "chapter")
+                                    held.step(props.excerpt.sid, "chapter");
+                                }}
+                              >
+                                {chapterOpen() ? t("Show less") : t("Show more")}
+                              </Button>
+                            )}
                           </Show>
                         </>
                       }

@@ -94,12 +94,6 @@ export interface ExcerptFeedOptions {
    * rather than once for the mapping and once again for the cards.
    */
   readonly analyze?: (text: string) => Analysis;
-  /**
-   * How many units of context every card starts with, when the screen decides
-   * rather than the reader's setting (Spiritual terms' design tweak). Read
-   * reactively: changing it regroups every book.
-   */
-  readonly context?: Accessor<number>;
 }
 
 /**
@@ -162,17 +156,14 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
   const views = createCardViews<Excerpt>("excerpt");
 
   /** What every card starts from: the reader's setting, read when the screen opens. */
-  const setting = Math.max(
+  const context = Math.max(
     0,
     shell.services.settings.get(shellKeys(shell.services.settings).excerptContext),
   );
-  const initial = (): Extent => {
-    const context = options.context?.() ?? setting;
-    return { up: context, down: context };
-  };
+  const initial: Extent = { up: context, down: context };
 
   const expand = (sid: string, step: ContextStep): void => {
-    views.send(sid, { kind: "step", step, from: initial() });
+    views.send(sid, { kind: "step", step, from: initial });
   };
 
   // One memo for the whole screen, not one per excerpt: every book that holds
@@ -207,8 +198,6 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
       readonly length: number;
       readonly analysis: Analysis;
       readonly hits: readonly Occurrence[];
-      /** The starting context the groups were built with. */
-      readonly context: number;
       readonly book: BookText;
       readonly groups: readonly BookExcerpts[];
       readonly outline: readonly OutlineRow[];
@@ -237,7 +226,6 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
         else list.push(hit);
       }
       const books = readBooks(shell, new Set(byBook.keys()), analyze);
-      const start = initial();
       const groups: BookExcerpts[] = [];
       const outline: OutlineRow[] = [];
       const texts = new Map<BookId, BookText>();
@@ -252,8 +240,7 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
         // cards already on screen follow the book live and map their marks
         // through the edit; new hits (a re-take, a new search, a new pass)
         // are what regroup the book, over its text as it then stands.
-        const reuse =
-          before !== undefined && before.context === start.up && sameHits(before.hits, own);
+        const reuse = before !== undefined && sameHits(before.hits, own);
         if (reuse) {
           reused += 1;
           groups.push(...before.groups);
@@ -262,7 +249,7 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
           continue;
         }
         rebuilt += 1;
-        const built = group([book], own, start);
+        const built = group([book], own, initial);
         groups.push(...built.groups);
         outline.push(...built.outline);
         texts.set(book.bookId, book);
@@ -271,7 +258,6 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
           length: stamp?.length ?? -1,
           analysis: book.analysis,
           hits: own,
-          context: start.up,
           book,
           groups: built.groups,
           outline: built.outline,
