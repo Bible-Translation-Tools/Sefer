@@ -677,10 +677,91 @@ falls back to a two-way comparison and says so.
 It is decoded through a Schema on read. A file that does not decode means "no
 upstreams known", and nothing is checked; that is the safe failure.
 
+## Order, upstream fields, and two incoming streams (2026-10-02, late)
+
+**Order (Will's lean, agreed):**
+
+1. **Resolve and auto-pull paired resources** (relationships, the resolver,
+   Library upstream).
+2. **This plan:** migrate from Writer, single-book import.
+3. **Resource kinds and the Library cleanup,** then TN.
+
+Resource kinds' change 1 (splitting the Library row's `kind` into container
+and content) touches the same row as step 1's upstream field. It can ride
+along with step 1 if it is cheap, so the row changes shape once.
+
+**`Upstream`, revised:**
+
+```ts
+// committed, in .upstreams.json — the shared facts
+Upstream = {
+  books: BookCode[];
+  via: "git";          // the only one now; an HTTP/R2 kind (ETag or a version file) for blobs like Macula later
+  url; ref; commit;    // pull-only: NOT the project's git remote, and never pushed to
+  takenAt;             // when we last took work from it
+}
+// per device, in .sefer/ — the habits
+UpstreamCheck = { url; checkedAt; seen?: commit }
+```
+
+- **`checkedAt` is per device, never committed.** A check that changed a
+  committed file would dirty the project every time it ran.
+- **`takenAt` is committed,** because it changes only when work is taken, and
+  that is a commit anyway.
+- **Priority is not a field,** because one upstream per book holds. The
+  priority question is really about the order of the two streams below, and
+  that is a rule, not data.
+- **Provenance stays separate, but related.** `.sefer/provenance.json` is
+  this device's append-only log of arrivals, past tense: "this came from that
+  zip". An Upstream is the shared, current subscription: "1 John follows that
+  Writer project". A remote arrival that is followed WRITES an Upstream; the
+  two share `url`. Merging them would mean either committing provenance
+  (which holds local paths) or keeping subscriptions per device (which a
+  teammate needs). So: two names, and the glossary row for Upstream says
+  "pull-only; not the Shared project".
+
+**Two streams into one book.**
+
+The case: we consolidate, someone keeps working in Writer, and meanwhile the
+team works against the consolidated project. 1 John now changes from two
+places:
+
+- the **Shared project** (teammates in Sefer), through sync;
+- its **Writer upstream** (someone still in Writer), through the importer.
+
+The rule: **the Shared project first, always, and the two never in one
+pass.**
+
+1. Receive from the Shared project (ordinary sync).
+2. Only then check the Writer upstream, against the `commit` in the
+   `.upstreams.json` just received.
+
+This also settles "who takes Writer's work". If a teammate already took it
+and sent, step 1 brings their book arrival and the updated `commit`, and step
+2 finds nothing new. Two people can't take the same Writer saves twice.
+
+**Copy names the person and the place, never the remote.** For example:
+"Mary is still working on 1 John in Writer: 2 saves since 1 Oct". Then
+**Review her changes**, in Review's decisions, labelled "From Writer
+(mary_chishimba)". Shared-project changes stay labelled as they are. Nobody
+has to know there are two remotes.
+
+**Following ends.** Each Writer upstream has **Stop following**, a commit
+that removes the entry, as the migration's end state. The banner can offer
+it when a Writer project has been quiet for a while.
+
+**Defaults:**
+
+- For a book that arrived from Writer, checking is on.
+- The check is cheap:
+  - for catalogue upstreams, one Language API query (`modified_on`) as a
+    hint, then a probe only of the ones that moved;
+  - otherwise, a probe per upstream, at most once per `checkedAt` interval.
+
 ## Questions for Will
 
-1. **Upstream record.** A committed `.upstreams.json` (recommended), or
-   somewhere else?
+1. **Upstream record.** A committed `.upstreams.json` (recommended), plus a
+   per-device `checkedAt` in `.sefer/`?
 2. **Two versions of one paired resource** (ULB 24-02 and 21-05). Bind both,
    or bind the newer and record both?
 3. **`revision`.** The resolved commit SHA, as recommended, with the human
