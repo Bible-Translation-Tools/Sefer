@@ -14,7 +14,7 @@ parked rival copies in `.sefer/candidates/`; this note resolves them up front.
 
 **Related:**
 
-- [resource kinds](resource-kinds.md)
+- [resource kinds](../01-discussing/resource-kinds-2026-10-01.md)
 - import (`src/core/resources/import.ts`)
 - intake (`src/core/git/intake.ts`)
 - [Review](../../documentation/architecture/review.md)
@@ -758,17 +758,112 @@ it when a Writer project has been quiet for a while.
     hint, then a probe only of the ones that moved;
   - otherwise, a probe per upstream, at most once per `checkedAt` interval.
 
+## Step 1 settled: one version, pulled once, and what a project is for (2026-10-02, evening)
+
+**Decided (Will):**
+
+- **Upstream record:** a committed `.upstreams.json`, plus a per-device
+  `checkedAt` in `.sefer/`.
+- **Order:** paired resources first, then this plan, then resource kinds and
+  TN.
+- **One version per paired resource,** not one binding per listed version.
+- **Pulled once:** a resource already on this device is never pulled again.
+- **Start on step 1.**
+
+**One version.** When a project lists the same resource more than once (ULB
+`24-02` and `21-05`), take the highest listed version and resolve that.
+
+- The others stay in the metadata as written. They are history, not
+  bindings.
+- Resolution still says when it substituted ("listed 24-02; using 24-07").
+
+**Pulled once: the commit is the identity.**
+
+1. Resolve to `{url, commit}` first. Resolving costs a probe, or nothing when
+   the device already holds the repository.
+2. Look the URL up in the Library.
+   - **Same URL already held:** bind it. Pull nothing.
+   - If the held commit differs from the resolved one, the binding says so,
+     and the upstream check offers the update. Taking it is the person's
+     call, never an automatic re-pull.
+   - **Not held:** clone, then add and bind.
+3. Two projects listing en_ulb share one copy on the device.
+
+The URL is compared normalised: host case-folded, `.git` and a trailing slash
+dropped. That is because Gitea answers `wa-catalog` and `WA-Catalog` alike.
+
+### What a project is for
+
+**Today.** A gateway text downloaded from the catalogue becomes an ordinary
+project row (`WacsProjects.tsx`, `history: "latest"`). So en_ulb sits in
+"pick your project" beside the translation it supports.
+
+`resource-kinds-2026-10-01.md` §10 suggested a `uses` field, undecided.
+Auto-pull is about to add many more of these rows, so it has to be decided
+now.
+
+**Will's rule:**
+
+- **Heart language:** a Target, which can also be read as a reference.
+- **Gateway:** reference material, a Paired resource only.
+- **Ops' worry:** people editing source texts by accident, and clutter in
+  "pick your project".
+- **Internal staff** (revising en_tn, for example) must still be able to load
+  one directly and work in it.
+
+**Proposal: a default, not a lock.**
+
+- **One field, `purpose: "translate" | "reference"`, on the device's project
+  index** (`.sefer/projects.json`, `v: 5`).
+  - It is not committed, because purpose is about this person's copy: en_ulb
+    is somebody's Target at WA.
+  - It is a single value, not `uses[]`, until something needs a third value.
+- **It is set at arrival, from what we already know. Nothing is sniffed from
+  the text.**
+
+  | Arrival                                                   | Purpose                                                                                                                             |
+  | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+  | Auto-pulled because a project listed it                   | `reference`, always                                                                                                                 |
+  | Catalogue, a gateway row (`is_gateway`, WA-Catalog owner) | `reference`                                                                                                                         |
+  | Catalogue, a heart-language row                           | `translate`                                                                                                                         |
+  | Zip or folder                                             | `translate`, with a "Use only as a reference" choice in the import dialog. No enforcement, so internal staff import en_tn and work. |
+  | Writer migration                                          | `translate`                                                                                                                         |
+
+- **Screens filter by it:**
+  - "Your projects" lists `translate`.
+  - "Reference texts" is a quieter section, collapsed, with a count. It is
+    not a second app, and not hidden.
+  - Paired-resource pickers (Refine, Find, Findings) list both, with
+    references first.
+- **It is not a lock.** Opening a reference project works. The editor shows
+  a single line: "This is a reference text. Edit it as your own project?". It
+  switches the purpose and moves the row to "Your projects".
+  - No read-only editor mode is built, which keeps this small.
+  - The accidental-edit worry is met by the row not being where people pick
+    projects, plus that one line.
+- **Is the existing gateway/translation split on the WACS table enough as the
+  download side?** Yes. It already decides the default above.
+
+**Why not enforce on zips and folders?** We can't know purpose from the
+bytes. RC and Burrito don't say "gateway", and en_tn is both a reference
+(for translators) and a Target (for WA staff). A default with a visible
+switch puts the decision with the person, and costs one field.
+
+**Migration of existing rows.** On the `v: 5` repair, set
+`purpose: "reference"` for rows whose `from` is a WA-Catalog clone, and
+`"translate"` for everything else. Someone who already edits a WA-Catalog
+text sees it move once, and "Edit it as your own project" moves it back.
+
 ## Questions for Will
 
-1. **Upstream record.** A committed `.upstreams.json` (recommended), plus a
-   per-device `checkedAt` in `.sefer/`?
-2. **Two versions of one paired resource** (ULB 24-02 and 21-05). Bind both,
-   or bind the newer and record both?
-3. **`revision`.** The resolved commit SHA, as recommended, with the human
+1. **Purpose.** Is a default (`translate` | `reference`, per device, set at
+   arrival, switchable from the editor) enough for ops, or do they need
+   reference projects to refuse edits?
+2. **`revision`.** The resolved commit SHA, as recommended, with the human
    version kept in the RC `source`?
-4. **The id authority's name.** `wacs::`? It is ours to choose, and it should
-   be one value across the organisation's tools.
-5. **The converter.** Which one built `bwc_reg`? `render` should match it, or
-   say where it differs.
-6. **What "Active" means.** Who would know? The defaults treat it as "second
+3. **The id authority's name.** `wacs::`? It is ours to choose, and it
+   should be one value across the organisation's tools.
+4. **The converter.** Which one built `bwc_reg`? `render` should match it,
+   or say where it differs.
+5. **What "Active" means.** Who would know? The defaults treat it as "second
    choice".
