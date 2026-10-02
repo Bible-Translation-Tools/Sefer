@@ -1,5 +1,7 @@
 # Downloading a language from WACS, whatever format it was published in
 
+**Superseded 2026-10-02** by [assembling a Bible from single-book projects](../00-ideas/consolidate-book-repos.md), in wording and plan. The catalogue half below has shipped; the legacy half (steps 3–5, `.sefer/candidates/`) is replaced there by up-front choice, folder/zip/network producers behind one contract, and layered history. Kept for its measurements.
+
 **Status:** plan, 2026-09-24. Scoped with the designer and reviewed roughly by the developer; parked for the developer to pick up. It does not authorize implementation. The catalogue half (steps 1–2) can start without the open questions answered; the legacy half (steps 3–5) cannot.
 
 ## Job
