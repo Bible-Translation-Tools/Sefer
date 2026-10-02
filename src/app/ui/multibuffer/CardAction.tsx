@@ -29,6 +29,8 @@ interface ActionBase {
   readonly pressed?: boolean;
   /** A native tooltip, for a button whose words need one ("Stop editing (Escape)"). */
   readonly title?: string;
+  /** Shown and not pressable: History's Adopt where your text already reads that way. */
+  readonly disabled?: boolean;
   readonly onPress: () => void;
 }
 
@@ -72,6 +74,7 @@ export function CardActionButton(props: {
             label={action().label}
             icon={<Dynamic component={action().icon} />}
             aria-pressed={pressedOf(action())}
+            disabled={action().disabled}
             data-card-action={action().id}
             onClick={() => action().onPress()}
           />
@@ -85,6 +88,7 @@ export function CardActionButton(props: {
             icon={action().icon === undefined ? undefined : <Dynamic component={action().icon} />}
             aria-pressed={pressedOf(action())}
             title={action().title}
+            disabled={action().disabled}
             data-card-action={action().id}
             onClick={() => action().onPress()}
           >

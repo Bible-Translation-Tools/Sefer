@@ -18,6 +18,7 @@
  */
 
 import type { EditorView } from "@codemirror/view";
+import type { JSX } from "@solidjs/web";
 import CodeIcon from "lucide-solid/icons/code";
 import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
@@ -36,7 +37,7 @@ import {
 import "#editor/editor.css";
 
 import { t } from "../../i18n";
-import type { CardAction } from "../multibuffer/CardAction";
+import { CardActions, type CardAction } from "../multibuffer/CardAction";
 import { CardEditor } from "../multibuffer/CardEditor";
 import { CardFrame } from "../multibuffer/CardFrame";
 import type { CardEvent, CardView, ContextStep } from "../multibuffer/cardState";
@@ -130,6 +131,17 @@ export function DiffCard(props: {
   readonly analyze?: (text: string) => Analysis;
   /** Header actions, before Edit/Done: the card's decisions. */
   readonly headerActions?: readonly CardAction[];
+  /**
+   * In a split, actions under each column's caption, beside what that side
+   * calls itself — History's Adopt on either side. Drawn only in a split: a
+   * unified card has one column, and the screen puts them in the header.
+   */
+  readonly sideActions?: {
+    readonly baseline: readonly CardAction[];
+    readonly current: readonly CardAction[];
+  };
+  /** A row under the two sides: History's "your text against this version". */
+  readonly below?: JSX.Element;
   /** The way out (to the whole book). */
   readonly open?: CardAction;
   /** One context step for this card: absent, the card offers no widening. */
@@ -422,10 +434,27 @@ export function DiffCard(props: {
     >
       <Show when={props.split}>
         <div class="grid grid-cols-2 divide-x divide-surface-border border-b border-surface-border text-smallest text-on-surface-tertiary">
-          <span class={cx("truncate px-3 py-0.5", props.currentFirst === true && "order-last")}>
-            {props.baselineLabel}
-          </span>
-          <span class="truncate px-3 py-0.5">{props.currentLabel}</span>
+          <div
+            class={cx(
+              "flex min-w-0 items-center gap-2 px-3 py-0.5",
+              props.currentFirst === true && "order-last",
+            )}
+          >
+            <span class="min-w-0 truncate">{props.baselineLabel}</span>
+            <Show when={props.sideActions?.baseline.length}>
+              <span class="ms-auto flex shrink-0 items-center gap-1">
+                <CardActions actions={props.sideActions?.baseline ?? []} />
+              </span>
+            </Show>
+          </div>
+          <div class="flex min-w-0 items-center gap-2 px-3 py-0.5">
+            <span class="min-w-0 truncate">{props.currentLabel}</span>
+            <Show when={props.sideActions?.current.length}>
+              <span class="ms-auto flex shrink-0 items-center gap-1">
+                <CardActions actions={props.sideActions?.current ?? []} />
+              </span>
+            </Show>
+          </div>
         </div>
       </Show>
       <div class={props.split ? "grid grid-cols-2 divide-x divide-surface-border" : ""}>
@@ -471,6 +500,7 @@ export function DiffCard(props: {
           </div>
         </Show>
       </div>
+      {props.below}
     </CardFrame>
   );
 }

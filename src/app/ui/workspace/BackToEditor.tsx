@@ -30,7 +30,7 @@ import { bookName } from "./books";
 import { metadataOf } from "./project";
 import { useScreen } from "./screen";
 
-export interface BackToEditorTarget {
+interface BackToEditorTarget {
   readonly label: string;
   readonly go: () => void;
 }
@@ -39,6 +39,7 @@ export interface BackToEditorTarget {
  * Is there a book behind this screen to go back to? Asked of the route —
  * inside `/_app/project/$slug` or not — never of a pathname.
  */
+// fallow-ignore-next-line unused-export -- the behaviour half, for a screen that draws its own door; BackToEditor is the only consumer today.
 export function useBackToEditor(): () => BackToEditorTarget | undefined {
   const shell = useShell();
   const navigate = useNavigate();

@@ -31,10 +31,10 @@ import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Undo2 from "lucide-solid/icons/undo-2";
 import { For, Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
-import type { BookId } from "#core/book/book";
+import type { Book, BookId } from "#core/book/book";
 import { diffSkeleton } from "#core/diff/skeleton";
-import { revertUnits } from "#core/diff/units";
-import type { DecisionUnit } from "#core/galley";
+import { revertUnits, type UnitChanges } from "#core/diff/units";
+import type { Analysis, DecisionUnit } from "#core/galley";
 import type { Commit, Version } from "#core/git/git";
 import { Git, repositoryPath } from "#core/git/git";
 import { Remote, type Deepen } from "#core/remote/remote";
@@ -46,6 +46,9 @@ import { remoteReasonOf } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { syncStatus } from "../../syncStatus";
+import type { DiffSides } from "../diff/DiffCard";
+import { hunksOf, type Hunk, type Range } from "../diff/hunks";
+import type { CardAction } from "../multibuffer/CardAction";
 import {
   Badge,
   Button,
@@ -54,7 +57,6 @@ import {
   Dialog,
   EmptyState,
   PanelHeader,
-  SegmentedControl,
   toasts,
 } from "../primitives";
 import { ReviewReader, type ReviewBook } from "../review/ReviewReader";
@@ -68,8 +70,9 @@ import {
   versionChanges,
   type BookChanges,
 } from "./changes";
-import { ago, exact } from "./format";
+import { ago, dated, exact } from "./format";
 import { createRecordedVersion } from "./recorded";
+import { YoursRow } from "./YoursRow";
 
 /** The not-yet-recorded row's id in the selection. A commit id is 40 hex digits. */
 const WORKING = "working";
@@ -88,6 +91,29 @@ interface Confirmation {
   readonly label: string;
   readonly run: () => void;
 }
+
+/** Your text against both sides of a selected version, for one book. */
+interface Yours {
+  readonly book: Book;
+  /** Your text against this version: `baselineText` is the version, `workingText` yours. */
+  readonly version: UnitChanges | undefined;
+  /** Your text against the book's version before it. */
+  readonly before: UnitChanges | undefined;
+  /** `version`'s two texts and their parses, for the third row. */
+  readonly sides: DiffSides | undefined;
+}
+
+const point = (at: number): Range => ({ from: at, to: at });
+
+/**
+ * Whether two stretches share text. Two verses that only meet at a boundary do
+ * not; a point (a passage one side lacks) does when it falls inside or on the
+ * edge of the other.
+ */
+const overlaps = (a: Range, b: Range): boolean =>
+  a.from === a.to || b.from === b.to
+    ? a.from <= b.to && b.from <= a.to
+    : a.from < b.to && b.from < a.to;
 
 /** How many commits further back one step of older history goes. */
 const HISTORY_STEP = 10;
@@ -115,14 +141,17 @@ export function HistoryPanel() {
     return known !== undefined && !known.has(id);
   };
   /**
-   * What a selected version is compared with. `version` (the default) is what
-   * that version itself changed, against each book's version before it, as a
-   * log shows a commit. `now` is the version against the text in hand, the
-   * explicit second question.
+   * The cards whose "your text against this version" row is open, by card
+   * key. A selected version shows what it changed, as a log shows a commit;
+   * where your text has moved on since, a card offers that third row.
    */
-  const [compare, setCompare] = createSignal<"version" | "now">("version", {
-    name: "historyCompare",
+  const [yoursOpen, setYoursOpen] = createSignal<ReadonlySet<string>>(new Set(), {
+    name: "historyYoursOpen",
   });
+  const choose = (id: string): void => {
+    setSelected(id);
+    setYoursOpen(new Set<string>());
+  };
   const [confirming, setConfirming] = createSignal<Confirmation | undefined>(undefined, {
     name: "confirmRevert",
   });
@@ -274,10 +303,8 @@ export function HistoryPanel() {
    * The selected side's diff.
    *
    * The top row is always the text in hand against the recorded baseline. A
-   * commit, by default, shows what it changed: each book it touched, its
-   * previous version against this one. With `compare` set to `now` it shows
-   * this version against the book in hand instead, read the same way round
-   * as the top row.
+   * commit shows what it changed: each book it touched, its previous version
+   * against this one. Where your text stands against either is `yours`, below.
    */
   const recompute = async (): Promise<void> => {
     const project = shell.project();
@@ -291,43 +318,21 @@ export function HistoryPanel() {
       return;
     }
     const out: BookChanges[] = [];
-    if (compare() === "version") {
-      for (const bookId of booksIn(id)) {
-        const book = project.book(bookId);
-        const version = versionOf(bookId, id);
-        if (book === undefined || version === undefined) continue;
-        const after = await textOf(version);
-        if (after === undefined) continue;
-        const previous = previousOf(bookId, id);
-        const before = previous === undefined ? undefined : await textOf(previous);
-        const changes = versionChanges(
-          shell.services.galley,
-          book,
-          before === undefined ? undefined : { bookId, stamp: before.stamp, text: before.text },
-          { bookId, stamp: after.stamp, text: after.text },
-        );
-        if (changes.firstTime === true || changeCount(changes) > 0) out.push(changes);
-      }
-      setShown(out);
-      return;
-    }
     for (const bookId of booksIn(id)) {
       const book = project.book(bookId);
-      const blob = versionOf(bookId, id);
-      if (book === undefined || blob === undefined) continue;
-      const bytes = await shell.services.run(Effect.result(blob.bytes()));
-      if (Result.isFailure(bytes)) continue;
-      const decoded = decode(bytes.success);
-      if (Result.isFailure(decoded)) continue;
-      const changes = changesOf(shell.services.galley, book, {
-        bookId,
-        stamp: decoded.success.stamp,
-        text: decoded.success.text,
-      });
-      // A commit touches a file; it does not follow that the file still
-      // differs from the text in hand. A book that matches is dropped rather
-      // than shown as an empty diff.
-      if (changeCount(changes) > 0) out.push(changes);
+      const version = versionOf(bookId, id);
+      if (book === undefined || version === undefined) continue;
+      const after = await textOf(version);
+      if (after === undefined) continue;
+      const previous = previousOf(bookId, id);
+      const before = previous === undefined ? undefined : await textOf(previous);
+      const changes = versionChanges(
+        shell.services.galley,
+        book,
+        before === undefined ? undefined : { bookId, stamp: before.stamp, text: before.text },
+        { bookId, stamp: after.stamp, text: after.text },
+      );
+      if (changes.firstTime === true || changeCount(changes) > 0) out.push(changes);
     }
     setShown(out);
   };
@@ -335,20 +340,22 @@ export function HistoryPanel() {
   /**
    * The books this side is a diff OF, which is what decides when it restales.
    *
-   * The working row diffs every book against the recorded baseline; a commit
-   * diffs only the books it touched. Naming them is what lets a keystroke in
-   * Genesis leave a selected Ruth commit alone — behind `shell.tick()` every
-   * edit anywhere re-ran this panel, blob fetch and decode included.
+   * The working row diffs every book against the recorded baseline. A commit
+   * diffs two recorded texts, which no keystroke moves: where your text
+   * stands against them is `yours`, which follows the edits itself. Naming
+   * the books is what lets a keystroke in Genesis leave this panel alone —
+   * behind `shell.tick()` every edit anywhere re-ran it, blob fetch and
+   * decode included.
    */
   const diffed = (): readonly BookId[] => {
     const id = selected();
-    if (id !== WORKING) return booksIn(id);
+    if (id !== WORKING) return [];
     return shell.project()?.books.map((book) => book.id) ?? [];
   };
 
   createEffect(
     () =>
-      `${selected()}:${compare()}:${versions().size}:${version.recorded().head ?? ""}:${diffed()
+      `${selected()}:${versions().size}:${version.recorded().head ?? ""}:${diffed()
         .map((bookId) => shell.stampOf(bookId)?.revision ?? -1)
         .join(",")}`,
     () => {
@@ -433,52 +440,168 @@ export function HistoryPanel() {
   };
 
   /**
-   * A version's own change, written into your text: for each passage `units`
-   * covers, your text takes that version's wording. Never a revert of the
-   * version, never a checkout — one ordinary edit, unsaved until Record a
-   * version, and one Undo takes it back.
-   *
-   * The match is by place in the VERSION's text, which both diffs share: a
-   * unit's `current` range here (before → this version) and a unit's
-   * `baseline` range in "your text against this version" are offsets into
-   * the same text.
+   * Your text against each side of the selected version, per book it shows:
+   * what Adopt writes from, and whether it would change anything. Follows
+   * your edits to those books (`stampOf`), and nothing else.
    */
-  const adopt = (bookId: BookId, units: readonly DecisionUnit[]): void => {
-    const project = shell.project();
-    const book = project?.book(bookId);
-    const versionText = shown().find((held) => held.bookId === bookId)?.changes?.workingText;
-    if (book === undefined || versionText === undefined) return;
-    const against = changesOf(shell.services.galley, book, {
-      bookId,
-      stamp: book.source().stamp,
-      text: versionText,
-    });
-    const theirs = against.changes;
-    if (theirs === undefined || theirs.units.length === 0) {
+  const yours = createMemo(
+    (): ReadonlyMap<BookId, Yours> => {
+      const out = new Map<BookId, Yours>();
+      if (selected() === WORKING) return out;
+      const held = shown().filter((changes) => changes.firstTime !== true);
+      for (const changes of held) void shell.stampOf(changes.bookId)?.revision;
+      // The reads above are the dependencies; the diffs below are snapshots of them.
+      return untrack(() => {
+        const galley = shell.services.galley;
+        for (const changes of held) {
+          const texts = changes.changes;
+          const book = shell.project()?.book(changes.bookId);
+          if (texts === undefined || book === undefined) continue;
+          const stamp = book.source().stamp;
+          const against = (text: string): UnitChanges | undefined =>
+            changesOf(galley, book, { bookId: changes.bookId, stamp, text }).changes;
+          const version = against(texts.workingText);
+          const before = against(texts.baselineText);
+          const sides: DiffSides | undefined =
+            version === undefined
+              ? undefined
+              : {
+                  bookId: changes.bookId,
+                  baselineText: version.baselineText,
+                  currentText: version.workingText,
+                  baseline: yoursAnalysis("version", changes.bookId, version.baselineText),
+                  current: yoursAnalysis("yours", changes.bookId, version.workingText),
+                };
+          out.set(changes.bookId, { book, version, before, sides });
+        }
+        return out;
+      });
+    },
+    { name: "historyYours" },
+  );
+
+  /** One parse per text per book, held while the text is the same — as the reader holds its own. */
+  const yoursAnalyzers = new Map<string, (text: string) => Analysis>();
+  const yoursAnalysis = (role: "version" | "yours", bookId: BookId, text: string): Analysis => {
+    const key = `${role}\0${bookId}`;
+    let analyze = yoursAnalyzers.get(key);
+    if (analyze === undefined) {
+      analyze = shell.services.galley.memoize();
+      yoursAnalyzers.set(key, analyze);
+    }
+    return analyze(text);
+  };
+
+  /**
+   * Your text's changes against one side that fall in this card's passage.
+   * Matched by place in THAT side's text, which both diffs share: a card's
+   * `current` ranges (before → this version) and a unit's `baseline` range in
+   * "your text against this version" are offsets into the same text; likewise
+   * `baseline` and "your text against before it". Empty: your text already
+   * reads as that side here.
+   */
+  const yoursAt = (hunk: Hunk, side: "baseline" | "current"): readonly DecisionUnit[] => {
+    const held = yours().get(hunk.bookId);
+    const changes = side === "current" ? held?.version : held?.before;
+    if (changes === undefined) return [];
+    const spans = hunk.units.map(
+      (unit) =>
+        (side === "current" ? unit.current : unit.baseline) ??
+        point(side === "current" ? unit.place.current : unit.place.baseline),
+    );
+    return changes.units.filter((mine) =>
+      spans.some((span) => overlaps(span, mine.baseline ?? point(mine.place.baseline))),
+    );
+  };
+
+  /**
+   * One side of a card, written into your text: for its passage, your text
+   * takes that side's wording. Never a revert of the version, never a
+   * checkout — one ordinary edit, unsaved until Record a version, and one
+   * Undo takes it back.
+   */
+  const adopt = (hunk: Hunk, side: "baseline" | "current"): void => {
+    const held = yours().get(hunk.bookId);
+    const changes = side === "current" ? held?.version : held?.before;
+    const picked = yoursAt(hunk, side);
+    if (held === undefined || changes === undefined || picked.length === 0) {
       toasts.success({ title: t("Already in your text") });
       return;
     }
-    const touches = (unit: DecisionUnit, mine: DecisionUnit): boolean => {
-      const span = unit.current ?? { from: unit.place.current, to: unit.place.current };
-      const at = mine.baseline ?? { from: mine.place.baseline, to: mine.place.baseline };
-      return at.from <= span.to && span.from <= at.to;
-    };
-    const picked = theirs.units.filter((mine) => units.some((unit) => touches(unit, mine)));
-    if (picked.length === 0) {
-      toasts.success({ title: t("Already in your text") });
-      return;
-    }
-    const done = revertUnits(shell.services.galley, book, theirs, picked);
+    const done = revertUnits(shell.services.galley, held.book, changes, picked);
     if (Result.isFailure(done)) {
       toasts.error({ title: t("Adopt refused"), message: t(done.failure.reason) });
       return;
     }
     toasts.success({ title: t("Adopted into your text") });
-    shell.changed({ kind: "book.apply", books: [bookId] });
+    shell.changed({ kind: "book.apply", books: [hunk.bookId] });
   };
 
-  /** Revert is offered where the right side is the book in hand. */
-  const reverting = (): boolean => selected() === WORKING || compare() === "now";
+  /**
+   * A card's Adopt on either side, its "Yours differs", and the row that
+   * opens. In a split each sits under its side's caption; unified, both are
+   * in the header and say which side they take.
+   */
+  const sidesOf = (hunk: Hunk, split: boolean) => {
+    const already = t("Your text already reads this way here.");
+    const adoptOf = (side: "baseline" | "current", id: string, label: string): CardAction => {
+      const off = yoursAt(hunk, side).length === 0;
+      return {
+        kind: "button",
+        id,
+        emphasis: "tertiary",
+        label,
+        disabled: off,
+        title: off
+          ? already
+          : t("Write this wording into your text. Unsaved until you record a version."),
+        onPress: () => adopt(hunk, side),
+      };
+    };
+    const differs = yoursAt(hunk, "current");
+    const open = differs.length > 0 && yoursOpen().has(hunk.key);
+    const sides = yours().get(hunk.bookId)?.sides;
+    return {
+      baseline: [adoptOf("baseline", "adopt-before", split ? t("Adopt") : t("Adopt before"))],
+      current: [
+        ...(differs.length === 0
+          ? []
+          : [
+              {
+                kind: "button",
+                id: "yours",
+                emphasis: "tertiary",
+                label: t("Yours differs"),
+                pressed: open,
+                title: t("Show your text against this version"),
+                onPress: () =>
+                  setYoursOpen((was) => {
+                    const next = new Set(was);
+                    if (!next.delete(hunk.key)) next.add(hunk.key);
+                    return next;
+                  }),
+              } satisfies CardAction,
+            ]),
+        adoptOf("current", "adopt-version", split ? t("Adopt") : t("Adopt this version")),
+      ],
+      below:
+        open && sides !== undefined ? (
+          <YoursRow
+            sides={sides}
+            hunks={hunksOf({
+              bookId: hunk.bookId,
+              units: differs,
+              baseline: sides.baseline,
+              current: sides.current,
+              label: (address) => untrack(() => shell.location.label(address)),
+              steps: 0,
+            })}
+            usfm={markup()}
+            label={t("Your text against this version")}
+          />
+        ) : undefined,
+    };
+  };
 
   const selectedCommit = (): Commit | undefined =>
     log()?.find((commit) => commit.id === selected());
@@ -594,7 +717,7 @@ export function HistoryPanel() {
                     data-commit={WORKING}
                     aria-current={selected() === WORKING ? "true" : undefined}
                     class={ROW}
-                    onClick={() => setSelected(WORKING)}
+                    onClick={() => choose(WORKING)}
                   >
                     <div class="flex w-full items-center gap-2">
                       <PencilLine
@@ -669,7 +792,7 @@ export function HistoryPanel() {
                           data-commit={commit.id}
                           aria-current={selected() === commit.id ? "true" : undefined}
                           class={ROW}
-                          onClick={() => setSelected(commit.id)}
+                          onClick={() => choose(commit.id)}
                         >
                           <div class="flex w-full items-center gap-2">
                             <Badge class="font-mono">{commit.id.slice(0, 7)}</Badge>
@@ -718,23 +841,7 @@ export function HistoryPanel() {
               subtitle={
                 selected() === WORKING
                   ? t("The text in the editor against the last recorded version.")
-                  : compare() === "version"
-                    ? t("What this version changed.")
-                    : t("This version compared with your text now.")
-              }
-              actions={
-                <Show when={selected() !== WORKING}>
-                  <SegmentedControl<"version" | "now">
-                    size="sm"
-                    label={t("Compare")}
-                    value={compare()}
-                    onChange={setCompare}
-                    items={[
-                      { value: "version", label: t("What changed in this version") },
-                      { value: "now", label: t("Compared with your text now") },
-                    ]}
-                  />
-                </Show>
+                  : t("What this version changed.")
               }
             />
 
@@ -745,9 +852,7 @@ export function HistoryPanel() {
                   title={
                     selected() === WORKING
                       ? t("Everything on screen is already in the latest version.")
-                      : compare() === "version"
-                        ? t("This version changed no book's text.")
-                        : t("This version matches the text in hand.")
+                      : t("This version changed no book's text.")
                   }
                 />
               }
@@ -787,33 +892,19 @@ export function HistoryPanel() {
                           {t("{count} line(s)", { count: changes.added })}
                         </Badge>
                       </Show>
-                      {/* Against the text in hand a book can go back; a version's own
-                          change can be adopted into it. */}
-                      <Show when={changes.firstTime !== true}>
-                        <Show
-                          when={reverting()}
-                          fallback={
-                            <Button
-                              size="sm"
-                              variant="tertiary"
-                              class="ms-auto"
-                              icon={<Undo2 />}
-                              onClick={() => adopt(changes.bookId, changes.changes?.units ?? [])}
-                            >
-                              {t("Adopt all into your text")}
-                            </Button>
-                          }
+                      {/* Against the last version, a book can go back. A version's
+                          change is adopted a card at a time, never a whole side:
+                          taking a book wholesale is Review's. */}
+                      <Show when={selected() === WORKING && changes.firstTime !== true}>
+                        <Button
+                          size="sm"
+                          variant="tertiary"
+                          class="ms-auto"
+                          icon={<Undo2 />}
+                          onClick={() => revertFile(changes)}
                         >
-                          <Button
-                            size="sm"
-                            variant="tertiary"
-                            class="ms-auto"
-                            icon={<Undo2 />}
-                            onClick={() => revertFile(changes)}
-                          >
-                            {t("Revert file")}
-                          </Button>
-                        </Show>
+                          {t("Revert file")}
+                        </Button>
                       </Show>
                     </div>
                   </section>
@@ -821,9 +912,11 @@ export function HistoryPanel() {
               </For>
               {/* The changes themselves: the multibuffer Review reads with —
                   the same cards, steps, chapter and fold-back, Open in the
-                  book. Against the text in hand a card can put that passage
-                  back (Take); for a version's own change, Adopt (on hover)
-                  writes it into your text. Neither writes a file. */}
+                  book. Against the last version a card can put that passage
+                  back (Take); for a version's own change, Adopt on either side
+                  (on hover) writes that side's wording into your text, and
+                  "Yours differs" opens your text against this version. Neither
+                  writes a file. */}
               <Show when={reviewBooks().length > 0}>
                 <div class="flex h-[70vh] min-h-0 flex-col" data-history-reader>
                   <ReviewReader
@@ -834,38 +927,27 @@ export function HistoryPanel() {
                       const changes = shown().find((held) => held.bookId === bookId);
                       if (changes !== undefined) announce(bookId, revertSome(changes, units));
                     }}
-                    decidable={reverting()}
-                    adopt={
-                      reverting()
-                        ? undefined
-                        : { label: t("Adopt"), onAdopt: (bookId, units) => adopt(bookId, units) }
-                    }
+                    decidable={selected() === WORKING}
+                    sides={selected() === WORKING ? undefined : sidesOf}
                     usfm={markup()}
                     onUsfm={setMarkup}
                     currentLabel={
-                      compare() === "version" && selected() !== WORKING
-                        ? t("This version")
-                        : t("Your text")
-                    }
-                    baselineLabel={
                       selected() === WORKING
-                        ? t("Last version")
-                        : compare() === "version"
-                          ? t("Before it")
-                          : t("This version")
+                        ? t("Your text")
+                        : t("This version · {when}", {
+                            when: dated(selectedCommit()?.at ?? Date.now()),
+                          })
                     }
-                    currentShort={
-                      compare() === "version" && selected() !== WORKING
-                        ? t("this version")
-                        : t("yours")
-                    }
-                    baselineShort={
-                      selected() === WORKING
-                        ? t("the last version")
-                        : compare() === "version"
-                          ? t("before")
-                          : t("this version")
-                    }
+                    baselineLabel={(bookId) => {
+                      const id = selected();
+                      if (id === WORKING) return t("Last version");
+                      const before = previousOf(bookId, id);
+                      return before === undefined
+                        ? t("Before it")
+                        : t("Before it · {when}", { when: dated(before.commit.at) });
+                    }}
+                    currentShort={selected() === WORKING ? t("yours") : t("this version")}
+                    baselineShort={selected() === WORKING ? t("the last version") : t("before")}
                     selected={focusBook()}
                     onSelect={setFocusBook}
                     seat={seatBook}

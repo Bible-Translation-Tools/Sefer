@@ -31,6 +31,7 @@
  * Genesis" is a question somebody can answer; "keep all 2,799" is not.
  */
 
+import type { JSX } from "@solidjs/web";
 import { Effect } from "effect";
 import ArrowDown from "lucide-solid/icons/arrow-down";
 import ArrowUp from "lucide-solid/icons/arrow-up";
@@ -139,8 +140,9 @@ export function ReviewReader(props: {
     bookId: BookId,
     units: readonly DecisionUnit[],
   ) => "there" | "here" | "both" | undefined;
-  readonly currentLabel: string;
-  readonly baselineLabel: string;
+  /** What each side calls itself, in a split's captions — per book where the sides differ by book. */
+  readonly currentLabel: string | ((bookId: BookId) => string);
+  readonly baselineLabel: string | ((bookId: BookId) => string);
   readonly currentShort: string;
   readonly baselineShort: string;
   readonly selected: BookId | undefined;
@@ -159,12 +161,17 @@ export function ReviewReader(props: {
   readonly currentFirst?: boolean;
   /**
    * When neither side is the Book (History's "what this version changed"):
-   * each card offers to write its passage into the reader's text instead of
-   * a decision. Drawn quiet, revealed on hover where there is a fine pointer.
+   * each card's own actions for either side — Adopt, written into the
+   * reader's text instead of a decision — and a row under it. In a split they
+   * sit under each side's caption; unified, in the card's header.
    */
-  readonly adopt?: {
-    readonly label: string;
-    readonly onAdopt: (bookId: BookId, units: readonly DecisionUnit[]) => void;
+  readonly sides?: (
+    hunk: Hunk,
+    split: boolean,
+  ) => {
+    readonly baseline: readonly CardAction[];
+    readonly current: readonly CardAction[];
+    readonly below?: JSX.Element;
   };
 }) {
   const shell = useShell();
@@ -593,19 +600,9 @@ export function ReviewReader(props: {
   const cardDecision = (hunk: Hunk): readonly CardAction[] => {
     if (hunk.units.length === 0) return [];
     if (!props.decidable) {
-      const adopt = props.adopt;
-      return adopt === undefined
-        ? []
-        : [
-            {
-              kind: "button",
-              id: "adopt",
-              emphasis: "tertiary",
-              label: adopt.label,
-              title: t("Write this change into your text. Unsaved until you record a version."),
-              onPress: () => adopt.onAdopt(hunk.bookId, hunk.units),
-            },
-          ];
+      if (split()) return [];
+      const sides = props.sides?.(hunk, false);
+      return sides === undefined ? [] : [...sides.baseline, ...sides.current];
     }
     const sides = new Set(hunk.units.map((unit) => props.decision(hunk.bookId, unit.id)));
     const side: MergeSide | "mixed" | undefined = sides.size !== 1 ? "mixed" : [...sides][0];
@@ -951,8 +948,8 @@ export function ReviewReader(props: {
                   split={split()}
                   usfm={props.usfm}
                   controls={controls().get(held().book.bookId)}
-                  currentLabel={props.currentLabel}
-                  baselineLabel={props.baselineLabel}
+                  currentLabel={labelOf(props.currentLabel, held().book.bookId)}
+                  baselineLabel={labelOf(props.baselineLabel, held().book.bookId)}
                   currentFirst={props.currentFirst !== false}
                   observability={observability}
                   initial={opened()?.unit}
@@ -998,9 +995,11 @@ export function ReviewReader(props: {
                 usfm={props.usfm}
                 controls={controls().get(item().hunk.bookId)}
                 origin={props.originOf?.(item().hunk.bookId, item().hunk.units)}
-                currentLabel={props.currentLabel}
-                baselineLabel={props.baselineLabel}
+                currentLabel={labelOf(props.currentLabel, item().hunk.bookId)}
+                baselineLabel={labelOf(props.baselineLabel, item().hunk.bookId)}
                 currentFirst={props.currentFirst !== false}
+                sideActions={split() ? props.sides?.(item().hunk, true) : undefined}
+                below={props.sides?.(item().hunk, split()).below}
                 editable={editable()}
                 editing={session.editing}
                 gone={session.gone ? session.goneLabel : undefined}
@@ -1034,6 +1033,9 @@ export function ReviewReader(props: {
     </div>
   );
 }
+
+const labelOf = (label: string | ((bookId: BookId) => string), bookId: BookId): string =>
+  typeof label === "string" ? label : label(bookId);
 
 const toFilter = (value: string): Filter =>
   value === "words" || value === "formatting" ? value : "all";

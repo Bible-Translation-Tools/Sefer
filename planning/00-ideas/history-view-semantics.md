@@ -39,6 +39,36 @@ To test:
 4. **"Now" after Adopt** for a version several commits back. Expect only the
    passages Adopt did not take to remain.
 
+## Second pass (Will's review, 2026-10-02, built)
+
+- **No "Compared with your text now" toggle.** A version shows its own change,
+  and nothing else.
+- **Adopt on both sides of every card.** Left takes "before it", right takes
+  this version, each written into your text as one unsaved edit. A side is
+  disabled ("Your text already reads this way here") when your text matches it
+  at that card. This replaces both the old Adopt and the "now" view's Take.
+- **"Yours differs"** shows on a card's right caption only where your text
+  differs from this version there. It opens a third row under the card: your
+  text against this version, unified, read-only.
+- **No whole-side adopt.** The per-book "Adopt all into your text" is gone;
+  taking a book wholesale is Review's job. "Revert file" stays on the "Not yet
+  recorded" row.
+- **Dated captions:** "Before it · <date>" and "This version · <date>", in the
+  reader's locale. The "before" date is that BOOK's previous version, not the
+  commit's parent, so `Commit` needed no `parents`.
+- Back to the editor is now `useBackToEditor()` plus a plain `<BackToEditor />`.
+  Every page-level `PanelHeader` ends with it by default (shell.md).
+
+Tested in the fixture: two versions recorded, then an unsaved edit. All three
+Adopt/"Yours differs" states, the third row and Adopt-before behave as above.
+Checked unified at 1440 px and split at 2200 px.
+
+Not tested: a passage one side lacks (an added or removed verse), and
+Undo after Adopt-before.
+
+Open: should History be a sidebar beside the editor (Zed's Changes | History)
+instead of its own screen? See the conversation of 2026-10-02.
+
 Today a selected commit is diffed against the WORKING text ("Working text
 against 3b83a12."), not against its parent. So:
 

@@ -36,6 +36,10 @@ export const ago = (at: number, now = Date.now()): string => {
 /** The full timestamp, for the `title` a relative one hides. */
 export const exact = (at: number): string => new Date(at).toLocaleString();
 
+/** A date and time a caption can carry: "2 Oct 2026, 14:03" in the reader's locale. */
+export const dated = (at: number): string =>
+  new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(at);
+
 /**
  * The lines of a text slice, without the empty tail a trailing newline leaves.
  *
