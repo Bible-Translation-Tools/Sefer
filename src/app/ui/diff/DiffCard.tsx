@@ -166,7 +166,11 @@ export function DiffCard(props: {
    * rebuilt for it, least of all a live one somebody is typing in.
    */
   const now = () => untrack(() => ({ hunk: props.hunk, sides: props.sides }));
-  const controls = (): Controls | undefined => untrack(() => props.controls);
+  // The card's header decides it; its gutter carries no second pair of buttons.
+  const controls = (): Controls | undefined => {
+    const held = untrack(() => props.controls);
+    return held === undefined ? undefined : { ...held, gutter: false };
+  };
 
   const currentPaint = (markup: boolean, split: boolean) => (): DiffPaint => {
     const { hunk, sides } = now();

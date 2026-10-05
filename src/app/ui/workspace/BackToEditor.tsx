@@ -75,14 +75,18 @@ export function useBackToEditor(): () => BackToEditorTarget | undefined {
   return () => (shown() ? { label: label(), go } : undefined);
 }
 
-export function BackToEditor() {
+export function BackToEditor(props: {
+  /** Small and borderless, for a header whose primary button should lead. */
+  readonly quiet?: boolean;
+}) {
   const target = useBackToEditor();
   return (
     <Show when={target()}>
       {(door) => (
         <IconButton
           data-testid="back-to-editor"
-          variant="outlined"
+          variant={props.quiet === true ? "subtle" : "outlined"}
+          size={props.quiet === true ? "sm" : "md"}
           label={door().label}
           tooltipSide="left"
           icon={<X />}

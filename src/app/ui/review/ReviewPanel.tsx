@@ -1393,7 +1393,7 @@ export function ReviewPanel() {
             <Show when={target() !== undefined}>
               <Button
                 size="sm"
-                variant="secondary"
+                variant="primary"
                 icon={<Save />}
                 data-review-record
                 disabled={unsaved().length === 0 && !againstShared()}
@@ -1402,7 +1402,7 @@ export function ReviewPanel() {
                 })}
                 onClick={openRecord}
               >
-                {t("Record a version…")}
+                {t("Save")}
               </Button>
             </Show>
             <Menu
@@ -1451,7 +1451,7 @@ export function ReviewPanel() {
                 </p>
               </Show>
             </Menu>
-            <BackToEditor />
+            <BackToEditor quiet />
           </div>
         </header>
 
@@ -1532,11 +1532,11 @@ export function ReviewPanel() {
                   description={
                     againstShared()
                       ? t(
-                          "The editor now reads as you chose. Record a version to finish: it keeps your choices and joins your work with the shared project's.",
+                          "The editor now reads as you chose. Save to finish: it keeps your choices and joins your work with the shared project's.",
                         )
                       : unsaved().length > 0
-                        ? t("Both sides now read the same. Record a version to keep it.")
-                        : t("Both sides now read the same. Nothing is left to record.")
+                        ? t("Both sides now read the same. Save to keep it.")
+                        : t("Both sides now read the same. Nothing is left to save.")
                   }
                   action={
                     <div class="flex flex-wrap justify-center gap-2" data-review-settled>
@@ -1544,7 +1544,7 @@ export function ReviewPanel() {
                         when={target() !== undefined && (againstShared() || unsaved().length > 0)}
                       >
                         <Button variant="primary" icon={<Save />} onClick={openRecord}>
-                          {t("Record a version…")}
+                          {t("Save")}
                         </Button>
                       </Show>
                       <Button variant="tertiary" onClick={() => setShowChoices(true)}>
@@ -1588,7 +1588,7 @@ export function ReviewPanel() {
               setSendLine(undefined);
             }
           }}
-          title={t("Record a version")}
+          title={t("Save")}
           description={
             againstShared()
               ? t(
@@ -1623,7 +1623,7 @@ export function ReviewPanel() {
                 data-review-record-confirm
                 onClick={() => void record()}
               >
-                {t("Record a version")}
+                {t("Save")}
               </Button>
             </Show>
           }

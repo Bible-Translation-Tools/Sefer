@@ -320,7 +320,11 @@ export function BookDiff(props: {
           </Show>
         </p>
         <div
-          class={cx("cm-diff-pane min-h-0 flex-1", props.live !== undefined && "cm-diff-live")}
+          class={cx(
+            "cm-diff-pane min-h-0 flex-1",
+            props.live !== undefined && "cm-diff-live",
+            props.controls !== undefined && "cm-diff-deciding",
+          )}
           ref={setRight}
         />
       </div>
