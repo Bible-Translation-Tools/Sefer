@@ -6,6 +6,8 @@
  * stable until the view leaves it (hysteresis), so scrolling costs one rebuild
  * per screenful rather than one per frame.
  *
+ * The window moves at most once a frame (`requestAnimationFrame`): see `sync`.
+ *
  * Moving the window can itself move the view. Only the window is decorated, and
  * a decorated stretch is not the height of the same text undecorated (the
  * reading hides markers and joins verses), so after a jump into estimated
@@ -118,7 +120,13 @@ class RenderWindow {
       });
       return;
     }
-    queueMicrotask(() => {
+    // A frame, not a microtask. Run from a microtask, the move was its own
+    // transaction straight after the scroll's update, whose DOM rebuild and
+    // forced selection read laid the page out mid-frame — and after a jump it
+    // decorated around a viewport measured on estimated heights, slid, and
+    // moved again. In the frame it lands beside CodeMirror's own measure,
+    // before paint: one move per jump, and no frame of undecorated text.
+    requestAnimationFrame(() => {
       this.queued = false;
       if (this.gone) return;
       const now = onScreen(this.view);
