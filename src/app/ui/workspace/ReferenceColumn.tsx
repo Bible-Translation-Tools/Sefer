@@ -130,12 +130,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     return Number.isNaN(numbered) ? undefined : numbered;
   };
 
-  /** The chapter at the top of the editor's viewport — the location watcher's reading. */
-  const at = (): number | undefined => {
-    const project = shell.project();
-    return project === undefined ? undefined : numberAt(shell.lastLocation(project.root)?.at);
-  };
-
   /** The chapter the editor is CLIPPED to, if it is clipped at all. */
   const clip = (): number | null => numberAt(shell.chapter()) ?? null;
 
@@ -277,7 +271,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
                 resource={entry.resource}
                 role={entry.role}
                 bookId={stackProps.book}
-                at={at}
                 clip={clip}
                 onUnbind={() => drop(entry)}
               />

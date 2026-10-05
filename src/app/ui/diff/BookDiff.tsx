@@ -5,12 +5,13 @@
  * baseline's words struck through where they were and a baseline-only unit
  * drawn as a block where it stood.
  *
- * In a split the two panes scroll on their own. They used to follow each
- * other by place, and that was too eager: once the texts' heights differ (a
- * reviewer deleted a run of `\p` and `\q` lines, say), a small scroll in one
- * moved the other by a screen. What puts them side by side is next / previous
- * change (`showUnit`): each pane brings that unit to its MIDDLE — where it
- * stands, or where it would stand in a text that lacks it. `onPlace` reports
+ * In a split the two panes are an aligned group (`createAlignedGroup`): they
+ * follow each other by VERSE, and only when the verse scrolled to is not
+ * already on screen in the other. They once followed by place, and that was
+ * too eager: once the texts' heights differ (a reviewer deleted a run of `\p`
+ * and `\q` lines, say), a small scroll in one moved the other by a screen.
+ * Next / previous change (`showUnit`) still brings the unit to each pane's
+ * MIDDLE — where it stands, or where it would stand in a text that lacks it. `onPlace` reports
  * the unit at the top of the current pane, so a counter can say where you are.
  */
 
@@ -22,6 +23,7 @@ import type { DecisionUnit } from "#core/galley/diff";
 import type { ObservabilityService } from "#core/observability";
 import {
   analyzer,
+  createAlignedGroup,
   liveDiff,
   modeView,
   mountDiffView,
@@ -250,6 +252,12 @@ export function BookDiff(props: {
         );
         follow("baseline", was);
         follow("current", current);
+        // The two panes, aligned by verse: either leads, the other follows.
+        const group = createAlignedGroup("reveal");
+        releases.push(
+          group.join({ view: was.view, book: sides.bookId }),
+          group.join({ view: current.view, book: sides.bookId }),
+        );
       } else {
         const current = add("unified", r, sides.currentText, () =>
           hunkPaint(

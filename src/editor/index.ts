@@ -85,6 +85,7 @@ export { flash, flashing } from "./recipes/flash";
 export { showCorpusFindings, usfmLinter, type CorpusFinding } from "./recipes/lint";
 export { lintHoverGrace } from "./recipes/lintHover";
 export { watchLocation } from "./recipes/whereAmI";
+export { createAlignedGroup, type AlignedGroup } from "./recipes/align";
 export { noteBookIs, noteEditing } from "./recipes/noteEditor";
 
 // Clipboard and the attribute popover.
