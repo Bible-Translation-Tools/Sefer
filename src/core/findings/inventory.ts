@@ -7,7 +7,7 @@
 // convention finding is a claim about a corpus and a claim needs a
 // denominator. What it publishes is a flat PATTERN TABLE: one row per
 // (glyph, channel, key) with a numerator, a denominator, a share in basis
-// points and a book count. `fromSnapshot` reads that table only to phrase a
+// points and a book count. `corpusReader` reads that table only to phrase a
 // finding's message. This file reads it as the thing it actually is — a
 // description of the corpus — and pivots it into one record per code point.
 //
@@ -409,7 +409,7 @@ interface Bucket {
  * The pattern table, pivoted per code point, with the convention findings
  * joined on.
  *
- * `resolveBook` is the SAME resolver `fromSnapshot` takes — a published host
+ * `resolveBook` is the SAME resolver `corpusReader` takes — a published host
  * id back to the book and the two stamps of the text we published — so
  * `ProjectAnalysis` hands both readers one function and the sites here carry
  * the same freshness answer the findings do. A book the caller no longer holds
@@ -417,7 +417,7 @@ interface Bucket {
  *
  * A publication in UTF-8 coordinates keeps its PATTERNS — a share and a
  * denominator are coordinate-free — but contributes no flagged sites, for the
- * same reason `fromSnapshot` drops one whole: an offset in the wrong space
+ * same reason `corpusReader` drops one whole: an offset in the wrong space
  * points at the wrong bytes, and a "Go" that lands in the wrong verse is worse
  * than no "Go" at all.
  */

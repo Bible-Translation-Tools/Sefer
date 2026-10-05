@@ -361,8 +361,10 @@ export function BookEditor(props: BookEditorProps) {
       // silently rather than shifted onto an offset nobody measured.
       const corpus = (): void => {
         const list: CorpusFinding[] = [];
-        for (const finding of shell.services.projectAnalysis.crossBook())
-          if (finding.bookId === book.id && !stale(finding, book)) list.push(finding);
+        // This book's share only — converted on its own, not by converting the
+        // whole project's list to filter it.
+        for (const finding of shell.services.projectAnalysis.crossBookOf(book.id))
+          if (!stale(finding, book)) list.push(finding);
         showCorpusFindings(created, list);
         // Counts and ids only — a finding's message quotes the document and
         // never reaches the ring.

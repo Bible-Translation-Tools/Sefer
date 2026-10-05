@@ -308,7 +308,8 @@ const corpusCode = (finding: CorpusFinding, channel: string | undefined): string
 };
 
 /**
- * Sous corpus findings → findings, for a whole publication.
+ * Sous corpus findings → findings, for a whole publication: what a
+ * `corpusReader` answers, one book at a time.
  *
  * `resolveBook` maps the host id a book was published under back to the stamps
  * of the text we published; a book the caller no longer holds (closed between
@@ -326,20 +327,54 @@ const corpusCode = (finding: CorpusFinding, channel: string | undefined): string
  * prevent. The engine flags UTF-16 when the books were published that way,
  * which is what `ProjectAnalysis` does.
  */
-export const fromSnapshot = (
+export interface CorpusReader {
+  /** One book's findings, converted on first ask and held for the publication. */
+  of(bookId: BookId): readonly Finding[];
+  /** Every book's — the Findings panel's list. Converts what was not asked for yet. */
+  all(): readonly Finding[];
+  /** How many errors and warnings, from the severities alone: nothing is converted. */
+  totals(): { readonly errors: number; readonly warnings: number };
+}
+
+/**
+ * The conversion of a publication's corpus findings, a book at a time.
+ *
+ * Converting every finding in every book on every publication — and formatting
+ * each one's two sentences through IntlMessageFormat — was ~27 ms per
+ * keystroke on a slow machine, for a list nothing showed: the badges want
+ * counts, the editor wants its own book's squiggles, and only the Findings
+ * panel wants the whole. So a book is converted when something asks for it,
+ * the counts come from severities, and a finding's `message` and `details`
+ * are formatted the first time they are read.
+ */
+export const corpusReader = (
   snapshot: FindingsSnapshot,
   resolveBook: (id: string) => PublishedBook | undefined,
-): readonly Finding[] => {
-  if (snapshot.coordinateSpace !== "utf16") return [];
-  const patterns = snapshot.patterns();
+): CorpusReader => {
+  const usable = snapshot.coordinateSpace === "utf16";
   const bookCount = snapshot.length;
-  const bookName = (index: number): string => {
-    const book = snapshot.book(index);
-    if (book === undefined) return String(index + 1);
-    return resolveBook(book.id)?.name ?? book.key;
+  // Shared by every book's conversion, and built only by the first.
+  let shared:
+    | {
+        readonly patterns: ReturnType<FindingsSnapshot["patterns"]>;
+        readonly patternBooks: ReturnType<typeof booksByPattern>;
+        readonly bookName: (index: number) => string;
+      }
+    | undefined;
+  const context = () => {
+    if (shared !== undefined) return shared;
+    shared = {
+      patterns: snapshot.patterns(),
+      // Which books hold each pattern, so a two-book spread is named, not counted.
+      patternBooks: booksByPattern(snapshot),
+      bookName: (index: number): string => {
+        const book = snapshot.book(index);
+        if (book === undefined) return String(index + 1);
+        return resolveBook(book.id)?.name ?? book.key;
+      },
+    };
+    return shared;
   };
-  // Which books hold each pattern, so a two-book spread is named, not counted.
-  const patternBooks = booksByPattern(snapshot);
   // A Casing message says what the project does after the mark before its
   // word; the reading map that finds that mark is asked for once per book,
   // and only by a book that has one.
@@ -359,12 +394,37 @@ export const fromSnapshot = (
     const mark = mask === undefined ? undefined : markBeforeIn(resolved.text, mask, finding.from);
     return mark === undefined ? {} : { before: mark };
   };
-  const out: Finding[] = [];
-  for (let index = 0; index < snapshot.length; index += 1) {
-    const book = snapshot.book(index);
-    if (book === undefined) continue;
-    const resolved = resolveBook(book.id);
-    if (resolved === undefined) continue;
+
+  /** Each published book's index and what it resolves to; a closed book is not there. */
+  let indexes:
+    | Map<BookId, { readonly index: number; readonly resolved: PublishedBook }>
+    | undefined;
+  const indexOf = () => {
+    if (indexes !== undefined) return indexes;
+    indexes = new Map();
+    if (!usable) return indexes;
+    for (let index = 0; index < snapshot.length; index += 1) {
+      const book = snapshot.book(index);
+      if (book === undefined) continue;
+      const resolved = resolveBook(book.id);
+      if (resolved !== undefined) indexes.set(resolved.bookId, { index, resolved });
+    }
+    return indexes;
+  };
+
+  const converted = new Map<BookId, readonly Finding[]>();
+  const of = (bookId: BookId): readonly Finding[] => {
+    const held = converted.get(bookId);
+    if (held !== undefined) return held;
+    const at = indexOf().get(bookId);
+    const book = at === undefined ? undefined : snapshot.book(at.index);
+    if (at === undefined || book === undefined) {
+      converted.set(bookId, []);
+      return [];
+    }
+    const { patterns, patternBooks, bookName } = context();
+    const resolved = at.resolved;
+    const out: Finding[] = [];
     for (let row = 0; row < book.count; row += 1) {
       const finding = book.at(row);
       const pattern =
@@ -379,14 +439,24 @@ export const fromSnapshot = (
         ...before(resolved, finding, pattern),
       });
       const comparison = comparisonOf(described);
+      // The two sentences, formatted when first read: most findings are
+      // counted or squiggled, and never have either drawn.
+      let headline: string | undefined;
+      let more: string | undefined;
       out.push({
         id: identify("sous", resolved.bookId, code, finding.from, finding.to),
         bookId: resolved.bookId,
         severity: corpusSeverity(finding),
         code,
         producer: "sous",
-        message: render(described, "headline"),
-        details: render(described, "details"),
+        get message() {
+          headline ??= render(described, "headline");
+          return headline;
+        },
+        get details() {
+          more ??= render(described, "details");
+          return more;
+        },
         described,
         from: finding.from,
         to: finding.to,
@@ -396,8 +466,35 @@ export const fromSnapshot = (
         ...(comparison === undefined ? {} : { comparison }),
       });
     }
-  }
-  return out;
+    converted.set(bookId, out);
+    return out;
+  };
+
+  let everything: readonly Finding[] | undefined;
+  let counted: { readonly errors: number; readonly warnings: number } | undefined;
+  return {
+    of,
+    all: () => {
+      everything ??= [...indexOf().keys()].flatMap(of);
+      return everything;
+    },
+    totals: () => {
+      if (counted !== undefined) return counted;
+      let errors = 0;
+      let warnings = 0;
+      for (const { index } of indexOf().values()) {
+        const book = snapshot.book(index);
+        if (book === undefined) continue;
+        for (let row = 0; row < book.count; row += 1) {
+          const severity = corpusSeverity(book.at(row));
+          if (severity === "error") errors += 1;
+          else if (severity === "warning") warnings += 1;
+        }
+      }
+      counted = { errors, warnings };
+      return counted;
+    },
+  };
 };
 
 /**

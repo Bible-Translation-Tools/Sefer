@@ -149,9 +149,15 @@ export const makeShellStores = (options: {
   // reader that iterates it for granularity it cannot use. The census is the
   // opposite: sixty-six rows that move independently, where a reader of RUT's
   // row must not wake for PSA's.
-  const [findingsList, setFindingsList] = createSignal<readonly Finding[]>([], {
-    name: "findings",
-  });
+  /**
+   * Which publication the findings describe. The LIST is not held: building
+   * it converts every finding in every book, and on a keystroke nothing but
+   * the badges' counts wants it — those come from `findingTotals`. A reader
+   * that does want the list (the Findings panel, stepping through findings)
+   * reads it through `findings()`, which asks ProjectAnalysis, memoised for
+   * the same publication.
+   */
+  const [findingsVersion, setFindingsVersion] = createSignal(0, { name: "findingsVersion" });
   const [findingsPending, setFindingsPending] = createSignal(false, { name: "findingsPending" });
   const [findingTotals, setFindingTotals] = createSignal(
     { errors: 0, warnings: 0 },
@@ -168,7 +174,7 @@ export const makeShellStores = (options: {
   const publishFindings = (): void => {
     const staticOpen = open();
     if (staticOpen === undefined) {
-      setFindingsList([]);
+      setFindingsVersion((n) => n + 1);
       setFindingTotals({ errors: 0, warnings: 0 });
       setInventoryHeld(EMPTY_INVENTORY);
       setCensusHeld((draft) => {
@@ -179,17 +185,11 @@ export const makeShellStores = (options: {
     // One rebuild, here, for every reader — rather than each of them paying
     // it separately. All three doors are memoised behind the same
     // publication, so asking for all of them costs what asking for one did.
-    const list = services.projectAnalysis.findings();
     setFindingsPending(false);
-    let errors = 0;
-    let warnings = 0;
-    for (const held of list) {
-      if (held.severity === "error") errors += 1;
-      else if (held.severity === "warning") warnings += 1;
-    }
+    const totals = services.projectAnalysis.findingTotals();
     const rows = services.projectAnalysis.census(staticOpen);
-    setFindingsList(list);
-    setFindingTotals({ errors, warnings });
+    setFindingsVersion((n) => n + 1);
+    setFindingTotals(totals);
     setInventoryHeld(services.projectAnalysis.inventory());
     setCensusHeld((draft) => {
       const present = new Set<BookId>();
@@ -203,7 +203,10 @@ export const makeShellStores = (options: {
     });
   };
 
-  const findings = (): readonly Finding[] => findingsList();
+  const findings = (): readonly Finding[] => {
+    findingsVersion();
+    return open() === undefined ? [] : services.projectAnalysis.findings();
+  };
 
   const findingCounts = (): { readonly errors: number; readonly warnings: number } =>
     findingTotals();
