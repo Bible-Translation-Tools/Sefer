@@ -2,10 +2,10 @@
  * One line of where the project stands with the shared project, for the
  * screen where versions are made: Review.
  *
- * It is the status bar's "↑2 ↓3" said in words — "2 versions only on this
- * device · 3 in the shared project you don't have" — with the one move beside
- * it. Shown only when there is something to say: both sides agreeing, or a
- * project attached to nothing, is no line at all.
+ * It is the status bar's "↑2 ↓3" said in words — "Saved changes not sent
+ * yet · 3 verses in 2 books differ from yours" — with the one move beside it.
+ * Shown only when there is something to say: both sides agreeing, or a project
+ * attached to nothing, is no line at all.
  */
 
 import CloudAlert from "lucide-solid/icons/cloud-alert";
@@ -14,12 +14,13 @@ import CloudOff from "lucide-solid/icons/cloud-off";
 import CloudUpload from "lucide-solid/icons/cloud-upload";
 import { Show } from "solid-js";
 
-import type { Sync } from "#core/sync";
+import type { IncomingPlan, Sync } from "#core/sync";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
+import { syncWatch } from "../../syncWatch";
 import { Button, cx } from "../primitives";
-import { plural } from "./copy";
+import { incomingWords, outgoingWords } from "./copy";
 import { attentionOf, createQuickSync, quickActionOf, quickLabel } from "./quick";
 
 const SAID = new Set(["ahead", "behind", "diverged", "offline", "unauthorized", "conflicted"]);
@@ -37,22 +38,17 @@ const glyphOf = (sync: Sync) => {
   }
 };
 
-/** "2 versions only on this device · 3 in the shared project you don't have". */
-const countsOf = (sync: Sync): string => {
+/**
+ * "Saved changes not sent yet · 3 verses in 2 books differ from yours" — the
+ * plan's numbers, never a count of versions (`incomingWords`).
+ */
+const countsOf = (sync: Sync, plan: IncomingPlan | undefined): string => {
   const parts: string[] = [];
-  const ahead = sync.clocks.local.unshared;
-  const behind = sync.clocks.shared.unshared;
-  if (ahead > 0)
+  if (sync.clocks.local.unshared > 0) parts.push(outgoingWords());
+  if (sync.clocks.shared.unshared > 0)
     parts.push(
-      plural(ahead, "{count} version only on this device", "{count} versions only on this device"),
-    );
-  if (behind > 0)
-    parts.push(
-      plural(
-        behind,
-        "{count} version in the shared project you don't have",
-        "{count} versions in the shared project you don't have",
-      ),
+      (plan === undefined ? undefined : incomingWords(plan)) ??
+        t("the shared project has changes you don't have yet"),
     );
   return parts.join(" · ");
 };
@@ -89,10 +85,10 @@ export function SyncLine(props: {
           </span>
           <span>
             {held().state === "offline"
-              ? t("Offline — versions stay on this device until you're back.")
+              ? t("Offline — your saved changes stay on this device until you're back.")
               : held().state === "unauthorized"
                 ? t("Sign in to send to the shared project.")
-                : countsOf(held())}
+                : countsOf(held(), syncWatch.facts(shell.project()?.root)?.plan)}
           </span>
           <Show
             when={

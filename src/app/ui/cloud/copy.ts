@@ -202,9 +202,9 @@ export const actionLabel = (action: SyncActionId): string => {
 /**
  * The sentence under the button: what this press will do, before it does it.
  *
- * Counts come from the clocks, so the sentence is specific — "sends your 2
- * versions", not "sends your changes". A vague promise is what makes people
- * afraid to press a sync button.
+ * Specific about what moves and what does not — a vague promise is what makes
+ * people afraid to press a sync button — and never a count of versions, which
+ * reads as how many times you will have to compare.
  */
 export const narrate = (
   action: SyncActionId,
@@ -218,34 +218,21 @@ export const narrate = (
       });
     case "attach":
       return t("Records which shared project this one belongs to. Nothing is transferred yet.");
+    // No version counts: whatever it took either side to get there, what
+    // moves is the newest text, compared once (`incomingWords`).
     case "publish":
-      return plural(
-        counts.ahead,
-        "Creates the project online and sends the {count} version on this device. Nothing here changes.",
-        "Creates the project online and sends the {count} versions on this device. Nothing here changes.",
-      );
+      return t("Creates the project online and sends your work. Nothing here changes.");
     case "pull":
-      return plural(
-        counts.behind,
-        "Applies the shared project's {count} version to this device. You see the plan first, and nothing is applied until you confirm it.",
-        "Applies the shared project's {count} versions to this device. You see the plan first, and nothing is applied until you confirm it.",
+      return t(
+        "Applies the shared project's changes to this device. You see the plan first, and nothing is applied until you confirm it.",
       );
     case "push":
-      return plural(
-        counts.ahead,
-        "Sends your {count} version to the shared project. Nothing on this device changes.",
-        "Sends your {count} versions to the shared project. Nothing on this device changes.",
-      );
+      return t("Sends your saved changes to the shared project. Nothing on this device changes.");
     case "combine":
-      // Both counts, because the whole question a person is weighing here is
-      // "what happens to my N versions, and to their M". Both are kept, and
-      // one new version joins them. The last clause is the promise the move
-      // keeps: everything up to the send is local.
-      return plural(
-        counts.ahead,
-        "Your {count} version and the shared project's {behind} are both kept, joined by one new version. Nothing in the shared project changes until it is sent.",
-        "Your {count} versions and the shared project's {behind} are both kept, joined by one new version. Nothing in the shared project changes until it is sent.",
-        { behind: counts.behind },
+      // The promise the move keeps: both sides' work is kept, and everything
+      // up to the send is local.
+      return t(
+        "Your changes and the shared project's are both kept, joined by one new version. Nothing in the shared project changes until it is sent.",
       );
     case "compare":
       return plural(
@@ -290,6 +277,23 @@ export const planSummary = (plan: IncomingPlan): string => {
   const verses = plural(plan.verseCount, "{count} verse", "{count} verses");
   return t("There are changes to {verses} in {books}.", { verses, books });
 };
+
+/**
+ * What the shared project has that you do not, in the plan's own numbers —
+ * "3 verses in 2 books differ from yours" — never in versions. However many
+ * versions it took them, a review compares the newest against yours ONCE, and
+ * "3 versions you don't have" read like three reviews.
+ */
+export const incomingWords = (plan: IncomingPlan): string | undefined => {
+  if (plan.books.length === 0) return undefined;
+  const books = plural(plan.books.length, "{count} book", "{count} books");
+  if (plan.verseCount === 0) return t("{books} differ from yours", { books });
+  const verses = plural(plan.verseCount, "{count} verse", "{count} verses");
+  return t("{verses} in {books} differ from yours", { verses, books });
+};
+
+/** What you have that the shared project does not — said, not counted: see `incomingWords`. */
+export const outgoingWords = (): string => t("Saved changes not sent yet");
 
 /** The second sentence: whether you changed any of the same verses, and how it reads. */
 export const planOverlap = (

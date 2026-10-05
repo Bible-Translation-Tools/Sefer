@@ -14,12 +14,12 @@
 
 import { Show } from "solid-js";
 
-import type { Clock, Sync } from "#core/sync";
+import type { Clock, IncomingPlan, Sync } from "#core/sync";
 
 import { t } from "../../i18n";
 import { ago, exact } from "../panels/format";
 import { Card, cx, PanelHeader, type BadgeTone } from "../primitives";
-import { plural, stateCopy } from "./copy";
+import { incomingWords, outgoingWords, plural, stateCopy } from "./copy";
 
 /** The repository, as a person reads it: `owner/name`, not a clone URL. */
 const shortOrigin = (url: string): string => {
@@ -87,7 +87,12 @@ export const toneText = (tone: BadgeTone): string => {
 };
 
 /** The two clocks, side by side: this device's and the shared project's. */
-export function SyncClocks(props: { readonly sync: Sync; readonly class?: string }) {
+export function SyncClocks(props: {
+  readonly sync: Sync;
+  /** What would arrive, for the shared side's words in verses; absent until it is worked out. */
+  readonly plan?: IncomingPlan;
+  readonly class?: string;
+}) {
   return (
     <div class={cx("flex flex-wrap gap-6", props.class)}>
       <ClockLine
@@ -95,13 +100,7 @@ export function SyncClocks(props: { readonly sync: Sync; readonly class?: string
         label={t("This device")}
         clock={props.sync.clocks.local}
         unshared={
-          props.sync.clocks.local.unshared === 0
-            ? t("nothing waiting to be sent")
-            : plural(
-                props.sync.clocks.local.unshared,
-                "{count} version the shared project does not have",
-                "{count} versions the shared project does not have",
-              )
+          props.sync.clocks.local.unshared === 0 ? t("nothing waiting to be sent") : outgoingWords()
         }
       />
       <ClockLine
@@ -111,18 +110,19 @@ export function SyncClocks(props: { readonly sync: Sync; readonly class?: string
         unshared={
           props.sync.clocks.shared.unshared === 0
             ? t("nothing waiting to be received")
-            : plural(
-                props.sync.clocks.shared.unshared,
-                "{count} version this device does not have",
-                "{count} versions this device does not have",
-              )
+            : ((props.plan === undefined ? undefined : incomingWords(props.plan)) ??
+              t("changes you don't have yet"))
         }
       />
     </div>
   );
 }
 
-export function ProjectCard(props: { readonly sync: Sync; readonly projectName: string }) {
+export function ProjectCard(props: {
+  readonly sync: Sync;
+  readonly plan?: IncomingPlan;
+  readonly projectName: string;
+}) {
   const copy = () =>
     stateCopy(props.sync.state, {
       sendRefused: props.sync.reading.sendRefused,
@@ -146,7 +146,7 @@ export function ProjectCard(props: { readonly sync: Sync; readonly projectName: 
         <p class="mt-1 text-small text-on-surface-secondary">{copy().detail}</p>
       </div>
 
-      <SyncClocks sync={props.sync} class="border-t border-surface-border pt-3" />
+      <SyncClocks sync={props.sync} plan={props.plan} class="border-t border-surface-border pt-3" />
 
       <Show when={props.sync.reading.uncommitted > 0}>
         <p class="text-small text-on-surface-tertiary" data-cloud="uncommitted">

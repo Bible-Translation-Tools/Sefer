@@ -472,7 +472,7 @@ export function CloudScreen() {
           <Show when={current()} fallback={<Card>{t("Reading this project…")}</Card>}>
             {(held) => (
               <>
-                <ProjectCard sync={held()} projectName={name()} />
+                <ProjectCard sync={held()} plan={plan()} projectName={name()} />
 
                 <Show when={wantsPlan(held().state) && plan().books.length > 0}>
                   <IncomingPlanCard plan={plan()} />

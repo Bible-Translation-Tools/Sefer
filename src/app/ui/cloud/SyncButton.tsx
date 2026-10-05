@@ -166,7 +166,11 @@ export function SyncButton() {
               </div>
 
               <Show when={held().reading.origin !== undefined}>
-                <SyncClocks sync={held()} class="border-t border-surface-border pt-3" />
+                <SyncClocks
+                  sync={held()}
+                  plan={plan()}
+                  class="border-t border-surface-border pt-3"
+                />
               </Show>
 
               <Show when={(plan()?.books.length ?? 0) > 0 ? plan() : undefined}>
