@@ -107,14 +107,15 @@ instead, labelled as that suggestion ([git](git.md), Suggested changes).
 
 Only this pairing has a third text: the version both sides last agreed on, the merge base, read as
 `createRecordedVersion(shell, "base")`. Against it, every card says where its change came from —
-**Changed there**, **Changed here**, or **Changed in both places** — from the same change facts the
+**changed there**, **changed here**, or **changed in both places** — from the same change facts the
 sync policy decides with (`bookFacts`, `src/core/sync/facts.ts`), so Review and `/cloud` cannot
-disagree about which passages both people touched. It is a label, not a colour: the tint stays by
-side.
+disagree about which passages both people touched. It is plain words in the card's header, not a
+chip, and only "changed in both places" takes a colour (warning): it is the one that asks something
+of the reader. The tint stays by side.
 
 Every passage has a side before anyone chooses: changed only there is preset to theirs, changed
 only here to mine, and the card shows the preset as its decision. A passage changed in both places
-has none, and Record a version waits until each has a choice. Pressing it SETTLES the difference
+has none, and Save waits until each has a choice. Pressing it SETTLES the difference
 rather than only recording the editor: the presets still set to theirs are taken into the project's
 text, and then the project's text — choices, presets and anything typed into the cards — is what is
 recorded, with everything else the other side changed, as one version: a receive and a version, or
@@ -209,8 +210,11 @@ sid-aligned rule exists to prevent.
 
 **The chrome is one row**, so the reading has the screen. What is compared is
 a chip ("On disk → In the editor") that opens the two pickers (From, To); the count says
-how far the review is; Record a version opens
-a dialog for its message; the ⋯ menu holds Clear every decision (in an
+how far the review is; **Save** — the header's one primary button, and its
+largest thing, with the way back a small borderless × beside it
+(`BackToEditor quiet`) — opens a dialog for its message, and the dialog stays
+open on its receipt: a line for this device and a line for the shared
+project ([sync](sync.md), "One reading for every surface"); the ⋯ menu holds Clear every decision (in an
 editable review it takes every take back out of the text, one Undo step per
 book, as each book's own Clear does), History and what aligned the diff.
 Choosing another source starts over: no decisions, and the takes already
@@ -228,6 +232,34 @@ the Changes tab: each book that differs, decided of total, as Find's sidebar
 becomes its results. History is the other tab: the timeline, with the selected
 version's changes in the main area (`?commit=<id>`) and Adopt on either side of
 a card. The route picks the tab, so Back and Forward move between them.
+
+Under the header, one line says where the project stands with the shared
+project — "Saved changes not sent yet · 3 verses in 2 books differ from yours"
+— with Send or See the changes beside it (`SyncLine`); it is the status bar's
+↑2 ↓3 in words, and absent when there is nothing to say.
+
+**The states a review passes through, said rather than guessed at:**
+
+- **Waiting for a side.** A side read out of a commit (the shared project, the
+  last version) has its texts a moment after the screen opens. Compared before
+  they land it held no books, and every book read "only in the editor"; so the
+  screen says "Reading the shared project…" until they do. A side that truly
+  holds no books is one sentence ("The shared project holds no books yet"),
+  never a list of sixty-six names.
+- **Every change decided.** When something was decided, nothing is left
+  undecided and both sides read the same, the cards — each now "unchanged",
+  which reads as "did it work?" — give way to **Every change is decided**, with
+  Save and **Show my choices**. The card sits OVER a reader that stays mounted
+  and hidden (it ignores its zero width while hidden, so an automatic layout
+  does not flip), so showing the choices is instant; replacing the reader threw
+  away every book's prepared diff. A decided card hides the engine's status
+  ("unchanged") for the same reason; the pressed button and the checked column
+  say what happened.
+- **Whole book builds once.** Its two editors wait for the book to be seated
+  (`awaitLive`) and for the reader's width; the seat is kept through a
+  re-comparison; and the view is keyed on the BOOK, not on its prepared entry,
+  which a comparison replaces. Each of the three had been a full rebuild of two
+  Genesis editors on entering Whole book.
 
 The differences are drawn ON the two texts, as the editor reads them — the
 diff view recipe (`#editor` `mountDiffView`) paints units and word runs on each
@@ -282,7 +314,7 @@ book, so the scope is a toggle a reader flips, not a setting they visit.
 **The kind filter** — All, Words, Markup and spacing — narrows the cards, the
 navigation and the bulk actions to one kind, using the engine's own
 classification (`isUsfmStructureChange`, `isWhitespaceChange`). A card with
-formatting changes carries a "markup only" / "whitespace only" badge and a
+formatting changes says "markup only" / "whitespace only" in its header, as words and not a chip, and has a
 code icon that switches that card alone to USFM. In the reading those changes are
 invisible, but a card never switches mode by itself; it once did, and a
 view that changes under the reader unasked reads as a bug.
@@ -380,12 +412,13 @@ a book yet, and it says so in one line.
 
 ---
 
-## 4. Record a version: the save model, explicit only
+## 4. Save (record a version): the save model, explicit only
 
 **The project file is written only when a version is recorded.** There is no
 timer on the file, no idle write, no `autosave` — Review's one button calls
 `saveAll` and then `Git.commit`, in that order, as one action
-(`recordVersion`, `src/app/recordVersion.ts`, which the save key shares when
+(`recordVersion`, `src/app/recordVersion.ts`; the button says **Save**, the code and this document
+still say "record a version" for what it does; the save key shares it when
 "Skip review of my changes" is on). It is offered whenever the project is one
 of the two sides, because what it records is the project's own unsaved work
 and not the comparison. The commit takes exactly the save's receipts, plus

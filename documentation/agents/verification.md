@@ -94,6 +94,53 @@ The web host prefers the File System Access picker, which is a native dialog no 
 
 **4. Prefer the longest task to the wall clock.** CDP `Tracing` with `devtools.timeline`, `performance.mark` either side of the interaction, then the top-level tasks in the window. A single 69ms task and two 34ms tasks take the same total time and do not feel the same; the second is the one that keeps typing responsive. A sampling profile (`Profiler.*`) correlated to a task's window by timestamp is what names the functions inside it — the timeline alone will only say `EventDispatch`.
 
+## Measuring on a slow machine
+
+CDP's `Emulation.setCPUThrottlingRate { rate: 4 }` makes the rig's main thread a cheap laptop's — and only that: GPU, memory and disk are untouched. 4× is slow enough to make a cost visible that a fast machine hides, which is what it is for: a debugging tool when something feels slow, not a target. The numbers it gave on 2026-10-05 are in [the editor](../architecture/editor.md#performance).
+
+**Set up.** Steps 1–3 above: the rig, a corpus imported through the product's own door, and the production build on the SAME origin — `pnpm build --sourcemap`, then `pnpm serve --port <p> --strictPort`. The rig's OPFS is per origin, port included, so a corpus imported at one port is not there at another; use a port nobody else's dev server is holding (a person's `pnpm dev` is usually on 3000), and import there once. The imported en_ulb lists as "English" and opens at `/project/en-ulb`.
+
+**One run, by phase.** Throttle, open the book, then per phase take `Performance.getMetrics` deltas (task, script, layout and style time and counts), a `longtask` observer's entries, and a `Profiler` sample: idle for ten seconds; a fling (150 random `scrollTop` jumps a frame apart, then 120 wheel ticks); typing 40 characters at a 150 ms cadence into a line mid-screen, then undoing until the document is what it was (`document.querySelector(".cm-content").cmTile.view.state.doc` — a line's DOM is replaced on redraw, so its `textContent` proves nothing); the same in USFM. Map each profile frame through the bundle's `.map` (`@jridgewell/trace-mapping`, already in `node_modules/.pnpm`) and key by bundle position as well as mapped name: native work (layout, style) is booked to the JS function that caused it.
+
+**Key to frame, measured directly.** Event Timing collected by a `PerformanceObserver` and drained per phase reported 3–4 s p50 for regular-mode typing on Chrome 154 where the real figure was ~100 ms. Read it in the page instead, or time it yourself:
+
+```js
+addEventListener(
+  "keydown",
+  (e) => {
+    const t0 = e.timeStamp;
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => keyToFrame.push(performance.now() - t0)),
+    );
+  },
+  true,
+);
+```
+
+**A behaviour, counted.** When the question is "how many times does X happen per gesture" — window moves per scroll jump, builds per toggle — a temporary counter on `globalThis` in the code under test, read by the driving script and removed before commit, answers it in one run. Pair a visual claim with a probe that can fail: "no jump paints undecorated text" was counted as visible lines still showing `\v` on the first frame after a jump, and the probe was proven by running it in USFM mode, where every line shows them.
+
+**A tab that never yields cannot be paused over CDP** — `Debugger.enable` never answers — and macOS `sample` on the renderer shows only stripped Chrome frames. What names a never-yielding microtask loop is a tripwire in `page.addInitScript`, read against `pnpm build --sourcemap`:
+
+```js
+let since = 0;
+const beat = new MessageChannel();
+beat.port1.onmessage = () => {
+  since = 0;
+  beat.port2.postMessage(0);
+}; // any macrotask resets it
+beat.port2.postMessage(0);
+const qm = globalThis.queueMicrotask;
+globalThis.queueMicrotask = (fn) => {
+  if (globalThis.__armed && ++since > 5000) {
+    console.error("TRIPWIRE\n" + new Error().stack); // reaches CDP before the throw
+    throw new Error("tripwire"); // breaks the chain, so the page lives
+  }
+  return qm(fn);
+};
+```
+
+**Pitfalls met.** A page the rig opens is 800 px wide unless `setViewportSize` says otherwise, which puts Review in its one-text layout. Several stray `vite` dev servers from one checkout share `node_modules/.vite/deps`, and one re-optimizing left another serving `504 Outdated Optimize Dep` on every module. Unsaved work left in the rig's OPFS by an earlier run shows the recovery banner on every book screen; a run that edits should discard it or expect it. The "open books one chapter at a time" toggle is `[id="editor.preferChapterView"]`, and chapter view needs it on before a chapter tile clips rather than scrolls. Something in a person's checkout (an editor's git integration) can hold `.git/index.lock` for a moment; retry rather than delete it.
+
 ## Evidence that humans and agents can inspect
 
 Keep a compact record of intent, fixture, build/revision (including dirty-tree status), platform, actions, observed result, and limits. Add screenshots or a trace where useful, console/errors, and relevant file/content checks. Evidence may show success or failure; a final screenshot alone rarely explains either.

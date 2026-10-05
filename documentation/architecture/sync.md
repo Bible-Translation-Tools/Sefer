@@ -17,8 +17,13 @@ that refused to sync at all.
 
 Two consequences run through everything below:
 
-- The screen always says what a press will do BEFORE it does it, with the real counts in the
-  sentence. "Sends your 2 versions to the shared project. Nothing on this device changes."
+- The screen always says what a press will do BEFORE it does it, specifically. "Sends your saved
+  changes to the shared project. Nothing on this device changes."
+- **Counts are verses and books, never versions.** "3 verses in 2 books differ from yours"
+  (`incomingWords`, from the incoming plan's own numbers); what has not been sent is said, not
+  counted ("Saved changes not sent yet", `outgoingWords`). However many versions it took either
+  side, a review compares the newest against yours once, and "3 versions you don't have" read like
+  three reviews to do.
 - When both sides changed the same book, no automatic move is offered. That book goes to Compare —
   the Review screen, `/project/$slug/review` — where a person decides.
 
@@ -120,7 +125,10 @@ interface Clock {
   this device is.
 
 `at` and `unshared` are separate numbers on purpose: a project can be perfectly in sync and still
-have last moved a month ago, and that is worth saying.
+have last moved a month ago, and that is worth saying. `unshared` decides WHETHER a line has
+something to say; it is never shown as a number (see "Counts are verses and books" above) — the
+shared line says the plan's verses and books, the local line that saved changes are not sent yet.
+The time is the coloured word on both.
 
 `by` names the person only on the SHARED line, and only when there is something of theirs to
 receive. The local line never does — we already know who that was — and an attribution left over

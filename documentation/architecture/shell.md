@@ -158,6 +158,11 @@ the application's Mod-K for an application it is not part of.
   `SegmentedControl` (`md`, `iconsWhenNarrow`), which drop to icons below `md`;
   right, 48px icon-only buttons. Everything on it is lit from the `pathname`,
   not from a signal, and every button but three is a plain navigation.
+  The first of them, with a project open, is the **cloud** (`SyncButton`,
+  `app-bar-sync`): where the project stands with the shared project, from the
+  application's one sync reading (`syncWatch`), quiet until something waits on
+  a person and with a popover that is `/cloud` in brief ([sync](sync.md), "One
+  reading for every surface").
 - **The project panel's show/hide** is not on the app bar. It is one button that
   stays put and flips (`PanelToggle`, `panel-toggle`): left of the book's title
   in the editor toolbar, and on project screens without that toolbar at the
@@ -243,6 +248,22 @@ during render and has no unregister, so an unmounted panel renumbers the split.
 The route learns the count from the column's `onBound` callback rather than
 asking the Library a second time: the split is the route's, so the route is
 told.
+
+**The editor and its references are one aligned group.** The route makes it
+(`createAlignedGroup`) and provides it (`AlignedProvider`,
+`src/app/ui/workspace/aligned.ts`); `BookEditor` and each `ReferencePane` join
+it when their view mounts, so scrolling either brings the same verse into the
+other when it is not already in sight there — by verse address, never by
+scroll position ([editor](editor.md), "Two editors side by side"). The pane's
+chain (`FollowToggle`) decides whether it leads and follows; the clip is still
+chapter-level.
+
+**The location strip is shared.** The editor's sticky bar is `LocationStrip`
+plus `Crumbs` (`src/app/ui/workspace/Crumbs.tsx`) — a book picker and a
+chapter picker over whatever lists the caller gives, with optional counts and
+chapter arrows — and `LocationBar` is the editor's adapter over them: the
+project's books, the book's chapters, `shell.showChapter`. Review's Whole book
+uses the same strip over the books and chapters that changed.
 
 The panes themselves are remounted rather than reconciled whenever the binding
 set or the open book changes (`<Show keyed>` over the entries array), which is

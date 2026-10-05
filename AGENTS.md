@@ -14,7 +14,7 @@ Read only the guidance relevant to the task:
 - [Services](documentation/services.md): one page per service, at a glance — what it owns, where it lives, and its known gaps.
 - [Solid development and diagnostics](documentation/architecture/solid.md): read before Solid changes or reactive debugging; includes versioned skill locations and evidence capture.
 - [Testing](documentation/architecture/testing.md): coverage ownership, runner choice, cadence, and current commands.
-- [Agent verification](documentation/agents/verification.md): explore the running app, capture evidence, and decide what earns a regression test.
+- [Agent verification](documentation/agents/verification.md): explore the running app, capture evidence, decide what earns a regression test, and measure on a 4× throttled CPU when something feels slow.
 - [Lint results](documentation/lint-results.md): read before adding a suppression comment, changing a gate or a linter's config, or when a gate reports something new; what is gated where, what is deliberately left, and the process for keeping that record true.
 - [Observability](documentation/architecture/observability.md): logs, spans, bounded editor evidence, and platform sinks.
 - [Boundaries](documentation/architecture/boundaries.md): what `src/core` may depend on, and the checks that enforce it.

@@ -186,7 +186,7 @@ The pinned Scripture Kitchen WASM build (tagged git dependency, v0.1.8). Onion p
 
 ### Overview
 
-Sefer's whole-project consumer of Galley. It analyses every book when a project opens and re-analyses on a debounce. It holds the cross-book results, reference texts and the character inventory, each stamped for freshness. `rejudge()` is the door for a settings change: it marks every book stale and lets the one debounced pass republish, keeping the old publication until that one replaces it, so Findings dims rather than empties (`findingsPending`). References (the project's source) register on project open, and again when Copied source words is turned on. `src/core/analysis/projectAnalysis.ts`. → [findings](architecture/findings.md), [inventory](architecture/inventory.md)
+Sefer's whole-project consumer of Galley. It analyses every book when a project opens and re-analyses on a debounce. It holds the cross-book results, reference texts and the character inventory, each stamped for freshness. `rejudge()` is the door for a settings change: it marks every book stale and lets the one debounced pass republish, keeping the old publication until that one replaces it, so Findings dims rather than empties (`findingsPending`). References (the project's source) register on project open, and again when Copied source words is turned on. The Sous half of the findings is converted a book at a time, only when something asks (`crossBookOf`, `corpusReader`), and `findingTotals()` counts without converting, so a keystroke's publication no longer builds every finding in the project. `src/core/analysis/projectAnalysis.ts`. → [findings](architecture/findings.md), [inventory](architecture/inventory.md)
 
 ### Constraints and known bugs
 
@@ -260,7 +260,7 @@ On it today: the palette, the sidebar's filter (`shell.location.books` for every
 
 ### Overview
 
-CodeMirror over an EditorBook: the phases, registry, mapping and plan; one funnel for every write (`src/editor/funnel.ts`); undo; regular and USFM modes; chapter and book views; clip. A projection on a surface is one extension, `modeView(name, surface?)` (`views.ts`). `src/editor`, mounted by `app/ui/BookEditor.tsx`. → [editor](architecture/editor.md), [solid](architecture/solid.md)
+CodeMirror over an EditorBook: the phases, registry, mapping and plan; one funnel for every write (`src/editor/funnel.ts`); undo; regular and USFM modes; chapter and book views; clip. A projection on a surface is one extension, `modeView(name, surface?)` (`views.ts`). Decoration covers a window round the viewport that moves at most once a frame (`render.ts`), through one windowed loop for both modes; two editors side by side align by verse through a group their container holds (`recipes/align.ts`). `src/editor`, mounted by `app/ui/BookEditor.tsx`. → [editor](architecture/editor.md), [solid](architecture/solid.md)
 
 ### Constraints and known bugs
 
@@ -268,6 +268,8 @@ CodeMirror over an EditorBook: the phases, registry, mapping and plan; one funne
 - Passthrough markers (a registered standalone such as `\s5`, and any unknown marker) are invisible in regular mode and immortal: the caret goes around them, no key takes one alone, and a delete that covers one takes it — the matrix's immortal rule; a `KEEP` bit that wrote around them instead was tried and dropped because it glued `\s5` to the next word. The space a paragraph shows where it flows through blank and `\s5` lines is the registry's `join` set, which owns those lines, so Backspace or Delete at it removes the whole gap in one step. → [editor](architecture/editor.md#passthrough-markers)
 - An unknown marker closes its paragraph in the engine at the end of its line, so unlike `\s5` the paragraph does not flow through it: the marker is invisible, the lines after it read as their own lines. Needs an engine answer (see Galley).
 - Input and accessibility have not been exercised at all: no IME, RTL, screen-reader or keyboard-only evidence, in either mode or any of the three desktop webviews. Only groundwork exists (text direction, bidi isolates).
+- On a slow machine (CPU 4×, Psalms) a key reaches the screen in ~100 ms, and the floor is the full parse. Chapter view is not a performance setting: the clip narrows decoration only. → [editor](architecture/editor.md#performance)
+- The aligned group's `exact` mode has no switch in the UI; everything uses `reveal`.
 
 ### Ideas / future
 
@@ -276,6 +278,7 @@ CodeMirror over an EditorBook: the phases, registry, mapping and plan; one funne
   - record evidence per mode and per webview
   - make a touch decision
 - USFM-aware copy profiles, and the aligned-word tooltip (both in `planning/04-parked/parked.md`).
+- Chapter-scoped parse, plan and paint, the one way chapter view becomes a typing win; it needs the CST resolved across chapter boundaries. Not before the parse is what is left.
 
 ## Satellites
 
@@ -318,7 +321,7 @@ One `Finding` shape over engine diagnostics and project checks, with a semantic 
 ### Constraints and known bugs
 
 - The inventory only lists characters the engine made a claim about; it waits on the Sous census.
-- A Sous finding's message is kitchen's descriptor rendered through its English ICU catalog (`src/core/findings/messages.ts`, `intl-messageformat`, locale `en`). Onion's messages are still the engine's catalogue strings, and there is no second language yet.
+- A Sous finding's message is kitchen's descriptor rendered through its English ICU catalog (`src/core/findings/messages.ts`, `intl-messageformat`, locale `en`), the first time it is read. Onion's messages are still the engine's catalogue strings, and there is no second language yet.
 
 ### Ideas / future
 
@@ -416,7 +419,7 @@ There is one diff: the engine's decision units, addressed by sid (`core/diff/ske
 
 ### Overview
 
-The one compare screen, `/review`. Both sides are pickers over a `CompareSource` (the working project, a folder, a zip, a recorded version, the saved file, or the shared project — where each change says whether it changed there, here or in both places, and Record a version settles the difference). The differences are drawn on the texts as the editor reads them: cards per change across every book, or the whole book; split or unified; decisions per unit, card or book, next/previous change (`Alt-F5`). You decide, then Apply, and Record a version (save + commit). The app bar's More menu opens it (Compare). `src/core/compare`, `src/app/ui/review`. → [review](architecture/review.md)
+The one compare screen, `/review`. Both sides are pickers over a `CompareSource` (the working project, a folder, a zip, a recorded version, the saved file, or the shared project — where each change says whether it changed there, here or in both places, and Record a version settles the difference). The differences are drawn on the texts as the editor reads them, the other side on the left and your text on the right: cards per change across every book, or the whole book with the editor's location strip and its two texts aligned by verse; split or unified; decisions per unit, card, book or everything the view shows (Decide all), next/previous change (`Alt-F5`) from where you are. Save (save + commit) is the header's primary button and stays open on its receipt; a line under the header says where the project stands with the shared project. The app bar's More menu opens it (Compare), and so does the cloud's See the changes. `src/core/compare`, `src/app/ui/review`. → [review](architecture/review.md)
 
 ### Constraints and known bugs
 
@@ -426,6 +429,7 @@ The one compare screen, `/review`. Both sides are pickers over a `CompareSource`
 ### Ideas / future
 
 - Its own `/compare` route again, some day, if the flow splits.
+- A strip between Whole book's two texts for the decision column, if the panes are ever kept in exact alignment.
 
 ---
 
@@ -508,13 +512,14 @@ Clone (the newest version only unless the caller asks for all; desktop backfills
 
 ### Overview
 
-The `/cloud` screen. It reads the two clocks and sorts the project into one of ten states, plans what a Receive would change from change facts and one overlap policy, receives by fast-forward, and Combines as one decision commit; a contested book is settled in Review against the shared project. The check on open and send on save run per project, on by default. Scripture text is never merged automatically. `src/core/sync`, `app/ui/cloud`. → [sync](architecture/sync.md)
+The `/cloud` screen. It reads the two clocks and sorts the project into one of ten states, plans what a Receive would change from change facts and one overlap policy, receives by fast-forward, and Combines as one decision commit; a contested book is settled in Review against the shared project. The check on open and send on save run per project, on by default. Scripture text is never merged automatically. One reading for the whole application (`syncWatch`) feeds `/cloud`, the app bar's cloud and its popover, Review's sync line and Save's receipt; counts are verses and books, never versions. `src/core/sync`, `app/ui/cloud`. → [sync](architecture/sync.md)
 
 ### Constraints and known bugs
 
 - A contested book's link opens Review for the project, not that book: Review takes no book in its URL.
 - A direct reload onto `/cloud?fixture=1` has shown a blank screen; not yet known whether that predates the lifecycle work.
 - The overlap scope is `book` everywhere; `chapter` and `verse` exist in the policy with no setting.
+- The surfaces of 2026-10-05 — the app bar's cloud, Save's receipt, Review's sync line — have been driven on the fixture only: their behind, diverged and refused-send paths still want a run against a real shared project.
 
 ### Ideas / future
 
