@@ -68,7 +68,6 @@ import { CardList } from "../multibuffer/CardList";
 import type { ContextStep } from "../multibuffer/cardState";
 import { createCardViews } from "../multibuffer/cardViews";
 import {
-  Badge,
   Button,
   EmptyState,
   IconButton,
@@ -155,9 +154,10 @@ export function ReviewReader(props: {
   /** Whether a card is being edited: while it is, the reader must stay mounted. */
   readonly onEditing?: (editing: boolean) => void;
   /**
-   * Which text a split puts on the left. Review puts the current side where
-   * its picker is (the default); History reads was-then-now, before on the
-   * left.
+   * Whether a split puts the current side (the working text) on the left.
+   * Off by default: the other side — the file, the shared project, the
+   * version before — on the left and the text you edit on the right, read
+   * left to right as was-then-now, the way History lays out time.
    */
   readonly currentFirst?: boolean;
   /**
@@ -425,15 +425,33 @@ export function ReviewReader(props: {
     return best;
   };
 
+  /** Whether the card with this key is drawn and inside the list's window. */
+  const onScreen = (key: string | undefined): boolean => {
+    const root = listRoot;
+    if (root === undefined || key === undefined) return false;
+    const card = root.querySelector<HTMLElement>(`[data-diff-card="${CSS.escape(key)}"]`);
+    if (card === null) return false;
+    const box = card.getBoundingClientRect();
+    const frame = root.getBoundingClientRect();
+    return box.bottom > frame.top + 8 && box.top < frame.bottom - 8;
+  };
+
   const stepCards = (delta: 1 | -1): void => {
     const keysNow = untrack(cardKeys);
     if (keysNow.length === 0) return;
-    // From the card at the top, so a reader who scrolled is stepped from where
-    // they are. The first "next" lands on that card rather than skipping it.
-    const from = visibleCard() ?? 0;
+    // From the card last stepped to while it is still on screen; otherwise
+    // from the card at the top, so a reader who scrolled is stepped from where
+    // they are, and the first "next" lands on that card rather than skipping
+    // it. (From the top card alone, the last few cards — on screen together,
+    // with nothing below to scroll to — could never be reached.)
+    const at = untrack(place);
+    const held = at !== undefined && onScreen(keysNow[at]) ? at : undefined;
+    const from = held ?? visibleCard() ?? 0;
     const to =
-      untrack(place) === undefined && delta > 0
-        ? from
+      held === undefined && delta > 0
+        ? at === undefined
+          ? from
+          : Math.min(keysNow.length - 1, from + delta)
         : Math.max(0, Math.min(keysNow.length - 1, from + delta));
     const key = keysNow[to];
     if (key === undefined) return;
@@ -566,33 +584,57 @@ export function ReviewReader(props: {
 
   // --- the pieces --------------------------------------------------------------
 
-  function BookActions(actionProps: { readonly held: Prepared }) {
-    const bookId = () => actionProps.held.book.bookId;
+  /**
+   * The bulk decision, for what the view shows: every book in Changes, the
+   * book on screen in Whole book — always over the changes the kind filter
+   * shows, which is what makes "all" a question somebody can answer.
+   */
+  const inScope = (): readonly Prepared[] => {
+    if (scope() === "changes") return prepared();
+    const held = selectedBook();
+    return held === undefined ? [] : [held];
+  };
+  const scopeCount = (): number => inScope().reduce((sum, held) => sum + held.shown.length, 0);
+  const decideAll = (side: MergeSide | undefined): void => {
+    for (const held of untrack(inScope))
+      if (held.shown.length > 0) props.decide(held.book.bookId, held.shown, side);
+  };
+
+  function DecideAll() {
     return (
-      <Show when={props.decidable && actionProps.held.shown.length > 0}>
-        <div class="flex items-center gap-1" data-review-book-actions={bookId()}>
-          <Button
-            size="sm"
-            variant="tertiary"
-            onClick={() => props.decide(bookId(), actionProps.held.shown, "current")}
-          >
-            {t("Keep all of {source}'s", { source: props.currentShort })}
-          </Button>
-          <Button
-            size="sm"
-            variant="tertiary"
-            onClick={() => props.decide(bookId(), actionProps.held.shown, "baseline")}
-          >
-            {t("Take all of {source}'s", { source: props.baselineShort })}
-          </Button>
-          <Button
-            size="sm"
-            variant="tertiary"
-            onClick={() => props.decide(bookId(), actionProps.held.shown, undefined)}
-          >
-            {t("Clear")}
-          </Button>
-        </div>
+      <Show when={props.decidable && scopeCount() > 0}>
+        <Menu
+          label={t("Decide all")}
+          side="bottom"
+          align="end"
+          class="w-72"
+          trigger={
+            <Button size="sm" variant="secondary" data-review-decide-all>
+              {t("Decide all")}
+              <ChevronDown aria-hidden="true" />
+            </Button>
+          }
+        >
+          <MenuLabel>
+            {scope() === "changes"
+              ? t("{count} change(s) in {books} book(s)", {
+                  count: scopeCount(),
+                  books: inScope().filter((held) => held.shown.length > 0).length,
+                })
+              : t("{count} change(s) in {book}", {
+                  count: scopeCount(),
+                  book: inScope()[0]?.book.name ?? "",
+                })}
+          </MenuLabel>
+          <MenuItem data-review-take-all onSelect={() => decideAll("baseline")}>
+            {t("Take {source}'s for all", { source: props.baselineShort })}
+          </MenuItem>
+          <MenuItem data-review-keep-all onSelect={() => decideAll("current")}>
+            {t("Keep {source}'s for all", { source: props.currentShort })}
+          </MenuItem>
+          <MenuSeparator />
+          <MenuItem onSelect={() => decideAll(undefined)}>{t("Clear these decisions")}</MenuItem>
+        </Menu>
       </Show>
     );
   }
@@ -615,21 +657,15 @@ export function ReviewReader(props: {
     const one = hunk.units.length === 1;
     const choose = (chosen: MergeSide): void =>
       props.decide(hunk.bookId, hunk.units, side === chosen ? undefined : chosen);
+    // In the columns' order: the other side's on the left, yours on the right.
+    // Both at Edit's weight — deciding is what this card is for, so its two
+    // buttons are not the quietest thing on it — and the pressed one says
+    // which side was chosen.
     return [
       {
         kind: "button",
-        id: "keep",
-        emphasis: side === "current" ? "secondary" : "tertiary",
-        pressed: side === "current",
-        label: one
-          ? t("Keep {source}'s", { source: props.currentShort })
-          : t("Keep all of {source}'s", { source: props.currentShort }),
-        onPress: () => choose("current"),
-      },
-      {
-        kind: "button",
         id: "take",
-        emphasis: side === "baseline" ? "secondary" : "tertiary",
+        emphasis: "secondary",
         pressed: side === "baseline",
         label:
           side === "baseline"
@@ -638,6 +674,16 @@ export function ReviewReader(props: {
               ? t("Take {source}'s", { source: props.baselineShort })
               : t("Take all of {source}'s", { source: props.baselineShort }),
         onPress: () => choose("baseline"),
+      },
+      {
+        kind: "button",
+        id: "keep",
+        emphasis: "secondary",
+        pressed: side === "current",
+        label: one
+          ? t("Keep {source}'s", { source: props.currentShort })
+          : t("Keep all of {source}'s", { source: props.currentShort }),
+        onPress: () => choose("current"),
       },
     ];
   };
@@ -724,14 +770,14 @@ export function ReviewReader(props: {
                           }
                         >
                           <MenuItem
-                            onSelect={() => props.decide(held.book.bookId, held.shown, "current")}
-                          >
-                            {t("Keep all of {source}'s", { source: props.currentShort })}
-                          </MenuItem>
-                          <MenuItem
                             onSelect={() => props.decide(held.book.bookId, held.shown, "baseline")}
                           >
                             {t("Take all of {source}'s", { source: props.baselineShort })}
+                          </MenuItem>
+                          <MenuItem
+                            onSelect={() => props.decide(held.book.bookId, held.shown, "current")}
+                          >
+                            {t("Keep all of {source}'s", { source: props.currentShort })}
                           </MenuItem>
                           <MenuItem
                             onSelect={() => props.decide(held.book.bookId, held.shown, undefined)}
@@ -844,6 +890,26 @@ export function ReviewReader(props: {
             },
           ]}
         />
+        <Show when={scope() === "book" ? selectedBook() : undefined}>
+          {(held) => (
+            <Select
+              size="sm"
+              wrapperClass="min-w-0"
+              aria-label={t("Which book to review")}
+              data-review-reader-book
+              value={held().book.bookId}
+              onChange={(event) => pickBook(event.currentTarget.value)}
+            >
+              <For each={prepared()}>
+                {(entry) => (
+                  <option value={entry.book.bookId}>
+                    {`${entry.book.name} (${entry.shown.length})`}
+                  </option>
+                )}
+              </For>
+            </Select>
+          )}
+        </Show>
         <Select
           size="sm"
           wrapperClass="min-w-0"
@@ -888,6 +954,10 @@ export function ReviewReader(props: {
           </MenuCheckbox>
         </Menu>
         <div class="ms-auto flex items-center gap-1">
+          <DecideAll />
+          <Show when={props.decidable && scopeCount() > 0}>
+            <span aria-hidden="true" class="mx-1 h-4 w-px bg-surface-border" />
+          </Show>
           <span class="text-smallest text-on-surface-tertiary tabular-nums" data-review-counter>
             {counter()}
           </span>
@@ -912,35 +982,6 @@ export function ReviewReader(props: {
           <Show when={selectedBook()} fallback={<EmptyState title={t("Preparing…")} />}>
             {(held) => (
               <div class="flex min-h-0 flex-1 flex-col gap-2">
-                <div class="flex flex-wrap items-center gap-2 border-b border-surface-border pb-1.5">
-                  <Select
-                    size="sm"
-                    wrapperClass="min-w-0"
-                    aria-label={t("Which book to review")}
-                    data-review-reader-book
-                    value={held().book.bookId}
-                    onChange={(event) => pickBook(event.currentTarget.value)}
-                  >
-                    <For each={prepared()}>
-                      {(entry) => (
-                        <option value={entry.book.bookId}>
-                          {`${entry.book.name} (${entry.shown.length})`}
-                        </option>
-                      )}
-                    </For>
-                  </Select>
-                  <Badge tone="muted">
-                    {props.decidable
-                      ? t("{decided} decided of {total}", {
-                          decided: decidedOf(held()),
-                          total: held().shown.length,
-                        })
-                      : t("{total} changes", { total: held().shown.length })}
-                  </Badge>
-                  <div class="ms-auto">
-                    <BookActions held={held()} />
-                  </div>
-                </div>
                 <BookDiff
                   class="min-h-0 flex-1"
                   sides={held().sides}
@@ -950,7 +991,7 @@ export function ReviewReader(props: {
                   controls={controls().get(held().book.bookId)}
                   currentLabel={labelOf(props.currentLabel, held().book.bookId)}
                   baselineLabel={labelOf(props.baselineLabel, held().book.bookId)}
-                  currentFirst={props.currentFirst !== false}
+                  currentFirst={props.currentFirst === true}
                   observability={observability}
                   initial={opened()?.unit}
                   live={liveFor(held().book.bookId)}
@@ -994,10 +1035,11 @@ export function ReviewReader(props: {
                 split={split()}
                 usfm={props.usfm}
                 controls={controls().get(item().hunk.bookId)}
+                current={place() !== undefined && cardKeys()[place() ?? -1] === item().hunk.key}
                 origin={props.originOf?.(item().hunk.bookId, item().hunk.units)}
                 currentLabel={labelOf(props.currentLabel, item().hunk.bookId)}
                 baselineLabel={labelOf(props.baselineLabel, item().hunk.bookId)}
-                currentFirst={props.currentFirst !== false}
+                currentFirst={props.currentFirst === true}
                 sideActions={split() ? props.sides?.(item().hunk, true) : undefined}
                 below={props.sides?.(item().hunk, split()).below}
                 editable={editable()}

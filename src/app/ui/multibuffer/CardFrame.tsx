@@ -112,7 +112,9 @@ export function CardFrame(props: CardFrameProps) {
       }
       class={cx(
         "overflow-hidden",
-        props.current === true && "ring-1 ring-brand",
+        // An outline, not a ring: `shadow-small` sets box-shadow outright, and
+        // a ring is a box-shadow, so on a raised card it never showed.
+        props.current === true && "outline-2 -outline-offset-1 outline-brand",
         // Padding and opacity ease with the regions' rows, so the card moves
         // as one thing.
         props.flush === true &&

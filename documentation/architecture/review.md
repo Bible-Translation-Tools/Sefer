@@ -64,8 +64,13 @@ option is disabled on the other side's picker rather than silently ignored.
 
 `canApply` decides, and only the open project says `true`. So:
 
-- project on either side → the review edits it. The working text always sits
-  on the left: picking it on the right swaps the two sides.
+- project on either side → the review edits it. In the model the working text
+  is always the `left` side (picking it on the right swaps the two sides); on
+  screen it is drawn on the RIGHT, the other side on the left, so a reader of
+  a left-to-right script reads was-then-now, the way History lays out time
+  (`ReviewReader`'s `currentFirst`, off by default). The chip, the pickers and
+  each card's buttons follow the same order: "On disk → In the editor",
+  "Take the file's", "Keep the editor's".
 - neither side is the project → the review is **for reading**: a "Reading
   only" badge, no Edit, no double-click, no Keep / Take. A review between two
   copies neither of which is this project is a reading, and offering a write
@@ -197,15 +202,16 @@ sid-aligned rule exists to prevent.
 ### The reading: three layers
 
 **The chrome is one row**, so the reading has the screen. What is compared is
-a chip ("In the editor ⇄ On disk") that opens the two pickers; the count says
+a chip ("On disk → In the editor") that opens the two pickers (From, To); the count says
 how far the review is; Record a version opens
 a dialog for its message; the ⋯ menu holds Clear every decision (in an
 editable review it takes every take back out of the text, one Undo step per
 book, as each book's own Clear does), History and what aligned the diff.
 Choosing another source starts over: no decisions, and the takes already
 written stay as ordinary edits. Recovered work is the one recovery banner every
-project screen shows, and only when there is some. The reading's own toolbar is the second row: scope, the kind
-filter, a View menu (layout, USFM markup), next and previous. The project
+project screen shows, and only when there is some. The reading's own toolbar is the second row, one row in both scopes and every
+control one size: scope, the book (Whole book only), the kind filter, a View
+menu (layout, USFM markup), Decide all, and next and previous. The project
 sidebar becomes a two-tab panel, Changes and History
 (`workspace/ChangesHistorySidebar.tsx`, as Zed's git panel has them). Review is
 the Changes tab: each book that differs, decided of total, as Find's sidebar
@@ -273,21 +279,29 @@ view that changes under the reader unasked reads as a bug.
 
 **Next and previous change** — the arrows, `Alt-F5` / `Alt-Shift-F5` (VS
 Code's own, as `Alt-F8` is for findings), or the palette (`review.change.next`,
-`review.change.previous`). Cards step from the one at the top of the list; the
-book steps unit by unit and crosses into the next book at the end of one. The
-counter says where you are.
+`review.change.previous`). Cards step from the card last stepped to while it is
+still on screen, else from the one at the top of the list (from the top card
+alone, the last few cards — on screen together, with nothing below to scroll
+to — could never be reached); the card stepped to is outlined. The book steps
+unit by unit and crosses into the next book at the end of one. The counter
+says where you are.
 
 **Decisions in three sizes.** A unit, in the gutter: ✓ keeps the current
 side's text, ↶ takes the other's, pressing the chosen one again clears it. A
-card, in its header ("Keep all here", "Take all here"). A book, from its
-row's menu in the sidebar (and the Whole book toolbar), over the changes the
-filter shows; the row counts how many are decided. A decided unit stops shouting and puts
+card, in its header ("Take the file's", "Keep the editor's", at Edit's weight;
+the pressed one says which side, and the engine's status — "unchanged", once
+a take makes both sides read the same — is hidden on a decided card). A book,
+from its row's menu in the sidebar. Everything the view shows, from the
+toolbar's Decide all: every book in Changes, the book on screen in Whole book,
+always over the changes the kind filter shows, with the count and the books
+named at the top of the menu. A decided unit stops shouting and puts
 nothing over the text: a card whose changes are all decided one way says so in
 that side's column caption, in brand with a check ("✓ In the editor"), beside
-the pressed button. Strikeout means removed words and nothing else. There is no project-wide bulk
-decision beyond Clear: "keep every markup-only change in Genesis" is a
-question somebody can answer, and one click over every change in the project
-is not.
+the pressed button. Strikeout means removed words and nothing else. Decide all in
+Changes is project-wide: it was held back on the grounds that one click over
+every change in a project is not a question somebody can answer, and is offered
+now because a review against the shared project is usually a handful of
+changes the reader has just read. Each book's take is still its own Undo step.
 
 **Editability is a property of what is loaded.** When the left side is this
 project in the editor, the review IS the editor. There is no mode to pick.
@@ -517,8 +531,6 @@ Recovery never writes the project file, and Save never writes the journal.
 ## Not yet
 
 - Adding or removing a book (`Unsupported`, above).
-- A project-wide bulk decision, behind Advanced and a confirmation, if the
-  per-book ones prove too slow for a formatting pass over 66 books.
 - `compare.colours: "sideTint" | "redGreen"`. Named, not registered; the
   reading is red/green today (above).
 - More sources: a git checkpoint, another local project. The port is the

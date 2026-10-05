@@ -11,8 +11,9 @@
  *
  * **Editability is a property of what is loaded.** The one side that can be
  * written is the working text (`CompareSource.canApply`: only the open
- * project says yes), and it always sits on the left — picking it on the right
- * swaps the sides. Then the review is the editor: every card edits the Book
+ * project says yes), and it is always the model's left side — picking it on the
+ * right swaps the sides — though it is DRAWN on the right, the other side on
+ * the left, read left to right as was-then-now. Then the review is the editor: every card edits the Book
  * itself on a double-click, as every card in Sefer does, and "Keep" / "Take"
  * writes into it at once, one Undo step each. When neither side can be
  * written (two folders, two versions) the review is for reading: no Edit, no
@@ -1261,14 +1262,14 @@ export function ReviewPanel() {
     return (
       <div class="space-y-1">
         <span class="text-smallest font-medium text-on-surface-tertiary">
-          {props.side === "left" ? t("This side") : t("Against")}
+          {props.side === "left" ? t("To") : t("From")}
         </span>
         <div class="flex items-center gap-2">
           <Select
             size="sm"
             wrapperClass="min-w-0"
             data-review-side={props.side}
-            aria-label={props.side === "left" ? t("The left side") : t("The right side")}
+            aria-label={props.side === "left" ? t("Compare to") : t("Compare from")}
             value={id()}
             onChange={(event) => pick(props.side, event.currentTarget.value)}
           >
@@ -1293,8 +1294,11 @@ export function ReviewPanel() {
     );
   }
 
-  /** The sources, said once: "In the editor ⇄ On disk". */
-  const sourcesLabel = (): string => `${leftLabel()} ⇄ ${rightLabel()}`;
+  /**
+   * The sources, said once and in the columns' order: "On disk → In the
+   * editor" — the other side, then the text you edit.
+   */
+  const sourcesLabel = (): string => `${rightLabel()} → ${leftLabel()}`;
 
   return (
     <main class="flex h-full min-w-0 flex-col gap-2 px-4 pt-3 pb-2" data-review>
@@ -1324,8 +1328,8 @@ export function ReviewPanel() {
           >
             <div class="space-y-3">
               <div class="grid gap-3 sm:grid-cols-2">
-                <Picker side="left" />
                 <Picker side="right" />
+                <Picker side="left" />
               </div>
               <Show when={leftId() === rightId()}>
                 <p class="text-smallest text-on-surface-secondary">

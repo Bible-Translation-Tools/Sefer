@@ -44,7 +44,7 @@ import { CardFrame } from "../multibuffer/CardFrame";
 import type { CardEvent, CardView, ContextStep } from "../multibuffer/cardState";
 import { ContextControl } from "../multibuffer/ContextControl";
 import { cardPolicy } from "../multibuffer/policy";
-import { Badge, cx } from "../primitives";
+import { cx } from "../primitives";
 import { hunkKind, type Hunk } from "./hunks";
 import { hunkPaint, sidePaint, type Controls } from "./paint";
 
@@ -105,6 +105,8 @@ export function DiffCard(props: {
   readonly view: CardView;
   readonly onView: (event: CardEvent) => void;
   readonly controls: Controls | undefined;
+  /** The card next and previous last stepped to: outlined, so it can be told from its neighbours. */
+  readonly current?: boolean;
   /**
    * Who changed this passage since the two sides last agreed, when that is
    * known — only in a review against the shared project, where "keep mine"
@@ -392,37 +394,54 @@ export function DiffCard(props: {
     </span>
   );
 
-  const status = (): string =>
-    props.hunk.units.length === 0
-      ? ""
-      : props.hunk.units.length === 1
-        ? (props.hunk.units[0]?.status ?? "")
-        : `${props.hunk.units.length} changes`;
+  /**
+   * What the change is, as the engine says it — until it is decided. A take
+   * makes the passage read the same on both sides, and "unchanged" beside the
+   * button that took it reads as "did it work?"; the pressed button and the
+   * checked column say what happened instead.
+   */
+  const status = (): string => {
+    const units = props.hunk.units;
+    if (units.length === 0) return "";
+    const controls = props.controls;
+    if (controls !== undefined && units.every((unit) => controls.decision(unit) !== undefined))
+      return "";
+    return units.length === 1 ? (units[0]?.status ?? "") : `${units.length} changes`;
+  };
 
   return (
     <CardFrame
       data={{ "data-diff-card": props.hunk.key }}
+      current={props.current === true}
       title={props.hunk.label}
       gone={props.gone}
       info={
         <>
           <span class="text-smallest text-on-surface-tertiary">{status()}</span>
+          {/* Plain words, not chips: only "changed in both places" asks
+              something of the reader, so only it takes a colour. */}
           <Show when={props.origin}>
             {(origin) => (
-              <Badge tone={origin() === "both" ? "warning" : "muted"}>
+              <span
+                class={cx(
+                  "text-smallest",
+                  origin() === "both" ? "text-on-surface-warning" : "text-on-surface-tertiary",
+                )}
+                data-diff-origin={origin()}
+              >
                 {origin() === "there"
-                  ? t("Changed there")
+                  ? t("changed there")
                   : origin() === "here"
-                    ? t("Changed here")
-                    : t("Changed in both places")}
-              </Badge>
+                    ? t("changed here")
+                    : t("changed in both places")}
+              </span>
             )}
           </Show>
           <Show when={hunkKind(props.hunk.units)}>
             {(kind) => (
-              <Badge tone="muted" data-diff-kind={kind()}>
+              <span class="text-smallest text-on-surface-tertiary" data-diff-kind={kind()}>
                 {kind()}
-              </Badge>
+              </span>
             )}
           </Show>
         </>
