@@ -56,9 +56,13 @@ const marksWords = (unit: DecisionUnit, usfm: boolean): boolean =>
     (run) => run.kind !== "unchanged" && visibleRun(run.what, usfm),
   );
 
-/** Word runs worth marking in this projection: markup only when markup is shown. */
-const visibleRun = (what: string, usfm: boolean): boolean =>
-  what === "text" || (usfm && what === "markup");
+/**
+ * Runs worth marking in this projection: words and whitespace always —
+ * spaces typed between two sentences are a change a reader has to see, and
+ * leaving them unmarked left a gap nothing explained — markup only when
+ * markup is shown.
+ */
+const visibleRun = (what: string, usfm: boolean): boolean => what !== "markup" || usfm;
 
 /**
  * A unit's decision, in the gutter: keep the `current` side's text, or take the
@@ -122,10 +126,19 @@ const controlFor =
     const box = document.createElement("span");
     box.className = "cm-diff-control";
     box.dataset["unit"] = unit.id;
+    // Which verse this pair decides: two verses can start on one line, and an
+    // unlabelled pair could be either's. "9", "5-7"; a heading keeps its whole
+    // reference.
+    const reference = unitReference(unit);
+    const ref = document.createElement("span");
+    ref.className = "cm-diff-control-ref";
+    ref.textContent = reference.slice(reference.indexOf(":") + 1);
     // Between the two texts, the other side's on the left and yours on the
-    // right: each chevron points at the text it chooses.
+    // right: each chevron points at the text it chooses, and the verse it
+    // decides sits between them.
     box.append(
       button(unit, controls, "baseline", controls.takeTitle),
+      ref,
       button(unit, controls, "current", controls.keepTitle),
     );
     return box;

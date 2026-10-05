@@ -190,7 +190,13 @@ included: `what` is `"markup" | "text" | "whitespace"`, and `note` is true
 inside a footnote or cross-reference. `decodeSkeleton` slices
 each run's `text` from its own side, so a `TextRun` is located and readable.
 
-Both views are marked from those runs and nothing else. The markup view uses
+Both views are marked from those runs and nothing else, whitespace included:
+spaces typed between two sentences are a change, and a gap nothing marked
+read as a rendering fault. In Whole book a unit is decided from a thin column
+on the line between the two texts, `‹ 9 ›` — a chevron pointing at the text it
+chooses, the verse between them — and verses that start on the same line stack
+there; one marker per line used to drop every verse after the first. A card
+has no gutter controls: its header decides it. The markup view uses
 every run; the reading uses `readingRuns` (the non-markup ones). A note is its
 own reading: the engine never lets a word span its edge, so a note added
 after `grace` leaves `grace` unmarked, and the card sets note runs apart

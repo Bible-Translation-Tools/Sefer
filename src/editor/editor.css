@@ -1216,14 +1216,27 @@
   min-width: 0;
 }
 .cm-diff-deciding .cm-diff-controls {
-  min-width: 28px;
+  min-width: 68px;
   padding-inline: 2px;
 }
-.cm-diff-control {
+/* One row per verse that starts on the line: ‹ 9 ›, stacked when two share it. */
+.cm-diff-control-stack {
   display: inline-flex;
   flex-direction: column;
   gap: 2px;
+}
+.cm-diff-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
   padding-top: 2px;
+}
+.cm-diff-control-ref {
+  min-width: 18px;
+  text-align: center;
+  font: 600 11px/22px var(--font-sans, system-ui);
+  font-variant-numeric: tabular-nums;
+  color: var(--on-surface-tertiary);
 }
 .cm-diff-control button {
   display: grid;
