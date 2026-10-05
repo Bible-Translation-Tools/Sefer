@@ -915,10 +915,12 @@ export function ReviewReader(props: {
       return bookId === undefined ? [] : [bookId];
     },
     (bookIds) => {
-      if (bookIds.length === 0) {
-        if (untrack(seats).size > 0) setSeats(new Map());
-        return;
-      }
+      // Nothing to seat is often a moment, not a decision: the selected book
+      // drops out while a comparison re-prepares the list. Releasing the seat
+      // then made the whole book's views build without it, and build again
+      // when it came back. A seat is the project's own Book, held by identity
+      // — keeping it costs nothing.
+      if (bookIds.length === 0) return;
       let current = true;
       for (const bookId of bookIds) {
         if (untrack(seats).has(bookId)) continue;
@@ -1057,73 +1059,94 @@ export function ReviewReader(props: {
       <Show
         when={scope() === "changes"}
         fallback={
-          <Show when={selectedBook()} fallback={<EmptyState title={t("Preparing…")} />}>
-            {(held) => (
-              <div class="flex min-h-0 flex-1 flex-col gap-2">
-                {/* The editor's location strip, over what changed: Book ·
+          // Keyed on the BOOK, not on its prepared entry: a comparison
+          // replaces the entry for the same book, and keyed on the entry,
+          // the whole book's two editors were torn down and built again.
+          <Show
+            when={selectedBook()?.book.bookId}
+            fallback={<EmptyState title={t("Preparing…")} />}
+          >
+            {(_bookId) => {
+              let last = untrack(selectedBook);
+              const held = (): Prepared => {
+                const found = selectedBook();
+                if (found !== undefined) last = found;
+                if (last === undefined) throw new Error("Whole book is showing no book");
+                return last;
+              };
+              return (
+                <div class="flex min-h-0 flex-1 flex-col gap-2">
+                  {/* The editor's location strip, over what changed: Book ·
                     Chapter listing only the books and chapters with changes,
                     each with how many; the arrows step chapter to chapter;
                     the chain links the two texts' scrolling, as a reference
                     pane's does. */}
-                <LocationStrip testId="review-location" class="rounded-md border">
-                  <Crumbs
-                    book={held().book.name}
-                    books={() =>
-                      prepared().map((entry) => ({
-                        id: entry.book.bookId,
-                        name: entry.book.name,
-                        count: entry.shown.length,
-                      }))
-                    }
-                    currentBook={held().book.bookId}
-                    onBook={(picked) => pickBook(picked.id)}
-                    chapter={chapterWords(currentChapter())}
-                    chapters={() => chaptersOf(held())}
-                    currentChapter={currentChapter()}
-                    onChapter={goToChapter}
-                    step={{
-                      onPrevious: () => stepChapter(-1),
-                      onNext: () => stepChapter(1),
-                      get first() {
-                        return chapterAt(-1) === undefined;
-                      },
-                      get last() {
-                        return chapterAt(1) === undefined;
-                      },
-                    }}
-                    end={
-                      <FollowToggle
-                        testId="review-linked"
-                        following={linked()}
-                        tooltipSide="bottom"
-                        stopLabel={t("Scroll the two texts separately")}
-                        startLabel={t("Keep the two texts at the same verse")}
-                        onToggle={() => setLinked((on) => !on)}
-                      />
-                    }
-                  />
-                </LocationStrip>
-                <BookDiff
-                  class="min-h-0 flex-1"
-                  linked={linked}
-                  sides={held().sides}
-                  units={held().units}
-                  split={split()}
-                  usfm={props.usfm}
-                  controls={controls().get(held().book.bookId)}
-                  currentLabel={labelOf(props.currentLabel, held().book.bookId)}
-                  baselineLabel={labelOf(props.baselineLabel, held().book.bookId)}
-                  currentFirst={props.currentFirst === true}
-                  observability={observability}
-                  initial={opened()?.unit}
-                  live={liveFor(held().book.bookId)}
-                  ref={(api) => {
-                    book = api;
-                  }}
-                  onPlace={placeFrom}
-                />
-              </div>
-            )}
+                  <LocationStrip testId="review-location" class="rounded-md border">
+                    <Crumbs
+                      book={held().book.name}
+                      books={() =>
+                        prepared().map((entry) => ({
+                          id: entry.book.bookId,
+                          name: entry.book.name,
+                          count: entry.shown.length,
+                        }))
+                      }
+                      currentBook={held().book.bookId}
+                      onBook={(picked) => pickBook(picked.id)}
+                      chapter={chapterWords(currentChapter())}
+                      chapters={() => chaptersOf(held())}
+                      currentChapter={currentChapter()}
+                      onChapter={goToChapter}
+                      step={{
+                        onPrevious: () => stepChapter(-1),
+                        onNext: () => stepChapter(1),
+                        get first() {
+                          return chapterAt(-1) === undefined;
+                        },
+                        get last() {
+                          return chapterAt(1) === undefined;
+                        },
+                      }}
+                      end={
+                        <FollowToggle
+                          testId="review-linked"
+                          following={linked()}
+                          tooltipSide="bottom"
+                          stopLabel={t("Scroll the two texts separately")}
+                          startLabel={t("Keep the two texts at the same verse")}
+                          onToggle={() => setLinked((on) => !on)}
+                        />
+                      }
+                    />
+                  </LocationStrip>
+                  {/* Not before the reader has a width: "side by side when there
+                    is room" cannot answer at zero, and answering unified then
+                    split built every view twice. */}
+                  <Show when={layout() !== "auto" || width() > 0}>
+                    <BookDiff
+                      class="min-h-0 flex-1"
+                      linked={linked}
+                      sides={held().sides}
+                      units={held().units}
+                      split={split()}
+                      usfm={props.usfm}
+                      controls={controls().get(held().book.bookId)}
+                      currentLabel={labelOf(props.currentLabel, held().book.bookId)}
+                      baselineLabel={labelOf(props.baselineLabel, held().book.bookId)}
+                      currentFirst={props.currentFirst === true}
+                      observability={observability}
+                      initial={opened()?.unit}
+                      live={liveFor(held().book.bookId)}
+                      awaitLive={editable()}
+                      ref={(api) => {
+                        book = api;
+                      }}
+                      onPlace={placeFrom}
+                    />
+                  </Show>
+                </div>
+              );
+            }}
           </Show>
         }
       >

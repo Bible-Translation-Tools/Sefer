@@ -92,6 +92,12 @@ export function BookDiff(props: {
   readonly live?:
     | { readonly book: EditorBook; readonly analyze: (text: string) => Analysis }
     | undefined;
+  /**
+   * The current side WILL be live, once the book is seated: build nothing
+   * until then. Built read-only first, every view was built twice — a whole
+   * book's two editors torn down and made again a moment later.
+   */
+  readonly awaitLive?: boolean;
 }) {
   const [left, setLeft] = createSignal<HTMLDivElement | undefined>(undefined, { name: "bookLeft" });
   const [right, setRight] = createSignal<HTMLDivElement | undefined>(undefined, {
@@ -163,6 +169,7 @@ export function BookDiff(props: {
       split: props.split,
       markup: props.usfm,
       decidable: props.controls !== undefined,
+      waiting: props.awaitLive === true && props.live === undefined,
       l: left(),
       r: right(),
     }),
@@ -171,8 +178,8 @@ export function BookDiff(props: {
 
   createEffect(
     () => built(),
-    ({ split, markup, live, l, r }) => {
-      if (r === undefined || (split && l === undefined)) return;
+    ({ split, markup, live, waiting, l, r }) => {
+      if (waiting || r === undefined || (split && l === undefined)) return;
       // The latest comparison, read when painting: in a live pane it moves on
       // every accepted edit while the view stays.
       const now = () => untrack(() => ({ sides: props.sides, units: props.units }));
