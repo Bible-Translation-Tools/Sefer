@@ -36,11 +36,15 @@ import { useNavigate, useSearch } from "@tanstack/solid-router";
 import { Effect, Option, Result } from "effect";
 import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
+import CircleCheck from "lucide-solid/icons/circle-check";
+import CircleX from "lucide-solid/icons/circle-x";
 import Eraser from "lucide-solid/icons/eraser";
 import History from "lucide-solid/icons/history";
+import Info from "lucide-solid/icons/info";
 import MoreVertical from "lucide-solid/icons/more-vertical";
 import Save from "lucide-solid/icons/save";
 import Scale from "lucide-solid/icons/scale";
+import TriangleAlert from "lucide-solid/icons/triangle-alert";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
 import { trustedBy, type BookId } from "#core/book/book";
@@ -65,9 +69,11 @@ import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { recordVersion } from "../../recordVersion";
 import { suggestionRef } from "../../suggestions";
-import { sendAfterSave, settleWithShared } from "../../syncActions";
+import { sendAfterSave, sendNow, settleWithShared, type SendOutcome } from "../../syncActions";
 import { setAuthorName, syncPreferences } from "../../syncSettings";
-import { combineRefusal, combineTrouble, receiveRefusal } from "../cloud/copy";
+import { syncWatch } from "../../syncWatch";
+import { combineRefusal, combineTrouble, receiveRefusal, sendOutcomeCopy } from "../cloud/copy";
+import { SyncLine } from "../cloud/SyncLine";
 import { unsavedChanges } from "../panels/changes";
 import { ago, exact } from "../panels/format";
 import { createRecordedVersion } from "../panels/recorded";
@@ -956,7 +962,8 @@ export function ReviewPanel() {
       return;
     }
     setRecording(true);
-    const notice = toasts.progress({ title: t("Recording…") });
+    setRecordedLine(undefined);
+    setSendLine(undefined);
     if (againstShared()) {
       // The presets become real first: every passage only they changed, and
       // nobody chose, is taken into the project's text. What is recorded is
@@ -993,11 +1000,10 @@ export function ReviewPanel() {
       };
       switch (outcome.kind) {
         case "refused":
-          toasts.update(notice, {
+          setRecordedLine({
             tone: "error",
-            autoClose: false,
             title: t("Not combined"),
-            message:
+            detail:
               outcome.receive !== undefined
                 ? receiveRefusal(outcome.receive, outcome.books ?? [])
                 : outcome.combine !== undefined
@@ -1012,13 +1018,21 @@ export function ReviewPanel() {
             project.books.map((book) => book.id),
             true,
           );
-          toasts.update(notice, {
-            tone: outcome.sent ? "success" : "info",
-            title: outcome.sent
-              ? t("Combined with the shared project")
-              : t("Combined here; not sent yet"),
-            message: outcome.sent ? staticMessage : combineTrouble("recorded"),
+          setRecordedLine({
+            tone: "success",
+            title: t("Combined with the shared project on this device"),
+            detail: staticMessage,
           });
+          setSendLine(
+            outcome.sent
+              ? lineOfSend({ kind: "sent" })
+              : {
+                  tone: "warning",
+                  title: t("Saved here. Not sent yet"),
+                  detail: combineTrouble("recorded"),
+                  action: "retry",
+                },
+          );
           done();
           break;
         case "received":
@@ -1031,29 +1045,28 @@ export function ReviewPanel() {
                 project.books.map((book) => book.id),
                 true,
               );
-              toasts.update(notice, {
+              setRecordedLine({
                 tone: "success",
-                title: t("Combined with the shared project"),
-                message: staticMessage,
+                title: t("Combined with the shared project on this device"),
+                detail: staticMessage,
               });
+              follow(outcome.sending);
               done();
               break;
             case "not-recorded":
               shell.noteWritten(outcome.recorded.books, false);
-              toasts.update(notice, {
+              setRecordedLine({
                 tone: "error",
-                autoClose: false,
                 title: t("Updates received; your decisions are on disk, but not recorded"),
-                message: describe(outcome.recorded.error),
+                detail: describe(outcome.recorded.error),
               });
               done();
               break;
             case "not-written":
-              toasts.update(notice, {
+              setRecordedLine({
                 tone: "error",
-                autoClose: false,
                 title: t("Updates received; your decisions could not be written"),
-                message: describe(outcome.recorded.error),
+                detail: describe(outcome.recorded.error),
               });
               done();
               break;
@@ -1067,46 +1080,130 @@ export function ReviewPanel() {
     const outcome = await recordVersion(services, project, books, staticMessage, by);
     switch (outcome.kind) {
       case "nothing":
-        toasts.update(notice, { title: t("Nothing to record"), tone: "info" });
+        setRecordedLine({ tone: "muted", title: t("Nothing to record") });
         break;
       case "not-written":
-        toasts.update(notice, {
+        setRecordedLine({
           tone: "error",
           title: t("Could not write to disk"),
-          message: describe(outcome.error),
-          autoClose: false,
+          detail: describe(outcome.error),
         });
         break;
       case "not-recorded":
         // The files hold this text and no version holds the files: that is
         // `onDisk`, exactly, and the book markers say so.
         shell.noteWritten(outcome.books, false);
-        toasts.update(notice, {
+        setRecordedLine({
           tone: "error",
-          autoClose: false,
           title: t("On disk, but not recorded"),
-          message: describe(outcome.error),
+          detail: describe(outcome.error),
         });
         break;
       case "recorded":
         shell.noteWritten(outcome.books, true);
-        toasts.update(notice, {
+        setRecordedLine({
           tone: "success",
-          title: t("Recorded {count} book(s) as {hash}", {
-            count: outcome.receipts,
-            hash: outcome.commit.slice(0, 7),
-          }),
-          message: staticMessage,
+          title: t("Recorded {count} book(s) on this device", { count: outcome.receipts }),
+          detail: `${staticMessage} · ${outcome.commit.slice(0, 7)}`,
         });
         setMessage("");
         version.refresh();
-        // The send is its own line after "Saved": a refused send is never a
-        // failed save, and /cloud says what happened to it.
-        void sendAfterSave(services, project);
+        // The send is its own line after "Recorded": a refused send is never
+        // a failed save, and the dialog stays to say which it was.
+        follow(sendAfterSave(services, project));
         break;
     }
     setRecording(false);
   };
+
+  // --- the record's receipt ------------------------------------------------
+
+  /**
+   * What the dialog says once Record is pressed: one line for this device,
+   * one for the shared project. The dialog stays open on them, because "did
+   * it work?" has two answers, and a toast that vanished said only the first.
+   */
+  interface ReceiptLine {
+    readonly tone: "success" | "warning" | "error" | "muted";
+    readonly title: string;
+    readonly detail?: string;
+    /** The move the line offers: compare what arrived, send again, or go sign in. */
+    readonly action?: "see" | "retry" | "send" | "open";
+  }
+  const [recordedLine, setRecordedLine] = createSignal<ReceiptLine | undefined>(undefined, {
+    name: "reviewRecordedLine",
+  });
+  const [sendLine, setSendLine] = createSignal<ReceiptLine | "sending" | undefined>(undefined, {
+    name: "reviewSendLine",
+  });
+
+  /** The send's line once it has one: not while it is still under way. */
+  const sentLine = (): ReceiptLine | undefined => {
+    const held = sendLine();
+    return held === "sending" ? undefined : held;
+  };
+
+  const lineOfSend = (outcome: SendOutcome): ReceiptLine | undefined => {
+    const project = shell.project();
+    // Attached to nothing, there is no second line to say.
+    if (outcome.kind === "detached") return undefined;
+    const copy = sendOutcomeCopy(outcome, syncWatch.sync(project?.root)?.state);
+    const action =
+      outcome.kind === "held"
+        ? ("send" as const)
+        : outcome.kind !== "refused"
+          ? undefined
+          : outcome.reason === "Rejected"
+            ? ("see" as const)
+            : outcome.reason === "Unauthorized"
+              ? ("open" as const)
+              : ("retry" as const);
+    return { ...copy, ...(action === undefined ? {} : { action }) };
+  };
+
+  const follow = (sending: Promise<SendOutcome> | undefined): void => {
+    if (sending === undefined) return;
+    setSendLine("sending");
+    void sending.then((outcome) => setSendLine(lineOfSend(outcome)));
+  };
+
+  const receiptAction = (action: NonNullable<ReceiptLine["action"]>): void => {
+    const project = shell.project();
+    if (project === undefined) return;
+    switch (action) {
+      case "see":
+        setRecordOpen(false);
+        seeShared();
+        return;
+      case "open":
+        setRecordOpen(false);
+        void navigate({ to: "/project/$slug/cloud", params: { slug: shell.slug() }, search: {} });
+        return;
+      case "retry":
+      case "send":
+        follow(sendNow(services, project));
+        return;
+    }
+  };
+
+  /**
+   * Set the review against the shared project, read as the last check left
+   * it: what "See the changes" means on this screen.
+   */
+  const seeShared = (): void => {
+    shared.refresh();
+    common.refresh();
+    if (rightId() !== "shared" && leftId() !== "shared") pick("right", "shared");
+  };
+
+  // The app bar's "See the changes" navigates here with `against=shared`; when
+  // Review is already open that is a search change, not a mount.
+  createEffect(
+    () => search().against,
+    (against) => {
+      if (against === "shared") untrack(seeShared);
+    },
+  );
 
   // --- recovery ------------------------------------------------------------
 
@@ -1354,6 +1451,10 @@ export function ReviewPanel() {
           </div>
         </header>
 
+        {/* Where the project stands with the shared project, and the one
+            move: what `git status` says, in words. */}
+        <SyncLine onSee={seeShared} seeing={againstShared()} />
+
         {/* An earlier session's unsaved work: the one prompt every project
             screen shows, answered once. Review keeps no list of its own. */}
         <RecoveryBanner />
@@ -1476,7 +1577,13 @@ export function ReviewPanel() {
 
         <Dialog
           open={recordOpen()}
-          onOpenChange={setRecordOpen}
+          onOpenChange={(open) => {
+            setRecordOpen(open);
+            if (!open) {
+              setRecordedLine(undefined);
+              setSendLine(undefined);
+            }
+          }}
           title={t("Record a version")}
           description={
             againstShared()
@@ -1488,7 +1595,19 @@ export function ReviewPanel() {
                 })
           }
           footer={
-            <>
+            <Show
+              when={recordedLine() === undefined}
+              fallback={
+                <Button
+                  variant="primary"
+                  disabled={sendLine() === "sending"}
+                  data-review-record-done
+                  onClick={() => setRecordOpen(false)}
+                >
+                  {t("Done")}
+                </Button>
+              }
+            >
               <Button variant="tertiary" onClick={() => setRecordOpen(false)}>
                 {t("Cancel")}
               </Button>
@@ -1498,64 +1617,145 @@ export function ReviewPanel() {
                 loading={recording()}
                 disabled={(unsaved().length === 0 && !againstShared()) || undecidedBoth() > 0}
                 data-review-record-confirm
-                onClick={() => void record().then(() => setRecordOpen(false))}
+                onClick={() => void record()}
               >
                 {t("Record a version")}
               </Button>
-            </>
+            </Show>
           }
         >
-          <Show when={undecidedBoth() > 0}>
-            <p class="pb-3 text-small text-on-surface-warning" data-review-undecided>
-              {t(
-                "{count} passage(s) changed in both places still need a choice: keep yours or take the shared project's.",
-                { count: undecidedBoth() },
-              )}
-            </p>
+          <Show when={recordedLine()}>
+            {(line) => (
+              <div class="space-y-3" data-review-record-receipt>
+                <Receipt line={line()} onAction={receiptAction} />
+                <Show when={sendLine() === "sending"}>
+                  <div class="flex items-center gap-2 text-small text-on-surface-secondary">
+                    <span
+                      aria-hidden="true"
+                      class="size-4 animate-spin rounded-full border-2 border-on-surface-tertiary border-t-transparent"
+                    />
+                    {t("Sending to the shared project…")}
+                  </div>
+                </Show>
+                <Show when={sentLine()}>
+                  {(sent) => <Receipt line={sent()} onAction={receiptAction} />}
+                </Show>
+              </div>
+            )}
           </Show>
-          <Show when={author() === undefined}>
+          <Show when={recordedLine() === undefined}>
+            <Show when={undecidedBoth() > 0}>
+              <p class="pb-3 text-small text-on-surface-warning" data-review-undecided>
+                {t(
+                  "{count} passage(s) changed in both places still need a choice: keep yours or take the shared project's.",
+                  { count: undecidedBoth() },
+                )}
+              </p>
+            </Show>
+            <Show when={author() === undefined}>
+              <label
+                class="block pb-1 text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase"
+                for="author-name"
+              >
+                {t("Your name, as your team knows you")}
+              </label>
+              <Input
+                id="author-name"
+                wrapperClass="w-full pb-3"
+                value={typedName()}
+                onInput={(event) => setTypedName(event.currentTarget.value)}
+              />
+            </Show>
             <label
               class="block pb-1 text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase"
-              for="author-name"
+              for="commit-message"
             >
-              {t("Your name, as your team knows you")}
+              {t("What did you change?")}
             </label>
             <Input
-              id="author-name"
-              wrapperClass="w-full pb-3"
-              value={typedName()}
-              onInput={(event) => setTypedName(event.currentTarget.value)}
+              id="commit-message"
+              wrapperClass="w-full"
+              placeholder={defaultMessage()}
+              value={message()}
+              onInput={(event) => setMessage(event.currentTarget.value)}
+              onKeyDown={(event: KeyboardEvent) => {
+                if (event.key !== "Enter" || event.isComposing) return;
+                event.preventDefault();
+                if (unsaved().length > 0 || againstShared()) void record();
+              }}
             />
-          </Show>
-          <label
-            class="block pb-1 text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase"
-            for="commit-message"
-          >
-            {t("What did you change?")}
-          </label>
-          <Input
-            id="commit-message"
-            wrapperClass="w-full"
-            placeholder={defaultMessage()}
-            value={message()}
-            onInput={(event) => setMessage(event.currentTarget.value)}
-            onKeyDown={(event: KeyboardEvent) => {
-              if (event.key !== "Enter" || event.isComposing) return;
-              event.preventDefault();
-              if (unsaved().length > 0 || againstShared())
-                void record().then(() => setRecordOpen(false));
-            }}
-          />
-          <p class="pt-1 text-smallest text-on-surface-tertiary">
-            {t("Your team sees this, and so will you later.")}
-          </p>
-          <Show when={sends()}>
-            <p class="pt-3 text-small text-on-surface-secondary" data-review-sends>
-              {t("This also sends your changes to the shared project.")}
+            <p class="pt-1 text-smallest text-on-surface-tertiary">
+              {t("Your team sees this, and so will you later.")}
             </p>
+            <Show when={sends()}>
+              <p class="pt-3 text-small text-on-surface-secondary" data-review-sends>
+                {t("This also sends your changes to the shared project.")}
+              </p>
+            </Show>
           </Show>
         </Dialog>
       </Show>
     </main>
+  );
+}
+
+/** One line of a record's receipt: what happened, and the move it offers. */
+function Receipt(props: {
+  readonly line: {
+    readonly tone: "success" | "warning" | "error" | "muted";
+    readonly title: string;
+    readonly detail?: string;
+    readonly action?: "see" | "retry" | "send" | "open";
+  };
+  readonly onAction: (action: "see" | "retry" | "send" | "open") => void;
+}) {
+  const glyph = () => {
+    switch (props.line.tone) {
+      case "success":
+        return <CircleCheck size={18} class="text-on-surface-success" />;
+      case "warning":
+        return <TriangleAlert size={18} class="text-on-surface-warning" />;
+      case "error":
+        return <CircleX size={18} class="text-on-surface-error" />;
+      case "muted":
+        return <Info size={18} class="text-on-surface-tertiary" />;
+    }
+  };
+  const label = (action: "see" | "retry" | "send" | "open"): string => {
+    switch (action) {
+      case "see":
+        return t("Compare the changes");
+      case "retry":
+        return t("Try sending again");
+      case "send":
+        return t("Send now");
+      case "open":
+        return t("Open Sync");
+    }
+  };
+  return (
+    <div class="flex items-start gap-2" data-receipt-tone={props.line.tone}>
+      <span aria-hidden="true" class="mt-0.5 inline-flex">
+        {glyph()}
+      </span>
+      <div class="min-w-0 flex-1 space-y-1">
+        <p class="text-small font-medium text-on-surface-primary">{props.line.title}</p>
+        <Show when={props.line.detail}>
+          {(detail) => <p class="text-small text-on-surface-secondary">{detail()}</p>}
+        </Show>
+        <Show when={props.line.action}>
+          {(action) => (
+            <Button
+              size="sm"
+              variant={action() === "see" ? "primary" : "secondary"}
+              data-receipt-action={action()}
+              onClick={() => props.onAction(action())}
+            >
+              {label(action())}
+            </Button>
+          )}
+        </Show>
+      </div>
+    </div>
   );
 }

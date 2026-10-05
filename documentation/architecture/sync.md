@@ -331,8 +331,29 @@ follows, and the receive refuses whenever a book needs a person, so nothing arri
 the policy would have shown. It runs as the `sync.check` operation.
 
 `sendAfterSave` runs after Record a version, and only sends: the server's fast-forward rule is the
-check, and a refusal starts `checkForChanges` at once so `/cloud` reads `behind` or `diverged` with
-the facts rather than a bare error.
+check, and a refusal starts `checkForChanges` at once so every surface reads `behind` or `diverged`
+with the facts rather than a bare error. It returns how the send ended (`SendOutcome`: sent, held
+because the project does not send on save, attached to nothing, or refused for a reason), and the
+Record dialog stays open on it: one line for this device, one for the shared project, and the move
+the second offers — Compare the changes for a refusal because the shared project moved, Try sending
+again when it could not be reached, Open Sync for a sign-in. `sendNow` is the same send without the
+setting, for a button someone pressed.
+
+### One reading for every surface
+
+`src/app/syncWatch.ts` holds the open project's last reading (`readSync` and its plan) for the whole
+application, the way `syncStatus` holds the network. The check on open, every send, a combine or
+receive from Review, and `/cloud` itself leave their reading there; the app bar's cloud button
+(`SyncButton`), Review's status line (`SyncLine`) and `/cloud` read it. A reading is local work — refs
+and logs already in the object database — so opening the cloud popover reads again; only a check or
+a send touches the network.
+
+The cloud button is quiet when both sides agree, tinted when work is waiting to be sent, and tinted
+with a "!" when something waits on a person (versions to receive or review, a refused send, a
+sign-in, a stopped transfer). A project attached to nothing is never the alarm. Its popover is
+`/cloud` in brief: the state, the two clocks, what would arrive, the one right move, and the shared
+project's link to copy. Anything that receives goes through Review ("See the changes"); `/cloud` keeps
+the full story and the rarer moves.
 
 Neither runs with no network interface up, and both go through the ports' lanes, so a check and a
 send cannot race. A network failure the last transfer met does NOT stop them
