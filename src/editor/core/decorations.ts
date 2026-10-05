@@ -296,6 +296,48 @@ function narrow(
   return { from: Math.max(win.from, range.from), to: Math.min(win.to, range.to) };
 }
 
+/**
+ * WHEN to draw, once for both modes: the lines a window covers, and the
+ * tokens. Regular mode jumped to the window's first line and stopped at its
+ * last while USFM walked every line and every token of the book and skipped
+ * the ones outside; now both take the window's rows from `lineIndexAt`, and
+ * tokens by a binary search on their starts (they ascend, and tile the
+ * document). WHAT to draw stays each mode's own.
+ */
+function windowLines(
+  s: DocStructure,
+  win: { from: number; to: number } | null,
+): { readonly first: number; readonly last: number } {
+  if (win === null) return { first: 0, last: s.lines.length - 1 };
+  return { first: Math.max(0, lineIndexAt(s, win.from)), last: lineIndexAt(s, win.to) };
+}
+
+type TokenRows = NonNullable<DocStructure["analysis"]>["dish"]["tokens"]["rows"];
+
+function forTokensIn(
+  rows: TokenRows,
+  win: { from: number; to: number } | null,
+  visit: (kindBits: number, markerIdx: number, from: number, to: number) => void,
+): void {
+  let first = 0;
+  if (win !== null) {
+    // The last token starting at or before the window: it may run into it.
+    let low = 0;
+    let high = rows.length;
+    while (low < high) {
+      const mid = (low + high) >> 1;
+      if (rows.seek(mid).start <= win.from) low = mid + 1;
+      else high = mid;
+    }
+    first = Math.max(0, low - 1);
+  }
+  for (let i = first, n = rows.length; i < n; i++) {
+    const token = rows.seek(i);
+    if (win !== null && token.start > win.to) break;
+    visit(token.kind, token.marker, token.start, token.end);
+  }
+}
+
 export interface BuildResult {
   set: DecorationSet;
   stats: { decorations: number; joined: number; blocks: number };
@@ -404,9 +446,8 @@ export function buildRegular(
       });
   };
 
-  const firstRow = win ? Math.max(0, lineIndexAt(s, win.from)) : 0;
-  const lastRow = win ? lineIndexAt(s, win.to) : s.lines.length - 1;
-  for (let row = firstRow; row <= lastRow; row++) {
+  const rows = windowLines(s, win);
+  for (let row = rows.first; row <= rows.last; row++) {
     const l = s.lines.at(row);
     if (outside(l.from, l.to)) continue;
     const rl = plan.line(l.n);
@@ -634,7 +675,9 @@ export function buildUsfm(doc: string, s: DocStructure, opts: BuildOpts): BuildR
   const add: Pending[] = [];
   const win = narrow(opts.window, opts.range);
   const outside = (from: number, to: number) => win !== null && (to < win.from || from > win.to);
-  for (const l of s.lines) {
+  const rows = windowLines(s, win);
+  for (let row = rows.first; row <= rows.last; row++) {
+    const l = s.lines.at(row);
     if (outside(l.from, l.to)) continue;
     if (l.marker)
       add.push({
@@ -645,7 +688,7 @@ export function buildUsfm(doc: string, s: DocStructure, opts: BuildOpts): BuildR
   }
   const dish = s.analysis?.dish;
   if (dish) {
-    dish.tokens.forEach((kindBits, markerIdx, from, to) => {
+    forTokensIn(dish.tokens.rows, win, (kindBits, markerIdx, from, to) => {
       if (to <= from || outside(from, to)) return;
       const kind = kindBits & ~TOKEN_SPELLING_BIT;
       const cls = tokenClass(kind, classWordOf(markerIdx, kindBits));
