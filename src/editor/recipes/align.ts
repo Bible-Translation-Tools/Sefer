@@ -61,25 +61,67 @@ const tocOf = (view: EditorView): TocView | undefined => {
   return tocViewOf(analysis);
 };
 
-/** Where `offset` sits, in pixels below the scroller's top edge. */
+/**
+ * Where `offset` sits, in pixels below the scroller's top edge: the
+ * position's own line when it is drawn — a verse mid-paragraph starts lines
+ * below its paragraph's top — and its line block's estimate when it is not.
+ */
 const pixelsBelowTop = (view: EditorView, offset: number): number => {
-  const block = view.lineBlockAt(Math.min(offset, view.state.doc.length));
-  return view.documentTop + block.top - view.scrollDOM.getBoundingClientRect().top;
+  const at = Math.min(offset, view.state.doc.length);
+  const edge = view.scrollDOM.getBoundingClientRect().top;
+  const drawn = view.coordsAtPos(at);
+  if (drawn !== null) return drawn.top - edge;
+  return view.documentTop + view.lineBlockAt(at).top - edge;
 };
 
-/** The verse (or heading, or front matter) at the top of `view`. */
+/**
+ * The middle of the view, where a verse counts as being in sight: outside it,
+ * at either edge, a verse is technically on screen and still not where the
+ * eye is.
+ */
+const BAND = { from: 0.2, to: 0.75 };
+
+/**
+ * Bring `at` to the middle of `view` unless it is already in the middle band.
+ * The one reveal for every pair — the aligned group's, and the reference's
+ * paired block when the caret moves — so reading down the middle of a page
+ * moves nothing, and what reaches an edge comes back to the centre. Returns
+ * whether it scrolled.
+ */
+export const revealInBand = (view: EditorView, at: number): boolean => {
+  const height = view.scrollDOM.clientHeight;
+  const now = pixelsBelowTop(view, at);
+  if (now >= height * BAND.from && now <= height * BAND.to) return false;
+  view.dispatch({ effects: EditorView.scrollIntoView(at, { y: "center" }) });
+  // Once more if it landed off: the blocks above a far verse (a chapter's
+  // number, a psalm's title) get their real height only once they are drawn.
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      const landed = pixelsBelowTop(view, at);
+      if (Math.abs(landed - (height - view.defaultLineHeight) / 2) > view.defaultLineHeight)
+        view.dispatch({ effects: EditorView.scrollIntoView(at, { y: "center" }) });
+    }),
+  );
+  return true;
+};
+
+/** The verse (or heading, or front matter) the reader is at in `view`: the one in its middle. */
 const anchorAt = (view: EditorView, book: BookId): Anchor | undefined => {
   const toc = tocOf(view);
   if (toc === undefined) return undefined;
   const box = view.scrollDOM.getBoundingClientRect();
-  // The first line block the reader can see — `lineBlockAtHeight`, not
-  // `posAtCoords`, for the reason `whereAmI` gives.
-  const top = view.lineBlockAtHeight(box.top - view.documentTop + 1).from;
+  // The middle, where the eye is — not the top edge, which holds the verse
+  // already read. A position, not a line block: a paragraph of prose is one
+  // block holding several verses.
+  const middle = box.top + box.height / 2;
+  const top =
+    view.posAtCoords({ x: box.left + box.width / 2, y: middle }, false) ??
+    view.lineBlockAtHeight(middle - view.documentTop).from;
   let address = addressAt(book, toc, top);
   if (address === undefined) return undefined;
-  // A heading or a chapter's title at the top names the whole chapter, whose
-  // start may be screens above: the other view would be sent back there. The
-  // first VERSE in sight is the place being read.
+  // A heading or a chapter's title names the whole chapter, whose start may
+  // be screens above: the other view would be sent back there. The next VERSE
+  // in sight is the place being read.
   if (address.kind !== "verses") {
     const bottom = box.bottom - view.documentTop;
     for (let at = top; at < view.state.doc.length;) {
@@ -100,8 +142,8 @@ const anchorAt = (view: EditorView, book: BookId): Anchor | undefined => {
 
 /**
  * Bring `anchor` into `view`: to the middle in `reveal` (only when it is not
- * already showing), to the leader's height in `exact`. Returns whether it
- * scrolled.
+ * already in the middle band), to the leader's height in `exact`. Returns
+ * whether it scrolled.
  */
 const alignTo = (
   view: EditorView,
@@ -127,33 +169,12 @@ const alignTo = (
     if (chapter.kind === "found") at = chapter.from;
   }
   if (at === undefined) return false;
-  const now = pixelsBelowTop(view, at);
-  if (mode === "reveal") {
-    const height = view.scrollDOM.clientHeight;
-    // On screen already, with a line's grace at either edge: leave it be.
-    if (now >= 0 && now < height - 24) return false;
-  } else if (Math.abs(now - Math.max(0, anchor.below)) < 1) return false;
-  // CodeMirror's own scroll, not `scrollTop`: a verse screens away sits in
-  // lines it has only ESTIMATED the height of, and arithmetic on estimates
-  // landed a verse off; its scroll measures as it goes. Reveal brings the verse
-  // to the MIDDLE, where the eye is when it looks across; exact, to the
-  // leader's own height.
-  const height = view.scrollDOM.clientHeight;
-  const aim = () =>
-    mode === "reveal"
-      ? EditorView.scrollIntoView(at, { y: "center" })
-      : EditorView.scrollIntoView(at, { y: "start", yMargin: Math.max(0, anchor.below) });
-  const wanted = (): number =>
-    mode === "reveal" ? (height - view.defaultLineHeight) / 2 : Math.max(0, anchor.below);
-  view.dispatch({ effects: aim() });
-  // Once more if it landed off: the blocks above a far verse (a chapter's
-  // number, a psalm's title) get their real height only once they are drawn.
-  requestAnimationFrame(() =>
-    requestAnimationFrame(() => {
-      if (Math.abs(pixelsBelowTop(view, at) - wanted()) > view.defaultLineHeight)
-        view.dispatch({ effects: aim() });
-    }),
-  );
+  if (mode === "reveal") return revealInBand(view, at);
+  // Exact: the verse at the leader's own height, through CodeMirror's scroll
+  // (it measures lines it had only estimated).
+  const margin = Math.max(0, anchor.below);
+  if (Math.abs(pixelsBelowTop(view, at) - margin) < 1) return false;
+  view.dispatch({ effects: EditorView.scrollIntoView(at, { y: "start", yMargin: margin }) });
   return true;
 };
 

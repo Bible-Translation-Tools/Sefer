@@ -47,6 +47,7 @@ import { readingLayer, viewLayer } from "../core/compose";
 import { structureAt, type ChapterRow } from "../core/docStructure";
 import { span } from "../core/timing";
 import { modeView, pickChapter, type ProjectionName } from "../views";
+import { revealInBand } from "./align";
 import { pairingThere, showBlockPairs, showPaired, type PairedRange } from "./pairing";
 
 export interface ReferenceOptions {
@@ -85,11 +86,12 @@ export interface ReferenceMount {
    * MARKS the pair — the answer is worth having even when you have asked the
    * page to hold still — it just does not scroll to it.
    *
-   * When it does scroll: `y: "nearest"` and not `"center"`, which is the whole
-   * difference between this being useful and being unusable. A pane that
-   * re-centres on every verse fights the reader for the viewport; one that
-   * never scrolls marks a verse three screens away. Nearest moves only when
-   * the answer is off screen, so reading down a chapter is still.
+   * When it does scroll: only when the answer leaves the middle band, and
+   * then to the centre (`revealInBand`, the aligned group's own rule). A pane
+   * that re-centres on every verse fights the reader for the viewport; one
+   * that never scrolls marks a verse three screens away; and "nearest", which
+   * this was, stopped the pair on the bottom line — on screen, nowhere near
+   * the eye. Reading down the middle of a chapter is still still.
    */
   showPair(range: PairedRange | null, reveal?: boolean): void;
   /** Follows the reader's "show what the markup corresponds to" setting. */
@@ -159,7 +161,10 @@ export function mountReference(options: ReferenceOptions): ReferenceMount {
     showPair: (range, reveal = true) => {
       showPaired(view, range);
       if (range === null || !reveal) return;
-      view.dispatch({ effects: EditorView.scrollIntoView(range.from, { y: "nearest" }) });
+      // The aligned group's reveal: still while the pair stays in the middle
+      // band, centred once it reaches an edge — "nearest" left it at the
+      // bottom line, technically on screen and nowhere near the eye.
+      revealInBand(view, range.from);
     },
 
     pairBlocks: (on) => {
