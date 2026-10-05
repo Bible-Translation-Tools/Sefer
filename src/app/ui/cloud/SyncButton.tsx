@@ -31,10 +31,10 @@ import { useShell } from "../../ProjectContext";
 import { syncStatus } from "../../syncStatus";
 import { syncWatch } from "../../syncWatch";
 import { ago } from "../panels/format";
-import { Badge, Button, IconButton, Input, Popover, cx, toasts } from "../primitives";
-import { planSummary, stateCopy } from "./copy";
+import { Button, IconButton, Input, Popover, cx, toasts } from "../primitives";
+import { stateCopy } from "./copy";
 import { PlanBooks } from "./IncomingPlanCard";
-import { SyncClocks } from "./ProjectCard";
+import { SyncClocks, toneText } from "./ProjectCard";
 import { attentionOf, createQuickSync, quickActionOf, quickLabel, shareableLink } from "./quick";
 
 const glyphOf = (sync: Sync | undefined) => {
@@ -125,7 +125,7 @@ export function SyncButton() {
         label={t("Sync")}
         side="bottom"
         align="end"
-        class="w-[min(440px,92vw)]"
+        class="w-[min(480px,92vw)]"
         open={open()}
         onOpenChange={openChanged}
         trigger={
@@ -158,14 +158,11 @@ export function SyncButton() {
         >
           {(held) => (
             <div class="space-y-4" data-sync-popover={held().state}>
-              <div class="flex items-start gap-3">
-                <div class="min-w-0 flex-1">
-                  <h3 class="text-body font-semibold text-on-surface-primary">
-                    {copy()?.headline}
-                  </h3>
-                  <p class="mt-1 text-small text-on-surface-secondary">{copy()?.detail}</p>
-                </div>
-                <Badge tone={copy()?.tone ?? "muted"}>{copy()?.chip}</Badge>
+              <div>
+                <h3 class={cx("text-body font-semibold", toneText(copy()?.tone ?? "muted"))}>
+                  {copy()?.headline}
+                </h3>
+                <p class="mt-1 text-small text-on-surface-secondary">{copy()?.detail}</p>
               </div>
 
               <Show when={held().reading.origin !== undefined}>
@@ -176,9 +173,8 @@ export function SyncButton() {
                 {(arriving) => (
                   <div class="space-y-2 border-t border-surface-border pt-3">
                     <p class="text-smallest tracking-wide text-on-surface-tertiary uppercase">
-                      {t("What would arrive")}
+                      {t("Incoming changes")}
                     </p>
-                    <p class="text-small text-on-surface-secondary">{planSummary(arriving())}</p>
                     <PlanBooks plan={arriving()} />
                   </div>
                 )}
@@ -186,6 +182,7 @@ export function SyncButton() {
 
               <div class="flex flex-wrap items-center gap-2">
                 <Button
+                  size="sm"
                   variant="primary"
                   data-sync-quick={quickActionOf(held())}
                   loading={quick.busy() !== ""}
@@ -194,7 +191,7 @@ export function SyncButton() {
                   {quickLabel(quickActionOf(held()))}
                 </Button>
                 <Show when={quickActionOf(held()) !== "open"}>
-                  <Button variant="tertiary" onClick={() => run("open")}>
+                  <Button size="sm" variant="tertiary" onClick={() => run("open")}>
                     {t("Open Sync")}
                   </Button>
                 </Show>

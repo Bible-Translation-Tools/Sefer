@@ -18,7 +18,7 @@ import type { Clock, Sync } from "#core/sync";
 
 import { t } from "../../i18n";
 import { ago, exact } from "../panels/format";
-import { Badge, Card, cx, PanelHeader } from "../primitives";
+import { Card, cx, PanelHeader, type BadgeTone } from "../primitives";
 import { plural, stateCopy } from "./copy";
 
 /** The repository, as a person reads it: `owner/name`, not a clone URL. */
@@ -45,7 +45,8 @@ function ClockLine(props: {
         title={props.clock.at === undefined ? undefined : exact(props.clock.at)}
       >
         <Show when={props.clock.at !== undefined} fallback={<span>{t("no versions yet")}</span>}>
-          {ago(props.clock.at ?? 0)}
+          {/* The time is the answer to "when", so it is the coloured word. */}
+          <span class="font-medium text-brand">{ago(props.clock.at ?? 0)}</span>
           <Show when={props.clock.by !== undefined}>
             <span class="text-on-surface-tertiary">
               {" "}
@@ -67,6 +68,23 @@ function ClockLine(props: {
     </div>
   );
 }
+
+/**
+ * A state's tone as the colour of its headline. No chip: the sentence itself
+ * says the state, and colours it only when it wants something from you.
+ */
+export const toneText = (tone: BadgeTone): string => {
+  switch (tone) {
+    case "success":
+      return "text-on-surface-success";
+    case "warning":
+      return "text-on-surface-warning";
+    case "error":
+      return "text-on-surface-error";
+    default:
+      return "text-on-surface-primary";
+  }
+};
 
 /** The two clocks, side by side: this device's and the shared project's. */
 export function SyncClocks(props: { readonly sync: Sync; readonly class?: string }) {
@@ -121,11 +139,10 @@ export function ProjectCard(props: { readonly sync: Sync; readonly projectName: 
             ? t("Not connected to a shared project")
             : shortOrigin(props.sync.reading.origin)
         }
-        actions={<Badge tone={copy().tone}>{copy().chip}</Badge>}
       />
 
       <div>
-        <h4 class="text-body font-medium">{copy().headline}</h4>
+        <h4 class={cx("text-body font-medium", toneText(copy().tone))}>{copy().headline}</h4>
         <p class="mt-1 text-small text-on-surface-secondary">{copy().detail}</p>
       </div>
 

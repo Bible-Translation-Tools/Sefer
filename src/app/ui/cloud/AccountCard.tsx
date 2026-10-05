@@ -14,7 +14,7 @@
 import { Show, createSignal } from "solid-js";
 
 import { t } from "../../i18n";
-import { Badge, Button, Card, Input, PanelHeader } from "../primitives";
+import { Button, Card, Input, PanelHeader } from "../primitives";
 import type { Account } from "./account";
 
 export function AccountCard(props: { readonly account: Account }) {
@@ -38,7 +38,7 @@ export function AccountCard(props: { readonly account: Account }) {
         actions={
           <Show when={props.account.session() !== undefined}>
             <div class="flex items-center gap-2">
-              <Badge tone="success">{t("Signed in")}</Badge>
+              <span class="text-small text-on-surface-success">{t("Signed in")}</span>
               <Button size="sm" onClick={props.account.signOut} disabled={props.account.busy()}>
                 {t("Sign out")}
               </Button>

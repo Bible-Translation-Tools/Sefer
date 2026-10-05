@@ -273,37 +273,39 @@ export const chapterList = (chapters: readonly number[]): string => {
 };
 
 /**
- * The plan in one sentence — the one the gap analysis asked for by name:
- * "3 chapters of Mark changed on the cloud; 1 of them also changed here."
+ * What arrives, in verses — the unit a translator works in — as two
+ * sentences: what changed in the shared project, then whether any of it is
+ * a verse this device changed too. "There are changes to 3 verses in 2 books.
+ * You also changed 1 of those verses."
  *
- * Built from the totals rather than per-book, because the per-book detail is
- * right below it and a summary that repeats the list is not a summary.
+ * Built from the totals rather than per book, because the per-book detail is
+ * right below it and a summary that repeats the list is not a summary. A
+ * change the engine could not place in a verse falls back to books.
  */
 export const planSummary = (plan: IncomingPlan): string => {
-  if (plan.chapterCount === 0) {
+  if (plan.books.length === 0)
     return t("Nothing in your books changes; the updates are elsewhere in the project.");
-  }
-  // "3 chapters of Mark" reads better than "3 chapters across 1 book", and a
-  // single-book plan is the common one, so it gets its own sentence.
-  const where =
-    plan.books.length === 1
-      ? t("of {book}", { book: bookName(plan.books[0]?.bookId ?? "") })
-      : plural(plan.books.length, "across {count} book", "across {count} books");
-  const changed = plural(
-    plan.chapterCount,
-    "{count} chapter {where} changed in the shared project",
-    "{count} chapters {where} changed in the shared project",
-    { where },
-  );
-  if (plan.overlapCount === 0) {
-    return t("{changed}, and none of them changed here.", { changed });
-  }
-  return plural(
-    plan.overlapCount,
-    "{changed}; {count} of them also changed here.",
-    "{changed}; {count} of them also changed here.",
-    { changed },
-  );
+  const books = plural(plan.books.length, "{count} book", "{count} books");
+  if (plan.verseCount === 0) return t("There are changes in {books}.", { books });
+  const verses = plural(plan.verseCount, "{count} verse", "{count} verses");
+  return t("There are changes to {verses} in {books}.", { verses, books });
+};
+
+/** The second sentence: whether you changed any of the same verses, and how it reads. */
+export const planOverlap = (
+  plan: IncomingPlan,
+): { readonly text: string; readonly mine: boolean } | undefined => {
+  if (plan.verseCount === 0) return undefined;
+  if (plan.verseOverlap === 0)
+    return { text: t("You have not changed any of those verses."), mine: false };
+  return {
+    text: plural(
+      plan.verseOverlap,
+      "You also changed {count} of those verses.",
+      "You also changed {count} of those verses.",
+    ),
+    mine: true,
+  };
 };
 
 /**

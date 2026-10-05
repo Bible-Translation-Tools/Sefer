@@ -72,6 +72,8 @@ const planFor = (contested: boolean): IncomingPlan => ({
       kind: "modified",
       chapters: [1],
       alsoHere: [],
+      verses: 1,
+      versesAlsoHere: 0,
       contested: false,
       verdict: "take",
     },
@@ -81,6 +83,8 @@ const planFor = (contested: boolean): IncomingPlan => ({
       kind: "modified",
       chapters: [1],
       alsoHere: contested ? [1] : [],
+      verses: 2,
+      versesAlsoHere: contested ? 1 : 0,
       contested,
       verdict: contested ? "review" : "take",
     },
@@ -88,6 +92,8 @@ const planFor = (contested: boolean): IncomingPlan => ({
   contested: contested ? ["MRK"] : [],
   chapterCount: 2,
   overlapCount: contested ? 1 : 0,
+  verseCount: 3,
+  verseOverlap: contested ? 1 : 0,
   clean: !contested,
 });
 

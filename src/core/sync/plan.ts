@@ -27,6 +27,10 @@ export interface IncomingBook {
   readonly chapters: readonly number[];
   /** Of those, the ones this device also changed since the same base. */
   readonly alsoHere: readonly number[];
+  /** Verses (the engine's units) the cloud changed; 0 when it could not say where. */
+  readonly verses: number;
+  /** Of those, the ones this device also changed since the same base. */
+  readonly versesAlsoHere: number;
   /** True when the policy sends this book to a person: it goes to Compare. */
   readonly contested: boolean;
   readonly verdict: BookVerdict;
@@ -50,6 +54,10 @@ export interface IncomingPlan {
   readonly chapterCount: number;
   /** Of those, how many this device also changed. */
   readonly overlapCount: number;
+  /** Total verses the cloud changed, across every book. */
+  readonly verseCount: number;
+  /** Of those, how many this device also changed. */
+  readonly verseOverlap: number;
   readonly clean: boolean;
 }
 
@@ -60,6 +68,8 @@ export const emptyPlan: IncomingPlan = {
   contested: [],
   chapterCount: 0,
   overlapCount: 0,
+  verseCount: 0,
+  verseOverlap: 0,
   clean: true,
 };
 
@@ -83,6 +93,7 @@ export const incomingPlan = (
   const books = facts
     .map((book, index): IncomingBook => {
       const mine = new Set(book.mine.chapters);
+      const mineRefs = new Set(book.mine.refs);
       const verdict = verdicts[index] ?? "review";
       return {
         bookId: book.bookId,
@@ -90,6 +101,8 @@ export const incomingPlan = (
         kind: kindOf(book),
         chapters: book.theirs.chapters,
         alsoHere: book.theirs.chapters.filter((chapter) => mine.has(chapter)),
+        verses: book.theirs.refs.length,
+        versesAlsoHere: book.theirs.refs.filter((ref) => mineRefs.has(ref)).length,
         contested: verdict === "review",
         verdict,
       };
@@ -98,6 +111,8 @@ export const incomingPlan = (
     .sort((a, b) => a.bookId.localeCompare(b.bookId));
   const chapterCount = books.reduce((total, book) => total + book.chapters.length, 0);
   const overlapCount = books.reduce((total, book) => total + book.alsoHere.length, 0);
+  const verseCount = books.reduce((total, book) => total + book.verses, 0);
+  const verseOverlap = books.reduce((total, book) => total + book.versesAlsoHere, 0);
   const contested = books.filter((book) => book.contested).map((book) => book.bookId);
   return {
     commits,
@@ -105,6 +120,8 @@ export const incomingPlan = (
     contested,
     chapterCount,
     overlapCount,
+    verseCount,
+    verseOverlap,
     clean: contested.length === 0,
   };
 };

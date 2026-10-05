@@ -351,7 +351,7 @@ a send touches the network.
 The cloud button is quiet when both sides agree, tinted when work is waiting to be sent, and tinted
 with a "!" when something waits on a person (versions to receive or review, a refused send, a
 sign-in, a stopped transfer). A project attached to nothing is never the alarm. Its popover is
-`/cloud` in brief: the state, the two clocks, what would arrive, the one right move, and the shared
+`/cloud` in brief: the state, the two clocks, the incoming changes, the one right move, and the shared
 project's link to copy. Anything that receives goes through Review ("See the changes"); `/cloud` keeps
 the full story and the rarer moves.
 
@@ -407,9 +407,14 @@ cards in the order someone asks the questions:
 1. **Account** — sign in and out. An ACCOUNT action, not a project one: the same session serves every
    project on the device. Failures render inline under the form, never as a toast, because the form
    is where the person is looking.
-2. **Project** — the shared project it belongs to, the two clocks as two stat lines, the state as one
-   badge, and the headline and paragraph from the glossary.
-3. **What would arrive** — the incoming plan, shown only when something is coming.
+2. **Project** — the shared project it belongs to, the two clocks as two stat lines (the time is the
+   coloured word), and the headline and paragraph from the glossary. No chip: the headline takes the
+   state's colour when it wants something from you.
+3. **Incoming changes** — the incoming plan, shown only when something is coming, in verses: "There
+   are changes to 3 verses in 2 books. You also changed 1 of those verses." Then one plain line per
+   book; only a verse you both changed is coloured. Verses are the engine's units from the same
+   facts the policy reads (`IncomingBook.verses`, `versesAlsoHere`); a change it could not place
+   falls back to chapters.
 4. **What happens next** — the one primary button, and one sentence under it saying what will move
    and what will not.
 5. **Sync settings** — the four above, and the author name.
