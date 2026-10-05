@@ -45,8 +45,8 @@ import { hunkPaint, sidePaint, type Controls, type Side } from "./paint";
 
 export interface BookDiffApi {
   readonly showUnit: (unit: DecisionUnit) => void;
-  /** Where `unit` is against the current pane's screen: above it, on it, or below it. */
-  readonly sightOf: (unit: DecisionUnit) => "above" | "on" | "below" | undefined;
+  /** The offset at the middle of your pane: where a step counts from. */
+  readonly middle: () => number | undefined;
 }
 
 /** The unit whose span on `side` holds `at`, or the last one before it. */
@@ -127,21 +127,22 @@ export function BookDiff(props: {
       if (at !== undefined) entry.mount.showAt(at, "center");
     }
   };
-  const sightOf = (unit: DecisionUnit): "above" | "on" | "below" | undefined => {
+  /** The offset at the middle of your pane, where the reader is. */
+  const middle = (): number | undefined => {
     const entry = mounts.find((held) => held.side !== "baseline");
-    const at = placeIn("current", unit);
-    if (entry === undefined || at === undefined) return undefined;
+    if (entry === undefined) return undefined;
     const view = entry.mount.view;
     const box = view.scrollDOM.getBoundingClientRect();
-    const top = view.documentTop + view.lineBlockAt(Math.min(at, view.state.doc.length)).top;
-    if (top < box.top) return "above";
-    if (top > box.bottom - view.defaultLineHeight) return "below";
-    return "on";
+    const y = box.top + box.height / 2;
+    return (
+      view.posAtCoords({ x: box.left + box.width / 2, y }, false) ??
+      view.lineBlockAtHeight(y - view.documentTop).from
+    );
   };
   createEffect(
     () => props.ref,
     (give) => {
-      give?.({ showUnit, sightOf });
+      give?.({ showUnit, middle });
     },
   );
 

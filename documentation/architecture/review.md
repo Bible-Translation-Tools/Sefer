@@ -292,11 +292,12 @@ Code's own, as `Alt-F8` is for findings), or the palette (`review.change.next`,
 `review.change.previous`). Cards step from the card last stepped to while it is
 still on screen, else from the one at the top of the list (from the top card
 alone, the last few cards — on screen together, with nothing below to scroll
-to — could never be reached); the card stepped to is outlined. The book steps
-unit by unit, both panes brought to the change, and crosses into the next book
-at the end of one. A step first brings back the change you were at when you
-scrolled it out of sight the way you are stepping, and one with nothing
-further that way shows it again — the last change is never lost to a scroll. The counter
+to — could never be reached); the card stepped to is outlined. The book steps from where
+the reader IS — the middle of their pane, read at the click, not a remembered
+place: the next change after it or the previous one before it, skipping the one
+sitting at the middle, centred in both panes; past the end of a book it crosses
+into the next, and with nothing further anywhere it shows the last change again,
+so a change is never lost to a scroll. The counter
 says where you are.
 
 **Decisions in three sizes.** A unit, in the gutter: ✓ keeps the current

@@ -470,29 +470,43 @@ export function ReviewReader(props: {
   let steeredAt = 0;
   const STEER_MS = 800;
 
+  /**
+   * The next or previous change from WHERE THE READER IS — the middle of
+   * their pane, read at the click — not from a remembered place: scroll away
+   * and the step counts from where you scrolled to. The change sitting at the
+   * middle is the one you are on, and is skipped both ways; with nothing
+   * further in this book, the step crosses into the next (or previous) book
+   * that has one, and with nothing anywhere it shows the nearest again, so a
+   * change is never lost to a scroll.
+   */
   const stepUnits = (delta: 1 | -1): void => {
     steeredAt = performance.now();
     const all = untrack(prepared);
     const held = untrack(selectedBook);
     if (held === undefined) return;
     const shown = held.shown;
-    const at = untrack(place);
-    const active = at === undefined ? undefined : shown[at];
-    // The change you were at, scrolled out of sight the way you are stepping:
-    // the step brings IT back first, both panes, rather than skipping past it.
-    const sight = active === undefined ? undefined : book?.sightOf(active);
-    if (
-      active !== undefined &&
-      at !== undefined &&
-      ((delta < 0 && sight === "above") || (delta > 0 && sight === "below"))
-    ) {
-      book?.showUnit(active);
-      setPlace(at);
-      return;
+    const startOf = (unit: DecisionUnit): number => unit.current?.from ?? unit.place.current;
+    const endOf = (unit: DecisionUnit): number => unit.current?.to ?? unit.place.current;
+    const mid = book?.middle();
+    let to: number | undefined;
+    if (mid === undefined) to = delta > 0 ? 0 : shown.length - 1;
+    else {
+      const on = shown.findIndex((unit) => startOf(unit) <= mid && mid <= endOf(unit));
+      if (delta > 0) {
+        const found = shown.findIndex((unit, index) => index !== on && startOf(unit) > mid);
+        to = found < 0 ? undefined : found;
+      } else {
+        for (let index = shown.length - 1; index >= 0; index -= 1) {
+          const unit = shown[index];
+          if (unit !== undefined && index !== on && startOf(unit) < mid) {
+            to = index;
+            break;
+          }
+        }
+      }
     }
-    const to = at === undefined ? (delta > 0 ? 0 : shown.length - 1) : at + delta;
-    const unit = shown[to];
-    if (unit !== undefined) {
+    const unit = to === undefined ? undefined : shown[to];
+    if (unit !== undefined && to !== undefined) {
       book?.showUnit(unit);
       setPlace(to);
       return;
@@ -508,11 +522,12 @@ export function ReviewReader(props: {
       props.onSelect(next.book.bookId);
       return;
     }
-    // Nothing further that way: the active change again, so a reader who
-    // scrolled away from the last one can always find it.
-    if (active !== undefined && at !== undefined) {
-      book?.showUnit(active);
-      setPlace(at);
+    // Nothing further anywhere: the last (or first) change again.
+    const edge = delta > 0 ? shown.length - 1 : 0;
+    const last = shown[edge];
+    if (last !== undefined) {
+      book?.showUnit(last);
+      setPlace(edge);
     }
   };
 
@@ -943,7 +958,10 @@ export function ReviewReader(props: {
     observer?.disconnect();
     observer = new ResizeObserver((entries) => {
       const box = entries[0]?.contentRect;
-      if (box !== undefined) setWidth(box.width);
+      // Zero is a hidden reader (behind Review's settled card), not a narrow
+      // one: taking it would flip an auto layout to unified and rebuild every
+      // view for the moment it is out of sight.
+      if (box !== undefined && box.width > 0) setWidth(box.width);
     });
     observer.observe(element);
   };

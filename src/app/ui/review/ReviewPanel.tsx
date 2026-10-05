@@ -1523,59 +1523,62 @@ export function ReviewPanel() {
                 </Button>
               </p>
             </Show>
-            <Show
-              when={!settled() || showChoices()}
-              fallback={
-                <EmptyState
-                  icon={<Check size={20} />}
-                  title={t("Every change is decided")}
-                  description={
-                    againstShared()
-                      ? t(
-                          "The editor now reads as you chose. Save to finish: it keeps your choices and joins your work with the shared project's.",
-                        )
-                      : unsaved().length > 0
-                        ? t("Both sides now read the same. Save to keep it.")
-                        : t("Both sides now read the same. Nothing is left to save.")
-                  }
-                  action={
-                    <div class="flex flex-wrap justify-center gap-2" data-review-settled>
-                      <Show
-                        when={target() !== undefined && (againstShared() || unsaved().length > 0)}
-                      >
-                        <Button variant="primary" icon={<Save />} onClick={openRecord}>
-                          {t("Save")}
-                        </Button>
-                      </Show>
-                      <Button variant="tertiary" onClick={() => setShowChoices(true)}>
-                        {t("Show my choices")}
+            {/* The settled card sits OVER the reading rather than replacing it:
+                the reader stays mounted, hidden, so "Show my choices" is
+                instant. Replacing it threw away every book's prepared diff,
+                and showing them again parsed both sides of every book anew. */}
+            <Show when={settled() && !showChoices()}>
+              <EmptyState
+                icon={<Check size={20} />}
+                title={t("Every change is decided")}
+                description={
+                  againstShared()
+                    ? t(
+                        "The editor now reads as you chose. Save to finish: it keeps your choices and joins your work with the shared project's.",
+                      )
+                    : unsaved().length > 0
+                      ? t("Both sides now read the same. Save to keep it.")
+                      : t("Both sides now read the same. Nothing is left to save.")
+                }
+                action={
+                  <div class="flex flex-wrap justify-center gap-2" data-review-settled>
+                    <Show
+                      when={target() !== undefined && (againstShared() || unsaved().length > 0)}
+                    >
+                      <Button variant="primary" icon={<Save />} onClick={openRecord}>
+                        {t("Save")}
                       </Button>
-                    </div>
-                  }
-                />
-              }
-            >
-              <div class="flex min-h-0 flex-1 flex-col" data-review-units={totals().total}>
-                <ReviewReader
-                  books={reviewBooks()}
-                  originOf={originOf}
-                  decision={effectiveFor}
-                  decide={decideAny}
-                  decidable={editable()}
-                  usfm={markup()}
-                  onUsfm={setMarkup}
-                  currentLabel={leftLabel()}
-                  baselineLabel={rightLabel()}
-                  currentShort={leftShort()}
-                  baselineShort={rightShort()}
-                  selected={selected()}
-                  onSelect={setSelected}
-                  seat={seatBook}
-                  onEdited={(bookId) => shell.changed({ kind: "book.apply", books: [bookId] })}
-                  onEditing={setCardEditing}
-                />
-              </div>
+                    </Show>
+                    <Button variant="tertiary" onClick={() => setShowChoices(true)}>
+                      {t("Show my choices")}
+                    </Button>
+                  </div>
+                }
+              />
             </Show>
+            <div
+              class={["flex min-h-0 flex-1 flex-col", { hidden: settled() && !showChoices() }]}
+              data-review-units={totals().total}
+            >
+              <ReviewReader
+                books={reviewBooks()}
+                originOf={originOf}
+                decision={effectiveFor}
+                decide={decideAny}
+                decidable={editable()}
+                usfm={markup()}
+                onUsfm={setMarkup}
+                currentLabel={leftLabel()}
+                baselineLabel={rightLabel()}
+                currentShort={leftShort()}
+                baselineShort={rightShort()}
+                selected={selected()}
+                onSelect={setSelected}
+                seat={seatBook}
+                onEdited={(bookId) => shell.changed({ kind: "book.apply", books: [bookId] })}
+                onEditing={setCardEditing}
+              />
+            </div>
           </Show>
         </Show>
 
