@@ -50,8 +50,6 @@
  */
 
 import { Effect, Fiber, Option, Result, Stream } from "effect";
-import Link from "lucide-solid/icons/link";
-import Unlink from "lucide-solid/icons/unlink";
 import X from "lucide-solid/icons/x";
 import {
   Match,
@@ -83,6 +81,7 @@ import { shellKeys } from "../../settings";
 import { IconButton } from "../primitives";
 import { useAlignedGroup } from "./aligned";
 import { bookName } from "./books";
+import { FollowToggle } from "./FollowToggle";
 import { metadataOf } from "./project";
 
 // The editor's own stylesheet, for the same reason `BookEditor` imports it:
@@ -521,18 +520,12 @@ export function ReferencePane(props: ReferencePaneProps) {
         {/* Follow, or hold still. In the header rather than only in settings
             because it is a per-pane decision made while reading — you pin the
             one you are cross-checking and let the others follow. */}
-        <IconButton
-          size="sm"
-          data-testid={`follow-${props.resource.id}`}
-          data-following={following() ? "" : undefined}
-          label={
-            following()
-              ? t("Stop {title} following the book", { title: props.resource.title })
-              : t("Let {title} follow the book", { title: props.resource.title })
-          }
-          tooltipSide="left"
-          icon={following() ? <Link /> : <Unlink />}
-          onClick={() => setFollowing((on) => !on)}
+        <FollowToggle
+          testId={`follow-${props.resource.id}`}
+          following={following()}
+          stopLabel={t("Stop {title} following the book", { title: props.resource.title })}
+          startLabel={t("Let {title} follow the book", { title: props.resource.title })}
+          onToggle={() => setFollowing((on) => !on)}
         />
         <IconButton
           size="sm"

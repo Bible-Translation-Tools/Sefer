@@ -73,6 +73,8 @@ export function BookDiff(props: {
   readonly currentLabel: string;
   readonly baselineLabel: string;
   readonly currentFirst?: boolean;
+  /** Whether the split's two panes follow each other by verse; read at each scroll. */
+  readonly linked?: () => boolean;
   readonly observability: ObservabilityService;
   /** Shown at the top once the views are mounted: where "open in the book" lands. */
   readonly initial?: DecisionUnit | undefined;
@@ -254,9 +256,10 @@ export function BookDiff(props: {
         follow("current", current);
         // The two panes, aligned by verse: either leads, the other follows.
         const group = createAlignedGroup("reveal");
+        const linked = (): boolean => untrack(() => props.linked?.() ?? true);
         releases.push(
-          group.join({ view: was.view, book: sides.bookId }),
-          group.join({ view: current.view, book: sides.bookId }),
+          group.join({ view: was.view, book: sides.bookId, leads: linked, follows: linked }),
+          group.join({ view: current.view, book: sides.bookId, leads: linked, follows: linked }),
         );
       } else {
         const current = add("unified", r, sides.currentText, () =>

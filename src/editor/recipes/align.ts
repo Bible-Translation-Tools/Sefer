@@ -98,7 +98,11 @@ const anchorAt = (view: EditorView, book: BookId): Anchor | undefined => {
   return { address, below: pixelsBelowTop(view, start) };
 };
 
-/** Bring `anchor` into `view`. Returns whether it scrolled. */
+/**
+ * Bring `anchor` into `view`: to the middle in `reveal` (only when it is not
+ * already showing), to the leader's height in `exact`. Returns whether it
+ * scrolled.
+ */
 const alignTo = (
   view: EditorView,
   book: BookId,
@@ -124,16 +128,32 @@ const alignTo = (
   }
   if (at === undefined) return false;
   const now = pixelsBelowTop(view, at);
-  const margin = mode === "reveal" ? 0 : Math.max(0, anchor.below);
   if (mode === "reveal") {
     const height = view.scrollDOM.clientHeight;
     // On screen already, with a line's grace at either edge: leave it be.
     if (now >= 0 && now < height - 24) return false;
-  } else if (Math.abs(now - margin) < 1) return false;
-  // CodeMirror's own scroll, not `scrollTop`: a verse three screens away sits
-  // in lines it has only ESTIMATED the height of, and arithmetic on estimates
-  // landed a verse off. Its scroll measures as it goes.
-  view.dispatch({ effects: EditorView.scrollIntoView(at, { y: "start", yMargin: margin }) });
+  } else if (Math.abs(now - Math.max(0, anchor.below)) < 1) return false;
+  // CodeMirror's own scroll, not `scrollTop`: a verse screens away sits in
+  // lines it has only ESTIMATED the height of, and arithmetic on estimates
+  // landed a verse off; its scroll measures as it goes. Reveal brings the verse
+  // to the MIDDLE, where the eye is when it looks across; exact, to the
+  // leader's own height.
+  const height = view.scrollDOM.clientHeight;
+  const aim = () =>
+    mode === "reveal"
+      ? EditorView.scrollIntoView(at, { y: "center" })
+      : EditorView.scrollIntoView(at, { y: "start", yMargin: Math.max(0, anchor.below) });
+  const wanted = (): number =>
+    mode === "reveal" ? (height - view.defaultLineHeight) / 2 : Math.max(0, anchor.below);
+  view.dispatch({ effects: aim() });
+  // Once more if it landed off: the blocks above a far verse (a chapter's
+  // number, a psalm's title) get their real height only once they are drawn.
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      if (Math.abs(pixelsBelowTop(view, at) - wanted()) > view.defaultLineHeight)
+        view.dispatch({ effects: aim() });
+    }),
+  );
   return true;
 };
 

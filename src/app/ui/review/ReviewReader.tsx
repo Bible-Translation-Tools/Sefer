@@ -82,6 +82,8 @@ import {
   type VirtualSection,
 } from "../primitives";
 import { ChangesHistorySidebar } from "../workspace/ChangesHistorySidebar";
+import { Crumbs, LocationStrip, type CrumbChapter } from "../workspace/Crumbs";
+import { FollowToggle } from "../workspace/FollowToggle";
 import { claimSidebar } from "../workspace/sidebarSlot";
 
 /** One book that differs: both texts and the engine's units over them. */
@@ -551,6 +553,65 @@ export function ReviewReader(props: {
     setPlace(held?.shown.indexOf(first));
   };
 
+  /** The chapter a unit is in; 0 for the front matter. */
+  const chapterOf = (unit: DecisionUnit): number => {
+    const addr = unit.currentAddr ?? unit.baselineAddr;
+    return addr === undefined || addr.kind === "frontMatter" ? 0 : addr.chapter;
+  };
+  /** The book's chapters that have changes the filter shows, with how many. */
+  const chaptersOf = (held: Prepared): readonly CrumbChapter[] => {
+    const counts = new Map<number, number>();
+    for (const unit of held.shown) {
+      const chapter = chapterOf(unit);
+      counts.set(chapter, (counts.get(chapter) ?? 0) + 1);
+    }
+    return [...counts]
+      .sort((a, b) => a[0] - b[0])
+      .map(([chapter, count]) => ({
+        ordinal: chapter,
+        label: chapter === 0 ? t("Intro") : String(chapter),
+        intro: chapter === 0,
+        count,
+      }));
+  };
+  /** The chapter of the change the reader is at: the first change until they move. */
+  const currentChapter = (): number | undefined => {
+    const held = selectedBook();
+    const unit = held?.shown[place() ?? 0];
+    return unit === undefined ? undefined : chapterOf(unit);
+  };
+  const chapterWords = (chapter: number | undefined): string =>
+    chapter === undefined
+      ? ""
+      : chapter === 0
+        ? t("Intro")
+        : t("Chapter {label}", { label: chapter });
+  /** The chapter with changes before or after the one the reader is at. */
+  const chapterAt = (delta: 1 | -1): number | undefined => {
+    const held = selectedBook();
+    if (held === undefined) return undefined;
+    const list = chaptersOf(held);
+    const index = list.findIndex((row) => row.ordinal === currentChapter());
+    return list[(index < 0 ? 0 : index) + delta]?.ordinal;
+  };
+  const stepChapter = (delta: 1 | -1): void => {
+    const chapter = untrack(() => chapterAt(delta));
+    if (chapter !== undefined) goToChapter(chapter);
+  };
+  /** Whether the two texts scroll together: the chain in the strip. */
+  const [linked, setLinked] = createSignal(true, { name: "reviewLinked" });
+
+  /** To the first change in a chapter; the other pane comes with it. */
+  const goToChapter = (chapter: number): void => {
+    const held = untrack(selectedBook);
+    const index = held?.shown.findIndex((unit) => chapterOf(unit) === chapter) ?? -1;
+    const unit = held?.shown[index];
+    if (unit === undefined) return;
+    steeredAt = performance.now();
+    book?.showUnit(unit);
+    setPlace(index);
+  };
+
   /** Into the whole book at its first change — not at the title page. */
   const enterBook = (): void => {
     const first = untrack(selectedBook)?.shown[0];
@@ -890,26 +951,6 @@ export function ReviewReader(props: {
             },
           ]}
         />
-        <Show when={scope() === "book" ? selectedBook() : undefined}>
-          {(held) => (
-            <Select
-              size="sm"
-              wrapperClass="min-w-0"
-              aria-label={t("Which book to review")}
-              data-review-reader-book
-              value={held().book.bookId}
-              onChange={(event) => pickBook(event.currentTarget.value)}
-            >
-              <For each={prepared()}>
-                {(entry) => (
-                  <option value={entry.book.bookId}>
-                    {`${entry.book.name} (${entry.shown.length})`}
-                  </option>
-                )}
-              </For>
-            </Select>
-          )}
-        </Show>
         <Select
           size="sm"
           wrapperClass="min-w-0"
@@ -982,8 +1023,52 @@ export function ReviewReader(props: {
           <Show when={selectedBook()} fallback={<EmptyState title={t("Preparing…")} />}>
             {(held) => (
               <div class="flex min-h-0 flex-1 flex-col gap-2">
+                {/* The editor's location strip, over what changed: Book ·
+                    Chapter listing only the books and chapters with changes,
+                    each with how many; the arrows step chapter to chapter;
+                    the chain links the two texts' scrolling, as a reference
+                    pane's does. */}
+                <LocationStrip testId="review-location" class="rounded-md border">
+                  <Crumbs
+                    book={held().book.name}
+                    books={() =>
+                      prepared().map((entry) => ({
+                        id: entry.book.bookId,
+                        name: entry.book.name,
+                        count: entry.shown.length,
+                      }))
+                    }
+                    currentBook={held().book.bookId}
+                    onBook={(picked) => pickBook(picked.id)}
+                    chapter={chapterWords(currentChapter())}
+                    chapters={() => chaptersOf(held())}
+                    currentChapter={currentChapter()}
+                    onChapter={goToChapter}
+                    step={{
+                      onPrevious: () => stepChapter(-1),
+                      onNext: () => stepChapter(1),
+                      get first() {
+                        return chapterAt(-1) === undefined;
+                      },
+                      get last() {
+                        return chapterAt(1) === undefined;
+                      },
+                    }}
+                    end={
+                      <FollowToggle
+                        testId="review-linked"
+                        following={linked()}
+                        tooltipSide="bottom"
+                        stopLabel={t("Scroll the two texts separately")}
+                        startLabel={t("Keep the two texts at the same verse")}
+                        onToggle={() => setLinked((on) => !on)}
+                      />
+                    }
+                  />
+                </LocationStrip>
                 <BookDiff
                   class="min-h-0 flex-1"
+                  linked={linked}
                   sides={held().sides}
                   units={held().units}
                   split={split()}

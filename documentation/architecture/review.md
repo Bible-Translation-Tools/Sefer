@@ -216,8 +216,12 @@ book, as each book's own Clear does), History and what aligned the diff.
 Choosing another source starts over: no decisions, and the takes already
 written stay as ordinary edits. Recovered work is the one recovery banner every
 project screen shows, and only when there is some. The reading's own toolbar is the second row, one row in both scopes and every
-control one size: scope, the book (Whole book only), the kind filter, a View
-menu (layout, USFM markup), Decide all, and next and previous. The project
+control one size: scope, the kind filter, a View menu (layout, USFM markup),
+Decide all, and next and previous. Whole book adds the editor's location strip
+above its two texts (`LocationStrip`, `Crumbs`): Book · Chapter listing only the
+books and chapters with changes and how many, picking one going to its first
+change; the arrows step chapter to chapter; and the chain (`FollowToggle`)
+links the two texts' scrolling by verse (`createAlignedGroup`), on by default. The project
 sidebar becomes a two-tab panel, Changes and History
 (`workspace/ChangesHistorySidebar.tsx`, as Zed's git panel has them). Review is
 the Changes tab: each book that differs, decided of total, as Find's sidebar
