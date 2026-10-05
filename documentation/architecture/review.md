@@ -293,7 +293,10 @@ Code's own, as `Alt-F8` is for findings), or the palette (`review.change.next`,
 still on screen, else from the one at the top of the list (from the top card
 alone, the last few cards — on screen together, with nothing below to scroll
 to — could never be reached); the card stepped to is outlined. The book steps
-unit by unit and crosses into the next book at the end of one. The counter
+unit by unit, both panes brought to the change, and crosses into the next book
+at the end of one. A step first brings back the change you were at when you
+scrolled it out of sight the way you are stepping, and one with nothing
+further that way shows it again — the last change is never lost to a scroll. The counter
 says where you are.
 
 **Decisions in three sizes.** A unit, in the gutter: ✓ keeps the current

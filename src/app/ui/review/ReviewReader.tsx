@@ -477,6 +477,19 @@ export function ReviewReader(props: {
     if (held === undefined) return;
     const shown = held.shown;
     const at = untrack(place);
+    const active = at === undefined ? undefined : shown[at];
+    // The change you were at, scrolled out of sight the way you are stepping:
+    // the step brings IT back first, both panes, rather than skipping past it.
+    const sight = active === undefined ? undefined : book?.sightOf(active);
+    if (
+      active !== undefined &&
+      at !== undefined &&
+      ((delta < 0 && sight === "above") || (delta > 0 && sight === "below"))
+    ) {
+      book?.showUnit(active);
+      setPlace(at);
+      return;
+    }
     const to = at === undefined ? (delta > 0 ? 0 : shown.length - 1) : at + delta;
     const unit = shown[to];
     if (unit !== undefined) {
@@ -494,6 +507,12 @@ export function ReviewReader(props: {
       setPlace(delta > 0 ? 0 : next.shown.length - 1);
       props.onSelect(next.book.bookId);
       return;
+    }
+    // Nothing further that way: the active change again, so a reader who
+    // scrolled away from the last one can always find it.
+    if (active !== undefined && at !== undefined) {
+      book?.showUnit(active);
+      setPlace(at);
     }
   };
 
