@@ -248,6 +248,23 @@ export function ReviewPanel() {
   const live = (): boolean => LIVE.has(leftId()) || LIVE.has(rightId());
 
   /**
+   * A side read out of a commit whose texts have not come back yet, by its
+   * short name. Compared now it would hold no books, and every book in the
+   * project would read as "only in the editor" until the read landed.
+   */
+  const waitingFor = (): string | undefined => {
+    for (const id of [leftId(), rightId()]) {
+      const pending =
+        (id === "shared" && !shared.recorded().read) ||
+        (id === "recorded" && !version.recorded().read);
+      if (pending) return choiceOf(id)?.shortLabel ?? t("the other side");
+    }
+    return undefined;
+  };
+  /** A comparison is under way; the screen says so rather than "nothing yet". */
+  const [comparing, setComparing] = createSignal(false, { name: "reviewComparing" });
+
+  /**
    * Every open book's revision, as one key.
    *
    * Both effects below mean the same thing by "something moved": the text of
@@ -318,7 +335,7 @@ export function ReviewPanel() {
   const runCompare = (): void => {
     const a = left();
     const b = right();
-    if (a === undefined || b === undefined || a.id === b.id) {
+    if (a === undefined || b === undefined || a.id === b.id || waitingFor() !== undefined) {
       setResult(undefined);
       return;
     }
@@ -327,6 +344,7 @@ export function ReviewPanel() {
       return;
     }
     running = true;
+    setComparing(true);
     // One comparison, one record: what it cost and how big the answer was.
     // The sides by KIND only — a picked folder's label is somebody's path.
     const comparing = services.composition.observability.operation("review.compare", {
@@ -365,6 +383,7 @@ export function ReviewPanel() {
           "review.refused_books": refusedBooks,
         });
         computed = { result: found, skeletons: held };
+        setComparing(false);
         setNote("");
         setResult(found);
         setSelected((held) =>
@@ -387,6 +406,7 @@ export function ReviewPanel() {
         });
         running = false;
         again = false;
+        setComparing(false);
         setNote(describe(cause));
       });
   };
@@ -409,7 +429,7 @@ export function ReviewPanel() {
       // directly) is compared again once it has them.
       sides: `${leftId()}:${rightId()}:${leftPicked()?.id ?? ""}:${rightPicked()?.id ?? ""}:${
         version.recorded().head ?? ""
-      }:${shared.recorded().head ?? ""}`,
+      }:${shared.recorded().head ?? ""}:${version.recorded().read}:${shared.recorded().read}`,
       text: live() ? revisions() : "",
     }),
     ({ sides }) => {
@@ -444,6 +464,7 @@ export function ReviewPanel() {
     setDecisions(new Map());
     originals.clear();
     setReceipt("");
+    setShowChoices(false);
   };
 
   const pick = (side: "left" | "right", id: string): void => {
@@ -496,6 +517,25 @@ export function ReviewPanel() {
    * held there as "No longer a change" — and only then says "No differences."
    */
   const [cardEditing, setCardEditing] = createSignal(false, { name: "reviewCardEditing" });
+
+  /**
+   * The review's work is done: something was decided, nothing is left
+   * undecided, and both sides now read the same. The cards that held the
+   * decisions read "unchanged" by then, and a screen still full of them asks
+   * "did it work?" — so the one thing left, recording, takes their place, and
+   * the cards stay a click away to put something back.
+   */
+  const settled = (): boolean => {
+    const found = result();
+    return (
+      found !== undefined &&
+      found.changedBooks === 0 &&
+      decisions().size > 0 &&
+      !cardEditing() &&
+      undecidedBoth() === 0
+    );
+  };
+  const [showChoices, setShowChoices] = createSignal(false, { name: "reviewShowChoices" });
 
   const current = (): BookComparison | undefined => {
     const found = result();
@@ -854,6 +894,15 @@ export function ReviewPanel() {
   const oneSided = (): readonly BookComparison[] =>
     changed().filter((book) => book.presence !== "both");
 
+  /** The side that holds no book at all, by name: one sentence, not every book. */
+  const emptySide = (): string | undefined => {
+    const books = result()?.books ?? [];
+    if (books.length === 0) return undefined;
+    if (books.every((book) => book.presence === "left")) return rightLabel();
+    if (books.every((book) => book.presence === "right")) return leftLabel();
+    return undefined;
+  };
+
   // --- record a version ----------------------------------------------------
 
   const unsaved = () => unsavedChanges(shell);
@@ -937,6 +986,7 @@ export function ReviewPanel() {
       );
       const done = (): void => {
         setMessage("");
+        startOver();
         version.refresh();
         shared.refresh();
         common.refresh();
@@ -1308,7 +1358,29 @@ export function ReviewPanel() {
             screen shows, answered once. Review keeps no list of its own. */}
         <RecoveryBanner />
 
-        <Show when={result()} fallback={<EmptyState title={t("Nothing to review yet.")} />}>
+        <Show
+          when={result()}
+          fallback={
+            <Show
+              when={waitingFor() ?? (comparing() ? t("both sides") : undefined)}
+              fallback={<EmptyState title={t("Nothing to review yet.")} />}
+            >
+              {(what) => (
+                <div
+                  class="flex items-center justify-center gap-2 py-10 text-small text-on-surface-secondary"
+                  role="status"
+                  data-review-waiting
+                >
+                  <span
+                    aria-hidden="true"
+                    class="size-4 animate-spin rounded-full border-2 border-on-surface-tertiary border-t-transparent"
+                  />
+                  {t("Reading {source}…", { source: what() })}
+                </div>
+              )}
+            </Show>
+          }
+        >
           <Show
             when={changed().length > 0 || cardEditing()}
             fallback={
@@ -1321,32 +1393,84 @@ export function ReviewPanel() {
           >
             <Show when={oneSided().length > 0}>
               <p class="text-smallest text-on-surface-secondary" data-review-one-sided>
-                {t(
-                  "Only one side holds {books}. A project's book set is fixed when it opens, so Review cannot add or remove a book yet.",
-                  { books: oneSided().map(bookLabel).join(", ") },
-                )}
+                <Show
+                  when={emptySide()}
+                  fallback={t(
+                    "Only one side holds {books}. A project's book set is fixed when it opens, so Review cannot add or remove a book yet.",
+                    {
+                      books:
+                        oneSided().length > 6
+                          ? t("{count} books", { count: oneSided().length })
+                          : oneSided().map(bookLabel).join(", "),
+                    },
+                  )}
+                >
+                  {(side) => t("{source} holds no books yet.", { source: side() })}
+                </Show>
               </p>
             </Show>
-            <div class="flex min-h-0 flex-1 flex-col" data-review-units={totals().total}>
-              <ReviewReader
-                books={reviewBooks()}
-                originOf={originOf}
-                decision={effectiveFor}
-                decide={decideAny}
-                decidable={editable()}
-                usfm={markup()}
-                onUsfm={setMarkup}
-                currentLabel={leftLabel()}
-                baselineLabel={rightLabel()}
-                currentShort={leftShort()}
-                baselineShort={rightShort()}
-                selected={selected()}
-                onSelect={setSelected}
-                seat={seatBook}
-                onEdited={(bookId) => shell.changed({ kind: "book.apply", books: [bookId] })}
-                onEditing={setCardEditing}
-              />
-            </div>
+            <Show when={settled() && showChoices()}>
+              <p class="flex items-center gap-2 text-smallest text-on-surface-secondary">
+                <Check size={14} aria-hidden="true" class="text-on-surface-success" />
+                {t("Every change is decided.")}
+                <Button size="sm" variant="tertiary" onClick={() => setShowChoices(false)}>
+                  {t("Hide my choices")}
+                </Button>
+              </p>
+            </Show>
+            <Show
+              when={!settled() || showChoices()}
+              fallback={
+                <EmptyState
+                  icon={<Check size={20} />}
+                  title={t("Every change is decided")}
+                  description={
+                    againstShared()
+                      ? t(
+                          "The editor now reads as you chose. Record a version to finish: it keeps your choices and joins your work with the shared project's.",
+                        )
+                      : unsaved().length > 0
+                        ? t("Both sides now read the same. Record a version to keep it.")
+                        : t("Both sides now read the same. Nothing is left to record.")
+                  }
+                  action={
+                    <div class="flex flex-wrap justify-center gap-2" data-review-settled>
+                      <Show
+                        when={target() !== undefined && (againstShared() || unsaved().length > 0)}
+                      >
+                        <Button variant="primary" icon={<Save />} onClick={openRecord}>
+                          {t("Record a version…")}
+                        </Button>
+                      </Show>
+                      <Button variant="tertiary" onClick={() => setShowChoices(true)}>
+                        {t("Show my choices")}
+                      </Button>
+                    </div>
+                  }
+                />
+              }
+            >
+              <div class="flex min-h-0 flex-1 flex-col" data-review-units={totals().total}>
+                <ReviewReader
+                  books={reviewBooks()}
+                  originOf={originOf}
+                  decision={effectiveFor}
+                  decide={decideAny}
+                  decidable={editable()}
+                  usfm={markup()}
+                  onUsfm={setMarkup}
+                  currentLabel={leftLabel()}
+                  baselineLabel={rightLabel()}
+                  currentShort={leftShort()}
+                  baselineShort={rightShort()}
+                  selected={selected()}
+                  onSelect={setSelected}
+                  seat={seatBook}
+                  onEdited={(bookId) => shell.changed({ kind: "book.apply", books: [bookId] })}
+                  onEditing={setCardEditing}
+                />
+              </div>
+            </Show>
           </Show>
         </Show>
 
