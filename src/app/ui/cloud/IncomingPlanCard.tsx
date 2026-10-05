@@ -73,6 +73,15 @@ function BookRow(props: { readonly book: IncomingBook }) {
   );
 }
 
+/** Every arriving book, one row each: what changed there, and whether it is safe. */
+export function PlanBooks(props: { readonly plan: IncomingPlan }) {
+  return (
+    <ul class="rounded-md border border-surface-border" data-plan-books={props.plan.books.length}>
+      <For each={props.plan.books}>{(book) => <BookRow book={book} />}</For>
+    </ul>
+  );
+}
+
 export function IncomingPlanCard(props: { readonly plan: IncomingPlan }) {
   return (
     <Card class="space-y-3" data-cloud-card="plan">
@@ -90,12 +99,7 @@ export function IncomingPlanCard(props: { readonly plan: IncomingPlan }) {
       </p>
 
       <Show when={props.plan.books.length > 0}>
-        <ul
-          class="rounded-md border border-surface-border"
-          data-plan-books={props.plan.books.length}
-        >
-          <For each={props.plan.books}>{(book) => <BookRow book={book} />}</For>
-        </ul>
+        <PlanBooks plan={props.plan} />
       </Show>
 
       <Show when={!props.plan.clean}>

@@ -18,7 +18,7 @@ import type { Clock, Sync } from "#core/sync";
 
 import { t } from "../../i18n";
 import { ago, exact } from "../panels/format";
-import { Badge, Card, PanelHeader } from "../primitives";
+import { Badge, Card, cx, PanelHeader } from "../primitives";
 import { plural, stateCopy } from "./copy";
 
 /** The repository, as a person reads it: `owner/name`, not a clone URL. */
@@ -68,14 +68,48 @@ function ClockLine(props: {
   );
 }
 
+/** The two clocks, side by side: this device's and the shared project's. */
+export function SyncClocks(props: { readonly sync: Sync; readonly class?: string }) {
+  return (
+    <div class={cx("flex flex-wrap gap-6", props.class)}>
+      <ClockLine
+        test="local"
+        label={t("This device")}
+        clock={props.sync.clocks.local}
+        unshared={
+          props.sync.clocks.local.unshared === 0
+            ? t("nothing waiting to be sent")
+            : plural(
+                props.sync.clocks.local.unshared,
+                "{count} version the shared project does not have",
+                "{count} versions the shared project does not have",
+              )
+        }
+      />
+      <ClockLine
+        test="shared"
+        label={t("Shared project")}
+        clock={props.sync.clocks.shared}
+        unshared={
+          props.sync.clocks.shared.unshared === 0
+            ? t("nothing waiting to be received")
+            : plural(
+                props.sync.clocks.shared.unshared,
+                "{count} version this device does not have",
+                "{count} versions this device does not have",
+              )
+        }
+      />
+    </div>
+  );
+}
+
 export function ProjectCard(props: { readonly sync: Sync; readonly projectName: string }) {
   const copy = () =>
     stateCopy(props.sync.state, {
       sendRefused: props.sync.reading.sendRefused,
       signedIn: props.sync.reading.signedIn,
     });
-  const local = () => props.sync.clocks.local;
-  const shared = () => props.sync.clocks.shared;
 
   return (
     <Card class="space-y-4" data-cloud-card="project" data-sync-state={props.sync.state}>
@@ -95,36 +129,7 @@ export function ProjectCard(props: { readonly sync: Sync; readonly projectName: 
         <p class="mt-1 text-small text-on-surface-secondary">{copy().detail}</p>
       </div>
 
-      <div class="flex flex-wrap gap-6 border-t border-surface-border pt-3">
-        <ClockLine
-          test="local"
-          label={t("This device")}
-          clock={local()}
-          unshared={
-            local().unshared === 0
-              ? t("nothing waiting to be sent")
-              : plural(
-                  local().unshared,
-                  "{count} version the shared project does not have",
-                  "{count} versions the shared project does not have",
-                )
-          }
-        />
-        <ClockLine
-          test="shared"
-          label={t("Shared project")}
-          clock={shared()}
-          unshared={
-            shared().unshared === 0
-              ? t("nothing waiting to be received")
-              : plural(
-                  shared().unshared,
-                  "{count} version this device does not have",
-                  "{count} versions this device does not have",
-                )
-          }
-        />
-      </div>
+      <SyncClocks sync={props.sync} class="border-t border-surface-border pt-3" />
 
       <Show when={props.sync.reading.uncommitted > 0}>
         <p class="text-small text-on-surface-tertiary" data-cloud="uncommitted">

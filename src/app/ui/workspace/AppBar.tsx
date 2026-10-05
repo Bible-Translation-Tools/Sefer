@@ -37,6 +37,7 @@ import { createSignal, For } from "solid-js";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
+import { SyncButton } from "../cloud/SyncButton";
 import { ImportHub } from "../landing/ImportHub";
 import { IconButton, Menu, MenuItem, SegmentedControl } from "../primitives";
 
@@ -242,6 +243,9 @@ export function AppBar() {
       />
 
       <div class="flex shrink-0 items-center gap-2">
+        {/* Where the open project stands with the shared project; quiet
+            until something is waiting on a person. */}
+        <SyncButton />
         <MoreMenu />
         {/* The import menu from anywhere; a finished import lands on the
             projects page, where the new project is. */}
