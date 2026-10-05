@@ -79,6 +79,7 @@ import { makeShellStores, type SaveState } from "./shellStores";
 import { sousValues } from "./sousSettings";
 import { checkForChanges } from "./syncActions";
 import { syncPreferences } from "./syncSettings";
+import { syncWatch } from "./syncWatch";
 import { applyEditorFontSize } from "./ui/theme";
 import * as Workflows from "./workflows/references";
 
@@ -947,8 +948,11 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       if (Option.isSome(recorded)) noteRenamed(root, recorded.value);
     });
     // "Check for changes on open": in the background, never before the
-    // editor — it only asks and fetches, and never moves a file.
+    // editor — it only asks and fetches, and never moves a file. Without it,
+    // the reading is still taken from what is already here, so the app bar's
+    // cloud says where the project stood when it was last checked.
     if (syncPreferences(services.settings, root).checkOnOpen) void checkForChanges(services, ready);
+    else void syncWatch.refresh(services, ready).catch(() => undefined);
     // A seat swap replaces the Book object, so every row derived from one has
     // to be re-taken. One subscription for the whole project, not one per
     // book, and it is the Project's own announcement rather than a guess.

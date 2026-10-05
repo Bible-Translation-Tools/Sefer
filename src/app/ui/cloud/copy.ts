@@ -32,6 +32,7 @@ import type {
 import { FRONT_MATTER } from "#core/sync";
 
 import { t, type Params } from "../../i18n";
+import type { SendOutcome } from "../../syncActions";
 import type { BadgeTone } from "../primitives";
 import { bookName } from "../workspace/books";
 
@@ -412,5 +413,77 @@ export const combineTrouble = (state: CombineState): string => {
       return t(
         "This device is part-way through a combine and could not be put back. Your versions are all still recorded — do not edit until someone has looked at it.",
       );
+  }
+};
+
+/**
+ * How a send ended, as the last line of a Record: the version is kept here
+ * either way, and the line says that first whenever the send did not get
+ * through. `state` is where the project stands afterwards, when it is known —
+ * a refused send has already been followed by a check, so "behind" and
+ * "diverged" can be told apart.
+ */
+export const sendOutcomeCopy = (
+  outcome: SendOutcome,
+  state?: SyncState,
+): {
+  readonly tone: "success" | "warning" | "muted";
+  readonly title: string;
+  readonly detail: string;
+} => {
+  switch (outcome.kind) {
+    case "sent":
+      return {
+        tone: "success",
+        title: t("Sent to the shared project"),
+        detail: t("Your team gets it the next time they check for changes."),
+      };
+    case "detached":
+      return {
+        tone: "muted",
+        title: t("Kept on this device"),
+        detail: t(
+          "This project is not connected to a shared project, so there is nowhere to send it.",
+        ),
+      };
+    case "held":
+      return {
+        tone: "muted",
+        title: t("Kept on this device; not sent"),
+        detail: t("This project does not send on save. Send it when you are ready."),
+      };
+    case "refused":
+      switch (outcome.reason) {
+        case "Rejected":
+          return {
+            tone: "warning",
+            title: t("Saved here. Not sent: the shared project has changed"),
+            detail:
+              state === "behind" || state === "diverged"
+                ? t(
+                    "It has versions you have not reviewed yet. Your work is safe on this device — compare the changes, choose, and record again to send.",
+                  )
+                : t(
+                    "The shared project would not take it as it is. Your work is safe on this device — check for changes and compare them.",
+                  ),
+          };
+        case "Network":
+        case "Unavailable":
+          return {
+            tone: "warning",
+            title: t("Saved here. Not sent: the shared project could not be reached"),
+            detail: t(
+              "You may be offline. Your work is safe on this device, and Sefer sends it the next time you record a version or press Send.",
+            ),
+          };
+        case "Unauthorized":
+          return {
+            tone: "warning",
+            title: t("Saved here. Not sent: sign in to send"),
+            detail: t(
+              "Your sign-in has expired, or this account may not write to the shared project. Your work is safe on this device.",
+            ),
+          };
+      }
   }
 };

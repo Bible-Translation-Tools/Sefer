@@ -23,7 +23,7 @@ import CloudIcon from "lucide-solid/icons/cloud";
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 
 import { Git } from "#core/git/git";
-import { Observability, type Attrs, type Operation, type Verdict } from "#core/observability";
+import { Observability, type Attrs, type Verdict } from "#core/observability";
 import { Remote, remoteVerdict } from "#core/remote/remote";
 import {
   combine,
@@ -41,12 +41,12 @@ import {
 
 import { authorOrApp } from "../../author";
 import { describe, remoteReasonOf } from "../../describe";
-import { rememberSync } from "../../diagnostics";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import type { Domain } from "../../services";
 import { destination } from "../../syncActions";
 import { syncStatus } from "../../syncStatus";
+import { syncWatch } from "../../syncWatch";
 import { Button, Card, Dialog, EmptyState, PanelHeader, toasts } from "../primitives";
 import { createAccount } from "./account";
 import { AccountCard } from "./AccountCard";
@@ -56,7 +56,7 @@ import { DevStateSwitcher } from "./DevStateSwitcher";
 import { fixtureFacts, fixtureReplay, fixtureStateRequested } from "./fixture";
 import { IncomingPlanCard } from "./IncomingPlanCard";
 import { ProjectCard } from "./ProjectCard";
-import { readSync, type ReadSyncOptions, type SyncFacts } from "./reading";
+import type { ReadSyncOptions, SyncFacts } from "./reading";
 import { SharedProjectCard, type SharedProjectActions } from "./SharedProjectCard";
 import { SuggestionsCard } from "./SuggestionsCard";
 import { SyncSettingsCard } from "./SyncSettingsCard";
@@ -86,10 +86,14 @@ export function CloudScreen() {
   const account = createAccount(shell);
   const network = syncStatus;
 
-  const [facts, setFacts] = createSignal<SyncFacts | undefined>(undefined, { name: "syncFacts" });
-  const [fetchedAt, setFetchedAt] = createSignal<number | undefined>(undefined, {
-    name: "lastFetchedAt",
-  });
+  // The reading is the application's (`syncWatch`), not this screen's: the
+  // app bar and Review show the same one, and a check or a send anywhere
+  // updates all of them.
+  const facts = (): SyncFacts | undefined => syncWatch.facts(shell.project()?.root);
+  const fetchedAt = (): number | undefined => {
+    const root = shell.project()?.root;
+    return root === undefined ? undefined : syncWatch.fetchedAt(root);
+  };
   const [busy, setBusy] = createSignal(false, { name: "syncBusy" });
   /** The shared-project card's own actions, once it is showing. */
   let shared: SharedProjectActions | undefined;
@@ -184,78 +188,10 @@ export function CloudScreen() {
     };
   };
 
-  /**
-   * One pass over the repository, as two operations.
-   *
-   * `sync.survey` is the reading and ends with the state it derived, which
-   * is also handed to `rememberSync` for a diagnostics export — and `sync.plan` is the incoming plan, opened only when the
-   * device is behind. The plan FOLLOWS the survey rather than running inside
-   * it: the survey has already decided the state and ended by the time the
-   * plan starts, so it is a cause and not a parent.
-   *
-   * Counts and flags only. Never the origin URL, the account or a commit.
-   */
+  /** One pass over the repository, published for every surface (`syncWatch.survey`). */
   const load = (options: ReadSyncOptions | undefined): void => {
     if (options === undefined) return;
-    const observability = services.composition.observability;
-    const surveying = observability.operation("sync.survey", {
-      "sync.online": options.online,
-      ...(options.fetchedAt === undefined ? {} : { "sync.fetched_at": options.fetchedAt }),
-    });
-    let planning: Operation | undefined;
-    void services
-      .run(Effect.provideService(readSync(options), Observability, surveying))
-      .then(async (survey): Promise<SyncFacts> => {
-        const { reading } = survey;
-        const state = sync(reading).state;
-        // What a diagnostics export reports as "last observed", kept with the
-        // project it was about.
-        rememberSync(options.root, {
-          state,
-          ahead: reading.ahead.length,
-          behind: reading.behind.length,
-          observedAt: Date.now(),
-        });
-        // `offline` is the device, or the last transfer, saying the network
-        // did not answer: kept and exported, but not the alarm.
-        surveying.end(state === "offline" ? "unavailable" : "passed", {
-          "sync.state": state,
-          "sync.ahead": reading.ahead.length,
-          "sync.behind": reading.behind.length,
-          "sync.remote": reading.origin !== undefined,
-          "sync.signed_in": reading.signedIn,
-          "sync.online": reading.online,
-          "sync.uncommitted": reading.uncommitted,
-          "sync.merge": reading.mergeInProgress,
-          ...(reading.fetchedAt === undefined ? {} : { "sync.fetched_at": reading.fetchedAt }),
-          ...(reading.lastFailure === undefined ? {} : { "sync.reason": reading.lastFailure }),
-        });
-        if (survey.plan === undefined) return { reading, plan: emptyPlan };
-        planning = observability.operation(
-          "sync.plan",
-          { "sync.behind": reading.behind.length },
-          { cause: surveying.trace },
-        );
-        const plan = await services.run(
-          Effect.provideService(survey.plan, Observability, planning),
-        );
-        planning.end("passed", {
-          "sync.books": plan.books.length,
-          "sync.contested": plan.contested.length,
-          "sync.chapters": plan.chapterCount,
-          "sync.overlap": plan.overlapCount,
-          "sync.clean": plan.clean,
-        });
-        return { reading, plan };
-      })
-      .then(setFacts)
-      .catch((cause: unknown) => {
-        // Both programs are typed never-failing, so reaching here is a defect
-        // in our code: the alarm. `end` is a no-op on whichever already ended.
-        surveying.end("failed");
-        planning?.end("failed");
-        setProblem(describe(cause));
-      });
+    syncWatch.survey(services, options).catch((cause: unknown) => setProblem(describe(cause)));
   };
 
   // Solid 2 has no `onMount`; an effect whose compute gathers the reading's
@@ -323,7 +259,7 @@ export function CloudScreen() {
       .then(() => {
         finish("passed", { "sync.action": action });
         network.noteSuccess();
-        setFetchedAt(Date.now());
+        syncWatch.noteFetched(project.root);
       })
       .catch((cause: unknown) => {
         const reason = remoteReasonOf(cause);
