@@ -1310,7 +1310,7 @@ export function ReviewPanel() {
         return;
       case "offer":
         setSendLine("sending");
-        void suggestMyChanges(services, project, t("Suggested changes"))
+        void suggestMyChanges(services, project)
           .then(() =>
             setSendLine({
               tone: "success",

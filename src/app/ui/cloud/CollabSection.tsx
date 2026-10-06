@@ -50,7 +50,7 @@ export function CollabSection(props: { readonly onLeave: () => void }) {
   const offer = (): void =>
     press(async (project) => {
       try {
-        await suggestMyChanges(services, project, t("Suggested changes"));
+        await suggestMyChanges(services, project);
         toasts.success({
           title: t("Your changes are offered"),
           message: t(

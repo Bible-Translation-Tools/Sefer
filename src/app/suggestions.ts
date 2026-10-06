@@ -36,6 +36,7 @@ import { Suggestions, type Suggestion } from "#core/remote/suggestions";
 import { notIn, trackingRef } from "#core/sync";
 
 import { resolveEndpoints } from "./endpoints";
+import { t } from "./i18n";
 import type { Services } from "./services";
 import { chosenMode, setChosenMode, type CollabMode } from "./syncSettings";
 
@@ -299,11 +300,17 @@ export const suggestTo = (
  * suggestion per person, which later sends to the copy keep up to date by
  * themselves. Sends first, so the suggestion holds this device's newest work.
  */
-export const suggestMyChanges = (
-  services: Services,
-  project: Project,
-  title: string,
-): Promise<Suggestion> =>
+/**
+ * A new suggestion's title: the day it was offered, in the reader's own date
+ * format. Not a summary — nobody is asked to write one yet — but enough that
+ * a list of them is not a column of identical "Suggested changes".
+ */
+const suggestionTitle = (now = new Date()): string =>
+  t("Changes suggested on {date}", {
+    date: now.toLocaleDateString(undefined, { dateStyle: "long" }),
+  });
+
+export const suggestMyChanges = (services: Services, project: Project): Promise<Suggestion> =>
   services.run(
     Effect.gen(function* () {
       const at = yield* where(project);
@@ -316,7 +323,7 @@ export const suggestMyChanges = (
         from: at.me,
         branch: at.branch,
         base: at.branch,
-        title,
+        title: suggestionTitle(),
         body: "Suggested from Sefer.",
       });
     }),

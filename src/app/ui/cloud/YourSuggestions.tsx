@@ -95,7 +95,7 @@ export function YourSuggestions(props: { readonly project: Project }) {
             loading={busy()}
             onClick={() =>
               act(
-                suggestMyChanges(services, props.project, t("Suggested changes")),
+                suggestMyChanges(services, props.project),
                 t("Your changes are offered"),
                 props.project,
               )
