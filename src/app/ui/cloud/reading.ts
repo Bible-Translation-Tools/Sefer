@@ -150,7 +150,22 @@ export const readSync = (
     // In the copy mode, what is waiting to be SENT is what the person's copy
     // lacks — a send goes there; what is waiting to be RECEIVED is still the
     // shared project's. A copy not read yet was made from the shared project.
-    const copyAttached = Option.isSome(yield* orEmpty(remote.urlOf(repo, "copy"), Option.none()));
+    // Only the signed-in account's own copy counts (`copyAttached` in
+    // suggestions.ts): one left by another account on this device is not theirs.
+    const copyUrl = Option.getOrUndefined(
+      yield* orEmpty(remote.urlOf(repo, "copy"), Option.none()),
+    );
+    const me =
+      options.host === null
+        ? undefined
+        : Option.getOrUndefined(yield* orEmpty(gitea.session(options.host), Option.none()))
+            ?.username;
+    const copyOwner = copyUrl
+      ?.replace(/\.git$/u, "")
+      .split("/")
+      .at(-2);
+    const copyAttached =
+      me !== undefined && copyOwner !== undefined && me.toLowerCase() === copyOwner.toLowerCase();
     const inCopyMode = (options.chosenMode ?? (copyAttached ? "copy" : "shared")) === "copy";
     const copied = copyRef(branch ?? DEFAULT_BRANCH);
     const copyKnown =

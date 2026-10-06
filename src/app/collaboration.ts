@@ -26,6 +26,7 @@ import {
   modeOf,
   mySuggestion,
   openSuggestions,
+  sendingToName,
   type MySuggestion,
 } from "./suggestions";
 import type { CollabMode } from "./syncSettings";
@@ -42,6 +43,8 @@ interface CollabFacts {
   readonly copyAhead: boolean;
   /** This device has work the shared project lacks: what an offer would carry. */
   readonly offerable: boolean;
+  /** Where a send goes, `owner/name`: the shared project, or the person's copy. */
+  readonly sendsTo: string | undefined;
 }
 
 const [held, setHeld] = createSignal<
@@ -62,11 +65,12 @@ export const collaboration = {
     const mine = ++asked;
     const mode = await modeOf(services, project);
     const canWrite = await canWriteShared(services, project);
-    const [latest, waiting, copyAhead, offerable] = await Promise.all([
+    const [latest, waiting, copyAhead, offerable, sendsTo] = await Promise.all([
       mode === "copy" ? mySuggestion(services, project) : Promise.resolve(undefined),
       canWrite === true ? openSuggestions(services, project) : Promise.resolve([]),
       mode === "copy" ? copyHasMore(services, project) : Promise.resolve(false),
       mode === "copy" ? aheadOfShared(services, project) : Promise.resolve(false),
+      sendingToName(services, project),
     ]);
     if (mine !== asked) return;
     setHeld({
@@ -78,6 +82,7 @@ export const collaboration = {
         waiting: waiting.length,
         copyAhead,
         offerable,
+        sendsTo,
       },
     });
   },

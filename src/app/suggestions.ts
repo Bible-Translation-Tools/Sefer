@@ -100,11 +100,25 @@ const where = (project: Project) =>
   });
 
 /** Is a copy attached to this project? */
+/**
+ * Is a copy attached to this project that belongs to whoever is signed in?
+ *
+ * The copy remote is kept on this device, not with an account: one account's
+ * copy, left attached when another signs in, is not the second person's, and
+ * sending there would put their work in someone else's copy (or succeed, for
+ * an admin). So a copy counts only when its owner is the signed-in account;
+ * otherwise the person makes or finds their own, which re-points the remote.
+ */
 const copyAttached = (project: Project) =>
   Effect.gen(function* () {
     const git = yield* Git;
     const remote = yield* Remote;
-    return Option.isSome(yield* remote.urlOf(yield* git.open(project.root), COPY));
+    const url = Option.getOrUndefined(yield* remote.urlOf(yield* git.open(project.root), COPY));
+    const owner = url === undefined ? undefined : ownerAndName(url)?.owner;
+    if (owner === undefined) return false;
+    const host = resolveEndpoints(yield* Settings).contentHost;
+    const session = host === null ? Option.none() : yield* (yield* Gitea).session(host);
+    return Option.isSome(session) && session.value.username.toLowerCase() === owner.toLowerCase();
   });
 
 /**
@@ -504,3 +518,26 @@ export const aheadOfShared = (services: Services, project: Project): Promise<boo
       () => false,
     ),
   );
+
+/**
+ * Where a send goes, as a person reads it — `owner/name` — or `undefined`
+ * when this project sends nowhere.
+ */
+export const sendingToName = async (
+  services: Services,
+  project: Project,
+): Promise<string | undefined> => {
+  const name = await sendingTo(services, project);
+  return services.run(
+    Effect.orElseSucceed(
+      Effect.gen(function* () {
+        const git = yield* Git;
+        const remote = yield* Remote;
+        const url = Option.getOrUndefined(yield* remote.urlOf(yield* git.open(project.root), name));
+        const found = url === undefined ? undefined : ownerAndName(url);
+        return found === undefined ? undefined : `${found.owner}/${found.name}`;
+      }),
+      () => undefined,
+    ),
+  );
+};

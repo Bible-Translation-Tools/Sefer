@@ -10,6 +10,7 @@
  */
 
 import type { JSX } from "@solidjs/web";
+import Lock from "lucide-solid/icons/lock";
 import { Show, createSignal } from "solid-js";
 
 import { collaboration } from "../../collaboration";
@@ -18,7 +19,7 @@ import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { suggestTo } from "../../suggestions";
 import { syncWatch } from "../../syncWatch";
-import { Button, Card, Input, PanelHeader, toasts } from "../primitives";
+import { Button, Card, cx, Input, PanelHeader, toasts } from "../primitives";
 import { chooseOwnCopy, chooseShared } from "./collab";
 
 export function CollabModeCard() {
@@ -109,8 +110,14 @@ export function CollabModeCard() {
     extra?: () => JSX.Element,
   ) => (
     <label
-      class="flex items-start gap-3 rounded-md border border-surface-border p-3"
+      class={cx(
+        "flex items-start gap-3 rounded-md border p-3",
+        blocked === undefined
+          ? "border-surface-border"
+          : "cursor-not-allowed border-dashed border-surface-border bg-surface-secondary",
+      )}
       data-collab-mode={mode}
+      data-blocked={blocked === undefined ? undefined : "true"}
     >
       <input
         type="radio"
@@ -126,10 +133,20 @@ export function CollabModeCard() {
         }}
       />
       <span class="space-y-0.5">
-        <span class="block text-small font-semibold">{title}</span>
-        <span class="block text-smallest text-on-surface-secondary">{detail}</span>
+        {/* A way of working this person cannot choose reads as unavailable at a
+            glance — dimmed, dashed, and the reason beside a lock — not as the
+            same card with one grey line at the bottom. */}
+        <span class={cx("block space-y-0.5", blocked !== undefined && "opacity-60")}>
+          <span class="block text-small font-semibold">{title}</span>
+          <span class="block text-smallest text-on-surface-secondary">{detail}</span>
+        </span>
         <Show when={blocked}>
-          {(why) => <span class="block text-smallest text-on-surface-tertiary">{why()}</span>}
+          {(why) => (
+            <span class="flex items-center gap-1.5 pt-1 text-small font-medium text-on-surface-warning">
+              <Lock size={14} aria-hidden="true" />
+              {why()}
+            </span>
+          )}
         </Show>
         {extra?.()}
       </span>

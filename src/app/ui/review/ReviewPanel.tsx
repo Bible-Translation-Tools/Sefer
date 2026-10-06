@@ -199,6 +199,19 @@ export function ReviewPanel() {
   const [typedName, setTypedName] = createSignal("", { name: "reviewAuthorName" });
   /** Whether recording will also send, so the dialog can say so before the press. */
   const [sends, setSends] = createSignal(false, { name: "reviewSends" });
+  /** Where Save's send goes, named — the shared project, or the person's own copy. */
+  const sendsLine = (): string => {
+    const facts = collaboration.facts(shell.project()?.root);
+    const copy = facts?.mode === "copy";
+    const name = facts?.sendsTo;
+    if (name === undefined)
+      return copy
+        ? t("This also sends your changes to your copy.")
+        : t("This also sends your changes to the shared project.");
+    return copy
+      ? t("This also sends your changes to your copy, {name}.", { name })
+      : t("This also sends your changes to the shared project, {name}.", { name });
+  };
   const openRecord = (): void => {
     setRecordOpen(true);
     void services.run(personAuthor()).then((found) => setAuthor(Option.getOrUndefined(found)));
@@ -1725,9 +1738,7 @@ export function ReviewPanel() {
             </p>
             <Show when={sends()}>
               <p class="pt-3 text-small text-on-surface-secondary" data-review-sends>
-                {collaboration.facts(shell.project()?.root)?.mode === "copy"
-                  ? t("This also sends your changes to your copy.")
-                  : t("This also sends your changes to the shared project.")}
+                {sendsLine()}
               </p>
             </Show>
           </Show>
