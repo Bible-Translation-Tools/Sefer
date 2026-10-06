@@ -367,8 +367,11 @@ makes the fork, or finds the one made on another device; a project cloned from t
 is re-rooted (its parent becomes `origin`); a shared project that is the person's own and copies
 nothing asks which project it should suggest to, and refuses one that shares no history with it. A
 suggestion brought in by Review is always sent to the shared project, whatever the reviewer's own
-mode. Still to come: reading a person's copy from their other device through Review, and a
-Suggestions tab beside Review and History.
+mode. In the copy mode the check also reads the person's copy into `refs/sefer/copy`
+(`fetchCopy`); when it holds work this device lacks — sent from another of their devices — the
+popover offers "See the changes", Review against it (`?against=shared&copy=1`, labelled "Your
+copy"), and Record catches this device up and sends back to the copy. Nothing from the copy arrives
+without that review. Still to come: a Suggestions tab beside Review and History.
 
 ### One reading for every surface
 

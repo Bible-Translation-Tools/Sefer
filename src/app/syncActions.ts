@@ -37,7 +37,7 @@ import { collaboration } from "./collaboration";
 import { remoteReasonOf } from "./describe";
 import { recordVersion, type RecordOutcome } from "./recordVersion";
 import type { Services } from "./services";
-import { sendingTo } from "./suggestions";
+import { fetchCopy, modeOf, sendingTo } from "./suggestions";
 import { syncPreferences } from "./syncSettings";
 import { syncStatus } from "./syncStatus";
 import { syncWatch } from "./syncWatch";
@@ -101,9 +101,13 @@ export const checkForChanges = async (services: Services, project: Project): Pro
     ...(reason === undefined ? {} : { "sync.reason": reason }),
   });
   await syncWatch.refresh(services, project).catch(() => undefined);
-  // The network's half, on the same schedule: can this account write, how its
-  // suggestion stands, and how many wait for an editor.
-  if (verdict === "passed") void collaboration.refresh(services, project);
+  // The network's half, on the same schedule: in the copy mode, what the
+  // person's other devices sent to their copy; then can this account write,
+  // how its suggestion stands, and how many wait for an editor.
+  if (verdict === "passed") {
+    if ((await modeOf(services, project)) === "copy") await fetchCopy(services, project);
+    void collaboration.refresh(services, project);
+  }
   if (result !== "fetched" || !syncPreferences(services.settings, root).skipReviewIncoming) return;
   // Received without Review only when the policy lets every book through; a
   // book that needs a person makes the receive refuse, and /cloud shows it.

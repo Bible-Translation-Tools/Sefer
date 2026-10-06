@@ -42,6 +42,13 @@ import { chosenMode, setChosenMode, type CollabMode } from "./syncSettings";
 /** The remote a translator's own copy is attached as. */
 const COPY = "copy";
 
+/**
+ * The local ref the person's copy is read into, for Review to read: one ref,
+ * outside `refs/remotes/origin/`, which the Web's pruning fetch clears of
+ * every ref it did not write.
+ */
+export const COPY_REF = "refs/sefer/copy";
+
 /** The local ref a suggestion's head is fetched to, for Review to read. */
 export const suggestionRef = (number: number): string => `refs/sefer/pull/${number}`;
 
@@ -419,5 +426,44 @@ export const mySuggestion = (
           : ({ kind: "declined", suggestion, note } as const);
       }),
       () => undefined,
+    ),
+  );
+
+/**
+ * Reads the person's copy, for the check in the copy mode: what another of
+ * their devices sent there arrives here as `COPY_REF`, not in the work tree.
+ * Nothing when no copy is attached or it has no branch yet.
+ */
+export const fetchCopy = (services: Services, project: Project): Promise<void> =>
+  services.run(
+    Effect.orElseSucceed(
+      Effect.gen(function* () {
+        if (!(yield* copyAttached(project))) return;
+        const git = yield* Git;
+        const remote = yield* Remote;
+        const repo = yield* git.open(project.root);
+        const branch = Option.getOrUndefined(yield* git.branch(repo));
+        if (branch === undefined) return;
+        yield* remote.fetchRef(repo, `refs/heads/${branch}`, COPY_REF, COPY);
+      }),
+      () => undefined,
+    ),
+  );
+
+/** Has the person's copy work this device does not — from another of their devices? */
+export const copyHasMore = (services: Services, project: Project): Promise<boolean> =>
+  services.run(
+    Effect.orElseSucceed(
+      Effect.gen(function* () {
+        const git = yield* Git;
+        const repo = yield* git.open(project.root);
+        const copy = yield* git.resolve(repo, COPY_REF);
+        const head = yield* git.resolve(repo, "HEAD");
+        if (Option.isNone(copy) || Option.isNone(head)) return false;
+        if (copy.value === head.value) return false;
+        const base = yield* git.mergeBase(repo, copy.value, head.value);
+        return !(Option.isSome(base) && base.value === copy.value);
+      }),
+      () => false,
     ),
   );

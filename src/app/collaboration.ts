@@ -21,6 +21,7 @@ import type { Project } from "#core/project/project";
 import type { Services } from "./services";
 import {
   canWriteShared,
+  copyHasMore,
   modeOf,
   mySuggestion,
   openSuggestions,
@@ -36,6 +37,8 @@ interface CollabFacts {
   readonly mine: MySuggestion | undefined;
   /** Suggestions waiting for an editor, for someone who can write. */
   readonly waiting: number;
+  /** The copy has work this device lacks — sent from another of the person's devices. */
+  readonly copyAhead: boolean;
 }
 
 const [held, setHeld] = createSignal<
@@ -56,9 +59,10 @@ export const collaboration = {
     const mine = ++asked;
     const mode = await modeOf(services, project);
     const canWrite = await canWriteShared(services, project);
-    const [latest, waiting] = await Promise.all([
+    const [latest, waiting, copyAhead] = await Promise.all([
       mode === "copy" ? mySuggestion(services, project) : Promise.resolve(undefined),
       canWrite === true ? openSuggestions(services, project) : Promise.resolve([]),
+      mode === "copy" ? copyHasMore(services, project) : Promise.resolve(false),
     ]);
     if (mine !== asked) return;
     setHeld({
@@ -68,6 +72,7 @@ export const collaboration = {
         canWrite,
         mine: latest,
         waiting: waiting.length,
+        copyAhead,
       },
     });
   },

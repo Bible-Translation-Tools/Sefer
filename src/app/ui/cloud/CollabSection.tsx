@@ -143,6 +143,27 @@ export function CollabSection(props: { readonly onLeave: () => void }) {
 
             <Match when={held().mode === "copy"}>
               <p class="text-small font-semibold">{t("You're working in your own copy.")}</p>
+              <Show when={held().copyAhead}>
+                <div class="flex items-center gap-2" data-sync-copy="ahead">
+                  <p class="min-w-0 flex-1 text-small text-on-surface-secondary">
+                    {t("Your copy has work from another of your devices.")}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => {
+                      props.onLeave();
+                      void navigate({
+                        to: "/project/$slug/review",
+                        params: { slug: shell.slug() },
+                        search: { against: "shared", copy: 1 },
+                      });
+                    }}
+                  >
+                    {t("See the changes")}
+                  </Button>
+                </div>
+              </Show>
               <Switch
                 fallback={
                   <p class="text-small text-on-surface-secondary">

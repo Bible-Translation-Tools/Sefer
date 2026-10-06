@@ -69,7 +69,7 @@ import { describe, reasonOf } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { recordVersion } from "../../recordVersion";
-import { acceptSuggestion, suggestionRef } from "../../suggestions";
+import { acceptSuggestion, COPY_REF, suggestionRef } from "../../suggestions";
 import { sendAfterSave, sendNow, settleWithShared, type SendOutcome } from "../../syncActions";
 import { setAuthorName, syncPreferences } from "../../syncSettings";
 import { syncWatch } from "../../syncWatch";
@@ -129,15 +129,19 @@ export function ReviewPanel() {
   const search = useSearch({ strict: false }) as () => {
     readonly against?: unknown;
     readonly pull?: unknown;
+    readonly copy?: unknown;
   };
   /** A suggestion under review: its head, fetched to a local ref, is "theirs". */
   const pull = (): number | undefined => {
     const held = untrack(() => search().pull);
     return typeof held === "number" ? held : undefined;
   };
+  /** The person's own copy, as another of their devices left it, is "theirs". */
+  const fromCopy = (): boolean => untrack(() => search().copy) === 1;
   const theirsRef = (): string | undefined => {
     const number = pull();
-    return number === undefined ? undefined : suggestionRef(number);
+    if (number !== undefined) return suggestionRef(number);
+    return fromCopy() ? COPY_REF : undefined;
   };
   /** Is one side the shared project? Then recording also takes what it changed. */
   const againstShared = (): boolean => rightId() === "shared" || leftId() === "shared";
@@ -222,7 +226,8 @@ export function ReviewPanel() {
       baselineOf: (book) => services.save.baseline(book),
       recorded: version.recorded(),
       shared: shared.recorded(),
-      sharedLabel: pull() === undefined ? undefined : t("The suggested changes"),
+      sharedLabel:
+        pull() !== undefined ? t("The suggested changes") : fromCopy() ? t("Your copy") : undefined,
     });
 
   const choiceOf = (id: string): SourceChoice | undefined =>
@@ -985,15 +990,19 @@ export function ReviewPanel() {
       const settled = new Set(reviewBooks().map((book) => book.bookId));
       // Reviewed against the shared project: what was decided stays, and
       // everything else it changed arrives with it — in one move.
-      // A suggestion is brought into the shared project itself; anything else
-      // settles against it and sends wherever this project sends.
       const outcome = await settleWithShared(
         services,
         project,
         by,
         staticMessage,
         settled,
-        theirsRef() === undefined ? {} : { theirs: theirsRef(), sendTo: "origin" },
+        // A suggestion is brought into the shared project itself; the person's
+        // copy is caught up with and sent back to, as any send in their mode.
+        pull() !== undefined
+          ? { theirs: theirsRef(), sendTo: "origin" }
+          : fromCopy()
+            ? { theirs: COPY_REF }
+            : {},
       );
       // A suggestion brought in and sent is marked taken on the shared
       // project, so its author is not left waiting. Not when it stayed here.
