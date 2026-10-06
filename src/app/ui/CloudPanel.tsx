@@ -31,6 +31,7 @@ import {
   SharedProjectCard,
   SyncSettingsCard,
 } from "./cloud";
+import { WriterFollowCard } from "./cloud/WriterFollowCard";
 import { PanelHeader } from "./primitives";
 
 /**
@@ -51,6 +52,7 @@ export function CloudPanel(props: { readonly root?: string | undefined }) {
           <>
             <CollabModeCard />
             <SyncSettingsCard root={root()} />
+            <WriterFollowCard root={root()} />
           </>
         )}
       </Show>

@@ -16,12 +16,15 @@ import { ShellGate } from "#app/ui/ShellGate";
  * shared`, which is an address — the shared project, or with `pull=<n>` a
  * suggestion to it, or with `copy=1` the person's own copy as another of
  * their devices left it — and is how the cloud popover and the Suggestions
- * tab open a review already set against what arrived.
+ * tab open a review already set against what arrived. `against=writer` is
+ * the same for new work in the Writer projects the books follow.
  */
 export const Route = createFileRoute("/_app/project/$slug/review")({
   validateSearch: (
     search: Record<string, unknown>,
-  ): { readonly against?: "shared"; readonly pull?: number; readonly copy?: 1 } => {
+  ): { readonly against?: "shared" | "writer"; readonly pull?: number; readonly copy?: 1 } => {
+    // New work in the Writer projects this project's books follow.
+    if (search.against === "writer") return { against: "writer" };
     if (search.against !== "shared") return {};
     if (Number(search.copy) === 1) return { against: "shared", copy: 1 };
     // `pull` names a suggestion whose head was fetched for review; the shared

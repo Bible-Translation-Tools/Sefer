@@ -43,6 +43,7 @@ import { fetchCopy, modeOf, sendingTo } from "./suggestions";
 import { syncPreferences } from "./syncSettings";
 import { syncStatus } from "./syncStatus";
 import { syncWatch } from "./syncWatch";
+import { checkWriter } from "./writerWatch";
 
 /**
  * Where this project sends: the shared project, or — when suggested changes
@@ -76,12 +77,25 @@ const ask = (root: string): Effect.Effect<CheckResult, unknown, Git | Remote> =>
   });
 
 export const checkForChanges = async (services: Services, project: Project): Promise<void> => {
-  const root = project.root;
   const operation = services.composition.observability.operation("sync.check");
   if (!syncStatus.interfaceUp()) {
     operation.end("declined", { "sync.check.result": "offline" });
     return;
   }
+  await checkShared(services, project, operation);
+  // Then, and only then, the Writer projects its books still follow: what a
+  // teammate already took arrived just above and is not offered twice
+  // (`writerWatch.ts`). A project attached to no shared project is checked
+  // too: an assembly sends nothing until someone shares it.
+  await checkWriter(services, project);
+};
+
+const checkShared = async (
+  services: Services,
+  project: Project,
+  operation: ReturnType<Services["composition"]["observability"]["operation"]>,
+): Promise<void> => {
+  const root = project.root;
   syncStatus.setChecking(root, true);
   let result: CheckResult | undefined;
   let verdict: Verdict = "passed";

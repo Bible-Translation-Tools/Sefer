@@ -140,51 +140,78 @@ export const recognizeWriter = (
 const numbered = (name: string): number | undefined =>
   /^\d{2,3}$/.test(name) && Number(name) > 0 ? Number(name) : undefined;
 
-/** Reads the parts the template needs, in numeric order. */
+/**
+ * The files the template reads: `front/title.txt`, and each chapter's
+ * `NN/title.txt` and `NN/NN.txt` chunks. Everything else in a Writer
+ * project (the manifest, `LICENSE.md`, `.git`) is not the book.
+ */
+export const isWriterTextPath = (path: string): boolean =>
+  path === "front/title.txt" || /^\d{2,3}\/(?:title|\d{2,3})\.txt$/i.test(path);
+
+/**
+ * The book's parts, from its files by relative path. Pure: the same tree from
+ * a folder on disk (`readWriterTree`) or from a commit's blobs, which is how
+ * the text a project last took from Writer is rendered again later.
+ */
+export const treeFromFiles = (files: ReadonlyMap<string, string>): WriterTree => {
+  const title = (files.get("front/title.txt") ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+  const byChapter = new Map<number, { label: string | undefined; chunks: [number, string][] }>();
+  for (const [path, text] of files) {
+    const match = /^(\d{2,3})\/(title|\d{2,3})\.txt$/i.exec(path);
+    const chapter = match === null ? undefined : numbered(match[1] ?? "");
+    if (match === null || chapter === undefined) continue;
+    const held = byChapter.get(chapter) ?? { label: undefined, chunks: [] };
+    if (match[2]?.toLowerCase() === "title") held.label = text.trim();
+    else {
+      const chunk = numbered(match[2] ?? "");
+      if (chunk !== undefined) held.chunks.push([chunk, text]);
+    }
+    byChapter.set(chapter, held);
+  }
+  const chapters = [...byChapter.entries()]
+    .filter(([, held]) => held.chunks.length > 0)
+    .sort(([a], [b]) => a - b)
+    .map(([number, held]) => ({
+      number,
+      label:
+        held.label === undefined || held.label === "" || held.label === String(number)
+          ? undefined
+          : held.label,
+      chunks: held.chunks.sort(([a], [b]) => a - b).map(([, text]) => text),
+    }));
+  return { title, chapters };
+};
+
+/** Reads the parts the template needs off disk, in numeric order. */
 export const readWriterTree = (
   fileSystem: FileSystem.FileSystem,
   root: string,
 ): Effect.Effect<WriterTree> =>
   Effect.gen(function* () {
-    const title = ((yield* readText(fileSystem, joinPath(root, "front/title.txt"))) ?? "")
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line !== "");
+    const files = new Map<string, string>();
+    const take = (path: string) =>
+      Effect.map(readText(fileSystem, joinPath(root, path)), (text) => {
+        if (text !== undefined) files.set(path, text);
+      });
+    yield* take("front/title.txt");
     const names = yield* Effect.orElseSucceed(
       fileSystem.readDirectory(root),
       (): readonly string[] => [],
     );
-    const chapterNumbers = names
-      .map((name) => ({ name, number: numbered(name) }))
-      .filter((entry): entry is { name: string; number: number } => entry.number !== undefined)
-      .sort((a, b) => a.number - b.number);
-    const chapters: WriterTree["chapters"][number][] = [];
-    for (const chapter of chapterNumbers) {
-      const directory = joinPath(root, chapter.name);
-      const files = yield* Effect.orElseSucceed(
-        fileSystem.readDirectory(directory),
+    for (const chapter of names.filter((name) => numbered(name) !== undefined)) {
+      const inside = yield* Effect.orElseSucceed(
+        fileSystem.readDirectory(joinPath(root, chapter)),
         (): readonly string[] => [],
       );
-      const chunkFiles = files
-        .map((file) => ({ file, number: numbered(file.replace(/\.txt$/i, "")) }))
-        .filter(
-          (entry): entry is { file: string; number: number } =>
-            /\.txt$/i.test(entry.file) && entry.number !== undefined,
-        )
-        .sort((a, b) => a.number - b.number);
-      const chunks: string[] = [];
-      for (const chunk of chunkFiles) {
-        const text = yield* readText(fileSystem, joinPath(directory, chunk.file));
-        if (text !== undefined) chunks.push(text);
+      for (const file of inside) {
+        const path = `${chapter}/${file}`;
+        if (isWriterTextPath(path)) yield* take(path);
       }
-      const label = ((yield* readText(fileSystem, joinPath(directory, "title.txt"))) ?? "").trim();
-      chapters.push({
-        number: chapter.number,
-        label: label === "" || label === String(chapter.number) ? undefined : label,
-        chunks,
-      });
     }
-    return { title, chapters };
+    return treeFromFiles(files);
   });
 
 /**

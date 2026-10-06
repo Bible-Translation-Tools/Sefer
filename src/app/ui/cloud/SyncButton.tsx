@@ -33,6 +33,7 @@ import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { syncStatus } from "../../syncStatus";
 import { syncWatch } from "../../syncWatch";
+import { writerWatch } from "../../writerWatch";
 import { ago } from "../panels/format";
 import { Button, IconButton, Input, Popover, cx, toasts } from "../primitives";
 import { createAccount } from "./account";
@@ -43,6 +44,7 @@ import { PlanBooks } from "./IncomingPlanCard";
 import { SyncClocks, toneText } from "./ProjectCard";
 import { PublishSection } from "./PublishSection";
 import { attentionOf, createQuickSync, quickActionOf, quickLabel, shareableLink } from "./quick";
+import { WriterSection } from "./WriterSection";
 
 const glyphOf = (sync: Sync | undefined) => {
   if (sync?.reading.origin === undefined) return <Cloud size={20} />;
@@ -73,7 +75,10 @@ export function SyncButton() {
   const [open, setOpen] = createSignal(false, { name: "syncButtonOpen" });
 
   const sync = quick.sync;
-  const attention = () => attentionOf(sync());
+  // New work in a Writer project the books follow waits on a person too,
+  // whether or not the project is shared.
+  const attention = () =>
+    writerWatch.facts(shell.project()?.root).work.length > 0 ? "alert" : attentionOf(sync());
   const copy = () => {
     const held = sync();
     return held === undefined
@@ -244,6 +249,8 @@ export function SyncButton() {
               </div>
 
               <CollabSection onLeave={() => setOpen(false)} />
+
+              <WriterSection onLeave={() => setOpen(false)} />
 
               <Show when={held().reading.origin === undefined}>
                 <PublishSection

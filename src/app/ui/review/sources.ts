@@ -79,6 +79,12 @@ export interface ChoiceContext {
   readonly shared: RecordedTexts;
   /** What that side is called: the shared project, or a suggestion to it. */
   readonly sharedLabel?: string | undefined;
+  /**
+   * New work in the Writer projects the books follow, as texts: each book is
+   * the project's own with their changes in the places they changed
+   * (`writerWatch.ts`). Absent when there is none.
+   */
+  readonly writer?: { readonly texts: RecordedTexts; readonly label: string } | undefined;
 }
 
 /**
@@ -148,6 +154,20 @@ export const sourceChoices = (context: ChoiceContext): readonly SourceChoice[] =
         project === undefined
           ? undefined
           : sharedSource(context.shared, context.sharedLabel ?? t("The shared project")),
+    },
+    {
+      id: "writer",
+      label: context.writer?.label ?? t("From Writer"),
+      shortLabel: t("Writer"),
+      explainer:
+        context.writer === undefined
+          ? t("No Writer project this project follows has new work.")
+          : t("New saves in Writer, in the verses they changed since this project took them."),
+      available: project !== undefined && context.writer !== undefined,
+      immediate: () =>
+        project === undefined || context.writer === undefined
+          ? undefined
+          : sharedSource(context.writer.texts, context.writer.label),
     },
     {
       id: "zip",

@@ -89,6 +89,7 @@ import {
 import { sendAfterSave, sendNow, settleWithShared, type SendOutcome } from "../../syncActions";
 import { setAuthorName, syncPreferences } from "../../syncSettings";
 import { syncWatch } from "../../syncWatch";
+import { forgetWriterWork, takeWriterWork, writerWatch } from "../../writerWatch";
 import { combineRefusal, combineTrouble, receiveRefusal, sendOutcomeCopy } from "../cloud/copy";
 import { SyncLine } from "../cloud/SyncLine";
 import { unsavedChanges } from "../panels/changes";
@@ -183,9 +184,15 @@ export function ReviewPanel() {
 
   const [leftId, setLeftId] = createSignal("project", { name: "reviewLeftKind" });
   const [rightId, setRightId] = createSignal(
-    untrack(() => search().against) === "shared" ? "shared" : "disk",
+    untrack(() => search().against) === "shared"
+      ? "shared"
+      : untrack(() => search().against) === "writer"
+        ? "writer"
+        : "disk",
     { name: "reviewRightKind" },
   );
+  /** Is one side new work from Writer? Then recording also marks it taken. */
+  const againstWriter = (): boolean => rightId() === "writer" || leftId() === "writer";
   const [leftPicked, setLeftPicked] = createSignal<CompareSource | undefined>(undefined, {
     name: "reviewLeftPicked",
   });
@@ -256,6 +263,31 @@ export function ReviewPanel() {
     name: "reviewJournals",
   });
 
+  /** New Writer work as the Writer side's texts: the project's books with their changes in. */
+  // Every book is on this side: the project's own text where Writer has
+  // nothing new, so only the books with work differ and no book reads as
+  // missing from one side.
+  const writerSide = () => {
+    const project = shell.project();
+    const work = writerWatch.facts(project?.root).work;
+    if (project === undefined || work.length === 0) return undefined;
+    const owners = [...new Set(work.map((each) => each.owner))];
+    const texts = new Map<BookId, { text: string; stamp: { revision: number; length: number } }>();
+    for (const book of project.books) {
+      const text = book.source().text;
+      texts.set(book.id, { text, stamp: { revision: 0, length: text.length } });
+    }
+    for (const each of work)
+      texts.set(each.book, {
+        text: each.proposal,
+        stamp: { revision: 0, length: each.proposal.length },
+      });
+    return {
+      label: t("From Writer ({owners})", { owners: owners.join(", ") }),
+      texts: { head: `writer:${work.map((each) => each.head.slice(0, 7)).join("+")}`, texts },
+    };
+  };
+
   const choices = (): readonly SourceChoice[] =>
     sourceChoices({
       services,
@@ -265,6 +297,7 @@ export function ReviewPanel() {
       shared: shared.recorded(),
       sharedLabel:
         pull() !== undefined ? t("The suggested changes") : fromCopy() ? t("Your copy") : undefined,
+      writer: writerSide(),
     });
 
   const choiceOf = (id: string): SourceChoice | undefined =>
@@ -1034,7 +1067,7 @@ export function ReviewPanel() {
     const project = shell.project();
     const review = unsaved();
     if (project === undefined || recording()) return;
-    if (review.length === 0 && !againstShared()) return;
+    if (review.length === 0 && !againstShared() && !againstWriter()) return;
     // Taken before the save: afterwards no book is unsaved, and the default
     // would name none of them.
     const typedMessage = message().trim();
@@ -1215,7 +1248,41 @@ export function ReviewPanel() {
       return;
     }
     const books = review.map((entry) => entry.book);
-    const outcome = await recordVersion(services, project, books, staticMessage, by);
+    // Against Writer, what was looked at is marked taken in the same version,
+    // whether its saves were taken or every passage kept as it was.
+    // Every book the Writer side holds, not only those still differing: a
+    // book whose every change was taken differs no longer, and is taken too.
+    const writerBooks = againstWriter()
+      ? writerWatch.facts(project.root).work.map((each) => each.book)
+      : [];
+    const writerFile =
+      writerBooks.length === 0
+        ? undefined
+        : await services
+            .run(takeWriterWork(services, project, writerBooks))
+            .catch((cause: unknown) => {
+              toasts.error({
+                title: t("Could not mark the Writer work taken"),
+                message: describe(cause),
+              });
+              return undefined;
+            });
+    const writerMessage =
+      writerBooks.length === 0 || typedMessage !== ""
+        ? staticMessage
+        : t("Reviewed Writer work: {books}", {
+            books: writerBooks.map((id) => bookName(id, metadataOf(project))).join(", "),
+          });
+    const outcome = await recordVersion(
+      services,
+      project,
+      books,
+      writerMessage,
+      by,
+      writerFile === undefined ? [] : [writerFile],
+    );
+    if (outcome.kind === "recorded" && writerBooks.length > 0)
+      forgetWriterWork(project.root, writerBooks);
     switch (outcome.kind) {
       case "nothing":
         setRecordedLine({ tone: "muted", title: t("Nothing to record") });
@@ -1376,10 +1443,13 @@ export function ReviewPanel() {
 
   // The cloud popover's "See the changes" navigates here with `against=shared`;
   // when Review is already open that is a search change, not a mount.
+  // "Review their changes" does the same with `against=writer`.
   createEffect(
     () => search().against,
     (against) => {
       if (against === "shared") untrack(seeShared);
+      if (against === "writer" && untrack(rightId) !== "writer" && untrack(leftId) !== "writer")
+        untrack(() => pick("right", "writer"));
     },
   );
 
