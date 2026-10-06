@@ -1,6 +1,6 @@
 /**
  * The cloud in the app bar: where the open project stands with the shared
- * project, without going to `/cloud` to find out.
+ * project, without going anywhere to find out.
  *
  * The glyph says it at a glance — a tick when both sides agree, an arrow up
  * for work waiting to be sent, an arrow down for versions to receive, the
@@ -11,8 +11,9 @@
  *
  * The popover is where sync is done: the state in a sentence, the two clocks,
  * what would arrive, the one right move, the link to hand a teammate, and the
- * account — signing in and out happen here. `/cloud` keeps only attaching and
- * publishing, and suggested changes; the per-project switches are in Settings.
+ * account — signing in and out happen here — and publishing a project that is
+ * only on this device. Choosing an existing shared project, the mode and the
+ * per-project switches are Settings' Cloud section.
  */
 
 import Cloud from "lucide-solid/icons/cloud";
@@ -40,6 +41,7 @@ import { CollabSection } from "./CollabSection";
 import { stateCopy } from "./copy";
 import { PlanBooks } from "./IncomingPlanCard";
 import { SyncClocks, toneText } from "./ProjectCard";
+import { PublishSection } from "./PublishSection";
 import { attentionOf, createQuickSync, quickActionOf, quickLabel, shareableLink } from "./quick";
 
 const glyphOf = (sync: Sync | undefined) => {
@@ -122,7 +124,7 @@ export function SyncButton() {
   };
 
   const run = (action: ReturnType<typeof quickActionOf>): void => {
-    if (action === "see" || action === "open") setOpen(false);
+    if (action === "see" || action === "open" || action === "sign-in") setOpen(false);
     quick.run(action);
   };
 
@@ -201,8 +203,10 @@ export function SyncButton() {
               </Show>
 
               <div class="flex flex-wrap items-center gap-2">
-                {/* Signing in is the form below, not a button that goes elsewhere. */}
-                <Show when={quickActionOf(held()) !== "sign-in"}>
+                {/* Signing in and publishing are the forms below, not buttons that go elsewhere. */}
+                <Show
+                  when={quickActionOf(held()) !== "sign-in" && quickActionOf(held()) !== "open"}
+                >
                   <Button
                     size="sm"
                     variant="primary"
@@ -211,13 +215,6 @@ export function SyncButton() {
                     onClick={() => run(quickActionOf(held()))}
                   >
                     {quickLabel(quickActionOf(held()))}
-                  </Button>
-                </Show>
-                <Show
-                  when={quickActionOf(held()) !== "open" && quickActionOf(held()) !== "sign-in"}
-                >
-                  <Button size="sm" variant="tertiary" onClick={() => run("open")}>
-                    {t("Open Sync")}
                   </Button>
                 </Show>
                 <Show
@@ -241,6 +238,13 @@ export function SyncButton() {
               </div>
 
               <CollabSection onLeave={() => setOpen(false)} />
+
+              <Show when={held().reading.origin === undefined}>
+                <PublishSection
+                  signedIn={account.session() !== undefined}
+                  onLeave={() => setOpen(false)}
+                />
+              </Show>
 
               <Show when={link()}>
                 {(href) => (

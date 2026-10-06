@@ -1,13 +1,12 @@
 /**
- * Sync from wherever someone is, not only from `/cloud`: the app bar's cloud
+ * Sync from wherever someone is: the app bar's cloud
  * button and Review's status line both offer the one right move, and this is
  * that move — the same for both, so they cannot disagree.
  *
  * Anything that receives goes through Review ("See the changes"), where every
  * passage is shown before it lands; a send, a check and finishing a stopped
- * transfer are one press; signing in is the popover's own form (a surface
- * without one is taken to Settings); attaching and publishing are still
- * `/cloud`'s, and the button says so by taking you there.
+ * transfer are one press; signing in and publishing are the popover's own
+ * forms, and a surface without them is taken to Settings' Cloud section.
  */
 
 import { useNavigate } from "@tanstack/solid-router";
@@ -62,7 +61,7 @@ export const quickLabel = (action: QuickAction): string => {
     case "sign-in":
       return t("Sign in");
     case "open":
-      return t("Open Sync");
+      return t("Set up sharing");
   }
 };
 
@@ -138,9 +137,9 @@ export const createQuickSync = (
             search: { against: "shared" },
           });
         return;
+      // Signing in, and choosing or publishing a shared project, are Settings'
+      // Cloud section's on a surface without the popover's own forms.
       case "open":
-        void navigate({ to: "/project/$slug/cloud", params: { slug: shell.slug() }, search: {} });
-        return;
       case "sign-in":
         void navigate({ to: "/settings" });
         return;

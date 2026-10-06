@@ -35,8 +35,9 @@ import { recordVersion } from "./recordVersion";
 import type { Domain, Services } from "./services";
 import { shellKeys } from "./settings";
 import type { ShellEvent } from "./shellEvent";
-import { sendAfterSave } from "./syncActions";
+import { sendAfterSave, sendNow } from "./syncActions";
 import { syncPreferences } from "./syncSettings";
+import { sendOutcomeCopy } from "./ui/cloud/copy";
 import { bookName } from "./ui/workspace/books";
 
 /** What a command's `run` may return; an Effect is run on the app runtime. */
@@ -347,14 +348,25 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
   const multibook = makeMultiBook(() => bridge.project()?.books ?? []);
 
   /**
-   * Receiving and sending happen on the cloud screen, where the plan card says
-   * what would arrive and a second press applies it. The palette opens that
-   * screen rather than transferring directly: a transfer from here would skip
-   * both, and a receive needs the plan a person has actually read.
+   * Receiving goes through Review against the shared project, where every
+   * passage is shown before it lands — never straight from the palette.
    */
-  const openCloud = (): void => {
+  const seeIncoming = (): void => {
     if (bridge.project() === undefined) return;
-    void bridge.navigate({ to: "/project/$slug/cloud", params: { slug: bridge.slug() } });
+    void bridge.navigate({
+      to: "/project/$slug/review",
+      params: { slug: bridge.slug() },
+      search: { against: "shared" },
+    });
+  };
+
+  /** Sending is one press, as in the cloud menu: wherever this project's mode sends. */
+  const sendMine = (): void => {
+    const project = bridge.project();
+    if (project === undefined) return;
+    void sendNow(services, project).then((outcome) =>
+      bridge.report(sendOutcomeCopy(outcome).title),
+    );
   };
 
   /**
@@ -686,14 +698,14 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       id: "remote.pull",
       title: t("Receive updates…"),
       when: hasProject,
-      run: openCloud,
+      run: seeIncoming,
     }),
 
     registerCommand({
       id: "remote.push",
-      title: t("Send my changes…"),
+      title: t("Send my changes"),
       when: hasProject,
-      run: openCloud,
+      run: sendMine,
     }),
 
     registerCommand({

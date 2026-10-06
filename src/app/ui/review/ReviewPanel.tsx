@@ -440,7 +440,7 @@ export function ReviewPanel() {
   createEffect(
     () => ({
       // Both frozen sides are in the key: a side whose texts arrive after the
-      // screen opened (the shared project's, when /cloud's Compare opens it
+      // screen opened (the shared project's, when the cloud popover opens it
       // directly) is compared again once it has them.
       sides: `${leftId()}:${rightId()}:${leftPicked()?.id ?? ""}:${rightPicked()?.id ?? ""}:${
         version.recorded().head ?? ""
@@ -1204,7 +1204,7 @@ export function ReviewPanel() {
         return;
       case "open":
         setRecordOpen(false);
-        void navigate({ to: "/project/$slug/cloud", params: { slug: shell.slug() }, search: {} });
+        void navigate({ to: "/settings" });
         return;
       case "retry":
       case "send":

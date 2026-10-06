@@ -10,7 +10,7 @@
  *
  * `sendAfterSave` runs after a version is recorded, and only sends: the
  * server's fast-forward rule is the check, and a refusal starts the check at
- * once so `/cloud` reads `behind` or `diverged` rather than a bare error.
+ * once so every surface reads `behind` or `diverged` rather than a bare error.
  *
  * Neither runs with no interface up; `syncStatus` says so first. A network
  * failure the last transfer met does not stop them — they are how Sefer finds
@@ -110,7 +110,7 @@ export const checkForChanges = async (services: Services, project: Project): Pro
   }
   if (result !== "fetched" || !syncPreferences(services.settings, root).skipReviewIncoming) return;
   // Received without Review only when the policy lets every book through; a
-  // book that needs a person makes the receive refuse, and /cloud shows it.
+  // book that needs a person makes the receive refuse, and the popover shows it.
   const received = await services.run(Effect.result(receive({ project })));
   services.composition.observability.note(
     "sync.receive",

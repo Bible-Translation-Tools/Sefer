@@ -2,12 +2,9 @@
  * The "Shared project" card: choosing WHICH shared project a project on this
  * device is, and creating one when there is none.
  *
- * One card, two places. `CloudPanel` shows it beside the account on
- * `/settings`; the sync screen (`CloudScreen`) shows it whenever the next step
- * is to attach or publish, because a "Choose a shared project" button with the
- * card somewhere else did nothing at all. The screen drives it through
- * `actions`: its primary button lists the repositories, or puts the caret in
- * the new-name field.
+ * In Settings' Cloud section (`CloudPanel`), beside the account. The cloud
+ * popover publishes a project only on this device by itself; choosing one
+ * that already exists is here.
  *
  * It holds no domain state. The session lives in `Credentials` (through
  * `Gitea`), the attachment in the repository's own `origin`, and the progress
@@ -15,44 +12,42 @@
  */
 
 import { Effect, Fiber, Stream } from "effect";
-import { For, Show, createEffect, createSignal, onCleanup, untrack } from "solid-js";
+import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 
 import { Git } from "#core/git/git";
 import { Gitea, type RemoteRepo } from "#core/remote/gitea";
 import { Remote } from "#core/remote/remote";
 
+import { collaboration } from "../../collaboration";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
+import { syncWatch } from "../../syncWatch";
 import { Button, Card, Input, PanelHeader } from "../primitives";
 import type { Account } from "./account";
-
-/** What a screen can ask of the card from its own button. */
-export interface SharedProjectActions {
-  /** List the repositories this account can write, to attach one. */
-  readonly list: () => void;
-  /** Put the caret in the new shared project's name. */
-  readonly focusName: () => void;
-}
 
 /**
  * `root` is the project this card attaches and publishes; optional because
  * `/settings` shows it with no project open, and then it says what is missing
  * rather than offering a button that would `git.init` whatever folder was at
- * hand. `onChanged` runs after an attach or publish succeeds, so a screen that
- * reads the sync state can read it again.
+ * hand. An attach or publish reads the sync state and the collaboration facts
+ * again, so every surface shows the new shared project.
  */
 export function SharedProjectCard(props: {
   readonly account: Account;
   readonly root?: string | undefined;
-  readonly onChanged?: () => void;
-  readonly actions?: (actions: SharedProjectActions) => void;
 }) {
   const shell = useShell();
   const { services } = shell;
   // The account is the caller's, so the two cards on one screen share one.
   // oxlint-disable-next-line solid/reactivity -- a handle, not a value: the same Account for the card's life
   const account = props.account;
-  let nameField: HTMLInputElement | undefined;
+  /** After an attach or publish: every surface reads the new shared project. */
+  const reread = (): void => {
+    const project = shell.project();
+    if (project === undefined) return;
+    void syncWatch.refresh(services, project).catch(() => undefined);
+    void collaboration.refresh(services, project);
+  };
 
   const [repos, setRepos] = createSignal<readonly RemoteRepo[]>([], { name: "cloudRepos" });
   const [newName, setNewName] = createSignal("", { name: "cloudNewName" });
@@ -110,7 +105,6 @@ export function SharedProjectCard(props: {
   /** Attach an existing repository as this project's `origin`. */
   const attach = (repo: RemoteRepo): void => {
     const root = props.root;
-    const changed = props.onChanged;
     if (root === undefined) return;
     account.attempt(async () => {
       await services.run(
@@ -122,7 +116,7 @@ export function SharedProjectCard(props: {
         }),
       );
       shell.report(t("attached {name}", { name: repo.fullName }));
-      changed?.();
+      reread();
     });
   };
 
@@ -151,12 +145,9 @@ export function SharedProjectCard(props: {
       );
       setNewName("");
       shell.report(t("published {name}", { name: staticName }));
-      props.onChanged?.();
+      reread();
     });
   };
-
-  // Handed over once: the screen holding the card keeps the same two actions.
-  untrack(() => props.actions)?.({ list: listRepos, focusName: () => nameField?.focus() });
 
   return (
     <Card class="space-y-3" data-cloud-card="attach">
@@ -215,7 +206,6 @@ export function SharedProjectCard(props: {
             }}
           >
             <Input
-              ref={(element: HTMLInputElement) => (nameField = element)}
               type="text"
               wrapperClass="w-64"
               placeholder={t("new shared project name")}

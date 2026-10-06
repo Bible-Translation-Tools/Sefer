@@ -264,14 +264,6 @@ export const sync = (reading: SyncReading, contested = false): Sync => {
   };
 };
 
-/**
- * Does this state want the incoming plan computed?
- *
- * Only two do, and both for the same reason: something is arriving, and a
- * translator gets to read what it will change before it lands.
- */
-export const wantsPlan = (state: SyncState): boolean => state === "behind" || state === "diverged";
-
 /** The remote-tracking ref a branch's cloud copy lives at. */
 export const trackingRef = (branch: string, remote = "origin"): string =>
   `refs/remotes/${remote}/${branch}`;

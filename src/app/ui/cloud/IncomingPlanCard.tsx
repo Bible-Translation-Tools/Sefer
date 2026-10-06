@@ -1,14 +1,13 @@
 /**
  * What a pull would change, in books and chapters, BEFORE it runs.
  *
- * This card is the reason `/cloud` exists rather than a Pull button. A
- * translator asked to accept "3 incoming commits" has been asked nothing at
- * all; a translator told "There are changes to 3 verses in 2 books. You also
+ * This list is why the cloud popover says more than "Pull". A translator
+ * asked to accept "3 incoming commits" has been asked nothing at all; a translator told "There are changes to 3 verses in 2 books. You also
  * changed 1 of those verses." has been asked a real question they can answer.
  *
  * A contested book — one both sides changed — is never merged and never
  * offered as part of a pull. Its row links to the project's Review screen
- * instead, by path string rather than by import, so this card does not depend
+ * instead, by path string rather than by import, so this list does not depend
  * on that screen's module.
  */
 
@@ -18,7 +17,6 @@ import type { IncomingBook, IncomingPlan } from "#core/sync";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { Card, PanelHeader } from "../primitives";
 import { bookName } from "../workspace/books";
 import { chapterList, planOverlap, planSummary, plural } from "./copy";
 
@@ -97,43 +95,5 @@ export function PlanBooks(props: {
         </ul>
       </Show>
     </div>
-  );
-}
-
-export function IncomingPlanCard(props: { readonly plan: IncomingPlan }) {
-  return (
-    <Card class="space-y-3" data-cloud-card="plan">
-      <PanelHeader level={3} title={t("Incoming changes")} />
-      <PlanBooks plan={props.plan} links />
-
-      <Show when={!props.plan.clean}>
-        <p class="text-small text-on-surface-secondary">
-          {t(
-            "Sefer never merges scripture text on its own. The books you both changed stay exactly as they are here until you compare them and choose.",
-          )}
-        </p>
-      </Show>
-
-      <Show when={props.plan.commits.length > 0}>
-        <details class="text-small text-on-surface-tertiary">
-          <summary class="cursor-pointer">
-            {plural(
-              props.plan.commits.length,
-              "{count} version in the shared project",
-              "{count} versions in the shared project",
-            )}
-          </summary>
-          <ul class="mt-2 space-y-1 ps-4">
-            <For each={props.plan.commits}>
-              {(commit) => (
-                <li class="truncate">
-                  {commit.message} — {commit.author.name}
-                </li>
-              )}
-            </For>
-          </ul>
-        </details>
-      </Show>
-    </Card>
   );
 }

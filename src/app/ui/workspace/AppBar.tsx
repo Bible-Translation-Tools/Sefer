@@ -23,7 +23,6 @@
 import type { JSX } from "@solidjs/web";
 import { useNavigate, useRouterState } from "@tanstack/solid-router";
 import Bell from "lucide-solid/icons/bell";
-import CloudIcon from "lucide-solid/icons/cloud";
 import Download from "lucide-solid/icons/download";
 import Ellipsis from "lucide-solid/icons/ellipsis";
 import FileText from "lucide-solid/icons/file-text";
@@ -76,8 +75,7 @@ type ProjectScreen =
   | "/project/$slug/findings"
   | "/project/$slug/history"
   | "/project/$slug/inventory"
-  | "/project/$slug/review"
-  | "/project/$slug/cloud";
+  | "/project/$slug/review";
 
 /**
  * The project screens the bar no longer shows, parked in one menu until
@@ -98,7 +96,6 @@ function MoreMenu() {
       icon: <TypeIcon size={16} />,
     },
     { label: t("Compare"), to: "/project/$slug/review", icon: <GitCompare size={16} /> },
-    { label: t("Cloud"), to: "/project/$slug/cloud", icon: <CloudIcon size={16} /> },
   ];
 
   return (

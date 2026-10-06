@@ -1,5 +1,5 @@
 /**
- * Every word `/cloud` says, in one table keyed by the state.
+ * Every word the sync surfaces say, in one table keyed by the state.
  *
  * v1 learned this the expensive way: the chip, the banner, the panel and the
  * settings rows each grew their own wording for the same six situations, and

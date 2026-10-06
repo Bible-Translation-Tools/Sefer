@@ -76,13 +76,9 @@ export function YourProjects(props: {
   /** The card strip, and how many cards sit past its right edge. */
   const [strip, setStrip] = createSignal<HTMLUListElement>();
   const [hidden, setHidden] = createSignal(0, { name: "projectsHidden" });
-  /** Sharing is the cloud screen of that project; opening it gets there. */
+  /** Sharing is the open project's cloud menu, in the app bar; opening it gets there. */
   const share = (row: ProjectSummary): void => {
-    void navigate({
-      to: "/project/$slug/cloud",
-      params: { slug: shell.slugFor(row.root) },
-      search: {},
-    });
+    void navigate({ to: "/project/$slug", params: { slug: shell.slugFor(row.root) } });
   };
   const [renaming, setRenaming] = createSignal<ProjectSummary | undefined>(undefined, {
     name: "renamingProject",

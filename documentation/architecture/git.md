@@ -255,11 +255,11 @@ preference that may override them (see [configuration.md](configuration.md)):
 `VITE_SEFER_CONTENT_HOST` (the identity: what `origin` names and a sign-in is filed under) and, on the
 Web, `VITE_SEFER_WEB_TRANSPORT` (the proxy each host is reached through, applied at request time). The
 Gitea API rides the same transport and sends the same `X-Requested-With` the transfers do; before that
-it went direct and a successful sign-in was followed immediately by "Failed to fetch". The SURFACE is `/cloud` (`src/app/ui/cloud/`), which owns the state, the two clocks, the incoming
-plan and the one right button — see [sync.md](sync.md). `src/app/ui/CloudPanel.tsx` keeps the
-attach-and-publish half beside a project and shares the account half with it; the palette's
-`remote.pull` and `remote.push` open `/cloud` rather than transferring, because the screen is where the
-plan is shown first.
+it went direct and a successful sign-in was followed immediately by "Failed to fetch". The SURFACE is the app bar's cloud popover (`src/app/ui/cloud/`): the state, the two clocks, the
+incoming plan and the one right button — see [sync.md](sync.md). `src/app/ui/CloudPanel.tsx` is
+Settings' Cloud section: the account, the attach-and-publish half, and how this project is worked on.
+The palette's `remote.pull` opens Review against the shared project, where the plan is shown first,
+and `remote.push` sends.
 
 ## Suggested changes
 

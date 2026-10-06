@@ -1,6 +1,5 @@
 /**
- * Where this project stands: the shared project it belongs to, the two clocks,
- * and the state as one badge.
+ * Where this project stands: the two clocks, as the cloud popover shows them.
  *
  * The two clocks are the whole idea. A translator does not want a ref
  * comparison; they want to know how much of their morning has left this
@@ -18,18 +17,8 @@ import type { Clock, IncomingPlan, Sync } from "#core/sync";
 
 import { t } from "../../i18n";
 import { ago, exact } from "../panels/format";
-import { Card, cx, PanelHeader, type BadgeTone } from "../primitives";
-import { incomingWords, outgoingWords, plural, stateCopy } from "./copy";
-
-/** The repository, as a person reads it: `owner/name`, not a clone URL. */
-const shortOrigin = (url: string): string => {
-  try {
-    const path = new URL(url).pathname.replace(/^\/+|\.git$/gu, "");
-    return path === "" ? url : path;
-  } catch {
-    return url;
-  }
-};
+import { cx, type BadgeTone } from "../primitives";
+import { incomingWords, outgoingWords } from "./copy";
 
 function ClockLine(props: {
   readonly label: string;
@@ -115,48 +104,5 @@ export function SyncClocks(props: {
         }
       />
     </div>
-  );
-}
-
-export function ProjectCard(props: {
-  readonly sync: Sync;
-  readonly plan?: IncomingPlan;
-  readonly projectName: string;
-}) {
-  const copy = () =>
-    stateCopy(props.sync.state, {
-      sendRefused: props.sync.reading.sendRefused,
-      signedIn: props.sync.reading.signedIn,
-    });
-
-  return (
-    <Card class="space-y-4" data-cloud-card="project" data-sync-state={props.sync.state}>
-      <PanelHeader
-        level={3}
-        title={props.projectName}
-        subtitle={
-          props.sync.reading.origin === undefined
-            ? t("Not connected to a shared project")
-            : shortOrigin(props.sync.reading.origin)
-        }
-      />
-
-      <div>
-        <h4 class={cx("text-body font-medium", toneText(copy().tone))}>{copy().headline}</h4>
-        <p class="mt-1 text-small text-on-surface-secondary">{copy().detail}</p>
-      </div>
-
-      <SyncClocks sync={props.sync} plan={props.plan} class="border-t border-surface-border pt-3" />
-
-      <Show when={props.sync.reading.uncommitted > 0}>
-        <p class="text-small text-on-surface-tertiary" data-cloud="uncommitted">
-          {plural(
-            props.sync.reading.uncommitted,
-            "{count} file here has been written but not recorded as a version yet — it is not part of either count.",
-            "{count} files here have been written but not recorded as a version yet — they are not part of either count.",
-          )}
-        </p>
-      </Show>
-    </Card>
   );
 }

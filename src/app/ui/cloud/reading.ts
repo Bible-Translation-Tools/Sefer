@@ -5,12 +5,12 @@
  * The split is the point. This file knows about Effect, Git, Remote, Gitea and
  * the file system; it knows nothing about what any of it MEANS. It produces a
  * `SyncReading` and an `IncomingPlan`, and the pure module decides the state,
- * the clocks and the one right button. That is what lets `/cloud` render every
- * state from a fixture with no Gitea instance in sight.
+ * the clocks and the one right button. That is what lets every state be
+ * derived and tested with no Gitea instance in sight.
  *
  * Every git call goes through `Effect.result` and degrades to an honest empty
  * answer. A project in a browser fixture has never had `git init` run on it,
- * and the sync screen must say "this project is only on this device" rather
+ * and the popover must say "this project is only on this device" rather
  * than throw — that is a state, not a fault.
  */
 

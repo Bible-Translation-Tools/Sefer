@@ -161,7 +161,7 @@ the application's Mod-K for an application it is not part of.
   The first of them, with a project open, is the **cloud** (`SyncButton`,
   `app-bar-sync`): where the project stands with the shared project, from the
   application's one sync reading (`syncWatch`), quiet until something waits on
-  a person and with a popover that is `/cloud` in brief ([sync](sync.md), "One
+  a person and with a popover where sync is done ([sync](sync.md), "One
   reading for every surface").
 - **The project panel's show/hide** is not on the app bar. It is one button that
   stays put and flips (`PanelToggle`, `panel-toggle`): left of the book's title

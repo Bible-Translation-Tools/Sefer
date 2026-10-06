@@ -11,7 +11,7 @@
  * They are stored on this device, keyed by project root, and never in the
  * repository: whether this laptop checks on open is not a fact about the
  * translation. Registered here rather than in `settings.ts`, the way
- * `sousSettings.ts` keeps its own shape, and read by `/cloud`, the project
+ * `sousSettings.ts` keeps its own shape, and read by Settings' Cloud section, the project
  * open, and Record a version.
  */
 import { Schema } from "effect";

@@ -13,7 +13,6 @@ export {
   notIn,
   sync,
   trackingRef,
-  wantsPlan,
   type Clock,
   type Sync,
   type SyncReading,

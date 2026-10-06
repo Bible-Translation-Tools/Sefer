@@ -167,9 +167,7 @@ Facts decide nothing. `src/core/sync/policy.ts` is the ONE place overlap is deci
 `judge(facts, overlap)` gives each book a verdict — `none`, `keep` (only mine changed), `take` (only
 theirs), `combine` (both, not overlapping at the scope), `review` (both and overlapping, or one side
 unlocated). The state machine's `contested`, the plan, receive, Combine and "Skip review of incoming
-changes" all read that answer, so the screen can never offer a move the program then refuses. The
-dev fixture (`src/app/ui/cloud/fixture.ts`) writes its plans out literally, because a module-level
-constant has no engine to ask.
+changes" all read that answer, so the screen can never offer a move the program then refuses.
 
 "Also changed here" is measured against the Books' CURRENT text — unsaved edits included — not
 against HEAD, so an edit not yet recorded still counts as this device having touched the chapter.
@@ -182,8 +180,8 @@ choose otherwise, and `project` for the most cautious; none of them is offered o
 The plan renders as sentences — "2 chapters of Mark changed in the shared project; 1 of them also
 changed here" — with one row per book. A contested row links to the Review
 screen, `/project/$slug/review`. The link is a PATH STRING (`reviewHref` in
-`src/app/ui/cloud/IncomingPlanCard.tsx`), not an import: Review is another screen with its own
-lifetime, and this card must not depend on it.
+`src/app/ui/cloud/IncomingPlanCard.tsx`, whose `PlanBooks` the popover shows), not an import: Review
+is another screen with its own lifetime, and this list must not depend on it.
 
 Receiving takes two presses. The plan card is the first; the confirmation is the second. Nothing is
 applied before the plan has been on screen — unless the person turned on "Skip review of incoming
@@ -216,7 +214,7 @@ Step 5 is what `pull` never did. It moved the files and left every open Book, an
 the old text, so the next save wrote the old text back over what had just arrived. Handing the Books
 their text BEFORE the files move is what makes a refusal cheap: nothing on disk has changed yet.
 This is the one exception to "only Save writes a book" ([INVARIANTS](../INVARIANTS.md)): the bytes
-are Git's, and the Book learns them in the same move. `/cloud` says what a receive could not finish:
+are Git's, and the Book learns them in the same move. Review says what a receive could not finish:
 a book file that arrived or went (the book set is fixed while a project is open), or a book whose
 file could not be read back.
 
@@ -378,8 +376,8 @@ Changes and History (`ChangesHistorySidebar`), shown only to someone who can wri
 
 `src/app/syncWatch.ts` holds the open project's last reading (`readSync` and its plan) for the whole
 application, the way `syncStatus` holds the network. The check on open, every send, a combine or
-receive from Review, and `/cloud` itself leave their reading there; the app bar's cloud button
-(`SyncButton`), Review's status line (`SyncLine`) and `/cloud` read it. A reading is local work — refs
+receive from Review leave their reading there; the app bar's cloud button (`SyncButton`) and
+Review's status line (`SyncLine`) read it. A reading is local work — refs
 and logs already in the object database — so opening the cloud popover reads again; only a check or
 a send touches the network.
 
@@ -389,8 +387,10 @@ sign-in, a stopped transfer). A project attached to nothing is never the alarm. 
 sync is done: the state, the two clocks, the incoming changes, the one right move, the shared
 project's link to copy, and the account — signing in and out (`SignInForm`, the same fields and
 failure line as Settings' account card). Anything that receives goes through Review ("See the
-changes"); "Finish the transfer" (`conflicted`) runs `Remote.abortMerge` from the popover; attach and
-publish are still `/cloud`'s.
+changes"); "Finish the transfer" (`conflicted`) runs `Remote.abortMerge` from the popover; a project
+only on this device is published from it (`PublishSection`, the name worked out as WACS's
+`<language>_<resource>`); choosing an existing shared project is Settings' Shared project card. The
+palette's "Receive updates…" opens Review against the shared project and "Send my changes" sends.
 
 Neither runs with no network interface up, and both go through the ports' lanes, so a check and a
 send cannot race. A network failure the last transfer met does NOT stop them
@@ -422,8 +422,8 @@ arrival). The email is empty rather than invented.
 ## Offline
 
 `src/app/syncStatus.ts` holds it for the whole application — online, the last failure, which roots
-are checking, whether the last send was refused — so `/cloud`, the check on open, send on save and
-the Save dialog cannot disagree. Online is read twice, because neither detector is enough alone:
+are checking, whether the last send was refused — so the cloud popover, the check on open, send on
+save and the Save dialog cannot disagree. Online is read twice, because neither detector is enough alone:
 
 - `navigator.onLine`, kept live by the window's own events. Instant and free, but it only knows
   whether an interface is up — a captive portal, a dead proxy and a firewall all report `true`.
@@ -436,29 +436,18 @@ press is an ordinary attempt rather than a retry of something already given up o
 Offline is the least alarming state on the surface. The work is on disk, the clocks still show what
 is waiting, the button says "Check for changes", and nothing suggests anything was lost.
 
-## The screen
+## Where it is, now that there is no screen
 
-`/project/$slug/cloud` (`src/routes/_app/project/$slug/cloud.tsx` → `src/app/ui/cloud/CloudScreen.tsx`), inside a `ShellGate`.
-Since 2026-10-06 it is what is left once sync moved into the app bar's popover and its configuration
-into Settings' Cloud section (`CloudPanel`: account, shared project, the four switches). Its account
-card, its "What happens next" card with the one primary button, and its settings card are gone. What
-remains:
+`/project/$slug/cloud` was deleted on 2026-10-06. Doing sync is the app bar's cloud popover;
+configuring it is Settings' Cloud section (`CloudPanel`: the account, the shared project, how you
+work, the four switches); suggestions are the `/project/$slug/suggestions` tab. Every card the screen
+had either moved to one of those or had nothing left to do: its Combine and receive confirmations were
+superseded by Review, and its project and incoming-changes cards repeated the popover. The dev-only
+`?syncState=` fixture went with it; the states are the pure machine's (`src/core/sync/state.ts`), and
+`git log -- src/app/ui/cloud/fixture.ts` has the fixture back if a dev view of every state is wanted
+again — beside the popover, this time.
 
-1. **Project** — the shared project it belongs to, the two clocks as two stat lines (the time is the
-   coloured word), and the headline and paragraph from the glossary. No chip: the headline takes the
-   state's colour when it wants something from you.
-2. **Incoming changes** — the incoming plan, shown only when something is coming, in verses: "There
-   are changes to 3 verses in 2 books. You also changed 1 of those verses." Then one plain line per
-   book; only a verse you both changed is coloured. Verses are the engine's units from the same
-   facts the policy reads (`IncomingBook.verses`, `versesAlsoHere`); a change it could not place
-   falls back to chapters.
-3. **Suggested changes** — only when they apply: your own copy and "Suggest my changes", "Make my
-   own copy" for an account that cannot write, or the waiting suggestions for one that can
-   ([git](git.md), Suggested changes).
-4. **Shared project** — when the next step is attach or publish (the popover's "Open Sync" lands
-   here for those two).
-
-The screen holds no domain state. The session lives in `Credentials` (through `Gitea`), the
+None of them holds domain state. The session lives in `Credentials` (through `Gitea`), the
 attachment lives in the repository's own `origin`, the state is derived fresh by the pure machine —
 so a reload or a second window shows the same truth rather than a copy of it.
 
@@ -489,8 +478,8 @@ not made.
 `createAccount` (`src/app/ui/cloud/account.ts`) is the one implementation of "signed in": the popover
 and `CloudPanel` on `/settings` each make one, and `SignInForm` and `AccountCard`
 (`src/app/ui/cloud/AccountCard.tsx`) draw it. The attach-and-publish half, `SharedProjectCard`
-(`src/app/ui/cloud/SharedProjectCard.tsx`), is on `/settings` and on `/cloud` whenever the next step is
-attach or publish. An attach or publish re-reads the sync state.
+(`src/app/ui/cloud/SharedProjectCard.tsx`), is on `/settings`. An attach or publish re-reads the sync
+state.
 
 ## What the ports grew
 
@@ -500,18 +489,3 @@ shared project has nothing yet" is an answer), `Git.branch`, `Git.changedPathsBe
 `Remote.fastForward`, `Remote.push(repo, to?)`, and for suggested changes `attachAs`, `urlOf` and
 `fetchRef`. `Remote.pull` and `Remote.moveBranch` are gone. Both hosts answer every one; the desktop
 command table is in [desktop host](desktop.md).
-
-## Seeing every state
-
-`?syncState=<name>` on the cloud screen, under the dev server only (`import.meta.env.DEV` — unlike `?fixture=1`, which any `__SEFER_DESIGN__` build honours), renders a fixture's facts instead of the
-repository's — through the same pure derivation and the same cards, with no branch in the rendering
-that asks where the data came from. A row of buttons above the cards switches between them and
-writes the choice into the URL.
-
-The names are the ten states plus `diverged-apart`: the same STATE as `diverged` and a different
-screen, because when the two sides touched different books the primary action is Combine and when
-they touched the same one it is Compare. A list with only `diverged` would never show the first.
-
-The fixture lives in `src/app/ui/cloud/fixture.ts`, is reached only inside an `import.meta.env.DEV`
-branch, and changes nothing about the application's composition — `src/app/services.ts` does not
-know it exists.

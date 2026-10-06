@@ -512,12 +512,11 @@ Clone (the newest version only unless the caller asks for all; desktop backfills
 
 ### Overview
 
-The app bar's cloud popover (state, clocks, the one right move, sign in and out), Settings' Cloud section (account, shared project, the per-project switches), and what is left of `/cloud`. It reads the two clocks and sorts the project into one of ten states, plans what a Receive would change from change facts and one overlap policy, receives by fast-forward, and Combines as one decision commit; a contested book is settled in Review against the shared project. The check on open and send on save run per project, on by default. Scripture text is never merged automatically. One reading for the whole application (`syncWatch`) feeds the app bar's cloud and its popover, `/cloud`, Review's sync line and Save's receipt; counts are verses and books, never versions. `src/core/sync`, `app/ui/cloud`. → [sync](architecture/sync.md)
+The app bar's cloud popover (state, clocks, the one right move, sign in and out, publish, how your suggestion stands), Settings' Cloud section (account, shared project, how you work — together in the shared project or in your own copy — and the per-project switches), and the Suggestions tab for editors. `/cloud` was deleted on 2026-10-06. It reads the two clocks and sorts the project into one of ten states, plans what a Receive would change from change facts and one overlap policy, receives by fast-forward, and Combines as one decision commit; a contested book is settled in Review against the shared project. The check on open and send on save run per project, on by default. Scripture text is never merged automatically. One reading for the whole application (`syncWatch`) feeds the app bar's cloud and its popover, `/cloud`, Review's sync line and Save's receipt; counts are verses and books, never versions. `src/core/sync`, `app/ui/cloud`. → [sync](architecture/sync.md)
 
 ### Constraints and known bugs
 
 - A contested book's link opens Review for the project, not that book: Review takes no book in its URL.
-- A direct reload onto `/cloud?fixture=1` has shown a blank screen; not yet known whether that predates the lifecycle work.
 - The overlap scope is `book` everywhere; `chapter` and `verse` exist in the policy with no setting.
 - The surfaces of 2026-10-05 — the app bar's cloud, Save's receipt, Review's sync line — have been driven on the fixture only: their behind, diverged and refused-send paths still want a run against a real shared project.
 

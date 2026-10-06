@@ -101,15 +101,16 @@ is on a side. A comparison is still a snapshot — this simply takes a new one.
 
 "The shared project" is the other side of a receive or a combine, as a source like any other: the
 blobs at `refs/remotes/origin/<branch>`, read once per head (`createRecordedVersion(shell, "shared")`),
-never written by a review — it changes only by sending. `/cloud`'s Compare and a contested row of the
-incoming plan open it as `/project/$slug/review?against=shared`; `?pull=<n>` reads a suggestion's head
-instead, labelled as that suggestion ([git](git.md), Suggested changes).
+never written by a review — it changes only by sending. The cloud popover's "See the changes" and a
+contested row of the incoming plan open it as `/project/$slug/review?against=shared`; `?pull=<n>`
+reads a suggestion's head instead, labelled as that suggestion, and `?copy=1` the person's own copy
+as another of their devices left it, labelled "Your copy" ([git](git.md), Suggested changes).
 
 Only this pairing has a third text: the version both sides last agreed on, the merge base, read as
 `createRecordedVersion(shell, "base")`. Against it, every card says where its change came from —
 **changed there**, **changed here**, or **changed in both places** — from the same change facts the
-sync policy decides with (`bookFacts`, `src/core/sync/facts.ts`), so Review and `/cloud` cannot
-disagree about which passages both people touched. It is plain words in the card's header, not a
+sync policy decides with (`bookFacts`, `src/core/sync/facts.ts`), so Review and the cloud popover
+cannot disagree about which passages both people touched. It is plain words in the card's header, not a
 chip, and only "changed in both places" takes a colour (warning): it is the one that asks something
 of the reader. The tint stays by side.
 

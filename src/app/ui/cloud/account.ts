@@ -1,8 +1,8 @@
 /**
  * The account half of cloud sync, as state rather than as a component.
  *
- * Two surfaces show the same session — `/cloud`'s account Card and the Cloud
- * panel in a project's page — and neither of them OWNS it. The session lives
+ * Two surfaces show the same session — the cloud popover and Settings' Cloud
+ * section — and neither of them OWNS it. The session lives
  * in `Credentials` behind `Gitea`; this is the small amount of screen state
  * around asking for it: the form fields, whether the account wants its second
  * factor, and the one failure line.

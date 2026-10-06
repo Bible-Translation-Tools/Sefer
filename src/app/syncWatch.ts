@@ -1,11 +1,11 @@
 /**
  * Where the open project stands with the shared project, as ONE answer for
  * every surface that shows it: the app bar's cloud button, Review's status
- * line, the Record dialog's last line, and `/cloud`.
+ * line, and the Record dialog's last line.
  *
- * It was `/cloud`'s alone, read when that screen mounted, so the only way to
+ * It was the old `/cloud` screen's alone, read when it mounted, so the only way to
  * learn that a send had been refused was to go and look. Now the check on
- * open, every send, and `/cloud` itself all leave their reading here, and the
+ * open, every send, and every receive all leave their reading here, and the
  * surfaces read it — the way `syncStatus` holds the network for everyone. A
  * reading is local work (refs and logs already in the object database); the
  * network is touched only by the check and the send that call `refresh`.
@@ -148,7 +148,7 @@ export const syncWatch = {
   noteFetched: (root: string): void => {
     setFetched((was) => new Map(was).set(root, Date.now()));
   },
-  /** Read `options` and publish it; `/cloud` passes options its own signals gathered. */
+  /** Read `options` and publish it. */
   survey,
   /** Read the open project again and publish it; for after a check, a send or a record. */
   refresh: (services: Services, project: Project): Promise<SyncFacts> => {
