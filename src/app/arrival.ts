@@ -84,12 +84,20 @@ export const cloneArrival = (
 > =>
   Effect.gen(function* () {
     const into = arrivalRoot(services, kind, url);
-    const cloned = yield* cloneRepository(
+    const clone = cloneRepository(
       url,
       into,
       options?.catalogueId,
       kind === "sourceText" ? { history: "latest" } : options?.clone,
     );
+    // A failed clone can leave a partial folder, and git will not clone into
+    // it again. In the Library's own folder that is ours to clear; a project
+    // folder is the person's disk, and stays as it is (`clone.ts`).
+    const cloned = yield* kind === "project"
+      ? clone
+      : Effect.tapError(clone, () =>
+          Effect.ignore(services.fileSystem.remove(into, { recursive: true })),
+        );
     if (kind === "project") {
       yield* rememberProject(services.projectsRoot, into, undefined);
       return { root: into, progress: cloned.progress };

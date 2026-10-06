@@ -545,7 +545,7 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
             message:
               outcome === "held"
                 ? t("Already on this device, under Source texts.")
-                : t("Downloaded. It is under Source texts, beside a project."),
+                : t("Downloaded. Choose it as a source text beside any project."),
             tone: "success",
           });
         else {

@@ -124,18 +124,18 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       book: shell.focused()?.id,
       tick: bound(),
       library: libraryRevision(),
+      declared: Option.match(shell.project()?.metadata() ?? Option.none(), {
+        onNone: (): readonly RelatedResource[] => [],
+        onSome: (metadata) => highestVersions(metadata.related),
+      }),
     }),
-    ({ project }) => {
+    ({ project, declared }) => {
       if (project === undefined) {
         setEntries([]);
         setMissing([]);
         setLoading(false);
         return;
       }
-      const declared = Option.match(shell.project()?.metadata() ?? Option.none(), {
-        onNone: () => [],
-        onSome: (metadata) => highestVersions(metadata.related),
-      });
       setLoading(true);
       void services
         .run(
@@ -442,7 +442,9 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           show. The picker lives under the pane rather than above it: a pane
           is a page of scripture, and a button above it is a button in the
           reading. */}
-      <Show when={!loading() && missing().length > 0}>
+      {/* Only while nothing is picked: a person who chose a text has answered
+          the question this row asks. */}
+      <Show when={!loading() && missing().length > 0 && entries().every((entry) => entry.declared)}>
         <div
           data-testid="declared-missing"
           class="flex shrink-0 flex-col gap-1.5 rounded-md bg-surface-secondary px-3 py-2 text-small"
