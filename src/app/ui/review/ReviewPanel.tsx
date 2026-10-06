@@ -91,6 +91,7 @@ import {
   MenuSeparator,
   Popover,
   Select,
+  Switch,
   toasts,
   usePageLeading,
 } from "../primitives";
@@ -200,6 +201,8 @@ export function ReviewPanel() {
   const [typedName, setTypedName] = createSignal("", { name: "reviewAuthorName" });
   /** Whether recording will also send, so the dialog can say so before the press. */
   const [sends, setSends] = createSignal(false, { name: "reviewSends" });
+  /** Against a suggestion: close it as brought in when this Save sends it. */
+  const [closeOnSave, setCloseOnSave] = createSignal(true, { name: "reviewCloseSuggestion" });
   /** Where Save's send goes, named — the shared project, or the person's own copy. */
   const sendsLine = (): string => {
     const facts = collaboration.facts(shell.project()?.root);
@@ -1022,8 +1025,9 @@ export function ReviewPanel() {
             : {},
       );
       // A suggestion brought in and sent is marked taken on the shared
-      // project, so its author is not left waiting. Not when it stayed here.
-      const accepted = pull();
+      // project, so its author is not left waiting — unless the reviewer chose
+      // to leave it open (some of it now, more later). Not when it stayed here.
+      const accepted = untrack(closeOnSave) ? pull() : undefined;
       const markTaken = (sent: boolean): void => {
         if (accepted === undefined || !sent) return;
         acceptSuggestion(services, project, accepted).catch((cause: unknown) =>
@@ -1784,6 +1788,28 @@ export function ReviewPanel() {
               <p class="pt-3 text-small text-on-surface-secondary" data-review-sends>
                 {sendsLine()}
               </p>
+            </Show>
+            <Show when={pull() !== undefined}>
+              <label
+                class="flex items-start justify-between gap-3 pt-3"
+                data-review-close-suggestion
+              >
+                <span>
+                  <span class="block text-small font-medium">
+                    {t("Close the suggestion as brought in")}
+                  </span>
+                  <span class="block text-smallest text-on-surface-tertiary">
+                    {t(
+                      "Turn off to keep it open — when you are taking part of it now and more later.",
+                    )}
+                  </span>
+                </span>
+                <Switch
+                  aria-label={t("Close the suggestion as brought in")}
+                  checked={closeOnSave()}
+                  onChange={setCloseOnSave}
+                />
+              </label>
             </Show>
           </Show>
         </Dialog>

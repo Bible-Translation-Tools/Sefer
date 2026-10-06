@@ -266,12 +266,18 @@ export const settleWithShared = async (
     const recorded = await recordVersion(services, project, dirty, message, author);
     // Sent where the review said when it named a place (a suggestion brought
     // in goes to the shared project, whatever this project's mode).
+    // A review that names where to send (a suggestion brought in) sends even
+    // when nothing was left to record: the fast-forward itself brought
+    // versions the shared project does not have. Otherwise only a new version
+    // is worth a send.
     const sending =
-      recorded.kind !== "recorded"
-        ? undefined
-        : with_.sendTo === undefined
+      with_.sendTo !== undefined
+        ? recorded.kind === "recorded" || recorded.kind === "nothing"
+          ? sendNow(services, project, "save", with_.sendTo)
+          : undefined
+        : recorded.kind === "recorded"
           ? sendAfterSave(services, project)
-          : sendNow(services, project, "save", with_.sendTo);
+          : undefined;
     if (sending === undefined) void syncWatch.refresh(services, project).catch(() => undefined);
     return { kind: "received", recorded, sending };
   }
