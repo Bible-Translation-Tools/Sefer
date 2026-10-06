@@ -15,6 +15,7 @@ import { EmptyState, PanelHeader } from "../primitives";
 import { ChangesHistorySidebar } from "../workspace/ChangesHistorySidebar";
 import { claimSidebar } from "../workspace/sidebarSlot";
 import { SuggestionsCard } from "./SuggestionsCard";
+import { YourSuggestions } from "./YourSuggestions";
 
 export function SuggestionsScreen() {
   const shell = useShell();
@@ -34,27 +35,30 @@ export function SuggestionsScreen() {
     )),
   );
 
+  // Neither list applies: a writer sees what waits, a person in their own copy
+  // sees their own, and someone who is both sees both.
+  const nothing = (): boolean => facts()?.mode !== "copy" && facts()?.canWrite !== true;
+
   return (
     <main class="flex h-full min-w-0 flex-col gap-4 overflow-y-auto p-6" data-screen="suggestions">
       <PanelHeader
         title={t("Suggestions")}
         subtitle={t("The shared project only changes when an editor accepts.")}
       />
-      <Show
-        when={
-          shell.project() !== undefined && facts()?.canWrite === true ? shell.project() : undefined
-        }
-        fallback={
-          <EmptyState
-            icon={<Inbox aria-hidden="true" />}
-            title={t("Nothing for you to bring in")}
-            description={t(
-              "Suggestions are for the project's editors to review. If you work in your own copy, how yours stands is in the cloud menu.",
-            )}
-          />
-        }
-      >
+      <Show when={facts()?.mode === "copy" ? shell.project() : undefined}>
+        {(project) => <YourSuggestions project={project()} />}
+      </Show>
+      <Show when={facts()?.canWrite === true ? shell.project() : undefined}>
         {(project) => <SuggestionsCard project={project()} signedIn />}
+      </Show>
+      <Show when={nothing()}>
+        <EmptyState
+          icon={<Inbox aria-hidden="true" />}
+          title={t("No suggestions here")}
+          description={t(
+            "Suggestions are offered from your own copy, and reviewed by the shared project's editors. Choose how you work in Settings.",
+          )}
+        />
       </Show>
     </main>
   );

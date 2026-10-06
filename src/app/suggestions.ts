@@ -398,7 +398,7 @@ export const acceptSuggestion = (
     }),
   );
 
-/** How the person's newest suggestion stands, as its author reads it. */
+/** How one of the person's suggestions stands, as its author reads it. */
 export type MySuggestion =
   | { readonly kind: "waiting"; readonly suggestion: Suggestion }
   | { readonly kind: "taken"; readonly suggestion: Suggestion }
@@ -408,43 +408,76 @@ export type MySuggestion =
       readonly note: string | undefined;
     };
 
+/** How many of the person's suggestions are read, newest first: the recent story, not an archive. */
+const MINE_SHOWN = 5;
+
 /**
- * The person's newest suggestion to the shared project.
+ * The person's suggestions to the shared project, newest first.
  *
  * "Taken" is asked of git, not of Gitea's flag: a suggestion Review brought
  * in is a decision commit with the suggestion's head as a parent, which a
  * Gitea that does not allow "manually merged" never calls merged. Its head
- * being in the shared project's history is the answer either way.
+ * being in the shared project's history is the answer either way. The
+ * editor's note is read only for a declined one.
  */
-export const mySuggestion = (
+export const mySuggestions = (
   services: Services,
   project: Project,
-): Promise<MySuggestion | undefined> =>
+): Promise<readonly MySuggestion[]> =>
   services.run(
     Effect.orElseSucceed(
       Effect.gen(function* () {
         const at = yield* where(project);
-        if (at === undefined || at.me === undefined) return undefined;
-        const latest = yield* (yield* Suggestions).latestFrom(at.host, at.owner, at.name, at.me);
-        if (latest === undefined) return undefined;
-        const { suggestion, note } = latest;
-        if (suggestion.state === "open") return { kind: "waiting", suggestion } as const;
-        if (suggestion.state === "merged") return { kind: "taken", suggestion } as const;
+        if (at === undefined || at.me === undefined) return [];
+        const me = at.me;
+        const service = yield* Suggestions;
+        const all = (yield* service.from(at.host, at.owner, at.name, me)).slice(0, MINE_SHOWN);
         const git = yield* Git;
         const repo = yield* git.open(project.root);
-        const head = suggestion.head;
-        const base =
-          head === undefined
-            ? Option.none()
-            : yield* Effect.orElseSucceed(git.mergeBase(repo, head, trackingRef(at.branch)), () =>
-                Option.none(),
-              );
-        return Option.isSome(base) && base.value === head
-          ? ({ kind: "taken", suggestion } as const)
-          : ({ kind: "declined", suggestion, note } as const);
+        const shared = trackingRef(at.branch);
+        return yield* Effect.forEach(all, (suggestion) =>
+          Effect.gen(function* () {
+            if (suggestion.state === "open") return { kind: "waiting", suggestion } as const;
+            if (suggestion.state === "merged") return { kind: "taken", suggestion } as const;
+            const head = suggestion.head;
+            const base =
+              head === undefined
+                ? Option.none()
+                : yield* Effect.orElseSucceed(git.mergeBase(repo, head, shared), () =>
+                    Option.none(),
+                  );
+            if (Option.isSome(base) && base.value === head)
+              return { kind: "taken", suggestion } as const;
+            const note = yield* Effect.orElseSucceed(
+              service.noteOn(at.host, at.owner, at.name, suggestion.number, me),
+              () => undefined,
+            );
+            return { kind: "declined", suggestion, note } as const;
+          }),
+        );
       }),
-      () => undefined,
+      (): readonly MySuggestion[] => [],
     ),
+  );
+
+/** The person's newest suggestion, for the popover's one line. */
+export const mySuggestion = async (
+  services: Services,
+  project: Project,
+): Promise<MySuggestion | undefined> => (await mySuggestions(services, project))[0];
+
+/** Withdraws the person's own open suggestion: closed, nothing in their copy changes. */
+export const withdrawSuggestion = (
+  services: Services,
+  project: Project,
+  suggestion: Suggestion,
+): Promise<void> =>
+  services.run(
+    Effect.gen(function* () {
+      const at = yield* where(project);
+      if (at === undefined) return;
+      yield* (yield* Suggestions).decline(at.host, at.owner, at.name, suggestion.number, "");
+    }),
   );
 
 /**

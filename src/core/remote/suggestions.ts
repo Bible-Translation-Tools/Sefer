@@ -73,19 +73,24 @@ interface SuggestionsService {
     name: string,
     request: SuggestRequest,
   ) => Effect.Effect<Suggestion, GiteaError>;
-  /**
-   * The newest suggestion `author` made to `owner/name`, open or not, with the
-   * last thing anybody else said on it — the editor's note on a declined one.
-   */
-  readonly latestFrom: (
+  /** The suggestions `author` made to `owner/name`, open or not, newest first. */
+  readonly from: (
     host: string,
     owner: string,
     name: string,
     author: string,
-  ) => Effect.Effect<
-    { readonly suggestion: Suggestion; readonly note: string | undefined } | undefined,
-    GiteaError
-  >;
+  ) => Effect.Effect<readonly Suggestion[], GiteaError>;
+  /**
+   * The last thing anybody but `author` said on suggestion `number` — the
+   * editor's note on a declined one — or `undefined` when nobody did.
+   */
+  readonly noteOn: (
+    host: string,
+    owner: string,
+    name: string,
+    number: number,
+    author: string,
+  ) => Effect.Effect<string | undefined, GiteaError>;
   /**
    * Marks a suggestion brought in by `commit` — Gitea's "manually merged" —
    * or, where the repository does not allow that, closes it with a note
@@ -98,7 +103,10 @@ interface SuggestionsService {
     number: number,
     commit: string,
   ) => Effect.Effect<void, GiteaError>;
-  /** Closes a suggestion without bringing it in, leaving `note` on it when given. */
+  /**
+   * Closes a suggestion without bringing it in, leaving `note` on it when
+   * given: an editor declining it, or its author withdrawing it.
+   */
   readonly decline: (
     host: string,
     owner: string,
@@ -259,26 +267,24 @@ const make = (fetch: HttpFetch) =>
 
       open,
 
-      latestFrom: (host, owner, name, author) =>
+      from: (host, owner, name, author) =>
+        Effect.map(list(host, owner, name, "all"), (all) =>
+          all.filter((held) => sameLogin(held.author, author)),
+        ),
+
+      noteOn: (host, owner, name, number, author) =>
         Effect.gen(function* () {
-          const found = (yield* list(host, owner, name, "all")).find((held) =>
-            sameLogin(held.author, author),
-          );
-          if (found === undefined) return undefined;
-          if (found.state === "open") return { suggestion: found, note: undefined };
           const held = yield* session(host);
           const decoded = decodeComments(
             yield* answer(
-              yield* request(held, repoPath(host, owner, name, `/issues/${found.number}/comments`)),
+              yield* request(held, repoPath(host, owner, name, `/issues/${number}/comments`)),
             ),
           );
-          const said =
-            decoded._tag === "Failure"
-              ? undefined
-              : decoded.success.findLast(
-                  (entry) => !sameLogin(entry.user?.login ?? author, author) && entry.body !== "",
-                )?.body;
-          return { suggestion: found, note: said };
+          return decoded._tag === "Failure"
+            ? undefined
+            : decoded.success.findLast(
+                (entry) => !sameLogin(entry.user?.login ?? author, author) && entry.body !== "",
+              )?.body;
         }),
 
       accept: (host, owner, name, number, commit) =>

@@ -70,7 +70,7 @@ import { describe, reasonOf } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { recordVersion } from "../../recordVersion";
-import { acceptSuggestion, copyRef, suggestionRef } from "../../suggestions";
+import { acceptSuggestion, copyRef, suggestionRef, suggestMyChanges } from "../../suggestions";
 import { sendAfterSave, sendNow, settleWithShared, type SendOutcome } from "../../syncActions";
 import { setAuthorName, syncPreferences } from "../../syncSettings";
 import { syncWatch } from "../../syncWatch";
@@ -1170,8 +1170,11 @@ export function ReviewPanel() {
     readonly tone: "success" | "warning" | "error" | "muted";
     readonly title: string;
     readonly detail?: string;
-    /** The move the line offers: compare what arrived, send again, or go sign in. */
-    readonly action?: "see" | "retry" | "send" | "open";
+    /**
+     * The move the line offers: compare what arrived, send again, go sign in,
+     * or — after a send to the person's copy — offer it to the shared project.
+     */
+    readonly action?: "see" | "retry" | "send" | "open" | "offer";
   }
   const [recordedLine, setRecordedLine] = createSignal<ReceiptLine | undefined>(undefined, {
     name: "reviewRecordedLine",
@@ -1191,6 +1194,21 @@ export function ReviewPanel() {
     // Attached to nothing, there is no second line to say.
     if (outcome.kind === "detached") return undefined;
     const copy = sendOutcomeCopy(outcome, syncWatch.sync(project?.root)?.state);
+    // Sent to the person's copy: the next move is offering it, right here.
+    // An open suggestion already follows the copy, so it needs no second offer.
+    if (outcome.kind === "sent" && outcome.toCopy === true) {
+      const waiting = collaboration.facts(project?.root)?.mine?.kind === "waiting";
+      return waiting
+        ? {
+            ...copy,
+            detail: t("Your open suggestion now includes these changes."),
+          }
+        : {
+            ...copy,
+            detail: t("Offer them to the shared project when they are ready."),
+            action: "offer",
+          };
+    }
     const action =
       outcome.kind === "held"
         ? ("send" as const)
@@ -1225,6 +1243,28 @@ export function ReviewPanel() {
       case "retry":
       case "send":
         follow(sendNow(services, project));
+        return;
+      case "offer":
+        setSendLine("sending");
+        void suggestMyChanges(services, project, t("Suggested changes"))
+          .then(() =>
+            setSendLine({
+              tone: "success",
+              title: t("Offered to the shared project"),
+              detail: t(
+                "The project's editors will see your changes. Later sends add to the same suggestion.",
+              ),
+            }),
+          )
+          .catch((cause: unknown) =>
+            setSendLine({
+              tone: "error",
+              title: t("Could not offer your changes"),
+              detail: describe(cause),
+              action: "offer",
+            }),
+          )
+          .finally(() => void collaboration.refresh(services, project));
         return;
     }
   };
@@ -1754,9 +1794,9 @@ function Receipt(props: {
     readonly tone: "success" | "warning" | "error" | "muted";
     readonly title: string;
     readonly detail?: string;
-    readonly action?: "see" | "retry" | "send" | "open";
+    readonly action?: "see" | "retry" | "send" | "open" | "offer";
   };
-  readonly onAction: (action: "see" | "retry" | "send" | "open") => void;
+  readonly onAction: (action: "see" | "retry" | "send" | "open" | "offer") => void;
 }) {
   const glyph = () => {
     switch (props.line.tone) {
@@ -1770,7 +1810,7 @@ function Receipt(props: {
         return <Info size={18} class="text-on-surface-tertiary" />;
     }
   };
-  const label = (action: "see" | "retry" | "send" | "open"): string => {
+  const label = (action: "see" | "retry" | "send" | "open" | "offer"): string => {
     switch (action) {
       case "see":
         return t("Compare the changes");
@@ -1779,7 +1819,9 @@ function Receipt(props: {
       case "send":
         return t("Send now");
       case "open":
-        return t("Open Sync");
+        return t("Set up sharing");
+      case "offer":
+        return t("Offer these changes");
     }
   };
   return (
@@ -1796,7 +1838,7 @@ function Receipt(props: {
           {(action) => (
             <Button
               size="sm"
-              variant={action() === "see" ? "primary" : "secondary"}
+              variant={action() === "see" || action() === "offer" ? "primary" : "secondary"}
               data-receipt-action={action()}
               onClick={() => props.onAction(action())}
             >

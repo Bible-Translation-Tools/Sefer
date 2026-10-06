@@ -99,7 +99,7 @@ export function SuggestionsCard(props: { readonly project: Project; readonly sig
       <Card class="space-y-3" data-cloud-card="suggestions">
         <PanelHeader
           level={3}
-          title={t("Suggested changes ({count})", { count: waiting().length })}
+          title={t("To review ({count})", { count: waiting().length })}
           subtitle={t(
             "From people working in their own copy. The shared project only changes when you accept.",
           )}

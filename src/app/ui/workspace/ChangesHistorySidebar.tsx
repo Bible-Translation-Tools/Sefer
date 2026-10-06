@@ -66,8 +66,12 @@ export function VersionTabs(props: {
       >
         {t("History")}
       </Link>
-      {/* An editor's tab: the suggestions only someone who can write brings in. */}
-      <Show when={facts()?.canWrite === true || props.active === "suggestions"}>
+      {/* Suggestions: an editor's to review, and a person-in-their-copy's own. */}
+      <Show
+        when={
+          facts()?.canWrite === true || facts()?.mode === "copy" || props.active === "suggestions"
+        }
+      >
         <Link
           to="/project/$slug/suggestions"
           params={{ slug: shell.slug() }}
