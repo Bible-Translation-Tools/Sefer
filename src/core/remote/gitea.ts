@@ -168,14 +168,18 @@ export interface GiteaService {
 export class Gitea extends Context.Service<Gitea, GiteaService>()("Gitea") {}
 
 /**
- * The scopes the token is minted with, copied from v1 so an account signed in
- * from either app carries the same authority. `write:repository` is the one
- * that matters for sync; the reads are what the project and account screens
- * need. A token is never minted with more than this — notably not `write:admin`.
+ * The scopes the token is minted with, first copied from v1 so an account
+ * signed in from either app carries the same authority. `write:repository` is
+ * the one that matters for sync — forks and pull requests included;
+ * `write:issue` is suggested changes' note (a declined suggestion's reason is
+ * an issue comment, and Gitea answers 403 without it); the reads are what the
+ * project and account screens need. A token is never minted with more than
+ * this — notably not `write:admin`. A token minted before a scope was added
+ * lacks it until its person signs in again.
  */
 const SESSION_TOKEN_SCOPES: readonly string[] = [
   "read:activitypub",
-  "read:issue",
+  "write:issue",
   "write:misc",
   "read:notification",
   "read:organization",

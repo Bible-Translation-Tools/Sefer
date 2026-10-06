@@ -257,12 +257,23 @@ const make = (fetch: HttpFetch) =>
       body: string,
     ) =>
       Effect.asVoid(
-        Effect.flatMap(
-          request(held, repoPath(host, owner, name, `/issues/${number}/comments`), {
-            method: "POST",
-            body: { body },
-          }),
-          answer,
+        Effect.mapError(
+          Effect.flatMap(
+            request(held, repoPath(host, owner, name, `/issues/${number}/comments`), {
+              method: "POST",
+              body: { body },
+            }),
+            answer,
+          ),
+          // A sign-in from before notes needed `write:issue` (gitea.ts) carries
+          // a token Gitea refuses a comment to. Say the fix, not the status.
+          (error: GiteaError): GiteaError =>
+            error.reason === "Unauthorized"
+              ? failed(
+                  "Unauthorized",
+                  "this sign-in cannot leave notes yet: sign out and in again, then try once more",
+                )
+              : error,
         ),
       );
 
