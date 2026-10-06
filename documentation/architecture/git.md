@@ -291,7 +291,11 @@ person's own; `src/app/collaboration.ts` holds what the surfaces show. They join
 4. `ReviewPanel.tsx` reads `?pull=<n>` through `suggestionRef`, and accepts after Record.
 
 A copy is never forked twice: Gitea refuses a second fork of the same project (409), so a copy made
-on another device is found (`RemoteRepo.parent`) and attached. Forks and pull requests are built but
+on another device is found (`RemoteRepo.parent`) and attached. On the Web every one of these calls goes
+through the WACS proxy (`../wacs-isomorphic-git-proxy`), which forwards only an explicit list of API
+paths: `pulls`, `pulls/{n}` (PATCH, to close), `pulls/{n}/merge` and `issues/{n}/comments` were
+added for this on 2026-10-06. A suggestion call missing from that list fails in the browser as
+"Failed to fetch"; desktop talks to Gitea directly and never meets it. Forks and pull requests are built but
 not yet exercised against a second account.
 
 ## ProjectAdmin
