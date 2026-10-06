@@ -177,7 +177,10 @@ export function ReviewPanel() {
   const [selected, setSelected] = createSignal<BookId | undefined>(undefined, {
     name: "reviewBook",
   });
-  const [markup, setMarkup] = createSignal(false, { name: "reviewMarkup" });
+  // The shell's mode, not a copy: the palette's Toggle USFM and this screen's
+  // View menu move the same switch every editor surface follows.
+  const markup = (): boolean => shell.mode() === "usfm";
+  const setMarkup = (on: boolean): void => shell.setMode(on ? "usfm" : "default");
   const [message, setMessage] = createSignal("", { name: "reviewMessage" });
   const [busy, setBusy] = createSignal("", { name: "reviewBusy" });
   const [note, setNote] = createSignal("", { name: "reviewNote" });
