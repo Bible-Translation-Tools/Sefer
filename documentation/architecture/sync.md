@@ -348,6 +348,28 @@ the second offers — Compare the changes for a refusal because the shared proje
 again when it could not be reached, Open Sync for a sign-in. `sendNow` is the same send without the
 setting, for a button someone pressed.
 
+### Two ways to work
+
+Ruled 2026-10-06: exactly two modes, per project on this device (`CollabMode` in
+`src/app/syncSettings.ts`), and never a remote chosen per press.
+
+1. **Together in the shared project.** Send to and receive from `origin`. The default when the
+   account can write to what it cloned.
+2. **In my own copy, offering changes when ready.** Send to `copy` (a Gitea fork); "Offer my changes"
+   opens a suggestion ([git](git.md), Suggested changes). The default once a send is refused for
+   permission; the first mode is then not offered until the shared project's permissions change.
+
+Whether an account can write is the network's answer, asked again on the check's schedule
+(`collaboration.ts`); a refused send outranks any remembered one. A gained permission is said in the
+popover ("You can now work directly in the shared project") and never acted on by itself; a writer
+going back just sends. A writer may choose the copy mode (a paper trail of suggestions). Choosing it
+makes the fork, or finds the one made on another device; a project cloned from the person's own fork
+is re-rooted (its parent becomes `origin`); a shared project that is the person's own and copies
+nothing asks which project it should suggest to, and refuses one that shares no history with it. A
+suggestion brought in by Review is always sent to the shared project, whatever the reviewer's own
+mode. Still to come: reading a person's copy from their other device through Review, and a
+Suggestions tab beside Review and History.
+
 ### One reading for every surface
 
 `src/app/syncWatch.ts` holds the open project's last reading (`readSync` and its plan) for the whole

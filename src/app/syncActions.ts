@@ -33,6 +33,7 @@ import {
   type ReceiveRefusal,
 } from "#core/sync";
 
+import { collaboration } from "./collaboration";
 import { remoteReasonOf } from "./describe";
 import { recordVersion, type RecordOutcome } from "./recordVersion";
 import type { Services } from "./services";
@@ -100,6 +101,9 @@ export const checkForChanges = async (services: Services, project: Project): Pro
     ...(reason === undefined ? {} : { "sync.reason": reason }),
   });
   await syncWatch.refresh(services, project).catch(() => undefined);
+  // The network's half, on the same schedule: can this account write, how its
+  // suggestion stands, and how many wait for an editor.
+  if (verdict === "passed") void collaboration.refresh(services, project);
   if (result !== "fetched" || !syncPreferences(services.settings, root).skipReviewIncoming) return;
   // Received without Review only when the policy lets every book through; a
   // book that needs a person makes the receive refuse, and /cloud shows it.
@@ -137,13 +141,19 @@ export const sendNow = async (
   services: Services,
   project: Project,
   cause: "save" | "press" = "press",
+  /** A remote other than the project's mode would choose: a suggestion brought in goes to the shared project. */
+  to?: string,
 ): Promise<SendOutcome> => {
-  const outcome = await attemptSend(services, project, cause);
+  const outcome = await attemptSend(services, project, cause, to);
   // Refused because the shared project moved: ask it what changed, so every
   // surface can say "behind" or "diverged" with the facts.
   if (outcome.kind === "refused" && outcome.reason === "Rejected")
     await checkForChanges(services, project);
   else await syncWatch.refresh(services, project).catch(() => undefined);
+  // Refused by the shared project's permissions, or a sign-in gone stale: ask
+  // whether this account can write, so the popover can offer the copy mode.
+  if (outcome.kind === "refused" && outcome.reason === "Unauthorized")
+    await collaboration.refresh(services, project);
   return outcome;
 };
 
@@ -151,6 +161,7 @@ const attemptSend = async (
   services: Services,
   project: Project,
   cause: "save" | "press",
+  explicit: string | undefined,
 ): Promise<SendOutcome> => {
   const root = project.root;
   if (!syncStatus.interfaceUp()) {
@@ -162,7 +173,7 @@ const attemptSend = async (
     "sync.cause": cause,
   });
   try {
-    const to = await destination(services, project);
+    const to = explicit ?? (await destination(services, project));
     const sent = await services.run(
       Effect.gen(function* () {
         const git = yield* Git;
@@ -244,7 +255,14 @@ export const settleWithShared = async (
   if (received._tag === "Success") {
     const dirty = project.books.filter((book) => services.save.dirty(book));
     const recorded = await recordVersion(services, project, dirty, message, author);
-    const sending = recorded.kind === "recorded" ? sendAfterSave(services, project) : undefined;
+    // Sent where the review said when it named a place (a suggestion brought
+    // in goes to the shared project, whatever this project's mode).
+    const sending =
+      recorded.kind !== "recorded"
+        ? undefined
+        : with_.sendTo === undefined
+          ? sendAfterSave(services, project)
+          : sendNow(services, project, "save", with_.sendTo);
     if (sending === undefined) void syncWatch.refresh(services, project).catch(() => undefined);
     return { kind: "received", recorded, sending };
   }

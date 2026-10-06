@@ -1,5 +1,6 @@
 /**
- * The four sync settings, per project, and this device's author name.
+ * The four sync settings, per project, how this device works on the project
+ * (`CollabMode`), and this device's author name.
  *
  * Two of the four reach the network — checking on open and sending after a
  * save — and they are ON by default, so an ordinary translator never has to
@@ -43,6 +44,7 @@ const SyncByProject = Schema.Record(
     sendOnSave: Schema.optionalKey(Schema.Boolean),
     skipReviewMine: Schema.optionalKey(Schema.Boolean),
     skipReviewIncoming: Schema.optionalKey(Schema.Boolean),
+    works: Schema.optionalKey(Schema.Literals(["shared", "copy"])),
   }),
 );
 
@@ -88,6 +90,24 @@ export const setSyncPreference = (
   const { [key]: _dropped, ...rest } = all[root] ?? {};
   const mine = value === SYNC_DEFAULTS[key] ? rest : { ...rest, [key]: value };
   return settings.set(keys.byProject, { ...all, [root]: mine });
+};
+
+/**
+ * How this device works on a project with other people: in the ONE shared
+ * project, or in the person's own copy of it, offering changes when ready.
+ * Two modes and no more, so nobody picks a remote per press (see
+ * documentation/architecture/sync.md, "Two ways to work").
+ */
+export type CollabMode = "shared" | "copy";
+
+/** The mode chosen on this device, or `undefined` when nobody chose one. */
+export const chosenMode = (settings: SettingsService, root: string): CollabMode | undefined =>
+  settings.get(syncKeys(settings).byProject)[root]?.works;
+
+export const setChosenMode = (settings: SettingsService, root: string, mode: CollabMode) => {
+  const keys = syncKeys(settings);
+  const all = settings.get(keys.byProject);
+  return settings.set(keys.byProject, { ...all, [root]: { ...all[root], works: mode } });
 };
 
 /** The author name this device records, or `""` when none was given yet. */

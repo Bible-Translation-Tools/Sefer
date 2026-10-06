@@ -7,5 +7,6 @@
 export { AccountCard } from "./AccountCard";
 export { createAccount } from "./account";
 export { CloudScreen } from "./CloudScreen";
+export { CollabModeCard } from "./CollabModeCard";
 export { SharedProjectCard } from "./SharedProjectCard";
 export { SyncSettingsCard } from "./SyncSettingsCard";

@@ -160,19 +160,7 @@ export function SharedProjectCard(props: {
 
   return (
     <Card class="space-y-3" data-cloud-card="attach">
-      <PanelHeader
-        level={3}
-        title={t("Shared project")}
-        actions={
-          <a
-            class="text-small font-medium text-brand underline underline-offset-2"
-            href="/cloud"
-            data-cloud="open-sync"
-          >
-            {t("Open sync…")}
-          </a>
-        }
-      />
+      <PanelHeader level={3} title={t("Shared project")} />
 
       <Show
         when={account.host !== null && account.session() !== undefined}

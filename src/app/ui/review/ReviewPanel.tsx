@@ -69,7 +69,7 @@ import { describe, reasonOf } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { recordVersion } from "../../recordVersion";
-import { suggestionRef } from "../../suggestions";
+import { acceptSuggestion, suggestionRef } from "../../suggestions";
 import { sendAfterSave, sendNow, settleWithShared, type SendOutcome } from "../../syncActions";
 import { setAuthorName, syncPreferences } from "../../syncSettings";
 import { syncWatch } from "../../syncWatch";
@@ -995,6 +995,18 @@ export function ReviewPanel() {
         settled,
         theirsRef() === undefined ? {} : { theirs: theirsRef(), sendTo: "origin" },
       );
+      // A suggestion brought in and sent is marked taken on the shared
+      // project, so its author is not left waiting. Not when it stayed here.
+      const accepted = pull();
+      const markTaken = (sent: boolean): void => {
+        if (accepted === undefined || !sent) return;
+        acceptSuggestion(services, project, accepted).catch((cause: unknown) =>
+          toasts.error({
+            title: t("Brought in, but the suggestion is still open on the shared project"),
+            message: describe(cause),
+          }),
+        );
+      };
       const done = (): void => {
         setMessage("");
         startOver();
@@ -1027,6 +1039,7 @@ export function ReviewPanel() {
             title: t("Combined with the shared project on this device"),
             detail: staticMessage,
           });
+          markTaken(outcome.sent);
           setSendLine(
             outcome.sent
               ? lineOfSend({ kind: "sent" })
@@ -1055,6 +1068,7 @@ export function ReviewPanel() {
                 detail: staticMessage,
               });
               follow(outcome.sending);
+              void outcome.sending?.then((sent) => markTaken(sent.kind === "sent"));
               done();
               break;
             case "not-recorded":

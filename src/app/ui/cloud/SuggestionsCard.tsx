@@ -1,11 +1,11 @@
 /**
- * Suggested changes on /cloud: the translator's own copy and their
- * suggestion, and — for someone who can write to the shared project — the
- * suggestions waiting to be brought in.
+ * The suggestions waiting for an editor: for someone who can write to the
+ * shared project, each one to review (in Review, against the suggestion) or
+ * to decline with a note its author reads.
  *
- * Shows only what applies: nothing at all for a translator who writes to the
- * shared project directly, which is the whole point of the flow being one
- * card. Its logic is `src/app/suggestions.ts`; this is the words and buttons.
+ * Shows nothing to anyone else. The author's side — their copy, offering
+ * their changes, how their suggestion stands — is the cloud popover's. Its
+ * logic is `src/app/suggestions.ts`; this is the words and buttons.
  */
 import { useNavigate } from "@tanstack/solid-router";
 import { For, Show, createEffect, createSignal } from "solid-js";
@@ -20,18 +20,14 @@ import {
   canWriteShared,
   declineSuggestion,
   fetchSuggestion,
-  hasOwnCopy,
-  makeOwnCopy,
   openSuggestions,
-  suggestMyChanges,
 } from "../../suggestions";
-import { Button, Card, PanelHeader, toasts } from "../primitives";
+import { Button, Card, Input, PanelHeader, toasts } from "../primitives";
 
 export function SuggestionsCard(props: { readonly project: Project; readonly signedIn: boolean }) {
   const shell = useShell();
   const navigate = useNavigate();
   const { services } = shell;
-  const [ownCopy, setOwnCopy] = createSignal(false, { name: "suggestionsOwnCopy" });
   /** True, false, or unknown — no shared project, or it could not be asked. */
   const [writer, setWriter] = createSignal<boolean | undefined>(undefined, {
     name: "suggestionsWriter",
@@ -43,6 +39,7 @@ export function SuggestionsCard(props: { readonly project: Project; readonly sig
     name: "suggestionsDeclining",
   });
   const [busy, setBusy] = createSignal(false, { name: "suggestionsBusy" });
+  const [note, setNote] = createSignal("", { name: "suggestionsDeclineNote" });
 
   /**
    * The project is a parameter, not a read: this runs from promise
@@ -52,11 +49,9 @@ export function SuggestionsCard(props: { readonly project: Project; readonly sig
   let asked = 0;
   const load = async (project: Project, signedIn: boolean): Promise<void> => {
     const mine = ++asked;
-    const ownCopy = await hasOwnCopy(services, project);
     const canWrite = signedIn ? await canWriteShared(services, project) : undefined;
     const waiting = canWrite === true ? await openSuggestions(services, project) : [];
     if (mine !== asked) return;
-    setOwnCopy(ownCopy);
     setWriter(canWrite);
     setWaiting(waiting);
   };
@@ -100,69 +95,24 @@ export function SuggestionsCard(props: { readonly project: Project; readonly sig
   };
 
   return (
-    <Show when={props.signedIn}>
+    <Show when={props.signedIn && writer() === true}>
       <Card class="space-y-3" data-cloud-card="suggestions">
-        <Show when={ownCopy()}>
-          <PanelHeader level={3} title={t("Your own copy")} />
-          <p class="text-small text-on-surface-secondary">
-            {t(
-              "Your changes go to your own copy of the shared project. When they are ready, suggest them, and someone who looks after the shared project can bring them in.",
-            )}
-          </p>
-          <Button
-            variant="secondary"
-            disabled={busy()}
-            onClick={() =>
-              act(
-                suggestMyChanges(services, props.project, t("Suggested changes")),
-                t("Your changes are suggested"),
-                props.project,
-                props.signedIn,
-              )
-            }
-          >
-            {t("Suggest my changes")}
-          </Button>
-        </Show>
-
-        <Show when={!ownCopy() && writer() === false}>
-          <PanelHeader level={3} title={t("Can't send to the shared project?")} />
-          <p class="text-small text-on-surface-secondary">
-            {t(
-              "If this account can't write to the shared project, make your own copy of it: your changes are sent there, and you can suggest them when they are ready.",
-            )}
-          </p>
-          <Button
-            variant="secondary"
-            disabled={busy()}
-            onClick={() =>
-              act(
-                makeOwnCopy(services, props.project),
-                t("Your own copy is ready, and your changes are in it"),
-                props.project,
-                props.signedIn,
-              )
-            }
-          >
-            {t("Make my own copy")}
-          </Button>
-        </Show>
-
-        <Show when={writer() === true}>
-          <PanelHeader
-            level={3}
-            title={t("Suggested changes ({count})", { count: waiting().length })}
-          />
-          <Show
-            when={waiting().length > 0}
-            fallback={
-              <p class="text-small text-on-surface-secondary">{t("Nothing is waiting.")}</p>
-            }
-          >
-            <ul class="space-y-2">
-              <For each={waiting()}>
-                {(suggestion) => (
-                  <li class="flex items-center justify-between gap-3">
+        <PanelHeader
+          level={3}
+          title={t("Suggested changes ({count})", { count: waiting().length })}
+          subtitle={t(
+            "From people working in their own copy. The shared project only changes when you accept.",
+          )}
+        />
+        <Show
+          when={waiting().length > 0}
+          fallback={<p class="text-small text-on-surface-secondary">{t("Nothing is waiting.")}</p>}
+        >
+          <ul class="space-y-3">
+            <For each={waiting()}>
+              {(suggestion) => (
+                <li class="space-y-2" data-suggestion={suggestion.number}>
+                  <div class="flex items-center justify-between gap-3">
                     <span class="text-small">
                       {t("{author} suggested changes", { author: suggestion.author })}
                       <span class="text-on-surface-tertiary">
@@ -174,42 +124,56 @@ export function SuggestionsCard(props: { readonly project: Project; readonly sig
                       <Button size="sm" disabled={busy()} onClick={() => review(suggestion)}>
                         {t("Review")}
                       </Button>
-                      <Show
-                        when={declining() === suggestion.number}
-                        fallback={
-                          <Button
-                            size="sm"
-                            variant="tertiary"
-                            disabled={busy()}
-                            onClick={() => setDeclining(suggestion.number)}
-                          >
-                            {t("Decline")}
-                          </Button>
-                        }
-                      >
+                      <Show when={declining() !== suggestion.number}>
                         <Button
                           size="sm"
                           variant="tertiary"
                           disabled={busy()}
                           onClick={() => {
-                            setDeclining(undefined);
-                            act(
-                              declineSuggestion(services, props.project, suggestion, ""),
-                              t("Declined"),
-                              props.project,
-                              props.signedIn,
-                            );
+                            setNote("");
+                            setDeclining(suggestion.number);
                           }}
                         >
-                          {t("Yes, decline")}
+                          {t("Decline")}
                         </Button>
                       </Show>
                     </span>
-                  </li>
-                )}
-              </For>
-            </ul>
-          </Show>
+                  </div>
+                  <Show when={declining() === suggestion.number}>
+                    <form
+                      class="flex flex-wrap items-center gap-2"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        setDeclining(undefined);
+                        act(
+                          declineSuggestion(services, props.project, suggestion, note()),
+                          t("Declined"),
+                          props.project,
+                          props.signedIn,
+                        );
+                      }}
+                    >
+                      <Input
+                        size="sm"
+                        wrapperClass="min-w-0 flex-1"
+                        placeholder={t("Why? {author} will read this.", {
+                          author: suggestion.author,
+                        })}
+                        value={note()}
+                        onInput={(event) => setNote(event.currentTarget.value)}
+                      />
+                      <Button size="sm" type="submit" disabled={busy()}>
+                        {t("Decline")}
+                      </Button>
+                      <Button size="sm" variant="tertiary" onClick={() => setDeclining(undefined)}>
+                        {t("Not now")}
+                      </Button>
+                    </form>
+                  </Show>
+                </li>
+              )}
+            </For>
+          </ul>
         </Show>
       </Card>
     </Show>

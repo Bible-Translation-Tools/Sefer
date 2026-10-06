@@ -19,7 +19,7 @@ import { Context, Effect, Layer, Option, Schema } from "effect";
 
 import { Gitea, GiteaError, type HttpFetch, type HttpResponse, type Session } from "./gitea";
 
-/** One open suggestion, as the steward's list shows it. */
+/** One suggestion, as the steward's list and its author's popover show it. */
 export interface Suggestion {
   readonly number: number;
   readonly title: string;
@@ -29,6 +29,14 @@ export interface Suggestion {
   readonly updatedAt: string;
   /** The branch it suggests, on its author's copy. */
   readonly branch: string;
+  /** The commit it suggests, when Gitea said. */
+  readonly head: string | undefined;
+  /**
+   * Gitea's own word. `merged` is only true when Gitea merged it or was told
+   * it was; a suggestion brought in by Sefer's Review is a decision commit
+   * Gitea may not recognise, so "was it taken" is asked of git, by its `head`.
+   */
+  readonly state: "open" | "merged" | "closed";
 }
 
 interface SuggestRequest {
@@ -65,6 +73,31 @@ interface SuggestionsService {
     name: string,
     request: SuggestRequest,
   ) => Effect.Effect<Suggestion, GiteaError>;
+  /**
+   * The newest suggestion `author` made to `owner/name`, open or not, with the
+   * last thing anybody else said on it — the editor's note on a declined one.
+   */
+  readonly latestFrom: (
+    host: string,
+    owner: string,
+    name: string,
+    author: string,
+  ) => Effect.Effect<
+    { readonly suggestion: Suggestion; readonly note: string | undefined } | undefined,
+    GiteaError
+  >;
+  /**
+   * Marks a suggestion brought in by `commit` — Gitea's "manually merged" —
+   * or, where the repository does not allow that, closes it with a note
+   * saying it was brought in, so its author is not left waiting.
+   */
+  readonly accept: (
+    host: string,
+    owner: string,
+    name: string,
+    number: number,
+    commit: string,
+  ) => Effect.Effect<void, GiteaError>;
   /** Closes a suggestion without bringing it in, leaving `note` on it when given. */
   readonly decline: (
     host: string,
@@ -81,12 +114,15 @@ export class Suggestions extends Context.Service<Suggestions, SuggestionsService
 
 const PullRecord = Schema.Struct({
   number: Schema.Number,
+  state: Schema.optionalKey(Schema.String),
+  merged: Schema.optionalKey(Schema.NullOr(Schema.Boolean)),
   title: Schema.optionalKey(Schema.String),
   updated_at: Schema.optionalKey(Schema.String),
   user: Schema.optionalKey(Schema.Struct({ login: Schema.optionalKey(Schema.String) })),
   head: Schema.optionalKey(
     Schema.Struct({
       ref: Schema.optionalKey(Schema.String),
+      sha: Schema.optionalKey(Schema.String),
       repo: Schema.optionalKey(
         Schema.NullOr(
           Schema.Struct({
@@ -98,8 +134,14 @@ const PullRecord = Schema.Struct({
   ),
 });
 
+const CommentRecord = Schema.Struct({
+  body: Schema.optionalKey(Schema.String),
+  user: Schema.optionalKey(Schema.Struct({ login: Schema.optionalKey(Schema.String) })),
+});
+
 const decodePull = Schema.decodeUnknownResult(PullRecord);
 const decodePulls = Schema.decodeUnknownResult(Schema.Array(PullRecord));
+const decodeComments = Schema.decodeUnknownResult(Schema.Array(CommentRecord));
 
 type PullValue = typeof PullRecord.Type;
 
@@ -109,7 +151,12 @@ const suggestionOf = (record: PullValue): Suggestion => ({
   author: record.user?.login ?? record.head?.repo?.owner?.login ?? "",
   updatedAt: record.updated_at ?? "",
   branch: record.head?.ref ?? "",
+  head: record.head?.sha,
+  state: record.merged === true ? "merged" : record.state === "closed" ? "closed" : "open",
 });
+
+/** The same login, as Gitea compares them: without regard to case. */
+const sameLogin = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
 
 const failed = (reason: GiteaError["reason"], description: string): GiteaError =>
   new GiteaError({ reason, description });
@@ -164,17 +211,45 @@ const make = (fetch: HttpFetch) =>
         });
       });
 
-    const open: SuggestionsService["open"] = (host, owner, name) =>
+    const list = (
+      host: string,
+      owner: string,
+      name: string,
+      state: "open" | "all",
+    ): Effect.Effect<readonly Suggestion[], GiteaError> =>
       Effect.gen(function* () {
         const held = yield* session(host);
         const body = yield* answer(
-          yield* request(held, repoPath(host, owner, name, "/pulls?state=open&sort=recentupdate")),
+          yield* request(
+            held,
+            repoPath(host, owner, name, `/pulls?state=${state}&sort=recentupdate&limit=50`),
+          ),
         );
         const decoded = decodePulls(body);
         if (decoded._tag === "Failure")
           return yield* Effect.fail(failed("Io", "Gitea's pull request list did not decode"));
         return decoded.success.map(suggestionOf);
       });
+
+    const open: SuggestionsService["open"] = (host, owner, name) => list(host, owner, name, "open");
+
+    const comment = (
+      held: Session,
+      host: string,
+      owner: string,
+      name: string,
+      number: number,
+      body: string,
+    ) =>
+      Effect.asVoid(
+        Effect.flatMap(
+          request(held, repoPath(host, owner, name, `/issues/${number}/comments`), {
+            method: "POST",
+            body: { body },
+          }),
+          answer,
+        ),
+      );
 
     return {
       canWrite: (host, owner, name) =>
@@ -184,10 +259,54 @@ const make = (fetch: HttpFetch) =>
 
       open,
 
+      latestFrom: (host, owner, name, author) =>
+        Effect.gen(function* () {
+          const found = (yield* list(host, owner, name, "all")).find((held) =>
+            sameLogin(held.author, author),
+          );
+          if (found === undefined) return undefined;
+          if (found.state === "open") return { suggestion: found, note: undefined };
+          const held = yield* session(host);
+          const decoded = decodeComments(
+            yield* answer(
+              yield* request(held, repoPath(host, owner, name, `/issues/${found.number}/comments`)),
+            ),
+          );
+          const said =
+            decoded._tag === "Failure"
+              ? undefined
+              : decoded.success.findLast(
+                  (entry) => !sameLogin(entry.user?.login ?? author, author) && entry.body !== "",
+                )?.body;
+          return { suggestion: found, note: said };
+        }),
+
+      accept: (host, owner, name, number, commit) =>
+        Effect.gen(function* () {
+          const held = yield* session(host);
+          const marked = yield* Effect.result(
+            Effect.flatMap(
+              request(held, repoPath(host, owner, name, `/pulls/${number}/merge`), {
+                method: "POST",
+                body: { Do: "manually-merged", MergeCommitID: commit },
+              }),
+              answer,
+            ),
+          );
+          if (marked._tag === "Success") return;
+          yield* comment(held, host, owner, name, number, "Brought in with Sefer.");
+          yield* answer(
+            yield* request(held, repoPath(host, owner, name, `/pulls/${number}`), {
+              method: "PATCH",
+              body: { state: "closed" },
+            }),
+          );
+        }),
+
       suggest: (host, owner, name, suggestion) =>
         Effect.gen(function* () {
           const already = (yield* open(host, owner, name)).find(
-            (held) => held.author === suggestion.from && held.branch === suggestion.branch,
+            (held) => sameLogin(held.author, suggestion.from) && held.branch === suggestion.branch,
           );
           if (already !== undefined) return already;
           const held = yield* session(host);
@@ -211,13 +330,7 @@ const make = (fetch: HttpFetch) =>
       decline: (host, owner, name, number, note) =>
         Effect.gen(function* () {
           const held = yield* session(host);
-          if (note.trim() !== "")
-            yield* answer(
-              yield* request(held, repoPath(host, owner, name, `/issues/${number}/comments`), {
-                method: "POST",
-                body: { body: note },
-              }),
-            );
+          if (note.trim() !== "") yield* comment(held, host, owner, name, number, note);
           yield* answer(
             yield* request(held, repoPath(host, owner, name, `/pulls/${number}`), {
               method: "PATCH",

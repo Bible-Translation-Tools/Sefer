@@ -263,28 +263,36 @@ plan is shown first.
 
 ## Suggested changes
 
-A translator who cannot write to the shared project sends to their OWN COPY of it (a Gitea fork) and
-suggests those changes: one open pull request from that copy's branch, which later sends keep up to
-date by themselves. Whoever can write to the shared project sees the open suggestions on `/cloud`, and
-reviews one — Review against the shared project, with the suggestion's head
-(`refs/pull/<n>/head`, fetched to `refs/sefer/pull/<n>` — outside `refs/remotes/origin/`, which the
-Web's pruning fetch clears of every ref it did not write) as the other side — or declines it
-with a note. "Pull request" is Gitea's word and the code's; the screen says "suggested changes".
+A project is worked on in ONE of two modes, per project on this device (sync, "Two ways to work"):
+together in the shared project, or in the person's OWN COPY of it (a Gitea fork, attached as the
+remote `copy`), offering changes as a suggestion. A suggestion is one open pull request per person
+from that copy's branch, which later sends keep up to date by themselves; once it is closed, the next
+offer is a new one. Whoever can write to the shared project sees the open suggestions, and reviews
+one — Review against the shared project, with the suggestion's head (`refs/pull/<n>/head`, fetched to
+`refs/sefer/pull/<n>` — outside `refs/remotes/origin/`, which the Web's pruning fetch clears of every
+ref it did not write) as the other side — or declines it with a note its author reads in the cloud
+popover. Accepting is Record in that review: the decision commit is sent to the shared project, and
+`Suggestions.accept` marks the pull request "manually merged" by it, or closes it with a note where the
+repository does not allow that. Whether a closed suggestion was TAKEN is asked of git — its head is in
+the shared project's history — because a Gitea that does not allow manual merges never calls it
+merged. "Pull request" is Gitea's word and the code's; the screen says "suggestion".
 
-It is one topology among several, so it is built to come out. `src/core/remote/suggestions.ts` is its
-own service (`Suggestions`, over the session `Gitea` keeps), `src/app/suggestions.ts` is the logic and
-`src/app/ui/cloud/SuggestionsCard.tsx` the card, and they join the rest of Sefer at four one-line
-seams:
+`src/core/remote/suggestions.ts` is its own service (`Suggestions`, over the session `Gitea` keeps:
+`canWrite`, `open`, `latestFrom`, `suggest`, `accept`, `decline`); `src/app/suggestions.ts` is the
+logic — the mode, where a send goes (`sendingTo`), making or finding the copy (`workInOwnCopy`),
+re-rooting a project cloned from the person's own fork, `suggestTo` for a shared project that is the
+person's own; `src/app/collaboration.ts` holds what the surfaces show. They join the rest of Sefer at:
 
 1. `src/app/services.ts` registers `SuggestionsLive` and lists `Suggestions` in `Domain`;
 2. `destination()` in `src/app/syncActions.ts` asks `sendingTo` where a send goes — the one place a
    send is pointed anywhere but `origin`;
-3. `CloudScreen.tsx` mounts `SuggestionsCard`;
-4. `ReviewPanel.tsx` reads `?pull=<n>` through `suggestionRef`.
+3. the cloud popover (`CollabSection`), Settings' `CollabModeCard`, and `/cloud`'s `SuggestionsCard`
+   (the editors' list);
+4. `ReviewPanel.tsx` reads `?pull=<n>` through `suggestionRef`, and accepts after Record.
 
-Cut those and the dead-code gate (`pnpm deadcode`) reports the three files unused — checked on
-2026-09-30 — and everything else sends to `origin` as before. Forks and pull requests are built but not
-yet exercised against a second account.
+A copy is never forked twice: Gitea refuses a second fork of the same project (409), so a copy made
+on another device is found (`RemoteRepo.parent`) and attached. Forks and pull requests are built but
+not yet exercised against a second account.
 
 ## ProjectAdmin
 

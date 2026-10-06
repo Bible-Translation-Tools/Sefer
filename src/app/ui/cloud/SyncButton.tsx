@@ -27,6 +27,7 @@ import { Show, createEffect, createSignal } from "solid-js";
 
 import type { Sync } from "#core/sync";
 
+import { collaboration } from "../../collaboration";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { syncStatus } from "../../syncStatus";
@@ -35,6 +36,7 @@ import { ago } from "../panels/format";
 import { Button, IconButton, Input, Popover, cx, toasts } from "../primitives";
 import { createAccount } from "./account";
 import { SignInForm } from "./AccountCard";
+import { CollabSection } from "./CollabSection";
 import { stateCopy } from "./copy";
 import { PlanBooks } from "./IncomingPlanCard";
 import { SyncClocks, toneText } from "./ProjectCard";
@@ -97,7 +99,12 @@ export function SyncButton() {
     () => [syncStatus.online(), account.session()?.username],
     () => {
       const project = shell.project();
-      if (project !== undefined) void syncWatch.refresh(services, project).catch(() => undefined);
+      if (project === undefined) return;
+      void syncWatch.refresh(services, project).catch(() => undefined);
+      // Who is signed in decides what the collaboration facts say. Only once
+      // they have been asked: the first ask is the check's, on its schedule.
+      if (collaboration.facts(project.root) !== undefined)
+        void collaboration.refresh(services, project);
     },
   );
 
@@ -105,8 +112,13 @@ export function SyncButton() {
     setOpen(next);
     const project = shell.project();
     // Opening reads again: local work, refs and logs already here.
-    if (next && project !== undefined)
+    if (next && project !== undefined) {
       void syncWatch.refresh(services, project).catch(() => undefined);
+      // Somebody looking, with no check made yet (checking on open is off):
+      // ask once, so the popover can say how this project is worked on.
+      if (collaboration.facts(project.root) === undefined)
+        void collaboration.refresh(services, project);
+    }
   };
 
   const run = (action: ReturnType<typeof quickActionOf>): void => {
@@ -201,7 +213,9 @@ export function SyncButton() {
                     {quickLabel(quickActionOf(held()))}
                   </Button>
                 </Show>
-                <Show when={quickActionOf(held()) !== "open"}>
+                <Show
+                  when={quickActionOf(held()) !== "open" && quickActionOf(held()) !== "sign-in"}
+                >
                   <Button size="sm" variant="tertiary" onClick={() => run("open")}>
                     {t("Open Sync")}
                   </Button>
@@ -225,6 +239,8 @@ export function SyncButton() {
                   />
                 </Show>
               </div>
+
+              <CollabSection onLeave={() => setOpen(false)} />
 
               <Show when={link()}>
                 {(href) => (

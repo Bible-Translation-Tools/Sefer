@@ -23,7 +23,13 @@ import { Show } from "solid-js";
 
 import { t } from "../i18n";
 import { useShell } from "../ProjectContext";
-import { AccountCard, createAccount, SharedProjectCard, SyncSettingsCard } from "./cloud";
+import {
+  AccountCard,
+  CollabModeCard,
+  createAccount,
+  SharedProjectCard,
+  SyncSettingsCard,
+} from "./cloud";
 import { PanelHeader } from "./primitives";
 
 /**
@@ -39,7 +45,14 @@ export function CloudPanel(props: { readonly root?: string | undefined }) {
       <PanelHeader level={2} title={t("Cloud")} />
       <AccountCard account={account} />
       <SharedProjectCard account={account} root={props.root} />
-      <Show when={props.root}>{(root) => <SyncSettingsCard root={root()} />}</Show>
+      <Show when={props.root}>
+        {(root) => (
+          <>
+            <CollabModeCard />
+            <SyncSettingsCard root={root()} />
+          </>
+        )}
+      </Show>
     </section>
   );
 }
