@@ -11,7 +11,7 @@
 
 import type { JSX } from "@solidjs/web";
 import Lock from "lucide-solid/icons/lock";
-import { Show, createSignal } from "solid-js";
+import { Show, createSignal, untrack } from "solid-js";
 
 import { collaboration } from "../../collaboration";
 import { describe } from "../../describe";
@@ -31,9 +31,11 @@ export function CollabModeCard() {
   const [target, setTarget] = createSignal("", { name: "collabModeTarget" });
 
   // Settings is somewhere a person comes to decide this: ask, if nothing has.
-  const opened = shell.project();
-  if (opened !== undefined && collaboration.facts(opened.root) === undefined)
-    void collaboration.refresh(services, opened);
+  untrack(() => {
+    const opened = shell.project();
+    if (opened !== undefined && collaboration.facts(opened.root) === undefined)
+      void collaboration.refresh(services, opened);
+  });
 
   const press = (work: () => Promise<unknown>): void => {
     if (busy()) return;

@@ -24,7 +24,7 @@ import CloudOff from "lucide-solid/icons/cloud-off";
 import CloudUpload from "lucide-solid/icons/cloud-upload";
 import Copy from "lucide-solid/icons/copy";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
-import { Show, createEffect, createSignal } from "solid-js";
+import { Show, createEffect, createSignal, untrack } from "solid-js";
 
 import type { Sync } from "#core/sync";
 
@@ -98,15 +98,20 @@ export function SyncButton() {
 
   // Coming back online, going offline, or signing in or out changes the answer
   // without anything being read: take the reading again so the glyph says so.
+  // The project is read in the compute, with the two signals the effect
+  // follows: Solid 2 runs the callback untracked and warns on a read there.
   createEffect(
-    () => [syncStatus.online(), account.session()?.username],
-    () => {
-      const project = shell.project();
+    () => ({
+      project: shell.project(),
+      online: syncStatus.online(),
+      user: account.session()?.username,
+    }),
+    ({ project }) => {
       if (project === undefined) return;
       void syncWatch.refresh(services, project).catch(() => undefined);
       // Who is signed in decides what the collaboration facts say. Only once
       // they have been asked: the first ask is the check's, on its schedule.
-      if (collaboration.facts(project.root) !== undefined)
+      if (untrack(() => collaboration.facts(project.root)) !== undefined)
         void collaboration.refresh(services, project);
     },
   );

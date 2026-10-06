@@ -6,7 +6,7 @@
  */
 
 import Inbox from "lucide-solid/icons/inbox";
-import { Show, onCleanup } from "solid-js";
+import { Show, onCleanup, untrack } from "solid-js";
 
 import { collaboration } from "../../collaboration";
 import { t } from "../../i18n";
@@ -21,9 +21,12 @@ export function SuggestionsScreen() {
   const shell = useShell();
   const facts = () => collaboration.facts(shell.project()?.root);
   // Somebody came to look: ask, if the check has not yet.
-  const opened = shell.project();
-  if (opened !== undefined && collaboration.facts(opened.root) === undefined)
-    void collaboration.refresh(shell.services, opened);
+  // A one-time read at mount, untracked on purpose: nothing here should re-run.
+  untrack(() => {
+    const opened = shell.project();
+    if (opened !== undefined && collaboration.facts(opened.root) === undefined)
+      void collaboration.refresh(shell.services, opened);
+  });
 
   onCleanup(
     claimSidebar(() => (

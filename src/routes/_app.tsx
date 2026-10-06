@@ -76,7 +76,10 @@ function Workspace() {
   // Changes, History and Suggestions keep their tabs in the sidebar; with the
   // sidebar hidden the tabs come above the page, so the three screens are
   // still one click apart instead of reachable only through the palette.
-  const pageTabs = () => (showing() ? undefined : screen.versionsTab());
+  // Only with a project open: its slug is in every tab's link, and an empty
+  // one generates `/project//review`, which the router cannot match.
+  const pageTabs = () =>
+    showing() || shell.project() === undefined ? undefined : screen.versionsTab();
   return (
     <Resizable.Root
       class="h-full"

@@ -7,7 +7,7 @@
 
 import { useNavigate } from "@tanstack/solid-router";
 import { Effect } from "effect";
-import { Show, createSignal } from "solid-js";
+import { Show, createSignal, untrack } from "solid-js";
 
 import { Git } from "#core/git/git";
 import type { Project } from "#core/project/project";
@@ -42,7 +42,8 @@ export function PublishSection(props: {
   const shell = useShell();
   const navigate = useNavigate();
   const { services } = shell;
-  const opened = shell.project();
+  // The suggested name is worked out once, when the form appears.
+  const opened = untrack(() => shell.project());
   const [name, setName] = createSignal(opened === undefined ? "" : suggestedName(opened), {
     name: "publishName",
   });

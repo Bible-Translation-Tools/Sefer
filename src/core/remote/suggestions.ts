@@ -367,12 +367,20 @@ const make = (fetch: HttpFetch) =>
           const held = yield* session(host);
           // Closed first, then the note: a close that is refused leaves
           // nothing behind, so trying again does not post the note twice.
-          yield* answer(
-            yield* request(held, repoPath(host, owner, name, `/pulls/${number}`), {
-              method: "PATCH",
-              body: { state: "closed" },
-            }),
+          const closed = decodePull(
+            yield* answer(
+              yield* request(held, repoPath(host, owner, name, `/pulls/${number}`), {
+                method: "PATCH",
+                body: { state: "closed" },
+              }),
+            ),
           );
+          // Gitea answers 200 to a PATCH that changed nothing (an edit that
+          // arrived without its body), so the answer itself has to say closed.
+          if (closed._tag === "Failure" || closed.success.state !== "closed")
+            return yield* Effect.fail(
+              failed("Refused", `suggestion ${number} is still open after asking to close it`),
+            );
           if (note.trim() !== "") yield* comment(held, host, owner, name, number, note);
         }),
     } satisfies SuggestionsService;
