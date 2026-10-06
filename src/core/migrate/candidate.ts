@@ -67,7 +67,7 @@ export interface StagedBook {
   readonly upstream?: { readonly url: string; readonly commit: string };
 }
 
-export class CandidateError extends Data.TaggedError("CandidateError")<{
+class CandidateError extends Data.TaggedError("CandidateError")<{
   readonly reason: "NotWriter" | "Unreachable" | "Mismatch";
   readonly description: string;
 }> {}
@@ -80,7 +80,7 @@ export const testamentOfBook = (book: string): Testament =>
   CANON.find((entry) => entry.id === book)?.testament ?? "nt";
 
 /** Canonical position, for ordering rows; unknown books sort last. */
-export const canonIndex = (book: string): number => {
+const canonIndex = (book: string): number => {
   const index = CANON.findIndex((entry) => entry.id === book);
   return index === -1 ? CANON.length : index;
 };

@@ -25,8 +25,7 @@ import type { Domain, Services } from "./services";
 import { rememberProject } from "./ui/landing/summaries";
 
 /** Where opened candidates are staged. Temporary: nothing here is a project. */
-export const stagingRootOf = (services: Services): string =>
-  `${services.hostInfo.paths().temp}/migrate`;
+const stagingRootOf = (services: Services): string => `${services.hostInfo.paths().temp}/migrate`;
 
 /** A candidate as the screen holds it, from listed to opened or refused. */
 export type Opened =

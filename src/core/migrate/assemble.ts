@@ -39,7 +39,7 @@ import { candidateLabel, type StagedBook } from "./candidate";
 import { readUpstreams, upstreamsText, UPSTREAMS_FILE, type Upstream } from "./upstreams";
 import { usfmFileName } from "./writerBook";
 
-export class AssembleError extends Data.TaggedError("AssembleError")<{
+class AssembleError extends Data.TaggedError("AssembleError")<{
   readonly reason: "Exists" | "Invalid" | "Io";
   readonly description: string;
 }> {}
@@ -77,7 +77,7 @@ const titleOf = (staged: StagedBook): string =>
   staged.project.book;
 
 /** The assembly's message: what it is, who did the work, and their credit trailers. */
-export const assemblyMessage = (form: AssembleForm, books: readonly StagedBook[]): string => {
+const assemblyMessage = (form: AssembleForm, books: readonly StagedBook[]): string => {
   const authors = new Map<string, Author>();
   for (const book of books)
     for (const author of book.authors) {

@@ -130,7 +130,7 @@ const compareVersions = (a: string, b: string): number => {
   return 0;
 };
 
-export const sameVersion = (a: string, b: string): boolean => bare(a) === bare(b);
+const sameVersion = (a: string, b: string): boolean => bare(a) === bare(b);
 
 /**
  * One reference per (language, resource), at the highest version listed.

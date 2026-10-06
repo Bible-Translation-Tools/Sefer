@@ -50,7 +50,7 @@ export type ArrivalKind = "project" | "sourceText";
  */
 const [revision, setRevision] = createSignal(0, { name: "libraryRevision" });
 export const libraryRevision = revision;
-export const libraryChanged = (): void => {
+const libraryChanged = (): void => {
   setRevision((held) => held + 1);
 };
 
@@ -114,7 +114,7 @@ export const cloneArrival = (
   });
 
 /** One declared source text, after the pull: held already, pulled now, or not. */
-export interface SourceTextRow {
+interface SourceTextRow {
   readonly ref: RelatedResource;
   readonly title: string;
   readonly outcome: "held" | "pulled" | "failed";
@@ -128,7 +128,7 @@ export interface SourceTextRow {
  * unaffected (it opens either way). With no content host configured there is
  * nowhere to look, and nothing is attempted.
  */
-export const pullSourceTexts = (
+const pullSourceTexts = (
   services: Services,
   projectRoot: string,
 ): Effect.Effect<readonly SourceTextRow[], never, Domain> =>
