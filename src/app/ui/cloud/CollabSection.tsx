@@ -20,7 +20,6 @@ import { describe } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { suggestMyChanges } from "../../suggestions";
-import { syncWatch } from "../../syncWatch";
 import { ago } from "../panels/format";
 import { Button, toasts } from "../primitives";
 import { chooseOwnCopy, chooseShared } from "./collab";
@@ -31,9 +30,6 @@ export function CollabSection(props: { readonly onLeave: () => void }) {
   const { services } = shell;
   const facts = () => collaboration.facts(shell.project()?.root);
   const [busy, setBusy] = createSignal(false, { name: "collabBusy" });
-  /** Work here the shared project does not have: what an offer would carry. */
-  const ahead = (): boolean =>
-    (syncWatch.sync(shell.project()?.root)?.clocks.local.unshared ?? 0) > 0;
   const [standalone, setStandalone] = createSignal(false, { name: "collabStandalone" });
 
   /** One press at a time; the project is read when pressed. */
@@ -207,7 +203,7 @@ export function CollabSection(props: { readonly onLeave: () => void }) {
                 </Match>
               </Switch>
               <div class="flex flex-wrap items-center gap-2">
-                <Show when={held().mine?.kind !== "waiting" && ahead()}>
+                <Show when={held().mine?.kind !== "waiting" && held().offerable}>
                   <Button size="sm" variant="secondary" loading={busy()} onClick={offer}>
                     {t("Offer my changes")}
                   </Button>

@@ -31,7 +31,7 @@ import {
   type SyncReading,
 } from "#core/sync";
 
-import { COPY_REF } from "../../suggestions";
+import { copyRef } from "../../suggestions";
 import type { CollabMode } from "../../syncSettings";
 
 /** What one pass over the repository answers. */
@@ -152,9 +152,10 @@ export const readSync = (
     // shared project's. A copy not read yet was made from the shared project.
     const copyAttached = Option.isSome(yield* orEmpty(remote.urlOf(repo, "copy"), Option.none()));
     const inCopyMode = (options.chosenMode ?? (copyAttached ? "copy" : "shared")) === "copy";
+    const copied = copyRef(branch ?? DEFAULT_BRANCH);
     const copyKnown =
-      inCopyMode && Option.isSome(yield* orEmpty(git.resolve(repo, COPY_REF), Option.none()));
-    const sentLog = copyKnown ? yield* orEmpty(git.logFrom(repo, COPY_REF), empty) : remoteLog;
+      inCopyMode && Option.isSome(yield* orEmpty(git.resolve(repo, copied), Option.none()));
+    const sentLog = copyKnown ? yield* orEmpty(git.logFrom(repo, copied), empty) : remoteLog;
     const ahead = notIn(localLog, sentLog);
     const behind = notIn(remoteLog, localLog);
     const status = yield* orEmpty(git.status(repo), { changed: [] });

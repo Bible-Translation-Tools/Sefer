@@ -43,11 +43,13 @@ import { chosenMode, setChosenMode, type CollabMode } from "./syncSettings";
 const COPY = "copy";
 
 /**
- * The local ref the person's copy is read into, for Review to read: one ref,
- * outside `refs/remotes/origin/`, which the Web's pruning fetch clears of
- * every ref it did not write.
+ * The local ref that holds the person's copy: its remote-tracking ref, which
+ * a send to the copy moves by itself and a read of the copy (`fetchCopy`)
+ * writes. One ref for both, so what was sent and what was read cannot
+ * disagree. It is outside `refs/remotes/origin/`, the only place the Web's
+ * pruning fetch clears.
  */
-export const COPY_REF = "refs/sefer/copy";
+export const copyRef = (branch: string): string => trackingRef(branch, COPY);
 
 /** The local ref a suggestion's head is fetched to, for Review to read. */
 export const suggestionRef = (number: number): string => `refs/sefer/pull/${number}`;
@@ -433,7 +435,7 @@ export const mySuggestion = (
 
 /**
  * Reads the person's copy, for the check in the copy mode: what another of
- * their devices sent there arrives here as `COPY_REF`, not in the work tree.
+ * their devices sent there arrives in `copyRef`, not in the work tree.
  * Nothing when no copy is attached or it has no branch yet.
  */
 export const fetchCopy = (services: Services, project: Project): Promise<void> =>
@@ -446,7 +448,7 @@ export const fetchCopy = (services: Services, project: Project): Promise<void> =
         const repo = yield* git.open(project.root);
         const branch = Option.getOrUndefined(yield* git.branch(repo));
         if (branch === undefined) return;
-        yield* remote.fetchRef(repo, `refs/heads/${branch}`, COPY_REF, COPY);
+        yield* remote.fetchRef(repo, `refs/heads/${branch}`, copyRef(branch), COPY);
       }),
       () => undefined,
     ),
@@ -463,7 +465,9 @@ export const copyHasMore = (services: Services, project: Project): Promise<boole
       Effect.gen(function* () {
         const git = yield* Git;
         const repo = yield* git.open(project.root);
-        const copy = yield* git.resolve(repo, COPY_REF);
+        const branch = Option.getOrUndefined(yield* git.branch(repo));
+        if (branch === undefined) return false;
+        const copy = yield* git.resolve(repo, copyRef(branch));
         if (Option.isNone(copy)) return false;
         /** Is the copy's tip already in `ref`'s history? */
         const within = (ref: string) =>
@@ -474,9 +478,28 @@ export const copyHasMore = (services: Services, project: Project): Promise<boole
             const base = yield* git.mergeBase(repo, copy.value, tip.value);
             return Option.isSome(base) && base.value === copy.value;
           });
-        const branch = Option.getOrUndefined(yield* git.branch(repo));
         if (yield* within("HEAD")) return false;
-        return branch === undefined ? true : !(yield* within(trackingRef(branch)));
+        return !(yield* within(trackingRef(branch)));
+      }),
+      () => false,
+    ),
+  );
+
+/** Has this device work the shared project does not — something an offer would carry? */
+export const aheadOfShared = (services: Services, project: Project): Promise<boolean> =>
+  services.run(
+    Effect.orElseSucceed(
+      Effect.gen(function* () {
+        const git = yield* Git;
+        const repo = yield* git.open(project.root);
+        const branch = Option.getOrUndefined(yield* git.branch(repo));
+        const head = yield* git.resolve(repo, "HEAD");
+        if (branch === undefined || Option.isNone(head)) return false;
+        const shared = yield* git.resolve(repo, trackingRef(branch));
+        if (Option.isNone(shared)) return true;
+        if (shared.value === head.value) return false;
+        const base = yield* git.mergeBase(repo, head.value, shared.value);
+        return !(Option.isSome(base) && base.value === head.value);
       }),
       () => false,
     ),

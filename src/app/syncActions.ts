@@ -132,7 +132,8 @@ export const checkForChanges = async (services: Services, project: Project): Pro
  *   already brought its versions here by the time this is returned.
  */
 export type SendOutcome =
-  | { readonly kind: "sent" }
+  /** `toCopy`: sent to the person's own copy, in the copy mode, not to the shared project. */
+  | { readonly kind: "sent"; readonly toCopy?: true }
   | { readonly kind: "detached" }
   | { readonly kind: "held" }
   | { readonly kind: "refused"; readonly reason: RemoteFailureReason };
@@ -195,7 +196,8 @@ const attemptSend = async (
     // copy mode: read it again, so what was just sent stops counting.
     if (sent && to === "copy") await fetchCopy(services, project);
     operation.end("passed", { "sync.sent": sent });
-    return sent ? { kind: "sent" } : { kind: "detached" };
+    if (!sent) return { kind: "detached" };
+    return to === "copy" ? { kind: "sent", toCopy: true } : { kind: "sent" };
   } catch (cause) {
     const reason = remoteReasonOf(cause) ?? "Rejected";
     syncStatus.noteSend({ refused: reason });

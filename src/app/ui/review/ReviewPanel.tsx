@@ -65,11 +65,12 @@ import { bookFacts, type Diff } from "#core/sync/facts";
 import type { EditorBook } from "#editor/index";
 
 import { personAuthor } from "../../author";
+import { collaboration } from "../../collaboration";
 import { describe, reasonOf } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { recordVersion } from "../../recordVersion";
-import { acceptSuggestion, COPY_REF, suggestionRef } from "../../suggestions";
+import { acceptSuggestion, copyRef, suggestionRef } from "../../suggestions";
 import { sendAfterSave, sendNow, settleWithShared, type SendOutcome } from "../../syncActions";
 import { setAuthorName, syncPreferences } from "../../syncSettings";
 import { syncWatch } from "../../syncWatch";
@@ -141,7 +142,9 @@ export function ReviewPanel() {
   const theirsRef = (): string | undefined => {
     const number = pull();
     if (number !== undefined) return suggestionRef(number);
-    return fromCopy() ? COPY_REF : undefined;
+    if (!fromCopy()) return undefined;
+    const branch = untrack(() => syncWatch.facts(shell.project()?.root)?.reading.branch);
+    return branch === undefined ? undefined : copyRef(branch);
   };
   /** Is one side the shared project? Then recording also takes what it changed. */
   const againstShared = (): boolean => rightId() === "shared" || leftId() === "shared";
@@ -1001,7 +1004,7 @@ export function ReviewPanel() {
         pull() !== undefined
           ? { theirs: theirsRef(), sendTo: "origin" }
           : fromCopy()
-            ? { theirs: COPY_REF }
+            ? { theirs: theirsRef() }
             : {},
       );
       // A suggestion brought in and sent is marked taken on the shared
@@ -1722,7 +1725,9 @@ export function ReviewPanel() {
             </p>
             <Show when={sends()}>
               <p class="pt-3 text-small text-on-surface-secondary" data-review-sends>
-                {t("This also sends your changes to the shared project.")}
+                {collaboration.facts(shell.project()?.root)?.mode === "copy"
+                  ? t("This also sends your changes to your copy.")
+                  : t("This also sends your changes to the shared project.")}
               </p>
             </Show>
           </Show>

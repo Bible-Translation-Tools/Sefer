@@ -64,6 +64,11 @@ export interface StateCopy {
 export interface StateContext {
   readonly sendRefused?: boolean | undefined;
   readonly signedIn?: boolean | undefined;
+  /**
+   * The project is worked on in the person's own copy: sending goes there, so
+   * "up to date" and "work to send" are about the copy, not the shared project.
+   */
+  readonly inCopy?: boolean;
 }
 
 export const stateCopy = (state: SyncState, context: StateContext = {}): StateCopy => {
@@ -94,6 +99,13 @@ export const stateCopy = (state: SyncState, context: StateContext = {}): StateCo
         tone: "brand",
       };
     case "attached-clean":
+      if (context.inCopy === true)
+        return {
+          chip: t("Up to date"),
+          headline: t("Your copy has all your work"),
+          detail: t("Offer your changes to the shared project when they are ready."),
+          tone: "success",
+        };
       return {
         chip: t("Up to date"),
         headline: t("Up to date with the shared project"),
@@ -101,6 +113,13 @@ export const stateCopy = (state: SyncState, context: StateContext = {}): StateCo
         tone: "success",
       };
     case "ahead":
+      if (context.inCopy === true)
+        return {
+          chip: t("Changes to send"),
+          headline: t("You have work your copy does not"),
+          detail: t("Send it to your copy when you are ready."),
+          tone: "warning",
+        };
       return {
         chip: t("Changes to send"),
         headline: t("You have work the shared project does not"),
@@ -351,11 +370,17 @@ export const sendOutcomeCopy = (
 } => {
   switch (outcome.kind) {
     case "sent":
-      return {
-        tone: "success",
-        title: t("Sent to the shared project"),
-        detail: t("Your team gets it the next time they check for changes."),
-      };
+      return outcome.toCopy === true
+        ? {
+            tone: "success",
+            title: t("Sent to your copy"),
+            detail: t("Offer your changes from the cloud menu when they are ready."),
+          }
+        : {
+            tone: "success",
+            title: t("Sent to the shared project"),
+            detail: t("Your team gets it the next time they check for changes."),
+          };
     case "detached":
       return {
         tone: "muted",

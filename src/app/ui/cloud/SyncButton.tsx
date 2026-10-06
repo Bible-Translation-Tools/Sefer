@@ -83,6 +83,7 @@ export function SyncButton() {
         stateCopy(held.reading.origin === undefined ? "detached" : held.state, {
           sendRefused: held.reading.sendRefused,
           signedIn: held.reading.signedIn,
+          inCopy: collaboration.facts(shell.project()?.root)?.mode === "copy",
         });
   };
   const plan = () => syncWatch.facts(shell.project()?.root)?.plan;
