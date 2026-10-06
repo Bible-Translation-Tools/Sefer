@@ -287,6 +287,21 @@ const countsOf = (
   return { errors, warnings };
 };
 
+/**
+ * One book's census counts from one analysis: what a Book census row shows,
+ * for text that is not (yet) a project's book. The Writer migration's health
+ * line is this, so it cannot disagree with the book list once the book
+ * arrives.
+ */
+export const censusOf = (
+  bookId: BookId,
+  analysis: Analysis,
+): Pick<BookSummary, "chapters" | "verses" | "diagnostics"> => ({
+  chapters: analysis.dish.toc.chapterRows.length,
+  verses: versesIn(analysis.dish.toc.verseRows),
+  diagnostics: countsOf(bookId, analysis, { revision: 0, length: 0 }),
+});
+
 const summaryOf = (bookId: BookId, entry: Entry): BookSummary => {
   const analysis = entry.analysis;
   if (analysis === undefined || entry.stamp === undefined)

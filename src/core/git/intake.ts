@@ -140,6 +140,8 @@ export interface IntakeOptions {
   /** What it arrived from, for the arrival commit's message ("Imported from …"). */
   readonly from: string;
   readonly author: Author;
+  /** The whole message, when "Imported from …" is not enough (the Writer assembly's credits). */
+  readonly message?: string;
 }
 
 const isPrivate = (path: string): boolean =>
@@ -210,7 +212,12 @@ const program = (options: IntakeOptions) =>
     const arrival =
       receipts.length === 0
         ? undefined
-        : yield* git.commit(repo, receipts, `Imported from ${options.from}`, options.author);
+        : yield* git.commit(
+            repo,
+            receipts,
+            options.message ?? `Imported from ${options.from}`,
+            options.author,
+          );
     observability?.note(
       "repository.arrival",
       arrival === undefined ? "declined" : "passed",
