@@ -9,8 +9,10 @@ import { CommandPalette } from "#app/ui/CommandPalette";
 import { PageDoor, PageLeading, Resizable, Toaster } from "#app/ui/primitives";
 import { AppBar } from "#app/ui/workspace/AppBar";
 import { BackToEditor } from "#app/ui/workspace/BackToEditor";
+import { VersionTabs } from "#app/ui/workspace/ChangesHistorySidebar";
 import { usePanelToggleLeading } from "#app/ui/workspace/PanelToggle";
 import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
+import { useScreen } from "#app/ui/workspace/screen";
 import { sidebarClaim } from "#app/ui/workspace/sidebarSlot";
 
 /**
@@ -70,6 +72,11 @@ function Workspace() {
   const minWidth = SIDEBAR_WIDTH.min;
   const maxWidth = SIDEBAR_WIDTH.max;
   const panelToggle = usePanelToggleLeading();
+  const screen = useScreen();
+  // Changes, History and Suggestions keep their tabs in the sidebar; with the
+  // sidebar hidden the tabs come above the page, so the three screens are
+  // still one click apart instead of reachable only through the palette.
+  const pageTabs = () => (showing() ? undefined : screen.versionsTab());
   return (
     <Resizable.Root
       class="h-full"
@@ -114,8 +121,17 @@ function Workspace() {
             and the way back to the book ends it (`BackToEditor`). */}
         <PageLeading value={panelToggle}>
           <PageDoor value={() => <BackToEditor />}>
-            <div class="h-full min-w-0 overflow-y-auto">
-              <Outlet />
+            <div class="flex h-full min-w-0 flex-col">
+              <Show when={pageTabs()}>
+                {(active) => (
+                  <div class="shrink-0 border-b border-surface-border px-4">
+                    <VersionTabs active={active()} inline />
+                  </div>
+                )}
+              </Show>
+              <div class="min-h-0 min-w-0 flex-1 overflow-y-auto">
+                <Outlet />
+              </div>
             </div>
           </PageDoor>
         </PageLeading>
