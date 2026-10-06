@@ -207,6 +207,8 @@ export function ReviewPanel() {
   const [typedName, setTypedName] = createSignal("", { name: "reviewAuthorName" });
   /** Whether recording will also send, so the dialog can say so before the press. */
   const [sends, setSends] = createSignal(false, { name: "reviewSends" });
+  /** A suggestion was brought in and closed by this Save: Done goes back to the list. */
+  const [broughtIn, setBroughtIn] = createSignal(false, { name: "reviewBroughtIn" });
   /** Against a suggestion: close it as brought in when this Save sends it. */
   const [closeOnSave, setCloseOnSave] = createSignal(true, { name: "reviewCloseSuggestion" });
   /** Where Save's send goes, named — the shared project, or the person's own copy. */
@@ -1026,6 +1028,9 @@ export function ReviewPanel() {
     // Taken before the save: afterwards no book is unsaved, and the default
     // would name none of them.
     const typedMessage = message().trim();
+    // What the reviewer wrote, kept for the note a brought-in suggestion gets
+    // once the send has finished: a snapshot by design.
+    const staticNote = typedMessage;
     // Against the shared project the version is a settling, and says which
     // books it settled; anything else names the books it records.
     const settledNames = reviewBooks().map((book) => bookName(book.bookId, metadataOf(project)));
@@ -1099,12 +1104,16 @@ export function ReviewPanel() {
       const accepted = untrack(closeOnSave) ? pull() : undefined;
       const markTaken = (sent: boolean): void => {
         if (accepted === undefined || !sent) return;
-        acceptSuggestion(services, project, accepted).catch((cause: unknown) =>
-          toasts.error({
-            title: t("Brought in, but the suggestion is still open on the shared project"),
-            message: describe(cause),
-          }),
-        );
+        acceptSuggestion(services, project, accepted, staticNote)
+          .then(() => setBroughtIn(true))
+          .catch((cause: unknown) =>
+            toasts.error({
+              title: t("Brought in, but the suggestion is still open on the shared project"),
+              message: describe(cause),
+            }),
+          )
+          // The Suggestions tab's count is the network's: ask it again now.
+          .finally(() => void collaboration.refresh(services, project));
       };
       const done = (): void => {
         setMessage("");
@@ -1768,7 +1777,18 @@ export function ReviewPanel() {
                   variant="primary"
                   disabled={sendLine() === "sending"}
                   data-review-record-done
-                  onClick={() => setRecordOpen(false)}
+                  onClick={() => {
+                    setRecordOpen(false);
+                    // A suggestion that is now closed has nothing left to
+                    // review here: back to the list it came from.
+                    if (broughtIn()) {
+                      setBroughtIn(false);
+                      void navigate({
+                        to: "/project/$slug/suggestions",
+                        params: { slug: shell.slug() },
+                      });
+                    }
+                  }}
                 >
                   {t("Done")}
                 </Button>

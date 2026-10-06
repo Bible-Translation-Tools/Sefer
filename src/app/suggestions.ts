@@ -393,6 +393,8 @@ export const acceptSuggestion = (
   services: Services,
   project: Project,
   number: number,
+  /** The reviewer's message for the version: also the note its author reads. */
+  note: string,
 ): Promise<void> =>
   services.run(
     Effect.gen(function* () {
@@ -401,7 +403,7 @@ export const acceptSuggestion = (
       const git = yield* Git;
       const head = yield* git.resolve(yield* git.open(project.root), "HEAD");
       if (Option.isNone(head)) return;
-      yield* (yield* Suggestions).accept(at.host, at.owner, at.name, number, head.value);
+      yield* (yield* Suggestions).accept(at.host, at.owner, at.name, number, head.value, note);
     }),
   );
 

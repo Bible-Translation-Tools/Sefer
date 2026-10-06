@@ -21,11 +21,11 @@ export function SuggestionsScreen() {
   const shell = useShell();
   const facts = () => collaboration.facts(shell.project()?.root);
   // Somebody came to look: ask, if the check has not yet.
-  // A one-time read at mount, untracked on purpose: nothing here should re-run.
+  // Somebody came to look: ask again, so the tab's count and the lists below
+  // say the same thing. A one-time read at mount, untracked on purpose.
   untrack(() => {
     const opened = shell.project();
-    if (opened !== undefined && collaboration.facts(opened.root) === undefined)
-      void collaboration.refresh(shell.services, opened);
+    if (opened !== undefined) void collaboration.refresh(shell.services, opened);
   });
 
   onCleanup(

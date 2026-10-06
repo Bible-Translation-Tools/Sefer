@@ -13,6 +13,7 @@ import { For, Show, createEffect, createSignal } from "solid-js";
 import type { Project } from "#core/project/project";
 import type { Suggestion } from "#core/remote/suggestions";
 
+import { collaboration } from "../../collaboration";
 import { describe } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
@@ -75,6 +76,8 @@ export function SuggestionsCard(props: { readonly project: Project; readonly sig
       .finally(() => {
         setBusy(false);
         void load(project, signedIn);
+        // The tab's count reads the same network: ask it again too.
+        void collaboration.refresh(services, project);
       });
   };
 

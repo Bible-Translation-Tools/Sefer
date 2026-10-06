@@ -109,6 +109,8 @@ interface SuggestionsService {
     name: string,
     number: number,
     commit: string,
+    /** What the reviewer wrote when bringing it in — its author reads it. */
+    note: string,
   ) => Effect.Effect<void, GiteaError>;
   /**
    * Closes a suggestion without bringing it in, leaving `note` on it when
@@ -316,7 +318,7 @@ const make = (fetch: HttpFetch) =>
               )?.body;
         }),
 
-      accept: (host, owner, name, number, commit) =>
+      accept: (host, owner, name, number, commit, note) =>
         Effect.gen(function* () {
           const held = yield* session(host);
           const marked = yield* Effect.result(
@@ -328,13 +330,22 @@ const make = (fetch: HttpFetch) =>
               answer,
             ),
           );
-          if (marked._tag === "Success") return;
-          yield* comment(held, host, owner, name, number, "Brought in with Sefer.");
-          yield* answer(
-            yield* request(held, repoPath(host, owner, name, `/pulls/${number}`), {
-              method: "PATCH",
-              body: { state: "closed" },
-            }),
+          // Where the repository does not allow "manually merged", it is closed
+          // instead — and either way the reviewer's own words go on it.
+          if (marked._tag === "Failure")
+            yield* answer(
+              yield* request(held, repoPath(host, owner, name, `/pulls/${number}`), {
+                method: "PATCH",
+                body: { state: "closed" },
+              }),
+            );
+          yield* comment(
+            held,
+            host,
+            owner,
+            name,
+            number,
+            note.trim() === "" ? "Brought in with Sefer." : note,
           );
         }),
 
