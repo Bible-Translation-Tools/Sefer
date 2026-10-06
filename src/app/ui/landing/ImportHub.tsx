@@ -26,7 +26,9 @@
  */
 
 import type { JSX } from "@solidjs/web";
+import { useNavigate } from "@tanstack/solid-router";
 import { Effect, Option, Scope } from "effect";
+import BookCopy from "lucide-solid/icons/book-copy";
 import CloudDownload from "lucide-solid/icons/cloud-download";
 import FileArchive from "lucide-solid/icons/file-archive";
 import FolderOpen from "lucide-solid/icons/folder-open";
@@ -100,6 +102,7 @@ export function ImportHub(props: {
 }) {
   const shell = useShell();
   const { services } = shell;
+  const navigate = useNavigate();
   const capabilities = services.hostInfo.capabilities();
   // The content host: whether this build has a cloud at all. How a browser
   // reaches it is the Remote's business, not this screen's.
@@ -477,6 +480,15 @@ export function ImportHub(props: {
             >
               {t("Import folder")}
             </Button>
+            <Button
+              variant="accent"
+              size="lg"
+              data-testid="import-writer"
+              icon={<BookCopy size={24} aria-hidden="true" />}
+              onClick={() => void navigate({ to: "/migrate" })}
+            >
+              {t("Migrate from Writer")}
+            </Button>
           </div>
         }
       >
@@ -505,6 +517,13 @@ export function ImportHub(props: {
             onSelect={openClone}
           >
             {t("Clone from cloud")}
+          </MenuItem>
+          <MenuItem
+            data-testid="import-writer"
+            icon={<BookCopy aria-hidden="true" />}
+            onSelect={() => void navigate({ to: "/migrate" })}
+          >
+            {t("Migrate from Writer")}
           </MenuItem>
         </Menu>
       </Show>

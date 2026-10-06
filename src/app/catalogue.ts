@@ -32,6 +32,7 @@
 import { Result, Schema } from "effect";
 
 import type { SettingsService } from "#core/host/settings";
+import type { BookCandidate, CandidateStatus } from "#core/migrate/candidate";
 import type { Attrs, Verdict } from "#core/observability";
 
 import { catalogueUrlFor } from "./endpoints";
@@ -119,6 +120,12 @@ export interface CatalogueService {
   /** The endpoint, for the screen's provenance line. */
   readonly origin: string;
   readonly entries: () => Promise<CatalogueRead>;
+  /**
+   * One language's single-book repositories — Writer projects — as book
+   * candidates, one per whole-book USFM rendering. The consolidated
+   * repository is left out: it is what a migration makes.
+   */
+  readonly writerBooks: (language: string) => Promise<readonly BookCandidate[]>;
 }
 
 /**
@@ -152,6 +159,56 @@ const Content = Schema.Struct({ id: Schema.String, modified_on: Schema.NullOr(Sc
 const Facts = Schema.Struct({
   data: Schema.Struct({ vw_langnames: Schema.Array(LangName), content: Schema.Array(Content) }),
 });
+
+/** One `content` row of a language's single-book repositories. */
+const WriterContent = Schema.Struct({
+  modified_on: Schema.NullOr(Schema.String),
+  resource_type: Schema.NullOr(Schema.String),
+  wa_content_metadata: Schema.NullOr(Schema.Struct({ status: Schema.NullOr(Schema.String) })),
+  git_repo: Schema.NullOr(Schema.Struct({ username: Schema.String, repo_url: Schema.String })),
+  rendered_contents: Schema.Array(
+    Schema.Struct({
+      scriptural_rendering_metadata: Schema.NullOr(
+        Schema.Struct({ book_slug: Schema.NullOr(Schema.String) }),
+      ),
+    }),
+  ),
+});
+
+const WriterBooks = Schema.Struct({
+  data: Schema.Struct({ content: Schema.Array(WriterContent) }),
+});
+
+const decodeWriterBooks = Schema.decodeUnknownResult(WriterBooks);
+
+/**
+ * The renderings are filtered INSIDE the query, so one small answer (38 KB
+ * for all of `bwc`, probed 2026-10-02) carries each repository's book.
+ */
+const WRITER_BOOKS_QUERY = `query ($lang: String!) {
+  content(where: {
+    language: { ietf_code: { _eq: $lang } }
+    git_repo: { _not: { topics: { topic: { name: { _eq: "consolidated" } } } } }
+  }) {
+    modified_on resource_type
+    wa_content_metadata { status }
+    git_repo { username repo_url }
+    rendered_contents(where: {
+      file_type: { _eq: "usfm" }
+      scriptural_rendering_metadata: { is_whole_book: { _eq: true } }
+    }) { scriptural_rendering_metadata { book_slug } }
+  }
+}`;
+
+const STATUSES: readonly CandidateStatus[] = ["Primary", "Active", "Inactive"];
+
+/**
+ * `resource_type` is noisy (empty for some `reg` repositories), so the
+ * repository's own name decides when it ends `_text_<resource>`.
+ */
+const resourceOf = (repo: string, declared: string | null): string =>
+  /_text_([a-z0-9-]+)$/i.exec(repo)?.[1]?.toLowerCase() ??
+  (declared === null || declared.trim() === "" ? "reg" : declared.trim().toLowerCase());
 
 const decodeRepos = Schema.decodeUnknownResult(Repos);
 const decodeFacts = Schema.decodeUnknownResult(Facts);
@@ -222,6 +279,39 @@ const toEntry = (
 const languageApiCatalogue = (origin: string): CatalogueService => ({
   source: "live",
   origin,
+  writerBooks: async (language) => {
+    const decoded = decodeWriterBooks(
+      await graphql(origin, WRITER_BOOKS_QUERY, { lang: language.trim() }),
+    );
+    if (Result.isFailure(decoded))
+      throw new CatalogueError(
+        `Language API payload not understood: ${decoded.failure.message}`,
+        "payload",
+      );
+    return decoded.success.data.content.flatMap((row): BookCandidate[] => {
+      if (row.git_repo === null) return [];
+      const url = row.git_repo.repo_url;
+      const repo = url.replace(/\/+$/, "").split("/").at(-1) ?? "";
+      const status = STATUSES.find((each) => each === row.wa_content_metadata?.status);
+      return row.rendered_contents.flatMap((rendering) => {
+        const book = rendering.scriptural_rendering_metadata?.book_slug?.toUpperCase();
+        if (book === undefined || book === "") return [];
+        return [
+          {
+            id: `remote:${url}:${book}`,
+            book,
+            language: language.trim().toLowerCase(),
+            resource: resourceOf(repo, row.resource_type),
+            origin: { kind: "remote", owner: row.git_repo?.username ?? "", repo, url },
+            hints: {
+              ...(status === undefined ? {} : { status }),
+              ...(row.modified_on === null ? {} : { modified: row.modified_on }),
+            },
+          },
+        ];
+      });
+    });
+  },
   entries: async () => {
     const decoded = decodeRepos(await graphql(origin, REPOS_QUERY));
     if (Result.isFailure(decoded))
@@ -308,6 +398,8 @@ const sampleCatalogue = (): CatalogueService => ({
   source: "sample",
   origin: "sample data",
   entries: () => Promise.resolve({ rows: SAMPLE_CATALOGUE, enriched: true }),
+  // Sample rows clone nothing, so they offer no books either.
+  writerBooks: () => Promise.resolve([]),
 });
 
 /**

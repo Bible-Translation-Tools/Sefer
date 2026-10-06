@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as DesignRouteImport } from './routes/design'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppMigrateRouteImport } from './routes/_app/migrate'
 import { Route as AppProjectsRouteImport } from './routes/_app/projects'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppDevFixtureRouteImport } from './routes/_app/dev/fixture'
@@ -41,6 +42,11 @@ const DesignRoute = DesignRouteImport.update({
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppMigrateRoute = AppMigrateRouteImport.update({
+  id: '/migrate',
+  path: '/migrate',
   getParentRoute: () => AppRoute,
 } as any)
 const AppProjectsRoute = AppProjectsRouteImport.update({
@@ -130,6 +136,7 @@ const AppProjectSlugBookBookRoute = AppProjectSlugBookBookRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/design': typeof DesignRoute
+  '/migrate': typeof AppMigrateRoute
   '/projects': typeof AppProjectsRoute
   '/settings': typeof AppSettingsRoute
   '/dev/fixture': typeof AppDevFixtureRoute
@@ -149,6 +156,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/design': typeof DesignRoute
+  '/migrate': typeof AppMigrateRoute
   '/projects': typeof AppProjectsRoute
   '/settings': typeof AppSettingsRoute
   '/': typeof AppIndexRoute
@@ -170,6 +178,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/design': typeof DesignRoute
+  '/_app/migrate': typeof AppMigrateRoute
   '/_app/projects': typeof AppProjectsRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/': typeof AppIndexRoute
@@ -193,6 +202,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/design'
+    | '/migrate'
     | '/projects'
     | '/settings'
     | '/dev/fixture'
@@ -212,6 +222,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/design'
+    | '/migrate'
     | '/projects'
     | '/settings'
     | '/'
@@ -232,6 +243,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_app'
     | '/design'
+    | '/_app/migrate'
     | '/_app/projects'
     | '/_app/settings'
     | '/_app/'
@@ -277,6 +289,13 @@ declare module '@tanstack/solid-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/migrate': {
+      id: '/_app/migrate'
+      path: '/migrate'
+      fullPath: '/migrate'
+      preLoaderRoute: typeof AppMigrateRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/projects': {
@@ -425,6 +444,7 @@ const AppProjectSlugRouteWithChildren = AppProjectSlugRoute._addFileChildren(
 )
 
 interface AppRouteChildren {
+  AppMigrateRoute: typeof AppMigrateRoute
   AppProjectsRoute: typeof AppProjectsRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -435,6 +455,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppMigrateRoute: AppMigrateRoute,
   AppProjectsRoute: AppProjectsRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppIndexRoute: AppIndexRoute,
