@@ -52,6 +52,7 @@ import { openProject as openProjectEffect, type Project } from "#core/project/pr
 import { mintSlug } from "#core/project/slug";
 import { DEFAULT_JOURNAL_POLICY, type Restorable } from "#core/recovery/recovery";
 import { pendingOnOpen } from "#core/recovery/reopen";
+import { highestVersions } from "#core/resources/relationships";
 import { SaveCoordinator } from "#core/save/saveCoordinator";
 import type { SourceStamp } from "#core/source/source";
 import { anchorFrom, type ChapterRow, type EditorBook, type ProjectionName } from "#editor/index";
@@ -939,6 +940,17 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     );
     gesture.end("ready", { "project.books": ready.books.length });
     live = ready;
+    // What the project declares as its source texts: the Library answers
+    // "source" with these when the person has picked none.
+    await services.run(
+      services.library.declare(
+        ready.id,
+        Option.match(ready.metadata(), {
+          onNone: () => [],
+          onSome: (metadata) => highestVersions(metadata.related),
+        }),
+      ),
+    );
     setProject(ready);
     setCursor(0);
     // A name chosen on this device lives in `.sefer/project.json`, never in

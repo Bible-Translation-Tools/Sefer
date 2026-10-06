@@ -90,6 +90,13 @@ export interface ProjectMetadata {
    * written. `highestVersions` picks the one to hold.
    */
   readonly related: readonly RelatedResource[];
+  /**
+   * What the container says it holds: a Burrito flavor (`textTranslation`)
+   * or a Resource Container subject (`Bible`, `Translation Notes`).
+   */
+  readonly subject: string | undefined;
+  /** The version the resource declares (`dublin_core.version`); Burrito has none. */
+  readonly version: string | undefined;
 }
 
 const ONE = (locale: string | undefined, value: string): LocalizedText =>
@@ -127,6 +134,8 @@ export const fromBurrito = (metadata: BurritoMetadata): ProjectMetadata => {
     defaultLocale: metadata.meta.defaultLocale,
     bookNames,
     related: fromBurritoRelationships(metadata.relationships ?? []),
+    subject: metadata.type.flavorType.flavor.name,
+    version: undefined,
   };
 };
 
@@ -162,6 +171,8 @@ const fromResourceContainer = (manifest: ResourceContainerManifest): ProjectMeta
     defaultLocale: locale === "" ? undefined : locale,
     bookNames,
     related: fromResourceContainerSource(core.source ?? []),
+    subject: core.subject,
+    version: core.version,
   };
 };
 

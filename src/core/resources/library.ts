@@ -30,10 +30,11 @@ import {
 import { writeFileStringAtomic } from "../fileSystem/atomic";
 import { joinPath, lastSegment, parentPath } from "../fileSystem/path";
 import { Observability, type ObservabilityService } from "../observability";
+import { readProjectMetadata } from "../project/discovery";
 import { decode } from "../source/source";
-import { decodeBurritoMetadata } from "./burrito";
 import { classify, readJson, type Classification } from "./import";
-import { decodeResourceContainerManifest } from "./resourceContainer";
+import { localized } from "./projectMetadata";
+import { normaliseRepoUrl, type RelatedResource } from "./relationships";
 
 /**
  * How a resource is packed. The `unknown` classification is never registered.
@@ -81,6 +82,22 @@ export interface Resource {
    * lets a surface pick the renderer, and lets the library list what it holds.
    */
   readonly subject?: string;
+  /** What the resource calls itself (`ulb`), to match a project's declared source. */
+  readonly identifier?: string;
+  /** The version it declares (`24-07`), to say when it is not the one a project listed. */
+  readonly version?: string;
+  /**
+   * Where this copy was cloned from, and the commit it holds. Per device: a
+   * project names its source texts by language and resource, never by URL.
+   * Absent for a folder a person picked.
+   */
+  readonly upstream?: Upstream;
+}
+
+/** The remote a copy came from. `url` is stored normalised, which is how it is compared. */
+export interface Upstream {
+  readonly url: string;
+  readonly commit: string;
 }
 
 type LibraryRefusal = "Unclassified" | "NotFound" | "Io";
@@ -98,7 +115,15 @@ export interface LibraryService {
    * ./import.ts cannot say what the folder holds. Adding a root that is already
    * registered re-reads its metadata and replaces the entry.
    */
-  readonly add: (root: string) => Effect.Effect<Resource, LibraryError>;
+  readonly add: (root: string, upstream?: Upstream) => Effect.Effect<Resource, LibraryError>;
+  /** The resource cloned from `url`, compared normalised; how a second pull becomes none. */
+  readonly cloned: (url: string) => Effect.Effect<Option.Option<Resource>>;
+  /**
+   * What an open project declares as its source texts. Held in memory for the
+   * session; `resolve(projectId, "source")` answers with the matching held
+   * copies when the person has picked none.
+   */
+  readonly declare: (projectId: string, related: readonly RelatedResource[]) => Effect.Effect<void>;
   /** Forgets a resource and every binding that pointed at it. */
   readonly remove: (id: string) => Effect.Effect<void, LibraryError>;
   /** Adds `resourceId` to the resources holding `role` in `projectId`; idempotent, order kept. */
@@ -109,7 +134,11 @@ export interface LibraryService {
   ) => Effect.Effect<void, LibraryError>;
   /** Removes one binding; a no-op when it was not there. */
   readonly unbind: (projectId: string, role: Role, resourceId: string) => Effect.Effect<void>;
-  /** Every resource bound to `role` in `projectId`, in binding order; empty is explicit, never substituted. */
+  /**
+   * Every resource bound to `role` in `projectId`, in binding order. For
+   * `source` with nothing bound, the held copies of what the project declares
+   * (Will, 2026-10-06: the declared source text is the default).
+   */
   readonly resolve: (projectId: string, role: Role) => Effect.Effect<readonly Resource[]>;
   /** Every binding of one project, so a shell can lay out panes without knowing the roles up front. */
   readonly bound: (
@@ -148,6 +177,9 @@ const ResourceRecord = Schema.Struct({
   title: Schema.String,
   language: Schema.optionalKey(Schema.String),
   subject: Schema.optionalKey(Schema.String),
+  identifier: Schema.optionalKey(Schema.String),
+  version: Schema.optionalKey(Schema.String),
+  upstream: Schema.optionalKey(Schema.Struct({ url: Schema.String, commit: Schema.String })),
 });
 
 const Registry = Schema.Struct({
@@ -191,61 +223,40 @@ const failure = (error: PlatformError.PlatformError): LibraryError => refuse("Io
 
 const isUsfm = (path: string): boolean => path.toLowerCase().endsWith(".usfm");
 
-/** One localized-text value, preferring `defaultLocale` then `en` then whatever is first. */
-const localized = (
-  values: Readonly<Record<string, string>>,
-  preferred: string | undefined,
-): string | undefined => {
-  if (preferred !== undefined && values[preferred] !== undefined) return values[preferred];
-  if (values.en !== undefined) return values.en;
-  return Object.values(values)[0];
-};
-
 /**
- * Title and language for a classified root. The metadata files were already
- * decoded once by `classify`; they are read again here rather than threaded
- * through the classification result, because `classify`'s answer is a
- * classification and nothing more. For `looseUsfm` (and for a `manifest.yaml`
- * with no JSON sibling, which core cannot parse) the folder name is the title.
+ * Title, language and what a root declares about itself, read through the
+ * same `readProjectMetadata` a project's own header uses, so a Resource
+ * Container's `manifest.yaml` is read here too. For loose USFM, or metadata
+ * that does not decode, the folder name is the title.
  */
 const describe = (
   fileSystem: FileSystem.FileSystem,
   root: string,
-  kind: ContainerKind,
-): Effect.Effect<{
-  readonly title: string;
-  readonly language?: string;
-  readonly subject?: string;
-}> =>
-  Effect.gen(function* () {
-    if (kind === "burrito") {
-      const value = yield* readJson(fileSystem, joinPath(root, "metadata.json"));
-      const decoded = decodeBurritoMetadata(value);
-      if (Result.isSuccess(decoded)) {
-        const metadata = decoded.success;
-        const title = localized(metadata.identification.name, metadata.meta.defaultLocale);
-        const language = metadata.languages[0]?.tag;
+): Effect.Effect<Pick<Resource, "title" | "language" | "subject" | "identifier" | "version">> =>
+  Effect.map(readProjectMetadata(fileSystem, root), (read) =>
+    Option.match(read.metadata, {
+      onNone: () => ({ title: lastSegment(root) }),
+      onSome: (metadata) => {
+        const title = localized(metadata.name, [metadata.defaultLocale]);
         return {
-          title: title ?? lastSegment(root),
-          ...(language === undefined ? {} : { language }),
-          subject: metadata.type.flavorType.flavor.name,
+          title: title === "" ? lastSegment(root) : title,
+          ...(metadata.language.tag === "" ? {} : { language: metadata.language.tag }),
+          ...(metadata.subject === undefined ? {} : { subject: metadata.subject }),
+          ...(metadata.id === undefined ? {} : { identifier: metadata.id.toLowerCase() }),
+          ...(metadata.version === undefined ? {} : { version: metadata.version }),
         };
-      }
-    }
-    if (kind === "resourceContainer") {
-      const value = yield* readJson(fileSystem, joinPath(root, "manifest.json"));
-      const decoded = decodeResourceContainerManifest(value);
-      if (Result.isSuccess(decoded)) {
-        const core = decoded.success.dublin_core;
-        return {
-          title: core.title,
-          language: core.language.identifier,
-          ...(core.subject === undefined ? {} : { subject: core.subject }),
-        };
-      }
-    }
-    return { title: lastSegment(root) };
-  });
+      },
+    }),
+  );
+
+/**
+ * Whether a held resource is the copy a project's declaration names: cloned
+ * from `WA-Catalog/<language>_<resource>`, or declaring that language and
+ * identifier itself.
+ */
+const answers = (resource: Resource, ref: RelatedResource): boolean =>
+  resource.upstream?.url.endsWith(`/wa-catalog/${ref.language}_${ref.resource}`) === true ||
+  (resource.language?.toLowerCase() === ref.language && resource.identifier === ref.resource);
 
 /** Book files under a resource root, relative to it. */
 const usfmFilesUnder = (
@@ -307,23 +318,31 @@ const makeLibrary = (
     const find = (id: string): Resource | undefined =>
       held.resources.find((resource) => resource.id === id);
 
+    /** Per session: what each opened project declares. Re-declared on every open. */
+    const declared = new Map<string, readonly RelatedResource[]>();
+
     return {
       resources: () => Effect.succeed(held.resources),
 
-      add: (root) =>
+      add: (root, upstream) =>
         Effect.gen(function* () {
           const classification: Classification = yield* classify(fileSystem, { root });
           if (classification === "unknown")
             return yield* Effect.fail(
               refuse("Unclassified", `${root} is neither a Burrito, a Resource Container nor USFM`),
             );
-          const described = yield* describe(fileSystem, root, classification);
+          const described = yield* describe(fileSystem, root);
+          // Re-adding a root keeps where it came from unless told otherwise:
+          // a person picking a downloaded copy again has not changed its origin.
+          const known = upstream ?? find(root)?.upstream;
           const resource: Resource = {
             id: root,
             container: classification,
             root,
-            title: described.title,
-            ...(described.language === undefined ? {} : { language: described.language }),
+            ...described,
+            ...(known === undefined
+              ? {}
+              : { upstream: { url: normaliseRepoUrl(known.url), commit: known.commit } }),
           };
           yield* persist({
             ...held,
@@ -332,8 +351,22 @@ const makeLibrary = (
           observability?.note("library.add", "ready", undefined, {
             "resource.id": resource.id,
             "resource.classification": classification,
+            "resource.cloned": upstream !== undefined,
           });
           return resource;
+        }),
+
+      cloned: (url) =>
+        Effect.sync(() => {
+          const wanted = normaliseRepoUrl(url);
+          return Option.fromNullishOr(
+            held.resources.find((resource) => resource.upstream?.url === wanted),
+          );
+        }),
+
+      declare: (projectId, related) =>
+        Effect.sync(() => {
+          declared.set(projectId, related);
         }),
 
       remove: (id) =>
@@ -379,11 +412,16 @@ const makeLibrary = (
         }),
 
       resolve: (projectId, role) =>
-        Effect.sync(() =>
-          (held.bindings[projectId]?.[role] ?? [])
+        Effect.sync(() => {
+          const picked = (held.bindings[projectId]?.[role] ?? [])
             .map(find)
-            .filter((resource): resource is Resource => resource !== undefined),
-        ),
+            .filter((resource): resource is Resource => resource !== undefined);
+          if (picked.length > 0 || role !== ROLES.source) return picked;
+          return (declared.get(projectId) ?? []).flatMap((ref) => {
+            const copy = held.resources.find((resource) => answers(resource, ref));
+            return copy === undefined ? [] : [copy];
+          });
+        }),
 
       bound: (projectId) =>
         Effect.sync(() =>
