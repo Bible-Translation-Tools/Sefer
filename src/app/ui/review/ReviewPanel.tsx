@@ -784,11 +784,21 @@ export function ReviewPanel() {
     let offered = 0;
     let taken = 0;
     if (pull() === undefined) return { offered, taken };
+    // A take is written into the editor at once, so the passage it took then
+    // reads the same on both sides and is "unchanged" — kept on screen only
+    // because it was decided. The decisions are therefore counted as they
+    // were made, and only an undecided passage is counted by what differs and
+    // by its preset.
+    for (const side of decisions().values()) {
+      offered += 1;
+      if (side === "baseline") taken += 1;
+    }
     for (const book of reviewBooks())
       for (const unit of book.skeleton.units) {
-        if (unit.status === "unchanged") continue;
+        if (unit.status === "unchanged" || decisionFor(book.bookId, unit.id) !== undefined)
+          continue;
         offered += 1;
-        if (effectiveFor(book.bookId, unit.id) === "baseline") taken += 1;
+        if (preset(book.bookId, unit) === "baseline") taken += 1;
       }
     return { offered, taken };
   };
