@@ -50,6 +50,7 @@
  */
 
 import { Effect, Fiber, Option, Result, Stream } from "effect";
+import PencilLine from "lucide-solid/icons/pencil-line";
 import X from "lucide-solid/icons/x";
 import {
   Match,
@@ -96,7 +97,10 @@ export interface ReferencePaneProps {
   readonly bookId: string;
   /** The chapter NUMBER the main editor is clipped to, or `null` for whole-book. */
   readonly clip: () => number | null;
-  readonly onUnbind: () => void;
+  /** Absent for a text the project declares: nothing was picked to remove. */
+  readonly onUnbind?: () => void;
+  /** Present for a Library copy: "Edit it as your own project" moves it to the projects folder. */
+  readonly onAdopt?: () => void;
 }
 
 /** What the pane is showing, once the read has answered. */
@@ -527,14 +531,30 @@ export function ReferencePane(props: ReferencePaneProps) {
           startLabel={t("Let {title} follow the book", { title: props.resource.title })}
           onToggle={() => setFollowing((on) => !on)}
         />
-        <IconButton
-          size="sm"
-          data-testid={`unbind-${props.resource.id}`}
-          label={t("Remove {title}", { title: props.resource.title })}
-          tooltipSide="left"
-          icon={<X />}
-          onClick={() => props.onUnbind()}
-        />
+        <Show when={props.onAdopt}>
+          {(adopt) => (
+            <IconButton
+              size="sm"
+              data-testid={`adopt-${props.resource.id}`}
+              label={t("Edit it as your own project")}
+              tooltipSide="left"
+              icon={<PencilLine />}
+              onClick={() => adopt()()}
+            />
+          )}
+        </Show>
+        <Show when={props.onUnbind}>
+          {(unbind) => (
+            <IconButton
+              size="sm"
+              data-testid={`unbind-${props.resource.id}`}
+              label={t("Remove {title}", { title: props.resource.title })}
+              tooltipSide="left"
+              icon={<X />}
+              onClick={() => unbind()()}
+            />
+          )}
+        </Show>
       </div>
 
       <Switch>

@@ -204,3 +204,42 @@ export const announceSourceTexts = async (
     message: lines.join("\n"),
   });
 };
+
+/** `root`, or `root-2`, `root-3`… whichever does not exist yet. */
+const freeRoot = (services: Services, root: string): Effect.Effect<string, never, Domain> =>
+  Effect.gen(function* () {
+    for (let attempt = 1; ; attempt += 1) {
+      const candidate = attempt === 1 ? root : `${root}-${String(attempt)}`;
+      const taken = yield* Effect.orElseSucceed(services.fileSystem.exists(candidate), () => true);
+      if (!taken) return candidate;
+    }
+  });
+
+/**
+ * "Edit it as your own project": a Library copy becomes a project, by a full
+ * move. Once edited it is no longer WA's official text (Will, 2026-10-06), so
+ * it leaves the Library, and every project that read it as a source text
+ * falls back to downloading the official one again.
+ */
+export const adoptAsProject = (
+  services: Services,
+  resource: Resource,
+): Effect.Effect<string, unknown, Domain> =>
+  Effect.gen(function* () {
+    const into = yield* freeRoot(
+      services,
+      `${services.projectsRoot}/${lastSegment(resource.root)}`,
+    );
+    const fileSystem = services.fileSystem;
+    // A directory move where the host has one; OPFS without `move` copies.
+    yield* Effect.catch(fileSystem.rename(resource.root, into), () =>
+      Effect.andThen(fileSystem.copy(resource.root, into), () =>
+        fileSystem.remove(resource.root, { recursive: true }),
+      ),
+    );
+    const library = yield* Library;
+    yield* library.remove(resource.id);
+    yield* Effect.sync(libraryChanged);
+    yield* rememberProject(services.projectsRoot, into, undefined);
+    return into;
+  });

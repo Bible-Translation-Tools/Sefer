@@ -254,7 +254,7 @@ const describe = (
  * from `WA-Catalog/<language>_<resource>`, or declaring that language and
  * identifier itself.
  */
-const answers = (resource: Resource, ref: RelatedResource): boolean =>
+export const answers = (resource: Resource, ref: RelatedResource): boolean =>
   resource.upstream?.url.endsWith(`/wa-catalog/${ref.language}_${ref.resource}`) === true ||
   (resource.language?.toLowerCase() === ref.language && resource.identifier === ref.resource);
 
