@@ -1,10 +1,37 @@
 # Assembling a Bible from single-book projects (BTT Writer migration) (2026-10-02)
 
-**Status:** plan, ruled on 2026-10-06 ("Rulings, 2026-10-06" at the end
-wins where earlier sections differ). Nothing is built. The plan page is
+**Status:** built 2026-10-06 on master (39c5326 to the docs commit),
+unpushed, as ruled ("Rulings, 2026-10-06" at the end wins where earlier
+sections differ). The plan page is
 [consolidate-book-repos-plan.html](consolidate-book-repos-plan.html). The
-order is: paired resources (step 1), then this migration, then
+durable account is now [services](../../documentation/services.md) (Library,
+Writer migration), [resources](../../documentation/architecture/resources.md)
+and [landing](../../documentation/architecture/landing.md). Next:
 [resource kinds](../01-discussing/resource-kinds-2026-10-01.md) and TN.
+
+**Where the build differs from this note:**
+
+- **No version checkout.** A copy is the repository's newest version, and a
+  copy whose declared version is not the one listed says so ("listed 24-02;
+  this copy is 24-07"). With `revision` holding the listed version, nothing
+  records a commit to check out, so the release / tag / manifest rule is not
+  built; `VersionMatch` is `listed | newest`.
+- **No `candidateSource.ts`.** Review's reader takes two texts and a
+  skeleton, as History uses it, so "Differences from" needs no
+  `CompareSource`.
+- **Upstream checks are not built** (ruled: record only). `.upstreams.json`
+  is written and never read yet; Library rows record `upstream {url, commit}`.
+- **Bindings were not moved** to `.sefer/project.json` as `referencePicks`
+  (agreed 2026-10-06, a follow-up). Auto-pull writes no binding; the declared
+  source text is `resolve`'s default.
+- **Resource kinds change 1** rode along only as its rename: `ResourceKind` is
+  `ContainerKind`, the field `container`. `ContentKind` is resource kinds'
+  work.
+- **Found while building:** the Book census counted the synthetic
+  front-matter row as a chapter (Genesis read 51) and is fixed; Writer
+  sometimes saved a chapter's `\c` twice (Moffat_chola's REV), and every
+  leading `\c` of a first chunk is now dropped; Writer authors some saves as
+  "tsDesktop", which is never credited.
 
 **This replaced** the WACS language downloads note (2026-09-24, deleted
 2026-10-06). Its catalogue half shipped (`src/app/catalogue.ts` is on

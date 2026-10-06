@@ -26,7 +26,8 @@ flowchart TB
   end
   book[book] --> source
   project[project] --> book & source & fileSystem & resources
-  resources[resources] --> book & source & fileSystem
+  resources[resources] --> book & source & fileSystem & project
+  migrate[migrate] --> analysis & fileSystem & git & remote & resources
   findings[findings] --> book & galley & source
   analysis[analysis] --> book & findings & galley & project & source
   fixes[fixes] --> book & findings & galley & source
@@ -47,7 +48,7 @@ flowchart TB
 
 Above core: `src/editor` (CodeMirror; Book → EditorBook, the funnel, recipes) and `src/platform/{web,tauri,node}` (one Layer per host capability). Above those sits `src/app` (composition, commands, ProjectContext, stores, workflows, UI) with `src/routes`. `src/dev` is the design surface and never ships. [Boundaries](architecture/boundaries.md) is the enforced version of this.
 
-Save ↔ Recovery is the one two-way pair: recovery reads the Baseline type, and save optionally asks for Recovery to clear a journal.
+Save ↔ Recovery is one two-way pair: recovery reads the Baseline type, and save optionally asks for Recovery to clear a journal. Resources ↔ Project is the other: the Library describes a folder through `discovery.ts`'s `readProjectMetadata` (so a Resource Container's `manifest.yaml` names it), and discovery decodes through the resources schemas. No file imports back into itself; `pnpm deadcode` checks the cycles.
 
 ---
 
@@ -529,7 +530,7 @@ The app bar's cloud popover (state, clocks, the one right move, sign in and out,
 
 ### Overview
 
-Browsing the online catalogue on the projects page: the Language API's GraphQL endpoint, prod and dev, listing each repository with its git URL on its own server. One `catalogue.browse` operation per load of the table: a Language API that is down or answers non-2xx ends `unavailable`, a payload the decoder cannot read `failed`, and a failed second query (regions, alternates, dates) is `catalogue.enriched: false` on a passed browse. `src/app/catalogue.ts`. → [landing](architecture/landing.md)
+Browsing the online catalogue on the projects page: the Language API's GraphQL endpoint, prod and dev, listing each repository with its git URL on its own server. `writerBooks(language)` lists a language's single-book Writer repositories as book candidates for the Writer migration, one query. One `catalogue.browse` operation per load of the table: a Language API that is down or answers non-2xx ends `unavailable`, a payload the decoder cannot read `failed`, and a failed second query (regions, alternates, dates) is `catalogue.enriched: false` on a passed browse. `src/app/catalogue.ts`. → [landing](architecture/landing.md)
 
 ### Constraints and known bugs
 
@@ -564,17 +565,40 @@ Staged, validated import with provenance (`stage` → `classify` → `commit`, `
 
 ### Overview
 
-Stable resource identities bound to project roles (`source`, `reference`, `tn`, `tw`, `tq`). The read-only reference pane with caret-driven block pairing. `src/core/resources/library.ts`, `app/workflows/references.ts`, `ReferencePane.tsx`. → [resources](architecture/resources.md)
+Every text this device can read beside a project, and which one a project reads. A copy cloned for the Library (a WACS gateway row, or a source text a project declares) lives in `<appData>/library/<owner>/<repo>`, outside the projects folder, so "Your projects" never lists it; its row records the URL it came from and the commit it holds. A project's declared source texts (Burrito `relationships`, RC `source`, Writer `source_translations`, read by `relationships.ts`) are what `resolve(project, "source")` answers with when nobody picked one; a pick is a binding, this device's memory. The reference column lists the copies as "Source texts" and "Reference material" before other projects, offers a declared text that is missing for download, and "Edit it as your own project" moves a copy into the projects folder. `src/core/resources/library.ts`, `relationships.ts`, `src/app/arrival.ts`, `ReferenceColumn.tsx`, `ReferencePane.tsx`. → [resources](architecture/resources.md)
 
 ### Constraints and known bugs
 
 - Scripture only: a `tn`/`tw` binding can be made, but nothing reads it.
-- No UI for recovering a missing binding.
+- A copy is the repository's newest version. A project that lists `24-02` gets `24-07` when that is newest, and the toast says so; checking out an older listed version is not built (Burrito `revision` holds the listed version, not a commit, so nothing records which commit was meant).
+- Source texts are pulled on arrival (download, import, clone, assembly), not on open: a project that arrived before 2026-10-06 shows its declared text as missing until Download is pressed.
+- Bindings ("picks") still live in `library.json` keyed by project; moving them to the project's `.sefer/project.json` as `referencePicks` is agreed and not done.
+- Gateway texts downloaded before 2026-10-06 stay in the projects folder (ruled: they are not moved).
 
 ### Ideas / future
 
 - A Translation Notes reader and pane.
 - The key-terms guide as a Library resource instead of a fixture.
+- The upstream check: "en_ulb 24-07 is available", over `Remote.probe`.
+
+## Writer migration
+
+### Overview
+
+"Migrate from Writer" (`/migrate`, from Import) assembles one project from BTT Writer's single-book projects: a folder, a zip or a language from the catalogue, combined in one run. Every candidate is opened, rendered through one template (txt2USFM's header, then chapters and chunks in order; the translator's text is never repaired) and measured as a Book census row. A book with rival copies is chosen up front, with "Differences from" in Review's reader. Assemble writes the books, `metadata.json`, `manifest.yaml` and `.upstreams.json` and records them as ONE commit, crediting the Writer authors; Books → "Add a book…" brings more into a project the same way. `src/core/migrate/`, `src/core/resources/writeMetadata.ts`, `src/app/migrate.ts`, `src/app/ui/migrate/`. → [landing](architecture/landing.md), plan in `planning/00-ideas/consolidate-book-repos.md`
+
+### Constraints and known bugs
+
+- `.upstreams.json` is written, never read: checking a Writer project for new work ("Mary is still working on 1 John in Writer") is the next step.
+- A folder pick on the Web copies the whole folder into staging first, as import does.
+- The health line compares against the source text only when one is on this device; nothing compares against a versification.
+- Opening a language's candidates from the catalogue is a clone each: about 3 minutes for `bwc`'s 84 active ones on 2026-10-06. Staged clones are reused within a session.
+- Commit authors who left no email are named in the commit body, not `Co-authored-by`.
+
+### Ideas / future
+
+- The Writer upstream check and its Review, Shared project first.
+- A consolidated repository from the catalogue as one more candidate per book.
 
 ## ProjectAdmin
 
