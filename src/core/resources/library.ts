@@ -2,10 +2,10 @@
 //
 // The Library: the registry of resources this installation knows about, and the
 // bindings that give a resource a *role* in a project. Two independent facts
-// are kept apart: a resource's semantic kind (Burrito, Resource Container,
-// loose USFM — what it *is*) and its contextual role in a project (`source`,
-// `notes`, `reference`, `glossary` — what it is *for*). `add` records the kind
-// once; `bind` records the role per project, so the same resource can be a
+// are kept apart: a resource's container (Burrito, Resource Container, loose
+// USFM — what it is packed as) and its contextual role in a project (`source`,
+// `notes`, `reference`, `glossary` — what it is *for*). `add` records the
+// container once; `bind` records the role per project, so the same resource can be a
 // source in one project and a reference in another, and nothing about the
 // resource itself changes.
 //
@@ -35,8 +35,14 @@ import { decodeBurritoMetadata } from "./burrito";
 import { classify, readJson, type Classification } from "./import";
 import { decodeResourceContainerManifest } from "./resourceContainer";
 
-/** What a resource is. The `unknown` classification is never registered. */
-export type ResourceKind = "burrito" | "resourceContainer" | "looseUsfm";
+/**
+ * How a resource is packed. The `unknown` classification is never registered.
+ *
+ * Named for the container, not "kind", because what a resource holds (USFM,
+ * notes, questions) is a second fact that resource kinds will add beside it
+ * (`planning/01-discussing/resource-kinds-2026-10-01.md`, §3).
+ */
+export type ContainerKind = "burrito" | "resourceContainer" | "looseUsfm";
 
 /**
  * What a resource is *for*, in one project. The well-known roles are named
@@ -64,7 +70,7 @@ export interface Resource {
    * new one, which is the honest answer — its provenance moved too.
    */
   readonly id: string;
-  readonly kind: ResourceKind;
+  readonly container: ContainerKind;
   readonly root: string;
   readonly title: string;
   readonly language?: string;
@@ -137,7 +143,7 @@ const REGISTRY_FILE = "library.json";
 
 const ResourceRecord = Schema.Struct({
   id: Schema.String,
-  kind: Schema.Literals(["burrito", "resourceContainer", "looseUsfm"]),
+  container: Schema.Literals(["burrito", "resourceContainer", "looseUsfm"]),
   root: Schema.String,
   title: Schema.String,
   language: Schema.optionalKey(Schema.String),
@@ -153,6 +159,25 @@ const Registry = Schema.Struct({
 type Registry = typeof Registry.Type;
 
 const decodeRegistry = Schema.decodeUnknownResult(Registry);
+
+/**
+ * A registry written before `kind` was renamed `container` says `kind`. Read as
+ * the same fact; the next write stores the new name. Without this every
+ * existing library would fail to decode and start empty.
+ */
+const withContainer = (stored: unknown): unknown => {
+  if (typeof stored !== "object" || stored === null || !("resources" in stored)) return stored;
+  const { resources } = stored;
+  if (!Array.isArray(resources)) return stored;
+  return {
+    ...stored,
+    resources: resources.map((record: unknown) =>
+      typeof record === "object" && record !== null && "kind" in record && !("container" in record)
+        ? (({ kind, ...rest }) => ({ ...rest, container: kind }))(record)
+        : record,
+    ),
+  };
+};
 
 const EMPTY: Registry = { resources: [], bindings: {} };
 
@@ -186,7 +211,7 @@ const localized = (
 const describe = (
   fileSystem: FileSystem.FileSystem,
   root: string,
-  kind: ResourceKind,
+  kind: ContainerKind,
 ): Effect.Effect<{
   readonly title: string;
   readonly language?: string;
@@ -256,7 +281,7 @@ const makeLibrary = (
     const stored = yield* readJson(fileSystem, registryPath);
     let held = EMPTY;
     if (stored !== undefined) {
-      const decoded = decodeRegistry(stored);
+      const decoded = decodeRegistry(withContainer(stored));
       if (Result.isSuccess(decoded)) held = decoded.success;
       else
         // A registry we cannot decode is not a reason to refuse to start: the
@@ -295,7 +320,7 @@ const makeLibrary = (
           const described = yield* describe(fileSystem, root, classification);
           const resource: Resource = {
             id: root,
-            kind: classification,
+            container: classification,
             root,
             title: described.title,
             ...(described.language === undefined ? {} : { language: described.language }),
