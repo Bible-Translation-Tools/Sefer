@@ -20,11 +20,12 @@
  */
 
 import { useNavigate } from "@tanstack/solid-router";
+import { Option } from "effect";
 import ChevronLeft from "lucide-solid/icons/chevron-left";
 import CloudDownload from "lucide-solid/icons/cloud-download";
 import FileArchive from "lucide-solid/icons/file-archive";
 import FolderOpen from "lucide-solid/icons/folder-open";
-import { For, Show, createMemo, createSignal } from "solid-js";
+import { For, Show, createMemo, createSignal, untrack } from "solid-js";
 
 import { CANON } from "#core/location/canon";
 import { prefillForm, type AssembleForm } from "#core/migrate/assemble";
@@ -42,7 +43,14 @@ import { announceSourceTexts } from "../../arrival";
 import { describe } from "../../describe";
 import { contentHostFor } from "../../endpoints";
 import { t } from "../../i18n";
-import { assembleProject, openOne, pickLocal, remoteCandidates, type Opened } from "../../migrate";
+import {
+  addToProject,
+  assembleProject,
+  openOne,
+  pickLocal,
+  remoteCandidates,
+  type Opened,
+} from "../../migrate";
 import { useShell } from "../../ProjectContext";
 import { Badge, Button, Card, Input, PanelHeader, Select, toasts } from "../primitives";
 import { ChooseStep } from "./ChooseStep";
@@ -52,7 +60,7 @@ type Step = "books" | "choose" | "project";
 
 const OPEN_AT_ONCE = 4;
 
-export function MigrateScreen() {
+export function MigrateScreen(props: { readonly into?: string | undefined }) {
   const shell = useShell();
   const { services } = shell;
   const navigate = useNavigate();
@@ -69,7 +77,21 @@ export function MigrateScreen() {
     name: "migrateChosen",
   });
   const [sources, setSources] = createSignal<readonly string[]>([], { name: "migrateSources" });
-  const [language, setLanguage] = createSignal("", { name: "migrateLanguage" });
+  /**
+   * Adding to a project: the books it holds already are never offered (no
+   * Bible prints John twice), and only its language is. Read once: this
+   * screen is entered from the project, and leaves back to it.
+   */
+  const intoProject = untrack(() => {
+    const open = shell.project();
+    return props.into !== undefined && open?.root === props.into ? open : undefined;
+  });
+  const held: readonly string[] = intoProject?.books.map((book) => book.id) ?? [];
+  const intoLanguage = Option.match(intoProject?.metadata() ?? Option.none(), {
+    onNone: () => "",
+    onSome: (metadata) => metadata.language.tag.toLowerCase(),
+  });
+  const [language, setLanguage] = createSignal(intoLanguage, { name: "migrateLanguage" });
   const [busy, setBusy] = createSignal(false, { name: "migrateBusy" });
   const [showInactive, setShowInactive] = createSignal(false, { name: "migrateInactive" });
   const [step, setStep] = createSignal<Step>("books", { name: "migrateStep" });
@@ -113,6 +135,20 @@ export function MigrateScreen() {
   };
 
   const add = (label: string, found: readonly BookCandidate[]): void => {
+    const known = new Set(candidates().map((candidate) => candidate.id));
+    const fresh = found.filter(
+      (candidate) =>
+        !known.has(candidate.id) &&
+        !held.includes(candidate.book) &&
+        (intoLanguage === "" || candidate.language.toLowerCase() === intoLanguage),
+    );
+    if (found.length > 0 && fresh.length === 0) {
+      toasts.success({
+        title: t("Nothing new in {label}", { label }),
+        message: t("This project already has every book offered there."),
+      });
+      return;
+    }
     if (found.length === 0) {
       toasts.error({
         title: t("No Writer projects in {label}", { label }),
@@ -120,8 +156,6 @@ export function MigrateScreen() {
       });
       return;
     }
-    const known = new Set(candidates().map((candidate) => candidate.id));
-    const fresh = found.filter((candidate) => !known.has(candidate.id));
     setCandidates((held) => [...held, ...fresh]);
     setSources((held) => [
       ...held,
@@ -245,6 +279,26 @@ export function MigrateScreen() {
     })();
   };
 
+  /** "Add a book…": the picks go into the open project, in one commit. */
+  const runAdd = (): void => {
+    const root = props.into;
+    if (root === undefined) return;
+    const books = ready();
+    setAssembling(true);
+    void (async () => {
+      try {
+        await services.run(addToProject(services, root, held, books));
+        toasts.success({ title: t("Added {count} books", { count: books.length }), message: root });
+        await shell.openProject(root);
+        void navigate({ to: "/project/$slug", params: { slug: shell.slugFor(root) } });
+      } catch (cause) {
+        toasts.error({ title: t("Could not add the books"), message: describe(cause) });
+      } finally {
+        setAssembling(false);
+      }
+    })();
+  };
+
   const rowStatus = (row: BookRow) => {
     const shown = visible(row);
     if (shown.length === 0) {
@@ -340,10 +394,18 @@ export function MigrateScreen() {
       <Show when={step() === "books"}>
         <Card class="flex flex-col gap-3">
           <PanelHeader
-            title={t("Migrate from Writer")}
-            subtitle={t(
-              "Assemble one project from BTT Writer's single-book projects. Pick where they are; you can combine several.",
-            )}
+            title={
+              intoProject === undefined ? t("Migrate from Writer") : t("Add books from Writer")
+            }
+            subtitle={
+              intoProject === undefined
+                ? t(
+                    "Assemble one project from BTT Writer's single-book projects. Pick where they are; you can combine several.",
+                  )
+                : t(
+                    "Only books this project does not have yet, in its language, are offered. They arrive as one commit.",
+                  )
+            }
           />
           <div class="flex flex-wrap items-center gap-3">
             <Button
@@ -426,10 +488,13 @@ export function MigrateScreen() {
               <Button
                 variant="primary"
                 data-testid="migrate-next"
-                disabled={!canAssemble()}
-                onClick={toProject}
+                loading={assembling()}
+                disabled={!canAssemble() || assembling()}
+                onClick={props.into === undefined ? toProject : runAdd}
               >
-                {t("Next")}
+                {props.into === undefined
+                  ? t("Next")
+                  : t("Add {count} books", { count: picked().length })}
               </Button>
             </div>
             <Section testament="ot" title={t("Old Testament")} />

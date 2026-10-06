@@ -11,7 +11,7 @@ import { Effect, Option } from "effect";
 
 import { joinPath, lastSegment } from "#core/fileSystem/path";
 import type { IntakeResult } from "#core/git/intake";
-import { assemble, type AssembleForm } from "#core/migrate/assemble";
+import { addBooks, assemble, type AssembleForm } from "#core/migrate/assemble";
 import { openCandidate, type BookCandidate, type StagedBook } from "#core/migrate/candidate";
 import { health, validate, type Health } from "#core/migrate/check";
 import { localCandidates } from "#core/migrate/local";
@@ -142,4 +142,23 @@ export const assembleProject = (
     });
     yield* rememberProject(services.projectsRoot, root, undefined);
     return { root, result };
+  });
+
+/** Adds the chosen books to a project that exists, in one commit. */
+export const addToProject = (
+  services: Services,
+  root: string,
+  held: readonly string[],
+  books: readonly StagedBook[],
+): Effect.Effect<IntakeResult, unknown, Domain> =>
+  Effect.gen(function* () {
+    const result = yield* addBooks({
+      root,
+      books,
+      held,
+      author: APP_AUTHOR,
+      date: new Date().toISOString().slice(0, 10),
+    });
+    yield* rememberProject(services.projectsRoot, root, undefined);
+    return result;
   });
