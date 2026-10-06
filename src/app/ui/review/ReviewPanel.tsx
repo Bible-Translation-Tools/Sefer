@@ -808,7 +808,13 @@ export function ReviewPanel() {
     setRecording(true);
     declineSuggestion(services, project, { number }, staticNote)
       .then(() => {
-        toasts.success({ title: t("Declined"), message: t("Its author can read your note.") });
+        toasts.success({
+          title: t("Declined"),
+          message:
+            staticNote.trim() === ""
+              ? t("The suggestion is closed; its author sees it was not brought in.")
+              : t("Its author can read your note."),
+        });
         setRecordOpen(false);
         void collaboration.refresh(services, project);
         void navigate({ to: "/project/$slug/suggestions", params: { slug: shell.slug() } });

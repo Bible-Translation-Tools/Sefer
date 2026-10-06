@@ -38,7 +38,12 @@ export function SuggestionLine(props: { readonly number: number }) {
       .then(() => {
         toasts.success({
           title: t("Declined"),
-          message: t("{author} can read your note.", { author: held.suggestion.author }),
+          message:
+            staticNote.trim() === ""
+              ? t("The suggestion is closed; {author} sees it was not brought in.", {
+                  author: held.suggestion.author,
+                })
+              : t("{author} can read your note.", { author: held.suggestion.author }),
         });
         void collaboration.refresh(shell.services, project);
         void navigate({ to: "/project/$slug/suggestions", params: { slug: shell.slug() } });
