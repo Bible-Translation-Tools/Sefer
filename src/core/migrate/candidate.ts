@@ -85,6 +85,13 @@ export const canonIndex = (book: string): number => {
   return index === -1 ? CANON.length : index;
 };
 
+/**
+ * Writer commits some saves under its own name rather than the person's. That
+ * is the tool, not a translator, and it is never credited.
+ */
+const isWriterItself = (name: string): boolean =>
+  /^(ts-?desktop|translation ?studio|btt ?writer)$/i.test(name.trim());
+
 const authorsFrom = (project: WriterProject, committed: readonly Author[]): readonly Author[] => {
   const seen = new Set<string>();
   const out: Author[] = [];
@@ -93,7 +100,7 @@ const authorsFrom = (project: WriterProject, committed: readonly Author[]): read
     ...project.translators.map((name) => ({ name, email: "" })),
   ]) {
     const key = author.name.trim().toLowerCase();
-    if (key === "" || seen.has(key)) continue;
+    if (key === "" || seen.has(key) || isWriterItself(author.name)) continue;
     seen.add(key);
     out.push(author);
   }

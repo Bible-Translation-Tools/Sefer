@@ -187,8 +187,13 @@ export const readWriterTree = (
     return { title, chapters };
   });
 
-/** A chunk's own leading `\c N`: the template writes the chapter marker once. */
-const withoutChapterMarker = (chunk: string): string => chunk.replace(/^\s*\\c\s+\d+\s*/, "");
+/**
+ * A chunk's own leading `\c N`, every one of them: the template writes the
+ * chapter marker once. Writer sometimes saved it twice (`\c 3 \c 3 \v 1`,
+ * Moffat_chola's bwc REV), and the second made the book unreadable to the
+ * engine. That marker is Writer's chunk framing, not the translator's text.
+ */
+const withoutChapterMarker = (chunk: string): string => chunk.replace(/^(?:\s*\\c\s+\d+\s*)+/, "");
 
 /**
  * The template. Header as txt2USFM's `writeHeader` writes it (`\toc3` is the
