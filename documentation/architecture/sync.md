@@ -338,6 +338,32 @@ when nothing changed. It never moves a file. With "Skip review of incoming chang
 follows, and the receive refuses whenever a book needs a person, so nothing arrives unreviewed that
 the policy would have shown. It runs as the `sync.check` operation.
 
+### Writer projects a project follows
+
+A project that came from BTT Writer (the Writer migration) records, per book, the Writer project
+it came from and the commit it took: `.upstreams.json`, committed, so a teammate follows the same
+ones. While a project follows any, `checkForChanges` checks them too, AFTER the shared project's
+check and any receive — also for a project attached to no shared project, since an assembly sends
+nothing until someone shares it (`src/app/writerWatch.ts`, the `upstream.check` operation). There is
+no switch of its own: "Stop following Writer projects…" in Settings' Cloud section empties the file as
+one version, and that is the end of it (Will, 2026-10-06).
+
+Each upstream is a `Remote.probe`, six at a time (67 in about 4 s). A head that is the commit the
+project took, or the one the shared project's `.upstreams.json` records — a teammate took it and it
+arrives through ordinary sync — is nothing new: two people never take the same Writer saves twice.
+A moved one is cloned with history into staging (50–100 KB), rendered through the import template at
+its head and at the commit the project took, and saves that touched no chunk or title (Writer
+autosaves its manifest) are not work (`src/core/migrate/writerWork.ts`). What the person reviews is
+`incoming`: the project's own book with THEIR text only in the verses they changed since that commit,
+so a review against Writer shows their changes and none of the project's own edits, and a verse both
+changed is a difference to decide. Nothing is merged automatically.
+
+The cloud popover says it by person and book — "mary_chishimba is still working on 1 Yohane in
+Writer: saved Oct 1" — with "Review their changes", and the cloud carries its "!" while any waits.
+Review against "From Writer (owner)" holds every book, the project's own text where Writer has
+nothing new. Record writes `.upstreams.json`'s new heads into the same version, also when every
+passage was kept: the work was looked at, and is not offered again.
+
 `sendAfterSave` runs after Record a version, and only sends: the server's fast-forward rule is the
 check, and a refusal starts `checkForChanges` at once so every surface reads `behind` or `diverged`
 with the facts rather than a bare error. It returns how the send ended (`SendOutcome`: sent, held

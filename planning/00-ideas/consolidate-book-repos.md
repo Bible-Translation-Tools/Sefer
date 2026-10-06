@@ -19,11 +19,15 @@ and [landing](../../documentation/architecture/landing.md). Next:
 - **No `candidateSource.ts`.** Review's reader takes two texts and a
   skeleton, as History uses it, so "Differences from" needs no
   `CompareSource`.
-- **Upstream checks are not built** (ruled: record only). `.upstreams.json`
-  is written and never read yet; Library rows record `upstream {url, commit}`.
-- **Bindings were not moved** to `.sefer/project.json` as `referencePicks`
-  (agreed 2026-10-06, a follow-up). Auto-pull writes no binding; the declared
-  source text is `resolve`'s default.
+- **The Writer upstream check is built** (asked for 2026-10-06, after the
+  first build): part of every check for changes while a project follows any,
+  after the shared project; "Stop following Writer projects…" in Settings
+  ends it, with no separate switch. Review against "From Writer" shows only
+  the verses they changed since the commit taken; Record marks it taken in
+  the same version. The source-text check ("en_ulb 24-07 is available") is
+  not built.
+- **Picks moved** to `.sefer/project.json` as `referencePicks`, keyed by the
+  project's root; `library.json`'s old bindings move on first read.
 - **Resource kinds change 1** rode along only as its rename: `ResourceKind` is
   `ContainerKind`, the field `container`. `ContentKind` is resource kinds'
   work.

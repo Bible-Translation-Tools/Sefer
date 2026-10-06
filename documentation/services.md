@@ -514,7 +514,7 @@ Clone (the newest version only unless the caller asks for all; desktop backfills
 
 ### Overview
 
-The app bar's cloud popover (state, clocks, the one right move, sign in and out, publish, how your suggestion stands), Settings' Cloud section (account, shared project, how you work — together in the shared project or in your own copy — and the per-project switches), and the Suggestions tab for editors. `/cloud` was deleted on 2026-10-06. It reads the two clocks and sorts the project into one of ten states, plans what a Receive would change from change facts and one overlap policy, receives by fast-forward, and Combines as one decision commit; a contested book is settled in Review against the shared project. The check on open and send on save run per project, on by default. Scripture text is never merged automatically. One reading for the whole application (`syncWatch`) feeds the app bar's cloud and its popover, `/cloud`, Review's sync line and Save's receipt; counts are verses and books, never versions. `src/core/sync`, `app/ui/cloud`. → [sync](architecture/sync.md)
+The app bar's cloud popover (state, clocks, the one right move, sign in and out, publish, how your suggestion stands), Settings' Cloud section (account, shared project, how you work — together in the shared project or in your own copy — and the per-project switches), and the Suggestions tab for editors. `/cloud` was deleted on 2026-10-06. It reads the two clocks and sorts the project into one of ten states, plans what a Receive would change from change facts and one overlap policy, receives by fast-forward, and Combines as one decision commit; a contested book is settled in Review against the shared project. The check on open and send on save run per project, on by default. Scripture text is never merged automatically. A project from Writer also checks the Writer projects its books follow, after the shared project, and offers their work in the popover and Review. One reading for the whole application (`syncWatch`) feeds the app bar's cloud and its popover, `/cloud`, Review's sync line and Save's receipt; counts are verses and books, never versions. `src/core/sync`, `app/ui/cloud`. → [sync](architecture/sync.md)
 
 ### Constraints and known bugs
 
@@ -565,21 +565,20 @@ Staged, validated import with provenance (`stage` → `classify` → `commit`, `
 
 ### Overview
 
-Every text this device can read beside a project, and which one a project reads. A copy cloned for the Library (a WACS gateway row, or a source text a project declares) lives in `<appData>/library/<owner>/<repo>`, outside the projects folder, so "Your projects" never lists it; its row records the URL it came from and the commit it holds. A project's declared source texts (Burrito `relationships`, RC `source`, Writer `source_translations`, read by `relationships.ts`) are what `resolve(project, "source")` answers with when nobody picked one; a pick is a binding, this device's memory. The reference column lists the copies as "Source texts" and "Reference material" before other projects, offers a declared text that is missing for download, and "Edit it as your own project" moves a copy into the projects folder. `src/core/resources/library.ts`, `relationships.ts`, `src/app/arrival.ts`, `ReferenceColumn.tsx`, `ReferencePane.tsx`. → [resources](architecture/resources.md)
+Every text this device can read beside a project, and which one a project reads. A copy cloned for the Library (a WACS gateway row, or a source text a project declares) lives in `<appData>/library/<owner>/<repo>`, outside the projects folder, so "Your projects" never lists it; its row records the URL it came from and the commit it holds. A project's declared source texts (Burrito `relationships`, RC `source`, Writer `source_translations`, read by `relationships.ts`) are what `resolve(projectRoot, "source")` answers with when nobody picked one. A pick is this device's memory of one project, kept with the project as `referencePicks` in its `.sefer/project.json` (one merging writer, `core/project/projectState.ts`); picks an older build kept in `library.json` move there when the project is next read. The reference column lists the copies as "Source texts" and "Reference material" before other projects, offers a declared text that is missing for download, and "Edit it as your own project" moves a copy into the projects folder. `src/core/resources/library.ts`, `relationships.ts`, `src/app/arrival.ts`, `ReferenceColumn.tsx`, `ReferencePane.tsx`. → [resources](architecture/resources.md)
 
 ### Constraints and known bugs
 
 - Scripture only: a `tn`/`tw` binding can be made, but nothing reads it.
 - A copy is the repository's newest version. A project that lists `24-02` gets `24-07` when that is newest, and the toast says so; checking out an older listed version is not built (Burrito `revision` holds the listed version, not a commit, so nothing records which commit was meant).
 - Source texts are pulled on arrival (download, import, clone, assembly), not on open: a project that arrived before 2026-10-06 shows its declared text as missing until Download is pressed.
-- Bindings ("picks") still live in `library.json` keyed by project; moving them to the project's `.sefer/project.json` as `referencePicks` is agreed and not done.
 - Gateway texts downloaded before 2026-10-06 stay in the projects folder (ruled: they are not moved).
 
 ### Ideas / future
 
 - A Translation Notes reader and pane.
 - The key-terms guide as a Library resource instead of a fixture.
-- The upstream check: "en_ulb 24-07 is available", over `Remote.probe`.
+- The source-text upstream check: "en_ulb 24-07 is available", over `Remote.probe`.
 
 ## Writer migration
 
@@ -589,7 +588,8 @@ Every text this device can read beside a project, and which one a project reads.
 
 ### Constraints and known bugs
 
-- `.upstreams.json` is written, never read: checking a Writer project for new work ("Mary is still working on 1 John in Writer") is the next step.
+- Checking the Writer projects a project follows is part of every check for changes, after the shared project's ([sync](architecture/sync.md), "Writer projects a project follows"); "Stop following Writer projects…" in Settings ends it. A Writer project whose history was rewritten past the commit taken is reviewed two-way (all of their text), not in the verses they changed.
+- The Writer facts are in memory: a reload forgets them until the next check, which runs on open.
 - A folder pick on the Web copies the whole folder into staging first, as import does.
 - The health line compares against the source text only when one is on this device; nothing compares against a versification.
 - Opening a language's candidates from the catalogue is a clone each: about 3 minutes for `bwc`'s 84 active ones on 2026-10-06. Staged clones are reused within a session.
@@ -597,7 +597,6 @@ Every text this device can read beside a project, and which one a project reads.
 
 ### Ideas / future
 
-- The Writer upstream check and its Review, Shared project first.
 - A consolidated repository from the catalogue as one more candidate per book.
 
 ## ProjectAdmin
