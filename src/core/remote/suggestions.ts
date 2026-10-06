@@ -211,13 +211,15 @@ const make = (fetch: HttpFetch) =>
 
     const answer = (response: HttpResponse): Effect.Effect<unknown, GiteaError> =>
       Effect.gen(function* () {
-        if (response.status === 401 || response.status === 403)
-          return yield* Effect.fail(failed("Unauthorized", `${response.status}`));
         if (!response.ok) {
+          // Gitea's reason travels with the status: a bare "403" cannot tell
+          // a missing token scope from a permission from a proxy refusal.
           const text = yield* Effect.orElseSucceed(
             Effect.tryPromise(() => response.text()),
             () => "",
           );
+          if (response.status === 401 || response.status === 403)
+            return yield* Effect.fail(failed("Unauthorized", `${response.status} ${text}`.trim()));
           return yield* Effect.fail(failed("Refused", `${response.status} ${text}`.trim()));
         }
         return yield* Effect.tryPromise({
@@ -363,13 +365,15 @@ const make = (fetch: HttpFetch) =>
       decline: (host, owner, name, number, note) =>
         Effect.gen(function* () {
           const held = yield* session(host);
-          if (note.trim() !== "") yield* comment(held, host, owner, name, number, note);
+          // Closed first, then the note: a close that is refused leaves
+          // nothing behind, so trying again does not post the note twice.
           yield* answer(
             yield* request(held, repoPath(host, owner, name, `/pulls/${number}`), {
               method: "PATCH",
               body: { state: "closed" },
             }),
           );
+          if (note.trim() !== "") yield* comment(held, host, owner, name, number, note);
         }),
     } satisfies SuggestionsService;
   });
