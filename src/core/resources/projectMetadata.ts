@@ -29,6 +29,11 @@ import { parse as parseYaml } from "yaml";
 
 import type { BurritoMetadata } from "./burrito";
 import {
+  fromBurritoRelationships,
+  fromResourceContainerSource,
+  type RelatedResource,
+} from "./relationships";
+import {
   decodeResourceContainerManifest,
   type ResourceContainerManifest,
 } from "./resourceContainer";
@@ -79,6 +84,12 @@ export interface ProjectMetadata {
    * project's own default locale so both read the same way.
    */
   readonly bookNames: Readonly<Record<string, LocalizedText>>;
+  /**
+   * The source texts the project declares — Burrito `relationships`, or a
+   * Resource Container's `dublin_core.source` — every listed version, as
+   * written. `highestVersions` picks the one to hold.
+   */
+  readonly related: readonly RelatedResource[];
 }
 
 const ONE = (locale: string | undefined, value: string): LocalizedText =>
@@ -115,6 +126,7 @@ export const fromBurrito = (metadata: BurritoMetadata): ProjectMetadata => {
     },
     defaultLocale: metadata.meta.defaultLocale,
     bookNames,
+    related: fromBurritoRelationships(metadata.relationships ?? []),
   };
 };
 
@@ -149,6 +161,7 @@ const fromResourceContainer = (manifest: ResourceContainerManifest): ProjectMeta
     },
     defaultLocale: locale === "" ? undefined : locale,
     bookNames,
+    related: fromResourceContainerSource(core.source ?? []),
   };
 };
 
