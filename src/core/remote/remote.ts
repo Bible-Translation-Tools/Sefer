@@ -109,11 +109,16 @@ export interface RemoteService {
   /** The URL recorded for the remote `name`, or `None`. */
   readonly urlOf: (repo: Repo, name: string) => Effect.Effect<Option.Option<string>, RemoteError>;
   /**
-   * Fetches one named ref from `origin` — one no branch refspec covers — into
-   * the local ref `into`, and answers the commit it names. Nothing in the work
-   * tree moves.
+   * Fetches one named ref from `remote` (`origin` unless named) — one no
+   * branch refspec covers — into the local ref `into`, and answers the commit
+   * it names. Nothing in the work tree moves.
    */
-  readonly fetchRef: (repo: Repo, from: string, into: string) => Effect.Effect<string, RemoteError>;
+  readonly fetchRef: (
+    repo: Repo,
+    from: string,
+    into: string,
+    remote?: string,
+  ) => Effect.Effect<string, RemoteError>;
   /**
    * The URL `attach` recorded, or `None` when this project has none.
    *

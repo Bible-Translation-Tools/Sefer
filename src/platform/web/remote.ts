@@ -364,10 +364,10 @@ const makeWebRemote = (
       // a suggestion's head (`refs/pull/<n>/head`), which no branch refspec
       // covers. isomorphic-git answers the commit it fetched; the local ref
       // is written from that.
-      fetchRef: (repo, from, into) =>
+      fetchRef: (repo, from, into, remote = ORIGIN) =>
         Effect.gen(function* () {
           const last = { current: { phase: "done", loaded: 0 } satisfies Progress };
-          const wire = yield* wireFor(repo, last, "optional");
+          const wire = yield* wireFor(repo, last, "optional", remote);
           const fetched = yield* attempt(() =>
             git.fetch({ ...wire, ref: from, remoteRef: from, singleBranch: true, tags: false }),
           );
