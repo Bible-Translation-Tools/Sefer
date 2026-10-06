@@ -286,8 +286,8 @@ person's own; `src/app/collaboration.ts` holds what the surfaces show. They join
 1. `src/app/services.ts` registers `SuggestionsLive` and lists `Suggestions` in `Domain`;
 2. `destination()` in `src/app/syncActions.ts` asks `sendingTo` where a send goes — the one place a
    send is pointed anywhere but `origin`;
-3. the cloud popover (`CollabSection`), Settings' `CollabModeCard`, and `/cloud`'s `SuggestionsCard`
-   (the editors' list);
+3. the cloud popover (`CollabSection`), Settings' `CollabModeCard`, and the editors' list
+   (`SuggestionsScreen` → `SuggestionsCard`, at `/project/$slug/suggestions`);
 4. `ReviewPanel.tsx` reads `?pull=<n>` through `suggestionRef`, and accepts after Record.
 
 A copy is never forked twice: Gitea refuses a second fork of the same project (409), so a copy made

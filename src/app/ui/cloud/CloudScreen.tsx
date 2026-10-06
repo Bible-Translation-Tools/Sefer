@@ -34,7 +34,6 @@ import { IncomingPlanCard } from "./IncomingPlanCard";
 import { ProjectCard } from "./ProjectCard";
 import type { ReadSyncOptions, SyncFacts } from "./reading";
 import { SharedProjectCard } from "./SharedProjectCard";
-import { SuggestionsCard } from "./SuggestionsCard";
 
 /** A project's folder name, which is what a person calls it. */
 const projectName = (root: string): string => root.slice(root.lastIndexOf("/") + 1);
@@ -174,13 +173,6 @@ export function CloudScreen() {
 
                 <Show when={problem() !== ""}>
                   <p class="text-small break-words text-on-surface-error">{problem()}</p>
-                </Show>
-
-                {/* Suggested changes: one topology among several, one card. */}
-                <Show when={shell.project()}>
-                  {(project) => (
-                    <SuggestionsCard project={project()} signedIn={held().reading.signedIn} />
-                  )}
                 </Show>
 
                 <Show when={held().primary === "attach" || held().primary === "publish"}>

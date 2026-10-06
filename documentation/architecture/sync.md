@@ -371,7 +371,8 @@ mode. In the copy mode the check also reads the person's copy into `refs/sefer/c
 (`fetchCopy`); when it holds work this device lacks — sent from another of their devices — the
 popover offers "See the changes", Review against it (`?against=shared&copy=1`, labelled "Your
 copy"), and Record catches this device up and sends back to the copy. Nothing from the copy arrives
-without that review. Still to come: a Suggestions tab beside Review and History.
+without that review. The editors' list is `/project/$slug/suggestions`, a third sidebar tab beside
+Changes and History (`ChangesHistorySidebar`), shown only to someone who can write.
 
 ### One reading for every surface
 

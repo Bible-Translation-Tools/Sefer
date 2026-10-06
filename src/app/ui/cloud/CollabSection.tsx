@@ -130,9 +130,8 @@ export function CollabSection(props: { readonly onLeave: () => void }) {
                   onClick={() => {
                     props.onLeave();
                     void navigate({
-                      to: "/project/$slug/cloud",
+                      to: "/project/$slug/suggestions",
                       params: { slug: shell.slug() },
-                      search: {},
                     });
                   }}
                 >

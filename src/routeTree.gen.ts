@@ -26,6 +26,7 @@ import { Route as AppProjectSlugHistoryRouteImport } from './routes/_app/project
 import { Route as AppProjectSlugInventoryRouteImport } from './routes/_app/project/$slug/inventory'
 import { Route as AppProjectSlugPlaygroundRouteImport } from './routes/_app/project/$slug/playground'
 import { Route as AppProjectSlugReviewRouteImport } from './routes/_app/project/$slug/review'
+import { Route as AppProjectSlugSuggestionsRouteImport } from './routes/_app/project/$slug/suggestions'
 import { Route as AppProjectSlugTermsRouteImport } from './routes/_app/project/$slug/terms'
 import { Route as AppProjectSlugBookBookRouteImport } from './routes/_app/project/$slug/book/$book'
 
@@ -115,6 +116,12 @@ const AppProjectSlugReviewRoute = AppProjectSlugReviewRouteImport.update({
   path: '/review',
   getParentRoute: () => AppProjectSlugRoute,
 } as any)
+const AppProjectSlugSuggestionsRoute =
+  AppProjectSlugSuggestionsRouteImport.update({
+    id: '/suggestions',
+    path: '/suggestions',
+    getParentRoute: () => AppProjectSlugRoute,
+  } as any)
 const AppProjectSlugTermsRoute = AppProjectSlugTermsRouteImport.update({
   id: '/terms',
   path: '/terms',
@@ -142,6 +149,7 @@ export interface FileRoutesByFullPath {
   '/project/$slug/inventory': typeof AppProjectSlugInventoryRoute
   '/project/$slug/playground': typeof AppProjectSlugPlaygroundRoute
   '/project/$slug/review': typeof AppProjectSlugReviewRoute
+  '/project/$slug/suggestions': typeof AppProjectSlugSuggestionsRoute
   '/project/$slug/terms': typeof AppProjectSlugTermsRoute
   '/project/$slug/': typeof AppProjectSlugIndexRoute
   '/project/$slug/book/$book': typeof AppProjectSlugBookBookRoute
@@ -161,6 +169,7 @@ export interface FileRoutesByTo {
   '/project/$slug/inventory': typeof AppProjectSlugInventoryRoute
   '/project/$slug/playground': typeof AppProjectSlugPlaygroundRoute
   '/project/$slug/review': typeof AppProjectSlugReviewRoute
+  '/project/$slug/suggestions': typeof AppProjectSlugSuggestionsRoute
   '/project/$slug/terms': typeof AppProjectSlugTermsRoute
   '/project/$slug': typeof AppProjectSlugIndexRoute
   '/project/$slug/book/$book': typeof AppProjectSlugBookBookRoute
@@ -183,6 +192,7 @@ export interface FileRoutesById {
   '/_app/project/$slug/inventory': typeof AppProjectSlugInventoryRoute
   '/_app/project/$slug/playground': typeof AppProjectSlugPlaygroundRoute
   '/_app/project/$slug/review': typeof AppProjectSlugReviewRoute
+  '/_app/project/$slug/suggestions': typeof AppProjectSlugSuggestionsRoute
   '/_app/project/$slug/terms': typeof AppProjectSlugTermsRoute
   '/_app/project/$slug/': typeof AppProjectSlugIndexRoute
   '/_app/project/$slug/book/$book': typeof AppProjectSlugBookBookRoute
@@ -205,6 +215,7 @@ export interface FileRouteTypes {
     | '/project/$slug/inventory'
     | '/project/$slug/playground'
     | '/project/$slug/review'
+    | '/project/$slug/suggestions'
     | '/project/$slug/terms'
     | '/project/$slug/'
     | '/project/$slug/book/$book'
@@ -224,6 +235,7 @@ export interface FileRouteTypes {
     | '/project/$slug/inventory'
     | '/project/$slug/playground'
     | '/project/$slug/review'
+    | '/project/$slug/suggestions'
     | '/project/$slug/terms'
     | '/project/$slug'
     | '/project/$slug/book/$book'
@@ -245,6 +257,7 @@ export interface FileRouteTypes {
     | '/_app/project/$slug/inventory'
     | '/_app/project/$slug/playground'
     | '/_app/project/$slug/review'
+    | '/_app/project/$slug/suggestions'
     | '/_app/project/$slug/terms'
     | '/_app/project/$slug/'
     | '/_app/project/$slug/book/$book'
@@ -376,6 +389,13 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof AppProjectSlugReviewRouteImport
       parentRoute: typeof AppProjectSlugRoute
     }
+    '/_app/project/$slug/suggestions': {
+      id: '/_app/project/$slug/suggestions'
+      path: '/suggestions'
+      fullPath: '/project/$slug/suggestions'
+      preLoaderRoute: typeof AppProjectSlugSuggestionsRouteImport
+      parentRoute: typeof AppProjectSlugRoute
+    }
     '/_app/project/$slug/terms': {
       id: '/_app/project/$slug/terms'
       path: '/terms'
@@ -401,6 +421,7 @@ interface AppProjectSlugRouteChildren {
   AppProjectSlugInventoryRoute: typeof AppProjectSlugInventoryRoute
   AppProjectSlugPlaygroundRoute: typeof AppProjectSlugPlaygroundRoute
   AppProjectSlugReviewRoute: typeof AppProjectSlugReviewRoute
+  AppProjectSlugSuggestionsRoute: typeof AppProjectSlugSuggestionsRoute
   AppProjectSlugTermsRoute: typeof AppProjectSlugTermsRoute
   AppProjectSlugIndexRoute: typeof AppProjectSlugIndexRoute
   AppProjectSlugBookBookRoute: typeof AppProjectSlugBookBookRoute
@@ -414,6 +435,7 @@ const AppProjectSlugRouteChildren: AppProjectSlugRouteChildren = {
   AppProjectSlugInventoryRoute: AppProjectSlugInventoryRoute,
   AppProjectSlugPlaygroundRoute: AppProjectSlugPlaygroundRoute,
   AppProjectSlugReviewRoute: AppProjectSlugReviewRoute,
+  AppProjectSlugSuggestionsRoute: AppProjectSlugSuggestionsRoute,
   AppProjectSlugTermsRoute: AppProjectSlugTermsRoute,
   AppProjectSlugIndexRoute: AppProjectSlugIndexRoute,
   AppProjectSlugBookBookRoute: AppProjectSlugBookBookRoute,

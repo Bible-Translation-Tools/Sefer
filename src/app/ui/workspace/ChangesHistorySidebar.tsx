@@ -1,7 +1,8 @@
 /**
- * The sidebar of the two screens that read the project's versions: Changes
- * (Review — what is not recorded yet) and History (what was), as two tabs over
- * one panel, the way Zed's git panel puts them.
+ * The sidebar of the screens that read the project's versions: Changes
+ * (Review — what is not recorded yet), History (what was), and — for someone
+ * who can write to the shared project — Suggestions (what others offer), as
+ * tabs over one panel, the way Zed's git panel puts them.
  *
  * The tabs are links, and the route is the tab: Review draws Changes, History
  * draws History, so Back and Forward move between them and neither screen
@@ -11,7 +12,9 @@
 
 import type { JSX } from "@solidjs/web";
 import { Link } from "@tanstack/solid-router";
+import { Show } from "solid-js";
 
+import { collaboration } from "../../collaboration";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 
@@ -23,12 +26,13 @@ const TAB = [
 ].join(" ");
 
 export function ChangesHistorySidebar(props: {
-  readonly active: "changes" | "history";
+  readonly active: "changes" | "history" | "suggestions";
   /** Books with changes, when the screen knows; the Changes tab says how many. */
   readonly changes?: number;
   readonly children: JSX.Element;
 }) {
   const shell = useShell();
+  const facts = () => collaboration.facts(shell.project()?.root);
   return (
     <div
       class="flex h-full flex-col border-e border-sidebar-border bg-sidebar-surface"
@@ -56,6 +60,20 @@ export function ChangesHistorySidebar(props: {
         >
           {t("History")}
         </Link>
+        {/* An editor's tab: the suggestions only someone who can write brings in. */}
+        <Show when={facts()?.canWrite === true || props.active === "suggestions"}>
+          <Link
+            to="/project/$slug/suggestions"
+            params={{ slug: shell.slug() }}
+            class={TAB}
+            aria-current={props.active === "suggestions" ? "page" : undefined}
+            data-sidebar-tab="suggestions"
+          >
+            {(facts()?.waiting ?? 0) === 0
+              ? t("Suggestions")
+              : t("Suggestions ({count})", { count: facts()?.waiting ?? 0 })}
+          </Link>
+        </Show>
       </nav>
       <div class="flex min-h-0 flex-1 flex-col">{props.children}</div>
     </div>
