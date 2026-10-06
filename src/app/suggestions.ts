@@ -183,7 +183,7 @@ const existingFork = (host: string, me: string, shared: RemoteRepo) =>
  * Never forks twice: a copy made on another device is found and attached
  * (Gitea refuses a second fork of the same project). A project cloned from
  * the person's own fork is re-rooted instead — its parent becomes the shared
- * project. Sends this device's work to the copy, and sets the mode.
+ * project. Sets the mode; sending is the next send's.
  */
 export const workInOwnCopy = (services: Services, project: Project): Promise<CopyOutcome> =>
   services.run(
@@ -213,8 +213,10 @@ export const workInOwnCopy = (services: Services, project: Project): Promise<Cop
         const copy = Option.isSome(held)
           ? held.value
           : yield* gitea.forkRepo(at.host, at.owner, at.name);
+        // Attached, not sent: a fresh copy already holds the shared project's
+        // history, and this device's own work goes at the next send — after
+        // receiving, when this device is behind (a send now would be refused).
         yield* remote.attachAs(repo, COPY, copy.cloneUrl);
-        yield* remote.push(repo, COPY);
         return { kind: "copy", copy: copy.fullName } satisfies CopyOutcome;
       });
       if (outcome.kind !== "standalone")
@@ -450,7 +452,11 @@ export const fetchCopy = (services: Services, project: Project): Promise<void> =
     ),
   );
 
-/** Has the person's copy work this device does not — from another of their devices? */
+/**
+ * Has the person's copy work from another of their devices — work neither this
+ * device nor the shared project has? A fresh copy holds the shared project's
+ * versions, and those are the shared project's to bring, not the copy's.
+ */
 export const copyHasMore = (services: Services, project: Project): Promise<boolean> =>
   services.run(
     Effect.orElseSucceed(
@@ -458,11 +464,19 @@ export const copyHasMore = (services: Services, project: Project): Promise<boole
         const git = yield* Git;
         const repo = yield* git.open(project.root);
         const copy = yield* git.resolve(repo, COPY_REF);
-        const head = yield* git.resolve(repo, "HEAD");
-        if (Option.isNone(copy) || Option.isNone(head)) return false;
-        if (copy.value === head.value) return false;
-        const base = yield* git.mergeBase(repo, copy.value, head.value);
-        return !(Option.isSome(base) && base.value === copy.value);
+        if (Option.isNone(copy)) return false;
+        /** Is the copy's tip already in `ref`'s history? */
+        const within = (ref: string) =>
+          Effect.gen(function* () {
+            const tip = yield* git.resolve(repo, ref);
+            if (Option.isNone(tip)) return false;
+            if (tip.value === copy.value) return true;
+            const base = yield* git.mergeBase(repo, copy.value, tip.value);
+            return Option.isSome(base) && base.value === copy.value;
+          });
+        const branch = Option.getOrUndefined(yield* git.branch(repo));
+        if (yield* within("HEAD")) return false;
+        return branch === undefined ? true : !(yield* within(trackingRef(branch)));
       }),
       () => false,
     ),

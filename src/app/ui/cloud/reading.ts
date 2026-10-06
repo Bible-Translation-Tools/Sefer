@@ -31,6 +31,9 @@ import {
   type SyncReading,
 } from "#core/sync";
 
+import { COPY_REF } from "../../suggestions";
+import type { CollabMode } from "../../syncSettings";
+
 /** What one pass over the repository answers. */
 export interface SyncFacts {
   readonly reading: SyncReading;
@@ -69,6 +72,8 @@ export interface ReadSyncOptions {
   readonly sendRefused: boolean;
   /** When this session last fetched; `undefined` until it has. */
   readonly fetchedAt: number | undefined;
+  /** The mode chosen on this device, when one was (`chosenMode`). */
+  readonly chosenMode?: CollabMode | undefined;
 }
 
 /**
@@ -142,7 +147,15 @@ export const readSync = (
     const empty = [] as readonly Commit[];
     const localLog = yield* orEmpty(git.log(repo), empty);
     const remoteLog = remoteKnown ? yield* orEmpty(git.logFrom(repo, tracking), empty) : empty;
-    const ahead = notIn(localLog, remoteLog);
+    // In the copy mode, what is waiting to be SENT is what the person's copy
+    // lacks — a send goes there; what is waiting to be RECEIVED is still the
+    // shared project's. A copy not read yet was made from the shared project.
+    const copyAttached = Option.isSome(yield* orEmpty(remote.urlOf(repo, "copy"), Option.none()));
+    const inCopyMode = (options.chosenMode ?? (copyAttached ? "copy" : "shared")) === "copy";
+    const copyKnown =
+      inCopyMode && Option.isSome(yield* orEmpty(git.resolve(repo, COPY_REF), Option.none()));
+    const sentLog = copyKnown ? yield* orEmpty(git.logFrom(repo, COPY_REF), empty) : remoteLog;
+    const ahead = notIn(localLog, sentLog);
     const behind = notIn(remoteLog, localLog);
     const status = yield* orEmpty(git.status(repo), { changed: [] });
 

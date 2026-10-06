@@ -191,6 +191,9 @@ const attemptSend = async (
       }),
     );
     if (sent) syncStatus.noteSend({ sent: true });
+    // The copy's ref is what "waiting to be sent" is measured against in the
+    // copy mode: read it again, so what was just sent stops counting.
+    if (sent && to === "copy") await fetchCopy(services, project);
     operation.end("passed", { "sync.sent": sent });
     return sent ? { kind: "sent" } : { kind: "detached" };
   } catch (cause) {

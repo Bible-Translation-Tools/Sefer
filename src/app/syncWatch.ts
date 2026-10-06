@@ -24,6 +24,7 @@ import { emptyPlan, sync, type Sync } from "#core/sync";
 import { rememberSync } from "./diagnostics";
 import { contentHostFor } from "./endpoints";
 import type { Services } from "./services";
+import { chosenMode } from "./syncSettings";
 import { syncStatus } from "./syncStatus";
 import { readSync, type ReadSyncOptions, type SyncFacts } from "./ui/cloud/reading";
 
@@ -129,6 +130,7 @@ const optionsFor = (services: Services, project: Project): ReadSyncOptions => ({
   checking: syncStatus.checking(project.root),
   sendRefused: syncStatus.sendRefused(),
   fetchedAt: fetched().get(project.root),
+  chosenMode: chosenMode(services.settings, project.root),
 });
 
 export const syncWatch = {
