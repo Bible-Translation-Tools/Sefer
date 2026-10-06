@@ -4,8 +4,11 @@
  * to decline with a note its author reads.
  *
  * Shows nothing to anyone else. The author's side — their copy, offering
- * their changes, how their suggestion stands — is the cloud popover's. Its
- * logic is `src/app/suggestions.ts`; this is the words and buttons.
+ * their changes, how each suggestion stands — is `YourSuggestions`, above
+ * this list in the same tab, and the cloud popover's one line. Declining
+ * here closes it without a review; Review's own Decline does the same from
+ * inside one. Its logic is `src/app/suggestions.ts`; this is the words and
+ * buttons.
  */
 import { useNavigate } from "@tanstack/solid-router";
 import { For, Show, createEffect, createSignal } from "solid-js";

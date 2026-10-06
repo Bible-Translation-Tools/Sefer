@@ -15,7 +15,9 @@
  * - changed only on the other side — theirs, written into the work tree and
  *   into the Book;
  * - changed on both — never here. The policy sends that book to a person
- *   (Compare), and the whole combine refuses before anything is written.
+ *   (Review), and the whole combine refuses before anything is written —
+ *   unless Review already settled it (`settled`), when the project's text is
+ *   the decision.
  *
  * The file is in two halves, and the split is what makes the policy testable:
  *
@@ -62,7 +64,8 @@ import { notIn, trackingRef } from "./state";
 
 /**
  * Why a combine did not run. Every one of these is decided BEFORE anything is
- * written, and each is a different sentence on the screen.
+ * written, and each is a different sentence where it is reported (Review's
+ * receipt, `combineRefusal` in the shell).
  *
  * - `no-branch` — HEAD is detached or unborn; there is no branch to join onto.
  * - `no-work-here` — this repository has no commits.
@@ -295,9 +298,9 @@ interface Gathered {
 /**
  * Everything `planCombine` needs, read out of one repository and the Books.
  *
- * Shared by the preview and the move itself so the screen cannot offer a
- * combine the program then refuses — the only difference between the two is
- * that the move has fetched first.
+ * One read of the repository, the Books and the review's settled books, so
+ * the decision is taken over exactly what the combine then writes — fetched
+ * first, so it is the shared project as it is this second.
  */
 const gather = (
   repo: Repo,
@@ -404,7 +407,7 @@ export const combine = (
     const git = yield* Git;
     const remote = yield* Remote;
     // Ask the shared project what it has NOW — before the exclusive lane, so a
-    // slow network holds the lane only for its own transfer. The screen's
+    // slow network holds the lane only for its own transfer. The surfaces'
     // reading may be minutes old; this is seconds, and the send is
     // fast-forward only, so a head that moves in between is refused, never
     // overwritten.

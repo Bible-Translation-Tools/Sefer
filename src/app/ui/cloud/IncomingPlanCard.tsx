@@ -2,13 +2,18 @@
  * What a pull would change, in books and chapters, BEFORE it runs.
  *
  * This list is why the cloud popover says more than "Pull". A translator
- * asked to accept "3 incoming commits" has been asked nothing at all; a translator told "There are changes to 3 verses in 2 books. You also
- * changed 1 of those verses." has been asked a real question they can answer.
+ * asked to accept "3 incoming commits" has been asked nothing at all; a
+ * translator told "There are changes to 3 verses in 2 books. You also changed
+ * 1 of those verses." has been asked a real question they can answer.
  *
  * A contested book — one both sides changed — is never merged and never
- * offered as part of a pull. Its row links to the project's Review screen
+ * offered as part of a pull. Its row can link to the project's Review screen
  * instead, by path string rather than by import, so this list does not depend
- * on that screen's module.
+ * on that screen's module. The popover draws it without the links: its own
+ * "See the changes" already goes there.
+ *
+ * Only the list is left of the card the file is named for, which went with
+ * `/cloud` (2026-10-06).
  */
 
 import { For, Show } from "solid-js";

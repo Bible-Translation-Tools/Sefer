@@ -6,7 +6,9 @@
  * and a fetch only when its tip is not the one this device already holds. It
  * never moves a file. With "Skip review of incoming changes" on, a receive
  * follows, and the receive itself refuses whenever a book needs a person, so
- * nothing arrives unreviewed that the policy would have shown.
+ * nothing arrives unreviewed that the policy would have shown. In the copy
+ * mode it also reads the person's copy (`fetchCopy`), and on success it asks
+ * the network's half of the picture again (`collaboration.refresh`).
  *
  * `sendAfterSave` runs after a version is recorded, and only sends: the
  * server's fast-forward rule is the check, and a refusal starts the check at
@@ -14,8 +16,8 @@
  *
  * Neither runs with no interface up; `syncStatus` says so first. A network
  * failure the last transfer met does not stop them — they are how Sefer finds
- * out it is over. Both hold the repository's
- * lane through the ports, so a check and a send cannot race.
+ * out it is over. Both hold the repository's lane through the ports, so a
+ * check and a send cannot race.
  */
 import { Effect, Option } from "effect";
 
@@ -124,7 +126,8 @@ export const checkForChanges = async (services: Services, project: Project): Pro
 /**
  * How a send ended, for the surface that started it to say.
  *
- * - `sent` — the shared project has this device's versions.
+ * - `sent` — the shared project has this device's versions, or — `toCopy`, in
+ *   the copy mode — the person's own copy has them.
  * - `detached` — the project is attached to nothing; there was nowhere to send.
  * - `held` — this project does not send on save; the versions wait here.
  * - `refused` — the send was tried and did not get through, for `reason`.
@@ -247,6 +250,11 @@ export type SettleOutcome =
  * the review — and take everything else the other side changed: as a
  * fast-forward and one new version when this device has no versions of its
  * own, or as one decision commit that joins both histories when it has.
+ *
+ * "The other side" is the shared project's tip unless `theirs` names another
+ * ref: a suggestion's head (sent to the shared project, `sendTo: "origin"`),
+ * or the person's own copy as another of their devices left it (sent back
+ * wherever this project's mode sends).
  */
 export const settleWithShared = async (
   services: Services,
@@ -264,12 +272,10 @@ export const settleWithShared = async (
   if (received._tag === "Success") {
     const dirty = project.books.filter((book) => services.save.dirty(book));
     const recorded = await recordVersion(services, project, dirty, message, author);
-    // Sent where the review said when it named a place (a suggestion brought
-    // in goes to the shared project, whatever this project's mode).
-    // A review that names where to send (a suggestion brought in) sends even
-    // when nothing was left to record: the fast-forward itself brought
-    // versions the shared project does not have. Otherwise only a new version
-    // is worth a send.
+    // A review that names where to send — a suggestion brought in goes to the
+    // shared project, whatever this project's mode — sends even when nothing
+    // was left to record: the fast-forward itself brought versions the shared
+    // project does not have. Otherwise only a new version is worth a send.
     const sending =
       with_.sendTo !== undefined
         ? recorded.kind === "recorded" || recorded.kind === "nothing"

@@ -4,7 +4,8 @@
  * words its author wrote — so the reviewer is not deciding on text alone.
  *
  * And the one answer Review's Save does not give: Decline, with a note its
- * author reads. (Save brings it in, and closes it or leaves it open.)
+ * author reads. (Save brings it in, and closes it or leaves it open; when the
+ * reviewer kept none of it, Save's dialog offers only this Decline.)
  */
 
 import { useNavigate } from "@tanstack/solid-router";

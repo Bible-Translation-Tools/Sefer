@@ -44,11 +44,11 @@ import type { BadgeTone } from "../primitives";
 export const plural = (count: number, one: string, many: string, params: Params = {}): string =>
   t(count === 1 ? one : many, { count, ...params });
 
-/** What the badge, the heading and the paragraph say for one state. */
+/** What the headline and the paragraph say for one state, and its short name. */
 export interface StateCopy {
-  /** Two or three words, for the Badge. */
+  /** Two or three words, for a badge — which no surface draws since `/cloud` went. */
   readonly chip: string;
-  /** The card's heading: the situation, as a sentence. */
+  /** The popover's headline: the situation, as a sentence. */
   readonly headline: string;
   /** One paragraph: what it means, and that the work is safe. */
   readonly detail: string;
@@ -266,7 +266,7 @@ export const planOverlap = (
  * ends by saying where the work is, because a refused transfer is exactly when
  * somebody wonders.
  */
-/** Why a receive did not run, in the words the screen uses. */
+/** Why a receive did not run, in the words Review's receipt uses. */
 export const receiveRefusal = (refusal: ReceiveRefusal, books: readonly string[] = []): string => {
   switch (refusal) {
     case "review":
@@ -358,7 +358,8 @@ export const combineTrouble = (state: CombineState): string => {
  * either way, and the line says that first whenever the send did not get
  * through. `state` is where the project stands afterwards, when it is known —
  * a refused send has already been followed by a check, so "behind" and
- * "diverged" can be told apart.
+ * "diverged" can be told apart. A send to the person's own copy says so, and
+ * points at offering it rather than at the team.
  */
 export const sendOutcomeCopy = (
   outcome: SendOutcome,

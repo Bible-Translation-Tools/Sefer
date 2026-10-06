@@ -75,6 +75,8 @@ export const serialiseRemote = (
     attach: (repo, url) => write(repo.root, "attach", remote.attach(repo, url)),
     attachAs: (repo, name, url) => write(repo.root, "attach", remote.attachAs(repo, name, url)),
     urlOf: (repo, name) => read(repo.root, remote.urlOf(repo, name)),
+    // Every argument forwarded, the remote's name included: dropped, a read
+    // of the person's copy would silently read `origin` instead.
     fetchRef: (repo, from, into, name) =>
       write(repo.root, "fetch", remote.fetchRef(repo, from, into, name)),
     origin: (repo) => read(repo.root, remote.origin(repo)),

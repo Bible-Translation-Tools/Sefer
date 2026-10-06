@@ -4,7 +4,10 @@
  *
  * In Settings' Cloud section (`CloudPanel`), beside the account. The cloud
  * popover publishes a project only on this device by itself; choosing one
- * that already exists is here.
+ * that already exists is here. Once a project is attached the card names its
+ * shared project, and choosing another sits behind "Change shared project…":
+ * it moves where this project receives from and sends to, so it is never the
+ * first button on the card.
  *
  * It holds no domain state. The session lives in `Credentials` (through
  * `Gitea`), the attachment in the repository's own `origin`, and the progress

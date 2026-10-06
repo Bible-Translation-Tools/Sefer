@@ -1,7 +1,7 @@
 /**
  * "How you work on this project", in Settings' Cloud section: the two modes,
  * each with what it means in a sentence, and the one that cannot be chosen
- * greyed with why.
+ * shown as unavailable, with why.
  *
  * Choosing the copy makes it (or finds the one already made) at once, because
  * a mode with nowhere to send is not a mode. A shared project that is the

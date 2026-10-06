@@ -15,8 +15,8 @@ import { ShellGate } from "#app/ui/ShellGate";
  * comparison is session state, not a place. The one exception is `against=
  * shared`, which is an address — the shared project, or with `pull=<n>` a
  * suggestion to it, or with `copy=1` the person's own copy as another of
- * their devices left it — and is how the cloud popover opens a review
- * already set against what arrived.
+ * their devices left it — and is how the cloud popover and the Suggestions
+ * tab open a review already set against what arrived.
  */
 export const Route = createFileRoute("/_app/project/$slug/review")({
   validateSearch: (

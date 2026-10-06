@@ -205,7 +205,7 @@ type ObservedSync = Exclude<ProjectSnapshot["sync"], typeof UNKNOWN>;
  */
 const observed = new Map<string, ObservedSync>();
 
-/** The cloud screen reports every survey it finishes. */
+/** Every sync survey reports here as it finishes (`syncWatch`). */
 export const rememberSync = (root: string, sync: ObservedSync): void => {
   observed.set(root, sync);
 };

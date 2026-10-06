@@ -668,8 +668,9 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
     // ---------------------------------------------------------------------
     // Remote sync. Three commands, because remote work is three separate
     // approvals: prove who you are, take what arrived, publish what you did.
-    // The last two open the cloud screen, which does the transfer after a
-    // second press (documentation/architecture/sync.md).
+    // Receiving opens Review against the shared project, where every passage
+    // is shown before it lands; sending is one press, as in the cloud menu
+    // (documentation/architecture/sync.md).
     // ---------------------------------------------------------------------
 
     registerCommand({
@@ -677,8 +678,9 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       title: t("Sign in to the cloud…"),
       run: () => {
         // The sign-in form needs a password and an OTP field, which is a
-        // surface, not a command; this takes the user to it. A build with no
-        // Gitea host configured says so rather than opening an empty form.
+        // surface, not a command: it is the app bar's cloud menu, so this
+        // opens the project and says where. A build with no Gitea host
+        // configured says so rather than pointing at an empty form.
         const host = contentHostFor(services.settings);
         if (host === null) {
           bridge.report(t("no WACS server is set for this build: set one in Settings"));
@@ -690,7 +692,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
           return;
         }
         void bridge.navigate({ to: "/project/$slug", params: { slug: bridge.slug() } });
-        bridge.report(t("sign in to {host} in the Cloud panel", { host }));
+        bridge.report(t("sign in to {host} from the cloud menu or Settings", { host }));
       },
     }),
 

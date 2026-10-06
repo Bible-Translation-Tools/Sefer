@@ -1,8 +1,10 @@
 /**
  * Your suggestions, in the Suggestions tab: what you offered from your own
- * copy, how each stands — waiting, brought in, or closed with the editor's
- * note — and the two moves that are yours: offer what your copy has that the
- * shared project does not, and withdraw a suggestion still waiting.
+ * copy, how each stands — waiting, brought in, or closed — with what the
+ * editor wrote on it either way, and the two moves that are yours: offer what
+ * your copy has that the shared project does not, and withdraw a suggestion
+ * still waiting. "Brought in" is read from Sefer's own line at the end of the
+ * editor's note (`mySuggestions`), not from git.
  */
 
 import { For, Show, createEffect, createSignal } from "solid-js";

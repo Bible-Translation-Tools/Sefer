@@ -11,8 +11,8 @@
  * They are stored on this device, keyed by project root, and never in the
  * repository: whether this laptop checks on open is not a fact about the
  * translation. Registered here rather than in `settings.ts`, the way
- * `sousSettings.ts` keeps its own shape, and read by Settings' Cloud section, the project
- * open, and Record a version.
+ * `sousSettings.ts` keeps its own shape, and read by Settings' Cloud section,
+ * the project open, Record a version, and every send (which asks the mode).
  */
 import { Schema } from "effect";
 
@@ -96,7 +96,9 @@ export const setSyncPreference = (
  * How this device works on a project with other people: in the ONE shared
  * project, or in the person's own copy of it, offering changes when ready.
  * Two modes and no more, so nobody picks a remote per press (see
- * documentation/architecture/sync.md, "Two ways to work").
+ * documentation/architecture/sync.md, "Two ways to work"). Kept in the same
+ * per-project record as the four switches; `undefined` until somebody
+ * chooses, and then `modeOf` (suggestions.ts) answers from the repository.
  */
 export type CollabMode = "shared" | "copy";
 

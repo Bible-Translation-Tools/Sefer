@@ -99,7 +99,7 @@ book an aim had named lands on the remembered place.
 
 ## The way back: `editor.back`
 
-Every full-page route — findings, history, review, find, inventory, cloud — replaces the editor
+Every full-page route — findings, history, review, suggestions, find, inventory — replaces the editor
 entirely. The way back is `src/app/ui/workspace/BackToEditor.tsx`, in two pieces: `useBackToEditor()`
 is the behaviour, and `<BackToEditor />` is the default UI for it, a `data-testid="back-to-editor"` ×
 button naming the book it returns to, with no position of its own.

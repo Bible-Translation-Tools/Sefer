@@ -9,6 +9,12 @@
  *
  * The shared line names who recorded the newest cloud version when there is
  * something to receive; the local line never does, because we already know.
+ * In the copy mode "waiting to be sent" is what the person's own copy lacks —
+ * a send goes there (`reading.ts`) — while the shared line stays the shared
+ * project's.
+ *
+ * Only the clocks and the headline's colour are left of the card the file is
+ * named for, which went with `/cloud` (2026-10-06).
  */
 
 import { Show } from "solid-js";

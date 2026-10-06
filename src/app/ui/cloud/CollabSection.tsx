@@ -4,12 +4,17 @@
  *
  * - In the shared project, for someone who cannot write to it: the sentence
  *   that explains the refused send, and "Work in my own copy".
- * - In the shared project, for an editor: how many suggestions wait.
- * - In their own copy: how their suggestion stands — waiting, brought in, or
- *   closed with the editor's note — and "Offer my changes" when none is open;
- *   for someone who has since been given write access, the way back.
+ * - In the shared project, for an editor: how many suggestions wait, and the
+ *   way to the Suggestions tab.
+ * - In their own copy: work another of their devices sent to the copy, to
+ *   see in Review; how their newest suggestion stands — waiting, brought in,
+ *   or closed with the editor's note; "Offer my changes" when none is open
+ *   and this device has work the shared project lacks; and, for someone who
+ *   has since been given write access, the way back.
  *
- * Nothing here moves on its own. A gained permission is said, never acted on.
+ * The full list of their suggestions, and Withdraw, are the Suggestions tab's
+ * (`YourSuggestions`). Nothing here moves on its own. A gained permission is
+ * said, never acted on.
  */
 
 import { useNavigate } from "@tanstack/solid-router";

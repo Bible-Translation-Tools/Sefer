@@ -104,14 +104,21 @@ export interface RemoteService {
   ) => Effect.Effect<{ readonly repo: Repo; readonly progress: Progress }, RemoteError>;
   /** Records `url` as the repository's origin. Does not transfer anything. */
   readonly attach: (repo: Repo, url: string) => Effect.Effect<void, RemoteError>;
-  /** `attach` for a remote other than `origin` — somewhere else to send to. */
+  /**
+   * `attach` for a remote other than `origin` — somewhere else to send to (the
+   * person's own copy, `copy`). A remote already named so is replaced, not
+   * added beside: a stale URL is the one thing that would send work to the
+   * wrong repository.
+   */
   readonly attachAs: (repo: Repo, name: string, url: string) => Effect.Effect<void, RemoteError>;
   /** The URL recorded for the remote `name`, or `None`. */
   readonly urlOf: (repo: Repo, name: string) => Effect.Effect<Option.Option<string>, RemoteError>;
   /**
-   * Fetches one named ref from `remote` (`origin` unless named) — one no
-   * branch refspec covers — into the local ref `into`, and answers the commit
-   * it names. Nothing in the work tree moves.
+   * Fetches one named ref from `remote` (`origin` unless named) into the
+   * local ref `into`, and answers the commit it names: a ref no branch
+   * refspec covers (a suggestion's `refs/pull/<n>/head`), or one branch of
+   * another remote into a ref the caller chose (the person's copy into its
+   * tracking ref). Nothing in the work tree moves.
    */
   readonly fetchRef: (
     repo: Repo,
@@ -165,7 +172,8 @@ export interface RemoteService {
   readonly publish: (repo: Repo, target: string) => Effect.Effect<void, RemoteError>;
   /**
    * Throws away a half-finished merge: the work tree goes back to HEAD and the
-   * merge state is cleared. This is what Resolve does.
+   * merge state is cleared. This is what the cloud popover's "Finish the
+   * transfer" does.
    *
    * `Rejected` when nothing is in progress, deliberately — the operation is a
    * hard reset underneath, and running one on a clean repository would discard

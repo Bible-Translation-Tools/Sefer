@@ -2,8 +2,8 @@
  * The sync state machine: one reading of a repository in, one state out.
  *
  * Pure: the shell does the IO (`src/app/ui/cloud/reading.ts`), hands the facts
- * in, and renders what comes back, so every state is reachable from a dev
- * fixture without a Gitea instance. The two clocks and the rule that scripture
+ * in, and renders what comes back, so every state can be derived from plain
+ * facts without a repository or a Gitea instance. The two clocks and the rule that scripture
  * text is never merged automatically are in
  * `documentation/architecture/sync.md`.
  */
@@ -187,19 +187,20 @@ const clocksOf = (reading: SyncReading): Clocks => ({
 /**
  * The one right thing to offer for a state.
  *
- * Every screen showing sync has exactly one primary button, and this decides
- * which. Ids, not labels: the words are the shell's business (`src/app/i18n`),
+ * Every surface showing sync — the cloud popover, Review's status line — has
+ * exactly one primary move, and this decides which. Ids, not labels: the words are the shell's business (`src/app/i18n`),
  * and core has no catalogue.
  *
  * - `sign-in` — go get a session.
  * - `attach` — pick a repository for this project.
  * - `publish` — create the cloud copy and send the first version.
- * - `pull` — take the cloud's versions. Behind a confirmed plan, always.
+ * - `pull` — take the cloud's versions. Through Review, always: every passage
+ *   is shown before it lands.
  * - `push` — send this device's versions.
  * - `combine` — join this device's work and the cloud's in one decision
- *   commit, the diverged move.
+ *   commit, the diverged move; Review's Record makes it.
  * - `compare` — the diverged move when both sides touched the same book: a
- *   person decides, in the Compare screen, and no text is merged here.
+ *   person decides, in Review, and no text is merged here.
  * - `resolve` — finish the merge that is part-way through.
  * - `retry` — try the thing that failed, unchanged.
  */

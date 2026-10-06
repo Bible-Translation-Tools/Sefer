@@ -147,9 +147,6 @@ export const readSync = (
     const empty = [] as readonly Commit[];
     const localLog = yield* orEmpty(git.log(repo), empty);
     const remoteLog = remoteKnown ? yield* orEmpty(git.logFrom(repo, tracking), empty) : empty;
-    // In the copy mode, what is waiting to be SENT is what the person's copy
-    // lacks — a send goes there; what is waiting to be RECEIVED is still the
-    // shared project's. A copy not read yet was made from the shared project.
     // Only the signed-in account's own copy counts (`copyAttached` in
     // suggestions.ts): one left by another account on this device is not theirs.
     const copyUrl = Option.getOrUndefined(
@@ -166,6 +163,10 @@ export const readSync = (
       .at(-2);
     const copyAttached =
       me !== undefined && copyOwner !== undefined && me.toLowerCase() === copyOwner.toLowerCase();
+    // In the copy mode, what is waiting to be SENT is what the person's copy
+    // lacks — a send goes there, and moves its tracking ref (`copyRef`); what
+    // is waiting to be RECEIVED is still the shared project's. A copy not read
+    // yet was made from the shared project, so the shared log stands in.
     const inCopyMode = (options.chosenMode ?? (copyAttached ? "copy" : "shared")) === "copy";
     const copied = copyRef(branch ?? DEFAULT_BRANCH);
     const copyKnown =

@@ -1,17 +1,18 @@
 /**
  * Settings' Cloud section: the account, the ATTACHMENT half of remote sync,
- * and the open project's sync switches — `AccountCard`, `SharedProjectCard`
- * and `SyncSettingsCard`.
+ * how this project is worked on, and its sync switches — `AccountCard`,
+ * `SharedProjectCard`, `CollabModeCard` and `SyncSettingsCard`.
  *
  * Doing sync — the state, the clocks, what would arrive, the one right move —
  * is the app bar's cloud popover. What is here is configuration: choosing
- * WHICH shared project this folder is, creating one when there is none, and
- * what this project may do on open and on save.
+ * WHICH shared project this folder is, creating one when there is none,
+ * working in it or in one's own copy, and what this project may do on open
+ * and on save.
  *
- * The account half is not duplicated. `createAccount` is the shared state and
- * `AccountCard` the shared component (`src/app/ui/cloud/account.ts` and
- * `src/app/ui/cloud/AccountCard.tsx`), so the two surfaces cannot disagree
- * about what "signed in" means.
+ * The account half is not duplicated. `createAccount` is the shared state
+ * (`src/app/ui/cloud/account.ts`), and the popover signs in with the same
+ * `SignInForm` this section's `AccountCard` draws, so the two surfaces cannot
+ * disagree about what "signed in" means.
  *
  * The panel holds no domain state. The session lives in `Credentials` (through
  * `Gitea`), the attachment lives in the repository's own `origin`, and the

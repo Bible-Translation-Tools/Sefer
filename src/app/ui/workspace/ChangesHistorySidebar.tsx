@@ -1,13 +1,15 @@
 /**
  * The sidebar of the screens that read the project's versions: Changes
- * (Review — what is not recorded yet), History (what was), and — for someone
- * who can write to the shared project — Suggestions (what others offer), as
- * tabs over one panel, the way Zed's git panel puts them.
+ * (Review — what is not recorded yet), History (what was), and Suggestions
+ * (what is offered — shown to someone who can write to the shared project or
+ * works in their own copy of it), as tabs over one panel, the way Zed's git
+ * panel puts them.
  *
  * The tabs are links, and the route is the tab: Review draws Changes, History
  * draws History, so Back and Forward move between them and neither screen
  * keeps a tab of its own. Each screen claims the sidebar (`sidebarSlot`) and
- * puts its own list under the tabs.
+ * puts its own list under the tabs. The Suggestions tab's count is the
+ * network's (`collaboration`), so it follows the check rather than the page.
  */
 
 import type { JSX } from "@solidjs/web";

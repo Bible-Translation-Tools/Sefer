@@ -270,15 +270,33 @@ from that copy's branch, which later sends keep up to date by themselves; once i
 offer is a new one. Whoever can write to the shared project sees the open suggestions, and reviews
 one — Review against the shared project, with the suggestion's head (`refs/pull/<n>/head`, fetched to
 `refs/sefer/pull/<n>` — outside `refs/remotes/origin/`, which the Web's pruning fetch clears of every
-ref it did not write) as the other side — or declines it with a note its author reads in the cloud
-popover. Accepting is Record in that review: the decision commit is sent to the shared project, and
-`Suggestions.accept` marks the pull request "manually merged" by it, or closes it with a note where the
-repository does not allow that. Whether a closed suggestion was TAKEN is asked of git — its head is in
-the shared project's history — because a Gitea that does not allow manual merges never calls it
-merged. "Pull request" is Gitea's word and the code's; the screen says "suggestion".
+ref it did not write) as the other side, with who offered it, its title and its versions' messages
+above the cards (`SuggestionLine`). Three answers, all from Review:
+
+- **Save, closing it as brought in** (the default): the project's text is recorded — a fast-forward
+  when everything was taken and this device has no versions of its own, else one decision commit —
+  and always SENT to the shared project, even with nothing new to record. `Suggestions.accept` marks
+  it "manually merged" where the repository allows that, else closes it; either way the reviewer's
+  Save message goes on it as the note, ending with the line `BROUGHT_IN` ("Brought in with Sefer.").
+- **Save, leaving it open** (the dialog's switch off): taking part now and more later.
+- **Decline**, with a note: closed first, then the note, so a refused close leaves nothing to post
+  twice; the close is checked in Gitea's answer, which says 200 to a PATCH that changed nothing. When
+  the review offers passages and none is taken, Save is closed and the dialog offers only Decline.
+
+Whether a closed suggestion was TAKEN is read from that `BROUGHT_IN` line, not from git: one copy's
+branch backs every suggestion its person makes, and Gitea reports that branch's CURRENT tip as the
+head of each, closed or not, so ancestry would call a declined one taken once a later one came in.
+A suggestion is titled by the day it was offered ("Changes suggested on 6 October 2026"). Its
+author sees all of this in Suggestions → Yours (`YourSuggestions`): waiting, brought in or closed,
+the editor's note, Offer and Withdraw; and Save's receipt after a send to the copy offers it on the
+spot. "Pull request" is Gitea's word and the code's; the screen says "suggestion".
+
+Known and deferred (2026-10-06): a plain Decline only closes the pull request, so its versions stay
+outside the shared project's history and ride along in the person's next offer. Recording a decline
+as a keep-ours decision commit, as a partial accept already does, would end that.
 
 `src/core/remote/suggestions.ts` is its own service (`Suggestions`, over the session `Gitea` keeps:
-`canWrite`, `open`, `latestFrom`, `suggest`, `accept`, `decline`); `src/app/suggestions.ts` is the
+`canWrite`, `open`, `one`, `from`, `noteOn`, `suggest`, `accept`, `decline`); `src/app/suggestions.ts` is the
 logic — the mode, where a send goes (`sendingTo`), making or finding the copy (`workInOwnCopy`),
 re-rooting a project cloned from the person's own fork, `suggestTo` for a shared project that is the
 person's own; `src/app/collaboration.ts` holds what the surfaces show. They join the rest of Sefer at:
@@ -295,7 +313,7 @@ on another device is found (`RemoteRepo.parent`) and attached. On the Web every 
 through the WACS proxy (`../wacs-isomorphic-git-proxy`), which forwards only an explicit list of API
 paths: `pulls`, `pulls/{n}` (PATCH, to close), `pulls/{n}/merge` and `issues/{n}/comments` were
 added for this on 2026-10-06. A suggestion call missing from that list fails in the browser as
-"Failed to fetch"; desktop talks to Gitea directly and never meets it. Forks and pull requests are built but
+"Failed to fetch"; desktop talks to Gitea directly and never meets it. Forks and pull requests were exercised on the Web with a second, non-writer account on 2026-10-06; desktop is
 not yet exercised against a second account.
 
 ## ProjectAdmin

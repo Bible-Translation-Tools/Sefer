@@ -2,24 +2,26 @@
  * Suggested changes: Gitea's pull requests, as the few questions the
  * suggested-changes flow asks.
  *
- * A translator who cannot write to the shared project sends to their own copy
- * (a fork) and SUGGESTS those changes — one open pull request from that copy's
- * branch, which follows the copy as more is sent. Someone who can write to the
- * shared project sees the open suggestions and brings them in, or declines
- * them. "Pull request" is Gitea's word and this module's; the screen says
- * "suggested changes".
+ * A translator who works in their own copy (a fork) — because they cannot
+ * write to the shared project, or chose to — SUGGESTS what is there: one open
+ * pull request from that copy's branch, which follows the copy as more is
+ * sent. Someone who can write to the shared project sees the open suggestions
+ * and brings them in, or declines them. "Pull request" is Gitea's word and
+ * this module's; the screen says "suggestion".
  *
  * A service of its own beside `Gitea`, and deliberately so: the whole flow is
  * one topology among several (a team whose members are all writers never
  * needs it), and it comes out by removing this service's one registration and
- * its one caller. It reads the session `Gitea` keeps, so there is no second
- * sign-in.
+ * the app module that calls it (`src/app/suggestions.ts`). It reads the
+ * session `Gitea` keeps, so there is no second sign-in. On the Web every path
+ * here goes through the WACS proxy's API allowlist, which names each one; a
+ * new call needs a new entry there, or it fails as "Failed to fetch".
  */
 import { Context, Effect, Layer, Option, Schema } from "effect";
 
 import { Gitea, GiteaError, type HttpFetch, type HttpResponse, type Session } from "./gitea";
 
-/** One suggestion, as the steward's list and its author's popover show it. */
+/** One suggestion, as the editors' list and its author's own list show it. */
 export interface Suggestion {
   readonly number: number;
   readonly title: string;
@@ -29,12 +31,19 @@ export interface Suggestion {
   readonly updatedAt: string;
   /** The branch it suggests, on its author's copy. */
   readonly branch: string;
-  /** The commit it suggests, when Gitea said. */
+  /**
+   * The commit it suggests, when Gitea said. One copy's branch backs every
+   * suggestion its person makes, and Gitea reports that branch's CURRENT tip
+   * here — for a closed suggestion too — so it says nothing about what one
+   * particular suggestion held, and is never used to decide whether it was
+   * taken.
+   */
   readonly head: string | undefined;
   /**
    * Gitea's own word. `merged` is only true when Gitea merged it or was told
-   * it was; a suggestion brought in by Sefer's Review is a decision commit
-   * Gitea may not recognise, so "was it taken" is asked of git, by its `head`.
+   * it was; where a repository does not allow "manually merged", a suggestion
+   * Sefer brought in ends merely `closed`, and the `BROUGHT_IN` line on its
+   * note is what tells it from a declined one.
    */
   readonly state: "open" | "merged" | "closed";
 }
@@ -89,7 +98,8 @@ interface SuggestionsService {
   ) => Effect.Effect<readonly Suggestion[], GiteaError>;
   /**
    * The last thing anybody but `author` said on suggestion `number` — the
-   * editor's note on a declined one — or `undefined` when nobody did.
+   * editor's note on a declined or brought-in one — or `undefined` when
+   * nobody did.
    */
   readonly noteOn: (
     host: string,
@@ -100,8 +110,9 @@ interface SuggestionsService {
   ) => Effect.Effect<string | undefined, GiteaError>;
   /**
    * Marks a suggestion brought in by `commit` — Gitea's "manually merged" —
-   * or, where the repository does not allow that, closes it with a note
-   * saying it was brought in, so its author is not left waiting.
+   * or, where the repository does not allow that, closes it; either way it
+   * leaves `note` on it, ending with `BROUGHT_IN`, so its author sees it
+   * taken rather than declined, and in the reviewer's own words.
    */
   readonly accept: (
     host: string,

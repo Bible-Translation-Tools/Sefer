@@ -1,6 +1,6 @@
 /**
  * The sync module's one door: the pure state machine, the incoming plan, and
- * the one move that writes — Combine.
+ * the two moves that write — Receive and Combine.
  *
  * Everything but `./combine.ts`, `./receive.ts` and `./survey.ts` is pure;
  * those are Effect programs over the ports and nothing else.

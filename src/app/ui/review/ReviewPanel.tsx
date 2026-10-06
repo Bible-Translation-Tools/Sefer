@@ -13,9 +13,10 @@
  * written is the working text (`CompareSource.canApply`: only the open
  * project says yes), and it is always the model's left side — picking it on the
  * right swaps the sides — though it is DRAWN on the right, the other side on
- * the left, read left to right as was-then-now. Then the review is the editor: every card edits the Book
- * itself on a double-click, as every card in Sefer does, and "Keep" / "Take"
- * writes into it at once, one Undo step each. When neither side can be
+ * the left, read left to right as was-then-now. Then the review is the
+ * editor: every card edits the Book itself on a double-click, as every card
+ * in Sefer does, and "Keep" / "Take" writes into it at once, one Undo step
+ * each. When neither side can be
  * written (two folders, two versions) the review is for reading: no Edit, no
  * double-click, no decisions. There is no "decide, then apply" mode: a
  * decision somebody has to remember to apply later is a decision that gets
@@ -31,6 +32,14 @@
  * `saveAll` then `Git.commit`, in that order, as one action. It is offered
  * whenever the project is one of the two sides, because what it records is the
  * project's own unsaved work and not the comparison.
+ *
+ * **Against a suggestion** (`?against=shared&pull=<n>`) the review is also
+ * its answer. Save brings it in — sent to the shared project whatever the
+ * reviewer's own mode, even with nothing new to record — and closes it as
+ * brought in, or leaves it open when the dialog's switch says so. Decline
+ * closes it with a note (`SuggestionLine`, or Save's dialog itself when the
+ * reviewer took none of it). Against the person's own copy (`copy=1`) Save
+ * catches this device up with another of theirs and sends back to the copy.
  */
 
 import { useNavigate, useSearch } from "@tanstack/solid-router";
@@ -337,8 +346,9 @@ export function ReviewPanel() {
   /** Every changed book's decision units, one engine diff each. */
   /**
    * A book somebody decided in stays in the review though it now reads the
-   * same on both sides: a take that made it identical keeps its card, with
-   * "put back", rather than vanishing under the click.
+   * same on both sides: a take that made it identical keeps its card — whose
+   * pressed "Taken from …" still puts it back — rather than vanishing under
+   * the click.
    */
   const decidedIn = (bookId: BookId): boolean => {
     for (const key of untrack(decisions).keys()) if (key.startsWith(`${bookId}\0`)) return true;
@@ -778,9 +788,9 @@ export function ReviewPanel() {
    * Against a suggestion: how many passages it offers, and how many end up
    * taken. Offered but none taken means there is nothing to bring in —
    * keeping the editor's text everywhere is declining it — so Save is closed
-   * and the dialog offers only Decline.
-   * Recording anyway would join the suggestion's history to the project's
-   * and close it as brought in, which is the opposite of what was decided.
+   * and the dialog offers only Decline. Recording anyway would join the
+   * suggestion's history to the project's and close it as brought in, which
+   * is the opposite of what was decided.
    */
   const suggestionTally = (): { readonly offered: number; readonly taken: number } => {
     let offered = 0;
@@ -1101,6 +1111,8 @@ export function ReviewPanel() {
       // A suggestion brought in and sent is marked taken on the shared
       // project, so its author is not left waiting — unless the reviewer chose
       // to leave it open (some of it now, more later). Not when it stayed here.
+      // Its note is the reviewer's own message (`Suggestions.accept` ends it
+      // with the line its author's list reads "brought in" from).
       const accepted = untrack(closeOnSave) ? pull() : undefined;
       const markTaken = (sent: boolean): void => {
         if (accepted === undefined || !sent) return;
@@ -1362,8 +1374,8 @@ export function ReviewPanel() {
     if (rightId() !== "shared" && leftId() !== "shared") pick("right", "shared");
   };
 
-  // The app bar's "See the changes" navigates here with `against=shared`; when
-  // Review is already open that is a search change, not a mount.
+  // The cloud popover's "See the changes" navigates here with `against=shared`;
+  // when Review is already open that is a search change, not a mount.
   createEffect(
     () => search().against,
     (against) => {

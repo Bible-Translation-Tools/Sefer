@@ -3,7 +3,7 @@
  * every surface that shows it: the app bar's cloud button, Review's status
  * line, and the Record dialog's last line.
  *
- * It was the old `/cloud` screen's alone, read when it mounted, so the only way to
+ * It was once a sync screen's alone, read when it mounted, so the only way to
  * learn that a send had been refused was to go and look. Now the check on
  * open, every send, and every receive all leave their reading here, and the
  * surfaces read it — the way `syncStatus` holds the network for everyone. A

@@ -755,7 +755,8 @@ export function ReviewReader(props: {
     // In the columns' order: the other side's on the left, yours on the right.
     // Both at Edit's weight — deciding is what this card is for, so its two
     // buttons are not the quietest thing on it — and the pressed one says
-    // which side was chosen.
+    // which side was chosen. Pressed again it puts the passage back, which it
+    // no longer spells out ("— put back" read as an instruction on every card).
     return [
       {
         kind: "button",

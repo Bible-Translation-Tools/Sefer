@@ -1,17 +1,15 @@
 # Assembling a Bible from single-book projects (BTT Writer migration) (2026-10-02)
 
-**Status:** idea, agreed in direction through 2026-10-02. Nothing is built.
-**Pick up Monday 2026-10-05, together with
-[resource kinds](../01-discussing/resource-kinds-2026-10-01.md).** The order
-is: paired resources (step 1), then this migration, then resource kinds and
-TN. Step 1's decisions are in "Step 1 settled", near the end. The sections
-from "Naming" on supersede earlier wording where they differ.
+**Status:** plan, ruled on 2026-10-06 ("Rulings, 2026-10-06" at the end
+wins where earlier sections differ). Nothing is built. The plan page is
+[consolidate-book-repos-plan.html](consolidate-book-repos-plan.html). The
+order is: paired resources (step 1), then this migration, then
+[resource kinds](../01-discussing/resource-kinds-2026-10-01.md) and TN.
 
-**This supersedes**
-[WACS language downloads](../01-discussing/wacs-language-downloads-2026-09-24.md),
-in both wording and plan. That note's catalogue half has shipped
-(`src/app/catalogue.ts` is on GraphQL). Its legacy half is this note. It
-parked rival copies in `.sefer/candidates/`; this note resolves them up front.
+**This replaced** the WACS language downloads note (2026-09-24, deleted
+2026-10-06). Its catalogue half shipped (`src/app/catalogue.ts` is on
+GraphQL); its GraphQL field table is kept below, under "What the GraphQL API
+holds".
 
 **Related:**
 
@@ -219,6 +217,25 @@ content(where: {
   open with the right books.
 - A tool that trusts status reproduces this. Every check below exists for this
   case.
+
+### What the GraphQL API holds (from the 2026-09-24 note)
+
+`https://api.bibleineverylanguage.org/v1/graphql` (Hasura). Introspection is open and CORS answers the page's origin. SQL schema: `WycliffeAssociates/languageapi`, `controller/src/db/schema/schema.ts` on `prod`.
+
+| Need                    | Where                                                                                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Consolidated            | repo topic: `git_repo.topics.topic.name = "consolidated"` (the only topic in `git_topic`)                                             |
+| Primary / Active        | `content.wa_content_metadata.status` ∈ `Primary`, `Active`, `Inactive`, `""`                                                          |
+| Shown publicly          | `wa_content_metadata.show_on_biel`, `wa_language_metadata.show_on_biel`                                                               |
+| Gateway                 | `language.wa_language_metadata.is_gateway` (also `vw_langnames.gw`)                                                                   |
+| Date                    | `content.modified_on` — take the newest per language                                                                                  |
+| Region, alternate names | `vw_langnames.lr`, `vw_langnames.alt` (same data as the td export, so that fetch can go); also `language.country.world_region.region` |
+| Book of a repo          | `rendered_content.scriptural_rendering_metadata.book_slug` (e.g. `ROM`), `is_whole_book`                                              |
+| Resource type           | `content.resource_type` — overwhelmingly `reg`, then `ulb`, `udb`; the field is noisy (book slugs and dates appear in it)             |
+| Domain                  | `content.domain` ∈ `scripture`, `gloss`, `parascriptural`, `peripheral`                                                               |
+| Pre-built archives      | `source_zips` (`zip_url`, `resource_type`, `meta_status`, `unique_book_slugs_count`)                                                  |
+
+Measured on 2026-09-24, scripture rows with `show_on_biel`: 896 languages, 862 non-gateway. **53** of those have a repo with the `consolidated` topic; **809 are legacy-only**, and 584 of those have at least one `Primary` repo. Legacy is the main case, not the edge case.
 
 ### The existing convention, and what we write instead
 
@@ -865,3 +882,65 @@ text sees it move once, and "Edit it as your own project" moves it back.
    or say where it differs.
 4. **What "Active" means.** Who would know? The defaults treat it as "second
    choice".
+
+## Rulings, 2026-10-06 (Will, on the plan page)
+
+- **Write relationships as Tech_Advance/leb-x-bisa_reg does** (commit
+  `7bd978c`, "identify source texts", by UsfmWizard 1.5): the authority is
+  `wycliffeassociates` (`https://www.wycliffeassociates.org`), the id is
+  `wycliffeassociates::<language>/<resource>`, and **`revision` is the listed
+  version** ("21-05"), one relationship per listed version. The id names no
+  repository; the WA-Catalog convention still gives the URL. The resolved
+  commit lives only on this device's Library row. Question 1 and 2 are
+  answered.
+- **Names:** `resolveRelatedTexts`, returning `RelatedTextResolution` with
+  `matchedBy: "release" | "tag" | "manifest" | "newest"`. A candidate's
+  network origin is `remote` (anything with a fetchable URL), not `tap`.
+- **Source texts live in their own folder.** Auto-pulled texts and gateway
+  downloads clone into the Library folder (`<appData>/library`), not the
+  projects folder, so "Your projects" never lists them. This replaces the
+  `purpose` field and the `v: 5` index repair. "Edit it as your own project"
+  moves the folder. Copy follows the PO: **"Source texts"** for a Bible,
+  **"Reference material"** for helps such as TN.
+- **Binding, explained.** Today a binding is only a remembered pick: "for
+  this project, the reference column shows that folder", per device. The
+  project's metadata already declares its source texts, so auto-pull writes
+  no binding; the picker lists the declared ones first.
+- **The converter is usfm-tools' `txt2USFM.py`**
+  (Bible-Translation-Tools/usfm-tools), driven by UsfmWizard. Question 3 is
+  answered. A Writer book becomes USFM through one declared template whose
+  header follows its `writeHeader()` (`\toc3` lowercase, `\mt1..n` from the
+  title lines); the manifest is written once, at the end of assembly.
+- **Health is not a new subsystem.** It is the Book census row
+  (`BookSummary`: chapters, verses, onion errors and warnings) for the staged
+  book, beside the same row for its source text when one is on the device.
+  `ufw` versification means nothing; no Sous for now; Kitchen may later own a
+  static table of expected verses. The cross-book "also appears as Jude"
+  check is dropped: the coverage against the source text shows that case.
+- **One commit for an assembly,** not one per book, with `Co-authored-by` for
+  every Writer author. Adding a book later is one commit too. Writer's
+  autosaves carry no intent worth a commit each.
+- **Writer upstreams are not git remotes.** A project has two remotes at most
+  (`origin` and `copy`); a Writer project is pull-only, one per book, and
+  never merged. `.upstreams.json` stays.
+- **Kept as proposed:** resource kinds change 1 rides along on the Library
+  row if it is small; this build records upstreams and the checks come next.
+
+### Round 2, 2026-10-06
+
+- **The reference column's default is the project's declared source text.**
+  Gateway texts already in the projects folder stay where they are.
+- **The template copies the header and the order only.** Import and shaping
+  code never repairs a translator's text. People must not learn to expect
+  normalising on the way in. A repair is a later one-click fix that the person
+  sees.
+- **"Edit it as your own project" is a full move.** Once edited, it is no
+  longer WA's official source text.
+- **Bindings stay, reframed as workspace state.** "On this project I usually
+  read that source text" is this device's memory of a pick, not a manifest
+  fact. Rename away from "binding", and consider moving it from the Library's
+  `library.json` into the project's own `.sefer/project.json`.
+- **Every clone goes through one arrival switch on what arrived.** A project
+  writes into the projects folder, updates the index and the project list
+  signal. A source text writes into the Library folder, runs `Library.add` and
+  updates the Library signal. Callers do not choose folders or signals.

@@ -2,10 +2,10 @@
  * The account half of cloud sync, as state rather than as a component.
  *
  * Two surfaces show the same session — the cloud popover and Settings' Cloud
- * section — and neither of them OWNS it. The session lives
- * in `Credentials` behind `Gitea`; this is the small amount of screen state
- * around asking for it: the form fields, whether the account wants its second
- * factor, and the one failure line.
+ * section — and neither of them OWNS it. The session lives in `Credentials`
+ * behind `Gitea`; this is the small amount of screen state around asking for
+ * it: the form fields, whether the account wants its second factor, and the
+ * one failure line.
  *
  * One module so the two surfaces cannot disagree about what "signed in"
  * means, and neither carries its own copy of the login flow.
@@ -44,7 +44,7 @@ export const createAccount = (shell: Shell): Account => {
   // Read once, at the composition's endpoint: an override typed into Settings
   // reaches the screens immediately but the transfer Layers only after a
   // reload, and signing in against one endpoint while transferring to another
-  // is precisely the confusion this screen exists to avoid.
+  // is precisely the confusion one shared account state exists to avoid.
   const host = contentHostFor(services.settings);
 
   const [session, setSession] = createSignal<Session | undefined>(undefined, { name: "session" });

@@ -12,16 +12,20 @@
  *
  * One topology among several, kept in one place so it can go: a team whose
  * members all write to the shared project never needs any of this. It joins
- * the rest of Sefer at four points, each one line:
+ * the rest of Sefer at a handful of seams:
  *
  * - composition registers `Suggestions` (`services.ts`);
- * - a send asks `sendingTo` where to go (`syncActions.ts`);
+ * - a send asks `sendingTo` where to go, and the check reads the copy with
+ *   `fetchCopy` (`syncActions.ts`);
  * - `collaboration.ts` holds what the surfaces show about it;
- * - `/cloud` shows `SuggestionsCard`;
+ * - the cloud popover (`CollabSection`), Settings' `CollabModeCard`, and the
+ *   Suggestions tab (`SuggestionsScreen`: `YourSuggestions` for an author,
+ *   `SuggestionsCard` for an editor);
  * - Review reads a suggestion like the shared project, from the ref
- *   `suggestionRef` names (`ReviewPanel.tsx`).
+ *   `suggestionRef` names, and accepts or declines it (`ReviewPanel.tsx`,
+ *   `SuggestionLine.tsx`).
  *
- * Take those out and this file, `SuggestionsCard.tsx` and
+ * Take those out and this file, the components above and
  * `core/remote/suggestions.ts` are dead code the gate finds; everything else
  * sends to `origin` as it did.
  */
@@ -140,8 +144,9 @@ export const modeOf = (services: Services, project: Project): Promise<CollabMode
 
 /**
  * Where a send goes: the person's copy in the copy mode, the shared project
- * otherwise. A copy mode with no copy attached yet sends nowhere new — it
- * falls back to the shared project, whose refusal says what to do.
+ * otherwise. A copy mode with no copy of the signed-in account's attached
+ * (none yet, or another account's) sends nowhere new — it falls back to the
+ * shared project, whose refusal says what to do.
  */
 export const sendingTo = async (services: Services, project: Project): Promise<string> => {
   if ((await modeOf(services, project)) !== "copy") return "origin";
@@ -296,11 +301,6 @@ export const suggestTo = (
   );
 
 /**
- * Suggests what this project's copy holds to the shared project: one open
- * suggestion per person, which later sends to the copy keep up to date by
- * themselves. Sends first, so the suggestion holds this device's newest work.
- */
-/**
  * A new suggestion's title: the day it was offered, in the reader's own date
  * format. Not a summary — nobody is asked to write one yet — but enough that
  * a list of them is not a column of identical "Suggested changes".
@@ -310,6 +310,12 @@ const suggestionTitle = (now = new Date()): string =>
     date: now.toLocaleDateString(undefined, { dateStyle: "long" }),
   });
 
+/**
+ * Suggests what this project's copy holds to the shared project: one open
+ * suggestion per person, which later sends to the copy keep up to date by
+ * themselves (`Suggestions.suggest` answers the open one rather than opening
+ * a second). Sends first, so the suggestion holds this device's newest work.
+ */
 export const suggestMyChanges = (services: Services, project: Project): Promise<Suggestion> =>
   services.run(
     Effect.gen(function* () {
@@ -386,8 +392,9 @@ export const declineSuggestion = (
 /**
  * After a suggestion was brought in by Review and sent: tell the shared
  * project, so its author sees it taken rather than waiting. Gitea marks it
- * merged by the commit just sent when the repository allows that, and it is
- * closed with a note otherwise.
+ * merged by the commit just sent where the repository allows that, and it is
+ * closed otherwise; either way the reviewer's message goes on it as the note,
+ * ending with the line that tells its author it was taken (`BROUGHT_IN`).
  */
 export const acceptSuggestion = (
   services: Services,

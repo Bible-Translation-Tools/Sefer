@@ -157,7 +157,11 @@ export interface GiteaService {
     owner: string,
     name: string,
   ) => Effect.Effect<Option.Option<RemoteRepo>, GiteaError>;
-  /** Forks `owner/name` into the signed-in user's account. */
+  /**
+   * Forks `owner/name` into the signed-in user's account. Gitea refuses a
+   * second fork of the same repository (409), so a caller looks for one first
+   * (`RemoteRepo.parent` on the user's repository of the same name).
+   */
   readonly forkRepo: (
     host: string,
     owner: string,

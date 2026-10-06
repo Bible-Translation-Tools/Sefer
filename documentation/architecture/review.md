@@ -122,6 +122,25 @@ text, and then the project's text — choices, presets and anything typed into t
 recorded, with everything else the other side changed, as one version: a receive and a version, or
 one decision commit ([sync](sync.md), "A contested book, settled in Review").
 
+### Against a suggestion
+
+`?pull=<n>` is the same pairing with a suggestion's head as theirs, and four things differ
+([git](git.md), Suggested changes):
+
+- **Whose it is** sits above the cards (`SuggestionLine`): who offered it, its title, when, and the
+  messages of the versions it would bring — with **Decline…**, a note box, on that line.
+- **Save always sends**, to the shared project whatever the reviewer's own mode, even when the
+  fast-forward left nothing new to record: the versions it brought are what the shared project lacks.
+- **The dialog's switch, "Close the suggestion as brought in"**, on by default: off keeps it open
+  for taking more later. On, the reviewer's Save message becomes the note its author reads.
+- **Keeping none of it is declining it.** When the suggestion still offers passages and none is
+  taken — counted by the decisions as made, since a take is written into the editor at once and its
+  passage then reads unchanged — Save is closed and the dialog offers only Decline. Recording anyway
+  would join the suggestion's history and close it as brought in. With nothing left to differ (its
+  versions already here), Save stays open: it is what sends them and closes it.
+
+After a Save that brought one in, Done goes back to the Suggestions tab.
+
 ### The screen never says "left" or "right"
 
 `left` and `right` are the model's words — `BookComparison` and the screen's
@@ -227,8 +246,10 @@ above its two texts (`LocationStrip`, `Crumbs`): Book · Chapter listing only th
 books and chapters with changes and how many, picking one going to its first
 change; the arrows step chapter to chapter; and the chain (`FollowToggle`)
 links the two texts' scrolling by verse (`createAlignedGroup`), on by default. The project
-sidebar becomes a two-tab panel, Changes and History
-(`workspace/ChangesHistorySidebar.tsx`, as Zed's git panel has them). Review is
+sidebar becomes a tabbed panel, Changes and History — and Suggestions, for
+someone who works in their own copy or can write to the shared project
+(`workspace/ChangesHistorySidebar.tsx`, as Zed's git panel has them; `VersionTabs`
+draws the same tabs above the page while the sidebar is hidden). Review is
 the Changes tab: each book that differs, decided of total, as Find's sidebar
 becomes its results. History is the other tab: the timeline, with the selected
 version's changes in the main area (`?commit=<id>`) and Adopt on either side of
@@ -359,8 +380,9 @@ card's current side, and the whole book's, edits the real Book on a
 double-click or Edit, with the diff as a plugin on it (`liveDiff` in
 `src/editor/recipes/diffView.ts`). So "take theirs, then fix the comma" is a
 click and some typing, the way a Find card is. A taken unit keeps its card,
-washed, with "Taken from the file — put back". Put back merges the
-ORIGINAL's unit into the live text, whatever else was written since. The
+washed, its button pressed and reading "Taken from the file"; pressing it
+again puts it back, which merges the ORIGINAL's unit into the live text,
+whatever else was written since. The
 file is still written only by Record a version.
 
 The DIFF names the tint, not the decision. A taken verse edited afterwards

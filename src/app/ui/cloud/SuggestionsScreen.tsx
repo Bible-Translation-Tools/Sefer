@@ -1,8 +1,15 @@
 /**
- * `/suggestions` — what people working in their own copy offer, for the
- * project's editors: each one to review in Review, or to decline with a note
- * its author reads. A tab beside Changes and History, because a suggestion is
- * one more thing about to change the project, and Review is where it changes.
+ * `/suggestions` — suggested changes, from both ends, in one tab beside
+ * Changes and History (a suggestion is one more thing about to change the
+ * project, and Review is where it changes):
+ *
+ * - **Yours**, for someone working in their own copy (`YourSuggestions`):
+ *   what they offered, how each stands, offering more, withdrawing one;
+ * - **To review**, for the shared project's editors (`SuggestionsCard`): each
+ *   one to review in Review, or to decline with a note its author reads.
+ *
+ * One tab rather than two: four tabs do not fit the sidebar, and both lists
+ * answer one question — what is suggested for this project.
  */
 
 import Inbox from "lucide-solid/icons/inbox";
@@ -20,7 +27,6 @@ import { YourSuggestions } from "./YourSuggestions";
 export function SuggestionsScreen() {
   const shell = useShell();
   const facts = () => collaboration.facts(shell.project()?.root);
-  // Somebody came to look: ask, if the check has not yet.
   // Somebody came to look: ask again, so the tab's count and the lists below
   // say the same thing. A one-time read at mount, untracked on purpose.
   untrack(() => {

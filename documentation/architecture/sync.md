@@ -42,7 +42,7 @@ merge, rebase, fetch or origin.
 | push                 | send my changes    |
 | a decision commit    | combine            |
 | a fork of the remote | your own copy      |
-| a pull request       | suggested changes  |
+| a pull request       | a suggestion       |
 
 The glossary is one module keyed by the state enum because v1's chip, banner, popover and settings
 rows each grew their own wording for the same situations and drifted apart. Every string for a
@@ -183,10 +183,11 @@ screen, `/project/$slug/review`. The link is a PATH STRING (`reviewHref` in
 `src/app/ui/cloud/IncomingPlanCard.tsx`, whose `PlanBooks` the popover shows), not an import: Review
 is another screen with its own lifetime, and this list must not depend on it.
 
-Receiving takes two presses. The plan card is the first; the confirmation is the second. Nothing is
-applied before the plan has been on screen — unless the person turned on "Skip review of incoming
-changes", and then only when the policy lets every book through. Combining takes two as well: the
-second press is a dialog naming the books that keep this device's version and the ones that arrive.
+Receiving goes through Review. The plan in the cloud popover says what would arrive; "See the
+changes" opens Review against the shared project, and its Record is what applies it — passage by
+passage, with the person's choices. Nothing is applied before Review has shown it, unless the person
+turned on "Skip review of incoming changes", and then only when the policy lets every book through.
+Combining is the same Record (`settleWithShared`, below), not a press of its own.
 
 ## Receiving
 
@@ -343,8 +344,11 @@ with the facts rather than a bare error. It returns how the send ended (`SendOut
 because the project does not send on save, attached to nothing, or refused for a reason), and the
 Record dialog stays open on it: one line for this device, one for the shared project, and the move
 the second offers — Compare the changes for a refusal because the shared project moved, Try sending
-again when it could not be reached, Open Sync for a sign-in. `sendNow` is the same send without the
-setting, for a button someone pressed.
+again when it could not be reached, Set up sharing (Settings' Cloud section) for a sign-in. A send
+to the person's own copy names it ("Sent to your copy") and offers "Offer these changes" on the
+spot, or says their open suggestion now holds them. `sendNow` is the same send without the setting,
+for a button someone pressed, and takes an explicit destination when a review names one (a
+suggestion brought in always goes to the shared project).
 
 ### Two ways to work
 
@@ -365,12 +369,15 @@ makes the fork, or finds the one made on another device; a project cloned from t
 is re-rooted (its parent becomes `origin`); a shared project that is the person's own and copies
 nothing asks which project it should suggest to, and refuses one that shares no history with it. A
 suggestion brought in by Review is always sent to the shared project, whatever the reviewer's own
-mode. In the copy mode the check also reads the person's copy into `refs/sefer/copy`
+mode. In the copy mode the check also reads the person's copy into its tracking ref (`copyRef`)
 (`fetchCopy`); when it holds work this device lacks — sent from another of their devices — the
 popover offers "See the changes", Review against it (`?against=shared&copy=1`, labelled "Your
 copy"), and Record catches this device up and sends back to the copy. Nothing from the copy arrives
-without that review. The editors' list is `/project/$slug/suggestions`, a third sidebar tab beside
-Changes and History (`ChangesHistorySidebar`), shown only to someone who can write.
+without that review. Suggestions are `/project/$slug/suggestions`, a third sidebar tab beside Changes
+and History (`ChangesHistorySidebar`), for anyone who works in their own copy (Yours) or can write
+(To review); with the sidebar hidden, the three tabs come above the page. The sign-in token carries
+`write:issue` for the notes; one minted before that must sign in again. On the Web every suggestion
+call goes through the WACS proxy's allowlist ([git](git.md), Suggested changes).
 
 ### One reading for every surface
 

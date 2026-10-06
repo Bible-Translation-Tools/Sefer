@@ -8,7 +8,7 @@ One section per service: what it is in plain words, what is wrong or constrained
 
 1. **Location** — done: every place question goes through Citation, Address and Location over the engine's TOC, and no regex reads a designator. Anchors (for comments) are the next piece, when comments start. See [Location](#location-and-reference) and [the Location chapter](architecture/location.md).
 2. **Git, top to bottom** — the lifecycle pass is built on the `git-lifecycle` branch (2026-09-30): one writer per repository, receive as a fast-forward through the Books, Combine as a decision commit, intake, check on open and send on save. History time travel is next. See [Git](#git).
-3. **One diff and sync model** — after the primitives settle: stop reading every book (the line diff is retired, 2026-09-27), one change classification for History, Review and Cloud. See [Diff](#diff) and `planning/01-discussing/diff-and-sync-model-2026-09-23.md`.
+3. **One diff and sync model** — after the primitives settle: stop reading every book (the line diff is retired, 2026-09-27), one change classification for History, Review and Cloud. See [Diff](#diff) and the retired Git lifecycle spec (`git log -- planning/01-discussing/diff-and-sync-model-2026-09-23.md`).
 4. **Data safety in Recovery** — done on the review branch (2026-09-28): a journal knows the text it started from by hash, and one subscriber on the canonical edit feed backs up every book. What is left is a damaged journal's valid prefix, and a recovery unit test (a candidate in the testing chapter). See [Recovery](#recovery).
 
 ## The graph
@@ -410,7 +410,7 @@ There is one diff: the engine's decision units, addressed by sid (`core/diff/ske
 
 ### Ideas / future
 
-- The plan: `planning/01-discussing/diff-and-sync-model-2026-09-23.md`. Skip by stamp, read only changed books, one change classification shared by History, Review and Cloud, — History and `projectSource` are on decision units and `core/diff/diff.ts` is deleted (2026-09-27); what remains is skipping the read by stamp.
+- The plan (the Git lifecycle spec, built and retired 2026-10-06; its decisions live in [sync](architecture/sync.md) and [git](architecture/git.md)). Skip by stamp, read only changed books, one change classification shared by History, Review and Cloud, — History and `projectSource` are on decision units and `core/diff/diff.ts` is deleted (2026-09-27); what remains is skipping the read by stamp.
 - The diff UI redesign is paused on `/project/$slug/playground`.
 - **Default baseline: the file on disk against the working session, not the last commit.**
 - **Open: files that aren't scripture** (a manifest, a versification file, `metadata.json`) have no comparison view. The agreed shape is `@codemirror/merge`'s read-only view, pick one side, behind Advanced; when it lands, the INVARIANTS rule becomes "Scripture diffs are sid-aligned". Until then Combine refuses a non-scripture file both sides changed.
@@ -484,9 +484,9 @@ The flow needs one top-to-bottom pass before more is added.
 
 ### Ideas / future
 
-- **Measured direction (2026-09-25, Appendix A of `planning/01-discussing/diff-and-sync-model-2026-09-23.md`):** a pack-cached filesystem view under the Web port (37 s → ~2 s for a full walk; isomorphic-git's per-object probing is the cost), then a durable book-change index built at clone and extended at fetch (en_ulb: 4 s, 0.7 MB gzipped; any book's history in ~3 ms), two-point comparison from root trees (42 ms), and common-ancestor / changed-on-both-sides facts for incoming work.
-- **Next up:** book time travel: a read-only historical pane with previous/next, and a bounded log. Then chapter filtering via Location, with a per-(blob, chapter) hash cache and an LRU. Plan: `planning/01-discussing/diff-and-sync-model-2026-09-23.md`, the one Git lifecycle spec.
-- Detect Git changes made outside Sefer; add "back to latest" and an unhealthy-repository recovery flow.
+- **Measured direction (2026-09-25, the retired Git lifecycle spec's Appendix A, `git log -- planning/01-discussing/diff-and-sync-model-2026-09-23.md`):** a pack-cached filesystem view under the Web port (37 s → ~2 s for a full walk; isomorphic-git's per-object probing is the cost), then a durable book-change index built at clone and extended at fetch (en_ulb: 4 s, 0.7 MB gzipped; any book's history in ~3 ms), two-point comparison from root trees (42 ms), and common-ancestor / changed-on-both-sides facts for incoming work.
+- **Next up:** book time travel: a read-only historical pane with previous/next, and a bounded log. Then chapter filtering via Location, with a per-(blob, chapter) hash cache and an LRU. The Git lifecycle spec that planned it is retired; its decisions are in [sync](architecture/sync.md) and [git](architecture/git.md).
+- Detect Git changes made outside Sefer; add "back to latest" and an unhealthy-repository recovery flow. Decided in the retired spec, not built: when `.git` cannot be read, Saving still writes the files and skips the commit (said honestly), and Advanced offers Finish the interrupted transfer (only mid-merge), Rebuild the history index, and Start a new history (the old `.git` moved to `.git-unreadable-<date>`, never deleted).
 
 ---
 
@@ -502,7 +502,8 @@ Clone (the newest version only unless the caller asks for all; desktop backfills
 
 - Desktop transfer progress is a `TODO(seam)` (`platform/tauri/remote.ts:141`).
 - Desktop `git_clone` (git2 `RepoBuilder`) compiles but has not been run against a server; the web clone was checked on `main` and `master` repositories through the prod proxy, and (2026-09-25) stores the content host as `origin`.
-- Suggested changes (forks and pull requests, `core/remote/suggestions.ts`) are built but not exercised against a second account. They join the app at four seams and can be cut out; [git](architecture/git.md#suggested-changes).
+- Suggested changes (forks and pull requests, `core/remote/suggestions.ts`) were exercised on the Web with a second, non-writer account on 2026-10-06 — copy, offer, partial accept, decline — and not yet on desktop. On the Web each call depends on the WACS proxy's API allowlist; [git](architecture/git.md#suggested-changes).
+- A plain Decline only closes the pull request: its versions stay out of the shared project's history and come back in the person's next offer. Recording a decline as a decision commit is deferred; [git](architecture/git.md#suggested-changes).
 
 ### Ideas / future
 
@@ -556,7 +557,7 @@ Staged, validated import with provenance (`stage` → `classify` → `commit`, `
 
 ### Ideas / future
 
-- Web Translation Notes import: pack per book straight from the zip entries, validate, then publish to the Library (`planning/01-discussing/web-translation-notes-import.md`).
+- Web Translation Notes import: pack per book straight from the zip entries, validate, then publish to the Library (`planning/01-discussing/resource-kinds-2026-10-01.md`, §5).
 - Cleanup of an import stage abandoned when the process dies.
 
 ## Library

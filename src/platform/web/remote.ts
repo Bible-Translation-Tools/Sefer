@@ -360,10 +360,11 @@ const makeWebRemote = (
           (remotes) => Option.fromNullishOr(remotes.find((entry) => entry.remote === name)?.url),
         ),
 
-      // One named ref from origin, into a local ref of the caller's choosing:
-      // a suggestion's head (`refs/pull/<n>/head`), which no branch refspec
-      // covers. isomorphic-git answers the commit it fetched; the local ref
-      // is written from that.
+      // One named ref from `remote` (origin unless named), into a local ref of
+      // the caller's choosing: a suggestion's head (`refs/pull/<n>/head`),
+      // which no branch refspec covers, or the person's copy's branch into its
+      // tracking ref. isomorphic-git answers the commit it fetched; the local
+      // ref is written from that.
       fetchRef: (repo, from, into, remote = ORIGIN) =>
         Effect.gen(function* () {
           const last = { current: { phase: "done", loaded: 0 } satisfies Progress };
@@ -373,7 +374,12 @@ const makeWebRemote = (
           );
           const head = fetched.fetchHead;
           if (head === null || head === undefined)
-            return yield* Effect.fail(fail("Rejected", `${from} is not on the shared project`));
+            return yield* Effect.fail(
+              fail(
+                "Rejected",
+                `${from} is not on ${remote === ORIGIN ? "the shared project" : "your copy"}`,
+              ),
+            );
           yield* attempt(() =>
             git.writeRef({ fs, dir: repo.root, ref: into, value: head, force: true }),
           );

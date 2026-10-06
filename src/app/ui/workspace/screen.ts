@@ -9,8 +9,10 @@
  * under, so it is part of the ID while absent from the URL (`routes/_app.tsx`).
  *
  * One answer for the chrome that has to know: `BackToEditor` draws its door
- * inside a project, and `usePanelToggleLeading` puts the panel toggle in the page
- * header of project screens that have no editor toolbar to carry it.
+ * inside a project, `usePanelToggleLeading` puts the panel toggle in the page
+ * header of project screens that have no editor toolbar to carry it, and the
+ * workspace (`routes/_app.tsx`) puts the versions tabs above the page while
+ * the sidebar that normally holds them is hidden.
  */
 
 import { useRouterState } from "@tanstack/solid-router";

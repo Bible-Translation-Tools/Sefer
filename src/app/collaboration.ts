@@ -4,11 +4,16 @@
  * and the Suggestions list.
  *
  * Kept apart from `syncWatch` because the two are asked different things:
- * a sync reading is local (refs already here), and these facts are the
- * network's — whether this account can write to the shared project, the
- * person's newest suggestion, how many wait for an editor. They are asked on
- * the check's schedule (`checkForChanges`), after a send the shared project
- * refused, and after the mode changes; nowhere else.
+ * a sync reading is local (refs already here), and these facts are mostly
+ * the network's — whether this account can write to the shared project, the
+ * person's newest suggestion, how many wait for an editor — with a few local
+ * answers that only mean something beside them (the copy's work, where a send
+ * goes). They are asked on the check's schedule (`checkForChanges`), after a
+ * send the shared project refused, after the mode changes, after the person
+ * signs in or out, after an offer, accept or decline, and when someone opens
+ * a surface that shows them with nothing asked yet (or the Suggestions tab,
+ * which asks every time, so its count and its lists cannot disagree). Never
+ * on a timer and never on boot by itself.
  *
  * Whether someone can write is the network's answer and never a remembered
  * one: it is asked again every time, and a refused send outranks it.

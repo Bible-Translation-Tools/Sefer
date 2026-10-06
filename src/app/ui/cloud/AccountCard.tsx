@@ -1,13 +1,14 @@
 /**
- * Who am I, to the cloud — the first of the sync screen's four questions.
+ * Who am I, to the cloud: the first card of Settings' Cloud section.
  *
  * Signing in is an ACCOUNT action, not a project one, which is why it has its
  * own Card above the project's: the same session serves every project on the
  * device. A build with no Gitea host configured says which variable is
  * missing rather than offering a form that would fail on submit.
  *
- * `SignInForm` is the form alone, so the app bar's cloud popover signs in
- * with the same fields and the same failure line.
+ * `SignInForm` is the form alone, so the app bar's cloud popover — where
+ * signing in and out usually happens — signs in with the same fields and the
+ * same failure line.
  *
  * Sign-in failures render inline, under the form, and never as a toast. The
  * form is where the person is looking, and a toast about a password is gone

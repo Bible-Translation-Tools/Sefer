@@ -87,7 +87,7 @@ export function SyncLine(props: {
             {held().state === "offline"
               ? t("Offline — your saved changes stay on this device until you're back.")
               : held().state === "unauthorized"
-                ? t("Sign in to send to the shared project.")
+                ? t("Sign in to send your changes.")
                 : countsOf(held(), syncWatch.facts(shell.project()?.root)?.plan)}
           </span>
           <Show

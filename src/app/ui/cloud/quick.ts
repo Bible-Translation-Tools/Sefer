@@ -1,7 +1,7 @@
 /**
- * Sync from wherever someone is: the app bar's cloud
- * button and Review's status line both offer the one right move, and this is
- * that move — the same for both, so they cannot disagree.
+ * Sync from wherever someone is: the app bar's cloud button and Review's
+ * status line both offer the one right move, and this is that move — the same
+ * for both, so they cannot disagree.
  *
  * Anything that receives goes through Review ("See the changes"), where every
  * passage is shown before it lands; a send, a check and finishing a stopped
@@ -25,6 +25,11 @@ import { syncWatch } from "../../syncWatch";
 import { toasts } from "../primitives";
 import { sendOutcomeCopy } from "./copy";
 
+/**
+ * `open` is setting sharing up — choosing or publishing a shared project — and
+ * takes a surface without the popover's forms to Settings' Cloud section; the
+ * name is from when it opened `/cloud`.
+ */
 export type QuickAction = "see" | "send" | "check" | "resolve" | "sign-in" | "open";
 
 /** The state's one right button, as a move that can be made from here. */

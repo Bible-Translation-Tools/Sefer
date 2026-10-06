@@ -10,14 +10,16 @@
  * column, not here.) The MODES in the middle — Refine and Key terms — the
  * ways of working on a project's text; with no project open they are there
  * but disabled, so the bar keeps one shape — the empty state's included. A
- * mode joins when it is built, not before. At the end: More, Import (a zip,
- * a folder or a clone, from anywhere), Settings, and Account (disabled until
- * there is an account).
+ * mode joins when it is built, not before. At the end: with a project open,
+ * the cloud (`SyncButton` — where sync is done, in its popover); then More,
+ * Import (a zip, a folder or a clone, from anywhere), Settings, and Account
+ * (disabled until there is an account).
  *
  * Every enabled tile is a place: a navigation lit from the pathname, never a
- * setting. The project-wide screens that used to sit here (findings, history,
- * glyphs, compare, cloud) live in the "More" menu at the end until the bar
- * decides where they belong.
+ * setting — the cloud is the one popover. The project-wide screens that used
+ * to sit here (findings, history, glyphs, compare) live in the "More" menu at
+ * the end until the bar decides where they belong; the cloud screen that was
+ * among them is gone, its work done by the popover and Settings.
  */
 
 import type { JSX } from "@solidjs/web";
