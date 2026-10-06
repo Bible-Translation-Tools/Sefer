@@ -20,7 +20,7 @@
  * reached through a dynamic import, so the zip decoder is fetched by the people
  * who use it and never sits in the first load.
  *
- * Cloning is `cloneRepository` (`src/core/remote/clone.ts`) over the Gitea
+ * Cloning is `cloneArrival(…, "project", …)` (`src/app/arrival.ts`) over the Gitea
  * session the cloud panel already holds — this screen does not log anyone in,
  * it only spends a session that exists.
  */
@@ -35,11 +35,11 @@ import { For, Show, createSignal, onCleanup, untrack } from "solid-js";
 import { lastSegment } from "#core/fileSystem/path";
 import { intakeRepository, type IntakeResult } from "#core/git/intake";
 import { Observability, type Verdict } from "#core/observability";
-import { cloneRepository } from "#core/remote/clone";
 import { Gitea, type RemoteRepo } from "#core/remote/gitea";
 import { remoteVerdict } from "#core/remote/remote";
 import { classify, commit, stage } from "#core/resources/import";
 
+import { announceSourceTexts, arrivalRoot, cloneArrival } from "../../arrival";
 import { APP_AUTHOR } from "../../author";
 import { registerCommand } from "../../commands";
 import { describe, reasonOf, remoteReasonOf } from "../../describe";
@@ -215,6 +215,7 @@ export function ImportHub(props: {
       // this device knows a new one exists — before the list is told to
       // re-read, so the row it draws is the one just written.
       await run(rememberProject(services.projectsRoot, into, undefined));
+      void announceSourceTexts(services, into);
       operation.end("passed", { "import.phase": "complete" });
       props.onImported?.();
     })().catch((cause: unknown) => {
@@ -331,6 +332,7 @@ export function ImportHub(props: {
       // this device knows a new one exists — before the list is told to
       // re-read, so the row it draws is the one just written.
       await run(rememberProject(services.projectsRoot, into, undefined));
+      void announceSourceTexts(services, into);
       operation.end("passed", { "import.phase": "complete" });
       props.onImported?.();
     })().catch((cause: unknown) => {
@@ -370,7 +372,7 @@ export function ImportHub(props: {
   const clone = (url: string): void => {
     if (url.trim() === "") return;
     const name = lastSegment(url.replace(/\.git$/u, ""));
-    const into = `${services.projectsRoot}/${name}`;
+    const into = arrivalRoot(services, "project", url);
     setCloneOpen(false);
     const toast = toasts.progress({ title: t("Cloning {name}", { name }) });
     running(t("Clone from cloud"), "commit");
@@ -398,7 +400,7 @@ export function ImportHub(props: {
     };
 
     void (async () => {
-      const cloned = await run(cloneRepository(url, into), "remote.clone");
+      const cloned = await run(cloneArrival(services, "project", url), "remote.clone");
       operation.attr({
         "remote.progress.phase": cloned.progress.phase,
         "remote.progress.loaded": cloned.progress.loaded,
@@ -406,9 +408,8 @@ export function ImportHub(props: {
           ? {}
           : { "remote.progress.total": cloned.progress.total }),
       });
-      phase = "register";
-      await run(rememberProject(services.projectsRoot, into, undefined), "import.register");
       end("passed", { "import.phase": "complete" });
+      void announceSourceTexts(services, into);
       finished(t("Ready"), t("Cloned into {root}.", { root: into }), false);
       toasts.update(toast, { title: t("Cloned {name}", { name }), tone: "success" });
       props.onImported?.();
