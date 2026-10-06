@@ -15,14 +15,7 @@
  */
 
 import type { Commit } from "#core/git/git";
-import {
-  combineMessage,
-  emptyPlan,
-  type CombineReplay,
-  type IncomingPlan,
-  type SyncReading,
-  type SyncState,
-} from "#core/sync";
+import { emptyPlan, type IncomingPlan, type SyncReading, type SyncState } from "#core/sync";
 
 import type { SyncFacts } from "./reading";
 
@@ -177,27 +170,6 @@ export const fixtureStateRequested = (): FixtureName | undefined => {
 };
 
 export const fixtureFacts = (state: FixtureName): SyncFacts => FIXTURES[state];
-
-/**
- * What a combine would join, for the states that offer one.
- *
- * The real answer comes from `previewCombine`, which reads the repository; a
- * fixture has none, and the confirmation dialog has to be reachable without
- * one for the same reason every other card is. These are the books THIS device
- * changed — different from the incoming plan's, which are the shared
- * project's, and that difference is the whole point of the screen.
- */
-export const fixtureReplay = (state: FixtureName): CombineReplay | undefined =>
-  state === "diverged-apart"
-    ? {
-        branch: "main",
-        from: "a1b2c3d4",
-        onto: "c3d4e5f6",
-        paths: ["40-MAT.usfm", "41-MRK.usfm"],
-        taking: ["42-LUK.usfm"],
-        message: combineMessage(3),
-      }
-    : undefined;
 
 /** The whole list, for the dev switcher the screen shows beside the fixture. */
 export const fixtureStates = NAMES;

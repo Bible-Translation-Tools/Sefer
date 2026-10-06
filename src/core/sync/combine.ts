@@ -101,7 +101,7 @@ export type CombineRefusal =
  */
 export type CombineState = "untouched" | "restored" | "recorded" | "stranded";
 
-export class CombineError extends Data.TaggedError("CombineError")<{
+class CombineError extends Data.TaggedError("CombineError")<{
   /** Which rule said no, or `undefined` when a port failed instead. */
   readonly refusal: CombineRefusal | undefined;
   readonly state: CombineState;
@@ -133,7 +133,7 @@ interface CombineSurvey {
 }
 
 /** The combination, once it is allowed: exactly what arrives and what is recorded. */
-export interface CombineReplay {
+interface CombineReplay {
   readonly branch: string;
   /** This device's tip: the decision commit's first parent. */
   readonly from: CommitId;
@@ -151,7 +151,7 @@ type CombineDecision =
   | { readonly ok: false; readonly refusal: CombineRefusal; readonly detail: string };
 
 /** The decision commit's message. Git-facing, so it may say what it means. */
-export const combineMessage = (books: number): string =>
+const combineMessage = (books: number): string =>
   books === 1
     ? "Combined with the shared project: 1 book"
     : `Combined with the shared project: ${books} books`;
@@ -381,23 +381,6 @@ const gather = (
       }),
       classified,
     };
-  });
-
-/**
- * The decision, off what is already in the object database.
- *
- * Reads only, and no network: this is what a screen asks before it puts the
- * question to a person, so the confirmation can name the actual books. It is
- * not the authority — `combine` fetches and asks again, because the cloud may
- * have moved between the dialog opening and the button being pressed.
- */
-export const previewCombine = (
-  project: Project,
-): Effect.Effect<CombineDecision, CombineError, Git | FileSystem.FileSystem | Galley> =>
-  Effect.gen(function* () {
-    const git = yield* Git;
-    const repo = yield* Effect.mapError(git.open(project.root), fromPort("untouched"));
-    return (yield* gather(repo, project, DEFAULT_OVERLAP)).decision;
   });
 
 /**

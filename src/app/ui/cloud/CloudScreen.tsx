@@ -1,84 +1,43 @@
 /**
- * `/cloud` — cloud sync as a translator meets it.
+ * `/cloud` — what is left of the sync screen once sync moved to the app bar.
  *
- * Four cards, in the order someone actually asks the questions: who am I,
- * which shared project is this and where do the two clocks stand, what would
- * arrive if I received it, and what is the one right thing to press now.
+ * Doing sync is the cloud popover's: the state, the clocks, what would
+ * arrive, the one right move, signing in and out. Every receive goes through
+ * Review, which settles a contested or diverged project as well. Settings'
+ * Cloud section holds the account, the shared project and the per-project
+ * switches. What this screen still shows is where the project stands in full,
+ * the incoming plan, suggested changes, and — when the next step is to attach
+ * or publish — the shared-project card.
  *
  * The screen holds no domain state. The session lives in `Credentials`
  * (through `Gitea`), the attachment lives in the repository's own `origin`,
  * and the state is derived fresh from a reading by the pure machine in
  * `src/core/sync` — so a reload, a second window, or the fixture below all
  * show the same truth rather than a copy of it.
- *
- * Nothing transfers on its own. Every state on this page is reached by
- * looking, and every transfer is a button someone pressed. Two of them take
- * two presses: a pull, where the plan card says what would arrive and the
- * confirmation is the second, and a combine, where the first press works out
- * which books keep this device's version and a dialog names them.
  */
 
-import { Effect, Fiber, Stream } from "effect";
 import CloudIcon from "lucide-solid/icons/cloud";
-import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
+import { Show, createEffect, createSignal, onCleanup } from "solid-js";
 
-import { Git } from "#core/git/git";
-import { Observability, type Attrs, type Verdict } from "#core/observability";
-import { Remote, remoteVerdict } from "#core/remote/remote";
-import {
-  combine,
-  CombineError,
-  emptyPlan,
-  previewCombine,
-  receive,
-  ReceiveError,
-  sync,
-  wantsPlan,
-  type CombineReplay,
-  type IncomingPlan,
-  type SyncActionId,
-} from "#core/sync";
+import { emptyPlan, sync, wantsPlan, type IncomingPlan } from "#core/sync";
 
-import { authorOrApp } from "../../author";
-import { describe, remoteReasonOf } from "../../describe";
+import { describe } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import type { Domain } from "../../services";
-import { destination } from "../../syncActions";
 import { syncStatus } from "../../syncStatus";
 import { syncWatch } from "../../syncWatch";
-import { Button, Card, Dialog, EmptyState, PanelHeader, toasts } from "../primitives";
+import { Card, EmptyState, PanelHeader } from "../primitives";
 import { createAccount } from "./account";
-import { AccountCard } from "./AccountCard";
-import { ActionCard } from "./ActionCard";
-import { bookFromPath, combineRefusal, combineTrouble, narrate, receiveRefusal } from "./copy";
 import { DevStateSwitcher } from "./DevStateSwitcher";
-import { fixtureFacts, fixtureReplay, fixtureStateRequested } from "./fixture";
+import { fixtureFacts, fixtureStateRequested } from "./fixture";
 import { IncomingPlanCard } from "./IncomingPlanCard";
 import { ProjectCard } from "./ProjectCard";
 import type { ReadSyncOptions, SyncFacts } from "./reading";
-import { SharedProjectCard, type SharedProjectActions } from "./SharedProjectCard";
+import { SharedProjectCard } from "./SharedProjectCard";
 import { SuggestionsCard } from "./SuggestionsCard";
-import { SyncSettingsCard } from "./SyncSettingsCard";
 
 /** A project's folder name, which is what a person calls it. */
 const projectName = (root: string): string => root.slice(root.lastIndexOf("/") + 1);
-
-/**
- * A combine's failure, as the sentence a translator reads.
- *
- * A refusal names the rule; anything else names where the work is now, which
- * is the only question worth answering when a transfer stopped part-way.
- */
-const explainCombine = (cause: unknown): string | undefined => {
-  if (!(cause instanceof CombineError)) return undefined;
-  return cause.refusal === undefined ? combineTrouble(cause.state) : combineRefusal(cause.refusal);
-};
-
-const explainReceive = (cause: unknown): string | undefined =>
-  cause instanceof ReceiveError && cause.refusal !== undefined
-    ? receiveRefusal(cause.refusal, cause.books)
-    : undefined;
 
 export function CloudScreen() {
   const shell = useShell();
@@ -94,23 +53,7 @@ export function CloudScreen() {
     const root = shell.project()?.root;
     return root === undefined ? undefined : syncWatch.fetchedAt(root);
   };
-  const [busy, setBusy] = createSignal(false, { name: "syncBusy" });
-  /** The shared-project card's own actions, once it is showing. */
-  let shared: SharedProjectActions | undefined;
-  const [phase, setPhase] = createSignal("", { name: "syncPhase" });
   const [problem, setProblem] = createSignal("", { name: "syncProblem" });
-  /** A pull is confirmed against the plan the person actually read. */
-  const [confirming, setConfirming] = createSignal(false, { name: "syncConfirming" });
-  /**
-   * The combine a person is being asked about, or `undefined` when none is.
-   *
-   * It holds the REPLAY rather than a boolean because the question is "these
-   * books keep your version — go ahead?", and a dialog that could not name
-   * them would be asking somebody to agree to something unstated.
-   */
-  const [combining, setCombining] = createSignal<CombineReplay | undefined>(undefined, {
-    name: "syncCombining",
-  });
 
   /**
    * DEV only: `?syncState=diverged` renders the fixture's facts instead of the
@@ -165,8 +108,8 @@ export function CloudScreen() {
    *
    * It is a function rather than five arguments because it is called from two
    * places with opposite tracking rules: inside the effect's compute (where
-   * reading a signal is what subscribes to it) and inside a transfer's
-   * continuation (where it is a deliberate one-shot snapshot). Solid 2 runs an
+   * reading a signal is what subscribes to it) and from the shared-project
+   * card's `onChanged` (a deliberate one-shot snapshot). Solid 2 runs an
    * effect's CALLBACK untracked, so gathering there would both fail to
    * subscribe and trip `STRICT_READ_UNTRACKED`.
    */
@@ -199,262 +142,13 @@ export function CloudScreen() {
   // the same thing, plus the reason to re-run.
   createEffect(ask, load);
 
-  // The progress line. A forked fiber rather than an awaited effect, because
-  // the stream never completes; it is interrupted when the screen unmounts.
-  // The interrupt is registered in the COMPONENT body: Solid 2 runs an effect
-  // callback unowned, so an `onCleanup` in there is never honoured.
-  let progressFiber: Fiber.Fiber<void, unknown> | undefined;
-  onCleanup(() => {
-    if (progressFiber !== undefined) Effect.runFork(Fiber.interrupt(progressFiber));
-  });
-  // The component body IS the mount in Solid 2, so the fork happens here.
-  progressFiber = services.runtime.runFork(
-    Effect.flatMap(Remote, (remote) =>
-      Stream.runForEach(remote.progress(), (progress) =>
-        Effect.sync(() =>
-          setPhase(
-            progress.total === undefined
-              ? t("{phase} {loaded}", { phase: progress.phase, loaded: progress.loaded })
-              : t("{phase} {loaded}/{total}", {
-                  phase: progress.phase,
-                  loaded: progress.loaded,
-                  total: progress.total,
-                }),
-          ),
-        ),
-      ),
-    ),
-  );
-
-  /**
-   * Every transfer, through one place: report the failure by reason (so the
-   * network status learns about it), clear the phase line, and re-read.
-   *
-   * `explain` is how a press with its own vocabulary — Combine — turns its
-   * typed failure into the sentence a translator reads. Returning `undefined`
-   * falls back to the ordinary description.
-   */
-  const transfer = (
-    action: SyncActionId,
-    work: (root: string) => Effect.Effect<unknown, unknown, Domain>,
-    explain?: (cause: unknown) => string | undefined,
-  ): void => {
-    const project = shell.project();
-    if (project === undefined) return;
-    setProblem("");
-    setBusy(true);
-    const operation = services.composition.observability.operation("sync.transfer", {
-      "sync.action": action,
-    });
-    const close = operation.span("sync.transfer", undefined, { "sync.action": action });
-    let settled = false;
-    const finish = (verdict: Verdict, attrs: Attrs): void => {
-      if (settled) return;
-      settled = true;
-      close(attrs);
-      operation.end(verdict, attrs);
-    };
-    void services
-      .run(Effect.provideService(work(project.root), Observability, operation))
-      .then(() => {
-        finish("passed", { "sync.action": action });
-        network.noteSuccess();
-        syncWatch.noteFetched(project.root);
-      })
-      .catch((cause: unknown) => {
-        const reason = remoteReasonOf(cause);
-        if (reason !== undefined) network.noteFailure(reason);
-        // The port's own reason decides it: offline is the world saying no,
-        // not the alarm. A failure with no reason did not come from the port.
-        finish(remoteVerdict(reason), {
-          "sync.action": action,
-          "sync.reason": reason ?? "unknown",
-        });
-        setProblem(explain?.(cause) ?? describe(cause));
-      })
-      // A press's continuation, not a tracked scope: re-running this on a
-      // signal change would re-read the repository on every keystroke.
-      // oxlint-disable-next-line solid/reactivity -- a promise continuation: reads the query once, when the transfer settles
-      .finally(() => {
-        setBusy(false);
-        setPhase("");
-        load(ask());
-      });
-  };
-
-  const fetchOnly = (root: string) =>
-    Effect.gen(function* () {
-      const git = yield* Git;
-      const remote = yield* Remote;
-      // A bare fetch touches no file in the work tree, which is what makes it
-      // the safe thing to run on a "check for changes".
-      return yield* remote.fetch(yield* git.open(root));
-    });
-
-  // A receive moves the Books with the files, so it needs the open project,
-  // not just its folder.
-  const pull = () => {
-    const project = shell.project();
-    if (project === undefined) return Effect.fail(new Error("no project is open"));
-    return Effect.tap(receive({ project }), (received) =>
-      Effect.sync(() => {
-        // What a receive could not finish is said, not left for the next save
-        // to find: a book file that arrived or went (the book set is fixed
-        // while a project is open), and a book whose saved text could not be
-        // read back.
-        if (received.reopen.length > 0)
-          toasts.info({
-            title: t("Reopen the project to see every book"),
-            message: t("{books} arrived or were removed.", {
-              books: received.reopen.map(bookFromPath).join(", "),
-            }),
-          });
-        if (received.unsettled.length > 0)
-          toasts.error({
-            title: t("Some books could not be read back"),
-            message: t("{books}: their text is kept; review before saving.", {
-              books: received.unsettled.join(", "),
-            }),
-            autoClose: false,
-          });
-      }),
-    );
-  };
-
-  const push = (root: string) =>
-    Effect.gen(function* () {
-      const git = yield* Git;
-      const remote = yield* Remote;
-      return yield* remote.push(yield* git.open(root));
-    });
-
-  /**
-   * Resolve: throw away the merge a transfer left half-finished, so the work
-   * tree is HEAD again and the next press is an ordinary one.
-   *
-   * `abortMerge` refuses when nothing is in progress — it is a hard reset
-   * underneath — so pressing this on a healthy project says so rather than
-   * discarding a morning's writing.
-   */
-  const abortMerge = (root: string) =>
-    Effect.gen(function* () {
-      const git = yield* Git;
-      const remote = yield* Remote;
-      return yield* remote.abortMerge(yield* git.open(root));
-    });
-
-  /**
-   * The first of Combine's two presses: work out what WOULD be joined, and
-   * put that to the person.
-   *
-   * The preview is local and asks the shared project nothing — it reads the
-   * object database the last check left behind. `combine` fetches and decides
-   * again for real, so a shared project that moved between this dialog opening
-   * and the second press is caught there rather than trusted from here.
-   */
-  const askToCombine = (): void => {
-    // DEV: a fixture has no repository to preview, and the dialog has to be
-    // reachable without one, like every other card on this screen.
-    const asked = fixtureState();
-    if (import.meta.env.DEV && asked !== undefined) {
-      setCombining(fixtureReplay(asked));
-      return;
-    }
-    const project = shell.project();
-    if (project === undefined) return;
-    setProblem("");
-    setBusy(true);
-    void services
-      .run(previewCombine(project))
-      .then((decision) => {
-        if (decision.ok) setCombining(decision.replay);
-        else setProblem(combineRefusal(decision.refusal));
-      })
-      .catch((cause: unknown) => setProblem(explainCombine(cause) ?? describe(cause)))
-      .finally(() => setBusy(false));
-  };
-
-  /**
-   * The primary button, dispatched by the action the state machine chose.
-   *
-   * `attach` and `publish` are not run from here: choosing a repository needs
-   * a list and a name, which is the Cloud panel's form on the project page.
-   * This screen sends the person there rather than growing a second copy of
-   * it — the sentence under the button says so.
-   */
-  const run = (action: SyncActionId): void => {
-    switch (action) {
-      case "retry":
-        transfer(action, fetchOnly);
-        return;
-      case "push":
-        transfer(action, push);
-        return;
-      case "pull":
-        // Two presses, always: the first opens the confirmation over the plan
-        // the person just read, the second applies it.
-        if (!confirming()) {
-          setConfirming(true);
-          return;
-        }
-        setConfirming(false);
-        transfer(action, pull, explainReceive);
-        return;
-      case "combine":
-        // Two presses, like a receive, and for a stronger reason: this one
-        // records and sends. The first press names the books that keep this
-        // device's version and the ones that arrive; the second runs the
-        // combine in `src/core/sync` — see documentation/architecture/sync.md.
-        if (combining() === undefined) {
-          askToCombine();
-          return;
-        }
-        setCombining(undefined);
-        transfer(
-          action,
-          () => {
-            const project = shell.project();
-            return project === undefined
-              ? Effect.void
-              : Effect.flatMap(
-                  Effect.all([authorOrApp(), Effect.promise(() => destination(services, project))]),
-                  ([author, sendTo]) => combine({ project, author, sendTo }),
-                );
-          },
-          explainCombine,
-        );
-        return;
-      case "resolve":
-        transfer(action, abortMerge);
-        return;
-      // The shared-project card below does these; the button starts it rather
-      // than being a primary action that does nothing.
-      case "attach":
-        shared?.list();
-        return;
-      case "publish":
-        shared?.focusName();
-        return;
-      case "sign-in":
-      case "compare":
-        // Handled by another card or another screen; the narrative says which.
-        return;
-    }
-  };
-
   return (
     <div class="mx-auto flex w-full max-w-3xl flex-col gap-4 p-6" data-screen="cloud">
-      <PanelHeader
-        level={2}
-        title={t("Sync")}
-        subtitle={t("Where your work is, and what happens next.")}
-      />
+      <PanelHeader level={2} title={t("Sync")} subtitle={t("Where your work is.")} />
 
       <Show when={import.meta.env.DEV}>
         <DevStateSwitcher value={fixtureState()} onChange={setFixtureState} />
       </Show>
-
-      <AccountCard account={account} />
 
       <Show
         when={named()}
@@ -478,18 +172,8 @@ export function CloudScreen() {
                   <IncomingPlanCard plan={plan()} />
                 </Show>
 
-                <ActionCard
-                  sync={held()}
-                  plan={plan()}
-                  host={account.host ?? t("the cloud")}
-                  busy={busy()}
-                  phase={phase()}
-                  problem={problem()}
-                  onRun={() => run(held().primary)}
-                />
-
-                <Show when={shell.project()?.root}>
-                  {(root) => <SyncSettingsCard root={root()} />}
+                <Show when={problem() !== ""}>
+                  <p class="text-small break-words text-on-surface-error">{problem()}</p>
                 </Show>
 
                 {/* Suggested changes: one topology among several, one card. */}
@@ -504,84 +188,7 @@ export function CloudScreen() {
                     account={account}
                     root={shell.project()?.root}
                     onChanged={() => load(ask())}
-                    actions={(actions) => (shared = actions)}
                   />
-                </Show>
-
-                <Show when={combining()}>
-                  {(replay) => (
-                    <Dialog
-                      open
-                      onOpenChange={(open) => {
-                        if (!open) setCombining(undefined);
-                      }}
-                      title={t("Combine your work?")}
-                      description={narrate(
-                        "combine",
-                        {
-                          ahead: held().clocks.local.unshared,
-                          behind: held().clocks.shared.unshared,
-                          contested: plan().contested.length,
-                        },
-                        account.host ?? t("the cloud"),
-                      )}
-                      footer={
-                        <>
-                          <Button onClick={() => setCombining(undefined)}>{t("Not now")}</Button>
-                          <Button
-                            variant="primary"
-                            onClick={() => run("combine")}
-                            data-cloud-confirm="combine"
-                          >
-                            {t("Yes, combine them")}
-                          </Button>
-                        </>
-                      }
-                    >
-                      <div class="space-y-3" data-cloud-dialog="combine">
-                        <p>{t("These books keep the version on this device:")}</p>
-                        <ul class="list-disc space-y-1 pl-5" data-cloud="combine-books">
-                          <For each={replay().paths}>
-                            {(path) => <li data-cloud-book={path}>{bookFromPath(path)}</li>}
-                          </For>
-                        </ul>
-                        <Show when={replay().taking.length > 0}>
-                          <p>{t("These arrive from the shared project:")}</p>
-                          <ul class="list-disc space-y-1 pl-5" data-cloud="combine-taking">
-                            <For each={replay().taking}>
-                              {(path) => <li data-cloud-book={path}>{bookFromPath(path)}</li>}
-                            </For>
-                          </ul>
-                        </Show>
-                        <p class="text-on-surface-secondary">
-                          {t(
-                            "No scripture text is merged line by line, and if recording goes wrong this device is put back exactly as it is now.",
-                          )}
-                        </p>
-                      </div>
-                    </Dialog>
-                  )}
-                </Show>
-
-                <Show when={confirming()}>
-                  <Card class="space-y-3" data-cloud-card="confirm">
-                    <PanelHeader level={3} title={t("Receive these updates?")} />
-                    <p class="text-small text-on-surface-secondary">
-                      {t(
-                        "The versions listed above will be applied to this device. Nothing you have written is discarded — anything you both changed was left out and is waiting in Compare.",
-                      )}
-                    </p>
-                    <div class="flex gap-2">
-                      <Button
-                        variant="primary"
-                        onClick={() => run("pull")}
-                        data-cloud-confirm="pull"
-                      >
-                        {t("Yes, receive them")}
-                      </Button>
-                      <Button onClick={() => setConfirming(false)}>{t("Not now")}</Button>
-                    </div>
-                  </Card>
                 </Show>
               </>
             )}

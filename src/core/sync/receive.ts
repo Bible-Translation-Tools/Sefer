@@ -62,7 +62,7 @@ export type ReceiveRefusal =
   | "unrecorded"
   | "moved";
 
-export class ReceiveError extends Data.TaggedError("ReceiveError")<{
+class ReceiveError extends Data.TaggedError("ReceiveError")<{
   /** Which rule said no, or `undefined` when a port failed instead. */
   readonly refusal: ReceiveRefusal | undefined;
   readonly description: string;

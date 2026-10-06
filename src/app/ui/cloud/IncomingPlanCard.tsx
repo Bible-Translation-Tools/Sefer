@@ -27,7 +27,7 @@ import { chapterList, planOverlap, planSummary, plural } from "./copy";
  * book in its URL (a picked source has no address), so the link opens the
  * screen and the reader picks the book there.
  */
-export const reviewHref = (slug: string): string =>
+const reviewHref = (slug: string): string =>
   `/project/${encodeURIComponent(slug)}/review?against=shared`;
 
 function BookRow(props: { readonly book: IncomingBook; readonly links: boolean }) {

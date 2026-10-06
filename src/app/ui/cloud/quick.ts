@@ -3,18 +3,22 @@
  * button and Review's status line both offer the one right move, and this is
  * that move — the same for both, so they cannot disagree.
  *
- * Fewer moves than `/cloud` has, on purpose. Anything that receives goes
- * through Review ("See the changes"), where every passage is shown before it
- * lands; a send and a check are one press; everything else — signing in,
- * attaching, finishing a stopped transfer — is `/cloud`'s, and the button says
- * so by taking you there.
+ * Anything that receives goes through Review ("See the changes"), where every
+ * passage is shown before it lands; a send, a check and finishing a stopped
+ * transfer are one press; signing in is the popover's own form (a surface
+ * without one is taken to Settings); attaching and publishing are still
+ * `/cloud`'s, and the button says so by taking you there.
  */
 
 import { useNavigate } from "@tanstack/solid-router";
+import { Effect } from "effect";
 import { createSignal, type Accessor } from "solid-js";
 
+import { Git } from "#core/git/git";
+import { Remote } from "#core/remote/remote";
 import type { Sync } from "#core/sync";
 
+import { describe } from "../../describe";
 import { t } from "../../i18n";
 import type { Shell } from "../../ProjectContext";
 import { checkForChanges, sendNow } from "../../syncActions";
@@ -22,7 +26,7 @@ import { syncWatch } from "../../syncWatch";
 import { toasts } from "../primitives";
 import { sendOutcomeCopy } from "./copy";
 
-export type QuickAction = "see" | "send" | "check" | "open";
+export type QuickAction = "see" | "send" | "check" | "resolve" | "sign-in" | "open";
 
 /** The state's one right button, as a move that can be made from here. */
 export const quickActionOf = (sync: Sync): QuickAction => {
@@ -35,10 +39,12 @@ export const quickActionOf = (sync: Sync): QuickAction => {
       return "send";
     case "retry":
       return "check";
+    case "resolve":
+      return "resolve";
     case "sign-in":
+      return "sign-in";
     case "attach":
     case "publish":
-    case "resolve":
       return "open";
   }
 };
@@ -51,6 +57,10 @@ export const quickLabel = (action: QuickAction): string => {
       return t("Send my changes");
     case "check":
       return t("Check for changes");
+    case "resolve":
+      return t("Finish the transfer");
+    case "sign-in":
+      return t("Sign in");
     case "open":
       return t("Open Sync");
   }
@@ -99,7 +109,7 @@ export const shareableLink = (origin: string): string => {
 export interface QuickSync {
   readonly sync: Accessor<Sync | undefined>;
   /** Which move is running now, or "" when none is. */
-  readonly busy: Accessor<"" | "send" | "check">;
+  readonly busy: Accessor<"" | "send" | "check" | "resolve">;
   readonly run: (action: QuickAction) => void;
 }
 
@@ -110,7 +120,9 @@ export const createQuickSync = (
 ): QuickSync => {
   const navigate = useNavigate();
   const { services } = shell;
-  const [busy, setBusy] = createSignal<"" | "send" | "check">("", { name: "quickSyncBusy" });
+  const [busy, setBusy] = createSignal<"" | "send" | "check" | "resolve">("", {
+    name: "quickSyncBusy",
+  });
   const sync = (): Sync | undefined => syncWatch.sync(shell.project()?.root);
 
   const run = (action: QuickAction): void => {
@@ -128,6 +140,30 @@ export const createQuickSync = (
         return;
       case "open":
         void navigate({ to: "/project/$slug/cloud", params: { slug: shell.slug() }, search: {} });
+        return;
+      case "sign-in":
+        void navigate({ to: "/settings" });
+        return;
+      case "resolve":
+        // A hard reset underneath, which is why `abortMerge` refuses when no
+        // merge is in progress: on a clean repository it would discard unsaved
+        // work instead of undoing a transfer. Only `conflicted` offers it.
+        setBusy("resolve");
+        void services
+          .run(
+            Effect.gen(function* () {
+              const git = yield* Git;
+              const remote = yield* Remote;
+              return yield* remote.abortMerge(yield* git.open(project.root));
+            }),
+          )
+          .catch((cause: unknown) =>
+            toasts.error({ title: t("Could not finish the transfer"), message: describe(cause) }),
+          )
+          .finally(() => {
+            setBusy("");
+            void syncWatch.refresh(services, project).catch(() => undefined);
+          });
         return;
       case "check":
         setBusy("check");

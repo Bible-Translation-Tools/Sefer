@@ -47,7 +47,7 @@ import { syncWatch } from "./syncWatch";
  * pointed anywhere but `origin`; return "origin" here and the suggested-changes
  * flow is gone from every send.
  */
-export const destination = (services: Services, project: Project): Promise<string> =>
+const destination = (services: Services, project: Project): Promise<string> =>
   sendingTo(services, project);
 
 type CheckResult = "up-to-date" | "fetched" | "detached" | "no-branch" | "no-repository";

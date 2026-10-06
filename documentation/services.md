@@ -512,7 +512,7 @@ Clone (the newest version only unless the caller asks for all; desktop backfills
 
 ### Overview
 
-The `/cloud` screen. It reads the two clocks and sorts the project into one of ten states, plans what a Receive would change from change facts and one overlap policy, receives by fast-forward, and Combines as one decision commit; a contested book is settled in Review against the shared project. The check on open and send on save run per project, on by default. Scripture text is never merged automatically. One reading for the whole application (`syncWatch`) feeds `/cloud`, the app bar's cloud and its popover, Review's sync line and Save's receipt; counts are verses and books, never versions. `src/core/sync`, `app/ui/cloud`. → [sync](architecture/sync.md)
+The app bar's cloud popover (state, clocks, the one right move, sign in and out), Settings' Cloud section (account, shared project, the per-project switches), and what is left of `/cloud`. It reads the two clocks and sorts the project into one of ten states, plans what a Receive would change from change facts and one overlap policy, receives by fast-forward, and Combines as one decision commit; a contested book is settled in Review against the shared project. The check on open and send on save run per project, on by default. Scripture text is never merged automatically. One reading for the whole application (`syncWatch`) feeds the app bar's cloud and its popover, `/cloud`, Review's sync line and Save's receipt; counts are verses and books, never versions. `src/core/sync`, `app/ui/cloud`. → [sync](architecture/sync.md)
 
 ### Constraints and known bugs
 

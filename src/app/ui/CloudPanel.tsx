@@ -1,11 +1,12 @@
 /**
- * The cloud panel: the account and the ATTACHMENT half of remote sync, side
- * by side — `AccountCard` and `SharedProjectCard`.
+ * Settings' Cloud section: the account, the ATTACHMENT half of remote sync,
+ * and the open project's sync switches — `AccountCard`, `SharedProjectCard`
+ * and `SyncSettingsCard`.
  *
- * `/cloud` is the sync screen, and it owns the state, the two clocks, the
- * incoming plan and the one right button. What is here is the part that
- * belongs beside a project rather than on a screen of its own: choosing WHICH
- * shared project this folder is, and creating one when there is none.
+ * Doing sync — the state, the clocks, what would arrive, the one right move —
+ * is the app bar's cloud popover. What is here is configuration: choosing
+ * WHICH shared project this folder is, creating one when there is none, and
+ * what this project may do on open and on save.
  *
  * The account half is not duplicated. `createAccount` is the shared state and
  * `AccountCard` the shared component (`src/app/ui/cloud/account.ts` and
@@ -18,8 +19,12 @@
  * second panel shows the same truth rather than a copy of it.
  */
 
+import { Show } from "solid-js";
+
+import { t } from "../i18n";
 import { useShell } from "../ProjectContext";
-import { AccountCard, createAccount, SharedProjectCard } from "./cloud";
+import { AccountCard, createAccount, SharedProjectCard, SyncSettingsCard } from "./cloud";
+import { PanelHeader } from "./primitives";
 
 /**
  * `root` is the project this panel attaches and publishes. Optional, because
@@ -30,9 +35,11 @@ import { AccountCard, createAccount, SharedProjectCard } from "./cloud";
 export function CloudPanel(props: { readonly root?: string | undefined }) {
   const account = createAccount(useShell());
   return (
-    <div class="space-y-3" data-panel="cloud">
+    <section class="space-y-3" data-panel="cloud">
+      <PanelHeader level={2} title={t("Cloud")} />
       <AccountCard account={account} />
       <SharedProjectCard account={account} root={props.root} />
-    </div>
+      <Show when={props.root}>{(root) => <SyncSettingsCard root={root()} />}</Show>
+    </section>
   );
 }

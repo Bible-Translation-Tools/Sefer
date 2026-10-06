@@ -290,10 +290,11 @@ says where the repository is:
 - `stranded` — the commit failed and putting the files back failed too. The only state that needs a
   person, which is why it has a word rather than a stack trace.
 
-**Two presses.** The first runs `previewCombine` — reads only, no network — and puts the books into
-a confirmation dialog. The second runs `combine`, which fetches and decides again, so a shared
-project that moved while the dialog was open is caught by the program rather than trusted from the
-screen.
+**Reached through Review.** Combine runs from Review's Record (`settleWithShared`, below), never
+from a button of its own: `combine` fetches and decides again, so a shared project that moved while
+the review was open is caught by the program rather than trusted from the screen. (Until 2026-10-06
+`/cloud` had its own two-press Combine, a `previewCombine` dialog and then the combine; the popover
+already sent every incoming state to Review, so it went with the card that held it.)
 
 **One survey, two callers.** `survey.ts` lives in core because the screen's reading and the combine
 ask the same question, and if they computed "contested" separately the screen could offer a move the
@@ -358,10 +359,12 @@ a send touches the network.
 
 The cloud button is quiet when both sides agree, tinted when work is waiting to be sent, and tinted
 with a "!" when something waits on a person (versions to receive or review, a refused send, a
-sign-in, a stopped transfer). A project attached to nothing is never the alarm. Its popover is
-`/cloud` in brief: the state, the two clocks, the incoming changes, the one right move, and the shared
-project's link to copy. Anything that receives goes through Review ("See the changes"); `/cloud` keeps
-the full story and the rarer moves.
+sign-in, a stopped transfer). A project attached to nothing is never the alarm. Its popover is where
+sync is done: the state, the two clocks, the incoming changes, the one right move, the shared
+project's link to copy, and the account — signing in and out (`SignInForm`, the same fields and
+failure line as Settings' account card). Anything that receives goes through Review ("See the
+changes"); "Finish the transfer" (`conflicted`) runs `Remote.abortMerge` from the popover; attach and
+publish are still `/cloud`'s.
 
 Neither runs with no network interface up, and both go through the ports' lanes, so a check and a
 send cannot race. A network failure the last transfer met does NOT stop them
@@ -372,7 +375,7 @@ waited for a success before trying would never see one.
 
 Four per project, stored on this device keyed by project root and never in the repository — whether
 this laptop checks on open is not a fact about the translation (`src/app/syncSettings.ts`, shown on
-`/cloud` by `SyncSettingsCard`):
+Settings' Cloud section by `SyncSettingsCard`, while a project is open):
 
 | Setting                         | Default | What it does                                        |
 | ------------------------------- | ------- | --------------------------------------------------- |
@@ -409,26 +412,25 @@ is waiting, the button says "Check for changes", and nothing suggests anything w
 
 ## The screen
 
-`/project/$slug/cloud` (`src/routes/_app/project/$slug/cloud.tsx` → `src/app/ui/cloud/CloudScreen.tsx`), inside a `ShellGate`,
-cards in the order someone asks the questions:
+`/project/$slug/cloud` (`src/routes/_app/project/$slug/cloud.tsx` → `src/app/ui/cloud/CloudScreen.tsx`), inside a `ShellGate`.
+Since 2026-10-06 it is what is left once sync moved into the app bar's popover and its configuration
+into Settings' Cloud section (`CloudPanel`: account, shared project, the four switches). Its account
+card, its "What happens next" card with the one primary button, and its settings card are gone. What
+remains:
 
-1. **Account** — sign in and out. An ACCOUNT action, not a project one: the same session serves every
-   project on the device. Failures render inline under the form, never as a toast, because the form
-   is where the person is looking.
-2. **Project** — the shared project it belongs to, the two clocks as two stat lines (the time is the
+1. **Project** — the shared project it belongs to, the two clocks as two stat lines (the time is the
    coloured word), and the headline and paragraph from the glossary. No chip: the headline takes the
    state's colour when it wants something from you.
-3. **Incoming changes** — the incoming plan, shown only when something is coming, in verses: "There
+2. **Incoming changes** — the incoming plan, shown only when something is coming, in verses: "There
    are changes to 3 verses in 2 books. You also changed 1 of those verses." Then one plain line per
    book; only a verse you both changed is coloured. Verses are the engine's units from the same
    facts the policy reads (`IncomingBook.verses`, `versesAlsoHere`); a change it could not place
    falls back to chapters.
-4. **What happens next** — the one primary button, and one sentence under it saying what will move
-   and what will not.
-5. **Sync settings** — the four above, and the author name.
-6. **Suggested changes** — only when they apply: your own copy and "Suggest my changes", "Make my
+3. **Suggested changes** — only when they apply: your own copy and "Suggest my changes", "Make my
    own copy" for an account that cannot write, or the waiting suggestions for one that can
    ([git](git.md), Suggested changes).
+4. **Shared project** — when the next step is attach or publish (the popover's "Open Sync" lands
+   here for those two).
 
 The screen holds no domain state. The session lives in `Credentials` (through `Gitea`), the
 attachment lives in the repository's own `origin`, the state is derived fresh by the pure machine —
@@ -458,13 +460,11 @@ A token revoked on the server still reads as a session here until the next call 
 `Unauthorized`; the account card surfaces that, and a boot-time validation request is deliberately
 not made.
 
-`createAccount` (`src/app/ui/cloud/account.ts`) and `AccountCard` (`src/app/ui/cloud/AccountCard.tsx`) are shared with
-`CloudPanel` on `/settings`, and so is the attach-and-publish half, `SharedProjectCard`
-(`src/app/ui/cloud/SharedProjectCard.tsx`). `/cloud` shows that card whenever the next step is attach or
-publish, and its primary button drives it: listing the repositories, or putting the caret in the new
-name. An attach or publish re-reads the sync state. (Until 2026-09-25 the card was only on `/settings`, so
-"Choose a shared project" on `/cloud` did nothing.) The surfaces cannot disagree about what "signed in"
-means because there is one implementation of it.
+`createAccount` (`src/app/ui/cloud/account.ts`) is the one implementation of "signed in": the popover
+and `CloudPanel` on `/settings` each make one, and `SignInForm` and `AccountCard`
+(`src/app/ui/cloud/AccountCard.tsx`) draw it. The attach-and-publish half, `SharedProjectCard`
+(`src/app/ui/cloud/SharedProjectCard.tsx`), is on `/settings` and on `/cloud` whenever the next step is
+attach or publish. An attach or publish re-reads the sync state.
 
 ## What the ports grew
 
@@ -488,5 +488,4 @@ they touched the same one it is Compare. A list with only `diverged` would never
 
 The fixture lives in `src/app/ui/cloud/fixture.ts`, is reached only inside an `import.meta.env.DEV`
 branch, and changes nothing about the application's composition — `src/app/services.ts` does not
-know it exists. `diverged-apart` also carries a `CombineReplay`, so the confirmation dialog is
-reachable with no repository the way every other card is; the real one comes from `previewCombine`.
+know it exists.

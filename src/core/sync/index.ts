@@ -16,23 +16,14 @@ export {
   wantsPlan,
   type Clock,
   type Sync,
-  type SyncActionId,
   type SyncReading,
   type SyncState,
 } from "./state";
 
 export { FRONT_MATTER, emptyPlan, type IncomingBook, type IncomingPlan } from "./plan";
 
-export {
-  combine,
-  CombineError,
-  combineMessage,
-  previewCombine,
-  type CombineRefusal,
-  type CombineReplay,
-  type CombineState,
-} from "./combine";
+export { combine, type CombineRefusal, type CombineState } from "./combine";
 
 export { mergeBase, surveyIncoming } from "./survey";
 
-export { receive, ReceiveError, type ReceiveRefusal } from "./receive";
+export { receive, type ReceiveRefusal } from "./receive";

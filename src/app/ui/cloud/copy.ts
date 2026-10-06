@@ -16,8 +16,7 @@
  *    diverged and conflicted all end by saying the work is still here. A
  *    translator's first fear is losing a morning's work, and answering it
  *    costs one clause.
- * 3. **Every action says what it will do, in one sentence, before it runs.**
- *    That sentence is `narrate`, it sits under the button, and it names what
+ * 3. **Every action says what it will do before it runs**, and names what
  *    moves and what does not.
  */
 
@@ -26,7 +25,6 @@ import type {
   CombineState,
   IncomingPlan,
   ReceiveRefusal,
-  SyncActionId,
   SyncState,
 } from "#core/sync";
 import { FRONT_MATTER } from "#core/sync";
@@ -34,7 +32,6 @@ import { FRONT_MATTER } from "#core/sync";
 import { t, type Params } from "../../i18n";
 import type { SendOutcome } from "../../syncActions";
 import type { BadgeTone } from "../primitives";
-import { bookName } from "../workspace/books";
 
 /**
  * One or many, as two whole messages rather than an "(s)".
@@ -176,77 +173,6 @@ export const stateCopy = (state: SyncState, context: StateContext = {}): StateCo
   }
 };
 
-export const actionLabel = (action: SyncActionId): string => {
-  switch (action) {
-    case "sign-in":
-      return t("Sign in");
-    case "attach":
-      return t("Choose a shared project");
-    case "publish":
-      return t("Publish this project");
-    case "pull":
-      return t("Receive updates");
-    case "push":
-      return t("Send my changes");
-    case "combine":
-      return t("Combine");
-    case "compare":
-      return t("Compare the changes");
-    case "resolve":
-      return t("Finish the transfer");
-    case "retry":
-      return t("Check for changes");
-  }
-};
-
-/**
- * The sentence under the button: what this press will do, before it does it.
- *
- * Specific about what moves and what does not — a vague promise is what makes
- * people afraid to press a sync button — and never a count of versions, which
- * reads as how many times you will have to compare.
- */
-export const narrate = (
-  action: SyncActionId,
-  counts: { readonly ahead: number; readonly behind: number; readonly contested: number },
-  host: string,
-): string => {
-  switch (action) {
-    case "sign-in":
-      return t("Signs you in to {host}. Nothing is sent or received until you ask for it.", {
-        host,
-      });
-    case "attach":
-      return t("Records which shared project this one belongs to. Nothing is transferred yet.");
-    // No version counts: whatever it took either side to get there, what
-    // moves is the newest text, compared once (`incomingWords`).
-    case "publish":
-      return t("Creates the project online and sends your work. Nothing here changes.");
-    case "pull":
-      return t(
-        "Applies the shared project's changes to this device. You see the plan first, and nothing is applied until you confirm it.",
-      );
-    case "push":
-      return t("Sends your saved changes to the shared project. Nothing on this device changes.");
-    case "combine":
-      // The promise the move keeps: both sides' work is kept, and everything
-      // up to the send is local.
-      return t(
-        "Your changes and the shared project's are both kept, joined by one new version. Nothing in the shared project changes until it is sent.",
-      );
-    case "compare":
-      return plural(
-        counts.contested,
-        "Opens the book you both changed, side by side, so you decide what to keep. Nothing changes until you do.",
-        "Opens the {count} books you both changed, side by side, so you decide what to keep. Nothing changes until you do.",
-      );
-    case "resolve":
-      return t("Finishes the transfer that stopped. Your text is untouched until you choose.");
-    case "retry":
-      return t("Asks the shared project what it has. Nothing is sent and nothing is applied.");
-  }
-};
-
 /** "the front matter", "chapter 3" — one chapter, as a person names it. */
 const chapterLabel = (chapter: number): string =>
   chapter === FRONT_MATTER ? t("the front matter") : t("chapter {number}", { number: chapter });
@@ -310,20 +236,6 @@ export const planOverlap = (
     ),
     mine: true,
   };
-};
-
-/**
- * A book's name from the file that holds it — "41-MRK.usfm" → "Mark".
- *
- * Combine names the books it is about to join before it reads a byte of
- * them, so there is no `\id` marker to go on yet; the file name is what a
- * project has. An unrecognised stem falls through `bookName` unchanged, which
- * shows the file rather than inventing a book.
- */
-export const bookFromPath = (path: string): string => {
-  const file = path.slice(path.lastIndexOf("/") + 1);
-  const stem = file.replace(/\.[^.]*$/u, "");
-  return bookName(stem.replace(/^\d+[-_]?/u, "").toUpperCase());
 };
 
 /**

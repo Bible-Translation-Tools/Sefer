@@ -9,9 +9,10 @@
  * review, a send that was refused, a sign-in. Offline is never the alarm: the
  * work is on disk, and editing goes on.
  *
- * The popover is `/cloud` in brief: the state in a sentence, the two clocks,
- * what would arrive, the one right move, and the link to hand a teammate.
- * `/cloud` is still where the full story and the rarer moves live.
+ * The popover is where sync is done: the state in a sentence, the two clocks,
+ * what would arrive, the one right move, the link to hand a teammate, and the
+ * account — signing in and out happen here. `/cloud` keeps only attaching and
+ * publishing, and suggested changes; the per-project switches are in Settings.
  */
 
 import Cloud from "lucide-solid/icons/cloud";
@@ -32,6 +33,8 @@ import { syncStatus } from "../../syncStatus";
 import { syncWatch } from "../../syncWatch";
 import { ago } from "../panels/format";
 import { Button, IconButton, Input, Popover, cx, toasts } from "../primitives";
+import { createAccount } from "./account";
+import { SignInForm } from "./AccountCard";
 import { stateCopy } from "./copy";
 import { PlanBooks } from "./IncomingPlanCard";
 import { SyncClocks, toneText } from "./ProjectCard";
@@ -62,6 +65,7 @@ export function SyncButton() {
   const shell = useShell();
   const { services } = shell;
   const quick = createQuickSync(shell);
+  const account = createAccount(shell);
   const [open, setOpen] = createSignal(false, { name: "syncButtonOpen" });
 
   const sync = quick.sync;
@@ -87,10 +91,10 @@ export function SyncButton() {
     return root === undefined ? undefined : syncWatch.fetchedAt(root);
   };
 
-  // Coming back online, or going offline, changes the answer without anything
-  // being read: take the reading again so the glyph says so.
+  // Coming back online, going offline, or signing in or out changes the answer
+  // without anything being read: take the reading again so the glyph says so.
   createEffect(
-    () => syncStatus.online(),
+    () => [syncStatus.online(), account.session()?.username],
     () => {
       const project = shell.project();
       if (project !== undefined) void syncWatch.refresh(services, project).catch(() => undefined);
@@ -185,15 +189,18 @@ export function SyncButton() {
               </Show>
 
               <div class="flex flex-wrap items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="primary"
-                  data-sync-quick={quickActionOf(held())}
-                  loading={quick.busy() !== ""}
-                  onClick={() => run(quickActionOf(held()))}
-                >
-                  {quickLabel(quickActionOf(held()))}
-                </Button>
+                {/* Signing in is the form below, not a button that goes elsewhere. */}
+                <Show when={quickActionOf(held()) !== "sign-in"}>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    data-sync-quick={quickActionOf(held())}
+                    loading={quick.busy() !== ""}
+                    onClick={() => run(quickActionOf(held()))}
+                  >
+                    {quickLabel(quickActionOf(held()))}
+                  </Button>
+                </Show>
                 <Show when={quickActionOf(held()) !== "open"}>
                   <Button size="sm" variant="tertiary" onClick={() => run("open")}>
                     {t("Open Sync")}
@@ -245,6 +252,33 @@ export function SyncButton() {
                       </Button>
                     </div>
                   </details>
+                )}
+              </Show>
+            </div>
+          )}
+        </Show>
+
+        <Show when={account.host}>
+          {(host) => (
+            <div class="mt-4 border-t border-surface-border pt-3" data-sync-account>
+              <Show
+                when={account.session()}
+                fallback={<SignInForm account={account} host={host()} />}
+              >
+                {(held) => (
+                  <div class="flex items-center gap-2">
+                    <p class="min-w-0 flex-1 text-small break-words text-on-surface-secondary">
+                      {t("Signed in to {host} as {user}.", { host: host(), user: held().username })}
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="tertiary"
+                      onClick={account.signOut}
+                      disabled={account.busy()}
+                    >
+                      {t("Sign out")}
+                    </Button>
+                  </div>
                 )}
               </Show>
             </div>

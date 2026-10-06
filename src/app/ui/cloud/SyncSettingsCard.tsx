@@ -1,8 +1,9 @@
 /**
- * This project's four sync settings, on the screen about sharing it.
+ * This project's four sync settings, in Settings' Cloud section.
  *
  * Per project and stored on this device (`src/app/syncSettings.ts`), so they
- * live here rather than in the global settings form. The two that reach the
+ * are their own card rather than rows of the global settings form, and they
+ * show only while a project is open. The two that reach the
  * network are on by default; the card says what each one does in a sentence,
  * because a translator deciding whether Sefer may send their work is owed the
  * consequence, not a key name.
