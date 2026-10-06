@@ -9,6 +9,7 @@
  * asks which project it should suggest to.
  */
 
+import type { JSX } from "@solidjs/web";
 import { Show, createSignal } from "solid-js";
 
 import { collaboration } from "../../collaboration";
@@ -88,12 +89,24 @@ export function CollabModeCard() {
     });
   };
 
+  /**
+   * The way this person CAN work. Someone who cannot write to the shared
+   * project works in their own copy whatever was stored, so that option shows
+   * as theirs — with the button that makes the copy, until it exists — rather
+   * than the stored "shared" showing as chosen beside why it cannot be.
+   */
+  const effective = (): "shared" | "copy" | undefined =>
+    facts()?.canWrite === false ? "copy" : facts()?.mode;
+  /** Their way of working is the copy, and the copy is not made yet. */
+  const copyToMake = (): boolean => facts()?.canWrite === false && facts()?.mode === "shared";
+
   const option = (
     mode: "shared" | "copy",
     title: string,
     detail: string,
     onChoose: () => void,
     blocked: string | undefined,
+    extra?: () => JSX.Element,
   ) => (
     <label
       class="flex items-start gap-3 rounded-md border border-surface-border p-3"
@@ -103,7 +116,7 @@ export function CollabModeCard() {
         type="radio"
         name="collab-mode"
         class="mt-1"
-        checked={facts()?.mode === mode}
+        checked={effective() === mode}
         disabled={busy() || blocked !== undefined || facts() === undefined}
         onChange={(event) => {
           // The mode changes when the move has happened, not when clicked: the
@@ -118,6 +131,7 @@ export function CollabModeCard() {
         <Show when={blocked}>
           {(why) => <span class="block text-smallest text-on-surface-tertiary">{why()}</span>}
         </Show>
+        {extra?.()}
       </span>
     </label>
   );
@@ -156,6 +170,18 @@ export function CollabModeCard() {
             copy,
             // Not known means nobody is signed in: a copy is made by an account.
             facts()?.canWrite === undefined ? t("Sign in to choose this.") : undefined,
+            () => (
+              <Show when={copyToMake()}>
+                <span class="flex items-center gap-2 pt-2">
+                  <Button size="sm" variant="primary" loading={busy()} onClick={copy}>
+                    {t("Work in my own copy")}
+                  </Button>
+                  <span class="text-smallest text-on-surface-tertiary">
+                    {t("Your copy is made on the shared project's server.")}
+                  </span>
+                </span>
+              </Show>
+            ),
           )}
         </div>
       </Show>

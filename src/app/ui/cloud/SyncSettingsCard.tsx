@@ -29,7 +29,8 @@ const ROWS: readonly {
   {
     key: "sendOnSave",
     label: "Send my changes on save",
-    detail: "When you save, send your changes to the shared project.",
+    detail:
+      "When you save, send your changes — to the shared project, or to your copy if you work in one.",
   },
   {
     key: "skipReviewMine",

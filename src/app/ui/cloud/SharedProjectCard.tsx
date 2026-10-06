@@ -149,6 +149,73 @@ export function SharedProjectCard(props: {
     });
   };
 
+  /** The shared project this one is attached to, as a person reads it, when it is. */
+  const attachedTo = (): string | undefined => {
+    const origin = syncWatch.sync(shell.project()?.root)?.reading.origin;
+    return origin === undefined
+      ? undefined
+      : origin
+          .replace(/\.git$/u, "")
+          .split("/")
+          .slice(-2)
+          .join("/");
+  };
+
+  // Choosing or creating a shared project. Up front when there is none;
+  // behind "Change shared project…" when there is, because a click here moves
+  // where this project sends — not something to offer as a first button.
+  const controls = () => (
+    <>
+      <div class="flex flex-wrap items-center gap-2">
+        <Button onClick={listRepos} disabled={account.busy()}>
+          {t("Choose a shared project…")}
+        </Button>
+      </div>
+
+      <Show when={repos().length > 0}>
+        <ul class="flex flex-col gap-1" data-repos={repos().length}>
+          <For each={repos()}>
+            {(repo) => (
+              <li
+                class="flex items-center gap-3 rounded-md border border-surface-border px-3 py-2"
+                data-repo={repo.fullName}
+              >
+                <strong class="text-small">{repo.fullName}</strong>
+                <Button
+                  size="sm"
+                  class="ms-auto"
+                  onClick={() => attach(repo)}
+                  disabled={account.busy()}
+                >
+                  {t("Attach")}
+                </Button>
+              </li>
+            )}
+          </For>
+        </ul>
+      </Show>
+
+      <form
+        class="flex flex-wrap items-center gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          publish();
+        }}
+      >
+        <Input
+          type="text"
+          wrapperClass="w-64"
+          placeholder={t("new shared project name")}
+          value={newName()}
+          onInput={(event) => setNewName(event.currentTarget.value)}
+        />
+        <Button type="submit" disabled={account.busy()}>
+          {t("Create and publish")}
+        </Button>
+      </form>
+    </>
+  );
+
   return (
     <Card class="space-y-3" data-cloud-card="attach">
       <PanelHeader level={3} title={t("Shared project")} />
@@ -169,53 +236,26 @@ export function SharedProjectCard(props: {
             </p>
           }
         >
-          <div class="flex flex-wrap items-center gap-2">
-            <Button onClick={listRepos} disabled={account.busy()}>
-              {t("Choose a shared project…")}
-            </Button>
-          </div>
-
-          <Show when={repos().length > 0}>
-            <ul class="flex flex-col gap-1" data-repos={repos().length}>
-              <For each={repos()}>
-                {(repo) => (
-                  <li
-                    class="flex items-center gap-3 rounded-md border border-surface-border px-3 py-2"
-                    data-repo={repo.fullName}
-                  >
-                    <strong class="text-small">{repo.fullName}</strong>
-                    <Button
-                      size="sm"
-                      class="ms-auto"
-                      onClick={() => attach(repo)}
-                      disabled={account.busy()}
-                    >
-                      {t("Attach")}
-                    </Button>
-                  </li>
-                )}
-              </For>
-            </ul>
+          <Show when={attachedTo()} fallback={<div class="space-y-3">{controls()}</div>}>
+            {(origin) => (
+              <div class="space-y-3">
+                <p class="text-small text-on-surface-secondary" data-cloud="attached-to">
+                  {t("This project is shared at {name}.", { name: origin() })}
+                </p>
+                <details class="space-y-3" data-cloud="change-shared">
+                  <summary class="cursor-pointer text-small text-on-surface-tertiary">
+                    {t("Change shared project…")}
+                  </summary>
+                  <p class="pt-2 text-smallest text-on-surface-tertiary">
+                    {t(
+                      "Your work stays on this device. Another shared project changes where this one receives from and sends to.",
+                    )}
+                  </p>
+                  {controls()}
+                </details>
+              </div>
+            )}
           </Show>
-
-          <form
-            class="flex flex-wrap items-center gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              publish();
-            }}
-          >
-            <Input
-              type="text"
-              wrapperClass="w-64"
-              placeholder={t("new shared project name")}
-              value={newName()}
-              onInput={(event) => setNewName(event.currentTarget.value)}
-            />
-            <Button type="submit" disabled={account.busy()}>
-              {t("Create and publish")}
-            </Button>
-          </form>
         </Show>
       </Show>
 
