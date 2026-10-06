@@ -70,7 +70,13 @@ import { describe, reasonOf } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { recordVersion } from "../../recordVersion";
-import { acceptSuggestion, copyRef, suggestionRef, suggestMyChanges } from "../../suggestions";
+import {
+  acceptSuggestion,
+  copyRef,
+  declineSuggestion,
+  suggestionRef,
+  suggestMyChanges,
+} from "../../suggestions";
 import { sendAfterSave, sendNow, settleWithShared, type SendOutcome } from "../../syncActions";
 import { setAuthorName, syncPreferences } from "../../syncSettings";
 import { syncWatch } from "../../syncWatch";
@@ -764,6 +770,53 @@ export function ReviewPanel() {
       .find((book) => book.bookId === bookId)
       ?.skeleton.units.find((entry) => entry.id === unitId);
     return unit === undefined ? undefined : preset(bookId, unit);
+  };
+
+  /**
+   * Against a suggestion: how many passages it offers, and how many end up
+   * taken. Offered but none taken means there is nothing to bring in —
+   * keeping the editor's text everywhere is declining it — so Save is closed
+   * and the dialog offers only Decline.
+   * Recording anyway would join the suggestion's history to the project's
+   * and close it as brought in, which is the opposite of what was decided.
+   */
+  const suggestionTally = (): { readonly offered: number; readonly taken: number } => {
+    let offered = 0;
+    let taken = 0;
+    if (pull() === undefined) return { offered, taken };
+    for (const book of reviewBooks())
+      for (const unit of book.skeleton.units) {
+        if (unit.status === "unchanged") continue;
+        offered += 1;
+        if (effectiveFor(book.bookId, unit.id) === "baseline") taken += 1;
+      }
+    return { offered, taken };
+  };
+  // Nothing left to differ is not "kept none": the suggestion's versions are
+  // already here, and Save is what sends them and closes it as brought in.
+  const declineOnly = (): boolean => {
+    const tally = suggestionTally();
+    return tally.offered > 0 && tally.taken === 0;
+  };
+  const [declineNote, setDeclineNote] = createSignal("", { name: "reviewDeclineOnlyNote" });
+  const declineFromDialog = (): void => {
+    const project = shell.project();
+    const number = pull();
+    if (project === undefined || number === undefined || recording()) return;
+    // Read at the moment of the press.
+    const staticNote = declineNote();
+    setRecording(true);
+    declineSuggestion(services, project, { number }, staticNote)
+      .then(() => {
+        toasts.success({ title: t("Declined"), message: t("Its author can read your note.") });
+        setRecordOpen(false);
+        void collaboration.refresh(services, project);
+        void navigate({ to: "/project/$slug/suggestions", params: { slug: shell.slug() } });
+      })
+      .catch((cause: unknown) =>
+        toasts.error({ title: t("Could not decline it"), message: describe(cause) }),
+      )
+      .finally(() => setRecording(false));
   };
 
   /** Passages changed in both places that nobody has chosen a side for yet. */
@@ -1712,7 +1765,11 @@ export function ReviewPanel() {
                 variant="primary"
                 icon={<Save />}
                 loading={recording()}
-                disabled={(unsaved().length === 0 && !againstShared()) || undecidedBoth() > 0}
+                disabled={
+                  (unsaved().length === 0 && !againstShared()) ||
+                  undecidedBoth() > 0 ||
+                  declineOnly()
+                }
                 data-review-record-confirm
                 onClick={() => void record()}
               >
@@ -1740,7 +1797,39 @@ export function ReviewPanel() {
               </div>
             )}
           </Show>
-          <Show when={recordedLine() === undefined}>
+          <Show when={recordedLine() === undefined && declineOnly()}>
+            <form
+              class="space-y-3"
+              data-review-decline-only
+              onSubmit={(event) => {
+                event.preventDefault();
+                declineFromDialog();
+              }}
+            >
+              <p class="text-small text-on-surface-secondary">
+                {t(
+                  "You kept none of the suggested changes, so there is nothing to bring in. Decline the suggestion instead; its author reads your note.",
+                )}
+              </p>
+              <Show when={unsaved().length > 0}>
+                <p class="text-smallest text-on-surface-tertiary">
+                  {t("Edits you typed here stay unsaved; save them from Changes afterwards.")}
+                </p>
+              </Show>
+              <div class="flex items-center gap-2">
+                <Input
+                  wrapperClass="min-w-0 flex-1"
+                  placeholder={t("Why? (optional)")}
+                  value={declineNote()}
+                  onInput={(event) => setDeclineNote(event.currentTarget.value)}
+                />
+                <Button type="submit" variant="secondary" loading={recording()}>
+                  {t("Decline")}
+                </Button>
+              </div>
+            </form>
+          </Show>
+          <Show when={recordedLine() === undefined && !declineOnly()}>
             <Show when={undecidedBoth() > 0}>
               <p class="pb-3 text-small text-on-surface-warning" data-review-undecided>
                 {t(

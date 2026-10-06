@@ -365,7 +365,7 @@ export const fetchSuggestion = (
 export const declineSuggestion = (
   services: Services,
   project: Project,
-  suggestion: Suggestion,
+  suggestion: Pick<Suggestion, "number">,
   note: string,
 ): Promise<void> =>
   services.run(
