@@ -764,7 +764,7 @@ export function ReviewReader(props: {
         pressed: side === "baseline",
         label:
           side === "baseline"
-            ? t("Taken from {source} — put back", { source: props.baselineShort })
+            ? t("Taken from {source}", { source: props.baselineShort })
             : one
               ? t("Take {source}'s", { source: props.baselineShort })
               : t("Take all of {source}'s", { source: props.baselineShort }),

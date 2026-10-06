@@ -182,7 +182,7 @@ export function YourSuggestions(props: { readonly project: Project }) {
                     </Show>
                   </Show>
                 </div>
-                <Show when={held.kind === "declined" ? held.note : undefined}>
+                <Show when={held.kind === "waiting" ? undefined : held.note}>
                   {(note) => (
                     <blockquote class="border-s-2 border-surface-border ps-3 text-small break-words text-on-surface-secondary">
                       {note()}

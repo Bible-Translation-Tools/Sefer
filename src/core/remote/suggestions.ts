@@ -175,6 +175,15 @@ const suggestionOf = (record: PullValue): Suggestion => ({
 /** The same login, as Gitea compares them: without regard to case. */
 const sameLogin = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
 
+/**
+ * The line Sefer ends a brought-in suggestion's note with — how its author
+ * tells "taken" from "declined" on a repository that does not allow marking a
+ * pull request "manually merged", where both end merely closed. Git cannot
+ * say: one copy's branch backs every suggestion its person makes, and Gitea
+ * reports that branch's CURRENT tip as the head of each, closed or not.
+ */
+export const BROUGHT_IN = "Brought in with Sefer.";
+
 const failed = (reason: GiteaError["reason"], description: string): GiteaError =>
   new GiteaError({ reason, description });
 
@@ -345,7 +354,7 @@ const make = (fetch: HttpFetch) =>
             owner,
             name,
             number,
-            note.trim() === "" ? "Brought in with Sefer." : note,
+            note.trim() === "" ? BROUGHT_IN : `${note.trim()}\n\n${BROUGHT_IN}`,
           );
         }),
 

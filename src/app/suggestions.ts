@@ -32,7 +32,7 @@ import { Settings } from "#core/host/settings";
 import type { Project } from "#core/project/project";
 import { Gitea, type ForkParent, type RemoteRepo } from "#core/remote/gitea";
 import { Remote } from "#core/remote/remote";
-import { Suggestions, type Suggestion } from "#core/remote/suggestions";
+import { BROUGHT_IN, Suggestions, type Suggestion } from "#core/remote/suggestions";
 import { notIn, trackingRef } from "#core/sync";
 
 import { resolveEndpoints } from "./endpoints";
@@ -410,7 +410,7 @@ export const acceptSuggestion = (
 /** How one of the person's suggestions stands, as its author reads it. */
 export type MySuggestion =
   | { readonly kind: "waiting"; readonly suggestion: Suggestion }
-  | { readonly kind: "taken"; readonly suggestion: Suggestion }
+  | { readonly kind: "taken"; readonly suggestion: Suggestion; readonly note: string | undefined }
   | {
       readonly kind: "declined";
       readonly suggestion: Suggestion;
@@ -423,11 +423,12 @@ const MINE_SHOWN = 5;
 /**
  * The person's suggestions to the shared project, newest first.
  *
- * "Taken" is asked of git, not of Gitea's flag: a suggestion Review brought
- * in is a decision commit with the suggestion's head as a parent, which a
- * Gitea that does not allow "manually merged" never calls merged. Its head
- * being in the shared project's history is the answer either way. The
- * editor's note is read only for a declined one.
+ * "Taken" is Gitea's merged flag, or — where a repository does not allow
+ * marking one "manually merged" and a brought-in suggestion ends merely
+ * closed — the line Sefer ends its note with (`BROUGHT_IN`). Not git: one
+ * copy's branch backs every suggestion, so each one's reported head is that
+ * branch's current tip, and a declined suggestion would read as taken the
+ * moment a later one was brought in.
  */
 export const mySuggestions = (
   services: Services,
@@ -441,27 +442,19 @@ export const mySuggestions = (
         const me = at.me;
         const service = yield* Suggestions;
         const all = (yield* service.from(at.host, at.owner, at.name, me)).slice(0, MINE_SHOWN);
-        const git = yield* Git;
-        const repo = yield* git.open(project.root);
-        const shared = trackingRef(at.branch);
         return yield* Effect.forEach(all, (suggestion) =>
           Effect.gen(function* () {
             if (suggestion.state === "open") return { kind: "waiting", suggestion } as const;
-            if (suggestion.state === "merged") return { kind: "taken", suggestion } as const;
-            const head = suggestion.head;
-            const base =
-              head === undefined
-                ? Option.none()
-                : yield* Effect.orElseSucceed(git.mergeBase(repo, head, shared), () =>
-                    Option.none(),
-                  );
-            if (Option.isSome(base) && base.value === head)
-              return { kind: "taken", suggestion } as const;
-            const note = yield* Effect.orElseSucceed(
+            const said = yield* Effect.orElseSucceed(
               service.noteOn(at.host, at.owner, at.name, suggestion.number, me),
               () => undefined,
             );
-            return { kind: "declined", suggestion, note } as const;
+            const taken = suggestion.state === "merged" || said?.includes(BROUGHT_IN) === true;
+            // The marker is Sefer's, not the editor's: what is shown is what they wrote.
+            const note = said?.replace(BROUGHT_IN, "").trim() || undefined;
+            return taken
+              ? ({ kind: "taken", suggestion, note } as const)
+              : ({ kind: "declined", suggestion, note } as const);
           }),
         );
       }),
