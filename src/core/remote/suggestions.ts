@@ -73,6 +73,13 @@ interface SuggestionsService {
     name: string,
     request: SuggestRequest,
   ) => Effect.Effect<Suggestion, GiteaError>;
+  /** Suggestion `number` on `owner/name`, or `undefined` when there is none. */
+  readonly one: (
+    host: string,
+    owner: string,
+    name: string,
+    number: number,
+  ) => Effect.Effect<Suggestion | undefined, GiteaError>;
   /** The suggestions `author` made to `owner/name`, open or not, newest first. */
   readonly from: (
     host: string,
@@ -266,6 +273,15 @@ const make = (fetch: HttpFetch) =>
         ),
 
       open,
+
+      one: (host, owner, name, number) =>
+        Effect.gen(function* () {
+          const held = yield* session(host);
+          const response = yield* request(held, repoPath(host, owner, name, `/pulls/${number}`));
+          if (response.status === 404) return undefined;
+          const decoded = decodePull(yield* answer(response));
+          return decoded._tag === "Failure" ? undefined : suggestionOf(decoded.success);
+        }),
 
       from: (host, owner, name, author) =>
         Effect.map(list(host, owner, name, "all"), (all) =>

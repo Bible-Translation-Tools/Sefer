@@ -27,13 +27,13 @@
  */
 import { Effect, Option } from "effect";
 
-import { Git } from "#core/git/git";
+import { Git, type Commit } from "#core/git/git";
 import { Settings } from "#core/host/settings";
 import type { Project } from "#core/project/project";
 import { Gitea, type ForkParent, type RemoteRepo } from "#core/remote/gitea";
 import { Remote } from "#core/remote/remote";
 import { Suggestions, type Suggestion } from "#core/remote/suggestions";
-import { trackingRef } from "#core/sync";
+import { notIn, trackingRef } from "#core/sync";
 
 import { resolveEndpoints } from "./endpoints";
 import type { Services } from "./services";
@@ -574,3 +574,38 @@ export const sendingToName = async (
     ),
   );
 };
+
+/**
+ * One suggestion as a reviewer reads it: who offered it, its title, and the
+ * messages of the versions it brings that this project does not have yet —
+ * read from its head, already fetched to `suggestionRef` for the review.
+ */
+export interface SuggestionDetails {
+  readonly suggestion: Suggestion;
+  readonly versions: readonly Commit[];
+}
+
+export const suggestionDetails = (
+  services: Services,
+  project: Project,
+  number: number,
+): Promise<SuggestionDetails | undefined> =>
+  services.run(
+    Effect.orElseSucceed(
+      Effect.gen(function* () {
+        const at = yield* where(project);
+        if (at === undefined) return undefined;
+        const suggestion = yield* (yield* Suggestions).one(at.host, at.owner, at.name, number);
+        if (suggestion === undefined) return undefined;
+        const git = yield* Git;
+        const repo = yield* git.open(project.root);
+        const theirs = yield* Effect.orElseSucceed(
+          git.logFrom(repo, suggestionRef(number)),
+          (): readonly Commit[] => [],
+        );
+        const here = yield* Effect.orElseSucceed(git.log(repo), (): readonly Commit[] => []);
+        return { suggestion, versions: notIn(theirs, here) };
+      }),
+      () => undefined,
+    ),
+  );

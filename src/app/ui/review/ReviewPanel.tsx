@@ -102,6 +102,7 @@ import { metadataOf } from "../workspace/project";
 import { claimSidebar } from "../workspace/sidebarSlot";
 import { ReviewReader, type ReviewBook } from "./ReviewReader";
 import { sourceChoices, type SourceChoice } from "./sources";
+import { SuggestionLine } from "./SuggestionLine";
 
 /** How long typing pauses before the review compares again: the cards' pause. */
 const TYPING_PAUSE_MS = 400;
@@ -1540,6 +1541,9 @@ export function ReviewPanel() {
         {/* Where the project stands with the shared project, and the one
             move: what `git status` says, in words. */}
         <SyncLine onSee={seeShared} seeing={againstShared()} />
+
+        {/* Against a suggestion: whose it is, and what its author said. */}
+        <Show when={pull()}>{(number) => <SuggestionLine number={number()} />}</Show>
 
         {/* An earlier session's unsaved work: the one prompt every project
             screen shows, answered once. Review keeps no list of its own. */}
