@@ -1,17 +1,24 @@
 // library.ts
 //
 // The Library: the registry of resources this installation knows about, and the
-// bindings that give a resource a *role* in a project. Two independent facts
-// are kept apart: a resource's container (Burrito, Resource Container, loose
-// USFM — what it is packed as) and its contextual role in a project (`source`,
+// picks that give a resource a *role* in a project. Two independent facts are
+// kept apart: a resource's container (Burrito, Resource Container, loose USFM —
+// what it is packed as) and its contextual role in a project (`source`,
 // `notes`, `reference`, `glossary` — what it is *for*). `add` records the
-// container once; `bind` records the role per project, so the same resource can be a
-// source in one project and a reference in another, and nothing about the
-// resource itself changes.
+// container once; `pick` records the role per project, so the same resource
+// can be a source in one project and a reference in another, and nothing about
+// the resource itself changes.
 //
 // The registry is small, read on nearly every screen and written rarely, so it
 // is held in memory for the life of the Layer and persisted to
 // `<libraryRoot>/library.json` on each mutation with `writeFileAtomic`.
+//
+// A pick is NOT in the registry: it is this device's memory of one project
+// ("on this project I usually read that source text"), so it lives with the
+// project, as `referencePicks` in its `.sefer/project.json` (Will,
+// 2026-10-06), read when the project is reopened. Picks written by an older
+// build into `library.json`'s `bindings` move there the first time the
+// project's picks are read.
 // Classification is not duplicated here: `add` calls `classify` from
 // ./import.ts, the one place that decides what a folder is.
 
@@ -31,6 +38,7 @@ import { writeFileStringAtomic } from "../fileSystem/atomic";
 import { joinPath, lastSegment, parentPath } from "../fileSystem/path";
 import { Observability, type ObservabilityService } from "../observability";
 import { readProjectMetadata } from "../project/discovery";
+import { readProjectState, updateProjectState } from "../project/projectState";
 import { decode } from "../source/source";
 import { classify, readJson, type Classification } from "./import";
 import { localized } from "./projectMetadata";
@@ -120,29 +128,32 @@ export interface LibraryService {
   readonly cloned: (url: string) => Effect.Effect<Option.Option<Resource>>;
   /**
    * What an open project declares as its source texts. Held in memory for the
-   * session; `resolve(projectId, "source")` answers with the matching held
+   * session; `resolve(projectRoot, "source")` answers with the matching held
    * copies when the person has picked none.
    */
-  readonly declare: (projectId: string, related: readonly RelatedResource[]) => Effect.Effect<void>;
-  /** Forgets a resource and every binding that pointed at it. */
+  readonly declare: (
+    projectRoot: string,
+    related: readonly RelatedResource[],
+  ) => Effect.Effect<void>;
+  /** Forgets a resource. A project's pick of it then resolves to nothing. */
   readonly remove: (id: string) => Effect.Effect<void, LibraryError>;
-  /** Adds `resourceId` to the resources holding `role` in `projectId`; idempotent, order kept. */
-  readonly bind: (
-    projectId: string,
+  /** Adds `resourceId` to what the project shows under `role`; idempotent, order kept. */
+  readonly pick: (
+    projectRoot: string,
     role: Role,
     resourceId: string,
   ) => Effect.Effect<void, LibraryError>;
-  /** Removes one binding; a no-op when it was not there. */
-  readonly unbind: (projectId: string, role: Role, resourceId: string) => Effect.Effect<void>;
+  /** Removes one pick; a no-op when it was not there. */
+  readonly unpick: (projectRoot: string, role: Role, resourceId: string) => Effect.Effect<void>;
   /**
-   * Every resource bound to `role` in `projectId`, in binding order. For
-   * `source` with nothing bound, the held copies of what the project declares
+   * Every resource picked for `role` in the project, in pick order. For
+   * `source` with nothing picked, the held copies of what the project declares
    * (Will, 2026-10-06: the declared source text is the default).
    */
-  readonly resolve: (projectId: string, role: Role) => Effect.Effect<readonly Resource[]>;
-  /** Every binding of one project, so a shell can lay out panes without knowing the roles up front. */
-  readonly bound: (
-    projectId: string,
+  readonly resolve: (projectRoot: string, role: Role) => Effect.Effect<readonly Resource[]>;
+  /** Every pick of one project, so a shell can lay out panes without knowing the roles up front. */
+  readonly picked: (
+    projectRoot: string,
   ) => Effect.Effect<readonly { readonly role: Role; readonly resource: Resource }[]>;
   /**
    * The WHOLE canonical text of one book of a registered resource — the bytes
@@ -182,10 +193,21 @@ const ResourceRecord = Schema.Struct({
   upstream: Schema.optionalKey(Schema.Struct({ url: Schema.String, commit: Schema.String })),
 });
 
+/** `{ [role]: resourceId[] }`: one project's picks, many per role. */
+const Picks = Schema.Record(Schema.String, Schema.Array(Schema.String));
+
+type Picks = typeof Picks.Type;
+
+const decodePicks = Schema.decodeUnknownResult(Picks);
+
 const Registry = Schema.Struct({
   resources: Schema.Array(ResourceRecord),
-  /** `{ [projectId]: { [role]: resourceId[] } }` — a project's role assignments, many per role. */
-  bindings: Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Array(Schema.String))),
+  /**
+   * Picks an older build kept here, `{ [projectId]: Picks }`. Moved into each
+   * project's `.sefer/project.json` when that project's picks are first read,
+   * and dropped from here as they move.
+   */
+  bindings: Schema.optionalKey(Schema.Record(Schema.String, Picks)),
 });
 
 type Registry = typeof Registry.Type;
@@ -211,7 +233,7 @@ const withContainer = (stored: unknown): unknown => {
   };
 };
 
-const EMPTY: Registry = { resources: [], bindings: {} };
+const EMPTY: Registry = { resources: [] };
 
 const withId = (ids: readonly string[], id: string): readonly string[] =>
   ids.includes(id) ? ids : [...ids, id];
@@ -321,6 +343,64 @@ const makeLibrary = (
     /** Per session: what each opened project declares. Re-declared on every open. */
     const declared = new Map<string, readonly RelatedResource[]>();
 
+    /** Picks read this session, by project root: read once, then written through. */
+    const picksHeld = new Map<string, Picks>();
+
+    /**
+     * One project's picks. The first read of a project that has none in its
+     * `.sefer/project.json` takes what an older build kept in `library.json`
+     * — under the root, or `root#<metadata id>` — writes it there, and drops it
+     * from the registry. Never fails: a project whose state cannot be read or
+     * written simply has no picks.
+     */
+    const picksOf = (projectRoot: string): Effect.Effect<Picks> =>
+      Effect.gen(function* () {
+        const cached = picksHeld.get(projectRoot);
+        if (cached !== undefined) return cached;
+        const state = yield* readProjectState(fileSystem, projectRoot);
+        const stored = decodePicks(state.referencePicks);
+        if (state.referencePicks !== undefined && Result.isSuccess(stored)) {
+          picksHeld.set(projectRoot, stored.success);
+          return stored.success;
+        }
+        const legacy = Object.entries(held.bindings ?? {}).filter(
+          ([projectId]) => projectId === projectRoot || projectId.startsWith(`${projectRoot}#`),
+        );
+        const merged: Record<string, readonly string[]> = {};
+        for (const [, roles] of legacy)
+          for (const [role, ids] of Object.entries(roles))
+            merged[role] = ids.reduce(withId, merged[role] ?? []);
+        if (legacy.length > 0) {
+          yield* Effect.ignore(
+            updateProjectState(fileSystem, projectRoot, { referencePicks: merged }),
+          );
+          const moved = new Set(legacy.map(([projectId]) => projectId));
+          const kept = Object.fromEntries(
+            Object.entries(held.bindings ?? {}).filter(([projectId]) => !moved.has(projectId)),
+          );
+          yield* Effect.ignore(
+            persist(
+              Object.keys(kept).length === 0
+                ? { resources: held.resources }
+                : { resources: held.resources, bindings: kept },
+            ),
+          );
+          observability?.note("library.picks.moved", "passed", undefined, {
+            "library.picks.roles": Object.keys(merged).length,
+          });
+        }
+        picksHeld.set(projectRoot, merged);
+        return merged;
+      });
+
+    const writePicks = (projectRoot: string, picks: Picks): Effect.Effect<void, LibraryError> =>
+      Effect.mapError(
+        Effect.map(updateProjectState(fileSystem, projectRoot, { referencePicks: picks }), () => {
+          picksHeld.set(projectRoot, picks);
+        }),
+        failure,
+      );
+
     return {
       resources: () => Effect.succeed(held.resources),
 
@@ -364,68 +444,56 @@ const makeLibrary = (
           );
         }),
 
-      declare: (projectId, related) =>
+      declare: (projectRoot, related) =>
         Effect.sync(() => {
-          declared.set(projectId, related);
+          declared.set(projectRoot, related);
         }),
 
       remove: (id) =>
-        Effect.suspend(() => {
-          const bindings: Record<string, Record<string, readonly string[]>> = {};
-          for (const [projectId, roles] of Object.entries(held.bindings)) {
-            const kept = Object.entries(roles)
-              .map(([role, ids]) => [role, ids.filter((resourceId) => resourceId !== id)] as const)
-              .filter(([, ids]) => ids.length > 0);
-            if (kept.length > 0) bindings[projectId] = Object.fromEntries(kept);
-          }
-          return persist({
-            resources: held.resources.filter((resource) => resource.id !== id),
-            bindings,
+        Effect.suspend(() =>
+          persist({ ...held, resources: held.resources.filter((resource) => resource.id !== id) }),
+        ),
+
+      pick: (projectRoot, role, resourceId) =>
+        Effect.gen(function* () {
+          if (find(resourceId) === undefined)
+            return yield* Effect.fail(
+              refuse("NotFound", `${resourceId} is not a registered resource`),
+            );
+          const picks = yield* picksOf(projectRoot);
+          yield* writePicks(projectRoot, {
+            ...picks,
+            [role]: withId(picks[role] ?? [], resourceId),
           });
         }),
 
-      bind: (projectId, role, resourceId) =>
-        Effect.suspend(() =>
-          find(resourceId) === undefined
-            ? Effect.fail(refuse("NotFound", `${resourceId} is not a registered resource`))
-            : persist({
-                ...held,
-                bindings: {
-                  ...held.bindings,
-                  [projectId]: {
-                    ...held.bindings[projectId],
-                    [role]: withId(held.bindings[projectId]?.[role] ?? [], resourceId),
-                  },
-                },
-              }),
+      unpick: (projectRoot, role, resourceId) =>
+        Effect.ignore(
+          Effect.gen(function* () {
+            const picks = { ...(yield* picksOf(projectRoot)) };
+            const ids = (picks[role] ?? []).filter((id) => id !== resourceId);
+            if (ids.length === 0) delete picks[role];
+            else picks[role] = ids;
+            yield* writePicks(projectRoot, picks);
+          }),
         ),
 
-      unbind: (projectId, role, resourceId) =>
-        Effect.suspend(() => {
-          const ids = (held.bindings[projectId]?.[role] ?? []).filter((id) => id !== resourceId);
-          const roles = { ...held.bindings[projectId] };
-          if (ids.length === 0) delete roles[role];
-          else roles[role] = ids;
-          return Effect.ignore(
-            persist({ ...held, bindings: { ...held.bindings, [projectId]: roles } }),
-          );
-        }),
-
-      resolve: (projectId, role) =>
-        Effect.sync(() => {
-          const picked = (held.bindings[projectId]?.[role] ?? [])
+      resolve: (projectRoot, role) =>
+        Effect.gen(function* () {
+          const picks = yield* picksOf(projectRoot);
+          const chosen = (picks[role] ?? [])
             .map(find)
             .filter((resource): resource is Resource => resource !== undefined);
-          if (picked.length > 0 || role !== ROLES.source) return picked;
-          return (declared.get(projectId) ?? []).flatMap((ref) => {
+          if (chosen.length > 0 || role !== ROLES.source) return chosen;
+          return (declared.get(projectRoot) ?? []).flatMap((ref) => {
             const copy = held.resources.find((resource) => answers(resource, ref));
             return copy === undefined ? [] : [copy];
           });
         }),
 
-      bound: (projectId) =>
-        Effect.sync(() =>
-          Object.entries(held.bindings[projectId] ?? {}).flatMap(([role, ids]) =>
+      picked: (projectRoot) =>
+        Effect.map(picksOf(projectRoot), (picks) =>
+          Object.entries(picks).flatMap(([role, ids]) =>
             ids
               .map(find)
               .filter((resource): resource is Resource => resource !== undefined)

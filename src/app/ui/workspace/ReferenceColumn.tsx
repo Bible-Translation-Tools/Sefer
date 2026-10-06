@@ -120,7 +120,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
    */
   createEffect(
     () => ({
-      project: shell.project()?.id,
+      project: shell.project()?.root,
       book: shell.focused()?.id,
       tick: bound(),
       library: libraryRevision(),
@@ -141,7 +141,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         .run(
           Effect.gen(function* () {
             const picked = new Set(
-              (yield* services.library.bound(project)).map((each) => each.resource.id),
+              (yield* services.library.picked(project)).map((each) => each.resource.id),
             );
             const found: Entry[] = [];
             for (const role of ROLES)
@@ -268,7 +268,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         Effect.result(
           Effect.gen(function* () {
             const resource = yield* services.library.add(root);
-            yield* services.library.bind(project.id, role, resource.id);
+            yield* services.library.pick(project.root, role, resource.id);
             return resource;
           }),
         ),
@@ -293,7 +293,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     const project = shell.project();
     if (project === undefined) return;
     void services
-      .run(services.library.unbind(project.id, entry.role, entry.resource.id))
+      .run(services.library.unpick(project.root, entry.role, entry.resource.id))
       .then(() => {
         setBound((held) => held + 1);
       });

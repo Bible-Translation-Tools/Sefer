@@ -456,7 +456,7 @@ const domainLayer = (
         return Layer.mergeAll(
           // The project census, the held per-book analyses, and every finding.
           ProjectAnalysisLive,
-          // Imported resources and the role bindings a project reads them through.
+          // Imported resources; a project's picks of them live in its own `.sefer/`.
           LibraryLive({ libraryRoot: libraryRootIn(paths.appData) }),
           // History and transfer, every call in its repository's lane.
           laned(

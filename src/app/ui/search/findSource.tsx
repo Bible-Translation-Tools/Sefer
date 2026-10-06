@@ -55,7 +55,7 @@ export function createFindSource(onBound: () => void) {
   let generation = 0;
 
   createEffect(
-    () => ({ project: shell.project()?.id, tick: tick() }),
+    () => ({ project: shell.project()?.root, tick: tick() }),
     ({ project }) => {
       books.clear();
       generation += 1;
@@ -92,10 +92,10 @@ export function createFindSource(onBound: () => void) {
         Effect.result(
           Effect.gen(function* () {
             if (previous !== undefined)
-              yield* services.library.unbind(project.id, "source", previous.id);
+              yield* services.library.unpick(project.root, "source", previous.id);
             if (root === NONE) return undefined;
             const added = yield* services.library.add(root);
-            yield* services.library.bind(project.id, "source", added.id);
+            yield* services.library.pick(project.root, "source", added.id);
             return added;
           }),
         ),
@@ -110,7 +110,7 @@ export function createFindSource(onBound: () => void) {
         setTick((held) => held + 1);
         // The corpus follows the binding, and the source-text checks with it.
         void services
-          .run(Workflows.bindReferences(project.id))
+          .run(Workflows.bindReferences(project.root))
           .then(() => services.projectAnalysis.rejudge());
         onBound();
       });

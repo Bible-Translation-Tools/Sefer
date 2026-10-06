@@ -84,16 +84,13 @@ const booksOf = (
  * idempotent per id and unchanged text costs a checksum. `attachReferences`
  * replaces the whole set, so a binding the user removed stops answering.
  *
- * `projectId` is `Project.id` — the key `Library.bind` actually writes under,
- * which is NOT the root. A project that declares an identifier has an id of
- * `${root}#${declared}` (`core/project/project.ts`), and every screen that
- * binds a resource does so through `project.id`. Passing the root here
- * resolved nothing for exactly the projects that declare themselves properly,
- * and it failed SILENTLY: no bindings, no references registered, and a screen
- * that said "bind a source first" to somebody who had.
+ * `projectRoot` is `Project.root`: picks live in that project's
+ * `.sefer/project.json` (`Library.pick`). They were keyed by `Project.id`
+ * when they lived in `library.json`, and a caller passing the root found
+ * nothing for every project that declares its own identifier.
  */
 export const bindReferences = (
-  projectId: string,
+  projectRoot: string,
   options?: {
     /**
      * Register every reference again even when its text is unchanged. The
@@ -109,8 +106,8 @@ export const bindReferences = (
     const analysis = yield* ProjectAnalysis;
     const fileSystem = yield* FileSystem.FileSystem;
 
-    const sources = yield* library.resolve(projectId, ROLES.source);
-    const references = yield* library.resolve(projectId, ROLES.reference);
+    const sources = yield* library.resolve(projectRoot, ROLES.source);
+    const references = yield* library.resolve(projectRoot, ROLES.reference);
     // One resource may hold both roles; it is one reference either way.
     const seen = new Set<string>();
     const resources: Resource[] = [];

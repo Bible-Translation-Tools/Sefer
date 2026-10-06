@@ -610,7 +610,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
           return;
         }
         void services
-          .run(Workflows.bindReferences(project.id, { fresh: true }))
+          .run(Workflows.bindReferences(project.root, { fresh: true }))
           .then(() => services.projectAnalysis.rejudge());
       }),
     ),
@@ -944,7 +944,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     // "source" with these when the person has picked none.
     await services.run(
       services.library.declare(
-        ready.id,
+        ready.root,
         Option.match(ready.metadata(), {
           onNone: () => [],
           onSome: (metadata) => highestVersions(metadata.related),
@@ -996,7 +996,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     // visiting Find first. In the background; once they are in, ONE book is
     // invalidated, which is a pass and so a publication that reads them —
     // not a re-judge, which would re-analyse every book.
-    void services.run(Workflows.bindReferences(ready.id)).then((bound) => {
+    void services.run(Workflows.bindReferences(ready.root)).then((bound) => {
       const first = ready.books[0]?.id;
       if (live === ready && bound.ids.length > 0 && first !== undefined)
         services.projectAnalysis.invalidate(first);
