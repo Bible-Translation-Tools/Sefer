@@ -410,7 +410,7 @@ call goes through the WACS proxy's allowlist ([git](git.md), Suggested changes).
 `src/app/syncWatch.ts` holds the open project's last reading (`readSync` and its plan) for the whole
 application, the way `syncStatus` holds the network. The check on open, every send, a combine or
 receive from Review leave their reading there; the app bar's cloud button (`SyncButton`) and
-Review's status line (`SyncLine`) read it. A reading is local work — refs
+Review's status line (`SyncLine`, the "Shared project" part, with when it was checked and a refresh) read it. A reading is local work — refs
 and logs already in the object database — so opening the cloud popover reads again; only a check or
 a send touches the network.
 

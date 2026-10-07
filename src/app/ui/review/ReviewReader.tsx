@@ -774,15 +774,15 @@ export function ReviewReader(props: {
     const choose = (chosen: MergeSide): void =>
       props.decide(hunk.bookId, hunk.units, side === chosen ? undefined : chosen);
     // In the columns' order: the other side's on the left, yours on the right.
-    // Both at Edit's weight — deciding is what this card is for, so its two
-    // buttons are not the quietest thing on it — and the pressed one says
-    // which side was chosen. Pressed again it puts the passage back, which it
+    // Quiet until chosen — tertiary, like Edit beside them — so a page of
+    // undecided cards is not a page of outlined buttons; the pressed one takes
+    // the brand outline and says which side was chosen. Pressed again it puts the passage back, which it
     // no longer spells out ("— put back" read as an instruction on every card).
     return [
       {
         kind: "button",
         id: "take",
-        emphasis: "secondary",
+        emphasis: "tertiary",
         pressed: side === "baseline",
         label:
           side === "baseline"
@@ -795,7 +795,7 @@ export function ReviewReader(props: {
       {
         kind: "button",
         id: "keep",
-        emphasis: "secondary",
+        emphasis: "tertiary",
         pressed: side === "current",
         label: one
           ? t("Keep {source}'s", { source: props.currentShort })
@@ -832,10 +832,16 @@ export function ReviewReader(props: {
         <ChangesHistorySidebar active="changes" changes={prepared().length}>
           <div class="px-4 pt-3 pb-2">
             <p class="px-2 text-small text-on-surface-secondary">
-              {t("{count} in {books} book(s)", {
-                count: prepared().reduce((sum, held) => sum + held.shown.length, 0),
-                books: prepared().length,
-              })}
+              {/* The status line's words, so the two never read as different
+                  answers: "2 changes in 1 book". */}
+              {(() => {
+                const count = prepared().reduce((sum, held) => sum + held.shown.length, 0);
+                const books = prepared().length;
+                return t("{changes} in {books}", {
+                  changes: t(count === 1 ? "{count} change" : "{count} changes", { count }),
+                  books: t(books === 1 ? "{count} book" : "{count} books", { count: books }),
+                });
+              })()}
             </p>
           </div>
           <nav aria-label={t("Changes")} class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
@@ -1057,12 +1063,14 @@ export function ReviewReader(props: {
         </Menu>
         <div class="ms-auto flex items-center gap-1">
           <DecideAll />
-          <Show when={props.decidable && scopeCount() > 0}>
-            <span aria-hidden="true" class="mx-1 h-4 w-px bg-surface-border" />
+          {/* Where you are, once you have stepped: the how-many is the status
+              line's, and a second total here (cards, not changes) read as a
+              different answer to the same question. */}
+          <Show when={place() !== undefined}>
+            <span class="text-smallest text-on-surface-tertiary tabular-nums" data-review-counter>
+              {counter()}
+            </span>
           </Show>
-          <span class="text-smallest text-on-surface-tertiary tabular-nums" data-review-counter>
-            {counter()}
-          </span>
           <IconButton
             size="sm"
             label={t("Previous change (Alt-Shift-F5)")}

@@ -265,10 +265,27 @@ becomes its results. History is the other tab: the timeline, with the selected
 version's changes in the main area (`?commit=<id>`) and Adopt on either side of
 a card. The route picks the tab, so Back and Forward move between them.
 
-Under the header, one line says where the project stands with the shared
-project — "Saved changes not sent yet · 3 verses in 2 books differ from yours"
-— with Send or See the changes beside it (`SyncLine`); it is the status bar's
-↑2 ↓3 in words, and absent when there is nothing to say.
+Under the header, one quiet status line (`SyncLine`) says how many and where,
+each in its own place, so no number on the screen reads as another's
+(2026-10-07; it replaced a header count and a warning-tinted banner whose
+"2 verses in 1 book differ from yours" sat over a "4 changes" it had nothing to
+do with):
+
+- **This comparison** — "4 changes in 2 books · 1 decided": the two sides
+  picked above, in passages, moving with every edit. The sidebar line says the
+  same words; the toolbar shows only where you are ("2 of 4") once you step.
+- **Shared project** — "2 verses in 1 book to receive", "your saved changes
+  aren't sent yet", "up to date": between recorded versions, as the last check
+  left it, so it says "checked 3 min ago" and has a refresh button, and the one
+  move (See the changes, Send my changes) as a link. A dot, not a tint, when it
+  asks something of you.
+- **Writer** — "new work in N books" and See it, when the books' Writer
+  projects have some.
+
+The cards are calmer to match: Take / Keep are quiet until one is chosen (the
+chosen one takes the brand outline), Edit is quiet on every card screen, the
+context steps are faint until the pointer or focus is on the card, and
+"modified" is not said on every card — only "added" and "deleted" are.
 
 **The states a review passes through, said rather than guessed at:**
 

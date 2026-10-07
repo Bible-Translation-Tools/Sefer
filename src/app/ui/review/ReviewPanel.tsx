@@ -1645,22 +1645,6 @@ export function ReviewPanel() {
               </p>
             </div>
           </Popover>
-          <Show when={result()}>
-            {(found) => (
-              <span class="text-small text-on-surface-secondary tabular-nums" data-review-decided>
-                <span data-review-changed={found().changedBooks}>
-                  {t("{count} book(s) differ", { count: found().changedBooks })}
-                </span>
-                <Show when={totals().total > 0}>
-                  {" · "}
-                  {t("{decided} of {total} decided", {
-                    decided: totals().decided,
-                    total: totals().total,
-                  })}
-                </Show>
-              </span>
-            )}
-          </Show>
           <Show when={target() === undefined && result() !== undefined}>
             <Badge tone="muted" data-review-readonly>
               {t("Reading only")}
@@ -1757,9 +1741,25 @@ export function ReviewPanel() {
           </div>
         </header>
 
-        {/* Where the project stands with the shared project, and the one
-            move: what `git status` says, in words. */}
-        <SyncLine onSee={seeShared} seeing={againstShared()} />
+        {/* How many and where, each in its own place: this comparison's
+            counts, the shared project as the last check left it, and Writer
+            work — one quiet line instead of a count in the header and a
+            banner under it that read as the same number. */}
+        <SyncLine
+          comparison={
+            result() === undefined
+              ? undefined
+              : {
+                  changes: totals().total,
+                  books: result()?.changedBooks ?? 0,
+                  decided: totals().decided,
+                }
+          }
+          onSee={seeShared}
+          seeing={againstShared()}
+          onSeeWriter={() => pick("right", "writer")}
+          seeingWriter={againstWriter()}
+        />
 
         {/* Against a suggestion: whose it is, and what its author said. */}
         <Show when={pull()}>{(number) => <SuggestionLine number={number()} />}</Show>

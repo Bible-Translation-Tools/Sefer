@@ -410,7 +410,11 @@ export function DiffCard(props: {
     const controls = props.controls;
     if (controls !== undefined && units.every((unit) => controls.decision(unit) !== undefined))
       return "";
-    return units.length === 1 ? (units[0]?.status ?? "") : `${units.length} changes`;
+    // "modified" is what a change usually is, and said on every card it is
+    // noise; "added" and "deleted" are news.
+    if (units.length > 1) return `${units.length} changes`;
+    const only = units[0]?.status ?? "";
+    return only === "modified" ? "" : only;
   };
 
   return (
@@ -483,7 +487,7 @@ export function DiffCard(props: {
       }}
     >
       <Show when={props.split}>
-        <div class="grid grid-cols-2 divide-x divide-surface-border border-b border-surface-border text-smallest text-on-surface-tertiary">
+        <div class="grid grid-cols-2 divide-x divide-surface-border text-smallest text-on-surface-tertiary">
           <div
             class={cx(
               "flex min-w-0 items-center gap-2 px-3 py-0.5",
@@ -512,7 +516,7 @@ export function DiffCard(props: {
           <div class={cx("min-w-0", props.currentFirst === true && "order-last")} ref={setLeft}>
             <Show when={props.hunk.baseline === undefined}>
               <p class="px-3 py-2 text-small text-on-surface-tertiary italic">
-                Not in {props.baselineLabel}.
+                {t("Not on this side.")}
               </p>
             </Show>
           </div>
