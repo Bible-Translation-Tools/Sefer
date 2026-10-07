@@ -142,8 +142,15 @@ export interface GiteaService {
    */
   readonly logout: (host: string) => Effect.Effect<void>;
   readonly session: (host: string) => Effect.Effect<Option.Option<Session>>;
-  /** Repositories the signed-in user can push to, owned or collaborated on. */
-  readonly listWritableRepos: (host: string) => Effect.Effect<readonly RemoteRepo[], GiteaError>;
+  /**
+   * Repositories the signed-in user can push to, owned or collaborated on:
+   * one page of them, or, with `search`, the page whose names match it
+   * (Gitea's own `q`). An organisation holds more than a page.
+   */
+  readonly listWritableRepos: (
+    host: string,
+    search?: string,
+  ) => Effect.Effect<readonly RemoteRepo[], GiteaError>;
   /** Repositories the signed-in user owns, writable or not. */
   readonly listOwnedRepos: (host: string) => Effect.Effect<readonly RemoteRepo[], GiteaError>;
   /** Creates the repository under the signed-in user. `Refused` if it exists. */
@@ -583,8 +590,11 @@ const makeGitea = (options: {
 
     session: readSession,
 
-    listWritableRepos: (host) =>
-      Effect.map(search(host, {}), (repos) => repos.filter((repo) => repo.canWrite)),
+    listWritableRepos: (host, text) =>
+      Effect.map(
+        search(host, text === undefined || text.trim() === "" ? {} : { q: text.trim() }),
+        (repos) => repos.filter((repo) => repo.canWrite),
+      ),
 
     listOwnedRepos: (host) => search(host, { exclusive: "true" }),
 

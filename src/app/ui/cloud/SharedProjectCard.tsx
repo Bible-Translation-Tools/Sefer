@@ -98,6 +98,42 @@ export function SharedProjectCard(props: {
     },
   );
 
+  const [searching, setSearching] = createSignal(false, { name: "cloudRepoSearching" });
+  let searchTimer: ReturnType<typeof setTimeout> | undefined;
+  let searchTicket = 0;
+  /**
+   * What was typed, asked of Gitea: the first list is one page, and an
+   * organisation holds more than a page. What comes back joins the list, so
+   * the filter finds it.
+   */
+  const searchRepos = (text: string): void => {
+    clearTimeout(searchTimer);
+    const base = account.host;
+    searchTicket += 1;
+    const ticket = searchTicket;
+    if (base === null || text === "") {
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    searchTimer = setTimeout(() => {
+      void services
+        .run(Effect.flatMap(Gitea, (gitea) => gitea.listWritableRepos(base, text)))
+        .then((found) => {
+          if (ticket !== searchTicket) return;
+          setRepos((held) => {
+            const known = new Set(held.map((repo) => repo.fullName));
+            return [...held, ...found.filter((repo) => !known.has(repo.fullName))];
+          });
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (ticket === searchTicket) setSearching(false);
+        });
+    }, 300);
+  };
+  onCleanup(() => clearTimeout(searchTimer));
+
   const listRepos = (): void => {
     const base = account.host;
     if (base === null) return;
@@ -207,6 +243,8 @@ export function SharedProjectCard(props: {
               items={repos()}
               key={(repo) => repo.fullName}
               match={(repo, query) => repo.fullName.toLowerCase().includes(query.toLowerCase())}
+              onQuery={searchRepos}
+              searching={searching()}
               onPick={(repo) => {
                 setChoosing(false);
                 attach(repo);
