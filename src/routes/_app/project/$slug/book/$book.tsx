@@ -55,7 +55,9 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
    * editor's view beside it.
    */
   const [references, setReferences] = createSignal(0, { name: "boundReferences" });
-  const collapsed = (): boolean => references() === 0;
+  /** The column folded to its cards (its own collapse button). */
+  const [folded, setFolded] = createSignal(false, { name: "referencesFolded" });
+  const collapsed = (): boolean => references() === 0 || folded();
 
   // Open the project and seat the book the URL names, and do it again whenever
   // the URL names a different one. Idempotent: `focus` runs
@@ -112,7 +114,7 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                   maxSize={referenceMax}
                   class={collapsed() ? "[flex-basis:13rem]!" : undefined}
                 >
-                  <ReferenceColumn onBound={setReferences} />
+                  <ReferenceColumn onBound={setReferences} onFolded={setFolded} />
                 </Resizable.Panel>
                 {/* Hidden rather than unmounted, same reason as the panel. */}
                 <Resizable.Handle

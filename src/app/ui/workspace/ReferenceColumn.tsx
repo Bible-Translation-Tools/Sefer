@@ -34,6 +34,7 @@ import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronUp from "lucide-solid/icons/chevron-up";
 import Download from "lucide-solid/icons/download";
+import PanelLeftClose from "lucide-solid/icons/panel-left-close";
 import { For, Show, createEffect, createSignal } from "solid-js";
 
 import type { Resource, Role } from "#core/resources/library";
@@ -49,8 +50,9 @@ import {
   useGatewaySource,
   type GatewayText,
 } from "../../workflows/gatewaySources";
-import { EmptyState, Menu, MenuItem } from "../primitives";
+import { EmptyState, IconButton, Menu, MenuItem } from "../primitives";
 import { metadataOf } from "./project";
+import { ReferenceCard } from "./ReferenceCard";
 import { ReferencePane } from "./ReferencePane";
 
 /** The roles the column shows, in the order it shows them. */
@@ -69,6 +71,11 @@ export interface ReferenceColumnProps {
    * asking the Library a second time.
    */
   readonly onBound?: (count: number) => void;
+  /**
+   * Folded to its cards, or open: the ROUTE narrows the column for the cards,
+   * as it does when nothing is bound.
+   */
+  readonly onFolded?: (folded: boolean) => void;
 }
 
 export function ReferenceColumn(props: ReferenceColumnProps) {
@@ -304,6 +311,15 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     return `${name} (${code})`;
   };
 
+  /** Folded to a stack of cards, one per installed text. */
+  const [folded, setFolded] = createSignal(false, { name: "referenceFolded" });
+  const fold = (next: boolean): void => {
+    setFolded(next);
+    props.onFolded?.(next);
+  };
+  /** "English": the language alone, for a card. */
+  const languageOf = (resource: Resource): string => nameOf(resource).replace(/ \([^)]*\)$/u, "");
+
   const [showOthers, setShowOthers] = createSignal(false, { name: "referenceShowOthers" });
   /** Rows: 48px, 24px sides; the menu's own 8px plus 4px here is 12px above and below. */
   const ROW = "px-6";
@@ -397,40 +413,74 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       class="flex h-full min-w-0 flex-col gap-3 py-4 pe-[7.5px]"
       data-references={entries().length}
     >
-      <LanguagePicker />
-      {/* One text, straight on the page: the picker above says whose it is. */}
       <Show
-        when={onShow()}
-        keyed
+        when={!folded()}
         fallback={
-          <Show when={!loading()}>
-            <EmptyState
-              icon={<BookMarked size={22} />}
-              title={
-                fetching() === ""
-                  ? t("No source text yet")
-                  : t("Getting {language}…", { language: fetching() })
-              }
-              description={
-                fetching() === ""
-                  ? t("Choose a reference language above to read beside this project.")
-                  : t("Downloading it once, to read beside this project.")
-              }
-            />
-          </Show>
+          // Folded: one card per installed text; pressing one opens the
+          // column on it.
+          <div class="flex min-h-0 flex-col gap-3 overflow-y-auto">
+            <For each={installed()}>
+              {(resource) => (
+                <ReferenceCard
+                  resource={resource}
+                  bookId={shell.focused()?.id ?? ""}
+                  language={languageOf(resource)}
+                  onOpen={() => {
+                    show(resource);
+                    fold(false);
+                  }}
+                />
+              )}
+            </For>
+          </div>
         }
       >
-        {(held) => (
-          <div class="flex min-h-0 flex-1 flex-col">
-            <ReferencePane
-              bare
-              resource={held.entry.resource}
-              role={held.entry.role}
-              bookId={held.book}
-              clip={clip}
-            />
+        <div class="flex items-center gap-controls">
+          <div class="min-w-0 flex-1">
+            <LanguagePicker />
           </div>
-        )}
+          <IconButton
+            variant="subtle"
+            data-testid="reference-fold"
+            label={t("Collapse the reference text")}
+            icon={<PanelLeftClose />}
+            onClick={() => fold(true)}
+          />
+        </div>
+        {/* One text, straight on the page: the picker above says whose it is. */}
+        <Show
+          when={onShow()}
+          keyed
+          fallback={
+            <Show when={!loading()}>
+              <EmptyState
+                icon={<BookMarked size={22} />}
+                title={
+                  fetching() === ""
+                    ? t("No source text yet")
+                    : t("Getting {language}…", { language: fetching() })
+                }
+                description={
+                  fetching() === ""
+                    ? t("Choose a reference language above to read beside this project.")
+                    : t("Downloading it once, to read beside this project.")
+                }
+              />
+            </Show>
+          }
+        >
+          {(held) => (
+            <div class="flex min-h-0 flex-1 flex-col">
+              <ReferencePane
+                bare
+                resource={held.entry.resource}
+                role={held.entry.role}
+                bookId={held.book}
+                clip={clip}
+              />
+            </div>
+          )}
+        </Show>
       </Show>
     </aside>
   );
