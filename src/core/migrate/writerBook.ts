@@ -186,6 +186,8 @@ export const treeFromFiles = (files: ReadonlyMap<string, string>): WriterTree =>
 };
 
 /** Reads the parts the template needs off disk, in numeric order. */
+const READ_AT_ONCE = 32;
+
 export const readWriterTree = (
   fileSystem: FileSystem.FileSystem,
   root: string,
@@ -201,16 +203,22 @@ export const readWriterTree = (
       fileSystem.readDirectory(root),
       (): readonly string[] => [],
     );
-    for (const chapter of names.filter((name) => numbered(name) !== undefined)) {
-      const inside = yield* Effect.orElseSucceed(
-        fileSystem.readDirectory(joinPath(root, chapter)),
-        (): readonly string[] => [],
-      );
-      for (const file of inside) {
-        const path = `${chapter}/${file}`;
-        if (isWriterTextPath(path)) yield* take(path);
-      }
-    }
+    // Many at once: a long book is hundreds of chunk files, and one at a time
+    // each read waits out the storage's own round trip (OPFS: a handle walk
+    // per path). Read in sequence, John took longer to read than to clone.
+    const listed = yield* Effect.forEach(
+      names.filter((name) => numbered(name) !== undefined),
+      (chapter) =>
+        Effect.map(
+          Effect.orElseSucceed(
+            fileSystem.readDirectory(joinPath(root, chapter)),
+            (): readonly string[] => [],
+          ),
+          (inside) => inside.map((file) => `${chapter}/${file}`).filter(isWriterTextPath),
+        ),
+      { concurrency: READ_AT_ONCE },
+    );
+    yield* Effect.forEach(listed.flat(), take, { concurrency: READ_AT_ONCE, discard: true });
     return treeFromFiles(files);
   });
 

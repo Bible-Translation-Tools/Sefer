@@ -16,6 +16,7 @@ import { openCandidate, type BookCandidate, type StagedBook } from "#core/migrat
 import { health, validate, type Health } from "#core/migrate/check";
 import { localCandidates } from "#core/migrate/local";
 import { UPSTREAM_TIMEOUT } from "#core/migrate/writerWork";
+import { Observability } from "#core/observability";
 import { Library, answers } from "#core/resources/library";
 import { highestVersions, type RelatedResource } from "#core/resources/relationships";
 
@@ -78,22 +79,42 @@ export const pickLocal = async (
 
 /** Opens, renders, validates and measures one candidate. Never rejects. */
 export const openOne = async (services: Services, candidate: BookCandidate): Promise<Opened> => {
+  const operation = services.composition.observability.operation("migrate.open", {
+    "migrate.book": candidate.book,
+    "migrate.origin": candidate.origin.kind,
+  });
   try {
     // A clone that does not finish in time is refused like an unreachable
     // one, so one slow repository never holds the run's Next behind it.
-    const opened = await services.run(
-      Effect.timeoutOption(openCandidate(candidate, stagingRootOf(services)), UPSTREAM_TIMEOUT),
+    // A remote candidate is cloned, read once and dropped, so on the Web it is
+    // cloned into memory: OPFS writes were most of its cost. A folder or zip
+    // candidate is read where it is.
+    const inMemory = candidate.origin.kind === "remote" ? services.inMemoryTransfer?.() : undefined;
+    const open = Effect.timeoutOption(
+      openCandidate(candidate, inMemory === undefined ? stagingRootOf(services) : "/staging"),
+      UPSTREAM_TIMEOUT,
     );
-    if (Option.isNone(opened)) return { state: "refused", reason: t("it did not answer in time") };
+    const where: Effect.Effect<Option.Option<StagedBook>, unknown, Domain> = inMemory === undefined
+      ? open
+      : Effect.provide(open, inMemory);
+    const opened = await services.run(Effect.provideService(where, Observability, operation));
+    if (Option.isNone(opened)) {
+      operation.end("unavailable", { "migrate.reason": "timeout" });
+      return { state: "refused", reason: t("it did not answer in time") };
+    }
     const staged = opened.value;
     const refused = validate(staged.usfm);
-    if (refused !== undefined) return { state: "refused", reason: refused };
-    return {
-      state: "ready",
-      staged,
-      health: health(services.galley, staged.project.book, staged.usfm),
-    };
+    if (refused !== undefined) {
+      operation.end("refused", { "migrate.reason": refused });
+      return { state: "refused", reason: refused };
+    }
+    const measured = operation.span("migrate.health");
+    const census = health(services.galley, staged.project.book, staged.usfm);
+    measured();
+    operation.end("passed");
+    return { state: "ready", staged, health: census };
   } catch (cause) {
+    operation.end("failed", { "migrate.reason": describe(cause) });
     return { state: "refused", reason: describe(cause) };
   }
 };

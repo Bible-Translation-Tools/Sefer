@@ -20,6 +20,7 @@ import { Data, Effect, FileSystem, Option } from "effect";
 import { lastSegment } from "../fileSystem/path";
 import { Git, type Author } from "../git/git";
 import { CANON, type Testament } from "../location/canon";
+import { Observability } from "../observability";
 import { Remote } from "../remote/remote";
 import {
   readWriterTree,
@@ -124,11 +125,16 @@ const render = (project: WriterProject, root: string) =>
 export const openCandidate = (
   candidate: BookCandidate,
   stagingRoot: string,
-): Effect.Effect<StagedBook, CandidateError, FileSystem.FileSystem | Git | Remote> =>
+): Effect.Effect<
+  StagedBook,
+  CandidateError,
+  FileSystem.FileSystem | Git | Remote | Observability
+> =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const git = yield* Git;
     const remote = yield* Remote;
+    const observability = yield* Observability;
     let root: string;
     let upstream: StagedBook["upstream"];
     if (candidate.origin.kind === "remote") {
@@ -140,6 +146,7 @@ export const openCandidate = (
         () => false,
       );
       if (!staged) {
+        const cloned = observability.span("migrate.clone");
         yield* Effect.ignore(fileSystem.remove(root, { recursive: true }));
         yield* Effect.mapError(
           remote.clone(candidate.origin.url, root, { history: "latest" }),
@@ -149,6 +156,7 @@ export const openCandidate = (
               description: error.description ?? error.reason,
             }),
         );
+        cloned();
       }
     } else root = candidate.origin.root;
 
@@ -170,6 +178,7 @@ export const openCandidate = (
 
     // History, where there is any: the newest commit's author and the commit
     // the work was taken at. A folder with no `.git` has neither.
+    const logged = observability.span("migrate.log");
     const committed: Author[] = [];
     const repo = yield* Effect.option(git.open(root));
     if (repo._tag === "Some") {
@@ -185,7 +194,10 @@ export const openCandidate = (
       if (head !== undefined && url !== undefined) upstream = { url, commit: head };
     }
 
+    logged();
+    const rendered = observability.span("migrate.render");
     const usfm = yield* render(project, root);
+    rendered({ "migrate.bytes": usfm.length });
     return {
       candidate,
       project,

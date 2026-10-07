@@ -34,6 +34,7 @@ import {
 } from "#core/analysis/projectAnalysis";
 import type { BookId } from "#core/book/book";
 import type { HostFacts } from "#core/diagnostics/header";
+import { MemoryFileSystemLive } from "#core/fileSystem/memory";
 import {
   Galley,
   type EngineLoadError,
@@ -188,6 +189,14 @@ export interface Services {
   readonly gitea: GiteaService;
   readonly remote: RemoteService;
   readonly admin: ProjectAdminService;
+  /**
+   * A FileSystem with the Git and Remote that work over it, all in memory:
+   * for a clone that is read once and thrown away (a Writer candidate). A
+   * fresh one per call. Undefined where cloning to disk is already cheap.
+   */
+  readonly inMemoryTransfer:
+    | (() => Layer.Layer<FileSystem.FileSystem | Git | Remote, never, Credentials | Gitea>)
+    | undefined;
 
   /** Plain → Instantiated: `openProject(root, { seat })`. */
   readonly seat: Seat;
@@ -676,6 +685,24 @@ export const composeServices = async (
     // subtree is all the projects list can honestly enumerate.
     projectsRoot: tauri === undefined ? PROJECTS_ROOT : `${paths.appData}/projects`,
     libraryRoot: libraryRootIn(paths.appData),
+    // Web only: isomorphic-git writing to OPFS is the cost of a throwaway
+    // clone (measured 2026-10-07: 2.7 s for a tiny Writer project, most of
+    // it storage), and desktop's git2 on a native disk does not pay it.
+    inMemoryTransfer:
+      tauri === undefined
+        ? () =>
+            Layer.provideMerge(
+              Layer.merge(
+                WebGitLive,
+                WebRemoteLive({
+                  contentHost: resolveEndpoints(resolved.settings).contentHost,
+                  transport: bootTransport(),
+                  appId: appIdFor(build),
+                }),
+              ),
+              MemoryFileSystemLive(),
+            )
+        : undefined,
     fixtureProject: fixture?.SMALL_NT_ROOT,
     hostFacts,
     logFiles,

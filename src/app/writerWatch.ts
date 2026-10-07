@@ -85,6 +85,17 @@ const takenOnShared = (root: string): Effect.Effect<ReadonlyMap<string, string>,
 
 const stagingOf = (services: Services): string => `${services.hostInfo.paths().temp}/writer`;
 
+/** One moved Writer project, cloned in memory where that is cheaper than disk (the Web). */
+const fetchIn = (
+  services: Services,
+  probed: Parameters<typeof fetchWork>[0],
+): Effect.Effect<WriterWork | undefined, unknown, Domain> => {
+  const inMemory = services.inMemoryTransfer?.();
+  return inMemory === undefined
+    ? fetchWork(probed, stagingOf(services))
+    : Effect.provide(fetchWork(probed, "/staging"), inMemory);
+};
+
 /**
  * Checks the project's Writer upstreams. Never rejects: a remote that does
  * not answer, or a project that cannot be fetched, has no new work this
@@ -120,7 +131,7 @@ export const checkWriter = async (services: Services, project: Project): Promise
             moved,
             (each) =>
               Effect.orElseSucceed(
-                Effect.timeout(fetchWork(each, stagingOf(services)), UPSTREAM_TIMEOUT),
+                Effect.timeout(fetchIn(services, each), UPSTREAM_TIMEOUT),
                 () => undefined,
               ),
             { concurrency: 3 },
