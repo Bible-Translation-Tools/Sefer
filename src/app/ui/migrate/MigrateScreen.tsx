@@ -4,9 +4,11 @@
  *
  * Two steps, one screen:
  *
- *   find      a folder or zip of Writer projects, or a language from "Writer
- *             projects on WACS" (`WriterLanguages`) — several may be combined
- *             in one run, and every one works offline except the catalogue
+ *   find      a language from "Writer projects on WACS" (`WriterLanguages`),
+ *             or a folder or zip of Writer projects: where the run starts.
+ *             There is no way back to it — a run is that start, plus any
+ *             Writer project's folder or zip added later in its language;
+ *             leaving the screen abandons it
  *   books     a sidebar of books in canonical order, under OT and NT, beside
  *             the selected book's candidates as a table (`BookPane`): who,
  *             status, updated, health, and passages differing from the pick
@@ -51,7 +53,17 @@ import {
   type Opened,
 } from "../../migrate";
 import { useShell } from "../../ProjectContext";
-import { Badge, Button, Card, PanelHeader, cx, toasts, type BadgeTone } from "../primitives";
+import {
+  Badge,
+  Button,
+  Card,
+  Menu,
+  MenuItem,
+  PanelHeader,
+  cx,
+  toasts,
+  type BadgeTone,
+} from "../primitives";
 import { BookPane } from "./BookPane";
 import { WriterLanguages } from "./WriterLanguages";
 
@@ -132,14 +144,37 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
     await Promise.all(Array.from({ length: OPEN_AT_ONCE }, next));
   };
 
+  /**
+   * The run's language, once it has one: the project being added to, or the
+   * first source picked. A run is one language (Will, 2026-10-07: "if you pick
+   * from a starting point, that's what we're doing").
+   */
+  const runLanguage = (): string =>
+    intoLanguage !== "" ? intoLanguage : (candidates()[0]?.language.toLowerCase() ?? "");
+
   const add = (label: string, found: readonly BookCandidate[]): void => {
     const known = new Set(candidates().map((candidate) => candidate.id));
+    const language = runLanguage();
     const fresh = found.filter(
       (candidate) =>
         !known.has(candidate.id) &&
         !held.includes(candidate.book) &&
-        (intoLanguage === "" || candidate.language.toLowerCase() === intoLanguage),
+        (language === "" || candidate.language.toLowerCase() === language),
     );
+    const otherLanguage = found.find(
+      (candidate) => language !== "" && candidate.language.toLowerCase() !== language,
+    );
+    if (otherLanguage !== undefined && fresh.length === 0) {
+      toasts.error({
+        title: t("Not added: another language"),
+        message: t("This run assembles {language}; {label} holds {other}.", {
+          language,
+          label,
+          other: otherLanguage.language,
+        }),
+      });
+      return;
+    }
     if (found.length > 0 && fresh.length === 0) {
       toasts.success({
         title: t("Nothing new in {label}", { label }),
@@ -369,7 +404,7 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
             subtitle={
               intoProject === undefined
                 ? t(
-                    "Assemble one project from BTT Writer's single-book projects. Pick a language below, or a folder or zip of Writer projects; you can combine several.",
+                    "Assemble one project from BTT Writer's single-book projects. Pick a language below, or a folder or zip of Writer projects, to start.",
                   )
                 : t(
                     "Only books this project does not have yet, in its language, are offered. They arrive as one commit.",
@@ -395,11 +430,6 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
             >
               {t("Zip of Writer projects")}
             </Button>
-            <Show when={allRows().length > 0}>
-              <Button variant="tertiary" class="ms-auto" onClick={() => setStep("books")}>
-                {t("Back to {count} books", { count: allRows().length })}
-              </Button>
-            </Show>
           </div>
           <Show when={sources().length > 0}>
             <p class="text-small text-on-surface-secondary">{sources().join(" · ")}</p>
@@ -441,9 +471,26 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
           <span class="me-auto truncate text-small text-on-surface-tertiary">
             {sources().join(" · ")}
           </span>
-          <Button size="sm" variant="tertiary" onClick={() => setStep("find")}>
-            {t("Add more…")}
-          </Button>
+          {/* Once a run has started it is that run: more books come only as a
+              Writer project's folder or zip, in its language. Leaving the
+              screen abandons it. */}
+          <Menu
+            label={t("Add a Writer project")}
+            side="bottom"
+            align="end"
+            trigger={
+              <Button size="sm" variant="tertiary" disabled={busy()} data-testid="migrate-add">
+                {t("Add a Writer project…")}
+              </Button>
+            }
+          >
+            <MenuItem icon={<FolderOpen aria-hidden="true" />} onSelect={() => fromLocal("folder")}>
+              {t("Folder…")}
+            </MenuItem>
+            <MenuItem icon={<FileArchive aria-hidden="true" />} onSelect={() => fromLocal("zip")}>
+              {t("Zip…")}
+            </MenuItem>
+          </Menu>
           <Show when={inactiveCount() > 0}>
             <Button
               size="sm"
