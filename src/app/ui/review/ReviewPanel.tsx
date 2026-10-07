@@ -48,10 +48,7 @@ import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import CircleCheck from "lucide-solid/icons/circle-check";
 import CircleX from "lucide-solid/icons/circle-x";
-import Eraser from "lucide-solid/icons/eraser";
-import History from "lucide-solid/icons/history";
 import Info from "lucide-solid/icons/info";
-import MoreVertical from "lucide-solid/icons/more-vertical";
 import Save from "lucide-solid/icons/save";
 import Scale from "lucide-solid/icons/scale";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
@@ -66,7 +63,7 @@ import {
   type CompareSource,
 } from "#core/compare";
 import { diffSkeleton, type SkeletonResult } from "#core/diff/skeleton";
-import type { DecisionUnit, DiffSkeleton, MergeSide } from "#core/galley";
+import type { DecisionUnit, MergeSide } from "#core/galley";
 import type { Author } from "#core/git/git";
 import { Observability } from "#core/observability";
 import type { Restorable } from "#core/recovery/recovery";
@@ -93,18 +90,14 @@ import { forgetWriterWork, takeWriterWork, writerWatch } from "../../writerWatch
 import { combineRefusal, combineTrouble, receiveRefusal, sendOutcomeCopy } from "../cloud/copy";
 import { SyncLine } from "../cloud/SyncLine";
 import { unsavedChanges } from "../panels/changes";
-import { ago, exact } from "../panels/format";
+import { ago } from "../panels/format";
 import { createRecordedVersion } from "../panels/recorded";
 import {
   Badge,
   Button,
   Dialog,
   EmptyState,
-  IconButton,
   Input,
-  Menu,
-  MenuItem,
-  MenuSeparator,
   Popover,
   Select,
   Switch,
@@ -681,12 +674,6 @@ export function ReviewPanel() {
     { name: "reviewSkeleton" },
   );
 
-  /** The selected book's decision units. */
-  const skeleton = (): DiffSkeleton | undefined => {
-    const found = selectedSkeleton();
-    return found !== undefined && Result.isSuccess(found) ? found.success : undefined;
-  };
-
   /**
    * The engine has no diff door — which means the artifact in this build is
    * not the pinned build. Said in as many words, because the
@@ -1065,25 +1052,6 @@ export function ReviewPanel() {
         (unit) => decisionFor(bookId, unit.id) === undefined && preset(bookId, unit) === "baseline",
       );
     writeNow(bookId, staticUnits, putBackPreset ? "current" : side);
-  };
-
-  /**
-   * "Clear every decision": in an editable review that means taking the takes
-   * back, as each book's own Clear does — through `writeNow`, one Undo step
-   * per book. Resetting the map alone left the takes written, their cards
-   * gone, and only Undo to reach them.
-   */
-  const clearEverything = (): void => {
-    if (!editable()) {
-      setDecisions(new Map());
-      return;
-    }
-    for (const book of reviewBooks()) {
-      const decided = book.skeleton.units.filter(
-        (unit) => decisionFor(book.bookId, unit.id) !== undefined,
-      );
-      if (decided.length > 0) writeNow(book.bookId, decided, undefined);
-    }
   };
 
   const seatBook = async (bookId: BookId): Promise<EditorBook | undefined> => {
@@ -1608,13 +1576,13 @@ export function ReviewPanel() {
         when={shell.project()}
         fallback={<EmptyState icon={<Scale size={22} />} title={t("Open a project first.")} />}
       >
-        {/* ONE row of chrome. What is compared is a chip that opens the two
-            pickers; how far along the review is, is a count; the one write is
-            the primary button. Everything else is in the menu — the reading
-            below is what this screen is for. */}
-        <header class="flex min-w-0 flex-wrap items-center gap-2" data-review-header>
+        {/* ONE row of chrome, in the order a reader asks: WHAT is compared —
+            the page's title, as Spiritual terms' title is the term, and
+            pressing it changes the two sides — then the one write, then the
+            way back. How many lives on the status line under it; deciding in
+            bulk lives with the cards it decides. */}
+        <header class="flex min-h-12 min-w-0 flex-wrap items-center gap-2" data-review-header>
           {pageLeading()}
-          <h1 class="text-h3 font-semibold text-on-surface-primary">{t("Review")}</h1>
           <Popover
             label={t("What is compared")}
             align="start"
@@ -1622,10 +1590,21 @@ export function ReviewPanel() {
             open={sourcesOpen()}
             onOpenChange={setSourcesOpen}
             trigger={
-              <Button size="sm" variant="secondary" data-review-sources title={sourcesLabel()}>
-                <span class="max-w-[40ch] truncate">{sourcesLabel()}</span>
-                <ChevronDown aria-hidden="true" />
-              </Button>
+              <button
+                type="button"
+                data-review-sources
+                title={t("Change what is compared")}
+                class="-mx-1.5 inline-flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 text-start transition-colors hover:bg-button-tertiary-surface-hover"
+              >
+                <h1 class="min-w-0 truncate text-h3 font-semibold text-on-surface-primary">
+                  {sourcesLabel()}
+                </h1>
+                <ChevronDown
+                  size={18}
+                  aria-hidden="true"
+                  class="shrink-0 text-on-surface-tertiary"
+                />
+              </button>
             }
           >
             <div class="space-y-3">
@@ -1683,60 +1662,18 @@ export function ReviewPanel() {
                 icon={<Save />}
                 data-review-record
                 disabled={unsaved().length === 0 && !againstShared()}
-                title={t("{count} book(s) with changes", {
-                  count: unsaved().length,
-                })}
+                title={
+                  lastBackup() === undefined
+                    ? t("Write and keep a version")
+                    : t("Write and keep a version. Your work was last backed up {when}.", {
+                        when: ago(lastBackup() ?? 0),
+                      })
+                }
                 onClick={openRecord}
               >
                 {t("Save")}
               </Button>
             </Show>
-            <Menu
-              label={t("Review actions")}
-              side="bottom"
-              align="end"
-              class="w-60"
-              trigger={
-                <IconButton size="sm" label={t("More review actions")} icon={<MoreVertical />} />
-              }
-            >
-              <MenuItem
-                icon={<Eraser aria-hidden="true" />}
-                disabled={decisions().size === 0}
-                onSelect={clearEverything}
-              >
-                {t("Clear every decision")}
-              </MenuItem>
-              <MenuItem
-                icon={<History aria-hidden="true" />}
-                onSelect={() =>
-                  void navigate({
-                    to: "/project/$slug/history",
-                    params: { slug: shell.slug() },
-                    search: {},
-                  })
-                }
-              >
-                {t("History")}
-              </MenuItem>
-              <Show when={skeleton()}>
-                <MenuSeparator />
-                <p
-                  class="px-3 pb-2 text-smallest text-on-surface-tertiary"
-                  data-review-engine="engine"
-                >
-                  {t("Differences are the engine's: by verse, then by word.")}
-                  <Show when={lastBackup()}>
-                    {(at) => (
-                      <span title={exact(at())} data-backup="last">
-                        {" "}
-                        {t("Working-state backup: {when}", { when: ago(at()) })}
-                      </span>
-                    )}
-                  </Show>
-                </p>
-              </Show>
-            </Menu>
             <BackToEditor quiet />
           </div>
         </header>

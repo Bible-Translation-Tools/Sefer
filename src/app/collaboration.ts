@@ -50,6 +50,8 @@ interface CollabFacts {
   readonly offerable: boolean;
   /** Where a send goes, `owner/name`: the shared project, or the person's copy. */
   readonly sendsTo: string | undefined;
+  /** When these were asked of the network: what "checked 3 min ago" says. */
+  readonly checkedAt: number;
 }
 
 const [held, setHeld] = createSignal<
@@ -88,6 +90,7 @@ export const collaboration = {
         copyAhead,
         offerable,
         sendsTo,
+        checkedAt: Date.now(),
       },
     });
   },

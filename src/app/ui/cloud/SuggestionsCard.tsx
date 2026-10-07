@@ -26,9 +26,16 @@ import {
   fetchSuggestion,
   openSuggestions,
 } from "../../suggestions";
-import { Button, Card, Input, PanelHeader, toasts } from "../primitives";
+import { ago } from "../panels/format";
+import { Button, Input, toasts } from "../primitives";
+import { QuietSection } from "./QuietSection";
 
-export function SuggestionsCard(props: { readonly project: Project; readonly signedIn: boolean }) {
+export function SuggestionsCard(props: {
+  readonly project: Project;
+  readonly signedIn: boolean;
+  /** Moves when the page's refresh is pressed: read the list again. */
+  readonly asked?: number;
+}) {
   const shell = useShell();
   const navigate = useNavigate();
   const { services } = shell;
@@ -62,7 +69,7 @@ export function SuggestionsCard(props: { readonly project: Project; readonly sig
   // On mount, and again for a different project; `load` reads the project as
   // a parameter-free call, so the key is what is tracked.
   createEffect(
-    () => ({ project: props.project, signedIn: props.signedIn }),
+    () => ({ project: props.project, signedIn: props.signedIn, asked: props.asked }),
     ({ project, signedIn }) => {
       void load(project, signedIn);
     },
@@ -102,34 +109,35 @@ export function SuggestionsCard(props: { readonly project: Project; readonly sig
 
   return (
     <Show when={props.signedIn && writer() === true}>
-      <Card class="space-y-3" data-cloud-card="suggestions">
-        <PanelHeader
-          level={3}
-          title={t("To review ({count})", { count: waiting().length })}
-          subtitle={t(
-            "From people working in their own copy. The shared project only changes when you accept.",
-          )}
-        />
+      <QuietSection
+        title={t("To review")}
+        count={waiting().length}
+        note={t(
+          "From people working in their own copy. The shared project only changes when you accept.",
+        )}
+        data={{ "data-cloud-card": "suggestions" }}
+      >
         <Show
           when={waiting().length > 0}
-          fallback={<p class="text-small text-on-surface-secondary">{t("Nothing is waiting.")}</p>}
+          fallback={<p class="text-small text-on-surface-tertiary">{t("Nothing is waiting.")}</p>}
         >
-          <ul class="space-y-3">
+          <ul class="space-y-1">
             <For each={waiting()}>
               {(suggestion) => (
-                <li class="space-y-2" data-suggestion={suggestion.number}>
+                <li class="space-y-2 py-1.5" data-suggestion={suggestion.number}>
                   <div class="flex items-center justify-between gap-3">
-                    <span class="text-small">
-                      {/* The title, not only the date: two from one person
-                          read as two rows of the same words otherwise. */}
-                      <span class="font-medium">{suggestion.title}</span>
-                      <span class="text-on-surface-tertiary">
-                        {" "}
-                        — {suggestion.author} ·{" "}
-                        {new Date(suggestion.updatedAt).toLocaleDateString()}
+                    {/* The title, not only the date: two from one person read
+                        as two rows of the same words otherwise. Who and when
+                        under it, quietly, as in Yours. */}
+                    <span class="min-w-0">
+                      <span class="block truncate text-small font-medium text-on-surface-primary">
+                        {suggestion.title}
+                      </span>
+                      <span class="block text-smallest text-on-surface-tertiary">
+                        {suggestion.author} · {ago(Date.parse(suggestion.updatedAt))}
                       </span>
                     </span>
-                    <span class="flex gap-2">
+                    <span class="flex shrink-0 gap-1">
                       <Button size="sm" disabled={busy()} onClick={() => review(suggestion)}>
                         {t("Review")}
                       </Button>
@@ -184,7 +192,7 @@ export function SuggestionsCard(props: { readonly project: Project; readonly sig
             </For>
           </ul>
         </Show>
-      </Card>
+      </QuietSection>
     </Show>
   );
 }

@@ -1,7 +1,7 @@
 /**
- * Review against a suggestion says whose it is: who offered it, its title,
- * when it last moved, and the messages of the versions it would bring — the
- * words its author wrote — so the reviewer is not deciding on text alone.
+ * Review against a suggestion says whose it is, in one sentence: who offered
+ * it, its title, and when it last moved. Not the messages of the versions it
+ * would bring: the review is latest to latest.
  *
  * And the one answer Review's Save does not give: Decline, with a note its
  * author reads. (Save brings it in, and closes it or leaves it open; when the
@@ -9,7 +9,7 @@
  */
 
 import { useNavigate } from "@tanstack/solid-router";
-import { For, Show, createEffect, createSignal } from "solid-js";
+import { Show, createEffect, createSignal } from "solid-js";
 
 import { collaboration } from "../../collaboration";
 import { describe } from "../../describe";
@@ -18,9 +18,6 @@ import { useShell } from "../../ProjectContext";
 import { declineSuggestion, suggestionDetails, type SuggestionDetails } from "../../suggestions";
 import { ago } from "../panels/format";
 import { Button, Input, toasts } from "../primitives";
-
-/** How many of the suggestion's version messages are listed before "and N more". */
-const SHOWN = 3;
 
 export function SuggestionLine(props: { readonly number: number }) {
   const shell = useShell();
@@ -67,11 +64,11 @@ export function SuggestionLine(props: { readonly number: number }) {
   return (
     <Show when={details()}>
       {(held) => (
-        <div
-          class="space-y-1 rounded-md border border-surface-border bg-surface-secondary px-3 py-2"
-          data-review-suggestion={props.number}
-        >
-          <div class="flex items-start gap-3">
+        <div class="space-y-1" data-review-suggestion={props.number}>
+          {/* One sentence on the page's ground: who, what, when. The versions'
+              messages are not listed — the review compares latest to latest,
+              and a list of commits asked the reviewer to think in them. */}
+          <div class="flex items-center gap-3">
             <p class="min-w-0 flex-1 text-small">
               <span class="font-semibold">{held().suggestion.author}</span>
               <span class="text-on-surface-secondary">
@@ -86,18 +83,6 @@ export function SuggestionLine(props: { readonly number: number }) {
               </Button>
             </Show>
           </div>
-          <Show when={held().versions.length > 0}>
-            <ul class="space-y-0.5 ps-4 text-smallest text-on-surface-secondary">
-              <For each={held().versions.slice(0, SHOWN)}>
-                {(version) => <li class="list-disc">{version.message.split("\n")[0]}</li>}
-              </For>
-              <Show when={held().versions.length > SHOWN}>
-                <li class="list-none text-on-surface-tertiary">
-                  {t("and {count} more", { count: held().versions.length - SHOWN })}
-                </li>
-              </Show>
-            </ul>
-          </Show>
           <Show when={declining()}>
             <form
               class="flex flex-wrap items-center gap-2 pt-1"

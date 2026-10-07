@@ -282,6 +282,20 @@ do with):
 - **Writer** — "new work in N books" and See it, when the books' Writer
   projects have some.
 
+The header is one row: the comparison itself is the page's title ("On disk →
+In the editor", pressed to change the two sides, as Spiritual terms' title is
+the term), then Save, then the way back. There is no ⋮ menu: Clear these
+decisions is in Decide all, History is the sidebar's tab, and the last backup
+is Save's tooltip. The toolbar is Changes / Whole book, View (which also holds
+which changes to show, and says "View · words only" when it hides some), and
+Decide all with the arrows, all quiet. Against a suggestion, whose it is is
+one sentence, without its versions' messages. The cloud popover follows the
+same rules: its headline in ink with a dot when it wants something, labels in
+sentence case, times in ink rather than brand, "to receive" in the status
+line's words, and "checked … ago" beside its refresh; Suggestions lists To
+review first, then Yours, as quiet sections with a "checked … ago" and refresh
+in the page header.
+
 The cards are calmer to match: Take / Keep are quiet until one is chosen (the
 chosen one takes the brand outline), Edit is quiet on every card screen, the
 context steps are faint until the pointer or focus is on the card, and

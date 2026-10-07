@@ -84,7 +84,8 @@ export function PlanBooks(props: {
         <Show when={overlap()}>
           {(said) => (
             <span
-              class={said().mine ? "text-on-surface-warning" : "text-on-surface-success"}
+              // Only an overlap with your own work asks something of you.
+              class={said().mine ? "text-on-surface-warning" : "text-on-surface-secondary"}
               data-plan="overlap"
             >
               {said().text}

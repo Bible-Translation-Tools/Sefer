@@ -225,16 +225,17 @@ export const planSummary = (plan: IncomingPlan): string => {
 
 /**
  * What the shared project has that you do not, in the plan's own numbers —
- * "3 verses in 2 books differ from yours" — never in versions. However many
+ * "3 verses in 2 books to receive" — never in versions, and in Review's
+ * status line's words. However many
  * versions it took them, a review compares the newest against yours ONCE, and
  * "3 versions you don't have" read like three reviews.
  */
 export const incomingWords = (plan: IncomingPlan): string | undefined => {
   if (plan.books.length === 0) return undefined;
   const books = plural(plan.books.length, "{count} book", "{count} books");
-  if (plan.verseCount === 0) return t("{books} differ from yours", { books });
+  if (plan.verseCount === 0) return t("{books} to receive", { books });
   const verses = plural(plan.verseCount, "{count} verse", "{count} verses");
-  return t("{verses} in {books} differ from yours", { verses, books });
+  return t("{verses} in {books} to receive", { verses, books });
 };
 
 /** What you have that the shared project does not — said, not counted: see `incomingWords`. */

@@ -78,7 +78,6 @@ import {
   MenuRadio,
   MenuSeparator,
   SegmentedControl,
-  Select,
   type VirtualSection,
 } from "../primitives";
 import { ChangesHistorySidebar } from "../workspace/ChangesHistorySidebar";
@@ -725,22 +724,24 @@ export function ReviewReader(props: {
           align="end"
           class="w-72"
           trigger={
-            <Button size="sm" variant="secondary" data-review-decide-all>
+            <Button size="sm" variant="tertiary" data-review-decide-all>
               {t("Decide all")}
               <ChevronDown aria-hidden="true" />
             </Button>
           }
         >
           <MenuLabel>
-            {scope() === "changes"
-              ? t("{count} change(s) in {books} book(s)", {
-                  count: scopeCount(),
-                  books: inScope().filter((held) => held.shown.length > 0).length,
-                })
-              : t("{count} change(s) in {book}", {
-                  count: scopeCount(),
-                  book: inScope()[0]?.book.name ?? "",
-                })}
+            {(() => {
+              const count = scopeCount();
+              const changes = t(count === 1 ? "{count} change" : "{count} changes", { count });
+              if (scope() !== "changes")
+                return t("{changes} in {book}", { changes, book: inScope()[0]?.book.name ?? "" });
+              const books = inScope().filter((held) => held.shown.length > 0).length;
+              return t("{changes} in {books}", {
+                changes,
+                books: t(books === 1 ? "{count} book" : "{count} books", { count: books }),
+              });
+            })()}
           </MenuLabel>
           <MenuItem data-review-take-all onSelect={() => decideAll("baseline")}>
             {t("Take {source}'s for all", { source: props.baselineShort })}
@@ -1018,21 +1019,6 @@ export function ReviewReader(props: {
             },
           ]}
         />
-        <Select
-          size="sm"
-          wrapperClass="min-w-0"
-          aria-label={t("Which changes")}
-          data-review-filter
-          value={filter()}
-          onChange={(event) => {
-            setFilter(toFilter(event.currentTarget.value));
-            setPlace(undefined);
-          }}
-        >
-          <option value="all">{t("All changes")}</option>
-          <option value="words">{t("Changes to the words")}</option>
-          <option value="formatting">{t("Markup and spacing only")}</option>
-        </Select>
         <Menu
           label={t("View")}
           side="bottom"
@@ -1041,11 +1027,40 @@ export function ReviewReader(props: {
           trigger={
             <Button size="sm" variant="tertiary" data-review-view>
               <Columns2 aria-hidden="true" />
-              {t("View")}
+              {/* Says when it is hiding something, since the filter that does
+                  so now lives inside it. */}
+              {filter() === "all"
+                ? t("View")
+                : filter() === "words"
+                  ? t("View · words only")
+                  : t("View · markup only")}
               <ChevronDown aria-hidden="true" />
             </Button>
           }
         >
+          {/* Which changes: in here with how they are drawn, rather than a
+              select of its own in the toolbar — it is a way of looking, and
+              most reviews never change it. */}
+          <MenuLabel>{t("Show")}</MenuLabel>
+          <For each={["all", "words", "formatting"] as const}>
+            {(value) => (
+              <MenuRadio
+                checked={filter() === value}
+                data-review-filter={value}
+                onSelect={() => {
+                  setFilter(value);
+                  setPlace(undefined);
+                }}
+              >
+                {value === "all"
+                  ? t("All changes")
+                  : value === "words"
+                    ? t("Changes to the words")
+                    : t("Markup and spacing only")}
+              </MenuRadio>
+            )}
+          </For>
+          <MenuSeparator />
           <MenuLabel>{t("Layout")}</MenuLabel>
           <MenuRadio checked={layout() === "auto"} onSelect={() => setLayout("auto")}>
             {t("Side by side when there is room")}
@@ -1253,9 +1268,6 @@ export function ReviewReader(props: {
 
 const labelOf = (label: string | ((bookId: BookId) => string), bookId: BookId): string =>
   typeof label === "string" ? label : label(bookId);
-
-const toFilter = (value: string): Filter =>
-  value === "words" || value === "formatting" ? value : "all";
 
 const toLayout = (value: string): Layout =>
   value === "split" || value === "unified" ? value : "auto";

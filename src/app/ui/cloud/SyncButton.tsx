@@ -41,7 +41,7 @@ import { SignInForm } from "./AccountCard";
 import { CollabSection } from "./CollabSection";
 import { stateCopy } from "./copy";
 import { PlanBooks } from "./IncomingPlanCard";
-import { SyncClocks, toneText } from "./ProjectCard";
+import { SyncClocks } from "./ProjectCard";
 import { PublishSection } from "./PublishSection";
 import { attentionOf, createQuickSync, quickActionOf, quickLabel, shareableLink } from "./quick";
 import { WriterSection } from "./WriterSection";
@@ -188,10 +188,21 @@ export function SyncButton() {
           {(held) => (
             <div class="space-y-4" data-sync-popover={held().state}>
               <div>
-                <h3 class={cx("text-body font-semibold", toneText(copy()?.tone ?? "muted"))}>
+                {/* The headline in ink, with a dot when it wants something —
+                    not a yellow sentence: the button already said so. */}
+                <h3 class="flex items-center gap-2 text-body font-semibold text-on-surface-primary">
+                  <Show when={copy()?.tone === "warning" || copy()?.tone === "error"}>
+                    <span
+                      aria-hidden="true"
+                      class={cx(
+                        "size-2 shrink-0 rounded-full",
+                        copy()?.tone === "error" ? "bg-on-surface-error" : "bg-on-surface-warning",
+                      )}
+                    />
+                  </Show>
                   {copy()?.headline}
                 </h3>
-                <p class="mt-1 text-small text-on-surface-secondary">{copy()?.detail}</p>
+                <p class="mt-1 text-small text-on-surface-tertiary">{copy()?.detail}</p>
               </div>
 
               <Show when={held().reading.origin !== undefined}>
@@ -205,7 +216,7 @@ export function SyncButton() {
               <Show when={(plan()?.books.length ?? 0) > 0 ? plan() : undefined}>
                 {(arriving) => (
                   <div class="space-y-2 border-t border-surface-border pt-3">
-                    <p class="text-smallest tracking-wide text-on-surface-tertiary uppercase">
+                    <p class="text-smallest font-medium text-on-surface-tertiary">
                       {t("Incoming changes")}
                     </p>
                     <PlanBooks plan={arriving()} />
@@ -231,9 +242,16 @@ export function SyncButton() {
                 <Show
                   when={quickActionOf(held()) !== "check" && held().reading.origin !== undefined}
                 >
+                  <Show when={fetchedAt()}>
+                    {(at) => (
+                      <span class="ms-auto text-smallest text-on-surface-tertiary">
+                        {t("checked {when}", { when: ago(at()) })}
+                      </span>
+                    )}
+                  </Show>
                   <IconButton
                     size="sm"
-                    class="ms-auto"
+                    class={fetchedAt() === undefined ? "ms-auto" : undefined}
                     label={
                       fetchedAt() === undefined
                         ? t("Check for changes")
@@ -262,7 +280,7 @@ export function SyncButton() {
               <Show when={link()}>
                 {(href) => (
                   <details class="border-t border-surface-border pt-3" data-sync-details>
-                    <summary class="cursor-pointer text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase">
+                    <summary class="cursor-pointer text-smallest font-medium text-on-surface-tertiary">
                       {t("Project details")}
                     </summary>
                     <label
@@ -301,7 +319,12 @@ export function SyncButton() {
                 {(held) => (
                   <div class="flex items-center gap-2">
                     <p class="min-w-0 flex-1 text-small break-words text-on-surface-secondary">
-                      {t("Signed in to {host} as {user}.", { host: host(), user: held().username })}
+                      {/* Who, then where, quietly: the scheme is noise. */}
+                      <span class="font-medium text-on-surface-primary">{held().username}</span>
+                      <span class="text-on-surface-tertiary">
+                        {" · "}
+                        {host().replace(/^https?:\/\//u, "")}
+                      </span>
                     </p>
                     <Button
                       size="sm"

@@ -28,9 +28,7 @@ export function WriterSection(props: { readonly onLeave: () => void }) {
   return (
     <Show when={facts().followed > 0}>
       <div class="space-y-2 border-t border-surface-border pt-3" data-sync-writer>
-        <p class="text-smallest tracking-wide text-on-surface-tertiary uppercase">
-          {t("Writer projects")}
-        </p>
+        <p class="text-smallest font-medium text-on-surface-tertiary">{t("Writer projects")}</p>
         <Show
           when={facts().work.length > 0}
           fallback={

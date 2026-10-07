@@ -22,7 +22,8 @@ import {
   type MySuggestion,
 } from "../../suggestions";
 import { ago } from "../panels/format";
-import { Button, Card, PanelHeader, toasts } from "../primitives";
+import { Button, toasts } from "../primitives";
+import { QuietSection } from "./QuietSection";
 
 const statusOf = (mine: MySuggestion): string => {
   switch (mine.kind) {
@@ -35,7 +36,11 @@ const statusOf = (mine: MySuggestion): string => {
   }
 };
 
-export function YourSuggestions(props: { readonly project: Project }) {
+export function YourSuggestions(props: {
+  readonly project: Project;
+  /** Moves when the page's refresh is pressed: read the list again. */
+  readonly asked?: number;
+}) {
   const shell = useShell();
   const { services } = shell;
   const facts = () => collaboration.facts(props.project.root);
@@ -55,8 +60,8 @@ export function YourSuggestions(props: { readonly project: Project }) {
     if (ask === asked) setMine(held);
   };
   createEffect(
-    () => props.project,
-    (project) => {
+    () => ({ project: props.project, asked: props.asked }),
+    ({ project }) => {
       void load(project);
     },
   );
@@ -79,15 +84,14 @@ export function YourSuggestions(props: { readonly project: Project }) {
   const waiting = () => mine()?.some((held) => held.kind === "waiting") === true;
 
   return (
-    <Card class="space-y-3" data-suggestions="yours">
-      <PanelHeader
-        level={3}
-        title={t("Yours")}
-        subtitle={t("What you offered from your own copy. Later sends add to an open suggestion.")}
-      />
-
+    <QuietSection
+      title={t("Yours")}
+      count={mine()?.length}
+      note={t("What you offered from your own copy. Later sends add to an open suggestion.")}
+      data={{ "data-suggestions": "yours" }}
+    >
       <Show when={!waiting() && facts()?.offerable === true}>
-        <div class="flex items-center gap-3 rounded-md bg-surface-secondary px-3 py-2">
+        <div class="flex items-center gap-3 py-1">
           <p class="min-w-0 flex-1 text-small text-on-surface-secondary">
             {t("Your copy has changes the shared project does not.")}
           </p>
@@ -118,31 +122,25 @@ export function YourSuggestions(props: { readonly project: Project }) {
           </p>
         }
       >
-        <ul class="divide-y divide-surface-border">
+        <ul class="space-y-1">
           <For each={mine()}>
             {(held) => (
               <li
-                class="space-y-1 py-2"
+                class="space-y-1 py-1.5"
                 data-suggestion={held.suggestion.number}
                 data-state={held.kind}
               >
                 <div class="flex items-center gap-3">
                   <div class="min-w-0 flex-1">
-                    <p class="text-small">
+                    <p class="truncate text-small font-medium text-on-surface-primary">
                       {held.suggestion.title}
-                      <span class="text-on-surface-tertiary">
-                        {" "}
-                        · {ago(Date.parse(held.suggestion.updatedAt))}
-                      </span>
                     </p>
-                    <p
-                      class={
-                        held.kind === "taken"
-                          ? "text-smallest text-on-surface-success"
-                          : "text-smallest text-on-surface-secondary"
-                      }
-                    >
-                      {statusOf(held)}
+                    <p class="text-smallest text-on-surface-tertiary">
+                      <span class={held.kind === "taken" ? "text-on-surface-success" : undefined}>
+                        {statusOf(held)}
+                      </span>
+                      {" · "}
+                      {ago(Date.parse(held.suggestion.updatedAt))}
                     </p>
                   </div>
                   <Show when={held.kind === "waiting"}>
@@ -196,6 +194,6 @@ export function YourSuggestions(props: { readonly project: Project }) {
           </For>
         </ul>
       </Show>
-    </Card>
+    </QuietSection>
   );
 }
