@@ -351,7 +351,7 @@ one version, and that is the end of it (Will, 2026-10-06).
 Each upstream is a `Remote.probe`, six at a time (67 in about 4 s). A head that is the commit the
 project took, or the one the shared project's `.upstreams.json` records — a teammate took it and it
 arrives through ordinary sync — is nothing new: two people never take the same Writer saves twice.
-A moved one is cloned with history into staging (50–100 KB), rendered through the import template at
+A moved one is cloned with history into staging (50–100 KB; in memory on the Web, through `Services.inMemoryTransfer`, and `<temp>/writer` on desktop), rendered through the import template at
 its head and at the commit the project took, and saves that touched no chunk or title (Writer
 autosaves its manifest) are not work (`src/core/migrate/writerWork.ts`). What the person reviews is
 `incoming`: the project's own book with THEIR text only in the verses they changed since that commit,
@@ -511,7 +511,10 @@ not made.
 `createAccount` (`src/app/ui/cloud/account.ts`) is the one implementation of "signed in": the popover
 and `CloudPanel` on `/project/$slug/settings` each make one, and `SignInForm` and `AccountCard`
 (`src/app/ui/cloud/AccountCard.tsx`) draw it. The attach-and-publish half, `SharedProjectCard`
-(`src/app/ui/cloud/SharedProjectCard.tsx`), is there too. "How you work on this project" shows only once a shared project is attached: before that whether the account can write to it is unknown, and the card used to read that as "Sign in". An attach or publish re-reads the sync
+(`src/app/ui/cloud/SharedProjectCard.tsx`), is there too. "Choose a shared project…" is a list you
+type at (`FilterList`) over the repositories the account can write to, and picking a row attaches
+it; the first list is one page of 50, so after a 300 ms pause what was typed is searched on Gitea
+(`listWritableRepos` with `q`) and what comes back joins the list. "How you work on this project" shows only once a shared project is attached: before that whether the account can write to it is unknown, and the card used to read that as "Sign in". An attach or publish re-reads the sync
 state.
 
 ## What the ports grew

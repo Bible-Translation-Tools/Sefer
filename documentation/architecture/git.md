@@ -220,7 +220,8 @@ empty ([landing](landing.md) has the record and the index field it feeds).
 `POST /api/v1/users/{user}/tokens` with HTTP Basic auth (plus `X-Gitea-OTP` when the account has two
 factors) mints a token scoped to `SESSION_TOKEN_SCOPES` and named `sefer-<platform>-<date>`, and the
 password is used for that one request and never stored. `login`, `logout`, `session`,
-`listWritableRepos`, `listOwnedRepos`, `createRepo`, `getRepo`, `listForks`, `forkRepo` (with an
+`listWritableRepos` (one page of 50, or with `search` the page Gitea's own `q` matches),
+`listOwnedRepos`, `createRepo`, `getRepo`, `listForks`, `forkRepo` (with an
 optional name); `GiteaError` reasons are
 `Unauthorized`, `OtpRequired`, `Network`, `Refused`, `Io`, and a 401 that mentions OTP is `OtpRequired`
 rather than a wrong password. The session is a `Credential` (`username`, `token`, plus the token's name

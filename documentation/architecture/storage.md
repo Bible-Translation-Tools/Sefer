@@ -45,7 +45,7 @@ Other variants on the scanned machine changed little: a worker with `createSyncA
 
 **The rule, on the Web:**
 
-- Work that is read once and thrown away never touches OPFS. It is staged in memory: `Services.inMemoryTransfer` is a memory `FileSystem` with isomorphic-git and the Remote over it.
+- Work that is read once and thrown away never touches OPFS. It is staged in memory: `Services.inMemoryTransfer` is a memory `FileSystem` with isomorphic-git and the Remote over it. Its Git must be `Layer.fresh(WebGitLive)`: the runtime memoises Layers by identity, so the plain Layer handed back the app's own Git over OPFS, and a clone made in memory read as no repository (`src/app/services.ts`).
 - Work that is kept is written once, many files at a time, and only what is kept.
 - Internal storage for something with many parts is few big files, an index if needed — the authoring layout is not the disk format (Will, 2026-10-07: a whole book's notes or words as one file, not a file per chunk). This matters most for resources like tN and tW.
 - Desktop does not pay the tax (git2, a native disk), so these are Web paths; `inMemoryTransfer` is undefined there.

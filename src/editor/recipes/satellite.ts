@@ -244,11 +244,10 @@ export const clipped = (range: { from: number; to: number }): Extension => [
 ];
 
 /**
- * A span of the book, snapped to whole lines and clamped to the document.
- *
- * `collapseOutside` replaces what is outside the range with block widgets,
- * and a block replacement that does not start and end at a line boundary is
- * not something CodeMirror will draw. A unit's end is the next unit's anchor,
+ * A span of the book, snapped to whole lines and clamped to the document:
+ * what a render window takes (`setRenderRange`), which draws whole lines.
+ * A card's clip no longer snaps — `clipSpan` — because `collapseOutside`
+ * hides the rest of a partly shown line inline. A unit's end is the next unit's anchor,
  * which sits at the START of its own line, so the last line is the one before
  * it.
  */

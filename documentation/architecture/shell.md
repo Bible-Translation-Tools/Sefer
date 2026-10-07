@@ -105,8 +105,8 @@ is the behaviour, and `<BackToEditor />` is the default UI for it, a `data-testi
 button naming the book it returns to, with no position of its own.
 
 The hook answers `undefined` off a project's routes (asked of the route, `useScreen().inProject`, never
-of a pathname), so settings and the projects list have no door; the app bar's Home is the way back
-from there. Inside them it answers the label and a `go`, and registers the `editor.back` command, so
+of a pathname), so the projects list has no door; the app bar's Home is the way back from there.
+Settings, under `/project/$slug/settings`, is a project route and has one. Inside them it answers the label and a `go`, and registers the `editor.back` command, so
 the palette lists it on any screen that draws the door — registered there and not in the shell's core
 set, because "is this a full-page screen" is the ROUTE's question and `ShellBridge` deliberately
 carries no pathname.
@@ -180,8 +180,9 @@ the application's Mod-K for an application it is not part of.
   nothing. The USFM mode is the Toolbar's Mode control, not a tile. Key terms
   goes to **`/project/$slug/terms`** — its own pane, because Find and Key terms
   are separate routes with similar UI rather than a mode toggle on one screen
-  ([design direction](design-direction.md), gap list 5). Projects, Findings,
-  History and Settings are always offered; Projects is lit on `/start/*` as
+  ([design direction](design-direction.md), gap list 5). Projects, Findings and
+  History are always offered, and Settings whenever a project is open (it lives
+  under one, and is disabled with none); Projects is lit on `/start/*` as
   well as `/projects`, because bringing a project in is the chooser's second
   half and `ProjectSidebar` reads the same two prefixes.
 
@@ -289,7 +290,7 @@ network request per render.
 
 ## The findings panel's filter
 
-`/findings` renders the whole project's findings through a filter the reader owns. The policy is pure and lives in core (`src/core/findings/filter.ts` — `applyFilter`; see [findings](findings.md), "Filters and views"); the shell holds only the state and the chips. `src/app/ui/panels/FindingsFilters.tsx` (with `panels/findingsFilter.ts`) carries both halves of that state deliberately: `createFindingsFilter(services)` owns the value — seeded from `Settings.get`, written back through `Settings.set` on every click, kept live by a fiber over `settings.changes` like `editor.preferChapterView` — and `<FindingsFilters>` is the chip row that edits it, so the list, the counts and the keyboard cursor cannot disagree about what is being shown. Severity, producer and "hide stale" persist as `findings.filter`; the text box, the book selection and the view (by book, by code, by severity, flat) are session signals. The key is a `Schema.Struct`, and `/settings` draws one widget per `kind`, so it is registered in `shellKeys` but left out of `shellSettings` — the panel is its only editor. The route's arrows/Enter cursor is **local to the route** and honours the filter, while the shell's own findings cursor (`shell.finding`, `findings.next`/`findings.previous` in the palette) still walks the unfiltered project: sharing one cursor would make a palette command jump according to a filter it never mentioned, and keeping them apart needs no change to `ProjectContext`.
+`/findings` renders the whole project's findings through a filter the reader owns. The policy is pure and lives in core (`src/core/findings/filter.ts` — `applyFilter`; see [findings](findings.md), "Filters and views"); the shell holds only the state and the chips. `src/app/ui/panels/FindingsFilters.tsx` (with `panels/findingsFilter.ts`) carries both halves of that state deliberately: `createFindingsFilter(services)` owns the value — seeded from `Settings.get`, written back through `Settings.set` on every click, kept live by a fiber over `settings.changes` like `editor.preferChapterView` — and `<FindingsFilters>` is the chip row that edits it, so the list, the counts and the keyboard cursor cannot disagree about what is being shown. Severity, producer and "hide stale" persist as `findings.filter`; the text box, the book selection and the view (by book, by code, by severity, flat) are session signals. The key is a `Schema.Struct`, and Settings draws one widget per `kind`, so it is registered in `shellKeys` but left out of `shellSettings` — the panel is its only editor. The route's arrows/Enter cursor is **local to the route** and honours the filter, while the shell's own findings cursor (`shell.finding`, `findings.next`/`findings.previous` in the palette) still walks the unfiltered project: sharing one cursor would make a palette command jump according to a filter it never mentioned, and keeping them apart needs no change to `ProjectContext`.
 
 ## Commands
 
@@ -305,7 +306,7 @@ An Effect-returning command is run on the app runtime by the runner `registerShe
 
 ## Routes and tokens
 
-Top level: `/`, `/projects`, `/settings` (a redirect to `/projects`: Settings live under a project), `/start/create`, the dev-only `/dev/fixture`, and `/design` (outside the `_app` chrome). Under `/project/$slug`: the index (a redirect to the work, above), `book/$book`, `find`, `findings`, `history` (`?review=1` redirects to `review`), `inventory`, `terms`, `review`, `cloud`, `settings` and `playground`. Settings is under the project so reaching it never closes the project, and its Cloud section is that project's; the preferences on it are still the device's, for every project. The app bar's Settings is disabled with no project open. A project's slug is minted by `shell.slugFor(root)` and kept in the `projectSlugs` setting, so a bookmark keeps working; slugs minted this session are also held in memory and read first by `rootForSlug`, because a setting only answers a new value once the settings file is written and a click mints and navigates in the same tick. `find` owns its search params and derives its whole state from them, so a link into it from the app bar or the toolbar changes the screen that is already mounted. File routes under `src/routes`; `src/routeTree.gen.ts` is generated — never edit it.
+Top level: `/`, `/projects`, `/settings` (a redirect to `/projects`: Settings live under a project), `/start/create`, the dev-only `/dev/fixture`, and `/design` (outside the `_app` chrome). Under `/project/$slug`: the index (a redirect to the work, above), `book/$book`, `find`, `findings`, `history` (`?review=1` redirects to `review`), `inventory`, `terms`, `review`, `suggestions`, `settings` and `playground`. Settings is under the project so reaching it never closes the project, and its Cloud section is that project's; the preferences on it are still the device's, for every project. The app bar's Settings is disabled with no project open. A project's slug is minted by `shell.slugFor(root)` and kept in the `projectSlugs` setting, so a bookmark keeps working (deleting a project forgets its slug, so an old link never opens a project made later in the same folder); slugs minted this session are also held in memory and read first by `rootForSlug`, because a setting only answers a new value once the settings file is written and a click mints and navigates in the same tick. `find` owns its search params and derives its whole state from them, so a link into it from the app bar or the toolbar changes the screen that is already mounted. File routes under `src/routes`; `src/routeTree.gen.ts` is generated — never edit it.
 
 `src/app/ui/tokens.css` is the design system as plain custom properties, ported from the v1 editor's vanilla-extract contract so the two read as one product, and it is also the Tailwind v4 configuration: an `@theme` block mints a utility from every semantic name. Components use the semantic names (`bg-surface-primary`), never the ramps. Dark is a token swap under `[data-theme="dark"]` and `prefers-color-scheme`, never Tailwind's `dark:` variant. The reusable components live in `src/app/ui/primitives/`, which is the only place corvu is imported. `src/app/ui/app.css` is the one global stylesheet and holds only the `<body>` ground and the CodeMirror frame. See [the UI layer](ui.md).
 
@@ -317,4 +318,4 @@ Every user-visible string goes through `t()` (`src/app/i18n.ts`) — an identity
 
 - **Opening an arbitrary folder on the Web host.** `WebDialogsLive.pickFolder` returns a picked handle's _name_, not a path the OPFS layer can read. `/projects` lists the OPFS subtree Sefer owns and says so.
 - **Drafting** (`src/app/workflows/drafting.ts`) is a typed stub that `Effect.die`s. Its header says what it composes and why the missing piece is domain vocabulary rather than code.
-- **Settings enumeration.** `SettingsService` has no "list every registered key" — a key belongs to the module that declared it. `src/app/settings.ts` is the shell's own set, and `/settings` renders exactly those.
+- **Settings enumeration.** `SettingsService` has no "list every registered key" — a key belongs to the module that declared it. `src/app/settings.ts` is the shell's own set, and Settings renders exactly those.
