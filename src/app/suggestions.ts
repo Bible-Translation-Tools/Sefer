@@ -385,7 +385,15 @@ export const suggestMyChanges = (services: Services, project: Project): Promise<
         return yield* Effect.fail(new Error("sign in to suggest changes"));
       const git = yield* Git;
       const remote = yield* Remote;
-      yield* remote.push(yield* git.open(project.root), COPY);
+      const repo = yield* git.open(project.root);
+      // Only when the copy lacks this device's newest version. Save has
+      // usually just sent it there, and sending the same commit again, a
+      // moment after the suggestion opened, showed on WACS as "force-pushed
+      // d3d8722 to d3d8722".
+      const head = yield* git.resolve(repo, "HEAD");
+      const sent = yield* git.resolve(repo, copyRef(at.branch));
+      if (Option.isNone(head) || Option.isNone(sent) || head.value !== sent.value)
+        yield* remote.push(repo, COPY);
       return yield* (yield* Suggestions).suggest(at.host, at.owner, at.name, {
         from: at.me,
         branch: at.branch,
