@@ -28,6 +28,7 @@ import {
   probeUpstreams,
   projectUpstreams,
   takenText,
+  UPSTREAM_TIMEOUT,
   type WriterWork,
 } from "#core/migrate/writerWork";
 import { Observability } from "#core/observability";
@@ -114,19 +115,25 @@ export const checkWriter = async (services: Services, project: Project): Promise
               each.head !== each.upstream.commit &&
               !each.upstream.books.some((book) => shared.get(book) === each.head),
           );
+          // A few at a time; a clone that does not finish in time has no work.
+          const fetched = yield* Effect.forEach(
+            moved,
+            (each) =>
+              Effect.orElseSucceed(
+                Effect.timeout(fetchWork(each, stagingOf(services)), UPSTREAM_TIMEOUT),
+                () => undefined,
+              ),
+            { concurrency: 3 },
+          );
           const found: IncomingWork[] = [];
-          for (const each of moved) {
-            const fetched = yield* Effect.orElseSucceed(
-              fetchWork(each, stagingOf(services)),
-              () => undefined,
-            );
-            if (fetched === undefined) continue;
-            const ours = project.book(fetched.book)?.source().text;
+          for (const each of fetched) {
+            if (each === undefined) continue;
+            const ours = project.book(each.book)?.source().text;
             if (ours === undefined) continue;
-            const proposal = incoming(services.galley, fetched, ours);
+            const proposal = incoming(services.galley, each, ours);
             // Their saves already match what this project holds: nothing to review.
             if (proposal === undefined || proposal === ours) continue;
-            found.push({ ...fetched, proposal });
+            found.push({ ...each, proposal });
           }
           return { found, probed: probed.length, moved: moved.length };
         }),

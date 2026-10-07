@@ -56,6 +56,13 @@ export interface Probed {
   readonly head: string | undefined;
 }
 
+/**
+ * How long one remote gets to answer a probe, or one Writer project to clone.
+ * A remote that takes longer counts as one that did not answer: no work this
+ * time, and the other books' work is not held up behind it.
+ */
+export const UPSTREAM_TIMEOUT = "15 seconds";
+
 /** Each upstream's head, a few at a time. A remote that does not answer has no head, and no work. */
 export const probeUpstreams = (
   upstreams: readonly Upstream[],
@@ -66,7 +73,10 @@ export const probeUpstreams = (
       upstreams,
       (upstream) =>
         Effect.map(
-          Effect.orElseSucceed(remote.probe(upstream.url), () => undefined),
+          Effect.orElseSucceed(
+            Effect.timeout(remote.probe(upstream.url), UPSTREAM_TIMEOUT),
+            () => undefined,
+          ),
           (probe): Probed => ({
             upstream,
             head: probe === undefined ? undefined : Option.getOrUndefined(probe.head),
