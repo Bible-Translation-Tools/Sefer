@@ -177,7 +177,12 @@ export const canWriteShared = (
 /** What choosing the copy mode came to. */
 export type CopyOutcome =
   /** The copy is attached (made now, or found already made) and has this device's work. */
-  | { readonly kind: "copy"; readonly copy: string }
+  | {
+      readonly kind: "copy";
+      readonly copy: string;
+      /** Made under another name, because the person already held the upstream one. */
+      readonly renamed?: true;
+    }
   /**
    * The project was cloned from the person's own copy: it is now the copy,
    * and the project it was copied from is the shared one.
@@ -189,13 +194,63 @@ export type CopyOutcome =
    */
   | { readonly kind: "standalone" };
 
-/** The signed-in account's fork of `shared`, when one exists already. */
+/**
+ * The names a copy of `shared` may have: the upstream one, then the upstream
+ * name and its owner (`en_ulb-raphael`) for someone who already held the
+ * first, numbered on after that.
+ */
+const copyNames = (shared: RemoteRepo): readonly string[] => {
+  const owned = `${shared.name}-${shared.owner.toLowerCase()}`;
+  return [shared.name, owned, `${owned}-2`, `${owned}-3`];
+};
+
+/**
+ * The signed-in account's fork of `shared`, when one exists already.
+ *
+ * Asked of `shared`'s own list of forks, whatever the copy is called. Looking
+ * up `<me>/<same name>` alone found the wrong repository for someone who
+ * already owned one of that name from another project (Raphael/en_ulb, with
+ * Will_Kelly/en_ulb a fork of WA-Catalog/en_ulb), and forking then failed on
+ * the name. When the list cannot be read — the WACS proxy forwards only POST
+ * on `forks` today — each name a copy is given (`copyNames`) is looked up
+ * instead, and counts only when its parent is `shared`.
+ */
 const existingFork = (host: string, me: string, shared: RemoteRepo) =>
   Effect.gen(function* () {
-    const found = yield* (yield* Gitea).getRepo(host, me, shared.name);
-    return Option.filter(
-      found,
-      (repo) => repo.parent?.fullName.toLowerCase() === shared.fullName.toLowerCase(),
+    const gitea = yield* Gitea;
+    const listed = yield* Effect.result(gitea.listForks(host, shared.owner, shared.name));
+    if (listed._tag === "Success")
+      return Option.fromUndefinedOr(
+        listed.success.find((fork) => fork.owner.toLowerCase() === me.toLowerCase()),
+      );
+    for (const name of copyNames(shared)) {
+      const found = yield* gitea.getRepo(host, me, name);
+      if (
+        Option.isSome(found) &&
+        found.value.parent?.fullName.toLowerCase() === shared.fullName.toLowerCase()
+      )
+        return found;
+    }
+    return Option.none<RemoteRepo>();
+  });
+
+/**
+ * The name a new copy of `shared` takes: `undefined` for the upstream one,
+ * or the first of `copyNames` the person does not already hold. A repository
+ * that holds the name but is not a copy of `shared` (a sibling fork) is never
+ * attached: it holds other work, and a suggestion from it would offer that
+ * too.
+ */
+const copyName = (host: string, me: string, shared: RemoteRepo) =>
+  Effect.gen(function* () {
+    const gitea = yield* Gitea;
+    const names = copyNames(shared);
+    for (const name of names) {
+      const held = yield* gitea.getRepo(host, me, name);
+      if (Option.isNone(held)) return name === shared.name ? undefined : name;
+    }
+    return yield* Effect.fail(
+      new Error(`you already hold ${names.join(", ")} on ${host}; rename one and try again`),
     );
   });
 
@@ -231,15 +286,21 @@ export const workInOwnCopy = (services: Services, project: Project): Promise<Cop
           yield* remote.fetch(repo);
           return { kind: "rerooted", shared: parent.fullName } satisfies CopyOutcome;
         }
-        const held = yield* existingFork(at.host, at.me ?? "", shared);
+        const me = at.me ?? "";
+        const held = yield* existingFork(at.host, me, shared);
+        const renamed = Option.isSome(held) ? undefined : yield* copyName(at.host, me, shared);
         const copy = Option.isSome(held)
           ? held.value
-          : yield* gitea.forkRepo(at.host, at.owner, at.name);
+          : yield* gitea.forkRepo(at.host, at.owner, at.name, renamed);
         // Attached, not sent: a fresh copy already holds the shared project's
         // history, and this device's own work goes at the next send — after
         // receiving, when this device is behind (a send now would be refused).
         yield* remote.attachAs(repo, COPY, copy.cloneUrl);
-        return { kind: "copy", copy: copy.fullName } satisfies CopyOutcome;
+        return {
+          kind: "copy",
+          copy: copy.fullName,
+          ...(renamed === undefined ? {} : { renamed: true }),
+        } satisfies CopyOutcome;
       });
       if (outcome.kind !== "standalone")
         yield* Effect.orElseSucceed(
