@@ -836,6 +836,9 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     // so nothing applies to a Book of a project that is already closed.
     await services.run(Effect.flatMap(Repositories, (lanes) => lanes.close(staticOpen.root)));
     await services.run(Effect.provideService(staticOpen.close(), Observability, closing));
+    // Save's baselines are keyed by book alone and live for the session: the
+    // next project's books must not be measured against this one's text.
+    await services.run(services.save.forget());
     closing.end("passed");
   };
 
