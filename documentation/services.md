@@ -424,8 +424,9 @@ The one compare screen, `/review`. Both sides are pickers over a `CompareSource`
 
 ### Constraints and known bugs
 
-- The flow itself needs design work.
-- The copy says "Save & Review" and stays that way until the product-copy pass.
+- The flow itself needs design work. For a suggestion: sides named by who wrote them, the unchosen side dimmed and a one-sentence header are on the playground's "Suggestion review" (2026-10-07), awaiting a ruling.
+- Reviewing a suggestion leaves out passages only the editor changed (counted in one line). A reviewer who is behind the shared project still sees, as the suggestion's, shared-project changes the suggestion carries and the editor lacks: the common version is merge-base(HEAD, suggestion), not (shared tip, suggestion) as WACS's "Files changed" uses.
+- The copy says "Save & Review" and stays that way until the product-copy pass. "Not in {caption}." puts a side's full caption mid-sentence ("Not in The suggested changes.").
 
 ### Ideas / future
 
@@ -447,6 +448,7 @@ The one compare screen, `/review`. Both sides are pickers over a `CompareSource`
 - `externalChanges`/`resolve` exist but nothing calls them, and Web has no `watch`. Something changing a file under OPFS or the sandbox mid-session is unlikely, but not impossible.
 - There is no disk-identity check at save time.
 - Partial `saveAll` failures have no user-facing report.
+- Baselines are keyed by book, not project: `forget()` on close (2026-10-07) is what keeps one project's text from judging the next. The seats in `services.ts` are keyed the same way and not cleared — harmless while callers only ask for the open project's books. A hot reload under an open project rebuilds the coordinator empty, and Review against the file then says "No differences" until the project is reopened.
 
 ### Ideas / future
 
@@ -504,7 +506,8 @@ Clone (the newest version only unless the caller asks for all; desktop backfills
 - Desktop transfer progress is a `TODO(seam)` (`platform/tauri/remote.ts:141`).
 - Desktop `git_clone` (git2 `RepoBuilder`) compiles but has not been run against a server; the web clone was checked on `main` and `master` repositories through the prod proxy, and (2026-09-25) stores the content host as `origin`.
 - Suggested changes (forks and pull requests, `core/remote/suggestions.ts`) were exercised on the Web with a second, non-writer account on 2026-10-06 — copy, offer, partial accept, decline — and not yet on desktop. On the Web each call depends on the WACS proxy's API allowlist; [git](architecture/git.md#suggested-changes).
-- A plain Decline only closes the pull request: its versions stay out of the shared project's history and come back in the person's next offer. Recording a decline as a decision commit is deferred; [git](architecture/git.md#suggested-changes).
+- A plain Decline only closes the pull request: its versions stay out of the shared project's history and come back in the person's next offer. Recording a decline as a decision commit was ruled out on 2026-10-07 (it resets the author's copy); remembering declines by content is proposed; [git](architecture/git.md#suggested-changes).
+- Finding a person's copy reads the shared project's forks (`listForks`, 2026-10-07); the WACS proxy allows that GET in a commit not yet deployed, and until it is the Web falls back to looking up each name a copy may have. A clash with a repository of the same name forks as `<name>-<owner>`. Not yet walked against WACS.
 
 ### Ideas / future
 

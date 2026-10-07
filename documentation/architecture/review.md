@@ -124,11 +124,21 @@ one decision commit ([sync](sync.md), "A contested book, settled in Review").
 
 ### Against a suggestion
 
-`?pull=<n>` is the same pairing with a suggestion's head as theirs, and four things differ
+`?pull=<n>` is the same pairing with a suggestion's head as theirs, and these things differ
 ([git](git.md), Suggested changes):
 
 - **Whose it is** sits above the cards (`SuggestionLine`): who offered it, its title, when, and the
-  messages of the versions it would bring — with **Decline…**, a note box, on that line.
+  messages of the versions it would bring — with **Decline…**, a note box, on that line. The
+  suggestion's side explains itself as its author's copy, as they last sent it, not as the shared
+  project.
+- **Only what it offers is shown.** A passage only the editor changed since the two last agreed
+  (`originOf` is `here`) is this device's own work, which the preset keeps, not part of the
+  suggestion: the reader leaves it out (`ReviewBook.hidden`) and one line counts it — "Your editor
+  also has N change(s) that are not in this suggestion" — with **Show them**. The editor stays one
+  side because a decision is written into it as it is made; what changes is what is drawn.
+- **Nothing to show is not "No differences".** When the editor already reads everything the
+  suggestion offers — its author reviewing their own, or a reviewer who took it already — the
+  screen says so, and that Save brings it into the shared project and closes it.
 - **Save always sends**, to the shared project whatever the reviewer's own mode, even when the
   fast-forward left nothing new to record: the versions it brought are what the shared project lacks.
 - **The dialog's switch, "Close the suggestion as brought in"**, on by default: off keeps it open
@@ -545,7 +555,17 @@ where Recovery replays one, so `dirty(book)` is the only question a marker has
 to ask. Adopting is refused quietly when a baseline already exists or when the
 book's revision is past 0. The `disk` source follows the same rule from the
 other end: a book with no baseline reads as its own current text, because that
-text IS the bytes on disk.
+text IS the bytes on disk. (So a Review against the file that says "No
+differences" right after an edit means the baselines are gone — a hot reload
+that rebuilt the services under an open project does exactly that; reopening
+the project re-adopts.)
+
+Baselines, conflicts and the books Save has seen are keyed by `BookId` alone and
+the coordinator lives for the session, so `forget()` clears them and the shell's
+`closeProject` calls it. Without that, the next project's `GEN` was measured
+against the last project's text and path: every book "changed entirely" in
+Review, and Record a version could commit receipts for the wrong files. The
+per-path write queues are kept, so a write still finishing keeps its turn.
 
 `dirty(book)` answers from the baseline alone. No baseline means dirty. Within
 a session the stamp's revision decides; when the baseline and the current text
