@@ -38,7 +38,6 @@ export {
   remark,
   mountSatellite,
   clipSpan,
-  wholeLines,
   type MarkedRange,
   type Satellite,
 } from "./recipes/satellite";
