@@ -2,7 +2,7 @@
  * Migrate from Writer: assemble one project from single-book BTT Writer
  * projects, choosing between rival copies up front.
  *
- * Three steps, one screen:
+ * Two steps, one screen:
  *
  *   find      a folder or zip of Writer projects, or a language from "Writer
  *             projects on WACS" (`WriterLanguages`) — several may be combined
@@ -10,7 +10,9 @@
  *   books     a sidebar of books in canonical order, under OT and NT, beside
  *             the selected book's candidates as a table (`BookPane`): who,
  *             status, updated, health, and passages differing from the pick
- *   project   the form, prefilled to bwc_reg's convention, then Assemble
+ *
+ * Assemble then runs at once, from the form prefilled to bwc_reg's
+ * convention: there is no form step.
  *
  * Inactive candidates are hidden by default; Primary is "Recommended". Every
  * candidate is opened and measured as soon as it is listed, a few at a time,
@@ -19,13 +21,12 @@
 
 import { useNavigate } from "@tanstack/solid-router";
 import { Option } from "effect";
-import ChevronLeft from "lucide-solid/icons/chevron-left";
 import FileArchive from "lucide-solid/icons/file-archive";
 import FolderOpen from "lucide-solid/icons/folder-open";
 import { For, Show, createMemo, createSignal, untrack } from "solid-js";
 
 import { CANON } from "#core/location/canon";
-import { prefillForm, type AssembleForm } from "#core/migrate/assemble";
+import { prefillForm } from "#core/migrate/assemble";
 import {
   candidateLabel,
   defaultCandidate,
@@ -49,23 +50,13 @@ import {
   type Opened,
 } from "../../migrate";
 import { useShell } from "../../ProjectContext";
-import {
-  Badge,
-  Button,
-  Card,
-  Input,
-  PanelHeader,
-  Select,
-  cx,
-  toasts,
-  type BadgeTone,
-} from "../primitives";
+import { Badge, Button, Card, PanelHeader, cx, toasts, type BadgeTone } from "../primitives";
 import { BookPane } from "./BookPane";
 import { WriterLanguages } from "./WriterLanguages";
 
-type Step = "find" | "books" | "project";
+type Step = "find" | "books";
 
-const OPEN_AT_ONCE = 4;
+const OPEN_AT_ONCE = 10;
 
 export function MigrateScreen(props: { readonly into?: string | undefined }) {
   const shell = useShell();
@@ -105,10 +96,6 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
   const [selected, setSelected] = createSignal<string | undefined>(undefined, {
     name: "migrateSelected",
   });
-  const [form, setForm] = createSignal<AssembleForm | undefined>(undefined, {
-    name: "migrateForm",
-  });
-  const [folder, setFolder] = createSignal("", { name: "migrateFolder" });
   const [assembling, setAssembling] = createSignal(false, { name: "migrateAssembling" });
 
   const openedOf = (id: string): Opened => opened().get(id) ?? { state: "waiting" };
@@ -254,23 +241,20 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
     return t("{have} of {total}", { have: have.length, total });
   };
 
-  const toProject = (): void => {
-    const books = ready();
-    const prefilled = prefillForm(books);
-    setForm(prefilled);
-    setFolder(`${prefilled.language.id}_${prefilled.resource}`);
-    setStep("project");
-  };
-
+  /**
+   * Next: assembled at once, from what the books already say — the form is
+   * prefilled to bwc_reg's convention and nobody changed it (Will,
+   * 2026-10-07: "just skip this screen"). Title, language, contributors and
+   * the rest are edited in the project afterwards, like any project's.
+   */
   const runAssemble = (): void => {
-    const held = form();
-    if (held === undefined) return;
     const books = ready();
-    const name = folder().trim() || "writer-project";
+    const form = prefillForm(books);
+    const name = `${form.language.id}_${form.resource}`.trim() || "writer-project";
     setAssembling(true);
     void (async () => {
       try {
-        const { root } = await services.run(assembleProject(services, name, held, books));
+        const { root } = await services.run(assembleProject(services, name, form, books));
         toasts.success({
           title: t("Assembled {count} books", { count: books.length }),
           message: root,
@@ -486,10 +470,10 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
             data-testid="migrate-next"
             loading={assembling()}
             disabled={!canAssemble() || assembling()}
-            onClick={props.into === undefined ? toProject : runAdd}
+            onClick={props.into === undefined ? runAssemble : runAdd}
           >
             {props.into === undefined
-              ? t("Next")
+              ? t("Assemble {count} books", { count: picked().length })
               : t("Add {count} books", { count: picked().length })}
           </Button>
         </Card>
@@ -512,153 +496,6 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
             )}
           </Show>
         </div>
-      </Show>
-
-      <Show when={step() === "project" ? form() : undefined}>
-        {(held) => (
-          <Card class="flex max-w-3xl flex-col gap-4">
-            <div class="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="tertiary"
-                icon={<ChevronLeft aria-hidden="true" />}
-                onClick={() => setStep("books")}
-              >
-                {t("Books")}
-              </Button>
-              <PanelHeader
-                title={t("The project")}
-                subtitle={t(
-                  "{count} books. Nothing is sent: share it through sync when you are ready.",
-                  {
-                    count: ready().length,
-                  },
-                )}
-              />
-            </div>
-            <label class="flex flex-col gap-1 text-small">
-              {t("Title")}
-              <Input
-                value={held().title}
-                onInput={(event) => setForm({ ...held(), title: event.currentTarget.value })}
-              />
-            </label>
-            <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <label class="flex flex-col gap-1 text-small">
-                {t("Language")}
-                <Input
-                  value={held().language.name}
-                  onInput={(event) =>
-                    setForm({
-                      ...held(),
-                      language: { ...held().language, name: event.currentTarget.value },
-                    })
-                  }
-                />
-              </label>
-              <label class="flex flex-col gap-1 text-small">
-                {t("Language code")}
-                <Input
-                  value={held().language.id}
-                  onInput={(event) =>
-                    setForm({
-                      ...held(),
-                      language: { ...held().language, id: event.currentTarget.value.trim() },
-                    })
-                  }
-                />
-              </label>
-              <label class="flex flex-col gap-1 text-small">
-                {t("Direction")}
-                <Select
-                  value={held().language.direction}
-                  onChange={(event) =>
-                    setForm({
-                      ...held(),
-                      language: {
-                        ...held().language,
-                        direction: event.currentTarget.value === "rtl" ? "rtl" : "ltr",
-                      },
-                    })
-                  }
-                >
-                  <option value="ltr">{t("Left to right")}</option>
-                  <option value="rtl">{t("Right to left")}</option>
-                </Select>
-              </label>
-              <label class="flex flex-col gap-1 text-small">
-                {t("Resource")}
-                <Input
-                  value={held().resource}
-                  onInput={(event) =>
-                    setForm({ ...held(), resource: event.currentTarget.value.trim() })
-                  }
-                />
-              </label>
-              <label class="flex flex-col gap-1 text-small">
-                {t("Checking level")}
-                <Input
-                  value={held().checkingLevel}
-                  onInput={(event) =>
-                    setForm({ ...held(), checkingLevel: event.currentTarget.value })
-                  }
-                />
-              </label>
-              <label class="flex flex-col gap-1 text-small">
-                {t("Rights")}
-                <Input
-                  value={held().rights}
-                  onInput={(event) => setForm({ ...held(), rights: event.currentTarget.value })}
-                />
-              </label>
-            </div>
-            <label class="flex flex-col gap-1 text-small">
-              {t("Contributors, one per line")}
-              <textarea
-                class="min-h-32 rounded-lg border border-surface-border bg-surface-primary p-3 text-small"
-                value={held().contributors.join("\n")}
-                onInput={(event) =>
-                  setForm({
-                    ...held(),
-                    contributors: event.currentTarget.value
-                      .split("\n")
-                      .map((line) => line.trim())
-                      .filter((line) => line !== ""),
-                  })
-                }
-              />
-            </label>
-            <div class="flex flex-col gap-1 text-small">
-              <span>{t("Source texts")}</span>
-              <p class="text-on-surface-secondary">
-                {held().sources.length === 0
-                  ? t("None listed.")
-                  : held()
-                      .sources.map((ref) =>
-                        ref.version === undefined
-                          ? `${ref.language}_${ref.resource}`
-                          : `${ref.language}_${ref.resource} ${ref.version}`,
-                      )
-                      .join(", ")}
-              </p>
-            </div>
-            <label class="flex flex-col gap-1 text-small">
-              {t("Folder name")}
-              <Input value={folder()} onInput={(event) => setFolder(event.currentTarget.value)} />
-            </label>
-            <div class="flex justify-end">
-              <Button
-                variant="primary"
-                data-testid="migrate-assemble"
-                loading={assembling()}
-                disabled={assembling()}
-                onClick={runAssemble}
-              >
-                {t("Assemble")}
-              </Button>
-            </div>
-          </Card>
-        )}
       </Show>
     </div>
   );
