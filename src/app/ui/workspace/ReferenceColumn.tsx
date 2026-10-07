@@ -394,7 +394,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   return (
     <aside
       aria-label={t("Reference texts")}
-      class="flex h-full min-w-0 flex-col gap-3 py-4 ps-2 pe-[7.5px]"
+      class="flex h-full min-w-0 flex-col gap-3 py-4 pe-[7.5px]"
       data-references={entries().length}
     >
       <LanguagePicker />

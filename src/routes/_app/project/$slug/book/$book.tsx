@@ -75,7 +75,7 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
   );
 
   return (
-    <main class="flex h-full min-h-0 min-w-0 flex-col gap-3 p-4">
+    <main class="flex h-full min-h-0 min-w-0 flex-col gap-3 p-6">
       {/* Above everything, and on THIS route as well as the project page:
           unsaved work found on open is the first thing to answer, and opening
           a project now lands on the book rather than on the census, so a
@@ -127,9 +127,8 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                 <Resizable.Panel
                   class={cx(
                     // 7.5px each side of the 9px handle: 24px between the
-                    // reference text and the editor, the page's left margin
-                    // (16px + the column's 8px).
-                    "flex flex-col gap-2 py-4 ps-[7.5px] pe-1",
+                    // reference text and the editor, the page's own margin.
+                    "flex flex-col gap-2 py-4 ps-[7.5px]",
                     // With the pane collapsed the editor takes the row back; the
                     // `!` is load-bearing because `Resizable.Panel` writes its
                     // share as an inline `flex-basis`.
