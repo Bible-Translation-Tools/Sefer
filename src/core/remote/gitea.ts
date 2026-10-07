@@ -60,6 +60,21 @@ export interface RemoteRepo {
   readonly defaultBranch: string;
   readonly private: boolean;
   readonly canWrite: boolean;
+  /**
+   * The repository this one is a fork of, or `undefined` when it is not one.
+   * How Sefer tells a person's own copy from a shared project: someone who
+   * cloned their fork is offered to suggest to its parent, and someone whose
+   * fork already exists is not forked twice (Gitea answers 409).
+   */
+  readonly parent: ForkParent | undefined;
+}
+
+/** The repository a fork was made from: enough to attach it and to ask about it. */
+export interface ForkParent {
+  readonly owner: string;
+  readonly name: string;
+  readonly fullName: string;
+  readonly cloneUrl: string;
 }
 
 export interface CreateRepoRequest {
@@ -142,7 +157,11 @@ export interface GiteaService {
     owner: string,
     name: string,
   ) => Effect.Effect<Option.Option<RemoteRepo>, GiteaError>;
-  /** Forks `owner/name` into the signed-in user's account. */
+  /**
+   * Forks `owner/name` into the signed-in user's account. Gitea refuses a
+   * second fork of the same repository (409), so a caller looks for one first
+   * (`RemoteRepo.parent` on the user's repository of the same name).
+   */
   readonly forkRepo: (
     host: string,
     owner: string,
@@ -153,14 +172,18 @@ export interface GiteaService {
 export class Gitea extends Context.Service<Gitea, GiteaService>()("Gitea") {}
 
 /**
- * The scopes the token is minted with, copied from v1 so an account signed in
- * from either app carries the same authority. `write:repository` is the one
- * that matters for sync; the reads are what the project and account screens
- * need. A token is never minted with more than this — notably not `write:admin`.
+ * The scopes the token is minted with, first copied from v1 so an account
+ * signed in from either app carries the same authority. `write:repository` is
+ * the one that matters for sync — forks and pull requests included;
+ * `write:issue` is suggested changes' note (a declined suggestion's reason is
+ * an issue comment, and Gitea answers 403 without it); the reads are what the
+ * project and account screens need. A token is never minted with more than
+ * this — notably not `write:admin`. A token minted before a scope was added
+ * lacks it until its person signs in again.
  */
 const SESSION_TOKEN_SCOPES: readonly string[] = [
   "read:activitypub",
-  "read:issue",
+  "write:issue",
   "write:misc",
   "read:notification",
   "read:organization",
@@ -197,6 +220,14 @@ const RepoPermissions = Schema.Struct({
   push: Schema.optionalKey(Schema.Boolean),
 });
 
+// A fork's parent arrives as a whole repository record; only its address is read.
+const ParentRecord = Schema.Struct({
+  name: Schema.optionalKey(Schema.String),
+  full_name: Schema.optionalKey(Schema.String),
+  clone_url: Schema.optionalKey(Schema.String),
+  owner: Schema.optionalKey(RepoOwner),
+});
+
 const RepoRecord = Schema.Struct({
   name: Schema.optionalKey(Schema.String),
   full_name: Schema.optionalKey(Schema.String),
@@ -206,6 +237,8 @@ const RepoRecord = Schema.Struct({
   private: Schema.optionalKey(Schema.Boolean),
   owner: Schema.optionalKey(RepoOwner),
   permissions: Schema.optionalKey(RepoPermissions),
+  fork: Schema.optionalKey(Schema.Boolean),
+  parent: Schema.optionalKey(Schema.NullOr(ParentRecord)),
 });
 
 // `/api/v1/repos/search` wraps its rows in `{ data }`; `/api/v1/user/repos`
@@ -384,6 +417,20 @@ const makeGitea = (options: {
     Accept: "application/json",
   });
 
+  const parentOf = (record: RepoRecordValue): ForkParent | undefined => {
+    const parent = record.parent;
+    if (record.fork !== true || parent === undefined || parent === null) return undefined;
+    const owner = parent.owner?.username ?? parent.owner?.login;
+    if (owner === undefined || parent.name === undefined || parent.clone_url === undefined)
+      return undefined;
+    return {
+      owner,
+      name: parent.name,
+      fullName: parent.full_name ?? `${owner}/${parent.name}`,
+      cloneUrl: parent.clone_url,
+    };
+  };
+
   const repoOf = (record: RepoRecordValue, fallbackOwner: string): RemoteRepo => {
     const owner = record.owner?.username ?? record.owner?.login ?? fallbackOwner;
     const name = record.name ?? "";
@@ -395,6 +442,7 @@ const makeGitea = (options: {
       defaultBranch: record.default_branch ?? "main",
       private: record.private ?? false,
       canWrite: (record.permissions?.push ?? false) || (record.permissions?.admin ?? false),
+      parent: parentOf(record),
     };
   };
 

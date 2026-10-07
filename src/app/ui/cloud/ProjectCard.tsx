@@ -1,6 +1,5 @@
 /**
- * Where this project stands: the shared project it belongs to, the two clocks,
- * and the state as one badge.
+ * Where this project stands: the two clocks, as the cloud popover shows them.
  *
  * The two clocks are the whole idea. A translator does not want a ref
  * comparison; they want to know how much of their morning has left this
@@ -10,26 +9,22 @@
  *
  * The shared line names who recorded the newest cloud version when there is
  * something to receive; the local line never does, because we already know.
+ * In the copy mode "waiting to be sent" is what the person's own copy lacks —
+ * a send goes there (`reading.ts`) — while the shared line stays the shared
+ * project's.
+ *
+ * Only the clocks and the headline's colour are left of the card the file is
+ * named for, which went with `/cloud` (2026-10-06).
  */
 
 import { Show } from "solid-js";
 
-import type { Clock, Sync } from "#core/sync";
+import type { Clock, IncomingPlan, Sync } from "#core/sync";
 
 import { t } from "../../i18n";
 import { ago, exact } from "../panels/format";
-import { Badge, Card, PanelHeader } from "../primitives";
-import { plural, stateCopy } from "./copy";
-
-/** The repository, as a person reads it: `owner/name`, not a clone URL. */
-const shortOrigin = (url: string): string => {
-  try {
-    const path = new URL(url).pathname.replace(/^\/+|\.git$/gu, "");
-    return path === "" ? url : path;
-  } catch {
-    return url;
-  }
-};
+import { cx, type BadgeTone } from "../primitives";
+import { incomingWords, outgoingWords } from "./copy";
 
 function ClockLine(props: {
   readonly label: string;
@@ -45,7 +40,8 @@ function ClockLine(props: {
         title={props.clock.at === undefined ? undefined : exact(props.clock.at)}
       >
         <Show when={props.clock.at !== undefined} fallback={<span>{t("no versions yet")}</span>}>
-          {ago(props.clock.at ?? 0)}
+          {/* The time is the answer to "when", so it is the coloured word. */}
+          <span class="font-medium text-brand">{ago(props.clock.at ?? 0)}</span>
           <Show when={props.clock.by !== undefined}>
             <span class="text-on-surface-tertiary">
               {" "}
@@ -68,73 +64,51 @@ function ClockLine(props: {
   );
 }
 
-export function ProjectCard(props: { readonly sync: Sync; readonly projectName: string }) {
-  const copy = () =>
-    stateCopy(props.sync.state, {
-      sendRefused: props.sync.reading.sendRefused,
-      signedIn: props.sync.reading.signedIn,
-    });
-  const local = () => props.sync.clocks.local;
-  const shared = () => props.sync.clocks.shared;
+/**
+ * A state's tone as the colour of its headline. No chip: the sentence itself
+ * says the state, and colours it only when it wants something from you.
+ */
+export const toneText = (tone: BadgeTone): string => {
+  switch (tone) {
+    case "success":
+      return "text-on-surface-success";
+    case "warning":
+      return "text-on-surface-warning";
+    case "error":
+      return "text-on-surface-error";
+    default:
+      return "text-on-surface-primary";
+  }
+};
 
+/** The two clocks, side by side: this device's and the shared project's. */
+export function SyncClocks(props: {
+  readonly sync: Sync;
+  /** What would arrive, for the shared side's words in verses; absent until it is worked out. */
+  readonly plan?: IncomingPlan;
+  readonly class?: string;
+}) {
   return (
-    <Card class="space-y-4" data-cloud-card="project" data-sync-state={props.sync.state}>
-      <PanelHeader
-        level={3}
-        title={props.projectName}
-        subtitle={
-          props.sync.reading.origin === undefined
-            ? t("Not connected to a shared project")
-            : shortOrigin(props.sync.reading.origin)
+    <div class={cx("flex flex-wrap gap-6", props.class)}>
+      <ClockLine
+        test="local"
+        label={t("This device")}
+        clock={props.sync.clocks.local}
+        unshared={
+          props.sync.clocks.local.unshared === 0 ? t("nothing waiting to be sent") : outgoingWords()
         }
-        actions={<Badge tone={copy().tone}>{copy().chip}</Badge>}
       />
-
-      <div>
-        <h4 class="text-body font-medium">{copy().headline}</h4>
-        <p class="mt-1 text-small text-on-surface-secondary">{copy().detail}</p>
-      </div>
-
-      <div class="flex flex-wrap gap-6 border-t border-surface-border pt-3">
-        <ClockLine
-          test="local"
-          label={t("This device")}
-          clock={local()}
-          unshared={
-            local().unshared === 0
-              ? t("nothing waiting to be sent")
-              : plural(
-                  local().unshared,
-                  "{count} version the shared project does not have",
-                  "{count} versions the shared project does not have",
-                )
-          }
-        />
-        <ClockLine
-          test="shared"
-          label={t("Shared project")}
-          clock={shared()}
-          unshared={
-            shared().unshared === 0
-              ? t("nothing waiting to be received")
-              : plural(
-                  shared().unshared,
-                  "{count} version this device does not have",
-                  "{count} versions this device does not have",
-                )
-          }
-        />
-      </div>
-
-      <Show when={props.sync.reading.uncommitted > 0}>
-        <p class="text-small text-on-surface-tertiary" data-cloud="uncommitted">
-          {plural(
-            props.sync.reading.uncommitted,
-            "{count} file here has been written but not recorded as a version yet — it is not part of either count.",
-            "{count} files here have been written but not recorded as a version yet — they are not part of either count.",
-          )}
-        </p>
-      </Show>
-    </Card>
+      <ClockLine
+        test="shared"
+        label={t("Shared project")}
+        clock={props.sync.clocks.shared}
+        unshared={
+          props.sync.clocks.shared.unshared === 0
+            ? t("nothing waiting to be received")
+            : ((props.plan === undefined ? undefined : incomingWords(props.plan)) ??
+              t("changes you don't have yet"))
+        }
+      />
+    </div>
   );
 }

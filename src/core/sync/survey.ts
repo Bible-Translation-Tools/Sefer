@@ -3,10 +3,10 @@
  * read through the ports and handed to the pure `incomingPlan`.
  *
  * It lives in core rather than in the shell because TWO callers now need the
- * same answer and they must not be able to disagree about it. `/cloud`'s
+ * same answer and they must not be able to disagree about it. The sync
  * reading (`src/app/ui/cloud/reading.ts`) asks what would arrive; `./combine`
  * asks whether a combine is safe to run at all. If those two computed
- * "contested" separately, the screen could offer a combine the program then
+ * "contested" separately, a surface could offer a combine the program then
  * refuses — or worse, the other way round.
  *
  * Nothing here decides anything. It reads three revisions of every file the

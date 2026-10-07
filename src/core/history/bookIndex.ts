@@ -327,6 +327,25 @@ export const bookHistoryFrom = (index: BookIndex, book: string): readonly BookVe
 };
 
 /**
+ * Every commit `tip` reaches inside the index, or `undefined` when the index
+ * does not hold `tip` (a ref ahead of HEAD): then the walk would leave the
+ * index on its first step, and the caller asks git instead.
+ */
+export const reachableFrom = (index: BookIndex, tip: string): ReadonlySet<string> | undefined => {
+  const byId = commitsById(index);
+  const first = byId.get(tip);
+  if (first === undefined) return undefined;
+  const seen = new Set([tip]);
+  const queue = [first];
+  while (queue.length > 0) {
+    const commit = queue.pop();
+    if (commit === undefined) break;
+    enqueue(commit.parents, seen, byId, queue);
+  }
+  return seen;
+};
+
+/**
  * The stored form: the index as JSON, with a version to refuse a file from a
  * different build rather than misread it. About 2.5 MB for en_ulb.
  */

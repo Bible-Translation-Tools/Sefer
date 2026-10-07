@@ -99,17 +99,23 @@ book an aim had named lands on the remembered place.
 
 ## The way back: `editor.back`
 
-Every full-page route — findings, history, review, find, terms, inventory, cloud, settings,
-the projects list — replaces the editor entirely. The way back is `src/app/ui/workspace/BackToEditor.tsx`, one
-`data-testid="back-to-editor"` button pinned to the top-right of the routed content, naming the book it
-returns to.
+Every full-page route — findings, history, review, suggestions, find, inventory — replaces the editor
+entirely. The way back is `src/app/ui/workspace/BackToEditor.tsx`, in two pieces: `useBackToEditor()`
+is the behaviour, and `<BackToEditor />` is the default UI for it, a `data-testid="back-to-editor"` ×
+button naming the book it returns to, with no position of its own.
 
-It is rendered ONCE, by the `_app` layout chrome above its `<Outlet/>` and outside the scroller, rather than by
-each page: a screen added later gets the door without knowing it exists, no page can forget it or spell
-it differently, and it does not scroll away with the content. The same component registers the
-`editor.back` command, so the palette lists it — registered there and not in the
-shell's core set, because "is this a full-page screen" is the ROUTE's question and `ShellBridge`
-deliberately carries no pathname. All three doors navigate to `/project/$slug`, which forwards to the
+The hook answers `undefined` off a project's routes (asked of the route, `useScreen().inProject`, never
+of a pathname), so settings and the projects list have no door; the app bar's Home is the way back
+from there. Inside them it answers the label and a `go`, and registers the `editor.back` command, so
+the palette lists it on any screen that draws the door — registered there and not in the shell's core
+set, because "is this a full-page screen" is the ROUTE's question and `ShellBridge` deliberately
+carries no pathname.
+
+A screen puts the button where it wants it. By default every page-level `PanelHeader` ends with it:
+the `_app` layout hands `PanelHeader` the button through the `PageDoor` context, so a screen added
+later still gets a door without knowing it exists. `door={false}` opts a header out, for a screen that
+places it itself; a header that is not a `PanelHeader` (Review's) places it directly. It sits in the
+header, so it scrolls with a screen whose header scrolls. All three doors navigate to `/project/$slug`, which forwards to the
 remembered book, so they cannot disagree.
 
 `editor.back` has no key. Escape belongs to whatever dialog is open on the screen (the Findings
@@ -152,6 +158,11 @@ the application's Mod-K for an application it is not part of.
   `SegmentedControl` (`md`, `iconsWhenNarrow`), which drop to icons below `md`;
   right, 48px icon-only buttons. Everything on it is lit from the `pathname`,
   not from a signal, and every button but three is a plain navigation.
+  The first of them, with a project open, is the **cloud** (`SyncButton`,
+  `app-bar-sync`): where the project stands with the shared project, from the
+  application's one sync reading (`syncWatch`), quiet until something waits on
+  a person and with a popover where sync is done ([sync](sync.md), "One
+  reading for every surface").
 - **The project panel's show/hide** is not on the app bar. It is one button that
   stays put and flips (`PanelToggle`, `panel-toggle`): left of the book's title
   in the editor toolbar, and on project screens without that toolbar at the
@@ -237,6 +248,22 @@ during render and has no unregister, so an unmounted panel renumbers the split.
 The route learns the count from the column's `onBound` callback rather than
 asking the Library a second time: the split is the route's, so the route is
 told.
+
+**The editor and its references are one aligned group.** The route makes it
+(`createAlignedGroup`) and provides it (`AlignedProvider`,
+`src/app/ui/workspace/aligned.ts`); `BookEditor` and each `ReferencePane` join
+it when their view mounts, so scrolling either brings the same verse into the
+other when it is not already in sight there — by verse address, never by
+scroll position ([editor](editor.md), "Two editors side by side"). The pane's
+chain (`FollowToggle`) decides whether it leads and follows; the clip is still
+chapter-level.
+
+**The location strip is shared.** The editor's sticky bar is `LocationStrip`
+plus `Crumbs` (`src/app/ui/workspace/Crumbs.tsx`) — a book picker and a
+chapter picker over whatever lists the caller gives, with optional counts and
+chapter arrows — and `LocationBar` is the editor's adapter over them: the
+project's books, the book's chapters, `shell.showChapter`. Review's Whole book
+uses the same strip over the books and chapters that changed.
 
 The panes themselves are remounted rather than reconciled whenever the binding
 set or the open book changes (`<Show keyed>` over the entries array), which is

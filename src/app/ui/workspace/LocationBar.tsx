@@ -19,17 +19,12 @@
  */
 
 import { useNavigate } from "@tanstack/solid-router";
-import ChevronDown from "lucide-solid/icons/chevron-down";
-import ChevronUp from "lucide-solid/icons/chevron-up";
-import ListTree from "lucide-solid/icons/list-tree";
-import { Show, createMemo, createSignal } from "solid-js";
-
-import { fold } from "#core/location/names";
+import { createMemo } from "solid-js";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { FilterList, IconButton, Popover } from "../primitives";
 import { bookName, CANON } from "./books";
+import { Crumbs, LocationStrip } from "./Crumbs";
 import { metadataOf } from "./project";
 import { typedChapter } from "./typedPlace";
 
@@ -44,8 +39,6 @@ const INTRO_LABEL = "Intro";
 export function LocationBar(props: LocationBarProps) {
   const shell = useShell();
   const navigate = useNavigate();
-  const [outline, setOutline] = createSignal(false, { name: "outlineOpen" });
-  const [picking, setPicking] = createSignal(false, { name: "bookPickerOpen" });
 
   /**
    * The focused book's chapter table.
@@ -117,8 +110,6 @@ export function LocationBar(props: LocationBarProps) {
       }))
       .filter((row, index) => !row.intro || index === 0);
 
-  const rows = createMemo(() => (outline() ? listed() : []), { name: "outlineRows" });
-
   const step = (delta: 1 | -1): void => {
     // Built on the click, not on every render: stepping is the one thing here
     // that needs the whole list and it happens at pointer speed.
@@ -164,7 +155,6 @@ export function LocationBar(props: LocationBarProps) {
   });
 
   const goToBook = (id: string): void => {
-    setPicking(false);
     void navigate({
       to: "/project/$slug/book/$book",
       params: { slug: shell.slug(), book: encodeURIComponent(id) },
@@ -172,136 +162,34 @@ export function LocationBar(props: LocationBarProps) {
   };
 
   return (
-    <div
-      data-testid="location-bar"
-      /* OPAQUE, and deliberately not blurred. It was
-         `bg-surface-primary/80 backdrop-blur-sm`, and `backdrop-filter` over a
-         sticky strip makes the compositor re-rasterize the scripture behind it
-         on every frame of a scroll AND after every keystroke — measurable, and
-         the worst kind of cost because it lands between the last state update
-         and the paint, where no JS profile shows it. A solid bar reads the
-         text underneath no worse: it covers it. The token carries dark. */
-      class="sticky top-0 z-20 flex items-center gap-1 border-b border-surface-border bg-surface-primary px-3 py-1"
-    >
-      <Popover
-        label={t("Books")}
-        side="bottom"
-        align="start"
-        class="flex max-h-[60vh] w-64 flex-col p-2"
-        open={picking()}
-        onOpenChange={setPicking}
-        trigger={
-          <button
-            type="button"
-            data-testid="location-book"
-            class="cursor-pointer truncate rounded px-1 py-0.5 text-smallest font-medium text-on-surface-secondary transition-colors hover:bg-surface-secondary hover:text-on-surface-primary"
-          >
-            {name()}
-          </button>
-        }
-      >
-        <FilterList
-          label={t("Filter books")}
-          placeholder={t("Book or code…")}
-          items={books()}
-          current={shell.focused()?.id}
-          key={(book) => book.id}
-          // The CODE as well as the name: a translator types "mrk" as readily
-          // as "Mark", and a project may hold a book the canon does not name.
-          // "mark 3" as well: the words the palette reads narrow it to Mark,
-          // and taking Mark then goes to chapter 3 (`typedPlace`).
-          match={(book, query) => {
-            const needle = fold(query);
-            return (
-              fold(book.name).includes(needle) ||
-              book.id.toLowerCase().includes(needle) ||
-              shell.location.books(query).includes(book.id)
-            );
-          }}
-          onPick={(book, query) => {
-            const place = typedChapter(shell.location, query, book.id);
-            if (place === undefined) goToBook(book.id);
-            else {
-              setPicking(false);
-              shell.showReference(place);
-            }
-          }}
-        >
-          {(book) => (
-            <>
-              <span class="w-9 shrink-0 font-mono text-smallest text-on-surface-tertiary">
-                {book.id}
-              </span>
-              <span class="truncate">{book.name}</span>
-            </>
-          )}
-        </FilterList>
-      </Popover>
-
-      <Show when={where() !== ""}>
-        <span aria-hidden="true" class="text-smallest text-on-surface-tertiary">
-          ·
-        </span>
-
-        <Popover
-          label={t("Outline")}
-          side="bottom"
-          align="start"
-          class="flex max-h-[60vh] w-56 flex-col p-2"
-          open={outline()}
-          onOpenChange={setOutline}
-          trigger={
-            <button
-              type="button"
-              data-testid="location-chapter"
-              class="inline-flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 text-smallest font-medium text-on-surface-secondary transition-colors hover:bg-surface-secondary hover:text-on-surface-primary"
-            >
-              {where()}
-              <ListTree size={12} aria-hidden="true" />
-            </button>
-          }
-        >
-          <FilterList
-            label={t("Filter chapters")}
-            placeholder={t("Chapter…")}
-            items={rows()}
-            current={String(at())}
-            key={(row) => String(row.ordinal)}
-            match={(row, query) => fold(row.label).startsWith(fold(query))}
-            onPick={(row) => {
-              setOutline(false);
-              shell.showChapter(row.ordinal);
-            }}
-          >
-            {(row) => (
-              <span data-testid={`outline-${row.intro ? "intro" : row.label}`}>
-                {row.intro ? row.label : t("Chapter {label}", { label: row.label })}
-              </span>
-            )}
-          </FilterList>
-        </Popover>
-      </Show>
-
-      <span class="ms-auto flex items-center gap-0.5">
-        <IconButton
-          size="sm"
-          data-testid="location-previous"
-          label={t("Previous chapter")}
-          tooltipSide="bottom"
-          icon={<ChevronUp />}
-          disabled={first()}
-          onClick={() => step(-1)}
-        />
-        <IconButton
-          size="sm"
-          data-testid="location-next"
-          label={t("Next chapter")}
-          tooltipSide="bottom"
-          icon={<ChevronDown />}
-          disabled={last()}
-          onClick={() => step(1)}
-        />
-      </span>
-    </div>
+    <LocationStrip testId="location-bar">
+      <Crumbs
+        book={name()}
+        books={books}
+        currentBook={shell.focused()?.id}
+        // "mark 3" as well: the words the palette reads narrow it to Mark,
+        // and taking Mark then goes to chapter 3 (`typedPlace`).
+        matchBook={(book, query) => shell.location.books(query).includes(book.id)}
+        onBook={(book, query) => {
+          const place = typedChapter(shell.location, query, book.id);
+          if (place === undefined) goToBook(book.id);
+          else shell.showReference(place);
+        }}
+        chapter={where()}
+        chapters={listed}
+        currentChapter={at()}
+        onChapter={(ordinal) => shell.showChapter(ordinal)}
+        step={{
+          onPrevious: () => step(-1),
+          onNext: () => step(1),
+          get first() {
+            return first();
+          },
+          get last() {
+            return last();
+          },
+        }}
+      />
+    </LocationStrip>
   );
 }

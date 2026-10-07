@@ -33,10 +33,3 @@ export const personAuthor = (): Effect.Effect<Option.Option<Author>, never, Gite
     const name = authorName(settings);
     return name === "" ? Option.none() : Option.some({ name, email: "" });
   });
-
-/** The person when there is one, else Sefer: for a commit that cannot stop to ask. */
-export const authorOrApp = (): Effect.Effect<Author, never, Gitea | Settings> =>
-  Effect.map(
-    personAuthor(),
-    Option.getOrElse(() => APP_AUTHOR),
-  );

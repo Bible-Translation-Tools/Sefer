@@ -262,6 +262,8 @@ export interface ShellKeys {
   readonly annotateEmptyParagraphs: SettingKey<boolean>;
   /** Enables the destructive multi-match action in Find. */
   readonly enableReplaceAll: SettingKey<boolean>;
+  /** Ask about unsaved work found when a project opens. Backups are written either way. */
+  readonly offerRecovery: SettingKey<boolean>;
   /**
    * How much of the book a result card shows around its match before the
    * reader widens it, in TOC steps either side — a verse, a chapter's head.
@@ -411,6 +413,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
       true,
     ),
     enableReplaceAll: settings.register("find.enableReplaceAll", Schema.Boolean, false),
+    offerRecovery: settings.register("recovery.offerOnOpen", Schema.Boolean, true),
     excerptContext: settings.register("excerpts.context", Schema.Number, 0),
     reviewLayout: settings.register("review.layout", Schema.String, "auto"),
     reviewScope: settings.register("review.scope", Schema.String, "changes"),
@@ -604,6 +607,14 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
       max: 10000,
       step: 100,
       unit: "ms",
+    },
+    {
+      key: keys.offerRecovery,
+      label: "Offer unsaved work on open",
+      description:
+        "Ask about unsaved work found when a project opens. Off, Sefer still backs up as you type; it only stops asking. Useful while developing with hot reload.",
+      kind: "boolean",
+      group: "advanced",
     },
     {
       key: keys.enableReplaceAll,

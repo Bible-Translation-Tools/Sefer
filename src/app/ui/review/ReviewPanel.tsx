@@ -11,10 +11,12 @@
  *
  * **Editability is a property of what is loaded.** The one side that can be
  * written is the working text (`CompareSource.canApply`: only the open
- * project says yes), and it always sits on the left — picking it on the right
- * swaps the sides. Then the review is the editor: every card edits the Book
- * itself on a double-click, as every card in Sefer does, and "Keep" / "Take"
- * writes into it at once, one Undo step each. When neither side can be
+ * project says yes), and it is always the model's left side — picking it on the
+ * right swaps the sides — though it is DRAWN on the right, the other side on
+ * the left, read left to right as was-then-now. Then the review is the
+ * editor: every card edits the Book itself on a double-click, as every card
+ * in Sefer does, and "Keep" / "Take" writes into it at once, one Undo step
+ * each. When neither side can be
  * written (two folders, two versions) the review is for reading: no Edit, no
  * double-click, no decisions. There is no "decide, then apply" mode: a
  * decision somebody has to remember to apply later is a decision that gets
@@ -30,17 +32,29 @@
  * `saveAll` then `Git.commit`, in that order, as one action. It is offered
  * whenever the project is one of the two sides, because what it records is the
  * project's own unsaved work and not the comparison.
+ *
+ * **Against a suggestion** (`?against=shared&pull=<n>`) the review is also
+ * its answer. Save brings it in — sent to the shared project whatever the
+ * reviewer's own mode, even with nothing new to record — and closes it as
+ * brought in, or leaves it open when the dialog's switch says so. Decline
+ * closes it with a note (`SuggestionLine`, or Save's dialog itself when the
+ * reviewer took none of it). Against the person's own copy (`copy=1`) Save
+ * catches this device up with another of theirs and sends back to the copy.
  */
 
 import { useNavigate, useSearch } from "@tanstack/solid-router";
 import { Effect, Option, Result } from "effect";
 import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
+import CircleCheck from "lucide-solid/icons/circle-check";
+import CircleX from "lucide-solid/icons/circle-x";
 import Eraser from "lucide-solid/icons/eraser";
 import History from "lucide-solid/icons/history";
+import Info from "lucide-solid/icons/info";
 import MoreVertical from "lucide-solid/icons/more-vertical";
 import Save from "lucide-solid/icons/save";
 import Scale from "lucide-solid/icons/scale";
+import TriangleAlert from "lucide-solid/icons/triangle-alert";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
 import { trustedBy, type BookId } from "#core/book/book";
@@ -60,14 +74,23 @@ import { bookFacts, type Diff } from "#core/sync/facts";
 import type { EditorBook } from "#editor/index";
 
 import { personAuthor } from "../../author";
+import { collaboration } from "../../collaboration";
 import { describe, reasonOf } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { recordVersion } from "../../recordVersion";
-import { suggestionRef } from "../../suggestions";
-import { sendAfterSave, settleWithShared } from "../../syncActions";
+import {
+  acceptSuggestion,
+  copyRef,
+  declineSuggestion,
+  suggestionRef,
+  suggestMyChanges,
+} from "../../suggestions";
+import { sendAfterSave, sendNow, settleWithShared, type SendOutcome } from "../../syncActions";
 import { setAuthorName, syncPreferences } from "../../syncSettings";
-import { combineRefusal, combineTrouble, receiveRefusal } from "../cloud/copy";
+import { syncWatch } from "../../syncWatch";
+import { combineRefusal, combineTrouble, receiveRefusal, sendOutcomeCopy } from "../cloud/copy";
+import { SyncLine } from "../cloud/SyncLine";
 import { unsavedChanges } from "../panels/changes";
 import { ago, exact } from "../panels/format";
 import { createRecordedVersion } from "../panels/recorded";
@@ -83,14 +106,19 @@ import {
   MenuSeparator,
   Popover,
   Select,
+  Switch,
   toasts,
   usePageLeading,
 } from "../primitives";
 import { RecoveryBanner } from "../recovery/RecoveryBanner";
+import { BackToEditor } from "../workspace/BackToEditor";
 import { bookName } from "../workspace/books";
+import { ChangesHistorySidebar } from "../workspace/ChangesHistorySidebar";
 import { metadataOf } from "../workspace/project";
+import { claimSidebar } from "../workspace/sidebarSlot";
 import { ReviewReader, type ReviewBook } from "./ReviewReader";
 import { sourceChoices, type SourceChoice } from "./sources";
+import { SuggestionLine } from "./SuggestionLine";
 
 /** How long typing pauses before the review compares again: the cards' pause. */
 const TYPING_PAUSE_MS = 400;
@@ -119,18 +147,34 @@ export function ReviewPanel() {
   const search = useSearch({ strict: false }) as () => {
     readonly against?: unknown;
     readonly pull?: unknown;
+    readonly copy?: unknown;
   };
   /** A suggestion under review: its head, fetched to a local ref, is "theirs". */
   const pull = (): number | undefined => {
     const held = untrack(() => search().pull);
     return typeof held === "number" ? held : undefined;
   };
+  /** The person's own copy, as another of their devices left it, is "theirs". */
+  const fromCopy = (): boolean => untrack(() => search().copy) === 1;
   const theirsRef = (): string | undefined => {
     const number = pull();
-    return number === undefined ? undefined : suggestionRef(number);
+    if (number !== undefined) return suggestionRef(number);
+    if (!fromCopy()) return undefined;
+    const branch = untrack(() => syncWatch.facts(shell.project()?.root)?.reading.branch);
+    return branch === undefined ? undefined : copyRef(branch);
   };
   /** Is one side the shared project? Then recording also takes what it changed. */
   const againstShared = (): boolean => rightId() === "shared" || leftId() === "shared";
+  // The sidebar's Changes tab with nothing under it, for a review with no
+  // reader: nothing differs, or nothing is compared yet. The reader's own claim
+  // replaces it while it is mounted, and the History tab stays one click away.
+  onCleanup(
+    claimSidebar(() => (
+      <ChangesHistorySidebar active="changes" changes={0}>
+        <p class="px-6 pt-3 text-small text-on-surface-tertiary">{t("Nothing differs.")}</p>
+      </ChangesHistorySidebar>
+    )),
+  );
   const version = createRecordedVersion(shell);
   const shared = createRecordedVersion(shell, "shared", theirsRef);
   // The last version both sides had in common: what "who changed this" is
@@ -157,7 +201,10 @@ export function ReviewPanel() {
   const [selected, setSelected] = createSignal<BookId | undefined>(undefined, {
     name: "reviewBook",
   });
-  const [markup, setMarkup] = createSignal(false, { name: "reviewMarkup" });
+  // The shell's mode, not a copy: the palette's Toggle USFM and this screen's
+  // View menu move the same switch every editor surface follows.
+  const markup = (): boolean => shell.mode() === "usfm";
+  const setMarkup = (on: boolean): void => shell.setMode(on ? "usfm" : "default");
   const [message, setMessage] = createSignal("", { name: "reviewMessage" });
   const [busy, setBusy] = createSignal("", { name: "reviewBusy" });
   const [note, setNote] = createSignal("", { name: "reviewNote" });
@@ -169,6 +216,23 @@ export function ReviewPanel() {
   const [typedName, setTypedName] = createSignal("", { name: "reviewAuthorName" });
   /** Whether recording will also send, so the dialog can say so before the press. */
   const [sends, setSends] = createSignal(false, { name: "reviewSends" });
+  /** A suggestion was brought in and closed by this Save: Done goes back to the list. */
+  const [broughtIn, setBroughtIn] = createSignal(false, { name: "reviewBroughtIn" });
+  /** Against a suggestion: close it as brought in when this Save sends it. */
+  const [closeOnSave, setCloseOnSave] = createSignal(true, { name: "reviewCloseSuggestion" });
+  /** Where Save's send goes, named — the shared project, or the person's own copy. */
+  const sendsLine = (): string => {
+    const facts = collaboration.facts(shell.project()?.root);
+    const copy = facts?.mode === "copy";
+    const name = facts?.sendsTo;
+    if (name === undefined)
+      return copy
+        ? t("This also sends your changes to your copy.")
+        : t("This also sends your changes to the shared project.");
+    return copy
+      ? t("This also sends your changes to your copy, {name}.", { name })
+      : t("This also sends your changes to the shared project, {name}.", { name });
+  };
   const openRecord = (): void => {
     setRecordOpen(true);
     void services.run(personAuthor()).then((found) => setAuthor(Option.getOrUndefined(found)));
@@ -199,7 +263,8 @@ export function ReviewPanel() {
       baselineOf: (book) => services.save.baseline(book),
       recorded: version.recorded(),
       shared: shared.recorded(),
-      sharedLabel: pull() === undefined ? undefined : t("The suggested changes"),
+      sharedLabel:
+        pull() !== undefined ? t("The suggested changes") : fromCopy() ? t("Your copy") : undefined,
     });
 
   const choiceOf = (id: string): SourceChoice | undefined =>
@@ -235,6 +300,23 @@ export function ReviewPanel() {
   const live = (): boolean => LIVE.has(leftId()) || LIVE.has(rightId());
 
   /**
+   * A side read out of a commit whose texts have not come back yet, by its
+   * short name. Compared now it would hold no books, and every book in the
+   * project would read as "only in the editor" until the read landed.
+   */
+  const waitingFor = (): string | undefined => {
+    for (const id of [leftId(), rightId()]) {
+      const pending =
+        (id === "shared" && !shared.recorded().read) ||
+        (id === "recorded" && !version.recorded().read);
+      if (pending) return choiceOf(id)?.shortLabel ?? t("the other side");
+    }
+    return undefined;
+  };
+  /** A comparison is under way; the screen says so rather than "nothing yet". */
+  const [comparing, setComparing] = createSignal(false, { name: "reviewComparing" });
+
+  /**
    * Every open book's revision, as one key.
    *
    * Both effects below mean the same thing by "something moved": the text of
@@ -264,8 +346,9 @@ export function ReviewPanel() {
   /** Every changed book's decision units, one engine diff each. */
   /**
    * A book somebody decided in stays in the review though it now reads the
-   * same on both sides: a take that made it identical keeps its card, with
-   * "put back", rather than vanishing under the click.
+   * same on both sides: a take that made it identical keeps its card — whose
+   * pressed "Taken from …" still puts it back — rather than vanishing under
+   * the click.
    */
   const decidedIn = (bookId: BookId): boolean => {
     for (const key of untrack(decisions).keys()) if (key.startsWith(`${bookId}\0`)) return true;
@@ -305,7 +388,7 @@ export function ReviewPanel() {
   const runCompare = (): void => {
     const a = left();
     const b = right();
-    if (a === undefined || b === undefined || a.id === b.id) {
+    if (a === undefined || b === undefined || a.id === b.id || waitingFor() !== undefined) {
       setResult(undefined);
       return;
     }
@@ -314,6 +397,7 @@ export function ReviewPanel() {
       return;
     }
     running = true;
+    setComparing(true);
     // One comparison, one record: what it cost and how big the answer was.
     // The sides by KIND only — a picked folder's label is somebody's path.
     const comparing = services.composition.observability.operation("review.compare", {
@@ -352,6 +436,7 @@ export function ReviewPanel() {
           "review.refused_books": refusedBooks,
         });
         computed = { result: found, skeletons: held };
+        setComparing(false);
         setNote("");
         setResult(found);
         setSelected((held) =>
@@ -374,6 +459,7 @@ export function ReviewPanel() {
         });
         running = false;
         again = false;
+        setComparing(false);
         setNote(describe(cause));
       });
   };
@@ -392,11 +478,11 @@ export function ReviewPanel() {
   createEffect(
     () => ({
       // Both frozen sides are in the key: a side whose texts arrive after the
-      // screen opened (the shared project's, when /cloud's Compare opens it
+      // screen opened (the shared project's, when the cloud popover opens it
       // directly) is compared again once it has them.
       sides: `${leftId()}:${rightId()}:${leftPicked()?.id ?? ""}:${rightPicked()?.id ?? ""}:${
         version.recorded().head ?? ""
-      }:${shared.recorded().head ?? ""}`,
+      }:${shared.recorded().head ?? ""}:${version.recorded().read}:${shared.recorded().read}`,
       text: live() ? revisions() : "",
     }),
     ({ sides }) => {
@@ -431,6 +517,7 @@ export function ReviewPanel() {
     setDecisions(new Map());
     originals.clear();
     setReceipt("");
+    setShowChoices(false);
   };
 
   const pick = (side: "left" | "right", id: string): void => {
@@ -483,6 +570,25 @@ export function ReviewPanel() {
    * held there as "No longer a change" — and only then says "No differences."
    */
   const [cardEditing, setCardEditing] = createSignal(false, { name: "reviewCardEditing" });
+
+  /**
+   * The review's work is done: something was decided, nothing is left
+   * undecided, and both sides now read the same. The cards that held the
+   * decisions read "unchanged" by then, and a screen still full of them asks
+   * "did it work?" — so the one thing left, recording, takes their place, and
+   * the cards stay a click away to put something back.
+   */
+  const settled = (): boolean => {
+    const found = result();
+    return (
+      found !== undefined &&
+      found.changedBooks === 0 &&
+      decisions().size > 0 &&
+      !cardEditing() &&
+      undecidedBoth() === 0
+    );
+  };
+  const [showChoices, setShowChoices] = createSignal(false, { name: "reviewShowChoices" });
 
   const current = (): BookComparison | undefined => {
     const found = result();
@@ -678,6 +784,69 @@ export function ReviewPanel() {
     return unit === undefined ? undefined : preset(bookId, unit);
   };
 
+  /**
+   * Against a suggestion: how many passages it offers, and how many end up
+   * taken. Offered but none taken means there is nothing to bring in —
+   * keeping the editor's text everywhere is declining it — so Save is closed
+   * and the dialog offers only Decline. Recording anyway would join the
+   * suggestion's history to the project's and close it as brought in, which
+   * is the opposite of what was decided.
+   */
+  const suggestionTally = (): { readonly offered: number; readonly taken: number } => {
+    let offered = 0;
+    let taken = 0;
+    if (pull() === undefined) return { offered, taken };
+    // A take is written into the editor at once, so the passage it took then
+    // reads the same on both sides and is "unchanged" — kept on screen only
+    // because it was decided. The decisions are therefore counted as they
+    // were made, and only an undecided passage is counted by what differs and
+    // by its preset.
+    for (const side of decisions().values()) {
+      offered += 1;
+      if (side === "baseline") taken += 1;
+    }
+    for (const book of reviewBooks())
+      for (const unit of book.skeleton.units) {
+        if (unit.status === "unchanged" || decisionFor(book.bookId, unit.id) !== undefined)
+          continue;
+        offered += 1;
+        if (preset(book.bookId, unit) === "baseline") taken += 1;
+      }
+    return { offered, taken };
+  };
+  // Nothing left to differ is not "kept none": the suggestion's versions are
+  // already here, and Save is what sends them and closes it as brought in.
+  const declineOnly = (): boolean => {
+    const tally = suggestionTally();
+    return tally.offered > 0 && tally.taken === 0;
+  };
+  const [declineNote, setDeclineNote] = createSignal("", { name: "reviewDeclineOnlyNote" });
+  const declineFromDialog = (): void => {
+    const project = shell.project();
+    const number = pull();
+    if (project === undefined || number === undefined || recording()) return;
+    // Read at the moment of the press.
+    const staticNote = declineNote();
+    setRecording(true);
+    declineSuggestion(services, project, { number }, staticNote)
+      .then(() => {
+        toasts.success({
+          title: t("Declined"),
+          message:
+            staticNote.trim() === ""
+              ? t("The suggestion is closed; its author sees it was not brought in.")
+              : t("Its author can read your note."),
+        });
+        setRecordOpen(false);
+        void collaboration.refresh(services, project);
+        void navigate({ to: "/project/$slug/suggestions", params: { slug: shell.slug() } });
+      })
+      .catch((cause: unknown) =>
+        toasts.error({ title: t("Could not decline it"), message: describe(cause) }),
+      )
+      .finally(() => setRecording(false));
+  };
+
   /** Passages changed in both places that nobody has chosen a side for yet. */
   const undecidedBoth = (): number => {
     if (!againstShared()) return 0;
@@ -841,6 +1010,15 @@ export function ReviewPanel() {
   const oneSided = (): readonly BookComparison[] =>
     changed().filter((book) => book.presence !== "both");
 
+  /** The side that holds no book at all, by name: one sentence, not every book. */
+  const emptySide = (): string | undefined => {
+    const books = result()?.books ?? [];
+    if (books.length === 0) return undefined;
+    if (books.every((book) => book.presence === "left")) return rightLabel();
+    if (books.every((book) => book.presence === "right")) return leftLabel();
+    return undefined;
+  };
+
   // --- record a version ----------------------------------------------------
 
   const unsaved = () => unsavedChanges(shell);
@@ -860,6 +1038,9 @@ export function ReviewPanel() {
     // Taken before the save: afterwards no book is unsaved, and the default
     // would name none of them.
     const typedMessage = message().trim();
+    // What the reviewer wrote, kept for the note a brought-in suggestion gets
+    // once the send has finished: a snapshot by design.
+    const staticNote = typedMessage;
     // Against the shared project the version is a settling, and says which
     // books it settled; anything else names the books it records.
     const settledNames = reviewBooks().map((book) => bookName(book.bookId, metadataOf(project)));
@@ -894,7 +1075,8 @@ export function ReviewPanel() {
       return;
     }
     setRecording(true);
-    const notice = toasts.progress({ title: t("Recording…") });
+    setRecordedLine(undefined);
+    setSendLine(undefined);
     if (againstShared()) {
       // The presets become real first: every passage only they changed, and
       // nobody chose, is taken into the project's text. What is recorded is
@@ -912,29 +1094,52 @@ export function ReviewPanel() {
       const settled = new Set(reviewBooks().map((book) => book.bookId));
       // Reviewed against the shared project: what was decided stays, and
       // everything else it changed arrives with it — in one move.
-      // A suggestion is brought into the shared project itself; anything else
-      // settles against it and sends wherever this project sends.
       const outcome = await settleWithShared(
         services,
         project,
         by,
         staticMessage,
         settled,
-        theirsRef() === undefined ? {} : { theirs: theirsRef(), sendTo: "origin" },
+        // A suggestion is brought into the shared project itself; the person's
+        // copy is caught up with and sent back to, as any send in their mode.
+        pull() !== undefined
+          ? { theirs: theirsRef(), sendTo: "origin" }
+          : fromCopy()
+            ? { theirs: theirsRef() }
+            : {},
       );
+      // A suggestion brought in and sent is marked taken on the shared
+      // project, so its author is not left waiting — unless the reviewer chose
+      // to leave it open (some of it now, more later). Not when it stayed here.
+      // Its note is the reviewer's own message (`Suggestions.accept` ends it
+      // with the line its author's list reads "brought in" from).
+      const accepted = untrack(closeOnSave) ? pull() : undefined;
+      const markTaken = (sent: boolean): void => {
+        if (accepted === undefined || !sent) return;
+        acceptSuggestion(services, project, accepted, staticNote)
+          .then(() => setBroughtIn(true))
+          .catch((cause: unknown) =>
+            toasts.error({
+              title: t("Brought in, but the suggestion is still open on the shared project"),
+              message: describe(cause),
+            }),
+          )
+          // The Suggestions tab's count is the network's: ask it again now.
+          .finally(() => void collaboration.refresh(services, project));
+      };
       const done = (): void => {
         setMessage("");
+        startOver();
         version.refresh();
         shared.refresh();
         common.refresh();
       };
       switch (outcome.kind) {
         case "refused":
-          toasts.update(notice, {
+          setRecordedLine({
             tone: "error",
-            autoClose: false,
             title: t("Not combined"),
-            message:
+            detail:
               outcome.receive !== undefined
                 ? receiveRefusal(outcome.receive, outcome.books ?? [])
                 : outcome.combine !== undefined
@@ -949,13 +1154,22 @@ export function ReviewPanel() {
             project.books.map((book) => book.id),
             true,
           );
-          toasts.update(notice, {
-            tone: outcome.sent ? "success" : "info",
-            title: outcome.sent
-              ? t("Combined with the shared project")
-              : t("Combined here; not sent yet"),
-            message: outcome.sent ? staticMessage : combineTrouble("recorded"),
+          setRecordedLine({
+            tone: "success",
+            title: t("Combined with the shared project on this device"),
+            detail: staticMessage,
           });
+          markTaken(outcome.sent);
+          setSendLine(
+            outcome.sent
+              ? lineOfSend({ kind: "sent" })
+              : {
+                  tone: "warning",
+                  title: t("Saved here. Not sent yet"),
+                  detail: combineTrouble("recorded"),
+                  action: "retry",
+                },
+          );
           done();
           break;
         case "received":
@@ -968,29 +1182,29 @@ export function ReviewPanel() {
                 project.books.map((book) => book.id),
                 true,
               );
-              toasts.update(notice, {
+              setRecordedLine({
                 tone: "success",
-                title: t("Combined with the shared project"),
-                message: staticMessage,
+                title: t("Combined with the shared project on this device"),
+                detail: staticMessage,
               });
+              follow(outcome.sending);
+              void outcome.sending?.then((sent) => markTaken(sent.kind === "sent"));
               done();
               break;
             case "not-recorded":
               shell.noteWritten(outcome.recorded.books, false);
-              toasts.update(notice, {
+              setRecordedLine({
                 tone: "error",
-                autoClose: false,
                 title: t("Updates received; your decisions are on disk, but not recorded"),
-                message: describe(outcome.recorded.error),
+                detail: describe(outcome.recorded.error),
               });
               done();
               break;
             case "not-written":
-              toasts.update(notice, {
+              setRecordedLine({
                 tone: "error",
-                autoClose: false,
                 title: t("Updates received; your decisions could not be written"),
-                message: describe(outcome.recorded.error),
+                detail: describe(outcome.recorded.error),
               });
               done();
               break;
@@ -1004,46 +1218,170 @@ export function ReviewPanel() {
     const outcome = await recordVersion(services, project, books, staticMessage, by);
     switch (outcome.kind) {
       case "nothing":
-        toasts.update(notice, { title: t("Nothing to record"), tone: "info" });
+        setRecordedLine({ tone: "muted", title: t("Nothing to record") });
         break;
       case "not-written":
-        toasts.update(notice, {
+        setRecordedLine({
           tone: "error",
           title: t("Could not write to disk"),
-          message: describe(outcome.error),
-          autoClose: false,
+          detail: describe(outcome.error),
         });
         break;
       case "not-recorded":
         // The files hold this text and no version holds the files: that is
         // `onDisk`, exactly, and the book markers say so.
         shell.noteWritten(outcome.books, false);
-        toasts.update(notice, {
+        setRecordedLine({
           tone: "error",
-          autoClose: false,
           title: t("On disk, but not recorded"),
-          message: describe(outcome.error),
+          detail: describe(outcome.error),
         });
         break;
       case "recorded":
         shell.noteWritten(outcome.books, true);
-        toasts.update(notice, {
+        setRecordedLine({
           tone: "success",
-          title: t("Recorded {count} book(s) as {hash}", {
-            count: outcome.receipts,
-            hash: outcome.commit.slice(0, 7),
-          }),
-          message: staticMessage,
+          title: t("Recorded {count} book(s) on this device", { count: outcome.receipts }),
+          detail: `${staticMessage} · ${outcome.commit.slice(0, 7)}`,
         });
         setMessage("");
         version.refresh();
-        // The send is its own line after "Saved": a refused send is never a
-        // failed save, and /cloud says what happened to it.
-        void sendAfterSave(services, project);
+        // The send is its own line after "Recorded": a refused send is never
+        // a failed save, and the dialog stays to say which it was.
+        follow(sendAfterSave(services, project));
         break;
     }
     setRecording(false);
   };
+
+  // --- the record's receipt ------------------------------------------------
+
+  /**
+   * What the dialog says once Record is pressed: one line for this device,
+   * one for the shared project. The dialog stays open on them, because "did
+   * it work?" has two answers, and a toast that vanished said only the first.
+   */
+  interface ReceiptLine {
+    readonly tone: "success" | "warning" | "error" | "muted";
+    readonly title: string;
+    readonly detail?: string;
+    /**
+     * The move the line offers: compare what arrived, send again, go sign in,
+     * or — after a send to the person's copy — offer it to the shared project.
+     */
+    readonly action?: "see" | "retry" | "send" | "open" | "offer";
+  }
+  const [recordedLine, setRecordedLine] = createSignal<ReceiptLine | undefined>(undefined, {
+    name: "reviewRecordedLine",
+  });
+  const [sendLine, setSendLine] = createSignal<ReceiptLine | "sending" | undefined>(undefined, {
+    name: "reviewSendLine",
+  });
+
+  /** The send's line once it has one: not while it is still under way. */
+  const sentLine = (): ReceiptLine | undefined => {
+    const held = sendLine();
+    return held === "sending" ? undefined : held;
+  };
+
+  const lineOfSend = (outcome: SendOutcome): ReceiptLine | undefined => {
+    const project = shell.project();
+    // Attached to nothing, there is no second line to say.
+    if (outcome.kind === "detached") return undefined;
+    const copy = sendOutcomeCopy(outcome, syncWatch.sync(project?.root)?.state);
+    // Sent to the person's copy: the next move is offering it, right here.
+    // An open suggestion already follows the copy, so it needs no second offer.
+    if (outcome.kind === "sent" && outcome.toCopy === true) {
+      const waiting = collaboration.facts(project?.root)?.mine?.kind === "waiting";
+      return waiting
+        ? {
+            ...copy,
+            detail: t("Your open suggestion now includes these changes."),
+          }
+        : {
+            ...copy,
+            detail: t("Offer them to the shared project when they are ready."),
+            action: "offer",
+          };
+    }
+    const action =
+      outcome.kind === "held"
+        ? ("send" as const)
+        : outcome.kind !== "refused"
+          ? undefined
+          : outcome.reason === "Rejected"
+            ? ("see" as const)
+            : outcome.reason === "Unauthorized"
+              ? ("open" as const)
+              : ("retry" as const);
+    return { ...copy, ...(action === undefined ? {} : { action }) };
+  };
+
+  const follow = (sending: Promise<SendOutcome> | undefined): void => {
+    if (sending === undefined) return;
+    setSendLine("sending");
+    void sending.then((outcome) => setSendLine(lineOfSend(outcome)));
+  };
+
+  const receiptAction = (action: NonNullable<ReceiptLine["action"]>): void => {
+    const project = shell.project();
+    if (project === undefined) return;
+    switch (action) {
+      case "see":
+        setRecordOpen(false);
+        seeShared();
+        return;
+      case "open":
+        setRecordOpen(false);
+        void navigate({ to: "/settings" });
+        return;
+      case "retry":
+      case "send":
+        follow(sendNow(services, project));
+        return;
+      case "offer":
+        setSendLine("sending");
+        void suggestMyChanges(services, project)
+          .then(() =>
+            setSendLine({
+              tone: "success",
+              title: t("Offered to the shared project"),
+              detail: t(
+                "The project's editors will see your changes. Later sends add to the same suggestion.",
+              ),
+            }),
+          )
+          .catch((cause: unknown) =>
+            setSendLine({
+              tone: "error",
+              title: t("Could not offer your changes"),
+              detail: describe(cause),
+              action: "offer",
+            }),
+          )
+          .finally(() => void collaboration.refresh(services, project));
+        return;
+    }
+  };
+
+  /**
+   * Set the review against the shared project, read as the last check left
+   * it: what "See the changes" means on this screen.
+   */
+  const seeShared = (): void => {
+    shared.refresh();
+    common.refresh();
+    if (rightId() !== "shared" && leftId() !== "shared") pick("right", "shared");
+  };
+
+  // The cloud popover's "See the changes" navigates here with `against=shared`;
+  // when Review is already open that is a search change, not a mount.
+  createEffect(
+    () => search().against,
+    (against) => {
+      if (against === "shared") untrack(seeShared);
+    },
+  );
 
   // --- recovery ------------------------------------------------------------
 
@@ -1101,14 +1439,14 @@ export function ReviewPanel() {
     return (
       <div class="space-y-1">
         <span class="text-smallest font-medium text-on-surface-tertiary">
-          {props.side === "left" ? t("This side") : t("Against")}
+          {props.side === "left" ? t("To") : t("From")}
         </span>
         <div class="flex items-center gap-2">
           <Select
             size="sm"
             wrapperClass="min-w-0"
             data-review-side={props.side}
-            aria-label={props.side === "left" ? t("The left side") : t("The right side")}
+            aria-label={props.side === "left" ? t("Compare to") : t("Compare from")}
             value={id()}
             onChange={(event) => pick(props.side, event.currentTarget.value)}
           >
@@ -1133,8 +1471,11 @@ export function ReviewPanel() {
     );
   }
 
-  /** The sources, said once: "In the editor ⇄ On disk". */
-  const sourcesLabel = (): string => `${leftLabel()} ⇄ ${rightLabel()}`;
+  /**
+   * The sources, said once and in the columns' order: "On disk → In the
+   * editor" — the other side, then the text you edit.
+   */
+  const sourcesLabel = (): string => `${rightLabel()} → ${leftLabel()}`;
 
   return (
     <main class="flex h-full min-w-0 flex-col gap-2 px-4 pt-3 pb-2" data-review>
@@ -1146,7 +1487,7 @@ export function ReviewPanel() {
             pickers; how far along the review is, is a count; the one write is
             the primary button. Everything else is in the menu — the reading
             below is what this screen is for. */}
-        <header class="flex min-w-0 flex-wrap items-center gap-2 pe-12" data-review-header>
+        <header class="flex min-w-0 flex-wrap items-center gap-2" data-review-header>
           {pageLeading()}
           <h1 class="text-h3 font-semibold text-on-surface-primary">{t("Review")}</h1>
           <Popover
@@ -1164,8 +1505,8 @@ export function ReviewPanel() {
           >
             <div class="space-y-3">
               <div class="grid gap-3 sm:grid-cols-2">
-                <Picker side="left" />
                 <Picker side="right" />
+                <Picker side="left" />
               </div>
               <Show when={leftId() === rightId()}>
                 <p class="text-smallest text-on-surface-secondary">
@@ -1229,7 +1570,7 @@ export function ReviewPanel() {
             <Show when={target() !== undefined}>
               <Button
                 size="sm"
-                variant="secondary"
+                variant="primary"
                 icon={<Save />}
                 data-review-record
                 disabled={unsaved().length === 0 && !againstShared()}
@@ -1238,7 +1579,7 @@ export function ReviewPanel() {
                 })}
                 onClick={openRecord}
               >
-                {t("Record a version…")}
+                {t("Save")}
               </Button>
             </Show>
             <Menu
@@ -1287,14 +1628,44 @@ export function ReviewPanel() {
                 </p>
               </Show>
             </Menu>
+            <BackToEditor quiet />
           </div>
         </header>
+
+        {/* Where the project stands with the shared project, and the one
+            move: what `git status` says, in words. */}
+        <SyncLine onSee={seeShared} seeing={againstShared()} />
+
+        {/* Against a suggestion: whose it is, and what its author said. */}
+        <Show when={pull()}>{(number) => <SuggestionLine number={number()} />}</Show>
 
         {/* An earlier session's unsaved work: the one prompt every project
             screen shows, answered once. Review keeps no list of its own. */}
         <RecoveryBanner />
 
-        <Show when={result()} fallback={<EmptyState title={t("Nothing to review yet.")} />}>
+        <Show
+          when={result()}
+          fallback={
+            <Show
+              when={waitingFor() ?? (comparing() ? t("both sides") : undefined)}
+              fallback={<EmptyState title={t("Nothing to review yet.")} />}
+            >
+              {(what) => (
+                <div
+                  class="flex items-center justify-center gap-2 py-10 text-small text-on-surface-secondary"
+                  role="status"
+                  data-review-waiting
+                >
+                  <span
+                    aria-hidden="true"
+                    class="size-4 animate-spin rounded-full border-2 border-on-surface-tertiary border-t-transparent"
+                  />
+                  {t("Reading {source}…", { source: what() })}
+                </div>
+              )}
+            </Show>
+          }
+        >
           <Show
             when={changed().length > 0 || cardEditing()}
             fallback={
@@ -1307,13 +1678,68 @@ export function ReviewPanel() {
           >
             <Show when={oneSided().length > 0}>
               <p class="text-smallest text-on-surface-secondary" data-review-one-sided>
-                {t(
-                  "Only one side holds {books}. A project's book set is fixed when it opens, so Review cannot add or remove a book yet.",
-                  { books: oneSided().map(bookLabel).join(", ") },
-                )}
+                <Show
+                  when={emptySide()}
+                  fallback={t(
+                    "Only one side holds {books}. A project's book set is fixed when it opens, so Review cannot add or remove a book yet.",
+                    {
+                      books:
+                        oneSided().length > 6
+                          ? t("{count} books", { count: oneSided().length })
+                          : oneSided().map(bookLabel).join(", "),
+                    },
+                  )}
+                >
+                  {(side) => t("{source} holds no books yet.", { source: side() })}
+                </Show>
               </p>
             </Show>
-            <div class="flex min-h-0 flex-1 flex-col" data-review-units={totals().total}>
+            <Show when={settled() && showChoices()}>
+              <p class="flex items-center gap-2 text-smallest text-on-surface-secondary">
+                <Check size={14} aria-hidden="true" class="text-on-surface-success" />
+                {t("Every change is decided.")}
+                <Button size="sm" variant="tertiary" onClick={() => setShowChoices(false)}>
+                  {t("Hide my choices")}
+                </Button>
+              </p>
+            </Show>
+            {/* The settled card sits OVER the reading rather than replacing it:
+                the reader stays mounted, hidden, so "Show my choices" is
+                instant. Replacing it threw away every book's prepared diff,
+                and showing them again parsed both sides of every book anew. */}
+            <Show when={settled() && !showChoices()}>
+              <EmptyState
+                icon={<Check size={20} />}
+                title={t("Every change is decided")}
+                description={
+                  againstShared()
+                    ? t(
+                        "The editor now reads as you chose. Save to finish: it keeps your choices and joins your work with the shared project's.",
+                      )
+                    : unsaved().length > 0
+                      ? t("Both sides now read the same. Save to keep it.")
+                      : t("Both sides now read the same. Nothing is left to save.")
+                }
+                action={
+                  <div class="flex flex-wrap justify-center gap-2" data-review-settled>
+                    <Show
+                      when={target() !== undefined && (againstShared() || unsaved().length > 0)}
+                    >
+                      <Button variant="primary" icon={<Save />} onClick={openRecord}>
+                        {t("Save")}
+                      </Button>
+                    </Show>
+                    <Button variant="tertiary" onClick={() => setShowChoices(true)}>
+                      {t("Show my choices")}
+                    </Button>
+                  </div>
+                }
+              />
+            </Show>
+            <div
+              class={["flex min-h-0 flex-1 flex-col", { hidden: settled() && !showChoices() }]}
+              data-review-units={totals().total}
+            >
               <ReviewReader
                 books={reviewBooks()}
                 originOf={originOf}
@@ -1338,8 +1764,14 @@ export function ReviewPanel() {
 
         <Dialog
           open={recordOpen()}
-          onOpenChange={setRecordOpen}
-          title={t("Record a version")}
+          onOpenChange={(open) => {
+            setRecordOpen(open);
+            if (!open) {
+              setRecordedLine(undefined);
+              setSendLine(undefined);
+            }
+          }}
+          title={t("Save")}
           description={
             againstShared()
               ? t(
@@ -1350,7 +1782,30 @@ export function ReviewPanel() {
                 })
           }
           footer={
-            <>
+            <Show
+              when={recordedLine() === undefined}
+              fallback={
+                <Button
+                  variant="primary"
+                  disabled={sendLine() === "sending"}
+                  data-review-record-done
+                  onClick={() => {
+                    setRecordOpen(false);
+                    // A suggestion that is now closed has nothing left to
+                    // review here: back to the list it came from.
+                    if (broughtIn()) {
+                      setBroughtIn(false);
+                      void navigate({
+                        to: "/project/$slug/suggestions",
+                        params: { slug: shell.slug() },
+                      });
+                    }
+                  }}
+                >
+                  {t("Done")}
+                </Button>
+              }
+            >
               <Button variant="tertiary" onClick={() => setRecordOpen(false)}>
                 {t("Cancel")}
               </Button>
@@ -1358,66 +1813,207 @@ export function ReviewPanel() {
                 variant="primary"
                 icon={<Save />}
                 loading={recording()}
-                disabled={(unsaved().length === 0 && !againstShared()) || undecidedBoth() > 0}
+                disabled={
+                  (unsaved().length === 0 && !againstShared()) ||
+                  undecidedBoth() > 0 ||
+                  declineOnly()
+                }
                 data-review-record-confirm
-                onClick={() => void record().then(() => setRecordOpen(false))}
+                onClick={() => void record()}
               >
-                {t("Record a version")}
+                {t("Save")}
               </Button>
-            </>
+            </Show>
           }
         >
-          <Show when={undecidedBoth() > 0}>
-            <p class="pb-3 text-small text-on-surface-warning" data-review-undecided>
-              {t(
-                "{count} passage(s) changed in both places still need a choice: keep yours or take the shared project's.",
-                { count: undecidedBoth() },
-              )}
-            </p>
+          <Show when={recordedLine()}>
+            {(line) => (
+              <div class="space-y-3" data-review-record-receipt>
+                <Receipt line={line()} onAction={receiptAction} />
+                <Show when={sendLine() === "sending"}>
+                  <div class="flex items-center gap-2 text-small text-on-surface-secondary">
+                    <span
+                      aria-hidden="true"
+                      class="size-4 animate-spin rounded-full border-2 border-on-surface-tertiary border-t-transparent"
+                    />
+                    {t("Sending to the shared project…")}
+                  </div>
+                </Show>
+                <Show when={sentLine()}>
+                  {(sent) => <Receipt line={sent()} onAction={receiptAction} />}
+                </Show>
+              </div>
+            )}
           </Show>
-          <Show when={author() === undefined}>
+          <Show when={recordedLine() === undefined && declineOnly()}>
+            <form
+              class="space-y-3"
+              data-review-decline-only
+              onSubmit={(event) => {
+                event.preventDefault();
+                declineFromDialog();
+              }}
+            >
+              <p class="text-small text-on-surface-secondary">
+                {t(
+                  "You kept none of the suggested changes, so there is nothing to bring in. Decline the suggestion instead; its author reads your note.",
+                )}
+              </p>
+              <Show when={unsaved().length > 0}>
+                <p class="text-smallest text-on-surface-tertiary">
+                  {t("Edits you typed here stay unsaved; save them from Changes afterwards.")}
+                </p>
+              </Show>
+              <div class="flex items-center gap-2">
+                <Input
+                  wrapperClass="min-w-0 flex-1"
+                  placeholder={t("Why? (optional)")}
+                  value={declineNote()}
+                  onInput={(event) => setDeclineNote(event.currentTarget.value)}
+                />
+                <Button type="submit" variant="secondary" loading={recording()}>
+                  {t("Decline")}
+                </Button>
+              </div>
+            </form>
+          </Show>
+          <Show when={recordedLine() === undefined && !declineOnly()}>
+            <Show when={undecidedBoth() > 0}>
+              <p class="pb-3 text-small text-on-surface-warning" data-review-undecided>
+                {t(
+                  "{count} passage(s) changed in both places still need a choice: keep yours or take the shared project's.",
+                  { count: undecidedBoth() },
+                )}
+              </p>
+            </Show>
+            <Show when={author() === undefined}>
+              <label
+                class="block pb-1 text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase"
+                for="author-name"
+              >
+                {t("Your name, as your team knows you")}
+              </label>
+              <Input
+                id="author-name"
+                wrapperClass="w-full pb-3"
+                value={typedName()}
+                onInput={(event) => setTypedName(event.currentTarget.value)}
+              />
+            </Show>
             <label
               class="block pb-1 text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase"
-              for="author-name"
+              for="commit-message"
             >
-              {t("Your name, as your team knows you")}
+              {t("What did you change?")}
             </label>
             <Input
-              id="author-name"
-              wrapperClass="w-full pb-3"
-              value={typedName()}
-              onInput={(event) => setTypedName(event.currentTarget.value)}
+              id="commit-message"
+              wrapperClass="w-full"
+              placeholder={defaultMessage()}
+              value={message()}
+              onInput={(event) => setMessage(event.currentTarget.value)}
+              onKeyDown={(event: KeyboardEvent) => {
+                if (event.key !== "Enter" || event.isComposing) return;
+                event.preventDefault();
+                if (unsaved().length > 0 || againstShared()) void record();
+              }}
             />
-          </Show>
-          <label
-            class="block pb-1 text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase"
-            for="commit-message"
-          >
-            {t("What did you change?")}
-          </label>
-          <Input
-            id="commit-message"
-            wrapperClass="w-full"
-            placeholder={defaultMessage()}
-            value={message()}
-            onInput={(event) => setMessage(event.currentTarget.value)}
-            onKeyDown={(event: KeyboardEvent) => {
-              if (event.key !== "Enter" || event.isComposing) return;
-              event.preventDefault();
-              if (unsaved().length > 0 || againstShared())
-                void record().then(() => setRecordOpen(false));
-            }}
-          />
-          <p class="pt-1 text-smallest text-on-surface-tertiary">
-            {t("Your team sees this, and so will you later.")}
-          </p>
-          <Show when={sends()}>
-            <p class="pt-3 text-small text-on-surface-secondary" data-review-sends>
-              {t("This also sends your changes to the shared project.")}
+            <p class="pt-1 text-smallest text-on-surface-tertiary">
+              {t("Your team sees this, and so will you later.")}
             </p>
+            <Show when={sends()}>
+              <p class="pt-3 text-small text-on-surface-secondary" data-review-sends>
+                {sendsLine()}
+              </p>
+            </Show>
+            <Show when={pull() !== undefined}>
+              <label
+                class="flex items-start justify-between gap-3 pt-3"
+                data-review-close-suggestion
+              >
+                <span>
+                  <span class="block text-small font-medium">
+                    {t("Close the suggestion as brought in")}
+                  </span>
+                  <span class="block text-smallest text-on-surface-tertiary">
+                    {t(
+                      "Turn off to keep it open — when you are taking part of it now and more later.",
+                    )}
+                  </span>
+                </span>
+                <Switch
+                  aria-label={t("Close the suggestion as brought in")}
+                  checked={closeOnSave()}
+                  onChange={setCloseOnSave}
+                />
+              </label>
+            </Show>
           </Show>
         </Dialog>
       </Show>
     </main>
+  );
+}
+
+/** One line of a record's receipt: what happened, and the move it offers. */
+function Receipt(props: {
+  readonly line: {
+    readonly tone: "success" | "warning" | "error" | "muted";
+    readonly title: string;
+    readonly detail?: string;
+    readonly action?: "see" | "retry" | "send" | "open" | "offer";
+  };
+  readonly onAction: (action: "see" | "retry" | "send" | "open" | "offer") => void;
+}) {
+  const glyph = () => {
+    switch (props.line.tone) {
+      case "success":
+        return <CircleCheck size={18} class="text-on-surface-success" />;
+      case "warning":
+        return <TriangleAlert size={18} class="text-on-surface-warning" />;
+      case "error":
+        return <CircleX size={18} class="text-on-surface-error" />;
+      case "muted":
+        return <Info size={18} class="text-on-surface-tertiary" />;
+    }
+  };
+  const label = (action: "see" | "retry" | "send" | "open" | "offer"): string => {
+    switch (action) {
+      case "see":
+        return t("Compare the changes");
+      case "retry":
+        return t("Try sending again");
+      case "send":
+        return t("Send now");
+      case "open":
+        return t("Set up sharing");
+      case "offer":
+        return t("Offer these changes");
+    }
+  };
+  return (
+    <div class="flex items-start gap-2" data-receipt-tone={props.line.tone}>
+      <span aria-hidden="true" class="mt-0.5 inline-flex">
+        {glyph()}
+      </span>
+      <div class="min-w-0 flex-1 space-y-1">
+        <p class="text-small font-medium text-on-surface-primary">{props.line.title}</p>
+        <Show when={props.line.detail}>
+          {(detail) => <p class="text-small text-on-surface-secondary">{detail()}</p>}
+        </Show>
+        <Show when={props.line.action}>
+          {(action) => (
+            <Button
+              size="sm"
+              variant={action() === "see" || action() === "offer" ? "primary" : "secondary"}
+              data-receipt-action={action()}
+              onClick={() => props.onAction(action())}
+            >
+              {label(action())}
+            </Button>
+          )}
+        </Show>
+      </div>
+    </div>
   );
 }

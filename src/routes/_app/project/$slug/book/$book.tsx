@@ -7,8 +7,10 @@ import { REFERENCE_WIDTH } from "#app/settings";
 import { BookEditor } from "#app/ui/BookEditor";
 import { DelayedSpinner, Resizable, cx } from "#app/ui/primitives";
 import { RecoveryBanner } from "#app/ui/recovery/RecoveryBanner";
+import { AlignedProvider } from "#app/ui/workspace/aligned";
 import { ReferenceColumn } from "#app/ui/workspace/ReferenceColumn";
 import { Toolbar } from "#app/ui/workspace/Toolbar";
+import { createAlignedGroup } from "#editor/index";
 
 /**
  * The editor screen: the workspace toolbar, the reference column, and the book
@@ -29,6 +31,10 @@ import { Toolbar } from "#app/ui/workspace/Toolbar";
 
 function BookPage(props: { readonly root: string; readonly bookId: string }) {
   const shell = useShell();
+  // The page holds the editors' alignment: they each report where they are,
+  // and it decides who follows (`#editor` `createAlignedGroup`). Reveal: a
+  // pane moves only when the verse scrolled to is not already in its view.
+  const aligned = createAlignedGroup("reveal");
   // Plain variables: `Resizable.Panel` reads its three sizes once, during
   // registration, and a JSX expression there is a memo read outside a tracking
   // scope — which Solid 2 warns about, correctly. The initial width is the
@@ -75,8 +81,10 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
           a project now lands on the book rather than on the census, so a
           banner mounted only there is a banner nobody sees. */}
       <RecoveryBanner />
+      {/* The editor waits for the recovery answer too: it is asked beside the
+          analysis and lands first, so the banner above is never late. */}
       <Show
-        when={shell.focused()}
+        when={shell.recoveryOffer() !== undefined ? shell.focused() : undefined}
         fallback={
           /* Opening a book parses it; blank unless a big one runs long. */
           <div class="h-full" data-opening={props.bookId}>
@@ -88,50 +96,54 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
           <>
             <Toolbar />
 
-            <Resizable.Root
-              class="min-h-0 flex-1"
-              onSizesChange={(sizes) => {
-                const first = sizes[0];
-                if (first !== undefined) shell.setReferenceWidth(first);
-              }}
-            >
-              <Resizable.Panel
-                initialSize={referenceInitial}
-                minSize={referenceMin}
-                maxSize={referenceMax}
-                class={collapsed() ? "[flex-basis:13rem]!" : undefined}
+            {/* The editor and its references are one aligned group: scroll
+                either and a following pane brings the same verse into view. */}
+            <AlignedProvider value={aligned}>
+              <Resizable.Root
+                class="min-h-0 flex-1"
+                onSizesChange={(sizes) => {
+                  const first = sizes[0];
+                  if (first !== undefined) shell.setReferenceWidth(first);
+                }}
               >
-                <ReferenceColumn onBound={setReferences} />
-              </Resizable.Panel>
-              {/* Hidden rather than unmounted, same reason as the panel. */}
-              <Resizable.Handle
-                label={t("Resize the reference pane")}
-                class={collapsed() ? "hidden" : undefined}
-              />
-              {/* No `<Card>` around the editor: `.editor-host` (app.css) IS
+                <Resizable.Panel
+                  initialSize={referenceInitial}
+                  minSize={referenceMin}
+                  maxSize={referenceMax}
+                  class={collapsed() ? "[flex-basis:13rem]!" : undefined}
+                >
+                  <ReferenceColumn onBound={setReferences} />
+                </Resizable.Panel>
+                {/* Hidden rather than unmounted, same reason as the panel. */}
+                <Resizable.Handle
+                  label={t("Resize the reference pane")}
+                  class={collapsed() ? "hidden" : undefined}
+                />
+                {/* No `<Card>` around the editor: `.editor-host` (app.css) IS
                   the card — white, bordered, 12px radius — and the scripture's
                   own generous padding is inside the view, where CodeMirror can
                   keep the measure at 40rem and centre it. A second card would
                   be a second border around the same rectangle. */}
-              <Resizable.Panel
-                class={cx(
-                  "flex flex-col gap-2 py-4 pe-1",
-                  // With the pane collapsed the editor takes the row back; the
-                  // `!` is load-bearing because `Resizable.Panel` writes its
-                  // share as an inline `flex-basis`.
-                  collapsed() ? "grow! [flex-basis:auto]!" : undefined,
-                )}
-              >
-                {/* Keyed on the book id: a different book is a different
+                <Resizable.Panel
+                  class={cx(
+                    "flex flex-col gap-2 py-4 pe-1",
+                    // With the pane collapsed the editor takes the row back; the
+                    // `!` is load-bearing because `Resizable.Panel` writes its
+                    // share as an inline `flex-basis`.
+                    collapsed() ? "grow! [flex-basis:auto]!" : undefined,
+                  )}
+                >
+                  {/* Keyed on the book id: a different book is a different
                     canonical state, so the view is rebuilt rather than
                     repointed. */}
-                <div class="flex min-h-0 flex-1 flex-col">
-                  <Show when={book().id} keyed>
-                    <BookEditor book={book()} />
-                  </Show>
-                </div>
-              </Resizable.Panel>
-            </Resizable.Root>
+                  <div class="flex min-h-0 flex-1 flex-col">
+                    <Show when={book().id} keyed>
+                      <BookEditor book={book()} />
+                    </Show>
+                  </div>
+                </Resizable.Panel>
+              </Resizable.Root>
+            </AlignedProvider>
           </>
         )}
       </Show>

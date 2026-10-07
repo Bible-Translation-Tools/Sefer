@@ -141,10 +141,16 @@ class Built extends WidgetType {
   }
 }
 
+/**
+ * Every control whose unit starts on one line, stacked: the gutter draws one
+ * marker per line, and two verses can start on the same one (a verse that
+ * begins mid-paragraph). One marker per control dropped every one after the
+ * first.
+ */
 class Control extends GutterMarker {
   constructor(
     readonly key: string,
-    readonly make: () => HTMLElement,
+    readonly make: readonly (() => HTMLElement)[],
   ) {
     super();
   }
@@ -152,7 +158,11 @@ class Control extends GutterMarker {
     return other.key === this.key;
   }
   override toDOM(): HTMLElement {
-    return this.make();
+    if (this.make.length === 1 && this.make[0] !== undefined) return this.make[0]();
+    const stack = document.createElement("span");
+    stack.className = "cm-diff-control-stack";
+    for (const make of this.make) stack.append(make());
+    return stack;
   }
 }
 
@@ -523,17 +533,26 @@ const controlGutter = (): Extension =>
     markers: (view) => {
       const builder = new RangeSetBuilder<GutterMarker>();
       const doc = view.state.doc;
-      const seen = new Set<number>();
+      const lines = new Map<number, DiffControl[]>();
       const controls = [...view.state.field(paintField).paint.controls].sort((a, b) => a.at - b.at);
       for (const control of controls) {
         // At the VISUAL line's start: the gutter draws a marker only where a
         // line block begins, and in regular mode a unit's first source line
         // (a bare `\q1`) is folded into the line it introduces.
         const from = visualStart(view, Math.min(control.at, doc.length));
-        if (seen.has(from)) continue;
-        seen.add(from);
-        builder.add(from, from, new Control(control.key, control.render));
+        const held = lines.get(from);
+        if (held === undefined) lines.set(from, [control]);
+        else held.push(control);
       }
+      for (const [from, held] of [...lines].sort((a, b) => a[0] - b[0]))
+        builder.add(
+          from,
+          from,
+          new Control(
+            held.map((control) => control.key).join("|"),
+            held.map((control) => control.render),
+          ),
+        );
       return builder.finish();
     },
   });

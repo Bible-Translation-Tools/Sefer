@@ -84,6 +84,81 @@ Pure core behaviour that a Node test over the in-memory `FileSystem` would pin, 
 
 - **A card's keys are the editor's keys** (2026-09-30, `src/editor/recipes/satellite.ts`, `core/compose.ts` `deletionKeys`, `core/deletion.ts`). A satellite's Backspace was CodeMirror's plain delete, so none of the keypress rules reached a card and the Book refused ("nothing survives the write-around") at a locked pip. Guard, in a card with locked verse numbers widened one unit up: at `\v 3 |While` (Mark 14:3, the verse opening its paragraph) one Backspace goes past the locked `\v 3` in USFM terms and takes the paragraph by its anchoring newline (`…the people."\n\n\s5\n\v 3 While`), never the `"` before it; at `\v 7 |You` mid-paragraph it takes the join before the pip (`…for me.\v 7 You`) — only a paragraph-level marker owns the newline before it (editor.md, "What a key does"); at the first verse of a card whose TOC unit starts at `\v`, Backspace only moves the caret; and the satellite's verdicts reach the Book's Observability ring.
 
+### Git lifecycle and sync candidates
+
+Carried over from the Git lifecycle spec (2026-09-29, built; the spec itself is retired — `git log -- planning/01-discussing/diff-and-sync-model-2026-09-23.md`). None is built: the build-out rule holds until behaviour is locked.
+
+Each test sits at the smallest seam that owns its risk:
+
+- **Vitest `core` project:** plain TypeScript in Node. Core is written over ports, so the test provides the host part: the in-memory `FileSystem` layer (the one the dev fixture seeds), or a real production adapter where the claim needs one (isomorphic-git over Node's filesystem for the native-git comparison). No mocks of core itself.
+- **Browser Mode:** a real browser API (OPFS, Web Locks, isomorphic-git) at module level.
+- **Playwright:** the built artifact.
+- **cargo:** git2.
+
+None of them asserts how a screen looks.
+
+#### Playwright journeys (`e2e/`)
+
+**Harness:**
+
+- **The remote** is a local git smart-HTTP server started by the Playwright config: `git http-backend` behind a small Node HTTP wrapper that adds CORS, with native git on the runner. Bare repositories are seeded per test from `fixtures/small-nt/`, with `receive.denyNonFastForwards` set, so any force push fails the journey. The built app reaches it through the endpoint preference ([configuration](configuration.md)), so no build flag changes.
+- **Credentials** are seeded the way `platform/web/credentials.ts` stores them (localStorage, keyed by host), because a push needs one and a Gitea login is not what these journeys test.
+- **Evidence** comes from two places:
+  - the **server's** repository, read with native git from Node: its commits, parents and tree;
+  - **Export diagnostics**: its project snapshot (HEAD, branch, origin present, unsaved books, the last sync state) and its rings, read with the observability chapter's `jq` recipes. That is the runtime evidence the observability rules require, read from the production build.
+
+**The journeys:**
+
+1. **A zip becomes one whole first commit.** Import a zip of `small-nt` with no `.git`, then save one edited book, then publish. Guard: the server's history has the arrival commit holding every book, and the save's commit on top holding the edited book; the snapshot shows no unsaved books; `import.resource` ends `passed` with `import.adopted: false` and `import.arrival: true`.
+2. **Adoption keeps history and drops the remote.** Import a zip whose `.git` has 5 commits and an `origin` with a token in its URL. Guard: the snapshot shows no origin; the server-side count after a publish is 5 plus any arrival; the token appears nowhere in the export. The byte-level checks are Node test 1.
+3. **An unreadable `.git` falls back.** Import a zip whose `.git/objects` is truncated. Guard: the notice appears, every book opens, and `import.fallback` names the reason.
+4. **A clone opens before its history arrives.** Clone a seeded remote with 50 commits. Guard: the project is editable while `repository.deepen` is still running; afterwards `deepen.complete` is true and `index.update` covers 50 commits.
+5. **The headline bug: a receive never reverts incoming work.** The remote advances MRK. Locally, LUK has an unsaved edit. Open with "Check for changes" on. Guard:
+   - `sync.check` ends `fetched`, and no project file changes before the receive;
+   - after the receive, the editor holds the incoming MRK and LUK's unsaved edit is intact;
+   - editing MRK and saving produces a server commit whose MRK contains both the incoming change and the edit.
+6. **Changed in both places goes to Review, and ends in one decision commit.** Both sides change MRK, and the local side has 3 unsent commits. Guard:
+   - receiving without review is refused (`sync.review: 1`);
+   - Review shows "the shared project" as a side;
+   - after the decisions and the save, the server's newest commit has exactly two parents, the old remote tip and the old local tip; its MRK equals the editor's text byte for byte; the push was accepted with non-fast-forwards denied.
+7. **Git never merges.** Both sides change different books, with review skipped. Guard: every commit with two parents is a decision commit (Sefer's message, and a tree whose books equal the editor's text), and none was made by `pull`. With review not skipped, nothing is received without a press.
+8. **Behind only, and no commit is added.** Theirs only, with no unsent commits here; receive. Guard: local HEAD equals the remote tip.
+9. **Checksums travel with the books.** In a burrito project, edit and save. Guard: the server commit contains `metadata.json` with the new md5, and the snapshot shows nothing unrecorded afterwards.
+10. **A refused send is reported, then explained.** Save with sending on, against a server that has moved on, then against one that refuses the account. Guard: the save reads "Saved" both times; `sync.transfer` ends `refused`; the first moves through `checking` to `behind` or `diverged`, the second stays `ahead` with the no-write-access words; never "sent".
+11. **The first save asks for a name once.** Signed out, save twice. Guard: the name is asked once, and both commits carry it as author with an empty email.
+12. **A steward brings in a copy.** A fork of the seeded remote carries 2 commits changing MRK and LUK, and its owner suggests them; the steward takes LUK and not MRK. Guard: the steward's "Suggested changes" card lists it, and a translator's shows no card at all; the steward cannot open it while `behind`; after the save, canonical's newest commit has parents [old canonical tip, fork tip], its LUK is the fork's and its MRK the steward's; the translator's next open reads `behind`, and receiving leaves her HEAD at canonical's tip with no commit added; the pull request reads merged.
+13. **The URL field says what it found.** Paste a reachable repository, an empty one, and a URL that isn't a repository. Guard: three different answers under the field, and nothing attached until a person confirms.
+
+#### Vitest `core` project (Node, host injected)
+
+1. **Adoption allowlist:** over the in-memory `FileSystem`, a `.git` with remotes, remote refs, `packed-refs` remote lines, hooks, a credential helper and a token URL. Guard: only objects, heads, HEAD and shallow survive, the config is fresh, and each fallback reason (gitfile, merge in progress, unresolvable HEAD) is chosen.
+2. **The history index against native git:** the core walker over the batched reader, on a fixture repository with merges, a TREESAME merge, a rename and repeated blobs. Guard: each book's history equals native `git log -- <path>` from a `tools/` probe; forward growth, backward growth and the rebuild on a force push each give the same index as building from scratch.
+3. **The decision commit:** over the in-memory `FileSystem` and isomorphic-git, a diverged pair. Guard: the commit's parents are both tips, its tree is exactly the final files (per file: theirs-only → theirs, mine-only → mine, both → the decided text), and nothing uncommitted in the work tree is ever discarded, including when the commit fails.
+4. **Change facts and policy:** three texts per book in, per-book verdicts out, at each overlap scope. Guard: `book` (the default) sends any book changed on both sides to review; `chapter` passes different chapters of one book; unchanged, added and deleted are all reported; nothing is decided twice (Combine and the state machine read the same answer).
+5. **The lifecycle machine:** every state × event. Guard: mutations are refused outside `ready`, `unhealthy` is left only through its tools, and `closing` refuses new work.
+6. **Checksums:** md5 over the written bytes, not LF text; an unchanged book leaves `metadata.json` byte-identical.
+
+#### Browser Mode
+
+1. **One writer across contexts:** the Web Locks lane from the page and a worker, and from two pages. Guard: exclusive holders never overlap, a save waits at most one deepen chunk (`lock.wait_ms`), and releasing an exclusive lock invalidates the pack view.
+2. **The batched reader over OPFS** on a repository with a backslash tree entry. Guard: no `UnsafeFilepathError`, and the same answers as the Node run of test 2.
+
+#### cargo (`src-tauri`)
+
+1. **A push the server refuses is `Rejected`** (the push-update-reference callback), against a bare repository that has moved on.
+2. **The batched reader in git2** returns the same batches as the Web reader for the shared fixture.
+3. **The per-repository mutex** serialises two mutating commands.
+
+#### Suggested changes, exercised by hand on 2026-10-06
+
+Journeys a second, non-writer account walked on the Web ([git](git.md), Suggested changes); each found a bug that is now fixed, and none is guarded:
+
+- **A refused send offers the copy, and the copy is found, not forked twice.** Guard: after a 403 push, "Work in my own copy" attaches the existing fork (no second fork request), and the mode is chosen only once the copy is attached.
+- **A send to the copy is not "waiting to be sent".** Guard: after a send in the copy mode, the reading counts nothing unsent (it is measured against `copyRef`), and the copy's ref equals HEAD — the lane wrapper once dropped `fetchRef`'s remote and read the shared project instead.
+- **A partial accept brings in what was taken and closes the suggestion.** Guard: take one passage, keep another, Save; the shared project's newest commit carries the taken text and keeps the other, the suggestion is closed with the reviewer's message and the `BROUGHT_IN` line, and Save was enabled (a take written into the editor once read as "kept none").
+- **Keeping none of it is declining it.** Guard: with passages offered and none taken, Save is closed; Decline closes the suggestion (checked in Gitea's answer — a PATCH sent without its body is a 200 that changes nothing) and only then posts the note.
+- **The author reads the outcome.** Guard: Suggestions → Yours shows a brought-in suggestion as taken and a declined one as closed with the editor's note, by the `BROUGHT_IN` line and not by git (every suggestion reports its copy branch's current tip as its head).
+
 Colocate Node and focused browser tests with their owner; Web journeys live in `e2e/`.
 
 ## Tool references

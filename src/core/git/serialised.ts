@@ -50,6 +50,7 @@ export const serialiseGit = (git: GitService, repositories: RepositoriesService)
     // The list is read in the lane; each version's bytes are read later, by
     // id, which needs none.
     previousVersions: (repo, path) => read(repo.root, git.previousVersions(repo, path)),
+    timeline: (repo, paths, shared) => read(repo.root, git.timeline(repo, paths, shared)),
   };
 };
 
@@ -74,7 +75,10 @@ export const serialiseRemote = (
     attach: (repo, url) => write(repo.root, "attach", remote.attach(repo, url)),
     attachAs: (repo, name, url) => write(repo.root, "attach", remote.attachAs(repo, name, url)),
     urlOf: (repo, name) => read(repo.root, remote.urlOf(repo, name)),
-    fetchRef: (repo, from, into) => write(repo.root, "fetch", remote.fetchRef(repo, from, into)),
+    // Every argument forwarded, the remote's name included: dropped, a read
+    // of the person's copy would silently read `origin` instead.
+    fetchRef: (repo, from, into, name) =>
+      write(repo.root, "fetch", remote.fetchRef(repo, from, into, name)),
     origin: (repo) => read(repo.root, remote.origin(repo)),
     // Nothing local is read or written: a probe needs no lane.
     probe: remote.probe,

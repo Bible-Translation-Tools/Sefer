@@ -18,10 +18,12 @@
  */
 
 import type { EditorView } from "@codemirror/view";
+import type { JSX } from "@solidjs/web";
+import CheckIcon from "lucide-solid/icons/check";
 import CodeIcon from "lucide-solid/icons/code";
 import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
-import type { Analysis } from "#core/galley";
+import type { Analysis, MergeSide } from "#core/galley";
 import type { DecisionUnit } from "#core/galley/diff";
 import {
   liveDiff,
@@ -36,13 +38,13 @@ import {
 import "#editor/editor.css";
 
 import { t } from "../../i18n";
-import type { CardAction } from "../multibuffer/CardAction";
+import { CardActions, type CardAction } from "../multibuffer/CardAction";
 import { CardEditor } from "../multibuffer/CardEditor";
 import { CardFrame } from "../multibuffer/CardFrame";
 import type { CardEvent, CardView, ContextStep } from "../multibuffer/cardState";
 import { ContextControl } from "../multibuffer/ContextControl";
 import { cardPolicy } from "../multibuffer/policy";
-import { Badge, cx } from "../primitives";
+import { cx } from "../primitives";
 import { hunkKind, type Hunk } from "./hunks";
 import { hunkPaint, sidePaint, type Controls } from "./paint";
 
@@ -103,6 +105,8 @@ export function DiffCard(props: {
   readonly view: CardView;
   readonly onView: (event: CardEvent) => void;
   readonly controls: Controls | undefined;
+  /** The card next and previous last stepped to: outlined, so it can be told from its neighbours. */
+  readonly current?: boolean;
   /**
    * Who changed this passage since the two sides last agreed, when that is
    * known — only in a review against the shared project, where "keep mine"
@@ -130,6 +134,17 @@ export function DiffCard(props: {
   readonly analyze?: (text: string) => Analysis;
   /** Header actions, before Edit/Done: the card's decisions. */
   readonly headerActions?: readonly CardAction[];
+  /**
+   * In a split, actions under each column's caption, beside what that side
+   * calls itself — History's Adopt on either side. Drawn only in a split: a
+   * unified card has one column, and the screen puts them in the header.
+   */
+  readonly sideActions?: {
+    readonly baseline: readonly CardAction[];
+    readonly current: readonly CardAction[];
+  };
+  /** A row under the two sides: History's "your text against this version". */
+  readonly below?: JSX.Element;
   /** The way out (to the whole book). */
   readonly open?: CardAction;
   /** One context step for this card: absent, the card offers no widening. */
@@ -151,7 +166,11 @@ export function DiffCard(props: {
    * rebuilt for it, least of all a live one somebody is typing in.
    */
   const now = () => untrack(() => ({ hunk: props.hunk, sides: props.sides }));
-  const controls = (): Controls | undefined => untrack(() => props.controls);
+  // The card's header decides it; its gutter carries no second pair of buttons.
+  const controls = (): Controls | undefined => {
+    const held = untrack(() => props.controls);
+    return held === undefined ? undefined : { ...held, gutter: false };
+  };
 
   const currentPaint = (markup: boolean, split: boolean) => (): DiffPaint => {
     const { hunk, sides } = now();
@@ -353,37 +372,80 @@ export function DiffCard(props: {
           },
         ];
 
-  const status = (): string =>
-    props.hunk.units.length === 0
-      ? ""
-      : props.hunk.units.length === 1
-        ? (props.hunk.units[0]?.status ?? "")
-        : `${props.hunk.units.length} changes`;
+  /**
+   * The side every change in this card is decided for, if they agree: its
+   * caption says so, in brand with a check, rather than a wash over the text.
+   */
+  const chosen = (): MergeSide | undefined => {
+    const controls = props.controls;
+    const units = props.hunk.units;
+    if (controls === undefined || units.length === 0) return undefined;
+    const sides = new Set(units.map((unit) => controls.decision(unit)));
+    return sides.size === 1 ? [...sides][0] : undefined;
+  };
+  const caption = (side: MergeSide, label: string) => (
+    <span
+      class={cx(
+        "flex min-w-0 items-center gap-1 truncate",
+        chosen() === side && "font-medium text-brand",
+      )}
+      data-diff-chosen={chosen() === side ? "" : undefined}
+    >
+      <Show when={chosen() === side}>
+        <CheckIcon size={12} aria-hidden="true" class="shrink-0" />
+      </Show>
+      <span class="truncate">{label}</span>
+    </span>
+  );
+
+  /**
+   * What the change is, as the engine says it — until it is decided. A take
+   * makes the passage read the same on both sides, and "unchanged" beside the
+   * button that took it reads as "did it work?"; the pressed button and the
+   * checked column say what happened instead.
+   */
+  const status = (): string => {
+    const units = props.hunk.units;
+    if (units.length === 0) return "";
+    const controls = props.controls;
+    if (controls !== undefined && units.every((unit) => controls.decision(unit) !== undefined))
+      return "";
+    return units.length === 1 ? (units[0]?.status ?? "") : `${units.length} changes`;
+  };
 
   return (
     <CardFrame
       data={{ "data-diff-card": props.hunk.key }}
+      current={props.current === true}
       title={props.hunk.label}
       gone={props.gone}
       info={
         <>
           <span class="text-smallest text-on-surface-tertiary">{status()}</span>
+          {/* Plain words, not chips: only "changed in both places" asks
+              something of the reader, so only it takes a colour. */}
           <Show when={props.origin}>
             {(origin) => (
-              <Badge tone={origin() === "both" ? "warning" : "muted"}>
+              <span
+                class={cx(
+                  "text-smallest",
+                  origin() === "both" ? "text-on-surface-warning" : "text-on-surface-tertiary",
+                )}
+                data-diff-origin={origin()}
+              >
                 {origin() === "there"
-                  ? t("Changed there")
+                  ? t("changed there")
                   : origin() === "here"
-                    ? t("Changed here")
-                    : t("Changed in both places")}
-              </Badge>
+                    ? t("changed here")
+                    : t("changed in both places")}
+              </span>
             )}
           </Show>
           <Show when={hunkKind(props.hunk.units)}>
             {(kind) => (
-              <Badge tone="muted" data-diff-kind={kind()}>
+              <span class="text-smallest text-on-surface-tertiary" data-diff-kind={kind()}>
                 {kind()}
-              </Badge>
+              </span>
             )}
           </Show>
         </>
@@ -422,10 +484,27 @@ export function DiffCard(props: {
     >
       <Show when={props.split}>
         <div class="grid grid-cols-2 divide-x divide-surface-border border-b border-surface-border text-smallest text-on-surface-tertiary">
-          <span class={cx("truncate px-3 py-0.5", props.currentFirst === true && "order-last")}>
-            {props.baselineLabel}
-          </span>
-          <span class="truncate px-3 py-0.5">{props.currentLabel}</span>
+          <div
+            class={cx(
+              "flex min-w-0 items-center gap-2 px-3 py-0.5",
+              props.currentFirst === true && "order-last",
+            )}
+          >
+            {caption("baseline", props.baselineLabel)}
+            <Show when={props.sideActions?.baseline.length}>
+              <span class="ms-auto flex shrink-0 items-center gap-1">
+                <CardActions actions={props.sideActions?.baseline ?? []} />
+              </span>
+            </Show>
+          </div>
+          <div class="flex min-w-0 items-center gap-2 px-3 py-0.5">
+            {caption("current", props.currentLabel)}
+            <Show when={props.sideActions?.current.length}>
+              <span class="ms-auto flex shrink-0 items-center gap-1">
+                <CardActions actions={props.sideActions?.current ?? []} />
+              </span>
+            </Show>
+          </div>
         </div>
       </Show>
       <div class={props.split ? "grid grid-cols-2 divide-x divide-surface-border" : ""}>
@@ -471,6 +550,7 @@ export function DiffCard(props: {
           </div>
         </Show>
       </div>
+      {props.below}
     </CardFrame>
   );
 }

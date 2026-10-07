@@ -1,6 +1,6 @@
 /**
  * The sync module's one door: the pure state machine, the incoming plan, and
- * the one move that writes — Combine.
+ * the two moves that write — Receive and Combine.
  *
  * Everything but `./combine.ts`, `./receive.ts` and `./survey.ts` is pure;
  * those are Effect programs over the ports and nothing else.
@@ -13,26 +13,16 @@ export {
   notIn,
   sync,
   trackingRef,
-  wantsPlan,
   type Clock,
   type Sync,
-  type SyncActionId,
   type SyncReading,
   type SyncState,
 } from "./state";
 
 export { FRONT_MATTER, emptyPlan, type IncomingBook, type IncomingPlan } from "./plan";
 
-export {
-  combine,
-  CombineError,
-  combineMessage,
-  previewCombine,
-  type CombineRefusal,
-  type CombineReplay,
-  type CombineState,
-} from "./combine";
+export { combine, type CombineRefusal, type CombineState } from "./combine";
 
 export { mergeBase, surveyIncoming } from "./survey";
 
-export { receive, ReceiveError, type ReceiveRefusal } from "./receive";
+export { receive, type ReceiveRefusal } from "./receive";

@@ -208,13 +208,13 @@ const makeTauriRemote = (
           call<string | null>("git_remote_url", { root: repo.root, name }),
           Option.fromNullishOr,
         ),
-      fetchRef: (repo, from, into) =>
+      fetchRef: (repo, from, into, remote = ORIGIN) =>
         Effect.gen(function* () {
-          const url = yield* originUrl(repo);
+          const url = yield* originUrl(repo, remote);
           const credential = Option.getOrNull(yield* credentialFor(url));
           return yield* call<string>("git_fetch_ref", {
             root: repo.root,
-            remote: ORIGIN,
+            remote,
             from,
             into,
             username: credential?.username ?? null,

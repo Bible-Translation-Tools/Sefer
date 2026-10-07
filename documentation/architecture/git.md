@@ -83,7 +83,12 @@ too.
   storage — never in the project or `.git` — and held in memory per root. A stale one is extended,
   walking only the new commits; a missing or old-format one is rebuilt (`store.ts`). en_ulb's full
   build is about 4 s in a browser.
-- **No lock of its own.** `log` and `previousVersions` run in the repository's shared lane and hold
+- **History reads it once.** `timeline(repo, paths, shared?)` is the whole History tab in one port
+  call: the index's commits are HEAD's log, each book's versions are a walk over them, and the shared
+  project's commits are what its tip reaches inside the index (a tip ahead of HEAD falls back to
+  `logFrom`). Asked per book, the 66 calls each re-resolved HEAD and re-read `.git/shallow` before
+  reaching the held index. Desktop composes the per-path calls (`composedTimeline`).
+- **No lock of its own.** `log`, `previousVersions` and `timeline` run in the repository's shared lane and hold
   it while the worker reads, so no writer can run under the build; a worker taking the lock itself
   would queue behind a writer that waits on the page.
 - **Desktop does not need it.** git2's revision walk has neither problem, so `git_log` and
@@ -250,36 +255,66 @@ preference that may override them (see [configuration.md](configuration.md)):
 `VITE_SEFER_CONTENT_HOST` (the identity: what `origin` names and a sign-in is filed under) and, on the
 Web, `VITE_SEFER_WEB_TRANSPORT` (the proxy each host is reached through, applied at request time). The
 Gitea API rides the same transport and sends the same `X-Requested-With` the transfers do; before that
-it went direct and a successful sign-in was followed immediately by "Failed to fetch". The SURFACE is `/cloud` (`src/app/ui/cloud/`), which owns the state, the two clocks, the incoming
-plan and the one right button — see [sync.md](sync.md). `src/app/ui/CloudPanel.tsx` keeps the
-attach-and-publish half beside a project and shares the account half with it; the palette's
-`remote.pull` and `remote.push` open `/cloud` rather than transferring, because the screen is where the
-plan is shown first.
+it went direct and a successful sign-in was followed immediately by "Failed to fetch". The SURFACE is the app bar's cloud popover (`src/app/ui/cloud/`): the state, the two clocks, the
+incoming plan and the one right button — see [sync.md](sync.md). `src/app/ui/CloudPanel.tsx` is
+Settings' Cloud section: the account, the attach-and-publish half, and how this project is worked on.
+The palette's `remote.pull` opens Review against the shared project, where the plan is shown first,
+and `remote.push` sends.
 
 ## Suggested changes
 
-A translator who cannot write to the shared project sends to their OWN COPY of it (a Gitea fork) and
-suggests those changes: one open pull request from that copy's branch, which later sends keep up to
-date by themselves. Whoever can write to the shared project sees the open suggestions on `/cloud`, and
-reviews one — Review against the shared project, with the suggestion's head
-(`refs/pull/<n>/head`, fetched to `refs/sefer/pull/<n>` — outside `refs/remotes/origin/`, which the
-Web's pruning fetch clears of every ref it did not write) as the other side — or declines it
-with a note. "Pull request" is Gitea's word and the code's; the screen says "suggested changes".
+A project is worked on in ONE of two modes, per project on this device (sync, "Two ways to work"):
+together in the shared project, or in the person's OWN COPY of it (a Gitea fork, attached as the
+remote `copy`), offering changes as a suggestion. A suggestion is one open pull request per person
+from that copy's branch, which later sends keep up to date by themselves; once it is closed, the next
+offer is a new one. Whoever can write to the shared project sees the open suggestions, and reviews
+one — Review against the shared project, with the suggestion's head (`refs/pull/<n>/head`, fetched to
+`refs/sefer/pull/<n>` — outside `refs/remotes/origin/`, which the Web's pruning fetch clears of every
+ref it did not write) as the other side, with who offered it, its title and its versions' messages
+above the cards (`SuggestionLine`). Three answers, all from Review:
 
-It is one topology among several, so it is built to come out. `src/core/remote/suggestions.ts` is its
-own service (`Suggestions`, over the session `Gitea` keeps), `src/app/suggestions.ts` is the logic and
-`src/app/ui/cloud/SuggestionsCard.tsx` the card, and they join the rest of Sefer at four one-line
-seams:
+- **Save, closing it as brought in** (the default): the project's text is recorded — a fast-forward
+  when everything was taken and this device has no versions of its own, else one decision commit —
+  and always SENT to the shared project, even with nothing new to record. `Suggestions.accept` marks
+  it "manually merged" where the repository allows that, else closes it; either way the reviewer's
+  Save message goes on it as the note, ending with the line `BROUGHT_IN` ("Brought in with Sefer.").
+- **Save, leaving it open** (the dialog's switch off): taking part now and more later.
+- **Decline**, with a note: closed first, then the note, so a refused close leaves nothing to post
+  twice; the close is checked in Gitea's answer, which says 200 to a PATCH that changed nothing. When
+  the review offers passages and none is taken, Save is closed and the dialog offers only Decline.
+
+Whether a closed suggestion was TAKEN is read from that `BROUGHT_IN` line, not from git: one copy's
+branch backs every suggestion its person makes, and Gitea reports that branch's CURRENT tip as the
+head of each, closed or not, so ancestry would call a declined one taken once a later one came in.
+A suggestion is titled by the day it was offered ("Changes suggested on 6 October 2026"). Its
+author sees all of this in Suggestions → Yours (`YourSuggestions`): waiting, brought in or closed,
+the editor's note, Offer and Withdraw; and Save's receipt after a send to the copy offers it on the
+spot. "Pull request" is Gitea's word and the code's; the screen says "suggestion".
+
+Known and deferred (2026-10-06): a plain Decline only closes the pull request, so its versions stay
+outside the shared project's history and ride along in the person's next offer. Recording a decline
+as a keep-ours decision commit, as a partial accept already does, would end that.
+
+`src/core/remote/suggestions.ts` is its own service (`Suggestions`, over the session `Gitea` keeps:
+`canWrite`, `open`, `one`, `from`, `noteOn`, `suggest`, `accept`, `decline`); `src/app/suggestions.ts` is the
+logic — the mode, where a send goes (`sendingTo`), making or finding the copy (`workInOwnCopy`),
+re-rooting a project cloned from the person's own fork, `suggestTo` for a shared project that is the
+person's own; `src/app/collaboration.ts` holds what the surfaces show. They join the rest of Sefer at:
 
 1. `src/app/services.ts` registers `SuggestionsLive` and lists `Suggestions` in `Domain`;
 2. `destination()` in `src/app/syncActions.ts` asks `sendingTo` where a send goes — the one place a
    send is pointed anywhere but `origin`;
-3. `CloudScreen.tsx` mounts `SuggestionsCard`;
-4. `ReviewPanel.tsx` reads `?pull=<n>` through `suggestionRef`.
+3. the cloud popover (`CollabSection`), Settings' `CollabModeCard`, and the editors' list
+   (`SuggestionsScreen` → `SuggestionsCard`, at `/project/$slug/suggestions`);
+4. `ReviewPanel.tsx` reads `?pull=<n>` through `suggestionRef`, and accepts after Record.
 
-Cut those and the dead-code gate (`pnpm deadcode`) reports the three files unused — checked on
-2026-09-30 — and everything else sends to `origin` as before. Forks and pull requests are built but not
-yet exercised against a second account.
+A copy is never forked twice: Gitea refuses a second fork of the same project (409), so a copy made
+on another device is found (`RemoteRepo.parent`) and attached. On the Web every one of these calls goes
+through the WACS proxy (`../wacs-isomorphic-git-proxy`), which forwards only an explicit list of API
+paths: `pulls`, `pulls/{n}` (PATCH, to close), `pulls/{n}/merge` and `issues/{n}/comments` were
+added for this on 2026-10-06. A suggestion call missing from that list fails in the browser as
+"Failed to fetch"; desktop talks to Gitea directly and never meets it. Forks and pull requests were exercised on the Web with a second, non-writer account on 2026-10-06; desktop is
+not yet exercised against a second account.
 
 ## ProjectAdmin
 

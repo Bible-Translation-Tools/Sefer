@@ -1,5 +1,7 @@
 # Release: draft, then publish only when every platform built (2026-10-01)
 
+**Agreed 2026-10-01 (Will), for desktop.** Web stays independent.
+
 From the first `v0.1.0-1` run. macOS failed (Apple's developer agreement had
 expired, notarization 403), Windows and Linux succeeded — and the GitHub
 prerelease went out anyway with their installers and a `latest.json` that

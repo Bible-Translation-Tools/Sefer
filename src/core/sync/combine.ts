@@ -15,7 +15,9 @@
  * - changed only on the other side — theirs, written into the work tree and
  *   into the Book;
  * - changed on both — never here. The policy sends that book to a person
- *   (Compare), and the whole combine refuses before anything is written.
+ *   (Review), and the whole combine refuses before anything is written —
+ *   unless Review already settled it (`settled`), when the project's text is
+ *   the decision.
  *
  * The file is in two halves, and the split is what makes the policy testable:
  *
@@ -62,7 +64,8 @@ import { notIn, trackingRef } from "./state";
 
 /**
  * Why a combine did not run. Every one of these is decided BEFORE anything is
- * written, and each is a different sentence on the screen.
+ * written, and each is a different sentence where it is reported (Review's
+ * receipt, `combineRefusal` in the shell).
  *
  * - `no-branch` — HEAD is detached or unborn; there is no branch to join onto.
  * - `no-work-here` — this repository has no commits.
@@ -101,7 +104,7 @@ export type CombineRefusal =
  */
 export type CombineState = "untouched" | "restored" | "recorded" | "stranded";
 
-export class CombineError extends Data.TaggedError("CombineError")<{
+class CombineError extends Data.TaggedError("CombineError")<{
   /** Which rule said no, or `undefined` when a port failed instead. */
   readonly refusal: CombineRefusal | undefined;
   readonly state: CombineState;
@@ -133,7 +136,7 @@ interface CombineSurvey {
 }
 
 /** The combination, once it is allowed: exactly what arrives and what is recorded. */
-export interface CombineReplay {
+interface CombineReplay {
   readonly branch: string;
   /** This device's tip: the decision commit's first parent. */
   readonly from: CommitId;
@@ -151,7 +154,7 @@ type CombineDecision =
   | { readonly ok: false; readonly refusal: CombineRefusal; readonly detail: string };
 
 /** The decision commit's message. Git-facing, so it may say what it means. */
-export const combineMessage = (books: number): string =>
+const combineMessage = (books: number): string =>
   books === 1
     ? "Combined with the shared project: 1 book"
     : `Combined with the shared project: ${books} books`;
@@ -295,9 +298,9 @@ interface Gathered {
 /**
  * Everything `planCombine` needs, read out of one repository and the Books.
  *
- * Shared by the preview and the move itself so the screen cannot offer a
- * combine the program then refuses — the only difference between the two is
- * that the move has fetched first.
+ * One read of the repository, the Books and the review's settled books, so
+ * the decision is taken over exactly what the combine then writes — fetched
+ * first, so it is the shared project as it is this second.
  */
 const gather = (
   repo: Repo,
@@ -384,23 +387,6 @@ const gather = (
   });
 
 /**
- * The decision, off what is already in the object database.
- *
- * Reads only, and no network: this is what a screen asks before it puts the
- * question to a person, so the confirmation can name the actual books. It is
- * not the authority — `combine` fetches and asks again, because the cloud may
- * have moved between the dialog opening and the button being pressed.
- */
-export const previewCombine = (
-  project: Project,
-): Effect.Effect<CombineDecision, CombineError, Git | FileSystem.FileSystem | Galley> =>
-  Effect.gen(function* () {
-    const git = yield* Git;
-    const repo = yield* Effect.mapError(git.open(project.root), fromPort("untouched"));
-    return (yield* gather(repo, project, DEFAULT_OVERLAP)).decision;
-  });
-
-/**
  * The whole move, in the repository's exclusive lane.
  *
  * Everything before the first write is a read, so a refusal or a failed fetch
@@ -421,7 +407,7 @@ export const combine = (
     const git = yield* Git;
     const remote = yield* Remote;
     // Ask the shared project what it has NOW — before the exclusive lane, so a
-    // slow network holds the lane only for its own transfer. The screen's
+    // slow network holds the lane only for its own transfer. The surfaces'
     // reading may be minutes old; this is seconds, and the send is
     // fast-forward only, so a head that moves in between is refused, never
     // overwritten.

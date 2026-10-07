@@ -23,7 +23,7 @@ Nothing else. The module never reads the project's text — the excerpt beside a
 - **Other signals** — `Rarity`, `LetterRun`, `SentenceStart`.
 - **Flagged sites** — the Convention findings whose `convention.pattern` is one of that glyph's rows, with their reasons, their two stamps, and a reference derived through `siteRef`.
 
-`resolveBook` is the **same** resolver `fromSnapshot` takes, so a site carries the Book's `SourceStamp` and the `EngineStamp` and answers freshness exactly as a `Finding` does. `siteRef(site, analysis)` fills a chapter and verse in only when the engine stamps agree — the rule `findings.navigateTarget` follows, for the same reason: a table of contents from another revision names the wrong verse with total confidence.
+`resolveBook` is the **same** resolver `corpusReader` takes, so a site carries the Book's `SourceStamp` and the `EngineStamp` and answers freshness exactly as a `Finding` does. `siteRef(site, analysis)` fills a chapter and verse in only when the engine stamps agree — the rule `findings.navigateTarget` follows, for the same reason: a table of contents from another revision names the wrong verse with total confidence.
 
 `Finding` carries an additive `pattern?: number` for a Sous Convention row, so the panel can ask for "the other sites of this pattern" without re-walking the snapshot. It is not a durable identity: the next publication renumbers the pattern table exactly as it renumbers findings, and the index is only meaningful against the snapshot `ProjectAnalysis` still holds.
 
@@ -43,7 +43,7 @@ Its limits, plainly:
 
 - **The word channels.** `Casing`, `WordLength` and `Doubled` judge a word, carry a 64-bit word hash instead of a scalar, and read `glyph === 0` off the wire. Folding them into a "code point zero" row would invent a character that does not exist, so `inventory()` keeps them in `wordPatterns` and the page reports their count in a footer card. A word-level view is a different page.
 - **The other Sous lanes.** Hygiene, Presence, SourceCopy and LengthProportionality say nothing about a glyph's convention; they belong to `/findings`.
-- **A UTF-8 publication's sites.** The patterns survive — a share and a denominator are coordinate-free — but the flagged sites are dropped, exactly as `fromSnapshot` drops such a publication whole. An offset in the wrong space points at the wrong bytes.
+- **A UTF-8 publication's sites.** The patterns survive — a share and a denominator are coordinate-free — but the flagged sites are dropped, exactly as `corpusReader` drops such a publication whole. An offset in the wrong space points at the wrong bytes.
 
 ## Where it is computed
 

@@ -42,10 +42,9 @@
 
 import { Effect, Result } from "effect";
 import History from "lucide-solid/icons/history";
-import { Show, createEffect, createSignal } from "solid-js";
+import { Show, createSignal } from "solid-js";
 
 import type { Restorable } from "#core/recovery/recovery";
-import { pendingOnOpen } from "#core/recovery/reopen";
 
 import { describe } from "../../describe";
 import { t } from "../../i18n";
@@ -70,25 +69,13 @@ const lastTouched = (journals: readonly Restorable[]): string => {
 
 export function RecoveryBanner() {
   const shell = useShell();
-  const [offered, setOffered] = createSignal<readonly Restorable[]>([], { name: "recovered" });
+  // The shell asked when the project opened (`ProjectContext.openProject`),
+  // so the answer is in before the editor draws.
+  const offered = (): readonly Restorable[] => shell.recoveryOffer() ?? [];
+  const setOffered = (
+    next: readonly Restorable[] | ((was: readonly Restorable[]) => readonly Restorable[]),
+  ): void => shell.setRecoveryOffer(typeof next === "function" ? next(offered()) : next);
   const [busy, setBusy] = createSignal(false, { name: "recoveryBusy" });
-
-  // One pass per open project. Keyed on the project's id rather than on any
-  // edit event, so an edit does not re-run an IO check whose answer cannot
-  // have changed: journalling during this session is the ReviewPanel's
-  // subject, not this one's.
-  createEffect(
-    () => shell.project()?.id,
-    (id) => {
-      if (id === undefined) {
-        setOffered([]);
-        return;
-      }
-      void shell.services
-        .run(pendingOnOpen(shell.services.recovery, id, (text) => shell.services.galley.hash(text)))
-        .then((found) => setOffered(found));
-    },
-  );
 
   const books = (): number => offered().length;
 

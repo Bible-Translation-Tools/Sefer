@@ -56,9 +56,13 @@ const marksWords = (unit: DecisionUnit, usfm: boolean): boolean =>
     (run) => run.kind !== "unchanged" && visibleRun(run.what, usfm),
   );
 
-/** Word runs worth marking in this projection: markup only when markup is shown. */
-const visibleRun = (what: string, usfm: boolean): boolean =>
-  what === "text" || (usfm && what === "markup");
+/**
+ * Runs worth marking in this projection: words and whitespace always —
+ * spaces typed between two sentences are a change a reader has to see, and
+ * leaving them unmarked left a gap nothing explained — markup only when
+ * markup is shown.
+ */
+const visibleRun = (what: string, usfm: boolean): boolean => what !== "markup" || usfm;
 
 /**
  * A unit's decision, in the gutter: keep the `current` side's text, or take the
@@ -77,20 +81,37 @@ export interface Controls {
   readonly takeTitle: string;
   /** Decisions are written as they are made, so the diff, not the decision, names the tint. */
   readonly live?: boolean;
+  /**
+   * Whether each unit gets its pair of buttons in the gutter. Off on a card,
+   * whose header already decides it — two of the same choice, side by side,
+   * was one too many.
+   */
+  readonly gutter?: boolean;
 }
+
+/** A chevron pointing at the side it chooses: left takes the other side's, right keeps yours. */
+const chevron = (points: "left" | "right"): SVGSVGElement => {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute("d", points === "left" ? "M15 5 L8 12 L15 19" : "M9 5 L16 12 L9 19");
+  svg.append(path);
+  return svg;
+};
 
 const button = (
   unit: DecisionUnit,
   controls: Controls,
   side: MergeSide,
-  glyph: string,
   title: string,
 ): HTMLButtonElement => {
   const on = controls.decision(unit) === side;
   const element = document.createElement("button");
   element.type = "button";
   element.title = title;
-  element.textContent = glyph;
+  element.append(chevron(side === "baseline" ? "left" : "right"));
   element.dataset["on"] = on ? "true" : "false";
   element.dataset["side"] = side;
   element.setAttribute("aria-pressed", on ? "true" : "false");
@@ -105,9 +126,20 @@ const controlFor =
     const box = document.createElement("span");
     box.className = "cm-diff-control";
     box.dataset["unit"] = unit.id;
+    // Which verse this pair decides: two verses can start on one line, and an
+    // unlabelled pair could be either's. "9", "5-7"; a heading keeps its whole
+    // reference.
+    const reference = unitReference(unit);
+    const ref = document.createElement("span");
+    ref.className = "cm-diff-control-ref";
+    ref.textContent = reference.slice(reference.indexOf(":") + 1);
+    // Between the two texts, the other side's on the left and yours on the
+    // right: each chevron points at the text it chooses, and the verse it
+    // decides sits between them.
     box.append(
-      button(unit, controls, "current", "✓", controls.keepTitle),
-      button(unit, controls, "baseline", "↶", controls.takeTitle),
+      button(unit, controls, "baseline", controls.takeTitle),
+      ref,
+      button(unit, controls, "current", controls.keepTitle),
     );
     return box;
   };
@@ -158,7 +190,7 @@ export const sidePaint = (
             class: side === "baseline" ? "cm-diff-removed" : "cm-diff-added",
           });
     }
-    if (controls !== undefined && side === "current")
+    if (controls !== undefined && controls.gutter !== false && side === "current")
       buttons.push({
         at: span?.from ?? unit.place[side],
         key: `${unit.id} ${decision ?? "-"}`,

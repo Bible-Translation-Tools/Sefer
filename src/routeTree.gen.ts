@@ -19,13 +19,13 @@ import { Route as AppPlaygroundHistoryDiffRouteImport } from './routes/_app/play
 import { Route as AppProjectSlugRouteImport } from './routes/_app/project/$slug'
 import { Route as AppStartCreateRouteImport } from './routes/_app/start/create'
 import { Route as AppProjectSlugIndexRouteImport } from './routes/_app/project/$slug/index'
-import { Route as AppProjectSlugCloudRouteImport } from './routes/_app/project/$slug/cloud'
 import { Route as AppProjectSlugFindRouteImport } from './routes/_app/project/$slug/find'
 import { Route as AppProjectSlugFindingsRouteImport } from './routes/_app/project/$slug/findings'
 import { Route as AppProjectSlugHistoryRouteImport } from './routes/_app/project/$slug/history'
 import { Route as AppProjectSlugInventoryRouteImport } from './routes/_app/project/$slug/inventory'
 import { Route as AppProjectSlugPlaygroundRouteImport } from './routes/_app/project/$slug/playground'
 import { Route as AppProjectSlugReviewRouteImport } from './routes/_app/project/$slug/review'
+import { Route as AppProjectSlugSuggestionsRouteImport } from './routes/_app/project/$slug/suggestions'
 import { Route as AppProjectSlugTermsRouteImport } from './routes/_app/project/$slug/terms'
 import { Route as AppProjectSlugBookBookRouteImport } from './routes/_app/project/$slug/book/$book'
 
@@ -79,11 +79,6 @@ const AppProjectSlugIndexRoute = AppProjectSlugIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppProjectSlugRoute,
 } as any)
-const AppProjectSlugCloudRoute = AppProjectSlugCloudRouteImport.update({
-  id: '/cloud',
-  path: '/cloud',
-  getParentRoute: () => AppProjectSlugRoute,
-} as any)
 const AppProjectSlugFindRoute = AppProjectSlugFindRouteImport.update({
   id: '/find',
   path: '/find',
@@ -115,6 +110,12 @@ const AppProjectSlugReviewRoute = AppProjectSlugReviewRouteImport.update({
   path: '/review',
   getParentRoute: () => AppProjectSlugRoute,
 } as any)
+const AppProjectSlugSuggestionsRoute =
+  AppProjectSlugSuggestionsRouteImport.update({
+    id: '/suggestions',
+    path: '/suggestions',
+    getParentRoute: () => AppProjectSlugRoute,
+  } as any)
 const AppProjectSlugTermsRoute = AppProjectSlugTermsRouteImport.update({
   id: '/terms',
   path: '/terms',
@@ -135,13 +136,13 @@ export interface FileRoutesByFullPath {
   '/playground/history-diff': typeof AppPlaygroundHistoryDiffRoute
   '/project/$slug': typeof AppProjectSlugRouteWithChildren
   '/start/create': typeof AppStartCreateRoute
-  '/project/$slug/cloud': typeof AppProjectSlugCloudRoute
   '/project/$slug/find': typeof AppProjectSlugFindRoute
   '/project/$slug/findings': typeof AppProjectSlugFindingsRoute
   '/project/$slug/history': typeof AppProjectSlugHistoryRoute
   '/project/$slug/inventory': typeof AppProjectSlugInventoryRoute
   '/project/$slug/playground': typeof AppProjectSlugPlaygroundRoute
   '/project/$slug/review': typeof AppProjectSlugReviewRoute
+  '/project/$slug/suggestions': typeof AppProjectSlugSuggestionsRoute
   '/project/$slug/terms': typeof AppProjectSlugTermsRoute
   '/project/$slug/': typeof AppProjectSlugIndexRoute
   '/project/$slug/book/$book': typeof AppProjectSlugBookBookRoute
@@ -154,13 +155,13 @@ export interface FileRoutesByTo {
   '/dev/fixture': typeof AppDevFixtureRoute
   '/playground/history-diff': typeof AppPlaygroundHistoryDiffRoute
   '/start/create': typeof AppStartCreateRoute
-  '/project/$slug/cloud': typeof AppProjectSlugCloudRoute
   '/project/$slug/find': typeof AppProjectSlugFindRoute
   '/project/$slug/findings': typeof AppProjectSlugFindingsRoute
   '/project/$slug/history': typeof AppProjectSlugHistoryRoute
   '/project/$slug/inventory': typeof AppProjectSlugInventoryRoute
   '/project/$slug/playground': typeof AppProjectSlugPlaygroundRoute
   '/project/$slug/review': typeof AppProjectSlugReviewRoute
+  '/project/$slug/suggestions': typeof AppProjectSlugSuggestionsRoute
   '/project/$slug/terms': typeof AppProjectSlugTermsRoute
   '/project/$slug': typeof AppProjectSlugIndexRoute
   '/project/$slug/book/$book': typeof AppProjectSlugBookBookRoute
@@ -176,13 +177,13 @@ export interface FileRoutesById {
   '/_app/playground/history-diff': typeof AppPlaygroundHistoryDiffRoute
   '/_app/project/$slug': typeof AppProjectSlugRouteWithChildren
   '/_app/start/create': typeof AppStartCreateRoute
-  '/_app/project/$slug/cloud': typeof AppProjectSlugCloudRoute
   '/_app/project/$slug/find': typeof AppProjectSlugFindRoute
   '/_app/project/$slug/findings': typeof AppProjectSlugFindingsRoute
   '/_app/project/$slug/history': typeof AppProjectSlugHistoryRoute
   '/_app/project/$slug/inventory': typeof AppProjectSlugInventoryRoute
   '/_app/project/$slug/playground': typeof AppProjectSlugPlaygroundRoute
   '/_app/project/$slug/review': typeof AppProjectSlugReviewRoute
+  '/_app/project/$slug/suggestions': typeof AppProjectSlugSuggestionsRoute
   '/_app/project/$slug/terms': typeof AppProjectSlugTermsRoute
   '/_app/project/$slug/': typeof AppProjectSlugIndexRoute
   '/_app/project/$slug/book/$book': typeof AppProjectSlugBookBookRoute
@@ -198,13 +199,13 @@ export interface FileRouteTypes {
     | '/playground/history-diff'
     | '/project/$slug'
     | '/start/create'
-    | '/project/$slug/cloud'
     | '/project/$slug/find'
     | '/project/$slug/findings'
     | '/project/$slug/history'
     | '/project/$slug/inventory'
     | '/project/$slug/playground'
     | '/project/$slug/review'
+    | '/project/$slug/suggestions'
     | '/project/$slug/terms'
     | '/project/$slug/'
     | '/project/$slug/book/$book'
@@ -217,13 +218,13 @@ export interface FileRouteTypes {
     | '/dev/fixture'
     | '/playground/history-diff'
     | '/start/create'
-    | '/project/$slug/cloud'
     | '/project/$slug/find'
     | '/project/$slug/findings'
     | '/project/$slug/history'
     | '/project/$slug/inventory'
     | '/project/$slug/playground'
     | '/project/$slug/review'
+    | '/project/$slug/suggestions'
     | '/project/$slug/terms'
     | '/project/$slug'
     | '/project/$slug/book/$book'
@@ -238,13 +239,13 @@ export interface FileRouteTypes {
     | '/_app/playground/history-diff'
     | '/_app/project/$slug'
     | '/_app/start/create'
-    | '/_app/project/$slug/cloud'
     | '/_app/project/$slug/find'
     | '/_app/project/$slug/findings'
     | '/_app/project/$slug/history'
     | '/_app/project/$slug/inventory'
     | '/_app/project/$slug/playground'
     | '/_app/project/$slug/review'
+    | '/_app/project/$slug/suggestions'
     | '/_app/project/$slug/terms'
     | '/_app/project/$slug/'
     | '/_app/project/$slug/book/$book'
@@ -327,13 +328,6 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof AppProjectSlugIndexRouteImport
       parentRoute: typeof AppProjectSlugRoute
     }
-    '/_app/project/$slug/cloud': {
-      id: '/_app/project/$slug/cloud'
-      path: '/cloud'
-      fullPath: '/project/$slug/cloud'
-      preLoaderRoute: typeof AppProjectSlugCloudRouteImport
-      parentRoute: typeof AppProjectSlugRoute
-    }
     '/_app/project/$slug/find': {
       id: '/_app/project/$slug/find'
       path: '/find'
@@ -376,6 +370,13 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof AppProjectSlugReviewRouteImport
       parentRoute: typeof AppProjectSlugRoute
     }
+    '/_app/project/$slug/suggestions': {
+      id: '/_app/project/$slug/suggestions'
+      path: '/suggestions'
+      fullPath: '/project/$slug/suggestions'
+      preLoaderRoute: typeof AppProjectSlugSuggestionsRouteImport
+      parentRoute: typeof AppProjectSlugRoute
+    }
     '/_app/project/$slug/terms': {
       id: '/_app/project/$slug/terms'
       path: '/terms'
@@ -394,26 +395,26 @@ declare module '@tanstack/solid-router' {
 }
 
 interface AppProjectSlugRouteChildren {
-  AppProjectSlugCloudRoute: typeof AppProjectSlugCloudRoute
   AppProjectSlugFindRoute: typeof AppProjectSlugFindRoute
   AppProjectSlugFindingsRoute: typeof AppProjectSlugFindingsRoute
   AppProjectSlugHistoryRoute: typeof AppProjectSlugHistoryRoute
   AppProjectSlugInventoryRoute: typeof AppProjectSlugInventoryRoute
   AppProjectSlugPlaygroundRoute: typeof AppProjectSlugPlaygroundRoute
   AppProjectSlugReviewRoute: typeof AppProjectSlugReviewRoute
+  AppProjectSlugSuggestionsRoute: typeof AppProjectSlugSuggestionsRoute
   AppProjectSlugTermsRoute: typeof AppProjectSlugTermsRoute
   AppProjectSlugIndexRoute: typeof AppProjectSlugIndexRoute
   AppProjectSlugBookBookRoute: typeof AppProjectSlugBookBookRoute
 }
 
 const AppProjectSlugRouteChildren: AppProjectSlugRouteChildren = {
-  AppProjectSlugCloudRoute: AppProjectSlugCloudRoute,
   AppProjectSlugFindRoute: AppProjectSlugFindRoute,
   AppProjectSlugFindingsRoute: AppProjectSlugFindingsRoute,
   AppProjectSlugHistoryRoute: AppProjectSlugHistoryRoute,
   AppProjectSlugInventoryRoute: AppProjectSlugInventoryRoute,
   AppProjectSlugPlaygroundRoute: AppProjectSlugPlaygroundRoute,
   AppProjectSlugReviewRoute: AppProjectSlugReviewRoute,
+  AppProjectSlugSuggestionsRoute: AppProjectSlugSuggestionsRoute,
   AppProjectSlugTermsRoute: AppProjectSlugTermsRoute,
   AppProjectSlugIndexRoute: AppProjectSlugIndexRoute,
   AppProjectSlugBookBookRoute: AppProjectSlugBookBookRoute,

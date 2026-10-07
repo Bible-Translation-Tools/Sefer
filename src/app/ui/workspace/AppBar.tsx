@@ -10,20 +10,21 @@
  * column, not here.) The MODES in the middle — Refine and Key terms — the
  * ways of working on a project's text; with no project open they are there
  * but disabled, so the bar keeps one shape — the empty state's included. A
- * mode joins when it is built, not before. At the end: More, Import (a zip,
- * a folder or a clone, from anywhere), Settings, and Account (disabled until
- * there is an account).
+ * mode joins when it is built, not before. At the end: with a project open,
+ * the cloud (`SyncButton` — where sync is done, in its popover); then More,
+ * Import (a zip, a folder or a clone, from anywhere), Settings, and Account
+ * (disabled until there is an account).
  *
  * Every enabled tile is a place: a navigation lit from the pathname, never a
- * setting. The project-wide screens that used to sit here (findings, history,
- * glyphs, compare, cloud) live in the "More" menu at the end until the bar
- * decides where they belong.
+ * setting — the cloud is the one popover. The project-wide screens that used
+ * to sit here (findings, history, glyphs, compare) live in the "More" menu at
+ * the end until the bar decides where they belong; the cloud screen that was
+ * among them is gone, its work done by the popover and Settings.
  */
 
 import type { JSX } from "@solidjs/web";
 import { useNavigate, useRouterState } from "@tanstack/solid-router";
 import Bell from "lucide-solid/icons/bell";
-import CloudIcon from "lucide-solid/icons/cloud";
 import Download from "lucide-solid/icons/download";
 import Ellipsis from "lucide-solid/icons/ellipsis";
 import FileText from "lucide-solid/icons/file-text";
@@ -37,6 +38,7 @@ import { createSignal, For } from "solid-js";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
+import { SyncButton } from "../cloud/SyncButton";
 import { ImportHub } from "../landing/ImportHub";
 import { IconButton, Menu, MenuItem, SegmentedControl } from "../primitives";
 
@@ -75,8 +77,7 @@ type ProjectScreen =
   | "/project/$slug/findings"
   | "/project/$slug/history"
   | "/project/$slug/inventory"
-  | "/project/$slug/review"
-  | "/project/$slug/cloud";
+  | "/project/$slug/review";
 
 /**
  * The project screens the bar no longer shows, parked in one menu until
@@ -97,7 +98,6 @@ function MoreMenu() {
       icon: <TypeIcon size={16} />,
     },
     { label: t("Compare"), to: "/project/$slug/review", icon: <GitCompare size={16} /> },
-    { label: t("Cloud"), to: "/project/$slug/cloud", icon: <CloudIcon size={16} /> },
   ];
 
   return (
@@ -242,6 +242,9 @@ export function AppBar() {
       />
 
       <div class="flex shrink-0 items-center gap-2">
+        {/* Where the open project stands with the shared project; quiet
+            until something is waiting on a person. */}
+        <SyncButton />
         <MoreMenu />
         {/* The import menu from anywhere; a finished import lands on the
             projects page, where the new project is. */}

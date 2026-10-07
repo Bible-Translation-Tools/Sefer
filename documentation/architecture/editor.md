@@ -229,6 +229,41 @@ clip's own window rather than outside it.
 
 `recipes/lint.ts` turns `structureAt(state).analysis.diagnostics` into inline marks and gutter fix actions. Rebuilt from the current state every keystroke, so an inline mark cannot be stale. A finding whose whole span is inside hidden markup is dropped by default — that test reads the **paint index** (`PAINT_PORT.hidden`), not the decoration set. A fix carries the analysis's `EngineStamp` and is discarded if the document moved under it.
 
+## Rendering: the window
+
+The structure, the plan and the paint index cover the whole book; DECORATION does not. `core/render.ts`'s `RenderWindow` keeps a range — the viewport plus 2,000 characters either side — in `renderRangeField`, and `core/decorations.ts` builds only inside it, so a 270,000-character Psalms is decorated a few screens at a time. The range has hysteresis: it moves only when the viewport leaves it, one rebuild per screenful rather than per frame.
+
+- **It moves at most once an animation frame.** A move is its own transaction (`setRenderRange`). Run from a microtask after every scroll update, as it was, its DOM rebuild and CodeMirror's forced selection read laid the page out mid-frame, and after a jump it decorated around a viewport measured on estimated heights, slid, and moved again. Coalesced into `requestAnimationFrame` it lands beside CodeMirror's own measure, before paint: a jump settles in one move, and no frame of undecorated text is painted. (Inside the measure's `write` is not an option: CodeMirror throws on a dispatch while the view is updating.)
+- **A move can move the view, and must still come to rest.** A decorated stretch is not the height of the same text undecorated — the reading hides markers and joins verses — so after a jump into estimated heights, moving the window shifted the text by thousands of characters, further than the margin, and the next move shifted it back: a chain that never let the tab paint. A move caused by the window's own last move (the `windowMove` annotation) takes the UNION of the two ranges, which only grows and so must settle; past four in a row the next try waits a frame — at worst a flicker, never a hang.
+- **The margin stays 2,000.** A wider one, wider above than below, was measured and does not help: the shift after a jump runs ±4,000–6,400 characters in either direction, past any fixed margin, and a bigger window only makes each move dearer.
+- **One loop decides WHEN to draw, for both modes.** `windowLines` takes the window's lines from `lineIndexAt`, and `forTokensIn` its tokens by a binary search on their starts (they ascend and tile the document). `buildRegular` and `buildUsfm` decide WHAT to draw over the same iteration; USFM used to walk every line and token of the book and skip the ones outside.
+
+## Two editors side by side
+
+`recipes/align.ts`'s `createAlignedGroup` keeps editors over two texts of the same book at the same VERSE, never the same scroll position — two texts are different lengths, and following by place moved the other pane by a screen once their heights drifted. The group is the lifted state: the container that shows the editors makes it (the book page for the editor and its references; `BookDiff` for Review's two panes) and each view joins it; the views know nothing of each other.
+
+- **The anchor is the verse in the middle** of the view the reader scrolled — where the eye is — named by Location's `addressAt` over that view's own table of contents (`tocViewOf`); a heading there gives way to the next verse in sight. The others find it with `resolve` in theirs, the join Find uses, so a bridge lands where it should.
+- **`reveal` (the default) moves a follower only when the verse is outside its middle band** (20–75% of its height), and then to the middle; `exact` keeps it at the leader's own height. Both through CodeMirror's `scrollIntoView`, which measures lines it had only estimated, with one check two frames later for blocks drawn taller than estimated. `revealInBand` is also the reference pane's paired block's reveal.
+- **Only the reader's own input leads**: the wheel, a touch, a drag on the scrollbar, a key that scrolls. A view also scrolls on its own — the caret brought into view, a paired block revealed, the group's own move — and leading from those made the views answer each other. A jump the app makes on purpose (a chapter picked, a hit opened) calls `group.lead(view)`.
+- A member's `leads` / `follows` are read at each scroll, so a pin (the reference pane's chain, Review's link) takes effect at once; `sync(view)` catches a member up after its text arrives or its Follow is turned back on.
+
+## Performance
+
+Measured 2026-10-02 and 2026-10-05 on en-ulb Psalms, the largest book (272,530 characters), production build, CPU throttled 4× — "a cheap laptop's main thread", not a cheap laptop (it slows neither GPU, memory nor disk). The recipe is in [verification](../agents/verification.md#measuring-on-a-slow-machine).
+
+|                                                            | 1×      | 4×          |
+| ---------------------------------------------------------- | ------- | ----------- |
+| Open to first line                                         | 1.4 s   | ~4 s        |
+| At rest                                                    | 1% busy | 3% busy     |
+| Typing, key to frame p50 / p95                             | ~32 ms  | 99 / 138 ms |
+| Fling (150 scrollbar jumps, 120 wheel ticks): longest task | 30 ms   | 140 ms      |
+
+- **Nothing runs at rest and nothing leaks** across book switches.
+- **A keystroke's floor is the full parse**: the structure update (~33 ms at 4×) and the editor's analysis (~22 ms) on the largest book, then corpus publication (~27 ms) and CodeMirror (~17 ms). Corpus findings are no longer part of it: they are converted a book at a time when something shows them ([findings](findings.md)).
+- **Chapter view is not a performance setting.** The clip narrows decoration only; parse, plan and paint run over the whole book, so a keystroke in Psalm 119 costs what one in Psalms does. It does halve scrolling work.
+- **USFM is the cheaper mode**: regular mode's extra cost is the plan and the paint, not the window.
+- **Chapter-scoped work is not done, deliberately.** It is the only way chapter view becomes a typing win, and it needs the CST resolved across chapter boundaries (a verse continued from the last chapter, notes and tables that cross, `\c` itself moving) and the offset bookkeeping the whole-document model avoids. Leave it until the parse is what is left.
+
 ## Instrumentation
 
 **One instrument for the whole pipeline.** `core/instrument.ts` opens one **trace** per transaction and records every stage that transaction flowed through, in order, with what each decided. The trace is keyed on the transaction's **start state**: a command reads that state, then the filters run against it, so a whole gesture — the keymap command, admission, normalization, protection, settlement, and the derivations in between — lands in one trace under one correlation id.
@@ -265,16 +300,16 @@ Every event carries the correlation `<bookId>#<trace seq>`, so one keystroke's s
 
 `cst.ts`'s typed arrays are a CACHE over the Galley reader, not a second reader: every value is read through `TokenRow`/`NodeRow`/`Tree`/`Toc`, so a wire change lands in scripture-kitchen's generated reader and reaches the editor as a type error, not a misread. What the planes add is the editor's own — line openings, note/origin/wrapper scope, block extents, designator roles, the `mapping.ts` rows. Two helpers are named so they cannot be mistaken for the reader's: `firstTokenFrom(pos)` (the first token starting at or after a position; `Tree.tokenAt` answers the one containing it and throws outside the document) and `isHorizontalSpace(i)` (a `Pad` token or a `Text` token flagged `TOKEN_BLANK`; `TokenView.isBlank()` is the flag alone).
 
-| what                                  | where                                                                                                                                         |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| the engine seam                       | `core/analyzer.ts`                                                                                                                            |
-| the fold (structure)                  | `core/docStructure.ts`, `cst.ts`, `fold.ts`, `lineTable.ts`, `blockTable.ts`, `notes.ts`, `designators.ts`                                    |
-| classification, then policy           | `core/mapping.ts` → `core/registry.ts`                                                                                                        |
-| the plan, owned targets, paint, stops | `core/plan.ts`, `owned.ts`, `paint.ts`, `stops.ts`, `exceptions.ts`, `scroll.ts`                                                              |
-| rules and commands                    | `core/phases.ts`, `compose.ts`, `sealed.ts`, `clip.ts`, `input.ts`, `deletion.ts`, `caret.ts`, `kernel.ts`                                    |
-| structured entry                      | `core/insert.ts`, `actions.ts`, `frontmatter.ts`                                                                                              |
-| rendering                             | `core/decorations.ts`, `render.ts`, `editorState.ts`, `editor.css`                                                                            |
-| instruments                           | `core/instrument.ts`, `meter.ts`, `timing.ts`, `trace.ts`, `../observability.ts`                                                              |
-| the Book, the funnel, views           | `book.ts`, `funnel.ts`, `views.ts`                                                                                                            |
-| recipes over the editor               | `recipes/lint.ts`, `lintHover.ts`, `satellite.ts`, `noteEditor.ts`, `emptyBlocks.ts`, `flash.ts`, `pairing.ts`, `reference.ts`, `whereAmI.ts` |
-| test tools (not tests)                | `testing/harness.ts`, `testing/mount.ts`                                                                                                      |
+| what                                  | where                                                                                                                                                     |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| the engine seam                       | `core/analyzer.ts`                                                                                                                                        |
+| the fold (structure)                  | `core/docStructure.ts`, `cst.ts`, `fold.ts`, `lineTable.ts`, `blockTable.ts`, `notes.ts`, `designators.ts`                                                |
+| classification, then policy           | `core/mapping.ts` → `core/registry.ts`                                                                                                                    |
+| the plan, owned targets, paint, stops | `core/plan.ts`, `owned.ts`, `paint.ts`, `stops.ts`, `exceptions.ts`, `scroll.ts`                                                                          |
+| rules and commands                    | `core/phases.ts`, `compose.ts`, `sealed.ts`, `clip.ts`, `input.ts`, `deletion.ts`, `caret.ts`, `kernel.ts`                                                |
+| structured entry                      | `core/insert.ts`, `actions.ts`, `frontmatter.ts`                                                                                                          |
+| rendering                             | `core/decorations.ts`, `render.ts`, `editorState.ts`, `editor.css`                                                                                        |
+| instruments                           | `core/instrument.ts`, `meter.ts`, `timing.ts`, `trace.ts`, `../observability.ts`                                                                          |
+| the Book, the funnel, views           | `book.ts`, `funnel.ts`, `views.ts`                                                                                                                        |
+| recipes over the editor               | `recipes/lint.ts`, `lintHover.ts`, `satellite.ts`, `noteEditor.ts`, `emptyBlocks.ts`, `flash.ts`, `pairing.ts`, `reference.ts`, `whereAmI.ts`, `align.ts` |
+| test tools (not tests)                | `testing/harness.ts`, `testing/mount.ts`                                                                                                                  |

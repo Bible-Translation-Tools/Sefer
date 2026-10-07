@@ -35,8 +35,9 @@ import { recordVersion } from "./recordVersion";
 import type { Domain, Services } from "./services";
 import { shellKeys } from "./settings";
 import type { ShellEvent } from "./shellEvent";
-import { sendAfterSave } from "./syncActions";
+import { sendAfterSave, sendNow } from "./syncActions";
 import { syncPreferences } from "./syncSettings";
+import { sendOutcomeCopy } from "./ui/cloud/copy";
 import { bookName } from "./ui/workspace/books";
 
 /** What a command's `run` may return; an Effect is run on the app runtime. */
@@ -347,14 +348,25 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
   const multibook = makeMultiBook(() => bridge.project()?.books ?? []);
 
   /**
-   * Receiving and sending happen on the cloud screen, where the plan card says
-   * what would arrive and a second press applies it. The palette opens that
-   * screen rather than transferring directly: a transfer from here would skip
-   * both, and a receive needs the plan a person has actually read.
+   * Receiving goes through Review against the shared project, where every
+   * passage is shown before it lands — never straight from the palette.
    */
-  const openCloud = (): void => {
+  const seeIncoming = (): void => {
     if (bridge.project() === undefined) return;
-    void bridge.navigate({ to: "/project/$slug/cloud", params: { slug: bridge.slug() } });
+    void bridge.navigate({
+      to: "/project/$slug/review",
+      params: { slug: bridge.slug() },
+      search: { against: "shared" },
+    });
+  };
+
+  /** Sending is one press, as in the cloud menu: wherever this project's mode sends. */
+  const sendMine = (): void => {
+    const project = bridge.project();
+    if (project === undefined) return;
+    void sendNow(services, project).then((outcome) =>
+      bridge.report(sendOutcomeCopy(outcome).title),
+    );
   };
 
   /**
@@ -542,37 +554,6 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
     }),
 
     /**
-     * The projection, by NAME rather than as a toggle.
-     *
-     * A palette is searched by typing what you want, and "Toggle USFM /
-     * visual" answers to neither word a reader would reach for: somebody who
-     * wants USFM types "usfm" and somebody who wants the reading types
-     * "revision". So each mode is its own command, titled as the mode, and
-     * offered only when the editor is not already in it — a command that would
-     * do nothing is one more line to read past.
-     *
-     * The chord stays on the toggle, because a keystroke is a flip and not a
-     * choice from a list.
-     */
-    registerCommand({
-      id: "view.mode.revision",
-      title: t("Revision mode"),
-      when: () => hasBook() && bridge.mode() === "usfm",
-      run: () => {
-        bridge.setMode("default");
-      },
-    }),
-
-    registerCommand({
-      id: "view.mode.usfm",
-      title: t("USFM mode"),
-      when: () => hasBook() && bridge.mode() !== "usfm",
-      run: () => {
-        bridge.setMode("usfm");
-      },
-    }),
-
-    /**
      * The dev playground, reachable without typing a URL.
      *
      * `import.meta.env.DEV` is a build-time constant, so `when` folds to
@@ -592,11 +573,16 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       },
     }),
 
+    /**
+     * The one USFM switch. The mode is the shell's, not a view's: every editor
+     * surface — the book, the reference pane, Review's whole-book diff, the
+     * cards — follows it, so the command is offered on any project screen.
+     */
     registerCommand({
       id: "editor.toggleMode",
-      title: t("Toggle USFM / visual"),
+      title: t("Toggle USFM"),
       keys: "Mod-Shift-m",
-      when: hasBook,
+      when: hasProject,
       run: () => {
         bridge.setMode(bridge.mode() === "usfm" ? "default" : "usfm");
       },
@@ -682,8 +668,9 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
     // ---------------------------------------------------------------------
     // Remote sync. Three commands, because remote work is three separate
     // approvals: prove who you are, take what arrived, publish what you did.
-    // The last two open the cloud screen, which does the transfer after a
-    // second press (documentation/architecture/sync.md).
+    // Receiving opens Review against the shared project, where every passage
+    // is shown before it lands; sending is one press, as in the cloud menu
+    // (documentation/architecture/sync.md).
     // ---------------------------------------------------------------------
 
     registerCommand({
@@ -691,8 +678,9 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       title: t("Sign in to the cloud…"),
       run: () => {
         // The sign-in form needs a password and an OTP field, which is a
-        // surface, not a command; this takes the user to it. A build with no
-        // Gitea host configured says so rather than opening an empty form.
+        // surface, not a command: it is the app bar's cloud menu, so this
+        // opens the project and says where. A build with no Gitea host
+        // configured says so rather than pointing at an empty form.
         const host = contentHostFor(services.settings);
         if (host === null) {
           bridge.report(t("no WACS server is set for this build: set one in Settings"));
@@ -704,7 +692,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
           return;
         }
         void bridge.navigate({ to: "/project/$slug", params: { slug: bridge.slug() } });
-        bridge.report(t("sign in to {host} in the Cloud panel", { host }));
+        bridge.report(t("sign in to {host} from the cloud menu or Settings", { host }));
       },
     }),
 
@@ -712,14 +700,14 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       id: "remote.pull",
       title: t("Receive updates…"),
       when: hasProject,
-      run: openCloud,
+      run: seeIncoming,
     }),
 
     registerCommand({
       id: "remote.push",
-      title: t("Send my changes…"),
+      title: t("Send my changes"),
       when: hasProject,
-      run: openCloud,
+      run: sendMine,
     }),
 
     registerCommand({

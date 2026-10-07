@@ -53,14 +53,24 @@ export const unitChanges = (
   baseline: BaselineLike,
 ): Result.Result<UnitChanges, Refusal> => {
   const source = book.source();
-  const base = {
-    bookId: baseline.bookId,
-    stamp: source.stamp,
-    baselineText: baseline.text,
-    workingText: source.text,
-  };
-  if (baseline.text === source.text) return Result.succeed({ ...base, units: [] });
-  const found = diffSkeleton(galley, baseline.bookId, baseline.text, source.text);
+  return textChanges(galley, baseline.bookId, source.stamp, baseline.text, source.text);
+};
+
+/**
+ * The same, between any two texts of one book — History's "what this version
+ * changed" is a version against the one before it, neither of them the
+ * book's current text. `stamp` is the newer side's.
+ */
+export const textChanges = (
+  galley: GalleyService,
+  bookId: BookId,
+  stamp: SourceStamp,
+  baselineText: string,
+  workingText: string,
+): Result.Result<UnitChanges, Refusal> => {
+  const base = { bookId, stamp, baselineText, workingText };
+  if (baselineText === workingText) return Result.succeed({ ...base, units: [] });
+  const found = diffSkeleton(galley, bookId, baselineText, workingText);
   if (Result.isFailure(found))
     return Result.fail(
       new Refusal({ rule: "diff.units", reason: "Engine", description: found.failure.description }),

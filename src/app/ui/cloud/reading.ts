@@ -5,12 +5,12 @@
  * The split is the point. This file knows about Effect, Git, Remote, Gitea and
  * the file system; it knows nothing about what any of it MEANS. It produces a
  * `SyncReading` and an `IncomingPlan`, and the pure module decides the state,
- * the clocks and the one right button. That is what lets `/cloud` render every
- * state from a fixture with no Gitea instance in sight.
+ * the clocks and the one right button. That is what lets every state be
+ * derived and tested with no Gitea instance in sight.
  *
  * Every git call goes through `Effect.result` and degrades to an honest empty
  * answer. A project in a browser fixture has never had `git init` run on it,
- * and the sync screen must say "this project is only on this device" rather
+ * and the popover must say "this project is only on this device" rather
  * than throw — that is a state, not a fault.
  */
 
@@ -30,6 +30,9 @@ import {
   type IncomingPlan,
   type SyncReading,
 } from "#core/sync";
+
+import { copyRef } from "../../suggestions";
+import type { CollabMode } from "../../syncSettings";
 
 /** What one pass over the repository answers. */
 export interface SyncFacts {
@@ -69,6 +72,8 @@ export interface ReadSyncOptions {
   readonly sendRefused: boolean;
   /** When this session last fetched; `undefined` until it has. */
   readonly fetchedAt: number | undefined;
+  /** The mode chosen on this device, when one was (`chosenMode`). */
+  readonly chosenMode?: CollabMode | undefined;
 }
 
 /**
@@ -142,7 +147,32 @@ export const readSync = (
     const empty = [] as readonly Commit[];
     const localLog = yield* orEmpty(git.log(repo), empty);
     const remoteLog = remoteKnown ? yield* orEmpty(git.logFrom(repo, tracking), empty) : empty;
-    const ahead = notIn(localLog, remoteLog);
+    // Only the signed-in account's own copy counts (`copyAttached` in
+    // suggestions.ts): one left by another account on this device is not theirs.
+    const copyUrl = Option.getOrUndefined(
+      yield* orEmpty(remote.urlOf(repo, "copy"), Option.none()),
+    );
+    const me =
+      options.host === null
+        ? undefined
+        : Option.getOrUndefined(yield* orEmpty(gitea.session(options.host), Option.none()))
+            ?.username;
+    const copyOwner = copyUrl
+      ?.replace(/\.git$/u, "")
+      .split("/")
+      .at(-2);
+    const copyAttached =
+      me !== undefined && copyOwner !== undefined && me.toLowerCase() === copyOwner.toLowerCase();
+    // In the copy mode, what is waiting to be SENT is what the person's copy
+    // lacks — a send goes there, and moves its tracking ref (`copyRef`); what
+    // is waiting to be RECEIVED is still the shared project's. A copy not read
+    // yet was made from the shared project, so the shared log stands in.
+    const inCopyMode = (options.chosenMode ?? (copyAttached ? "copy" : "shared")) === "copy";
+    const copied = copyRef(branch ?? DEFAULT_BRANCH);
+    const copyKnown =
+      inCopyMode && Option.isSome(yield* orEmpty(git.resolve(repo, copied), Option.none()));
+    const sentLog = copyKnown ? yield* orEmpty(git.logFrom(repo, copied), empty) : remoteLog;
+    const ahead = notIn(localLog, sentLog);
     const behind = notIn(remoteLog, localLog);
     const status = yield* orEmpty(git.status(repo), { changed: [] });
 

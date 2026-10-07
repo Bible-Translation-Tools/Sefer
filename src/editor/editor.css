@@ -1103,17 +1103,14 @@
 .cm-diff-markup-unit {
   background-color: color-mix(in srgb, var(--on-surface-tertiary) 8%, transparent);
 }
-/* A decided unit stops shouting. Strikeout means removed words and nothing
-   else, so a decision is never drawn as one: kept is a quiet underline, taken
-   a neutral wash (the other side's text will stand here). */
-.cm-diff-kept {
-  background-color: transparent;
-  text-decoration: underline dotted color-mix(in srgb, var(--brand-base) 60%, transparent);
-  text-underline-offset: 4px;
-}
+/* A decided unit stops shouting, and puts nothing over the text: a wash or an
+   underline under the words was too faint to read as a choice and still sat
+   between the reader and the text. The choice is said where the side is
+   named — a card's column caption turns brand, with a check (`DiffCard`) —
+   and by the pressed Keep / Take buttons. The classes stay as hooks. */
+.cm-diff-kept,
 .cm-diff-taken {
-  background-color: color-mix(in srgb, var(--on-surface-tertiary) 14%, transparent);
-  border-radius: 2px;
+  background-color: transparent;
 }
 /* Kept words are settled. Under a TAKE they stay marked: in
    an editable review, what differs there now is the reader's own fix. */
@@ -1210,31 +1207,65 @@
 .cm-diff-was .cm-content {
   background: transparent;
 }
+/* A unit's decision, in a thin column at the edge of your text — which, with
+   the other side drawn on the left, is the line between the two. Two chevrons,
+   stacked, no borders: each points at the text it chooses, and the chosen one
+   is filled. Only a pane that decides keeps the column's width; elsewhere
+   (the other side, a card) it takes none. */
 .cm-diff-controls {
-  min-width: 60px;
-  padding-inline-start: 4px;
+  min-width: 0;
+}
+.cm-diff-deciding .cm-diff-controls {
+  min-width: 68px;
+  padding-inline: 2px;
+}
+/* One row per verse that starts on the line: ‹ 9 ›, stacked when two share it. */
+.cm-diff-control-stack {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
 }
 .cm-diff-control {
   display: inline-flex;
-  gap: 2px;
+  align-items: center;
+  gap: 1px;
+  padding-top: 2px;
+}
+.cm-diff-control-ref {
+  min-width: 18px;
+  text-align: center;
+  font: 600 11px/22px var(--font-sans, system-ui);
+  font-variant-numeric: tabular-nums;
+  color: var(--on-surface-tertiary);
 }
 .cm-diff-control button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
   cursor: pointer;
-  border: 1px solid var(--surface-border);
-  border-radius: 4px;
-  padding: 1px 6px;
-  font: 13px/18px var(--font-sans, system-ui);
-  color: var(--on-surface-secondary);
-  background: var(--surface-primary);
+  border: 0;
+  border-radius: 5px;
+  padding: 0;
+  color: var(--on-surface-tertiary);
+  background: transparent;
 }
-.cm-diff-control button[data-on="true"][data-side="baseline"] {
+.cm-diff-control button svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.cm-diff-control button:hover {
   color: var(--on-surface-primary);
-  border-color: var(--on-surface-tertiary);
   background: var(--surface-secondary);
 }
 .cm-diff-control button[data-on="true"] {
-  color: var(--brand-base);
-  border-color: var(--brand-base);
+  color: var(--surface-primary);
+  background: var(--brand-base);
 }
 
 /* The editable side of a review: it reads like the page, and

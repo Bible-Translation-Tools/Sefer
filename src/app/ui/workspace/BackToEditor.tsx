@@ -1,24 +1,21 @@
 /**
- * The way back to the book, on every screen that is not the book.
+ * The way back to the book, on a screen that is not the book.
  *
- * A full-page route — findings, history, review, compare, find, terms,
- * inventory, cloud, settings, the projects list — replaces the editor
- * entirely, and the only door back was the old rail's panel tile, which reads as
- * a panel toggle and not as "close this". So the door is spelled out: one
- * button, pinned to the top-right of the routed content, that says which book
- * it returns to.
+ * Two pieces. `useBackToEditor` is the behaviour: off a project's routes it
+ * answers `undefined`, and inside them it answers a label ("Back to Luke") and
+ * a `go` that navigates to `/project/$slug`. `BackToEditor` is the default UI
+ * for it — a plain × button with no position of its own, so a screen puts it
+ * wherever its header wants it.
  *
- * It is rendered ONCE, by the root chrome above the `<Outlet/>`, and not by
- * each page. That is the whole point of putting it here — a screen added
- * later gets the door without knowing it exists, and no page can forget it or
- * spell it differently.
+ * Every page-level `PanelHeader` ends with one by default: the layout hands
+ * `PanelHeader` the button through `PageDoor` (`routes/_app.tsx`), so a screen
+ * added later still gets a door without knowing it exists. A screen that wants
+ * it elsewhere passes `door={false}` and places `<BackToEditor />` itself; a
+ * header that is not a `PanelHeader` (Review's) places it directly.
  *
- * The same component registers `editor.back`, so the palette lists it. It has
- * no key: Escape belongs to whatever dialog is open on the screen, and a
- * screen closes only through this button. Registered here rather than in the
- * shell's core set
- * because the question "is this a full-page screen" is the ROUTE's, and the
- * `ShellBridge` deliberately does not carry a pathname.
+ * The hook registers `editor.back`, so the palette lists it on any screen that
+ * draws the door. It has no key: Escape belongs to whatever dialog is open on
+ * the screen.
  */
 
 import { useNavigate } from "@tanstack/solid-router";
@@ -33,23 +30,20 @@ import { bookName } from "./books";
 import { metadataOf } from "./project";
 import { useScreen } from "./screen";
 
-/**
- * Is there work behind this screen to go back TO? The work is the editor
- * (`useScreen`); every other screen is a panel over the top of it and needs
- * a door out, as soon as a project is open — except Key terms, which is a
- * mode like the editor's, left through the mode switcher. The workspace also
- * hands this to page headers (`PageDoor`), so they keep clear of the ×.
- */
-export function useBackToEditorShown(): () => boolean {
-  const shell = useShell();
-  const screen = useScreen();
-  return () => shell.project() !== undefined && !screen.onMode();
+interface BackToEditorTarget {
+  readonly label: string;
+  readonly go: () => void;
 }
 
-export function BackToEditor() {
+/**
+ * Is there a book behind this screen to go back to? Asked of the route —
+ * inside `/_app/project/$slug` or not — never of a pathname.
+ */
+// fallow-ignore-next-line unused-export -- the behaviour half, for a screen that draws its own door; BackToEditor is the only consumer today.
+export function useBackToEditor(): () => BackToEditorTarget | undefined {
   const shell = useShell();
   const navigate = useNavigate();
-  const away = useBackToEditorShown();
+  const screen = useScreen();
 
   const label = (): string => {
     const project = shell.project();
@@ -59,36 +53,46 @@ export function BackToEditor() {
     return t("Back to {book}", { book: bookName(held.bookId, metadataOf(project)) });
   };
 
-  const back = (): void => {
-    if (shell.project() === undefined) return;
-    // The PARENT route, and nothing cleverer. `/project/$slug` already knows
-    // where the work is — it forwards to the remembered book, and falls back
-    // to the first book when that one is gone — so asking it is one door
-    // instead of two answers that can disagree.
+  // The PARENT route, and nothing cleverer. `/project/$slug` already knows
+  // where the work is — it forwards to the remembered book, and falls back to
+  // the first book when that one is gone — so asking it is one door instead of
+  // two answers that can disagree.
+  const go = (): void => {
     void navigate({ to: "/project/$slug", params: { slug: shell.slug() } });
   };
+
+  const shown = (): boolean => screen.inProject() && shell.project() !== undefined;
 
   onCleanup(
     registerCommand({
       id: "editor.back",
       title: t("Back to the editor"),
-      when: away,
-      run: back,
+      when: shown,
+      run: go,
     }),
   );
 
+  return () => (shown() ? { label: label(), go } : undefined);
+}
+
+export function BackToEditor(props: {
+  /** Small and borderless, for a header whose primary button should lead. */
+  readonly quiet?: boolean;
+}) {
+  const target = useBackToEditor();
   return (
-    <Show when={away()}>
-      <div class="absolute end-4 top-4 z-30">
+    <Show when={target()}>
+      {(door) => (
         <IconButton
           data-testid="back-to-editor"
-          variant="outlined"
-          label={label()}
+          variant={props.quiet === true ? "subtle" : "outlined"}
+          size={props.quiet === true ? "sm" : "md"}
+          label={door().label}
           tooltipSide="left"
           icon={<X />}
-          onClick={back}
+          onClick={() => door().go()}
         />
-      </div>
+      )}
     </Show>
   );
 }

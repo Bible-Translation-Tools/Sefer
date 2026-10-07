@@ -10,9 +10,11 @@
  * History screen means "since the last version", so the baseline is the blob
  * at HEAD.
  *
- * The blobs are read once per HEAD and cached against that commit id: `tick()`
- * moves on every keystroke and the recorded version does not move at all until
- * somebody commits. `refresh()` is what a commit (and the Reload button) calls.
+ * The texts are held for the session by commit and path (`textAt`): a commit
+ * never changes, so a held text is never stale, and Review — which reads HEAD,
+ * the shared tip and their common base on every visit, usually all one
+ * commit — reads each blob once rather than three times a visit. `refresh()`
+ * is what a commit (and the Reload button) calls; it re-resolves the ref.
  *
  * A project with no repository, or a book HEAD has never seen, is not an
  * error: it is a book that will be recorded for the FIRST time, and the panels
@@ -40,6 +42,30 @@ export interface Recorded {
 }
 
 const NOTHING: Recorded = { head: undefined, texts: new Map(), read: true };
+
+/**
+ * Book texts at commits, for the session, least recently used out first.
+ * Bounded at about four whole Bibles (a few MB of text each): enough for HEAD,
+ * the shared tip and their base, plus the version History last showed.
+ */
+const HELD = 4 * 70;
+const held = new Map<string, Source>();
+const textAt = (key: string): Source | undefined => {
+  const found = held.get(key);
+  if (found !== undefined) {
+    held.delete(key);
+    held.set(key, found);
+  }
+  return found;
+};
+const hold = (key: string, source: Source): void => {
+  held.set(key, source);
+  while (held.size > HELD) {
+    const oldest = held.keys().next();
+    if (oldest.done === true) break;
+    held.delete(oldest.value);
+  }
+};
 
 export interface RecordedVersion {
   readonly recorded: Accessor<Recorded>;
@@ -95,8 +121,12 @@ export const createRecordedVersion = (
           const repo = opened.success;
           let head: string | undefined;
           if (ref === "head") {
-            const log = yield* Effect.result(git.log(repo));
-            head = Result.isSuccess(log) ? log.success[0]?.id : undefined;
+            // The tip, not the log: walking every commit to read the first
+            // is what a visit to Review used to cost.
+            const tip = yield* Effect.orElseSucceed(git.resolve(repo, "HEAD"), () =>
+              Option.none<string>(),
+            );
+            head = Option.getOrUndefined(tip);
           } else {
             const branch = yield* Effect.orElseSucceed(git.branch(repo), () =>
               Option.none<string>(),
@@ -127,12 +157,20 @@ export const createRecordedVersion = (
           for (const book of project.books) {
             const inside = repositoryPath(project.root, book.path);
             if (Option.isNone(inside)) continue;
+            const key = `${project.root}\0${head}\0${inside.value}`;
+            const known = textAt(key);
+            if (known !== undefined) {
+              texts.set(book.id, known);
+              continue;
+            }
             // A book absent from HEAD fails `show`, which is the answer, not a
             // problem: it has never been recorded.
             const bytes = yield* Effect.result(git.show(repo, head, inside.value));
             if (Result.isFailure(bytes)) continue;
             const source = decode(bytes.success);
-            if (Result.isSuccess(source)) texts.set(book.id, source.success);
+            if (Result.isFailure(source)) continue;
+            hold(key, source.success);
+            texts.set(book.id, source.success);
           }
           return { head, texts, read: true } satisfies Recorded;
         }),

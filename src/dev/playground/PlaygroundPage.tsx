@@ -30,6 +30,7 @@ import { For, Show, createMemo } from "solid-js";
 import { useShell } from "#app/ProjectContext";
 import { Badge, Card, SegmentedControl, Select, Switch } from "#app/ui/primitives";
 import { ShellGate } from "#app/ui/ShellGate";
+import { BackToEditor } from "#app/ui/workspace/BackToEditor";
 
 import { dialValues, withDial, type Dials } from "../dials";
 import { benchFor } from "./bench";
@@ -146,6 +147,9 @@ function Playground() {
             Real project text, no clicking around. Drop a file in{" "}
             <code>src/dev/playground/local/</code> and it appears here, untracked.
           </p>
+          <div class="ms-auto">
+            <BackToEditor />
+          </div>
         </div>
 
         {/* The bench: which book, against what. Shared by every experiment,

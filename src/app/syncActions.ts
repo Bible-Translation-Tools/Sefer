@@ -6,16 +6,18 @@
  * and a fetch only when its tip is not the one this device already holds. It
  * never moves a file. With "Skip review of incoming changes" on, a receive
  * follows, and the receive itself refuses whenever a book needs a person, so
- * nothing arrives unreviewed that the policy would have shown.
+ * nothing arrives unreviewed that the policy would have shown. In the copy
+ * mode it also reads the person's copy (`fetchCopy`), and on success it asks
+ * the network's half of the picture again (`collaboration.refresh`).
  *
  * `sendAfterSave` runs after a version is recorded, and only sends: the
  * server's fast-forward rule is the check, and a refusal starts the check at
- * once so `/cloud` reads `behind` or `diverged` rather than a bare error.
+ * once so every surface reads `behind` or `diverged` rather than a bare error.
  *
  * Neither runs with no interface up; `syncStatus` says so first. A network
  * failure the last transfer met does not stop them — they are how Sefer finds
- * out it is over. Both hold the repository's
- * lane through the ports, so a check and a send cannot race.
+ * out it is over. Both hold the repository's lane through the ports, so a
+ * check and a send cannot race.
  */
 import { Effect, Option } from "effect";
 
@@ -23,7 +25,7 @@ import type { BookId } from "#core/book/book";
 import { Git, type Author } from "#core/git/git";
 import type { Verdict } from "#core/observability";
 import type { Project } from "#core/project/project";
-import { Remote, remoteVerdict } from "#core/remote/remote";
+import { Remote, remoteVerdict, type RemoteFailureReason } from "#core/remote/remote";
 import {
   combine,
   receive,
@@ -33,12 +35,14 @@ import {
   type ReceiveRefusal,
 } from "#core/sync";
 
+import { collaboration } from "./collaboration";
 import { remoteReasonOf } from "./describe";
 import { recordVersion, type RecordOutcome } from "./recordVersion";
 import type { Services } from "./services";
-import { sendingTo } from "./suggestions";
+import { fetchCopy, modeOf, sendingTo } from "./suggestions";
 import { syncPreferences } from "./syncSettings";
 import { syncStatus } from "./syncStatus";
+import { syncWatch } from "./syncWatch";
 
 /**
  * Where this project sends: the shared project, or — when suggested changes
@@ -46,7 +50,7 @@ import { syncStatus } from "./syncStatus";
  * pointed anywhere but `origin`; return "origin" here and the suggested-changes
  * flow is gone from every send.
  */
-export const destination = (services: Services, project: Project): Promise<string> =>
+const destination = (services: Services, project: Project): Promise<string> =>
   sendingTo(services, project);
 
 type CheckResult = "up-to-date" | "fetched" | "detached" | "no-branch" | "no-repository";
@@ -85,6 +89,7 @@ export const checkForChanges = async (services: Services, project: Project): Pro
   try {
     result = await services.run(ask(root));
     syncStatus.noteSuccess();
+    syncWatch.noteFetched(root);
   } catch (cause) {
     const failure = remoteReasonOf(cause);
     if (failure !== undefined) syncStatus.noteFailure(failure);
@@ -97,9 +102,17 @@ export const checkForChanges = async (services: Services, project: Project): Pro
     "sync.check.result": result ?? "unreachable",
     ...(reason === undefined ? {} : { "sync.reason": reason }),
   });
+  await syncWatch.refresh(services, project).catch(() => undefined);
+  // The network's half, on the same schedule: in the copy mode, what the
+  // person's other devices sent to their copy; then can this account write,
+  // how its suggestion stands, and how many wait for an editor.
+  if (verdict === "passed") {
+    if ((await modeOf(services, project)) === "copy") await fetchCopy(services, project);
+    void collaboration.refresh(services, project);
+  }
   if (result !== "fetched" || !syncPreferences(services.settings, root).skipReviewIncoming) return;
   // Received without Review only when the policy lets every book through; a
-  // book that needs a person makes the receive refuse, and /cloud shows it.
+  // book that needs a person makes the receive refuse, and the popover shows it.
   const received = await services.run(Effect.result(receive({ project })));
   services.composition.observability.note(
     "sync.receive",
@@ -107,22 +120,68 @@ export const checkForChanges = async (services: Services, project: Project): Pro
     received._tag === "Success" ? undefined : received.failure.refusal,
     { "sync.auto": true },
   );
+  await syncWatch.refresh(services, project).catch(() => undefined);
 };
 
-/** After a version is recorded: send it, when this project sends on save. */
-export const sendAfterSave = async (services: Services, project: Project): Promise<void> => {
+/**
+ * How a send ended, for the surface that started it to say.
+ *
+ * - `sent` — the shared project has this device's versions, or — `toCopy`, in
+ *   the copy mode — the person's own copy has them.
+ * - `detached` — the project is attached to nothing; there was nowhere to send.
+ * - `held` — this project does not send on save; the versions wait here.
+ * - `refused` — the send was tried and did not get through, for `reason`.
+ *   `Rejected` is the shared project having moved: the check that follows has
+ *   already brought its versions here by the time this is returned.
+ */
+export type SendOutcome =
+  /** `toCopy`: sent to the person's own copy, in the copy mode, not to the shared project. */
+  | { readonly kind: "sent"; readonly toCopy?: true }
+  | { readonly kind: "detached" }
+  | { readonly kind: "held" }
+  | { readonly kind: "refused"; readonly reason: RemoteFailureReason };
+
+/**
+ * Send this device's versions now, whatever the project's send-on-save says:
+ * the button a person pressed. The server's fast-forward rule is the check.
+ */
+export const sendNow = async (
+  services: Services,
+  project: Project,
+  cause: "save" | "press" = "press",
+  /** A remote other than the project's mode would choose: a suggestion brought in goes to the shared project. */
+  to?: string,
+): Promise<SendOutcome> => {
+  const outcome = await attemptSend(services, project, cause, to);
+  // Refused because the shared project moved: ask it what changed, so every
+  // surface can say "behind" or "diverged" with the facts.
+  if (outcome.kind === "refused" && outcome.reason === "Rejected")
+    await checkForChanges(services, project);
+  else await syncWatch.refresh(services, project).catch(() => undefined);
+  // Refused by the shared project's permissions, or a sign-in gone stale: ask
+  // whether this account can write, so the popover can offer the copy mode.
+  if (outcome.kind === "refused" && outcome.reason === "Unauthorized")
+    await collaboration.refresh(services, project);
+  return outcome;
+};
+
+const attemptSend = async (
+  services: Services,
+  project: Project,
+  cause: "save" | "press",
+  explicit: string | undefined,
+): Promise<SendOutcome> => {
   const root = project.root;
-  if (!syncPreferences(services.settings, root).sendOnSave) return;
   if (!syncStatus.interfaceUp()) {
     syncStatus.noteSend({ refused: "Network" });
-    return;
+    return { kind: "refused", reason: "Network" };
   }
   const operation = services.composition.observability.operation("sync.transfer", {
     "sync.action": "push",
-    "sync.cause": "save",
+    "sync.cause": cause,
   });
   try {
-    const to = await destination(services, project);
+    const to = explicit ?? (await destination(services, project));
     const sent = await services.run(
       Effect.gen(function* () {
         const git = yield* Git;
@@ -136,22 +195,43 @@ export const sendAfterSave = async (services: Services, project: Project): Promi
       }),
     );
     if (sent) syncStatus.noteSend({ sent: true });
+    // The copy's ref is what "waiting to be sent" is measured against in the
+    // copy mode: read it again, so what was just sent stops counting.
+    if (sent && to === "copy") await fetchCopy(services, project);
     operation.end("passed", { "sync.sent": sent });
+    if (!sent) return { kind: "detached" };
+    return to === "copy" ? { kind: "sent", toCopy: true } : { kind: "sent" };
   } catch (cause) {
     const reason = remoteReasonOf(cause) ?? "Rejected";
     syncStatus.noteSend({ refused: reason });
     operation.end(remoteVerdict(reason), { "sync.reason": reason });
-    // Refused because the shared project moved: ask it what changed, so the
-    // screen can say "behind" or "diverged" with the facts.
-    if (reason === "Rejected") await checkForChanges(services, project);
+    return { kind: "refused", reason };
   }
+};
+
+/** After a version is recorded: send it, when this project sends on save. */
+export const sendAfterSave = async (services: Services, project: Project): Promise<SendOutcome> => {
+  if (!syncPreferences(services.settings, project.root).sendOnSave) {
+    // Not sent, and nothing went wrong: the reading still moves, because a
+    // new version here is one more the shared project does not have.
+    await syncWatch.refresh(services, project).catch(() => undefined);
+    return { kind: "held" };
+  }
+  return sendNow(services, project, "save");
 };
 
 const optionalTheirs = (theirs: string | undefined) => (theirs === undefined ? {} : { theirs });
 
 export type SettleOutcome =
-  /** Received by fast-forward; `recorded` says whether the decisions were then kept. */
-  | { readonly kind: "received"; readonly recorded: RecordOutcome }
+  /**
+   * Received by fast-forward; `recorded` says whether the decisions were then
+   * kept, and `sending` is the send that follows a version, still under way.
+   */
+  | {
+      readonly kind: "received";
+      readonly recorded: RecordOutcome;
+      readonly sending: Promise<SendOutcome> | undefined;
+    }
   /** One decision commit; `sent` is false when it is kept here and sending did not finish. */
   | { readonly kind: "combined"; readonly commit: string | undefined; readonly sent: boolean }
   | {
@@ -170,6 +250,11 @@ export type SettleOutcome =
  * the review — and take everything else the other side changed: as a
  * fast-forward and one new version when this device has no versions of its
  * own, or as one decision commit that joins both histories when it has.
+ *
+ * "The other side" is the shared project's tip unless `theirs` names another
+ * ref: a suggestion's head (sent to the shared project, `sendTo: "origin"`),
+ * or the person's own copy as another of their devices left it (sent back
+ * wherever this project's mode sends).
  */
 export const settleWithShared = async (
   services: Services,
@@ -187,8 +272,20 @@ export const settleWithShared = async (
   if (received._tag === "Success") {
     const dirty = project.books.filter((book) => services.save.dirty(book));
     const recorded = await recordVersion(services, project, dirty, message, author);
-    if (recorded.kind === "recorded") void sendAfterSave(services, project);
-    return { kind: "received", recorded };
+    // A review that names where to send — a suggestion brought in goes to the
+    // shared project, whatever this project's mode — sends even when nothing
+    // was left to record: the fast-forward itself brought versions the shared
+    // project does not have. Otherwise only a new version is worth a send.
+    const sending =
+      with_.sendTo !== undefined
+        ? recorded.kind === "recorded" || recorded.kind === "nothing"
+          ? sendNow(services, project, "save", with_.sendTo)
+          : undefined
+        : recorded.kind === "recorded"
+          ? sendAfterSave(services, project)
+          : undefined;
+    if (sending === undefined) void syncWatch.refresh(services, project).catch(() => undefined);
+    return { kind: "received", recorded, sending };
   }
   if (received.failure.refusal !== "diverged")
     return {
@@ -210,6 +307,7 @@ export const settleWithShared = async (
       }),
     ),
   );
+  void syncWatch.refresh(services, project).catch(() => undefined);
   if (combined._tag === "Success")
     return { kind: "combined", commit: combined.success.commit, sent: true };
   // Recorded here and not sent is not a refusal: the next send carries it.

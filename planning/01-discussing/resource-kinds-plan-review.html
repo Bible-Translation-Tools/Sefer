@@ -1,0 +1,3227 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resource kinds — plan review against Sefer at master</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --font-display: "Instrument Serif", Georgia, serif;
+        --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+        --font-mono: "JetBrains Mono", "SF Mono", Consolas, monospace;
+
+        --bg: #f4f1ea;
+        --surface: #fffdf8;
+        --surface2: #ece8df;
+        --surface-elevated: #ffffff;
+        --border: rgba(30, 45, 70, 0.1);
+        --border-bright: rgba(30, 45, 70, 0.22);
+        --grid: rgba(30, 58, 95, 0.07);
+        --text: #1b2434;
+        --text-dim: #66707f;
+
+        --navy: #1e3a5f;
+        --navy-dim: rgba(30, 58, 95, 0.09);
+        --gold: #b8860b;
+        --gold-dim: rgba(184, 134, 11, 0.12);
+        --current: #2f5f8f;
+        --current-dim: rgba(47, 95, 143, 0.1);
+        --planned: #1f7a5a;
+        --planned-dim: rgba(31, 122, 90, 0.11);
+        --amber: #b45309;
+        --amber-dim: rgba(180, 83, 9, 0.11);
+        --red: #a32d2d;
+        --red-dim: rgba(163, 45, 45, 0.1);
+        --blue: #1d4ed8;
+        --blue-dim: rgba(29, 78, 216, 0.09);
+        --grey: #7a7f88;
+        --grey-dim: rgba(122, 127, 136, 0.12);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0f151e;
+          --surface: #161e2a;
+          --surface2: #1c2634;
+          --surface-elevated: #1f2a39;
+          --border: rgba(255, 255, 255, 0.07);
+          --border-bright: rgba(255, 255, 255, 0.15);
+          --grid: rgba(212, 167, 58, 0.05);
+          --text: #e8e4da;
+          --text-dim: #98a0ad;
+          --navy: #8fb3dc;
+          --navy-dim: rgba(143, 179, 220, 0.12);
+          --gold: #d4a73a;
+          --gold-dim: rgba(212, 167, 58, 0.14);
+          --current: #7fb0e0;
+          --current-dim: rgba(127, 176, 224, 0.12);
+          --planned: #4fc394;
+          --planned-dim: rgba(79, 195, 148, 0.13);
+          --amber: #f0a84a;
+          --amber-dim: rgba(240, 168, 74, 0.13);
+          --red: #ef8a8a;
+          --red-dim: rgba(239, 138, 138, 0.12);
+          --blue: #8db4ff;
+          --blue-dim: rgba(141, 180, 255, 0.12);
+          --grey: #9aa1ab;
+          --grey-dim: rgba(154, 161, 171, 0.14);
+        }
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        background-color: var(--bg);
+        background-image:
+          linear-gradient(var(--grid) 1px, transparent 1px),
+          linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+          radial-gradient(ellipse at 15% 0%, var(--gold-dim) 0%, transparent 45%);
+        background-size:
+          28px 28px,
+          28px 28px,
+          100% 100%;
+        color: var(--text);
+        font-family: var(--font-body);
+        font-size: 15px;
+        line-height: 1.55;
+        padding: 40px;
+        min-height: 100vh;
+        overflow-wrap: break-word;
+      }
+      .grid > *,
+      .flex > * {
+        min-width: 0;
+      }
+
+      .wrap {
+        max-width: 1440px;
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: 190px 1fr;
+        gap: 0 44px;
+      }
+      .main {
+        min-width: 0;
+      }
+
+      /* TOC */
+      .toc {
+        position: sticky;
+        top: 24px;
+        align-self: start;
+        padding: 14px 0;
+        grid-row: 1 / -1;
+        max-height: calc(100dvh - 48px);
+        overflow-y: auto;
+      }
+      .toc::-webkit-scrollbar {
+        width: 3px;
+      }
+      .toc::-webkit-scrollbar-thumb {
+        background: var(--surface2);
+        border-radius: 2px;
+      }
+      .toc-title {
+        font-family: var(--font-mono);
+        font-size: 9px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        color: var(--text-dim);
+        padding-bottom: 10px;
+        margin-bottom: 8px;
+        border-bottom: 1px solid var(--border);
+      }
+      .toc a {
+        display: block;
+        font-size: 12px;
+        color: var(--text-dim);
+        text-decoration: none;
+        padding: 4px 8px;
+        border-radius: 4px;
+        border-left: 2px solid transparent;
+        transition: all 0.15s;
+        line-height: 1.4;
+        margin-bottom: 1px;
+      }
+      .toc a:hover {
+        color: var(--text);
+        background: var(--surface2);
+      }
+      .toc a.active {
+        color: var(--text);
+        border-left-color: var(--gold);
+      }
+
+      /* Type */
+      h1 {
+        font-family: var(--font-display);
+        font-size: 46px;
+        font-weight: 400;
+        letter-spacing: -0.5px;
+        line-height: 1.05;
+        margin-bottom: 8px;
+        text-wrap: balance;
+      }
+      h1 em {
+        font-style: italic;
+        color: var(--gold);
+      }
+      .subtitle {
+        color: var(--text-dim);
+        font-size: 13px;
+        margin-bottom: 36px;
+        font-family: var(--font-mono);
+      }
+      .sec-head {
+        font-family: var(--font-display);
+        font-size: 30px;
+        font-weight: 400;
+        margin: 56px 0 18px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--border-bright);
+        display: flex;
+        align-items: baseline;
+        gap: 14px;
+        scroll-margin-top: 12px;
+      }
+      .sec-head .num {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--gold);
+        letter-spacing: 1px;
+      }
+      h3 {
+        font-size: 16px;
+        font-weight: 600;
+        margin: 22px 0 10px;
+      }
+      p {
+        margin-bottom: 10px;
+      }
+      code {
+        font-family: var(--font-mono);
+        font-size: 0.86em;
+        background: var(--navy-dim);
+        color: var(--navy);
+        padding: 1px 5px;
+        border-radius: 3px;
+      }
+      a {
+        color: var(--navy);
+      }
+
+      /* Cards */
+      .ve-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 18px 22px;
+        position: relative;
+      }
+      .ve-card--hero {
+        background: color-mix(in srgb, var(--surface) 90%, var(--gold) 10%);
+        box-shadow:
+          0 4px 22px rgba(0, 0, 0, 0.07),
+          0 1px 3px rgba(0, 0, 0, 0.04);
+        border-color: color-mix(in srgb, var(--border) 40%, var(--gold) 60%);
+        padding: 32px 36px;
+      }
+      .ve-card--elevated {
+        background: var(--surface-elevated);
+        box-shadow:
+          0 2px 8px rgba(0, 0, 0, 0.07),
+          0 1px 2px rgba(0, 0, 0, 0.04);
+      }
+      .ve-card--recessed {
+        background: color-mix(in srgb, var(--bg) 70%, var(--surface) 30%);
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+      }
+      .ve-card__label {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        color: var(--navy);
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .ve-card__label::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+
+      .hero-lead {
+        font-size: 22px;
+        line-height: 1.4;
+        font-family: var(--font-display);
+        margin-bottom: 18px;
+      }
+      .hero-body {
+        font-size: 16px;
+      }
+      .hero-grid {
+        display: grid;
+        grid-template-columns: 1.4fr 1fr;
+        gap: 28px;
+      }
+      .hero-grid > * {
+        min-width: 0;
+      }
+      .insight {
+        border-left: 3px solid var(--gold);
+        padding: 10px 16px;
+        background: var(--surface);
+        border-radius: 0 8px 8px 0;
+        font-size: 15px;
+      }
+      .insight strong {
+        color: var(--gold);
+      }
+
+      /* KPI */
+      .kpi-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 14px;
+      }
+      .kpi-row > * {
+        min-width: 0;
+      }
+      .kpi-card {
+        background: var(--surface-elevated);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 18px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+      }
+      .kpi-card__value {
+        font-family: var(--font-display);
+        font-size: 40px;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+      }
+      .kpi-card__label {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1.4px;
+        color: var(--text-dim);
+        margin-top: 8px;
+      }
+      .kpi-card__sub {
+        font-size: 12px;
+        color: var(--text-dim);
+        margin-top: 4px;
+      }
+      .kpi-current .kpi-card__value {
+        color: var(--current);
+      }
+      .kpi-planned .kpi-card__value {
+        color: var(--planned);
+      }
+      .kpi-amber .kpi-card__value {
+        color: var(--amber);
+      }
+      .kpi-red .kpi-card__value {
+        color: var(--red);
+      }
+
+      .complete {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 16px;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+      }
+      .pill i {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+      .ok i {
+        background: var(--planned);
+      }
+      .warn i {
+        background: var(--amber);
+      }
+      .bad i {
+        background: var(--red);
+      }
+      .na i {
+        background: var(--grey);
+      }
+
+      /* Badges */
+      .badge {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+        padding: 2px 8px;
+        border-radius: 4px;
+        display: inline-block;
+        vertical-align: middle;
+      }
+      .b-current {
+        background: var(--current-dim);
+        color: var(--current);
+      }
+      .b-planned {
+        background: var(--planned-dim);
+        color: var(--planned);
+      }
+      .b-amber {
+        background: var(--amber-dim);
+        color: var(--amber);
+      }
+      .b-red {
+        background: var(--red-dim);
+        color: var(--red);
+      }
+      .b-grey {
+        background: var(--grey-dim);
+        color: var(--grey);
+      }
+      .b-blue {
+        background: var(--blue-dim);
+        color: var(--blue);
+      }
+
+      /* Diagram shell */
+      .diagram-shell {
+        position: relative;
+        margin-bottom: 18px;
+      }
+      .diagram-shell__hint {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--text-dim);
+        margin-bottom: 8px;
+        opacity: 0.75;
+      }
+      .mermaid-wrap {
+        position: relative;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px 12px;
+        overflow: hidden;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 400px;
+        cursor: grab;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+      }
+      .mermaid-wrap.is-panning {
+        cursor: grabbing;
+        user-select: none;
+      }
+      .mermaid-viewport {
+        position: relative;
+        overflow: hidden;
+        width: 100%;
+        height: 100%;
+        min-height: 300px;
+      }
+      .mermaid-canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+      }
+      .zoom-controls {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        display: flex;
+        gap: 2px;
+        z-index: 10;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 2px;
+        align-items: center;
+      }
+      .zoom-controls button {
+        width: 28px;
+        height: 28px;
+        border: none;
+        background: transparent;
+        color: var(--text-dim);
+        font-family: var(--font-mono);
+        font-size: 14px;
+        cursor: pointer;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition:
+          background 0.15s,
+          color 0.15s;
+      }
+      .zoom-controls button:hover {
+        background: var(--border);
+        color: var(--text);
+      }
+      .zoom-label {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        color: var(--text-dim);
+        padding: 0 6px;
+        white-space: nowrap;
+      }
+      .mermaid .nodeLabel {
+        color: var(--text) !important;
+        font-family: var(--font-body) !important;
+        font-size: 15px !important;
+      }
+      .mermaid .edgeLabel {
+        color: var(--text-dim) !important;
+        background-color: var(--surface) !important;
+        font-family: var(--font-mono) !important;
+        font-size: 11px !important;
+      }
+      .mermaid .edgeLabel rect {
+        fill: var(--surface) !important;
+      }
+      .mermaid .node rect,
+      .mermaid .node polygon,
+      .mermaid .node circle {
+        stroke-width: 1.5px !important;
+      }
+      .mermaid .cluster rect {
+        rx: 10;
+        ry: 10;
+      }
+      .mermaid .cluster-label .nodeLabel {
+        font-family: var(--font-mono) !important;
+        font-size: 11px !important;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+      }
+      .legend {
+        display: flex;
+        gap: 18px;
+        flex-wrap: wrap;
+        margin: 10px 0 0;
+      }
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--text-dim);
+      }
+      .legend-swatch {
+        width: 12px;
+        height: 12px;
+        border-radius: 3px;
+        border: 1.5px solid;
+      }
+
+      /* Comparison */
+      .diff-panels {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+        margin-top: 10px;
+      }
+      .diff-panels > * {
+        min-width: 0;
+        overflow-wrap: break-word;
+      }
+      .diff-panel__header {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        padding: 9px 16px;
+      }
+      .diff-panel__header--before {
+        background: var(--current-dim);
+        color: var(--current);
+        border-bottom: 2px solid var(--current);
+      }
+      .diff-panel__header--after {
+        background: var(--planned-dim);
+        color: var(--planned);
+        border-bottom: 2px solid var(--planned);
+      }
+      .diff-panel__body {
+        padding: 14px 16px;
+        background: var(--surface);
+        font-size: 14px;
+        line-height: 1.55;
+      }
+      .diff-panel__body + .diff-panel__body {
+        border-left: 1px solid var(--border);
+      }
+      .rationale {
+        margin-top: 10px;
+        padding: 12px 16px;
+        border-left: 3px solid var(--gold);
+        background: var(--surface2);
+        border-radius: 0 8px 8px 0;
+        font-size: 14px;
+      }
+      .rationale .tag {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: var(--gold);
+        margin-right: 8px;
+      }
+      .rationale.missing {
+        border-left-color: var(--amber);
+      }
+      .rationale.missing .tag {
+        color: var(--amber);
+      }
+      .discrepancy {
+        margin-top: 8px;
+        padding: 10px 14px;
+        border-left: 3px solid var(--red);
+        background: var(--red-dim);
+        border-radius: 0 8px 8px 0;
+        font-size: 13.5px;
+      }
+      .change {
+        margin-bottom: 34px;
+      }
+      .change-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .change-title h3 {
+        margin: 0;
+        font-size: 18px;
+      }
+      .change-title .where {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--text-dim);
+      }
+
+      pre.code {
+        font-family: var(--font-mono);
+        font-size: 12.5px;
+        line-height: 1.55;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        background: color-mix(in srgb, var(--bg) 70%, var(--surface) 30%);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px 14px;
+        margin: 8px 0;
+        color: var(--text);
+      }
+      pre.code .k {
+        color: var(--navy);
+        font-weight: 600;
+      }
+      pre.code .c {
+        color: var(--text-dim);
+        font-style: italic;
+      }
+      pre.code .n {
+        color: var(--planned);
+      }
+      pre.code .s {
+        color: var(--amber);
+      }
+
+      ul.tight {
+        list-style: none;
+        padding: 0;
+      }
+      ul.tight li {
+        padding-left: 16px;
+        position: relative;
+        margin-bottom: 5px;
+      }
+      ul.tight li::before {
+        content: "›";
+        position: absolute;
+        left: 0;
+        color: var(--gold);
+        font-weight: 700;
+      }
+      .ve-card ol,
+      .ve-card ul {
+        list-style-position: inside;
+      }
+
+      /* Tables */
+      .table-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--surface);
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 13.5px;
+      }
+      thead th {
+        position: sticky;
+        top: 0;
+        background: var(--surface2);
+        font-family: var(--font-mono);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1.2px;
+        color: var(--text-dim);
+        text-align: left;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border-bright);
+      }
+      td {
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+      tbody tr:nth-child(even) {
+        background: color-mix(in srgb, var(--surface) 96%, var(--navy) 4%);
+      }
+      tbody tr:hover {
+        background: var(--navy-dim);
+      }
+      td small {
+        color: var(--text-dim);
+        display: block;
+        font-size: 12px;
+      }
+      .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 6px;
+        vertical-align: middle;
+      }
+
+      /* Risk cards */
+      .risk-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 14px;
+      }
+      .risk-grid > * {
+        min-width: 0;
+      }
+      .risk {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 14px 16px;
+        border-top: 3px solid var(--grey);
+      }
+      .risk.high {
+        border-top-color: var(--red);
+      }
+      .risk.med {
+        border-top-color: var(--amber);
+      }
+      .risk.low {
+        border-top-color: var(--planned);
+      }
+      .risk .r-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 10px;
+        margin-bottom: 6px;
+      }
+      .risk .r-head b {
+        font-size: 14.5px;
+      }
+      .risk .mit {
+        margin-top: 8px;
+        font-size: 13px;
+        color: var(--text-dim);
+        border-top: 1px dashed var(--border);
+        padding-top: 8px;
+      }
+      .risk .mit b {
+        color: var(--text);
+      }
+
+      /* Review cards */
+      .review-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      .review-grid > * {
+        min-width: 0;
+      }
+      .rev {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 14px 18px;
+        border-left: 4px solid;
+      }
+      .rev.good {
+        border-left-color: var(--planned);
+      }
+      .rev.bad {
+        border-left-color: var(--red);
+      }
+      .rev.ugly {
+        border-left-color: var(--amber);
+      }
+      .rev.q {
+        border-left-color: var(--blue);
+      }
+      .rev h4 {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 1.4px;
+        margin-bottom: 10px;
+      }
+      .rev.good h4 {
+        color: var(--planned);
+      }
+      .rev.bad h4 {
+        color: var(--red);
+      }
+      .rev.ugly h4 {
+        color: var(--amber);
+      }
+      .rev.q h4 {
+        color: var(--blue);
+      }
+      .rev li {
+        margin-bottom: 8px;
+        font-size: 14px;
+      }
+
+      details.collapsible {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+        background: var(--surface);
+        margin-top: 10px;
+      }
+      details.collapsible summary {
+        padding: 12px 18px;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        list-style: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      details.collapsible summary::-webkit-details-marker {
+        display: none;
+      }
+      details.collapsible summary::before {
+        content: "▸";
+        font-size: 11px;
+        color: var(--text-dim);
+        transition: transform 0.15s;
+      }
+      details.collapsible[open] summary::before {
+        transform: rotate(90deg);
+      }
+      .collapsible__body {
+        padding: 14px 18px;
+        border-top: 1px solid var(--border);
+        font-size: 14px;
+      }
+
+      /* Gaps bar */
+      .bar {
+        height: 14px;
+        border-radius: 7px;
+        overflow: hidden;
+        display: flex;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+      }
+      .bar > span {
+        display: block;
+        height: 100%;
+      }
+      .bar-legend {
+        display: flex;
+        gap: 18px;
+        margin-top: 8px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--text-dim);
+      }
+
+      @keyframes fadeUp {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      .a {
+        animation: fadeUp 0.45s ease-out both;
+        animation-delay: calc(var(--i, 0) * 0.05s);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          animation-delay: 0ms !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+
+      @media (max-width: 1000px) {
+        .wrap {
+          grid-template-columns: 1fr;
+        }
+        body {
+          padding: 0 20px 40px;
+        }
+        .toc {
+          position: sticky;
+          top: 0;
+          z-index: 200;
+          max-height: none;
+          display: flex;
+          gap: 4px;
+          align-items: center;
+          overflow-x: auto;
+          background: var(--bg);
+          border-bottom: 1px solid var(--border);
+          padding: 10px 20px;
+          margin: 0 -20px;
+          grid-row: auto;
+        }
+        .toc::-webkit-scrollbar {
+          display: none;
+        }
+        .toc-title {
+          display: none;
+        }
+        .toc a {
+          white-space: nowrap;
+          flex-shrink: 0;
+          border-left: none;
+          border-bottom: 2px solid transparent;
+          border-radius: 4px 4px 0 0;
+          padding: 6px 10px;
+          font-size: 10px;
+        }
+        .toc a.active {
+          border-bottom-color: var(--gold);
+          background: var(--surface);
+        }
+        .main {
+          padding-top: 20px;
+        }
+        .sec-head {
+          scroll-margin-top: 52px;
+        }
+        .hero-grid,
+        .review-grid,
+        .diff-panels {
+          grid-template-columns: 1fr;
+        }
+        .diff-panel__body + .diff-panel__body {
+          border-left: none;
+          border-top: 1px solid var(--border);
+        }
+        .diff-panel__header--after {
+          order: 2;
+        }
+        h1 {
+          font-size: 34px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <nav class="toc" id="toc">
+        <div class="toc-title">Contents</div>
+        <a href="#s1">1. Summary</a>
+        <a href="#s2">2. Impact</a>
+        <a href="#s3">3. Today</a>
+        <a href="#s4">4. Planned</a>
+        <a href="#s10">5. Tiers</a>
+        <a href="#s5">6. Changes</a>
+        <a href="#s6">7. Ripple</a>
+        <a href="#s7">8. Risks</a>
+        <a href="#s8">9. Review</a>
+        <a href="#s9">10. Gaps</a>
+      </nav>
+
+      <div class="main">
+        <h1 class="a" style="--i: 0">
+          Resource kinds: <em>shared domain ideas</em>, not four apps in one
+        </h1>
+        <p class="subtitle a" style="--i: 1">
+          plan review · Sefer master 4a05258 · planning/01-discussing/resource-kinds-2026-10-01.md
+          (the distilled plan) + the 2026-10-01 conversation · WACS and Language API checked live
+        </p>
+
+        <!-- ===================== 1. SUMMARY ===================== -->
+        <div id="s1" class="sec-head a" style="--i: 2">
+          <span class="num">01</span> Plan summary
+        </div>
+        <div class="ve-card ve-card--hero a" style="--i: 3">
+          <div class="hero-grid">
+            <div>
+              <p class="hero-lead">
+                Sefer is about to hold things that are not scripture text: Macula's syntax trees,
+                Translation Notes, Questions and Words. The plan is to add them as
+                <em>kinds</em> that fill a small, shared capability record, so a new resource is an
+                adapter plus a renderer, never a fifth application.
+              </p>
+              <p class="hero-body">
+                Today the only presupposition of USFM is one chain:
+                <code>/project/$slug</code> opens a Project, a Project is a folder of
+                <code>.usfm</code> Books, the engine parses them, and its TOC gives every Address.
+                <code>Source</code> and <code>Book</code> are already text, not USFM; the Library
+                already keeps <code>kind</code>, <code>subject</code> and per-project
+                <code>role</code> apart and binds <code>tn</code>/<code>tw</code>/<code>tq</code>
+                that nothing reads. The plan leaves the Project chain alone and puts resources
+                <em>beside</em> it, bound by role.
+              </p>
+              <p class="hero-body">
+                Scope: ~6 new core modules and 4–6 adapters, 3 existing files generalised
+                (<code>library.ts</code>, <code>import.ts</code>, <code>shellEvent.ts</code>), one
+                new UI registry, one new primitive. No file is deleted; no existing USFM behaviour
+                changes. <strong>Edit for TN/TW is typed, not built.</strong>
+              </p>
+            </div>
+            <div>
+              <div class="insight">
+                <strong>The core insight.</strong> One closed union of content kinds, consulted in
+                exactly two places — <code>recognize()</code> at the import boundary and a renderer
+                registry at the screen. Between them sits a capability record (<code>info</code>,
+                <code>places?</code>, <code>search?</code>, <code>edit?</code>) that
+                <em>nobody discriminates on</em>: panes check for a slot, never for a kind. Every
+                per-kind component speaks to the rest of the app only in <code>Address</code>. Every
+                call returns an Effect, consumed by a Solid 2 async memo that holds the last answer.
+              </div>
+              <div style="margin-top: 14px; font-size: 13px; color: var(--text-dim)">
+                <b style="color: var(--text)">Kinds in hand:</b> Macula Greek/Hebrew (wasm blob,
+                below-verse, faceted search, read-only) · TN (29,300 Markdown chunk files, 14 MB,
+                verse-addressed) · TQ (sparse first-verse files, open ranges) · TW (1,011 slug-keyed
+                articles, not verse-addressed without a TWL).
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===================== 2. IMPACT ===================== -->
+        <div id="s2" class="sec-head a" style="--i: 4">
+          <span class="num">02</span> Impact dashboard
+        </div>
+        <div class="kpi-row a" style="--i: 5">
+          <div class="kpi-card kpi-current">
+            <div class="kpi-card__value">3</div>
+            <div class="kpi-card__label">Files modified</div>
+            <div class="kpi-card__sub">library.ts · import.ts · shellEvent.ts</div>
+          </div>
+          <div class="kpi-card kpi-planned">
+            <div class="kpi-card__value">~12</div>
+            <div class="kpi-card__label">Files created</div>
+            <div class="kpi-card__sub">kinds/, adapters, registry, Held primitive</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-card__value">0</div>
+            <div class="kpi-card__label">Files deleted</div>
+            <div class="kpi-card__sub">USFM path untouched</div>
+          </div>
+          <div class="kpi-card kpi-planned">
+            <div class="kpi-card__value">~900</div>
+            <div class="kpi-card__label">Lines added (est.)</div>
+            <div class="kpi-card__sub">excl. Macula wasm (vendored)</div>
+          </div>
+          <div class="kpi-card kpi-amber">
+            <div class="kpi-card__value">6</div>
+            <div class="kpi-card__label">Library importers</div>
+            <div class="kpi-card__sub">see §6 — readBook callers</div>
+          </div>
+          <div class="kpi-card kpi-red">
+            <div class="kpi-card__value">0</div>
+            <div class="kpi-card__label">Tests planned</div>
+            <div class="kpi-card__sub">
+              by the build-out rule (no new tests until behaviour locks)
+            </div>
+          </div>
+        </div>
+        <div class="complete a" style="--i: 6">
+          <span class="pill bad"
+            ><i></i> tests: none planned — deliberate (build-out rule), but
+            <code>citation.test.ts</code>-style exception likely earned by
+            <code>recognize()</code> and TQ range closing</span
+          >
+          <span class="pill warn"
+            ><i></i> docs: services.md Library entry + a new architecture chapter needed; not in the
+            plan</span
+          >
+          <span class="pill na"
+            ><i></i> migration/rollback: N/A — additive; library.json gains a field, no re-describe
+            of existing rows</span
+          >
+          <span class="pill ok"
+            ><i></i> boundaries: plan keeps wasm/fetch out of src/core (adapter lives in
+            platform/app)</span
+          >
+        </div>
+
+        <!-- ===================== 3. CURRENT ===================== -->
+        <div id="s3" class="sec-head a" style="--i: 7">
+          <span class="num">03</span> Current architecture
+          <span class="badge b-current">today</span>
+        </div>
+        <p class="a" style="--i: 8">
+          Only the parts the plan touches. Two registries that do not know each other, one Project
+          chain that is USFM end to end, and three Library bindings that go nowhere.
+        </p>
+        <section class="diagram-shell a" style="--i: 9">
+          <p class="diagram-shell__hint">
+            Ctrl/Cmd + wheel to zoom · drag to pan when zoomed · double-click to fit · ⛶ opens
+            full-size
+          </p>
+          <div class="mermaid-wrap">
+            <div class="zoom-controls">
+              <button type="button" data-action="zoom-in" title="Zoom in">+</button>
+              <button type="button" data-action="zoom-out" title="Zoom out">&minus;</button>
+              <button type="button" data-action="zoom-fit" title="Smart fit">&#8634;</button>
+              <button type="button" data-action="zoom-one" title="1:1">1:1</button>
+              <button type="button" data-action="zoom-expand" title="Open full size">
+                &#x26F6;
+              </button>
+              <span class="zoom-label">—</span>
+            </div>
+            <div class="mermaid-viewport"><div class="mermaid-canvas"></div></div>
+            <script type="text/plain" class="diagram-source">
+              flowchart TD
+                Cat["Catalogue<br/><small>app/catalogue.ts · Language API vw_consolidated_repos</small>"]
+                Imp["Import seam<br/><small>core/resources/import.ts · stage → classify → commit</small>"]
+                Lib["Library<br/><small>core/resources/library.ts · kind · subject · role per project</small>"]
+                Route["/project/$slug<br/><small>the one place a project opens</small>"]
+                Proj["Project<br/><small>core/project/project.ts · discoverBooks → openBook</small>"]
+                Book["Book · Source<br/><small>text + stamp + form · id from \\id</small>"]
+                Eng["Galley engine<br/><small>core/galley · TOC · analysis</small>"]
+                Loc["Location<br/><small>core/location · Address · resolve · addressAt</small>"]
+                Ed["BookEditor<br/><small>the one Solid/Book subscription</small>"]
+                Ref["ReferencePane<br/><small>read-only CodeMirror · chapter sync by \\c</small>"]
+                Refs["references.ts<br/><small>source + reference → ProjectAnalysis</small>"]
+                Ev["ShellEvent<br/><small>closed union · 8 variants · books moved</small>"]
+                Dead(("tn / tw / tq<br/>bound, unread"))
+
+                Cat -->|"clone"| Imp --> Lib
+                Route --> Proj --> Book --> Eng --> Loc
+                Book --> Ed --> Ev
+                Lib -->|"readBook · .usfm bytes"| Ref
+                Lib -->|"filters .usfm"| Refs
+                Lib -.-> Dead
+                Loc -.->|"chapter number"| Ref
+
+                classDef cur fill:#2f5f8f22,stroke:#2f5f8f,stroke-width:1.5px
+                classDef dead fill:#a32d2d18,stroke:#a32d2d,stroke-dasharray:4 3
+                class Cat,Imp,Lib,Route,Proj,Book,Eng,Loc,Ed,Ref,Refs,Ev cur
+                class Dead dead
+            </script>
+          </div>
+          <div class="legend">
+            <div class="legend-item">
+              <span
+                class="legend-swatch"
+                style="border-color: var(--current); background: var(--current-dim)"
+              ></span>
+              exists today
+            </div>
+            <div class="legend-item">
+              <span
+                class="legend-swatch"
+                style="border-color: var(--red); border-style: dashed; background: var(--red-dim)"
+              ></span>
+              dead end — services.md: "a tn/tw binding can be made, but nothing reads it"
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== 4. PLANNED ===================== -->
+        <div id="s4" class="sec-head a" style="--i: 10">
+          <span class="num">04</span> Planned architecture
+          <span class="badge b-planned">after</span>
+        </div>
+        <p class="a" style="--i: 11">
+          Same nodes, same direction. The Project chain is untouched. What is added hangs off the
+          Library: a content-kind recogniser, a capability record per bound resource, adapters
+          behind it, and a renderer registry in front. Address is the only edge between a kind's
+          pane and everything else.
+        </p>
+        <section class="diagram-shell a" style="--i: 12">
+          <p class="diagram-shell__hint">
+            Gold outline = new · green = new or generalised · dashed gold = Address, the one
+            cross-kind vocabulary
+          </p>
+          <div class="mermaid-wrap">
+            <div class="zoom-controls">
+              <button type="button" data-action="zoom-in" title="Zoom in">+</button>
+              <button type="button" data-action="zoom-out" title="Zoom out">&minus;</button>
+              <button type="button" data-action="zoom-fit" title="Smart fit">&#8634;</button>
+              <button type="button" data-action="zoom-one" title="1:1">1:1</button>
+              <button type="button" data-action="zoom-expand" title="Open full size">
+                &#x26F6;
+              </button>
+              <span class="zoom-label">—</span>
+            </div>
+            <div class="mermaid-viewport"><div class="mermaid-canvas"></div></div>
+            <script type="text/plain" class="diagram-source">
+              flowchart TD
+                Cat["Catalogue<br/><small>Language API + a helps source (gap)</small>"]
+                Imp["Import seam<br/><small>stage → classify → commit</small>"]
+                Rec["recognize(metadata) → ContentKind<br/><small>closed union · consulted here, once</small>"]
+                Lib["Library<br/><small>container kind · CONTENT kind · subject · role</small>"]
+                Route["/project/$slug"]
+                Proj["Project<br/><small>unchanged · USFM books</small>"]
+                Book["Book · Source<br/><small>unchanged · text + stamp</small>"]
+                Eng["Galley engine · TOC"]
+                Loc["Location<br/><small>Address · resolve · addressAt</small>"]
+                Ed["BookEditor"]
+                Hdl["ResourceHandle per bound role<br/><small>info · places? · search? · edit? — every call an Effect</small>"]
+                Adp["Adapters<br/><small>usfm · tn · tq · tw · macula</small>"]
+                Reg["Renderer registry<br/><small>switch on ContentKind → JSX · consulted here, once</small>"]
+                Pane["Kind panes<br/><small>own DOM · Held (hold last answer)</small>"]
+                Ev["ShellEvent<br/><small>+ place.focus { address, from }</small>"]
+
+                Cat -->|"clone / fetch"| Imp --> Rec --> Lib
+                Route --> Proj --> Book --> Eng --> Loc
+                Book --> Ed --> Ev
+                Lib -->|"shell.resources · open once per project"| Hdl
+                Adp --> Hdl
+                Hdl --> Reg --> Pane
+                Pane -.->|"Address only"| Ev
+                Ev -.->|"Address only"| Pane
+                Loc -.->|"Address"| Hdl
+
+                classDef cur fill:#2f5f8f22,stroke:#2f5f8f,stroke-width:1.5px
+                classDef new fill:#1f7a5a22,stroke:#b8860b,stroke-width:2.5px
+                classDef gen fill:#1f7a5a22,stroke:#1f7a5a,stroke-width:2px
+                class Route,Proj,Book,Eng,Loc,Ed cur
+                class Rec,Hdl,Adp,Reg,Pane new
+                class Cat,Imp,Lib,Ev gen
+                linkStyle 13,14,15 stroke:#b8860b,stroke-width:2px,stroke-dasharray:6 4
+            </script>
+          </div>
+          <div class="legend">
+            <div class="legend-item">
+              <span
+                class="legend-swatch"
+                style="border-color: var(--current); background: var(--current-dim)"
+              ></span>
+              unchanged
+            </div>
+            <div class="legend-item">
+              <span
+                class="legend-swatch"
+                style="border-color: var(--planned); background: var(--planned-dim)"
+              ></span>
+              generalised
+            </div>
+            <div class="legend-item">
+              <span
+                class="legend-swatch"
+                style="
+                  border-color: var(--gold);
+                  border-width: 2.5px;
+                  background: var(--planned-dim);
+                "
+              ></span>
+              new
+            </div>
+            <div class="legend-item">
+              <span
+                class="legend-swatch"
+                style="border-color: var(--gold); border-style: dashed"
+              ></span>
+              Address edge
+            </div>
+          </div>
+        </section>
+
+        <div class="ve-card ve-card--elevated a" style="--i: 13">
+          <div class="ve-card__label">The two-place rule</div>
+          <div
+            style="
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+              gap: 14px;
+            "
+            class="grid"
+          >
+            <div>
+              <b>Boundary.</b> <code>recognize(metadata)</code> reads the RC
+              <code>identifier</code>/<code>type</code> (<code>tn</code>+<code>help</code>,
+              <code>tq</code>+<code>help</code>, <code>tw</code>+<code>dict</code>), a Burrito
+              flavor, or a Macula blob header, and returns one member of the closed union — or
+              refuses. Kitchen terms: this is the only place that looks at the ingredients' labels.
+            </div>
+            <div>
+              <b>Between.</b> Core, panes and workflows see a <code>ResourceHandle</code>. They ask
+              <code>if (handle.places)</code>, never <code>if (kind === "tn")</code>. Adding a
+              capability is a new optional slot; every existing adapter compiles unchanged. Adding a
+              kind is an adapter that fills a subset.
+            </div>
+            <div>
+              <b>Screen.</b> The renderer registry is the second and last
+              <code>switch (kind)</code>. Rendering is the one job where knowing what a thing is
+              <em>is</em> the point: Macula's faceted builder, RTL text and hover are its own DOM.
+              It receives the handle; it never reaches into storage or another kind.
+            </div>
+          </div>
+        </div>
+
+        <!-- ===================== 5. TIERS ===================== -->
+        <div id="s10" class="sec-head a" style="--i: 14">
+          <span class="num">05</span> Three tiers &amp; today's leaks
+          <span class="badge b-planned">added 2026-10-01 pm</span>
+        </div>
+        <div class="ve-card ve-card--elevated a" style="--i: 14">
+          <p class="hero-lead" style="font-size: 19px">
+            The shared domain is not one layer but three. The fear of "four apps in one" is really
+            the fear of a tier-3 idea living in a tier-1 module. Name the tiers, let a module depend
+            <em>downward only</em>, and every "what about diffing / clipping / editing / commenting"
+            question answers itself by asking which tier it is in.
+          </p>
+          <div class="table-wrap" style="margin-top: 14px">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 12%">Tier</th>
+                  <th style="width: 22%">Knows</th>
+                  <th>Ideas that live here</th>
+                  <th>Modules today</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><b>1 · Text</b><small>any file</small></td>
+                  <td>Bytes and a file. Nothing about scripture.</td>
+                  <td>
+                    Source, Book, changes &amp; history, backup journal, explicit save, Git
+                    lifecycle (clone · pull · versions · sync), text find with a per-format
+                    <em>mask</em>, line/hunk diff, comments anchored by checksum + offset, where to
+                    save, the FileSystem port
+                  </td>
+                  <td>
+                    <code>core/source</code> · <code>core/book</code> · <code>core/save</code> ·
+                    <code>core/recovery</code> · <code>core/sync</code> · Git + FileSystem ports ·
+                    <code>core/resources/library.ts</code> (roots, bindings)
+                  </td>
+                </tr>
+                <tr>
+                  <td><b>2 · Addressed</b><small>answers BCV both ways</small></td>
+                  <td>Where this is in book / chapter / verse.</td>
+                  <td>
+                    Address, <code>places()</code>, follow the caret, clip to a range, a
+                    <em>fragment</em> in a multibuffer, "that verse does not exist",
+                    <code>rc://</code> links, versification mapping, Macula's faceted find
+                    (addressed, but its own implementation)
+                  </td>
+                  <td>
+                    <code>core/location/address.ts</code> · <code>locate.ts</code> (TOC half) · the
+                    renderer registry and panes · TN / TQ / TW / Macula adapters
+                  </td>
+                </tr>
+                <tr>
+                  <td><b>3 · USFM</b><small>markers</small></td>
+                  <td>Markers, the engine, and everything derived from them.</td>
+                  <td>
+                    Engine + overlays, Sous, inventory, STET, sid-aligned decision units,
+                    <b>diff for USFM</b>, "surfaces are judged, not trusted"
+                  </td>
+                  <td>
+                    <code>core/project</code> (as it opens Books) · the editor ·
+                    <code>core/compare</code> · <code>/review</code> · <code>/inventory</code> ·
+                    <code>/terms</code> · the excerpt card
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="rationale" style="margin-top: 14px">
+            <span class="tag">rule</span> A module depends downward only: 3 → 2 → 1, never up.
+            Before adding a function, say which tier it is in — it takes <em>text</em>, an
+            <em>Address</em>, or a <em>marker</em>. Eventually a <code>pnpm boundaries</code> rule;
+            today, this table.
+          </div>
+          <div class="rationale" style="margin-top: 10px">
+            <span class="tag">find</span> Two finds, not N. <b>Text find</b> is tier 1 — regex over
+            any text unit, across many files, with the mask chosen by format (USFM's exists;
+            Markdown's is its counterpart). <b>Faceted find</b> is Macula's own, tier 2,
+            self-described by <code>dimensions()</code>. Whether a find spans one file or a whole
+            root is a loading detail of the handle, not a third kind of find.
+          </div>
+        </div>
+
+        <h3 class="a" style="--i: 14; margin-top: 28px">
+          Today's upward leaks — and what it would take
+        </h3>
+        <p class="a" style="--i: 14">
+          Four, none to be fixed ahead of a kind that needs it. Knowing them is enough not to add a
+          fifth. The TN proof would surface the first two by itself.
+        </p>
+        <div class="risk-grid a" style="--i: 14">
+          <div class="risk high">
+            <div class="r-head">
+              <b>Project refuses a root without <code>.usfm</code></b
+              ><span class="badge b-red">tier 3 at the tier 1 door</span>
+            </div>
+            <code>core/project/project.ts</code> — <code>openProject(root)</code> →
+            <code>discoverBooks</code> → <code>openBook</code>, fails <code>NoBooks</code>. A
+            project is a root with documents; "must contain USFM" is an engine fact.
+            <div class="mit">
+              <b>To change:</b> split "open a root" (tier 1: list documents, Git, journal) from
+              "open its USFM Books" (tier 3). <code>$slug.tsx</code> keeps calling the second. A
+              TN-only root would then open with zero Books and a TN handle — the
+              <strong>TN-through-Book</strong> test in §6 change 8. Medium; one file plus its one
+              caller.
+            </div>
+          </div>
+          <div class="risk med">
+            <div class="r-head">
+              <b><code>Library.readBook</code> = "the bytes of its <code>.usfm</code> file"</b
+              ><span class="badge b-amber">tier 3 name on a tier 1 read</span>
+            </div>
+            <code>core/resources/library.ts</code> — the only read the Library offers, and it is by
+            book id and extension.
+            <div class="mit">
+              <b>To change:</b> add <code>readText(resourceId, path)</code> beside it;
+              <code>readBook</code> becomes the <code>usfm</code> adapter's call to it. One caller
+              today (<code>ReferencePane.tsx</code>). Small; falls out of change 1.
+            </div>
+          </div>
+          <div class="risk med">
+            <div class="r-head">
+              <b><code>references.ts</code> sniffs <code>isUsfm</code></b
+              ><span class="badge b-amber">extension in place of kind</span>
+            </div>
+            <code>app/workflows/references.ts</code> — merges <code>source</code> +
+            <code>reference</code> bindings and keeps the <code>.usfm</code> ones for the corpus.
+            <div class="mit">
+              <b>To change:</b> once <code>Resource.content</code> exists, filter
+              <code>content === "usfm"</code>. A one-line swap after change 1; the behaviour is
+              right, only the evidence is wrong.
+            </div>
+          </div>
+          <div class="risk med">
+            <div class="r-head">
+              <b>Review's decision unit is sid-shaped</b
+              ><span class="badge b-amber">no tier 1 diff to fall back to</span>
+            </div>
+            <code>core/compare</code> + <code>/review</code> — Onion decision units; "sid-aligned
+            diff only" is the rule for scripture and today it is the only diff Sefer has.
+            <div class="mit">
+              <b>To change:</b> diff is dispatched by kind in the same registry as rendering.
+              <b>Diff for USFM</b> = the Onion implementation. <b>Diff for text</b> = CodeMirror's
+              merge view, pick left or right, Apply writes through Book. Not needed until something
+              non-USFM is edited <em>or</em> "show me what changed" is wanted on an
+              <code>en_tn</code> pull — the first realistic ask, which itself is a fast-forward on a
+              root and needs no diff at all.
+            </div>
+          </div>
+        </div>
+
+        <h3 class="a" style="--i: 14; margin-top: 28px">
+          Two consequences the plan doc now carries
+        </h3>
+        <div class="risk-grid a" style="--i: 14">
+          <div class="risk low">
+            <div class="r-head">
+              <b>A kind plus a reader: normalization</b
+              ><span class="badge b-planned">tier 2 · resolved</span>
+            </div>
+            <b>Where it lives</b> is the container's job and already decoded: a burrito's
+            <code>ingredients</code> carry path, <code>scope</code>, <code>mimeType</code> per file;
+            an RC's <code>projects[]</code> carry <code>identifier</code> + <code>path</code>, and
+            <code>dublin_core.format</code> names the MIME type once. <b>What it is</b> varies by
+            <em>format</em>, not container: WA <code>en_tn</code> is Markdown per chunk,
+            unfoldingWord <code>tn</code> is TSV per book — both kind <code>tn</code>.
+            <div class="mit">
+              <b>So:</b> <code>recognize()</code> returns a kind <em>and a reader</em>, one reader
+              per (kind, MIME type), every reader yielding one internal record — for a note:
+              <code>Address</code>, ordinal, Markdown body, optional quote. A reader is pure (bytes
+              + scope → records) importing only <code>address.ts</code>, which is why it belongs in
+              <code>src/core</code> and would extract cleanly to a utilities repo later.
+            </div>
+          </div>
+          <div class="risk med">
+            <div class="r-head">
+              <b>The fragment: one generalization with payoff</b
+              ><span class="badge b-amber">tier 2 · one carve-out</span>
+            </div>
+            "TQ beside the project in a multibuffer" is the excerpt card: a fragment of a document
+            at an Address range, shown as a satellite. Generalize from "a range of a USFM Book" to
+            "a range of anything with <code>places()</code>" and clip, align and follow all fall out
+            of one type.
+            <div class="mit">
+              <b>Cost to decide first:</b> the excerpt card obeys
+              <em>surfaces are judged, not trusted</em> — a tier 3 rule, because it has an engine
+              projection. A TQ fragment has none. The generalized fragment needs an explicit "no
+              projection, read-only" case, decided before the first non-USFM satellite.
+            </div>
+          </div>
+          <div class="risk med">
+            <div class="r-head">
+              <b>TQ needs a table of contents it does not have</b
+              ><span class="badge b-amber">tier 2 · versification</span>
+            </div>
+            <code>gen/01/01.md</code> means "from verse 1 until the next file"; the last file in a
+            chapter needs a verse count, and "you referenced a verse that does not exist" needs the
+            same thing. TQ, TN and TW are ULB-numbered. The only TOC Sefer has is the project's —
+            tier 3, from the engine.
+            <div class="mit">
+              <b>If TQ is built:</b> <code>places.at(address, ctx)</code> takes a TOC handed in,
+              refuses <code>unresolved</code> without one. Tier 2 eventually wants its own
+              versification table (STEP's TVTMS) so a resource's TOC does not depend on which
+              project it is opened beside. Named, not solved — open question 1.
+            </div>
+          </div>
+        </div>
+
+        <h3 class="a" style="--i: 14; margin-top: 28px">
+          Default find, the haystack, and the 27k-file wrinkle
+        </h3>
+        <div class="risk-grid a" style="--i: 14">
+          <div class="risk low">
+            <div class="r-head">
+              <b>Find already has the three stages</b
+              ><span class="badge b-planned">tier 1 · exists</span>
+            </div>
+            <code>core/search/reading.ts</code>: a <code>Subject</code> (id, text, stamp?) is one
+            haystack unit; a <code>Reading</code> is that subject <em>prepared</em> —
+            <code>toSource(at)</code> maps back, <code>pieces()</code> says when a span crossed
+            dropped markup; a <code>Hit</code> carries its stamp. Pipeline: scope → prepare → match
+            → map back.
+            <div class="mit">
+              <b>Default:</b> the identity Reading (<code>toSource = at</code>, one piece).
+              <b>USFM overrides one stage</b> — its Reading is cut by Galley's mask; Galley owns
+              that lifecycle and keeps owning it. The override point a kind supplies is the
+              haystack, <code>documents()</code>: USFM's are Books, a folder's are files, TN's are
+              whatever its adapter hands back.
+            </div>
+          </div>
+          <div class="risk med">
+            <div class="r-head">
+              <b>29,300 files is a haystack problem, not a find problem</b
+              ><span class="badge b-planned">tier 1 · derived store · measured</span>
+            </div>
+            Three things USFM already keeps apart stay apart for TN: <b>on-disk layout</b> is
+            upstream's (git, export, edit unit — never reshaped); the <b>derived store</b> is
+            per-book packed JSON, an index rebuilt from disk and stamped, exactly as the engine's
+            TOC is for USFM; the <b>edit unit</b> stays the chunk file, and an edit or a pull
+            invalidates that book's pack.
+            <div class="mit">
+              <b>So:</b> <code>documents()</code> reads the pack, one book in memory, async load on
+              book switch. Editability costs nothing. <b>Web:</b> read-only TN is packed only,
+              fetched as one archive, no raw tree — 27k OPFS files and Web git over them are the
+              real cost. The raw tree is required only for editing TN on the Web: decide then (open
+              question 6).
+            </div>
+          </div>
+          <div class="risk low">
+            <div class="r-head">
+              <b>Measured: the spike confirms the premise, hard</b
+              ><span class="badge b-planned">2026-10-01 · headless Chromium · median of 3</span>
+            </div>
+            Real <code>en_tn</code> is <b>29,300 files / 13.98 MB</b> (the doc's 26,001 / 5.75 MB
+            was <code>en_tn_condensed</code>); <code>en_tq</code> 17,375 / 2.76 MB;
+            <code>en_tw</code> <code>bible/</code> 1,012 articles + 1.02 MB
+            <code>config.yaml</code>.
+            <div class="table-wrap" style="margin-top: 8px">
+              <table style="font-size: 12.5px">
+                <thead>
+                  <tr>
+                    <th>en_tn</th>
+                    <th>time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>write 29,300 raw files to OPFS</td>
+                    <td>22.6 s (~1,300/s)</td>
+                  </tr>
+                  <tr>
+                    <td>read them all back</td>
+                    <td>10.0 s</td>
+                  </tr>
+                  <tr>
+                    <td>delete the raw tree</td>
+                    <td>2.6 s</td>
+                  </tr>
+                  <tr>
+                    <td>build + write 73 per-book packs</td>
+                    <td>0.14 s</td>
+                  </tr>
+                  <tr>
+                    <td>load one pack (Psalms, 1.14 MB)</td>
+                    <td>4 ms</td>
+                  </tr>
+                  <tr>
+                    <td>load all 73 packs</td>
+                    <td>0.37 s</td>
+                  </tr>
+                  <tr>
+                    <td>substring / regex find over all packs</td>
+                    <td>&lt; 20 ms</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="mit">
+              <b>Reads:</b> file count dominates, bytes barely register (en_tw's files are 3.5×
+              larger, same files/sec). Packing is ~200× less OPFS work. Find over packs needs
+              <em>no index</em> at this scale. <b>Gaps:</b> <code>performance.memory</code> could
+              not see 14 MB move — memory is unmeasured, not free; no worker tried because nothing
+              was slow on the main thread. Still to measure: Web git over a raw tree, a low-end
+              device. Rerun from the spike worktree:
+              <code
+                >node spike/build-fixtures.mjs &amp;&amp; pnpm exec vitest run --project browser
+                src/dev/spike/opfsSpike.browser.test.ts</code
+              >.
+            </div>
+          </div>
+          <div class="risk med">
+            <div class="r-head">
+              <b>The shape was wrong upstream; don't adapt around it</b
+              ><span class="badge b-amber">decision</span>
+            </div>
+            An adapter from a packed on-disk layout back to the upstream git layout is the wrong
+            direction. A Gitea <em>release</em> could carry the per-book JSON beside the repo, and
+            the Web then reads one object per book with no tree at all — but that kills writability,
+            which is the real cost of 29k files having been the format instead of SQLite or per-book
+            files.
+            <div class="mit">
+              <b>Rule:</b> read-only on the Web = packed, from a release or a direct-pack import,
+              never a raw tree. Writable TN = desktop (real files, git2) until there is a reason
+              otherwise. Consolidation upstream (TSV or one file per book) is the content-team ask
+              that would make Web writability cheap; the reader-per-format design makes that a new
+              MIME reader, nothing more.
+            </div>
+          </div>
+        </div>
+
+        <h3 class="a" style="--i: 14; margin-top: 28px">
+          Worked example: WA <code>en_tn</code> and unfoldingWord <code>tn</code> are one kind
+        </h3>
+        <p class="a" style="--i: 14">
+          Both are Resource Containers of <code>type: help</code>. The capability is identical; only
+          the tier 1 answers differ, and a pane never sees the difference.
+        </p>
+        <div class="change a" style="--i: 14">
+          <div class="diff-panels">
+            <div class="diff-panel__header diff-panel__header--before">
+              Tier 1 · WA en_tn · <code>text/markdown</code>
+            </div>
+            <div class="diff-panel__header diff-panel__header--after">
+              Tier 1 · unfoldingWord en_tn · <code>text/tsv</code>
+            </div>
+            <div class="diff-panel__body">
+              <pre
+                class="code"
+              ><span class="c">projects[].path</span>  ./gen            <span class="c">(a directory)</span>
+<span class="c">a document</span>       gen/01/28.md     <span class="c">one chunk file</span>
+<span class="c">files, whole Bible</span> 29,300
+<span class="c">edit unit</span>        the chunk file (Book opens it as text)
+<span class="c">git diff shows</span>   one file per note changed
+<span class="c">find Subjects</span>    one per chunk, or one per packed book
+<span class="c">Web derived store</span> <span class="n">yes</span>: per-book packs, raw tree never written
+<span class="c">Address from</span>     the path: 28.md = 1:28 <span class="s">until the next sibling</span>
+                 → last chunk of a chapter <span class="s">needs a TOC</span>
+<span class="c">entry identity</span>   none upstream; reader synthesises an ordinal</pre>
+            </div>
+            <div class="diff-panel__body">
+              <pre
+                class="code"
+              ><span class="c">projects[].path</span>  ./tn_GEN.tsv     <span class="c">(one file)</span>
+<span class="c">a document</span>       tn_GEN.tsv       <span class="c">Reference ID Tags SupportReference Quote Occurrence Note</span>
+<span class="c">files, whole Bible</span> 66
+<span class="c">edit unit</span>        the book file (Book opens it as text, a row per note)
+<span class="c">git diff shows</span>   one line per note changed, in one file
+<span class="c">find Subjects</span>    one per book file, as is
+<span class="c">Web derived store</span> <span class="n">no</span>: 66 files is already the packed shape
+<span class="c">Address from</span>     the Reference column: 1:28 · 1:28-29 · 1:intro · front:intro
+                 ranges explicit → <span class="n">no TOC needed</span>
+<span class="c">entry identity</span>   the four-character ID column</pre>
+            </div>
+          </div>
+          <div class="rationale">
+            <span class="tag">tier 2 · identical</span> Both readers yield one record —
+            <code>Note { address: Address; ordinal; body; quote?; id? }</code> — and from it every
+            tier 2 question has <em>one</em> implementation: <code>places.at(address)</code> is a
+            lookup in the records; <code>places.of(note)</code> is <code>note.address</code>;
+            <code>documents()</code> hands the default find each body with its Address as the id, so
+            a hit carries an Address without find knowing the format; a multibuffer fragment is the
+            notes whose address falls in the range; a pane renders <code>body</code> as Markdown and
+            emits <code>address</code>. It cannot tell which repository it is showing.
+          </div>
+          <div class="rationale missing">
+            <span class="tag">where it leaks · deliberately</span> Two places, both tier 1. The WA
+            reader takes a TOC and refuses <code>unresolved</code> without one; the uW reader
+            ignores it. And a WA edit touches a 400-byte file while a uW edit touches a line in a
+            300 KB file, so Review's text diff shows one file changed in one case and one line in
+            the other — right, because the diff is about the file and the file is upstream's.
+            Consolidation upstream is the right column replacing the left: one reader, every pane
+            and find unchanged.
+          </div>
+        </div>
+
+        <h3 class="a" style="--i: 14; margin-top: 28px">Macula, fleshed out: the stress test</h3>
+        <p class="a" style="--i: 14">
+          People are revising our source texts now. The SPA is not adopted; the package is —
+          <code>@wycliffeassociates/macula</code> 0.1.0, TypeScript sources + a wasm pair,
+          <code>openCorpus()</code> once then every call synchronous, vocabulary
+          <code>Passage { book, chapter, verseStart, verseEnd }</code>. The kind with the least tier
+          1 and no tier 3: if it fits without a special case, anything fits.
+        </p>
+        <div class="change a" style="--i: 14">
+          <div class="diff-panels">
+            <div class="diff-panel__header diff-panel__header--before">
+              Lifecycle · lazy, shell-owned, platform-provided
+            </div>
+            <div class="diff-panel__header diff-panel__header--after">
+              Typing · validate once, trust the rest
+            </div>
+            <div class="diff-panel__body">
+              <pre
+                class="code"
+              ><span class="c">kind table</span>      macula-greek | macula-hebrew → src/platform/*/macula.ts
+                <span class="c">(fetch + wasm init: boundaries keeps both out of core)</span>
+<span class="c">project open</span>    nothing happens
+<span class="c">first pane/query</span> shell.resources opens the handle
+                onProgress → the one justified progress bar (Hebrew ~44 MB)
+                wasmUrl → the .wasm Vite serves as an asset; init once per page
+<span class="c">the blob</span>        fetched from a release URL, cached as ONE object
+                cache key = checksum = <span class="n">info.identity</span>; desktop reads a file
+<span class="c">release</span>         project close, or shell decides memory matters
+                <span class="c">(44 MB wasm memory is why the shell owns lifetime, not the pane)</span></pre>
+            </div>
+            <div class="diff-panel__body">
+              <pre
+                class="code"
+              ><span class="c">the blob</span>        never typed: bytes + a checksum
+<span class="c">inside package</span>  JSON.parse(...) as T, covered by its selftest
+                <span class="c">→ a dependency like Galley: installed from a tag, tested upstream</span>
+<span class="c">at open</span>         <span class="n">info()</span> decoded through Effect Schema
+                <span class="c">→ a wrong or corrupt blob fails HERE, typed, not at the first query</span>
+<span class="c">after open</span>      results are trusted shape
+                Passage → <span class="n">Address</span> on the way out of the adapter
+                <span class="c">→ nothing downstream ever holds a Passage</span>
+<span class="c">info</span>            corpus · rtl · books · versification "wlc" | "ufw" (adapter sets it)</pre>
+            </div>
+          </div>
+          <div class="rationale">
+            <span class="tag">slots</span> <b>places</b>: <code>read(book, chapter)</code> filtered
+            to the range; <code>of(passage)</code> is the one-line translation. <b>search</b>:
+            Macula's override — <code>dimensions()</code> builds the facet UI (same UI for both
+            corpora, which is why it is a kind's override, not a pane's hard-coding);
+            <code>facets(q)</code> live counts so no dead ends; <code>passages(q)</code> → Addresses
+            for the project's text; <code>run(q)</code> → hits with Macula's own text for Macula's
+            own pane; <code>lookup("pistis")</code> the Latin-keyboard way in. <b>fragment</b>:
+            <code>read()</code> for the range, hover → <code>word(term)</code>; the generalised
+            fragment's "no projection, read-only" case, and why Macula owns its DOM (RTL, morphemes,
+            hover). <b>edit</b>: absent — correcting an alignment is a write to the project's USFM,
+            judged like any edit.
+          </div>
+          <div class="rationale">
+            <span class="tag">worked query · πίστις Χριστοῦ</span> Everywhere Greek has πίστις with
+            genitive Χριστός in the <em>same noun phrase</em>, how did this project render it, and
+            consistently? ① <code>lookup</code> both lemmas. ②
+            <code
+              >run({ target: "constituent", filters: { class: np }, contains: { lemma: pistis }
+              })</code
+            >
+            → every NP containing πίστις, with <code>term</code>. ③ The package allows one
+            <code>contains</code>, deliberately — so the adapter applies the second condition:
+            <code>word(term).ancestors</code> finds the NP, its words are checked for Χριστός in
+            genitive; all sync and local, milliseconds. (Intersecting two <code>passages()</code> at
+            the verse answers "both somewhere in the verse" — not the question.) ④ Survivors
+            collapse to Addresses. ⑤ The project resolves each through its TOC into an excerpt; the
+            multibuffer shows every rendering side by side as satellite editor views; the reviser
+            fixes the odd one out in place. <b>Two package asks</b> fall out of ③: a second
+            <code>contains</code> or an <code>and</code>, and a constituent id on <code>Hit</code>.
+          </div>
+          <div class="rationale missing">
+            <span class="tag">what it stresses</span> Platform-only adapter · lazy open with
+            progress · a source of truth that is not text · a kind overriding <code>search</code> ·
+            answers below the verse · a different versification (WLC: open question 1 bites here
+            first) · its own RTL DOM · read-only with no files at all. Every other kind is a subset
+            of that list.
+          </div>
+        </div>
+
+        <div class="risk-grid a" style="--i: 14; margin-top: 14px">
+          <div class="risk low">
+            <div class="r-head">
+              <b>A kind with no tier 1: bespoke, and it stays bespoke</b
+              ><span class="badge b-planned">ContainerKind "builtin"</span>
+            </div>
+            <code>documents?</code>, <code>edit?</code> and file naming are as optional as
+            <code>search?</code>; a handle is <code>info</code> plus what the kind has.
+            <code>Resource.root</code> is required today and Macula has no root — but Macula is
+            built in: URL and checksum compiled into the adapter, no manifest,
+            <code>recognize()</code> never involved.
+            <div class="mit">
+              <b>Light answer:</b> a third container kind, <code>builtin</code>, whose
+              <code>root</code> is the path of the one cached object. <code>root</code> stays a
+              string, <code>library.json</code> keeps its shape. Generalising <code>root</code> to
+              "directory or blob descriptor" waits for a <em>second</em> blob-shaped kind. The
+              point: a bespoke kind integrates cleanly without bending the common path.
+            </div>
+          </div>
+          <div class="risk low">
+            <div class="r-head">
+              <b>Enhanced find = a kind's search panel through the same registry</b
+              ><span class="badge b-planned">two-place rule, again</span>
+            </div>
+            Find today is one screen: text find over project + references. When a bound handle has
+            <code>search</code>, Find gains that kind's panel beside the text find; the registry
+            supplies the panel as it supplies the pane.
+            <div class="mit">
+              <b>One result shape for every panel:</b> Addresses, optionally with the kind's own hit
+              cards (Macula's <code>run()</code> spans). Addresses → multibuffer; cards stay in the
+              panel. Find never learns what a facet is; text find never learns about lemmas.
+            </div>
+          </div>
+          <div class="risk med">
+            <div class="r-head">
+              <b>Hover splits in two; only one half is Macula's</b
+              ><span class="badge b-amber">open question 2</span>
+            </div>
+            Hover in Macula's own pane (<code>word(term)</code>: parsing, gloss, ancestors) is
+            inside its DOM and free. Hover a word in the <em>project's</em> text and see its Greek
+            is cross-text and needs an alignment — word-level data in the project's USFM
+            (<code>\zaln</code>).
+            <div class="mit">
+              <b>Rule:</b> the kind does not create that capability; the project must carry the
+              alignment first. Until then, Macula emits only the verse Address.
+            </div>
+          </div>
+          <div class="risk low">
+            <div class="r-head">
+              <b>No Macula-shaped bump in the record</b
+              ><span class="badge b-planned">second-implementer rule</span>
+            </div>
+            Facets, presets, the word card, RTL reading: Macula-only, so they live in Macula's pane
+            and panel, not in <code>ResourceHandle</code>.
+            <div class="mit">
+              <b>Rule:</b> a slot enters the shared record when a <em>second</em> kind implements
+              it. That is the difference between "Macula fits" and "the interface was shaped around
+              Macula".
+            </div>
+          </div>
+        </div>
+
+        <!-- ===================== 5. CHANGES ===================== -->
+        <div id="s5" class="sec-head a" style="--i: 14">
+          <span class="num">06</span> Change-by-change
+        </div>
+
+        <!-- Change 1 -->
+        <div class="change a" style="--i: 15">
+          <div class="change-title">
+            <span class="badge b-planned">modify</span>
+            <h3>1 · Split container kind from content kind</h3>
+            <span class="where">src/core/resources/library.ts:39, :77 · import.ts:34</span>
+          </div>
+          <div class="diff-panels">
+            <div class="diff-panel__header diff-panel__header--before">Current</div>
+            <div class="diff-panel__header diff-panel__header--after">Planned</div>
+            <div class="diff-panel__body">
+              <pre
+                class="code"
+              ><span class="k">export type</span> ResourceKind = <span class="s">"burrito"</span> | <span class="s">"resourceContainer"</span> | <span class="s">"looseUsfm"</span>;
+
+<span class="k">interface</span> Resource {
+  id; kind: ResourceKind; root; title; language?;
+  <span class="c">/** What the container says it holds — a Burrito flavor, or an RC subject ("Translation Notes"). Sefer does not render every subject yet; carrying it lets a surface pick the renderer */</span>
+  subject?: string;
+}</pre>
+              <p>
+                <code>kind</code> is the <em>container format</em>. The content is a free string in
+                <code>subject</code> — the comment already foresees "a surface picks the renderer"
+                from it.
+              </p>
+            </div>
+            <div class="diff-panel__body">
+              <pre
+                class="code"
+              ><span class="k">export type</span> ContainerKind = <span class="s">"burrito"</span> | <span class="s">"resourceContainer"</span> | <span class="s">"looseUsfm"</span>;
+<span class="k">export type</span> <span class="n">ContentKind</span> = <span class="s">"usfm"</span> | <span class="s">"tn"</span> | <span class="s">"tq"</span> | <span class="s">"tw"</span> | <span class="s">"macula-greek"</span> | <span class="s">"macula-hebrew"</span>;
+
+<span class="k">interface</span> Resource {
+  id; <span class="n">container</span>: ContainerKind; <span class="n">content</span>: ContentKind; root; title; language?; subject?;
+}
+<span class="c">// recognize(classification, metadata) → ContentKind | refusal, called from Library.add</span></pre>
+              <p>
+                Two facts, two fields. <code>recognize</code> decodes through the existing
+                RC/Burrito schemas (<code>resourceContainer.ts</code>, <code>burrito.ts</code>) — no
+                new parsing of bytes.
+              </p>
+            </div>
+          </div>
+          <div class="rationale">
+            <span class="tag">why</span> resource-kinds.md second pass: "a <b>closed union</b> gives
+            the UI exhaustiveness checking … an open registry pays only for third-party kinds nobody
+            has asked for." Conversation: validate at the boundary once, then never switch on it
+            except to render.
+          </div>
+          <div class="discrepancy">
+            <b>Discrepancy.</b> The plan doc calls its union "kind" (<code
+              >"usfm" | "tn" | "tw" | "macula-greek" | …</code
+            >). The code already has <code>ResourceKind</code> meaning something else (container).
+            Shipping the plan's name as written would silently overload a type six files import. One
+            must be renamed; <code>ContentKind</code>/<code>ContainerKind</code> is the suggestion
+            here, not the plan's.
+          </div>
+        </div>
+
+        <!-- Change 2 -->
+        <div class="change a" style="--i: 16">
+          <div class="change-title">
+            <span class="badge b-planned">create</span>
+            <h3>2 · The capability record</h3>
+            <span class="where">src/core/resources/kinds/handle.ts (new)</span>
+          </div>
+          <div class="diff-panels">
+            <div class="diff-panel__header diff-panel__header--before">Current</div>
+            <div class="diff-panel__header diff-panel__header--after">Planned</div>
+            <div class="diff-panel__body">
+              <pre class="code"><span class="c">// library.ts:112 — the only read door</span>
+readBook(resourceId, bookId): Effect&lt;Option&lt;string&gt;, LibraryError&gt;
+<span class="c">// "the bytes of its `.usfm` file … no slicing, no interpretation"</span></pre>
+              <p>
+                One door, one shape: a whole USFM book as text. Callers (ReferencePane, stet.ts)
+                then run the engine themselves to find a verse.
+              </p>
+            </div>
+            <div class="diff-panel__body">
+              <pre
+                class="code"
+              ><span class="k">interface</span> <span class="n">ResourceHandle</span> {
+  info: ResourceInfo;                        <span class="c">// identity (Fingerprint), license, attribution, rtl</span>
+  places?: { at(address, ctx): Effect&lt;Page&lt;Entry&gt;, ResourceError&gt; };
+  search?: { text(needle, page): Effect&lt;Page&lt;Hit&gt;&gt; };
+  facets?: { dimensions(): Effect&lt;Dimensions&gt;; facets(q): Effect&lt;Facet[]&gt;; run(q, page): Effect&lt;Page&lt;Hit&gt;&gt; };
+  edit?: WritableUnit;                       <span class="c">// TYPED, NOT BUILT for tn/tw</span>
+  release(): Effect&lt;void&gt;;
+}
+<span class="k">type</span> Entry = { address: Address; body: string; link?: … }  <span class="c">// Address is core/location's, not a new BCV type</span></pre>
+              <p>
+                Optional slots, every call an Effect. <code>ctx</code> carries the project TOC so TQ
+                can close its open ranges. Macula's <code>Passage</code> becomes an
+                <code>Address</code> in a one-line adapter.
+              </p>
+            </div>
+          </div>
+          <div class="rationale">
+            <span class="tag">why</span> resource-kinds.md "Every call may be async": one colour
+            paid once in the interface — typed <code>unavailable</code>, interruption on
+            caret-follow, paging owned by the adapter, caching keyed by identity. Conversation
+            refined the reason: <b>uniformity and cancellation</b>, not a remote resource that does
+            not exist. Type-sniffing sync vs async per method was rejected as "uglier".
+          </div>
+        </div>
+
+        <!-- Change 3 -->
+        <div class="change a" style="--i: 17">
+          <div class="change-title">
+            <span class="badge b-planned">create</span>
+            <h3>3 · Adapters — one per kind, placed by what they import</h3>
+            <span class="where"
+              >src/core/resources/kinds/{usfm,tn,tq,tw}.ts · src/platform/*/macula.ts</span
+            >
+          </div>
+          <div class="diff-panels">
+            <div class="diff-panel__header diff-panel__header--before">Current</div>
+            <div class="diff-panel__header diff-panel__header--after">Planned</div>
+            <div class="diff-panel__body">
+              <ul class="tight">
+                <li>
+                  <b>USFM:</b> <code>references.ts:51</code> walks a resource root for
+                  <code>.usfm</code>, decodes, hands whole books to
+                  <code>ProjectAnalysis.attachReferences</code>. <code>ReferencePane</code> does the
+                  same through <code>readBook</code>.
+                </li>
+                <li>
+                  <b>TN/TQ/TW:</b> nothing. Roles exist (<code>ROLES.translationNotes = "tn"</code>
+                  …), bindings persist in <code>library.json</code>, no reader.
+                </li>
+                <li>
+                  <b>Macula:</b> a prototype in <code>~/Downloads/clearBibleSyntaxTree</code>:
+                  <code>openCorpus(url) → Corpus</code>, synchronous after open, wasm-bindgen, 14.5
+                  / 47.3 MB blobs.
+                </li>
+              </ul>
+            </div>
+            <div class="diff-panel__body">
+              <div class="table-wrap" style="border: none">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Kind</th>
+                      <th>places</th>
+                      <th>search</th>
+                      <th>facets</th>
+                      <th>edit</th>
+                      <th>lives in</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><b>usfm</b></td>
+                      <td>engine TOC → span</td>
+                      <td>text + USFM mask</td>
+                      <td>—</td>
+                      <td>via Book (today)</td>
+                      <td>core</td>
+                    </tr>
+                    <tr>
+                      <td><b>tn</b></td>
+                      <td>chunk file, closed by next sibling</td>
+                      <td>text + Markdown mask</td>
+                      <td>—</td>
+                      <td>typed (chunk file)</td>
+                      <td>core</td>
+                    </tr>
+                    <tr>
+                      <td><b>tq</b></td>
+                      <td>first-verse file, closed by sibling <i>or TOC</i></td>
+                      <td>text</td>
+                      <td>—</td>
+                      <td>typed</td>
+                      <td>core</td>
+                    </tr>
+                    <tr>
+                      <td><b>tw</b></td>
+                      <td>— (no TWL; <code>rc://</code> links point into TN)</td>
+                      <td>slug / title lookup</td>
+                      <td>—</td>
+                      <td>typed</td>
+                      <td>core</td>
+                    </tr>
+                    <tr>
+                      <td><b>macula</b></td>
+                      <td>Passage → Address</td>
+                      <td>substring + lookup</td>
+                      <td>dimensions / facets / run</td>
+                      <td>never</td>
+                      <td>platform (wasm + fetch)</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="rationale">
+            <span class="tag">why</span> <code>pnpm boundaries</code>: "<code>src/core</code>
+            imports nothing framework- or host-specific." A wasm module import and
+            <code>fetch</code> are host-specific, so Macula's adapter is a platform Layer the
+            composition provides — the same seat the FileSystem and Git ports already take. The
+            Markdown adapters read through <code>effect/FileSystem</code> and stay in core.
+          </div>
+        </div>
+
+        <!-- Change 4 -->
+        <div class="change a" style="--i: 18">
+          <div class="change-title">
+            <span class="badge b-planned">create</span>
+            <h3>4 · <code>shell.resources</code> — open once, release with the project</h3>
+            <span class="where">src/app/resources.ts (new) · ProjectContext.tsx</span>
+          </div>
+          <div class="diff-panels">
+            <div class="diff-panel__header diff-panel__header--before">Current</div>
+            <div class="diff-panel__header diff-panel__header--after">Planned</div>
+            <div class="diff-panel__body">
+              <p>
+                Each consumer resolves its own bindings on mount: <code>ReferencePane</code> reads
+                <code>Library.readBook</code> per book; <code>references.ts</code> calls
+                <code>Library.resolve</code> for <code>source</code> and <code>reference</code> and
+                registers with the corpus; <code>findSource.tsx</code> lists every other project on
+                the device.
+              </p>
+              <p>
+                <code>$slug.tsx</code> is "the ONE place a project is opened" — by structure, not a
+                lock.
+              </p>
+            </div>
+            <div class="diff-panel__body">
+              <pre
+                class="code"
+              >shell.resources: Accessor&lt;ReadonlyMap&lt;Role, ResourceHandle[]&gt;&gt;
+<span class="c">// built from Library.bound(projectId) when project.open fires,</span>
+<span class="c">// opened through the kind table, released on project close / seat change</span></pre>
+              <p>
+                Panes ask <code>shell.resources().get("tn")</code> and get handles, never resources.
+                Lifetime matches the project's, in the same effect that
+                <code>$slug.tsx</code> already owns.
+              </p>
+            </div>
+          </div>
+          <div class="rationale missing">
+            <span class="tag">partly stated</span> resource-kinds.md names the layer ("the project's
+            handles by role, opened once, released with the project") but not <b>who</b> opens them
+            or when — the plan doc predates <code>$slug.tsx</code> becoming the one open site.
+            Lifetime and the interaction with <code>seat.open</code>/<code>seat.close</code> (which
+            replace the Book object) are unstated.
+          </div>
+        </div>
+
+        <!-- Change 5 -->
+        <div class="change a" style="--i: 19">
+          <div class="change-title">
+            <span class="badge b-planned">create</span>
+            <h3>5 · Renderer registry — the second and last <code>switch (kind)</code></h3>
+            <span class="where">src/app/ui/resources/registry.tsx (new) + one pane per kind</span>
+          </div>
+          <div class="diff-panels">
+            <div class="diff-panel__header diff-panel__header--before">Current</div>
+            <div class="diff-panel__header diff-panel__header--after">Planned</div>
+            <div class="diff-panel__body">
+              <p>
+                <code>ReferencePane.tsx</code> is the only resource renderer: a read-only CodeMirror
+                over another USFM text, allowed to touch CodeMirror because "there is no Book here".
+                It syncs by chapter number and pairs blocks by <code>(sid, where, ordinal)</code>.
+              </p>
+              <p>
+                The earlier framing in conversation — "swap out the main editor component at the
+                router once validated at the boundary" — would have made a resource a peer of a
+                project.
+              </p>
+            </div>
+            <div class="diff-panel__body">
+              <pre
+                class="code"
+              ><span class="k">const</span> render = (h: ResourceHandle &amp; { content: ContentKind }) =&gt; {
+  <span class="k">switch</span> (h.content) {
+    <span class="k">case</span> <span class="s">"usfm"</span>: <span class="k">return</span> &lt;ReferencePane handle={h} /&gt;;
+    <span class="k">case</span> <span class="s">"tn"</span>: <span class="k">case</span> <span class="s">"tq"</span>: <span class="k">return</span> &lt;NotesPane handle={h} /&gt;;
+    <span class="k">case</span> <span class="s">"tw"</span>: <span class="k">return</span> &lt;ArticlePane handle={h} /&gt;;
+    <span class="k">case</span> <span class="s">"macula-greek"</span>: <span class="k">case</span> <span class="s">"macula-hebrew"</span>: <span class="k">return</span> &lt;CorpusPane handle={h} /&gt;;
+  }  <span class="c">// exhaustive: a new kind fails to compile here, nowhere else</span>
+};</pre>
+              <p>
+                A pane owns its DOM (Macula's facet builder, RTL, hover). It receives the handle and
+                emits/receives <code>Address</code>. It never reaches another kind's internals.
+              </p>
+            </div>
+          </div>
+          <div class="rationale">
+            <span class="tag">why</span> Conversation: "that shifts more and more logic into JSX"
+            was the worry; the answer is that
+            <b>rendering is the one job where knowing the kind is the point</b>, and the
+            exhaustiveness check is what the closed union buys. The test that keeps it honest: a
+            per-kind component talks to the rest of the app only through Address.
+          </div>
+        </div>
+
+        <!-- Change 6 -->
+        <div class="change a" style="--i: 20">
+          <div class="change-title">
+            <span class="badge b-planned">modify</span>
+            <h3>6 · Address as the bus: widen <code>ShellEvent</code> or add a signal</h3>
+            <span class="where">src/app/shellEvent.ts · ReferencePane.tsx:95</span>
+          </div>
+          <div class="diff-panels">
+            <div class="diff-panel__header diff-panel__header--before">Current</div>
+            <div class="diff-panel__header diff-panel__header--after">Planned</div>
+            <div class="diff-panel__body">
+              <pre class="code"><span class="k">type</span> ShellEvent =
+  | book.apply | book.write | journal.restore
+  | project.open | corpus.publish | corpus.rejudge
+  | seat.open | seat.close
+<span class="c">// "Deliberately narrow … Widen it when a store needs the field, not in anticipation."</span></pre>
+              <p>
+                Place today travels as a <b>chapter number</b> from the main editor's location
+                watcher to <code>ReferencePane</code> — a private prop, not an event.
+              </p>
+            </div>
+            <div class="diff-panel__body">
+              <pre
+                class="code"
+              >  | { kind: <span class="s">"place.focus"</span>; address: Address; from: <span class="s">"editor"</span> | ResourceId }</pre>
+              <p>
+                The editor's caret publishes an Address; a Macula hover or a TN click publishes one
+                back. <code>from</code> stops a pane echoing its own event. This <em>is</em> an
+                event-emitter architecture — and Sefer already has the emitter; the plan only adds a
+                variant that carries a place instead of a Book list.
+              </p>
+            </div>
+          </div>
+          <div class="rationale missing">
+            <span class="tag">undecided</span> Conversation ended on "maybe this is more of an event
+            emitter architecture — when you say emit…". Two honest options: a
+            <code>ShellEvent</code> variant (one vocabulary, traceable, follows the file's own
+            widening rule now that a consumer exists) or a separate <code>shell.place</code> signal
+            (keeps ShellEvent about Books). Neither is chosen. <code>booksOf()</code> would need a
+            <code>"none"</code> answer for a variant that moves no Book.
+          </div>
+        </div>
+
+        <!-- Change 7 -->
+        <div class="change a" style="--i: 21">
+          <div class="change-title">
+            <span class="badge b-planned">create</span>
+            <h3>7 · <code>Held</code> — the pending policy as a primitive</h3>
+            <span class="where">src/app/ui/primitives/Held.tsx (new) · DelayedSpinner exists</span>
+          </div>
+          <div class="diff-panels">
+            <div class="diff-panel__header diff-panel__header--before">Current</div>
+            <div class="diff-panel__header diff-panel__header--after">Planned</div>
+            <div class="diff-panel__body">
+              <p>
+                <code>DelayedSpinner</code> already exists in <code>#app/ui/primitives</code> and is
+                used by <code>$slug.tsx</code> while a project opens. Resource reads in
+                <code>ReferencePane</code> are Effects run into signals by hand, with a one-line "no
+                file for this book" state.
+              </p>
+            </div>
+            <div class="diff-panel__body">
+              <pre class="code">&lt;Held query={() =&gt; handle.places!.at(address(), ctx)}
+      empty={&lt;Empty/&gt;} after={400}&gt;
+  {(page) =&gt; &lt;Notes page={page}/&gt;}
+&lt;/Held&gt;
+<span class="c">// Effect → one promise → Solid 2 async memo. Keeps the LAST answer while</span>
+<span class="c">// the next is in flight; never dims; shows pending only when there is no</span>
+<span class="c">// answer yet; falls back to DelayedSpinner after `after` ms.</span></pre>
+            </div>
+          </div>
+          <div class="rationale">
+            <span class="tag">why</span> Conversation: "when things are fast you want them to hold
+            the last answer, not dim by default, with the ability to fall back to a loading state
+            after so much time has elapsed." A 50 ms Macula scan under stale-while-revalidate is
+            indistinguishable from synchronous. Effect owns cancellation (caret moved → interrupt),
+            Solid owns consumption.
+          </div>
+        </div>
+
+        <!-- Change 8 -->
+        <div class="change a" style="--i: 22">
+          <div class="change-title">
+            <span class="badge b-grey">typed only</span>
+            <h3>8 · TN through Book — the test that Book is about text</h3>
+            <span class="where">core/book/book.ts:110 · core/project/project.ts</span>
+          </div>
+          <div class="diff-panels">
+            <div class="diff-panel__header diff-panel__header--before">Current</div>
+            <div class="diff-panel__header diff-panel__header--after">Planned</div>
+            <div class="diff-panel__body">
+              <pre
+                class="code"
+              ><span class="k">const</span> ID_MARKER = /^\\id[ \t]+(\S+)/;   <span class="c">// book.ts:110</span>
+<span class="c">// Book.id: "The \id code when the text declares one, otherwise the file stem."</span></pre>
+              <p>
+                <code>Book</code> is text + stamp + apply/changes/history. The only USFM-ism is the
+                <code>\id</code> probe, and it already falls back to the file stem. Admission rules
+                and the save model assume the engine.
+              </p>
+            </div>
+            <div class="diff-panel__body">
+              <p>
+                <code>edit?: WritableUnit</code> is typed on the handle now. When built, a TN chunk
+                file opens as a <code>Book</code> whose id is its path, whose "engine" is trivial
+                (<code># heading</code> boundaries play the part of <code>\v</code>), written back
+                per file through <code>effect/FileSystem</code>, and judged by Book's door (origin,
+                trust, receipt). Comment and diff then fall out, because they sit over text +
+                address map.
+              </p>
+            </div>
+          </div>
+          <div class="rationale">
+            <span class="tag">why</span> resource-kinds.md "TN edits the file, not the note":
+            duplicate and missing headings argue against note records; exact text stays the truth.
+            Conversation: nobody has asked for TN/TW editing — <b>type it, don't build it</b>; the
+            first ask answers "is Book about text or about USFM" by whether it compiles. Leaning
+            through Book, flagged as the least certain call.
+          </div>
+        </div>
+
+        <!-- Change 9 -->
+        <div class="change a" style="--i: 23">
+          <div class="change-title">
+            <span class="badge b-amber">gap</span>
+            <h3>9 · The Catalogue cannot offer the helps</h3>
+            <span class="where">src/app/catalogue.ts:161 · verified live 2026-10-01</span>
+          </div>
+          <div class="diff-panels">
+            <div class="diff-panel__header diff-panel__header--before">Current</div>
+            <div class="diff-panel__header diff-panel__header--after">Planned</div>
+            <div class="diff-panel__body">
+              <pre class="code"><span class="c">// REPOS_QUERY</span>
+{ vw_consolidated_repos { content_id language_ietf language_name
+  language_english_name repo_url repo_name username } }</pre>
+              <p>
+                Queried live: 13 <code>en_ulb</code> rows (incl. <code>Will_Kelly/en_ulb</code>),
+                <b>zero</b> <code>en_tn</code>/<code>en_tq</code>/<code>en_tw</code>. The view has
+                no subject or resource-type field. Raw-file URLs on WACS sit behind a Cloudflare
+                challenge; the Gitea API (<code>/api/v1/repos/…/contents</code>) answers.
+              </p>
+            </div>
+            <div class="diff-panel__body">
+              <p>
+                Not in the plan. Either the Language API view grows helps (a Scripture Kitchen / API
+                ask — <code>planning/00-ideas/scripture-kitchen-asks.md</code> is already open in
+                the worktree), or the landing gets a second source for resources: the WACS search
+                API filtered to <code>WycliffeAssociates</code> + RC <code>identifier</code>.
+                Zip/folder import works today through the import seam and needs only
+                <code>recognize</code>.
+              </p>
+            </div>
+          </div>
+          <div class="rationale missing">
+            <span class="tag">unaddressed</span> Discovered during this review. The plan assumes
+            TN/TW arrive; nothing says how, on the Web, without a zip. The TN import plan starts at
+            "the input is a raw TN ZIP".
+          </div>
+          <div class="discrepancy">
+            <b>Discrepancy.</b> resource-kinds.md's second pass read
+            <code>WycliffeAssociates/en_tn_condensed</code> and <code>WA-Catalog/en_tw</code>. The
+            canonical repos today are <code>WycliffeAssociates/en_tn</code> (66 MB, pushed
+            2025-12-08) and <code>WycliffeAssociates/en_tw</code> (<b>629 MB</b>, pushed 2026-09-29
+            — <code>tWs_for_PDFs</code> and <code>archive</code>, not the 1,011 articles). A naive
+            clone of en_tw is a different cost class from the plan's "5.75 MB".
+          </div>
+        </div>
+
+        <!-- ===================== 6. RIPPLE ===================== -->
+        <div id="s6" class="sec-head a" style="--i: 24">
+          <span class="num">07</span> Dependency &amp; ripple
+        </div>
+        <details class="collapsible a" style="--i: 25" open>
+          <summary>
+            Who touches the files the plan changes — 6 Library importers, 3 ShellEvent users, the
+            boundaries and deadcode gates
+          </summary>
+          <div class="collapsible__body">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Depends on</th>
+                    <th>File</th>
+                    <th>What it does today</th>
+                    <th>Plan coverage</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>Library</code></td>
+                    <td>src/app/services.ts</td>
+                    <td>Provides <code>LibraryLive</code> in the one composition</td>
+                    <td>
+                      <span class="dot" style="background: var(--planned)"></span>Covered — gains
+                      the kind table Layer
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>Library.readBook</code></td>
+                    <td>src/app/ui/workspace/ReferencePane.tsx</td>
+                    <td>Whole USFM book for the read-only pane</td>
+                    <td>
+                      <span class="dot" style="background: var(--amber)"></span>Not mentioned —
+                      becomes the <code>usfm</code> renderer; <code>readBook</code> stays or becomes
+                      <code>readText(resourceId, path)</code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>Resource.root</code></td>
+                    <td>src/core/resources/library.ts · library.json</td>
+                    <td>Every resource is a directory on the FileSystem port</td>
+                    <td>
+                      <span class="dot" style="background: var(--amber)"></span>Not mentioned —
+                      Macula has no root; handled as a bespoke <code>builtin</code> container kind
+                      whose root is the cached object's path, checksum in code. No schema change
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>Library.resolve</code></td>
+                    <td>src/app/workflows/references.ts</td>
+                    <td>
+                      Merges <code>source</code>+<code>reference</code>, filters <code>.usfm</code>,
+                      registers with the corpus
+                    </td>
+                    <td>
+                      <span class="dot" style="background: var(--amber)"></span>Not mentioned —
+                      unaffected if roles are unchanged, but should now assert
+                      <code>content === "usfm"</code> rather than sniff extensions
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>Library</code></td>
+                    <td>src/app/workflows/stet.ts</td>
+                    <td>Key-terms source card reads a bound book, analyses, resolves the verse</td>
+                    <td>
+                      <span class="dot" style="background: var(--amber)"></span>Not mentioned — plan
+                      notes TW "is nearly a STET Term already"; the cheapest TW integration may be
+                      behind <code>/terms</code>'s catalogue port, not a new pane
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>Library</code></td>
+                    <td>src/app/ui/search/findSource.tsx</td>
+                    <td>Lists every other project as a possible <code>source</code></td>
+                    <td>
+                      <span class="dot" style="background: var(--grey)"></span>Unaffected; the
+                      <code>uses</code> addendum would narrow it later
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>Library</code></td>
+                    <td>src/app/ui/workspace/ReferenceColumn.tsx</td>
+                    <td>Lays out bound reference panes</td>
+                    <td>
+                      <span class="dot" style="background: var(--amber)"></span>Not mentioned — the
+                      natural home of the renderer registry call
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>ShellEvent</code></td>
+                    <td>ProjectContext.tsx · commands.ts · shellStores.ts</td>
+                    <td>
+                      Emit and subscribe by variant; <code>booksOf()</code> maps each to Books or
+                      <code>"all"</code>
+                    </td>
+                    <td>
+                      <span class="dot" style="background: var(--red)"></span>Missed — a
+                      <code>place.focus</code> variant moves no Book; <code>booksOf</code> needs a
+                      third answer or the plan needs the separate signal
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>pnpm boundaries</code></td>
+                    <td>tools/ (boundary check)</td>
+                    <td>core imports nothing host-specific</td>
+                    <td>
+                      <span class="dot" style="background: var(--planned)"></span>Covered — Macula
+                      adapter in platform
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>pnpm deadcode</code></td>
+                    <td>.fallowrc.jsonc · release.yml verify</td>
+                    <td>Fails on an unused export or type</td>
+                    <td>
+                      <span class="dot" style="background: var(--red)"></span>Missed — a
+                      typed-but-unbuilt <code>edit</code> slot and <code>WritableUnit</code> type
+                      are exactly what fallow flags; needs an entry or a consumer
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>library.json</code></td>
+                    <td>core/resources/library.ts:136</td>
+                    <td>Persisted registry, in-memory for the Layer</td>
+                    <td>
+                      <span class="dot" style="background: var(--amber)"></span>Partly — a new
+                      <code>content</code> field; existing rows need <code>recognize</code> re-run
+                      on load (the <code>add</code>-twice path already re-reads metadata)
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Location</td>
+                    <td>core/location/locate.ts · core/galley/location.ts</td>
+                    <td><code>resolve</code>/<code>addressAt</code> over the engine TOC</td>
+                    <td>
+                      <span class="dot" style="background: var(--planned)"></span>Covered —
+                      unchanged; TQ's <code>ctx</code> hands the TOC in
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="legend" style="margin-top: 12px">
+              <div class="legend-item">
+                <span class="dot" style="background: var(--planned)"></span> covered
+              </div>
+              <div class="legend-item">
+                <span class="dot" style="background: var(--amber)"></span> not mentioned, likely
+                affected
+              </div>
+              <div class="legend-item">
+                <span class="dot" style="background: var(--red)"></span> missed
+              </div>
+              <div class="legend-item">
+                <span class="dot" style="background: var(--grey)"></span> unaffected
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <!-- ===================== 7. RISKS ===================== -->
+        <div id="s7" class="sec-head a" style="--i: 26">
+          <span class="num">08</span> Risk assessment
+        </div>
+        <div class="risk-grid a" style="--i: 27">
+          <div class="risk high">
+            <div class="r-head">
+              <b>Name collision on <code>kind</code></b
+              ><span class="badge b-red">high · assumption</span>
+            </div>
+            The plan's "kind" is the code's <code>Resource.subject</code> territory, and
+            <code>ResourceKind</code> already names the container. Six importers, one persisted
+            file.
+            <div class="mit">
+              <b>Mitigate:</b> rename in one commit before any adapter;
+              <code>ContainerKind</code>/<code>ContentKind</code>, and keep <code>subject</code> as
+              the raw string it is.
+            </div>
+          </div>
+          <div class="risk high">
+            <div class="r-head">
+              <b>Versification</b><span class="badge b-red">high · edge case</span>
+            </div>
+            WLC Hebrew numbers Psalm titles, Malachi 4, Joel differently from English. Macula Hebrew
+            against an English-numbered text is where it bites first; TN/TQ/TW are ULB-numbered and
+            mostly escape.
+            <div class="mit">
+              <b>Mitigate:</b> the plan names it (open question 1) and does not hide it in an
+              adapter. Keep it that way: <code>info.versification</code> on the handle, a mapping
+              primitive later; STEP's TVTMS is the dataset.
+            </div>
+          </div>
+          <div class="risk high">
+            <div class="r-head">
+              <b>en_tw is 629 MB on WACS</b><span class="badge b-red">high · assumption</span>
+            </div>
+            The plan's TW numbers (1,011 articles, 5.75 MB TN) describe the content, not the repo. A
+            clone with <code>history: "latest"</code> still fetches <code>tWs_for_PDFs</code> and
+            <code>archive</code>.
+            <div class="mit">
+              <b>Mitigate:</b> fetch <code>bible/</code> only (Gitea contents API, or sparse
+              checkout on desktop), or a packed release artifact — the TN import plan's "if we
+              control the distributed resource" path.
+            </div>
+          </div>
+          <div class="risk med">
+            <div class="r-head">
+              <b><code>pnpm deadcode</code> vs "typed, not built"</b
+              ><span class="badge b-amber">medium · ordering</span>
+            </div>
+            <code>release.yml</code>'s verify runs fallow before every deploy; an unused
+            <code>WritableUnit</code> type fails it.
+            <div class="mit">
+              <b>Mitigate:</b> give <code>edit</code> one consumer (the registry's exhaustive render
+              reads <code>handle.edit !== undefined</code> to choose read-only), or a documented
+              <code>.fallowrc.jsonc</code> entry per <code>lint-results.md</code>.
+            </div>
+          </div>
+          <div class="risk med">
+            <div class="r-head">
+              <b>TQ open ranges need the text</b
+              ><span class="badge b-amber">medium · edge case</span>
+            </div>
+            <code>gen/01/01.md</code> means "from verse 1 until the next file"; the last file in a
+            chapter needs a verse count. 17 files for Genesis 1's 31 verses.
+            <div class="mit">
+              <b>Mitigate:</b> <code>places.at(address, ctx)</code> takes the project TOC; the
+              adapter refuses with <code>unresolved</code> when no TOC is supplied rather than
+              guessing.
+            </div>
+          </div>
+          <div class="risk med">
+            <div class="r-head">
+              <b>Macula below the verse</b><span class="badge b-amber">medium · edge case</span>
+            </div>
+            Hits carry word/morpheme positions; Hebrew morphemes share a word address. The interface
+            stays at Address; aligned word highlighting in the project's text would need a finer
+            answer and the project's own alignment.
+            <div class="mit">
+              <b>Mitigate:</b> open question 2 stays open; the Macula pane highlights in
+              <em>its own</em> text, emits only the verse Address.
+            </div>
+          </div>
+          <div class="risk low">
+            <div class="r-head">
+              <b>Cache outliving its data</b><span class="badge b-planned">low</span>
+            </div>
+            Handle answers are cached by identity; a re-import of the same version must hit, a new
+            version must miss.
+            <div class="mit">
+              <b>Mitigate:</b> <code>info.identity</code> is the Fingerprint rule from location.md
+              applied to resources (Macula: the blob checksum).
+            </div>
+          </div>
+          <div class="risk low">
+            <div class="r-head"><b>Rollback</b><span class="badge b-planned">low</span></div>
+            Additive. Removing the kind table leaves <code>library.json</code> with an extra field
+            the schema can ignore. No migration of folders (the <code>uses</code> addendum defers
+            that explicitly).
+          </div>
+        </div>
+
+        <h3 style="margin-top: 28px">
+          Cognitive complexity — "you'll forget how this works in a month"
+        </h3>
+        <div class="risk-grid a" style="--i: 28">
+          <div class="risk med">
+            <div class="r-head">
+              <b>The two-place rule lives in memory</b><span class="badge b-amber">medium</span>
+            </div>
+            Nothing stops a third <code>switch (content)</code> appearing in a workflow six months
+            from now, and the whole design is that there are two.
+            <div class="mit">
+              <b>Mitigate:</b> a grep gate in the style of <code>dev-only-routes.md</code>:
+              <code>ContentKind</code> may be narrowed only in <code>recognize.ts</code> and
+              <code>registry.tsx</code>. Cheap, and it turns the rule into a check.
+            </div>
+          </div>
+          <div class="risk med">
+            <div class="r-head">
+              <b>Hold-last-answer is a contract, not a style</b
+              ><span class="badge b-amber">medium</span>
+            </div>
+            If one pane hand-rolls its own pending state, panes will flicker differently and the
+            "feels synchronous" property dies by a thousand cuts.
+            <div class="mit">
+              <b>Mitigate:</b> the <code>Held</code> primitive is the only way a pane consumes a
+              handle; say so in ui.md's primitive inventory.
+            </div>
+          </div>
+          <div class="risk low">
+            <div class="r-head">
+              <b><code>from</code> on place events</b><span class="badge b-planned">low</span>
+            </div>
+            A pane that emits an Address and also follows Address will echo itself unless it ignores
+            its own <code>from</code>. Action at a distance.
+            <div class="mit">
+              <b>Mitigate:</b> <code>Held</code>/the pane wrapper filters
+              <code>from === self</code> once, centrally; a comment on the variant says why
+              <code>from</code> exists.
+            </div>
+          </div>
+          <div class="risk low">
+            <div class="r-head">
+              <b>Why Effect, when everything is local</b><span class="badge b-planned">low</span>
+            </div>
+            The next reader will ask "why is this async?" and the plan doc's answer (remote
+            resources) is not the real one.
+            <div class="mit">
+              <b>Mitigate:</b> the handle's doc comment states the actual reasons: one colour,
+              interruption on caret-follow, typed unavailable. Update resource-kinds.md's "Every
+              call may be async" section to match.
+            </div>
+          </div>
+        </div>
+
+        <!-- ===================== 8. REVIEW ===================== -->
+        <div id="s8" class="sec-head a" style="--i: 29">
+          <span class="num">09</span> Plan review
+        </div>
+        <div class="review-grid a" style="--i: 30">
+          <div class="rev good">
+            <h4>Good</h4>
+            <ul>
+              <li>
+                <b>It leaves the Project chain alone.</b> The dangerous version ("swap the editor at
+                the router") was rejected in conversation; resources sit beside a project, bound by
+                role, exactly as <code>library.ts</code>'s header already describes.
+              </li>
+              <li>
+                <b>Capability presence, not kind.</b> Adding a capability is a new optional slot;
+                adding a kind is a subset. Strongly typed in both directions, which is the stated
+                goal ("if something changes shape it's easy to plug in").
+              </li>
+              <li>
+                <b>Address is already the shared vocabulary.</b> <code>core/location</code> is
+                text-independent by design (location.md: "No offsets, no text, no hash"). Macula's
+                <code>Passage</code> maps in one line; nothing new is invented.
+              </li>
+              <li>
+                <b>Edit typed, not built.</b> Matches the build-out rule and the memory note; makes
+                the Book-is-text question answerable later by compilation.
+              </li>
+              <li><b>The pending policy is stated as a rule</b>, not left to each pane.</li>
+              <li>
+                <b>The plan doc already read the real data</b> (chunk files, duplicate headings,
+                TW's config.yaml index, Strong's join) and changed its mind in writing — the second
+                pass retiring "plugin" is the right kind of revision.
+              </li>
+            </ul>
+          </div>
+          <div class="rev bad">
+            <h4>Bad</h4>
+            <ul>
+              <li>
+                <b>Name collision</b> with the existing <code>ResourceKind</code> (§5.1). The plan
+                doc describes the Library correctly in the addendum and then reuses the word.
+              </li>
+              <li>
+                <b>No arrival path on the Web.</b> The Language API has no helps (§5.9); the plan
+                assumes TN/TW exist locally.
+              </li>
+              <li>
+                <b>Stale repo facts.</b> <code>en_tn_condensed</code> and
+                <code>WA-Catalog/en_tw</code> vs today's <code>WycliffeAssociates/en_tn</code> and a
+                629 MB <code>en_tw</code>.
+              </li>
+              <li>
+                <b><code>ShellEvent</code> ripple unaddressed</b>: <code>booksOf()</code> and three
+                subscribers.
+              </li>
+              <li>
+                <b><code>pnpm deadcode</code></b> will reject the "typed, not built" slot unless it
+                has a consumer or an entry.
+              </li>
+              <li>
+                <b>Docs:</b> services.md's Library entry ("Scripture only…") and a new architecture
+                chapter are not in scope but must change the day the first adapter lands.
+              </li>
+            </ul>
+          </div>
+          <div class="rev ugly">
+            <h4>Ugly</h4>
+            <ul>
+              <li>
+                <b>Four kinds, four very different shapes,</b> and only Address is truly shared. TW
+                is not verse-addressed at all without a TWL. The record risks being
+                <code>info</code> plus four optional slots each filled by one kind — which is fine,
+                but then the "shared domain" is thinner than the plan's prose suggests. Be honest
+                that the floor is <code>info</code> + <code>release</code>.
+              </li>
+              <li>
+                <b>Macula owns its DOM and its search vocabulary.</b> That is correct and also means
+                the "faceted find" is a one-implementer interface. The plan doc says so
+                ("Dedicated"); keep it out of the shared record unless a second corpus appears.
+              </li>
+              <li>
+                <b>Effect everywhere for local work</b> is a tax every pane pays. Small, and the
+                conversation accepted it knowingly — but <code>Held</code> must make it invisible or
+                it will be resented.
+              </li>
+              <li>
+                <b>TN through Book</b> is the elegant answer and the one most likely to surface USFM
+                assumptions in the admission rules and the save/recovery model. The plan leans; it
+                does not commit. That is the right posture <em>now</em>, and a trap if the first
+                edit ask arrives mid-sprint.
+              </li>
+            </ul>
+          </div>
+          <div class="rev q">
+            <h4>Questions for Will</h4>
+            <ul>
+              <li>
+                <b>Event or signal?</b> A <code>place.focus</code> ShellEvent variant (one
+                vocabulary, traceable) or a separate <code>shell.place</code> signal (ShellEvent
+                stays about Books)?
+              </li>
+              <li>
+                <b>Which proof first?</b> The plan says Macula Greek read-only (hard case:
+                below-verse, facets, wasm, platform Layer). TN read-only is the common case and
+                exercises <code>recognize</code>, chunk ranges and <code>Held</code> with no new
+                dependency. Which risk do you want retired first?
+              </li>
+              <li>
+                <b>TW behind <code>/terms</code>?</b> The plan's own observation — TW is nearly a
+                STET <code>Term</code> — suggests the cheapest TW integration is not a pane at all.
+                Is that in or out of this work?
+              </li>
+              <li>
+                <b>Helps in the catalogue:</b> an API ask (add subject/type to
+                <code>vw_consolidated_repos</code>) or a second source in Sefer?
+              </li>
+              <li>
+                <b
+                  >Does <code>uses</code> on a project (the 2026-10-01 addendum) happen alongside
+                  this, or wait?</b
+                >
+                It changes what the source picker offers and where folders land.
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- ===================== 9. GAPS ===================== -->
+        <div id="s9" class="sec-head a" style="--i: 31">
+          <span class="num">10</span> Understanding gaps
+        </div>
+        <div class="ve-card ve-card--recessed a" style="--i: 32">
+          <div class="ve-card__label">Rationale coverage across the nine changes</div>
+          <div class="bar">
+            <span style="width: 67%; background: var(--planned)"></span
+            ><span style="width: 22%; background: var(--amber)"></span
+            ><span style="width: 11%; background: var(--red)"></span>
+          </div>
+          <div class="bar-legend">
+            <span><b style="color: var(--planned)">6</b> clear why</span
+            ><span
+              ><b style="color: var(--amber)">2</b> partly stated (4 lifetime · 6 event vs
+              signal)</span
+            ><span><b style="color: var(--red)">1</b> unaddressed (9 catalogue arrival)</span>
+          </div>
+          <h3>Cognitive complexity flags</h3>
+          <ul class="tight">
+            <li>
+              <span class="badge b-amber">medium</span> The two-place rule has no enforcement — add
+              a grep gate.
+            </li>
+            <li>
+              <span class="badge b-amber">medium</span> Hold-last-answer must be the only
+              consumption path — <code>Held</code> primitive, documented in ui.md.
+            </li>
+            <li>
+              <span class="badge b-planned">low</span> <code>from</code> echo filtering, centralised
+              once.
+            </li>
+            <li>
+              <span class="badge b-planned">low</span> The real reason for Effect, written on the
+              handle.
+            </li>
+          </ul>
+          <h3>Before implementing</h3>
+          <ol style="padding-left: 1.6em; font-size: 14.5px; line-height: 1.7">
+            <li>
+              Rename: decide <code>ContainerKind</code>/<code>ContentKind</code> (or other words)
+              and land it alone. Everything else depends on the name.
+            </li>
+            <li>
+              Rule on event vs signal for Address (§5.6), and write the
+              <code>booksOf</code> consequence into <code>shellEvent.ts</code>'s header.
+            </li>
+            <li>
+              Rule on which proof is first (§8 Questions). If Macula, the platform Layer and the
+              boundaries gate are the first files; if TN, <code>recognize</code> and the chunk-range
+              closer are.
+            </li>
+            <li>
+              Update resource-kinds.md: the repo names and sizes, the two-place rule, the actual
+              reason for Effect, and the catalogue gap. Retire the "plugin vs thin contract"
+              question as answered.
+            </li>
+            <li>
+              Add the deadcode plan for the typed <code>edit</code> slot before the first commit
+              that declares it.
+            </li>
+          </ol>
+        </div>
+
+        <p
+          style="
+            margin-top: 40px;
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--text-dim);
+          "
+        >
+          Sources: src/core/resources/library.ts · import.ts · src/core/book/book.ts ·
+          src/core/source/source.ts · src/core/location/address.ts ·
+          documentation/architecture/location.md · src/app/shellEvent.ts · src/app/catalogue.ts ·
+          src/app/workflows/references.ts · src/app/ui/workspace/ReferencePane.tsx ·
+          src/routes/_app/project/$slug.tsx · documentation/services.md (Library) ·
+          planning/00-ideas/resource-kinds.md ·
+          planning/01-discussing/web-translation-notes-import.md · ~/Downloads/clearBibleSyntaxTree
+          (README, packages/macula-js/src/{types,index}.ts) · content.bibletranslationtools.org API
+          and api.bibleineverylanguage.org GraphQL, queried 2026-10-01. Line estimates are
+          estimates.
+        </p>
+      </div>
+      <!-- /main -->
+    </div>
+    <!-- /wrap -->
+
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+
+      const config = {
+        fitPadding: 28,
+        minHeight: 380,
+        maxHeightPx: 960,
+        maxHeightVh: 0.84,
+        maxInitialZoom: 1.6,
+        minZoom: 0.08,
+        maxZoom: 6.5,
+        zoomStep: 0.14,
+        readabilityFloor: 0.58,
+      };
+      const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+      let activeDrag = null;
+      addEventListener("mousemove", (e) => activeDrag?.onMove(e));
+      addEventListener("mouseup", () => {
+        activeDrag?.onEnd();
+        activeDrag = null;
+      });
+
+      const isDark = matchMedia("(prefers-color-scheme: dark)").matches;
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: "base",
+        look: "classic",
+        themeVariables: {
+          fontFamily: "'Source Sans 3', system-ui, sans-serif",
+          fontSize: "15px",
+          primaryColor: isDark ? "#1c2634" : "#fffdf8",
+          primaryBorderColor: isDark ? "#7fb0e0" : "#2f5f8f",
+          primaryTextColor: isDark ? "#e8e4da" : "#1b2434",
+          secondaryColor: isDark ? "#1f2a39" : "#f4f1ea",
+          secondaryBorderColor: isDark ? "#4fc394" : "#1f7a5a",
+          secondaryTextColor: isDark ? "#e8e4da" : "#1b2434",
+          tertiaryColor: isDark ? "#2a2415" : "#fbf3dc",
+          tertiaryBorderColor: isDark ? "#d4a73a" : "#b8860b",
+          tertiaryTextColor: isDark ? "#e8e4da" : "#1b2434",
+          lineColor: isDark ? "#8a95a6" : "#6b7a90",
+          clusterBkg: isDark ? "#161e2a" : "#f4f1ea",
+          clusterBorder: isDark ? "#3a4656" : "#c9c3b6",
+        },
+      });
+
+      function initDiagram(shell) {
+        const wrap = shell.querySelector(".mermaid-wrap");
+        const viewport = shell.querySelector(".mermaid-viewport");
+        const canvas = shell.querySelector(".mermaid-canvas");
+        const source = shell.querySelector(".diagram-source");
+        const label = shell.querySelector(".zoom-label");
+        if (!wrap || !viewport || !canvas || !source || !label) return;
+
+        let zoom = 1,
+          fitMode = "contain",
+          panX = 0,
+          panY = 0,
+          svgW = 0,
+          svgH = 0;
+        let sx = 0,
+          sy = 0,
+          spx = 0,
+          spy = 0,
+          touchDist = 0,
+          touchCx = 0,
+          touchCy = 0;
+
+        function constrainPan() {
+          const vpW = viewport.clientWidth,
+            vpH = viewport.clientHeight,
+            rW = svgW * zoom,
+            rH = svgH * zoom,
+            pad = config.fitPadding;
+          panX = rW + pad * 2 <= vpW ? (vpW - rW) / 2 : clamp(panX, vpW - rW - pad, pad);
+          panY = rH + pad * 2 <= vpH ? (vpH - rH) / 2 : clamp(panY, vpH - rH - pad, pad);
+        }
+        function applyTransform() {
+          const svg = canvas.querySelector("svg");
+          if (!svg || !svgW) return;
+          constrainPan();
+          svg.style.width = svgW * zoom + "px";
+          svg.style.height = svgH * zoom + "px";
+          canvas.style.transform = `translate(${panX}px, ${panY}px)`;
+          label.textContent = Math.round(zoom * 100) + "% \u2014 " + fitMode;
+        }
+        function canPan() {
+          return (
+            svgW * zoom + config.fitPadding * 2 > viewport.clientWidth ||
+            svgH * zoom + config.fitPadding * 2 > viewport.clientHeight
+          );
+        }
+        function computeSmartFit() {
+          const vpW = viewport.clientWidth,
+            vpH = viewport.clientHeight;
+          const aW = Math.max(80, vpW - config.fitPadding * 2),
+            aH = Math.max(80, vpH - config.fitPadding * 2);
+          const contain = Math.min(aW / svgW, aH / svgH);
+          let z = contain,
+            mode = "contain";
+          if (contain < config.readabilityFloor) {
+            const chartR = svgH / svgW,
+              vpR = vpH / Math.max(vpW, 1);
+            if (chartR >= vpR) {
+              z = aW / svgW;
+              mode = "width-priority";
+            } else {
+              z = aH / svgH;
+              mode = "height-priority";
+            }
+          }
+          return { zoom: clamp(z, config.minZoom, config.maxInitialZoom), mode };
+        }
+        function fitDiagram() {
+          if (!svgW) return;
+          const fit = computeSmartFit();
+          zoom = fit.zoom;
+          fitMode = fit.mode;
+          panX = (viewport.clientWidth - svgW * zoom) / 2;
+          panY = (viewport.clientHeight - svgH * zoom) / 2;
+          applyTransform();
+        }
+        function setOneToOne() {
+          zoom = clamp(1, config.minZoom, config.maxZoom);
+          fitMode = "1:1";
+          panX = (viewport.clientWidth - svgW * zoom) / 2;
+          panY = (viewport.clientHeight - svgH * zoom) / 2;
+          applyTransform();
+        }
+        function zoomAround(factor, cx, cy) {
+          const next = clamp(zoom * factor, config.minZoom, config.maxZoom),
+            ratio = next / zoom;
+          panX = cx - ratio * (cx - panX);
+          panY = cy - ratio * (cy - panY);
+          zoom = next;
+          fitMode = "custom";
+          applyTransform();
+        }
+        function readSvgNaturalSize(svg) {
+          let w = 0,
+            h = 0;
+          if (svg.viewBox?.baseVal?.width > 0) {
+            w = svg.viewBox.baseVal.width;
+            h = svg.viewBox.baseVal.height;
+          }
+          if (!w) {
+            w = parseFloat(svg.getAttribute("width")) || 0;
+            h = parseFloat(svg.getAttribute("height")) || 0;
+          }
+          if (!w) {
+            const b = svg.getBBox();
+            w = b.width;
+            h = b.height;
+          }
+          if (!w) {
+            const r = svg.getBoundingClientRect();
+            w = r.width || 1000;
+            h = r.height || 700;
+          }
+          if (!svg.getAttribute("viewBox")) svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+          return { w, h };
+        }
+        function setAdaptiveHeight() {
+          if (!svgW) return;
+          const usableW = Math.max(280, wrap.getBoundingClientRect().width - 2);
+          const idealH = (svgH / svgW) * usableW + config.fitPadding * 2;
+          const maxVp = Math.floor(innerHeight * config.maxHeightVh);
+          const hardMax = Math.min(config.maxHeightPx, Math.max(config.minHeight + 40, maxVp));
+          wrap.style.height = Math.round(clamp(idealH, config.minHeight, hardMax)) + "px";
+        }
+        function openInNewTab() {
+          const svg = canvas.querySelector("svg");
+          if (!svg) return;
+          const clone = svg.cloneNode(true);
+          clone.style.width = "";
+          clone.style.height = "";
+          const bg = isDark ? "#0f151e" : "#f4f1ea";
+          const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Diagram</title><style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:${bg};padding:40px;box-sizing:border-box}svg{max-width:100%;max-height:90vh;height:auto}</style></head><body>${clone.outerHTML}</body></html>`;
+          open(URL.createObjectURL(new Blob([html], { type: "text/html" })), "_blank");
+        }
+        async function render() {
+          try {
+            const code = source.textContent.trim();
+            const id = "diagram-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+            const { svg } = await mermaid.render(id, code);
+            canvas.innerHTML = svg;
+            const svgNode = canvas.querySelector("svg");
+            if (!svgNode) return;
+            const size = readSvgNaturalSize(svgNode);
+            svgW = size.w;
+            svgH = size.h;
+            svgNode.removeAttribute("width");
+            svgNode.removeAttribute("height");
+            svgNode.style.maxWidth = "none";
+            svgNode.style.display = "block";
+            setAdaptiveHeight();
+            fitDiagram();
+          } catch (err) {
+            console.error("Mermaid render failed:", err);
+            label.textContent = "Error: " + (err.message || "Render failed");
+          }
+        }
+        const actions = {
+          "zoom-in": () =>
+            zoomAround(1 + config.zoomStep, viewport.clientWidth / 2, viewport.clientHeight / 2),
+          "zoom-out": () =>
+            zoomAround(
+              1 / (1 + config.zoomStep),
+              viewport.clientWidth / 2,
+              viewport.clientHeight / 2,
+            ),
+          "zoom-fit": fitDiagram,
+          "zoom-one": setOneToOne,
+          "zoom-expand": openInNewTab,
+        };
+        Object.entries(actions).forEach(([action, handler]) =>
+          wrap.querySelector(`[data-action="${action}"]`)?.addEventListener("click", handler),
+        );
+        viewport.addEventListener("dblclick", fitDiagram);
+        viewport.addEventListener(
+          "wheel",
+          (e) => {
+            if (e.ctrlKey || e.metaKey) {
+              e.preventDefault();
+              const rect = viewport.getBoundingClientRect();
+              zoomAround(
+                e.deltaY < 0 ? 1 + config.zoomStep : 1 / (1 + config.zoomStep),
+                e.clientX - rect.left,
+                e.clientY - rect.top,
+              );
+              return;
+            }
+            if (canPan()) {
+              e.preventDefault();
+              panX -= e.deltaX;
+              panY -= e.deltaY;
+              applyTransform();
+            }
+          },
+          { passive: false },
+        );
+        viewport.addEventListener("mousedown", (e) => {
+          if (e.target.closest(".zoom-controls") || !canPan()) return;
+          wrap.classList.add("is-panning");
+          sx = e.clientX;
+          sy = e.clientY;
+          spx = panX;
+          spy = panY;
+          e.preventDefault();
+          activeDrag = {
+            onMove: (ev) => {
+              panX = spx + (ev.clientX - sx);
+              panY = spy + (ev.clientY - sy);
+              applyTransform();
+            },
+            onEnd: () => wrap.classList.remove("is-panning"),
+          };
+        });
+        viewport.addEventListener(
+          "touchstart",
+          (e) => {
+            if (e.touches.length === 1) {
+              sx = e.touches[0].clientX;
+              sy = e.touches[0].clientY;
+              spx = panX;
+              spy = panY;
+            } else if (e.touches.length === 2) {
+              const dx = e.touches[0].clientX - e.touches[1].clientX,
+                dy = e.touches[0].clientY - e.touches[1].clientY;
+              touchDist = Math.sqrt(dx * dx + dy * dy);
+              const r = viewport.getBoundingClientRect();
+              touchCx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left;
+              touchCy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - r.top;
+            }
+          },
+          { passive: true },
+        );
+        viewport.addEventListener(
+          "touchmove",
+          (e) => {
+            if (e.touches.length === 1 && canPan()) {
+              if (touchDist > 0) {
+                sx = e.touches[0].clientX;
+                sy = e.touches[0].clientY;
+                spx = panX;
+                spy = panY;
+                touchDist = 0;
+              }
+              e.preventDefault();
+              panX = spx + (e.touches[0].clientX - sx);
+              panY = spy + (e.touches[0].clientY - sy);
+              applyTransform();
+            } else if (e.touches.length === 2 && touchDist > 0) {
+              e.preventDefault();
+              const dx = e.touches[0].clientX - e.touches[1].clientX,
+                dy = e.touches[0].clientY - e.touches[1].clientY;
+              const d = Math.sqrt(dx * dx + dy * dy);
+              zoomAround(d / touchDist, touchCx, touchCy);
+              touchDist = d;
+            }
+          },
+          { passive: false },
+        );
+        new ResizeObserver(() => {
+          if (svgW) {
+            setAdaptiveHeight();
+            fitDiagram();
+          }
+        }).observe(wrap);
+        render();
+      }
+      document.querySelectorAll(".diagram-shell").forEach(initDiagram);
+    </script>
+    <script>
+      (function () {
+        const toc = document.getElementById("toc");
+        const links = toc.querySelectorAll("a");
+        const sections = [];
+        links.forEach((link) => {
+          const id = link.getAttribute("href").slice(1);
+          const el = document.getElementById(id);
+          if (el) sections.push({ id, el, link });
+        });
+        const observer = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting) {
+                links.forEach((l) => l.classList.remove("active"));
+                const m = sections.find((s) => s.el === entry.target);
+                if (m) {
+                  m.link.classList.add("active");
+                  if (innerWidth <= 1000)
+                    m.link.scrollIntoView({
+                      behavior: "smooth",
+                      block: "nearest",
+                      inline: "center",
+                    });
+                }
+              }
+            });
+          },
+          { rootMargin: "-10% 0px -80% 0px" },
+        );
+        sections.forEach((s) => observer.observe(s.el));
+        links.forEach((link) =>
+          link.addEventListener("click", (e) => {
+            e.preventDefault();
+            const el = document.getElementById(link.getAttribute("href").slice(1));
+            if (el) {
+              el.scrollIntoView({ behavior: "smooth", block: "start" });
+              history.replaceState(null, "", link.getAttribute("href"));
+            }
+          }),
+        );
+      })();
+    </script>
+  </body>
+</html>

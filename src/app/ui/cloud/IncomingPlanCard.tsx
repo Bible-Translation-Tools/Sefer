@@ -1,16 +1,19 @@
 /**
  * What a pull would change, in books and chapters, BEFORE it runs.
  *
- * This card is the reason `/cloud` exists rather than a Pull button. A
- * translator asked to accept "3 incoming commits" has been asked nothing at
- * all; a translator told "3 chapters of Mark changed in the shared project,
- * and one of them also changed here" has been asked a real question they can
- * answer.
+ * This list is why the cloud popover says more than "Pull". A translator
+ * asked to accept "3 incoming commits" has been asked nothing at all; a
+ * translator told "There are changes to 3 verses in 2 books. You also changed
+ * 1 of those verses." has been asked a real question they can answer.
  *
  * A contested book — one both sides changed — is never merged and never
- * offered as part of a pull. Its row links to the project's Review screen
- * instead, by path string rather than by import, so this card does not depend
- * on that screen's module.
+ * offered as part of a pull. Its row can link to the project's Review screen
+ * instead, by path string rather than by import, so this list does not depend
+ * on that screen's module. The popover draws it without the links: its own
+ * "See the changes" already goes there.
+ *
+ * Only the list is left of the card the file is named for, which went with
+ * `/cloud` (2026-10-06).
  */
 
 import { For, Show } from "solid-js";
@@ -19,50 +22,40 @@ import type { IncomingBook, IncomingPlan } from "#core/sync";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { Badge, Card, PanelHeader } from "../primitives";
 import { bookName } from "../workspace/books";
-import { chapterList, planSummary, plural } from "./copy";
+import { chapterList, planOverlap, planSummary, plural } from "./copy";
 
 /**
  * The link to this project's Review screen, as a path string. Review takes no
  * book in its URL (a picked source has no address), so the link opens the
  * screen and the reader picks the book there.
  */
-export const reviewHref = (slug: string): string =>
+const reviewHref = (slug: string): string =>
   `/project/${encodeURIComponent(slug)}/review?against=shared`;
 
-function BookRow(props: { readonly book: IncomingBook }) {
+function BookRow(props: { readonly book: IncomingBook; readonly links: boolean }) {
   const shell = useShell();
   const name = () => bookName(props.book.bookId);
   return (
     <li
-      class="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-t border-surface-border px-1 py-2 first:border-t-0"
+      class="flex flex-wrap items-baseline gap-x-2 gap-y-1 py-1"
       data-plan-book={props.book.bookId}
       data-contested={props.book.contested}
     >
-      <strong class="text-small">{name()}</strong>
+      <span class="text-small font-medium text-on-surface-primary">{name()}</span>
       <span class="text-small text-on-surface-secondary">
-        {t("{chapters} changed in the shared project", {
-          chapters: chapterList(props.book.chapters),
-        })}
+        {props.book.verses === 0
+          ? chapterList(props.book.chapters)
+          : plural(props.book.verses, "{count} verse", "{count} verses")}
       </span>
-      <Show when={props.book.alsoHere.length > 0}>
-        <span class="text-small text-on-surface-secondary">
-          {t("· {chapters} also changed here", {
-            chapters: chapterList(props.book.alsoHere),
-          })}
+      <Show when={props.book.versesAlsoHere > 0}>
+        <span class="text-small text-on-surface-warning">
+          {t("· {count} you also changed", { count: props.book.versesAlsoHere })}
         </span>
       </Show>
-      <Show
-        when={props.book.contested}
-        fallback={
-          <Badge class="ms-auto" tone="success">
-            {t("safe to receive")}
-          </Badge>
-        }
-      >
+      <Show when={props.links && props.book.contested}>
         <a
-          class="ms-auto text-small font-medium text-brand underline underline-offset-2"
+          class="ms-auto text-small font-medium text-brand underline-offset-2 hover:underline"
           href={reviewHref(shell.slug())}
           data-compare-link={props.book.bookId}
         >
@@ -73,59 +66,39 @@ function BookRow(props: { readonly book: IncomingBook }) {
   );
 }
 
-export function IncomingPlanCard(props: { readonly plan: IncomingPlan }) {
+/**
+ * The two sentences and the books, one line each: what changed in the shared
+ * project, whether any of it is yours too, and where. Colour carries the one
+ * thing that matters — a verse you both changed — and nothing else.
+ */
+export function PlanBooks(props: {
+  readonly plan: IncomingPlan;
+  /** Each contested book links to Review; off where a button below already goes there. */
+  readonly links?: boolean;
+}) {
+  const overlap = () => planOverlap(props.plan);
   return (
-    <Card class="space-y-3" data-cloud-card="plan">
-      <PanelHeader
-        level={3}
-        title={t("What would arrive")}
-        actions={
-          <Badge tone={props.plan.clean ? "success" : "warning"}>
-            {props.plan.clean ? t("nothing of yours moves") : t("needs your decision")}
-          </Badge>
-        }
-      />
-      <p class="text-small text-on-surface-secondary" data-plan="summary">
-        {planSummary(props.plan)}
+    <div class="space-y-2" data-plan-books={props.plan.books.length}>
+      <p class="text-small text-on-surface-primary" data-plan="summary">
+        {planSummary(props.plan)}{" "}
+        <Show when={overlap()}>
+          {(said) => (
+            <span
+              class={said().mine ? "text-on-surface-warning" : "text-on-surface-success"}
+              data-plan="overlap"
+            >
+              {said().text}
+            </span>
+          )}
+        </Show>
       </p>
-
       <Show when={props.plan.books.length > 0}>
-        <ul
-          class="rounded-md border border-surface-border"
-          data-plan-books={props.plan.books.length}
-        >
-          <For each={props.plan.books}>{(book) => <BookRow book={book} />}</For>
+        <ul>
+          <For each={props.plan.books}>
+            {(book) => <BookRow book={book} links={props.links === true} />}
+          </For>
         </ul>
       </Show>
-
-      <Show when={!props.plan.clean}>
-        <p class="text-small text-on-surface-secondary">
-          {t(
-            "Sefer never merges scripture text on its own. The books you both changed stay exactly as they are here until you compare them and choose.",
-          )}
-        </p>
-      </Show>
-
-      <Show when={props.plan.commits.length > 0}>
-        <details class="text-small text-on-surface-tertiary">
-          <summary class="cursor-pointer">
-            {plural(
-              props.plan.commits.length,
-              "{count} version in the shared project",
-              "{count} versions in the shared project",
-            )}
-          </summary>
-          <ul class="mt-2 space-y-1 ps-4">
-            <For each={props.plan.commits}>
-              {(commit) => (
-                <li class="truncate">
-                  {commit.message} — {commit.author.name}
-                </li>
-              )}
-            </For>
-          </ul>
-        </details>
-      </Show>
-    </Card>
+    </div>
   );
 }

@@ -8,9 +8,11 @@ import { SIDEBAR_WIDTH } from "#app/settings";
 import { CommandPalette } from "#app/ui/CommandPalette";
 import { PageDoor, PageLeading, Resizable, Toaster } from "#app/ui/primitives";
 import { AppBar } from "#app/ui/workspace/AppBar";
-import { BackToEditor, useBackToEditorShown } from "#app/ui/workspace/BackToEditor";
+import { BackToEditor } from "#app/ui/workspace/BackToEditor";
+import { VersionTabs } from "#app/ui/workspace/ChangesHistorySidebar";
 import { usePanelToggleLeading } from "#app/ui/workspace/PanelToggle";
 import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
+import { useScreen } from "#app/ui/workspace/screen";
 import { sidebarClaim } from "#app/ui/workspace/sidebarSlot";
 
 /**
@@ -70,7 +72,14 @@ function Workspace() {
   const minWidth = SIDEBAR_WIDTH.min;
   const maxWidth = SIDEBAR_WIDTH.max;
   const panelToggle = usePanelToggleLeading();
-  const door = useBackToEditorShown();
+  const screen = useScreen();
+  // Changes, History and Suggestions keep their tabs in the sidebar; with the
+  // sidebar hidden the tabs come above the page, so the three screens are
+  // still one click apart instead of reachable only through the palette.
+  // Only with a project open: its slug is in every tab's link, and an empty
+  // one generates `/project//review`, which the router cannot match.
+  const pageTabs = () =>
+    showing() || shell.project() === undefined ? undefined : screen.versionsTab();
   return (
     <Resizable.Root
       class="h-full"
@@ -110,16 +119,20 @@ function Workspace() {
           inline `flex-basis`, and with the sidebar hidden the routed content
           has to take the whole row back. */}
       <Resizable.Panel class={showing() ? "min-w-0" : "min-w-0 [flex-basis:100%]!"}>
-        {/* `relative`, and the door OUTSIDE the scroller: a full-page screen
-            scrolls its own content, and a button that scrolled away with it
-            would be a door you have to go back to the top to find. */}
         {/* The panel toggle for project screens without the editor's
-            toolbar leads each screen's page header, inline with its title. */}
+            toolbar leads each screen's page header, inline with its title,
+            and the way back to the book ends it (`BackToEditor`). */}
         <PageLeading value={panelToggle}>
-          <PageDoor value={door}>
-            <div class="relative h-full min-w-0">
-              <BackToEditor />
-              <div class="h-full overflow-y-auto">
+          <PageDoor value={() => <BackToEditor />}>
+            <div class="flex h-full min-w-0 flex-col">
+              <Show when={pageTabs()}>
+                {(active) => (
+                  <div class="shrink-0 border-b border-surface-border px-4">
+                    <VersionTabs active={active()} inline />
+                  </div>
+                )}
+              </Show>
+              <div class="min-h-0 min-w-0 flex-1 overflow-y-auto">
                 <Outlet />
               </div>
             </div>

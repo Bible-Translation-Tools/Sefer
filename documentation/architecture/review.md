@@ -64,8 +64,13 @@ option is disabled on the other side's picker rather than silently ignored.
 
 `canApply` decides, and only the open project says `true`. So:
 
-- project on either side → the review edits it. The working text always sits
-  on the left: picking it on the right swaps the two sides.
+- project on either side → the review edits it. In the model the working text
+  is always the `left` side (picking it on the right swaps the two sides); on
+  screen it is drawn on the RIGHT, the other side on the left, so a reader of
+  a left-to-right script reads was-then-now, the way History lays out time
+  (`ReviewReader`'s `currentFirst`, off by default). The chip, the pickers and
+  each card's buttons follow the same order: "On disk → In the editor",
+  "Take the file's", "Keep the editor's".
 - neither side is the project → the review is **for reading**: a "Reading
   only" badge, no Edit, no double-click, no Keep / Take. A review between two
   copies neither of which is this project is a reading, and offering a write
@@ -96,24 +101,45 @@ is on a side. A comparison is still a snapshot — this simply takes a new one.
 
 "The shared project" is the other side of a receive or a combine, as a source like any other: the
 blobs at `refs/remotes/origin/<branch>`, read once per head (`createRecordedVersion(shell, "shared")`),
-never written by a review — it changes only by sending. `/cloud`'s Compare and a contested row of the
-incoming plan open it as `/project/$slug/review?against=shared`; `?pull=<n>` reads a suggestion's head
-instead, labelled as that suggestion ([git](git.md), Suggested changes).
+never written by a review — it changes only by sending. The cloud popover's "See the changes" and a
+contested row of the incoming plan open it as `/project/$slug/review?against=shared`; `?pull=<n>`
+reads a suggestion's head instead, labelled as that suggestion, and `?copy=1` the person's own copy
+as another of their devices left it, labelled "Your copy" ([git](git.md), Suggested changes).
 
 Only this pairing has a third text: the version both sides last agreed on, the merge base, read as
 `createRecordedVersion(shell, "base")`. Against it, every card says where its change came from —
-**Changed there**, **Changed here**, or **Changed in both places** — from the same change facts the
-sync policy decides with (`bookFacts`, `src/core/sync/facts.ts`), so Review and `/cloud` cannot
-disagree about which passages both people touched. It is a label, not a colour: the tint stays by
-side.
+**changed there**, **changed here**, or **changed in both places** — from the same change facts the
+sync policy decides with (`bookFacts`, `src/core/sync/facts.ts`), so Review and the cloud popover
+cannot disagree about which passages both people touched. It is plain words in the card's header, not a
+chip, and only "changed in both places" takes a colour (warning): it is the one that asks something
+of the reader. The tint stays by side.
 
 Every passage has a side before anyone chooses: changed only there is preset to theirs, changed
 only here to mine, and the card shows the preset as its decision. A passage changed in both places
-has none, and Record a version waits until each has a choice. Pressing it SETTLES the difference
+has none, and Save waits until each has a choice. Pressing it SETTLES the difference
 rather than only recording the editor: the presets still set to theirs are taken into the project's
 text, and then the project's text — choices, presets and anything typed into the cards — is what is
 recorded, with everything else the other side changed, as one version: a receive and a version, or
 one decision commit ([sync](sync.md), "A contested book, settled in Review").
+
+### Against a suggestion
+
+`?pull=<n>` is the same pairing with a suggestion's head as theirs, and four things differ
+([git](git.md), Suggested changes):
+
+- **Whose it is** sits above the cards (`SuggestionLine`): who offered it, its title, when, and the
+  messages of the versions it would bring — with **Decline…**, a note box, on that line.
+- **Save always sends**, to the shared project whatever the reviewer's own mode, even when the
+  fast-forward left nothing new to record: the versions it brought are what the shared project lacks.
+- **The dialog's switch, "Close the suggestion as brought in"**, on by default: off keeps it open
+  for taking more later. On, the reviewer's Save message becomes the note its author reads.
+- **Keeping none of it is declining it.** When the suggestion still offers passages and none is
+  taken — counted by the decisions as made, since a take is written into the editor at once and its
+  passage then reads unchanged — Save is closed and the dialog offers only Decline. Recording anyway
+  would join the suggestion's history and close it as brought in. With nothing left to differ (its
+  versions already here), Save stays open: it is what sends them and closes it.
+
+After a Save that brought one in, Done goes back to the Suggestions tab.
 
 ### The screen never says "left" or "right"
 
@@ -185,7 +211,13 @@ included: `what` is `"markup" | "text" | "whitespace"`, and `note` is true
 inside a footnote or cross-reference. `decodeSkeleton` slices
 each run's `text` from its own side, so a `TextRun` is located and readable.
 
-Both views are marked from those runs and nothing else. The markup view uses
+Both views are marked from those runs and nothing else, whitespace included:
+spaces typed between two sentences are a change, and a gap nothing marked
+read as a rendering fault. In Whole book a unit is decided from a thin column
+on the line between the two texts, `‹ 9 ›` — a chevron pointing at the text it
+chooses, the verse between them — and verses that start on the same line stack
+there; one marker per line used to drop every verse after the first. A card
+has no gutter controls: its header decides it. The markup view uses
 every run; the reading uses `readingRuns` (the non-markup ones). A note is its
 own reading: the engine never lets a word span its edge, so a note added
 after `grace` leaves `grace` unmarked, and the card sets note runs apart
@@ -197,17 +229,59 @@ sid-aligned rule exists to prevent.
 ### The reading: three layers
 
 **The chrome is one row**, so the reading has the screen. What is compared is
-a chip ("In the editor ⇄ On disk") that opens the two pickers; the count says
-how far the review is; Record a version opens
-a dialog for its message; the ⋯ menu holds Clear every decision (in an
+a chip ("On disk → In the editor") that opens the two pickers (From, To); the count says
+how far the review is; **Save** — the header's one primary button, and its
+largest thing, with the way back a small borderless × beside it
+(`BackToEditor quiet`) — opens a dialog for its message, and the dialog stays
+open on its receipt: a line for this device and a line for the shared
+project ([sync](sync.md), "One reading for every surface"); the ⋯ menu holds Clear every decision (in an
 editable review it takes every take back out of the text, one Undo step per
 book, as each book's own Clear does), History and what aligned the diff.
 Choosing another source starts over: no decisions, and the takes already
 written stay as ordinary edits. Recovered work is the one recovery banner every
-project screen shows, and only when there is some. The reading's own toolbar is the second row: scope, the kind
-filter, a View menu (layout, USFM markup), next and previous. The project
-sidebar becomes the review's outline — each book that differs, decided of
-total — as Find's becomes its results.
+project screen shows, and only when there is some. The reading's own toolbar is the second row, one row in both scopes and every
+control one size: scope, the kind filter, a View menu (layout, USFM markup),
+Decide all, and next and previous. Whole book adds the editor's location strip
+above its two texts (`LocationStrip`, `Crumbs`): Book · Chapter listing only the
+books and chapters with changes and how many, picking one going to its first
+change; the arrows step chapter to chapter; and the chain (`FollowToggle`)
+links the two texts' scrolling by verse (`createAlignedGroup`), on by default. The project
+sidebar becomes a tabbed panel, Changes and History — and Suggestions, for
+someone who works in their own copy or can write to the shared project
+(`workspace/ChangesHistorySidebar.tsx`, as Zed's git panel has them; `VersionTabs`
+draws the same tabs above the page while the sidebar is hidden). Review is
+the Changes tab: each book that differs, decided of total, as Find's sidebar
+becomes its results. History is the other tab: the timeline, with the selected
+version's changes in the main area (`?commit=<id>`) and Adopt on either side of
+a card. The route picks the tab, so Back and Forward move between them.
+
+Under the header, one line says where the project stands with the shared
+project — "Saved changes not sent yet · 3 verses in 2 books differ from yours"
+— with Send or See the changes beside it (`SyncLine`); it is the status bar's
+↑2 ↓3 in words, and absent when there is nothing to say.
+
+**The states a review passes through, said rather than guessed at:**
+
+- **Waiting for a side.** A side read out of a commit (the shared project, the
+  last version) has its texts a moment after the screen opens. Compared before
+  they land it held no books, and every book read "only in the editor"; so the
+  screen says "Reading the shared project…" until they do. A side that truly
+  holds no books is one sentence ("The shared project holds no books yet"),
+  never a list of sixty-six names.
+- **Every change decided.** When something was decided, nothing is left
+  undecided and both sides read the same, the cards — each now "unchanged",
+  which reads as "did it work?" — give way to **Every change is decided**, with
+  Save and **Show my choices**. The card sits OVER a reader that stays mounted
+  and hidden (it ignores its zero width while hidden, so an automatic layout
+  does not flip), so showing the choices is instant; replacing the reader threw
+  away every book's prepared diff. A decided card hides the engine's status
+  ("unchanged") for the same reason; the pressed button and the checked column
+  say what happened.
+- **Whole book builds once.** Its two editors wait for the book to be seated
+  (`awaitLive`) and for the reader's width; the seat is kept through a
+  re-comparison; and the view is keyed on the BOOK, not on its prepared entry,
+  which a comparison replaces. Each of the three had been a full rebuild of two
+  Genesis editors on entering Whole book.
 
 The differences are drawn ON the two texts, as the editor reads them — the
 diff view recipe (`#editor` `mountDiffView`) paints units and word runs on each
@@ -262,27 +336,40 @@ book, so the scope is a toggle a reader flips, not a setting they visit.
 **The kind filter** — All, Words, Markup and spacing — narrows the cards, the
 navigation and the bulk actions to one kind, using the engine's own
 classification (`isUsfmStructureChange`, `isWhitespaceChange`). A card with
-formatting changes carries a "markup only" / "whitespace only" badge and a
+formatting changes says "markup only" / "whitespace only" in its header, as words and not a chip, and has a
 code icon that switches that card alone to USFM. In the reading those changes are
 invisible, but a card never switches mode by itself; it once did, and a
 view that changes under the reader unasked reads as a bug.
 
 **Next and previous change** — the arrows, `Alt-F5` / `Alt-Shift-F5` (VS
 Code's own, as `Alt-F8` is for findings), or the palette (`review.change.next`,
-`review.change.previous`). Cards step from the one at the top of the list; the
-book steps unit by unit and crosses into the next book at the end of one. The
-counter says where you are.
+`review.change.previous`). Cards step from the card last stepped to while it is
+still on screen, else from the one at the top of the list (from the top card
+alone, the last few cards — on screen together, with nothing below to scroll
+to — could never be reached); the card stepped to is outlined. The book steps from where
+the reader IS — the middle of their pane, read at the click, not a remembered
+place: the next change after it or the previous one before it, skipping the one
+sitting at the middle, centred in both panes; past the end of a book it crosses
+into the next, and with nothing further anywhere it shows the last change again,
+so a change is never lost to a scroll. The counter
+says where you are.
 
 **Decisions in three sizes.** A unit, in the gutter: ✓ keeps the current
 side's text, ↶ takes the other's, pressing the chosen one again clears it. A
-card, in its header ("Keep all here", "Take all here"). A book, from its
-row's menu in the sidebar (and the Whole book toolbar), over the changes the
-filter shows; the row counts how many are decided. A decided unit stops shouting: kept is
-underlined quietly, taken gets a neutral wash. Strikeout means removed words and
-nothing else. There is no project-wide bulk
-decision beyond Clear: "keep every markup-only change in Genesis" is a
-question somebody can answer, and one click over every change in the project
-is not.
+card, in its header ("Take the file's", "Keep the editor's", at Edit's weight;
+the pressed one says which side, and the engine's status — "unchanged", once
+a take makes both sides read the same — is hidden on a decided card). A book,
+from its row's menu in the sidebar. Everything the view shows, from the
+toolbar's Decide all: every book in Changes, the book on screen in Whole book,
+always over the changes the kind filter shows, with the count and the books
+named at the top of the menu. A decided unit stops shouting and puts
+nothing over the text: a card whose changes are all decided one way says so in
+that side's column caption, in brand with a check ("✓ In the editor"), beside
+the pressed button. Strikeout means removed words and nothing else. Decide all in
+Changes is project-wide: it was held back on the grounds that one click over
+every change in a project is not a question somebody can answer, and is offered
+now because a review against the shared project is usually a handful of
+changes the reader has just read. Each book's take is still its own Undo step.
 
 **Editability is a property of what is loaded.** When the left side is this
 project in the editor, the review IS the editor. There is no mode to pick.
@@ -293,8 +380,9 @@ card's current side, and the whole book's, edits the real Book on a
 double-click or Edit, with the diff as a plugin on it (`liveDiff` in
 `src/editor/recipes/diffView.ts`). So "take theirs, then fix the comma" is a
 click and some typing, the way a Find card is. A taken unit keeps its card,
-washed, with "Taken from the file — put back". Put back merges the
-ORIGINAL's unit into the live text, whatever else was written since. The
+washed, its button pressed and reading "Taken from the file"; pressing it
+again puts it back, which merges the ORIGINAL's unit into the live text,
+whatever else was written since. The
 file is still written only by Record a version.
 
 The DIFF names the tint, not the decision. A taken verse edited afterwards
@@ -347,12 +435,13 @@ a book yet, and it says so in one line.
 
 ---
 
-## 4. Record a version: the save model, explicit only
+## 4. Save (record a version): the save model, explicit only
 
 **The project file is written only when a version is recorded.** There is no
 timer on the file, no idle write, no `autosave` — Review's one button calls
 `saveAll` and then `Git.commit`, in that order, as one action
-(`recordVersion`, `src/app/recordVersion.ts`, which the save key shares when
+(`recordVersion`, `src/app/recordVersion.ts`; the button says **Save**, the code and this document
+still say "record a version" for what it does; the save key shares it when
 "Skip review of my changes" is on). It is offered whenever the project is one
 of the two sides, because what it records is the project's own unsaved work
 and not the comparison. The commit takes exactly the save's receipts, plus
@@ -512,8 +601,6 @@ Recovery never writes the project file, and Save never writes the journal.
 ## Not yet
 
 - Adding or removing a book (`Unsupported`, above).
-- A project-wide bulk decision, behind Advanced and a confirmation, if the
-  per-book ones prove too slow for a formatting pass over 66 books.
 - `compare.colours: "sideTint" | "redGreen"`. Named, not registered; the
   reading is red/green today (above).
 - More sources: a git checkpoint, another local project. The port is the

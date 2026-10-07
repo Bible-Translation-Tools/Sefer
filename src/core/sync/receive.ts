@@ -62,7 +62,7 @@ export type ReceiveRefusal =
   | "unrecorded"
   | "moved";
 
-export class ReceiveError extends Data.TaggedError("ReceiveError")<{
+class ReceiveError extends Data.TaggedError("ReceiveError")<{
   /** Which rule said no, or `undefined` when a port failed instead. */
   readonly refusal: ReceiveRefusal | undefined;
   readonly description: string;
@@ -99,7 +99,8 @@ export interface ReceiveOptions {
   readonly settled?: ReadonlySet<BookId>;
   /**
    * The ref "theirs" is read from — the shared project's remote-tracking ref
-   * unless named: a suggestion's head, fetched to a local ref, is received the
+   * unless named: a suggestion's head, fetched to a local ref, or the
+   * person's own copy as another of their devices left it, is received the
    * same way.
    */
   readonly theirs?: string;
@@ -129,7 +130,7 @@ export const receive = (
     const git = yield* Git;
     const remote = yield* Remote;
     const root = options.project.root;
-    // 1. The other side as it is this second, not as the screen last saw it —
+    // 1. The other side as it is this second, not as a surface last saw it —
     // fetched BEFORE the exclusive lane is taken, so a slow network holds the
     // lane only for its own transfer and never a Record a version behind it.
     // Fetching here rather than inside is as fresh: a push is fast-forward

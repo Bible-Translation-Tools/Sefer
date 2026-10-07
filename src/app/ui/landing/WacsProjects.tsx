@@ -8,7 +8,7 @@
  * flag. Translations show by default — this table is mostly a translation
  * team finding its own work — and a toggle swaps in the gateway languages.
  * Which of the two a download is FOR (edit vs read) is not modelled yet; see
- * planning/00-ideas/resource-kinds.md. A row's date is the most recent update across
+ * planning/01-discussing/resource-kinds-2026-10-01.md. A row's date is the most recent update across
  * every repo of its language — blank until the API carries one (see
  * `catalogue.ts`).
  *

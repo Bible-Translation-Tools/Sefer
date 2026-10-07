@@ -17,13 +17,15 @@
  *    parses a book and not a passage;
  *  - the MODE, from `shell.mode()`, so Regular/USFM switches both panes at
  *    once and a translator comparing markup sees markup on both sides;
- *  - the PLACE, from the main editor's location watcher, so scrolling the
- *    book scrolls the reference beside it.
+ *  - the PLACE, through the book page's aligned group (`#editor`
+ *    `createAlignedGroup`): scroll the book and the verse you scrolled to is
+ *    brought into this pane when it is not already showing, and scrolling
+ *    this pane leads the book the same way.
  *
- * Sync is CHAPTER-level, and by the chapter's own `\c` number rather than by
- * ordinal: the two texts are different files of the same book, so an ordinal
- * into one chapter table means nothing in the other, and the number a
- * translator reads is the only thing they are guaranteed to agree about.
+ * Sync is by VERSE ADDRESS — Location's `addressAt` in one table of contents,
+ * `resolve` in the other — never by offset or ordinal: the two texts are
+ * different files of the same book, and the reference a translator reads is
+ * the only thing they are guaranteed to agree about.
  *
  * ## The paired block
  *
@@ -48,8 +50,6 @@
  */
 
 import { Effect, Fiber, Option, Result, Stream } from "effect";
-import Link from "lucide-solid/icons/link";
-import Unlink from "lucide-solid/icons/unlink";
 import X from "lucide-solid/icons/x";
 import {
   Match,
@@ -79,7 +79,9 @@ import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import { IconButton } from "../primitives";
+import { useAlignedGroup } from "./aligned";
 import { bookName } from "./books";
+import { FollowToggle } from "./FollowToggle";
 import { metadataOf } from "./project";
 
 // The editor's own stylesheet, for the same reason `BookEditor` imports it:
@@ -92,8 +94,6 @@ export interface ReferencePaneProps {
   readonly role: Role;
   /** The book the reader has open; the reference is asked for the same one. */
   readonly bookId: string;
-  /** The chapter NUMBER at the top of the main editor, when it is known. */
-  readonly at: () => number | undefined;
   /** The chapter NUMBER the main editor is clipped to, or `null` for whole-book. */
   readonly clip: () => number | null;
   readonly onUnbind: () => void;
@@ -274,16 +274,38 @@ export function ReferencePane(props: ReferencePaneProps) {
     },
   );
 
-  // And the place follows the reader: the clip first (it decides what is on
-  // screen at all), then the scroll. The CLIP is applied either way — it is
-  // what is in the document, not where the reader is in it, and a pinned pane
-  // showing a chapter the editor has hidden would be showing a different book.
+  // The clip is applied either way — it is what is in the document, not
+  // where the reader is in it, and a pinned pane showing a chapter the editor
+  // has hidden would be showing a different book.
   createEffect(
-    () => ({ view: mounted(), clip: props.clip(), at: props.at(), follow: following() }),
-    ({ view, clip, at, follow }) => {
-      if (view === undefined) return;
-      view.clipTo(clip);
-      if (follow && at !== undefined) view.showChapter(at);
+    () => ({ view: mounted(), clip: props.clip() }),
+    ({ view, clip }) => {
+      view?.clipTo(clip);
+    },
+  );
+
+  // And the place follows the reader, BY VERSE: the pane joins the page's
+  // aligned group, which brings the verse scrolled to in the editor into this
+  // pane when it is not already showing — and this pane's scroll leads the
+  // editor the same way. Following is read at each scroll, so the pin takes
+  // effect at once; turning it back on catches the pane up.
+  const aligned = useAlignedGroup();
+  createEffect(
+    () => mounted(),
+    (view) => {
+      if (view === undefined || aligned === undefined) return;
+      return aligned.join({
+        view: view.view,
+        book: props.bookId,
+        leads: () => untrack(following),
+        follows: () => untrack(following),
+      });
+    },
+  );
+  createEffect(
+    () => ({ view: mounted(), follow: following() }),
+    ({ view, follow }) => {
+      if (view !== undefined && follow) aligned?.sync(view.view);
     },
   );
 
@@ -498,18 +520,12 @@ export function ReferencePane(props: ReferencePaneProps) {
         {/* Follow, or hold still. In the header rather than only in settings
             because it is a per-pane decision made while reading — you pin the
             one you are cross-checking and let the others follow. */}
-        <IconButton
-          size="sm"
-          data-testid={`follow-${props.resource.id}`}
-          data-following={following() ? "" : undefined}
-          label={
-            following()
-              ? t("Stop {title} following the book", { title: props.resource.title })
-              : t("Let {title} follow the book", { title: props.resource.title })
-          }
-          tooltipSide="left"
-          icon={following() ? <Link /> : <Unlink />}
-          onClick={() => setFollowing((on) => !on)}
+        <FollowToggle
+          testId={`follow-${props.resource.id}`}
+          following={following()}
+          stopLabel={t("Stop {title} following the book", { title: props.resource.title })}
+          startLabel={t("Let {title} follow the book", { title: props.resource.title })}
+          onToggle={() => setFollowing((on) => !on)}
         />
         <IconButton
           size="sm"

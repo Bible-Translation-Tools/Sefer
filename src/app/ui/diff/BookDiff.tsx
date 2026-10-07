@@ -5,12 +5,13 @@
  * baseline's words struck through where they were and a baseline-only unit
  * drawn as a block where it stood.
  *
- * In a split the two panes scroll on their own. They used to follow each
- * other by place, and that was too eager: once the texts' heights differ (a
- * reviewer deleted a run of `\p` and `\q` lines, say), a small scroll in one
- * moved the other by a screen. What puts them side by side is next / previous
- * change (`showUnit`): each pane brings that unit to its MIDDLE — where it
- * stands, or where it would stand in a text that lacks it. `onPlace` reports
+ * In a split the two panes are an aligned group (`createAlignedGroup`): they
+ * follow each other by VERSE, and only when the verse scrolled to is not
+ * already on screen in the other. They once followed by place, and that was
+ * too eager: once the texts' heights differ (a reviewer deleted a run of `\p`
+ * and `\q` lines, say), a small scroll in one moved the other by a screen.
+ * Next / previous change (`showUnit`) still brings the unit to each pane's
+ * MIDDLE — where it stands, or where it would stand in a text that lacks it. `onPlace` reports
  * the unit at the top of the current pane, so a counter can say where you are.
  */
 
@@ -22,6 +23,7 @@ import type { DecisionUnit } from "#core/galley/diff";
 import type { ObservabilityService } from "#core/observability";
 import {
   analyzer,
+  createAlignedGroup,
   liveDiff,
   modeView,
   mountDiffView,
@@ -43,6 +45,8 @@ import { hunkPaint, sidePaint, type Controls, type Side } from "./paint";
 
 export interface BookDiffApi {
   readonly showUnit: (unit: DecisionUnit) => void;
+  /** The offset at the middle of your pane: where a step counts from. */
+  readonly middle: () => number | undefined;
 }
 
 /** The unit whose span on `side` holds `at`, or the last one before it. */
@@ -71,6 +75,8 @@ export function BookDiff(props: {
   readonly currentLabel: string;
   readonly baselineLabel: string;
   readonly currentFirst?: boolean;
+  /** Whether the split's two panes follow each other by verse; read at each scroll. */
+  readonly linked?: () => boolean;
   readonly observability: ObservabilityService;
   /** Shown at the top once the views are mounted: where "open in the book" lands. */
   readonly initial?: DecisionUnit | undefined;
@@ -86,6 +92,12 @@ export function BookDiff(props: {
   readonly live?:
     | { readonly book: EditorBook; readonly analyze: (text: string) => Analysis }
     | undefined;
+  /**
+   * The current side WILL be live, once the book is seated: build nothing
+   * until then. Built read-only first, every view was built twice — a whole
+   * book's two editors torn down and made again a moment later.
+   */
+  readonly awaitLive?: boolean;
 }) {
   const [left, setLeft] = createSignal<HTMLDivElement | undefined>(undefined, { name: "bookLeft" });
   const [right, setRight] = createSignal<HTMLDivElement | undefined>(undefined, {
@@ -121,10 +133,22 @@ export function BookDiff(props: {
       if (at !== undefined) entry.mount.showAt(at, "center");
     }
   };
+  /** The offset at the middle of your pane, where the reader is. */
+  const middle = (): number | undefined => {
+    const entry = mounts.find((held) => held.side !== "baseline");
+    if (entry === undefined) return undefined;
+    const view = entry.mount.view;
+    const box = view.scrollDOM.getBoundingClientRect();
+    const y = box.top + box.height / 2;
+    return (
+      view.posAtCoords({ x: box.left + box.width / 2, y }, false) ??
+      view.lineBlockAtHeight(y - view.documentTop).from
+    );
+  };
   createEffect(
     () => props.ref,
     (give) => {
-      give?.({ showUnit });
+      give?.({ showUnit, middle });
     },
   );
 
@@ -145,6 +169,7 @@ export function BookDiff(props: {
       split: props.split,
       markup: props.usfm,
       decidable: props.controls !== undefined,
+      waiting: props.awaitLive === true && props.live === undefined,
       l: left(),
       r: right(),
     }),
@@ -153,8 +178,8 @@ export function BookDiff(props: {
 
   createEffect(
     () => built(),
-    ({ split, markup, live, l, r }) => {
-      if (r === undefined || (split && l === undefined)) return;
+    ({ split, markup, live, waiting, l, r }) => {
+      if (waiting || r === undefined || (split && l === undefined)) return;
       // The latest comparison, read when painting: in a live pane it moves on
       // every accepted edit while the view stays.
       const now = () => untrack(() => ({ sides: props.sides, units: props.units }));
@@ -250,6 +275,13 @@ export function BookDiff(props: {
         );
         follow("baseline", was);
         follow("current", current);
+        // The two panes, aligned by verse: either leads, the other follows.
+        const group = createAlignedGroup("reveal");
+        const linked = (): boolean => untrack(() => props.linked?.() ?? true);
+        releases.push(
+          group.join({ view: was.view, book: sides.bookId, leads: linked, follows: linked }),
+          group.join({ view: current.view, book: sides.bookId, leads: linked, follows: linked }),
+        );
       } else {
         const current = add("unified", r, sides.currentText, () =>
           hunkPaint(
@@ -320,7 +352,11 @@ export function BookDiff(props: {
           </Show>
         </p>
         <div
-          class={cx("cm-diff-pane min-h-0 flex-1", props.live !== undefined && "cm-diff-live")}
+          class={cx(
+            "cm-diff-pane min-h-0 flex-1",
+            props.live !== undefined && "cm-diff-live",
+            props.controls !== undefined && "cm-diff-deciding",
+          )}
           ref={setRight}
         />
       </div>

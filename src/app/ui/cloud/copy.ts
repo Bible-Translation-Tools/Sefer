@@ -1,5 +1,5 @@
 /**
- * Every word `/cloud` says, in one table keyed by the state.
+ * Every word the sync surfaces say, in one table keyed by the state.
  *
  * v1 learned this the expensive way: the chip, the banner, the panel and the
  * settings rows each grew their own wording for the same six situations, and
@@ -16,8 +16,7 @@
  *    diverged and conflicted all end by saying the work is still here. A
  *    translator's first fear is losing a morning's work, and answering it
  *    costs one clause.
- * 3. **Every action says what it will do, in one sentence, before it runs.**
- *    That sentence is `narrate`, it sits under the button, and it names what
+ * 3. **Every action says what it will do before it runs**, and names what
  *    moves and what does not.
  */
 
@@ -26,14 +25,13 @@ import type {
   CombineState,
   IncomingPlan,
   ReceiveRefusal,
-  SyncActionId,
   SyncState,
 } from "#core/sync";
 import { FRONT_MATTER } from "#core/sync";
 
 import { t, type Params } from "../../i18n";
+import type { SendOutcome } from "../../syncActions";
 import type { BadgeTone } from "../primitives";
-import { bookName } from "../workspace/books";
 
 /**
  * One or many, as two whole messages rather than an "(s)".
@@ -46,11 +44,11 @@ import { bookName } from "../workspace/books";
 export const plural = (count: number, one: string, many: string, params: Params = {}): string =>
   t(count === 1 ? one : many, { count, ...params });
 
-/** What the badge, the heading and the paragraph say for one state. */
+/** What the headline and the paragraph say for one state, and its short name. */
 export interface StateCopy {
-  /** Two or three words, for the Badge. */
+  /** Two or three words, for a badge — which no surface draws since `/cloud` went. */
   readonly chip: string;
-  /** The card's heading: the situation, as a sentence. */
+  /** The popover's headline: the situation, as a sentence. */
   readonly headline: string;
   /** One paragraph: what it means, and that the work is safe. */
   readonly detail: string;
@@ -66,6 +64,11 @@ export interface StateCopy {
 export interface StateContext {
   readonly sendRefused?: boolean | undefined;
   readonly signedIn?: boolean | undefined;
+  /**
+   * The project is worked on in the person's own copy: sending goes there, so
+   * "up to date" and "work to send" are about the copy, not the shared project.
+   */
+  readonly inCopy?: boolean;
 }
 
 export const stateCopy = (state: SyncState, context: StateContext = {}): StateCopy => {
@@ -96,6 +99,13 @@ export const stateCopy = (state: SyncState, context: StateContext = {}): StateCo
         tone: "brand",
       };
     case "attached-clean":
+      if (context.inCopy === true)
+        return {
+          chip: t("Up to date"),
+          headline: t("Your copy has all your work"),
+          detail: t("Offer your changes to the shared project when they are ready."),
+          tone: "success",
+        };
       return {
         chip: t("Up to date"),
         headline: t("Up to date with the shared project"),
@@ -103,6 +113,13 @@ export const stateCopy = (state: SyncState, context: StateContext = {}): StateCo
         tone: "success",
       };
     case "ahead":
+      if (context.inCopy === true)
+        return {
+          chip: t("Changes to send"),
+          headline: t("You have work your copy does not"),
+          detail: t("Send it to your copy when you are ready."),
+          tone: "warning",
+        };
       return {
         chip: t("Changes to send"),
         headline: t("You have work the shared project does not"),
@@ -175,90 +192,6 @@ export const stateCopy = (state: SyncState, context: StateContext = {}): StateCo
   }
 };
 
-export const actionLabel = (action: SyncActionId): string => {
-  switch (action) {
-    case "sign-in":
-      return t("Sign in");
-    case "attach":
-      return t("Choose a shared project");
-    case "publish":
-      return t("Publish this project");
-    case "pull":
-      return t("Receive updates");
-    case "push":
-      return t("Send my changes");
-    case "combine":
-      return t("Combine");
-    case "compare":
-      return t("Compare the changes");
-    case "resolve":
-      return t("Finish the transfer");
-    case "retry":
-      return t("Check for changes");
-  }
-};
-
-/**
- * The sentence under the button: what this press will do, before it does it.
- *
- * Counts come from the clocks, so the sentence is specific — "sends your 2
- * versions", not "sends your changes". A vague promise is what makes people
- * afraid to press a sync button.
- */
-export const narrate = (
-  action: SyncActionId,
-  counts: { readonly ahead: number; readonly behind: number; readonly contested: number },
-  host: string,
-): string => {
-  switch (action) {
-    case "sign-in":
-      return t("Signs you in to {host}. Nothing is sent or received until you ask for it.", {
-        host,
-      });
-    case "attach":
-      return t("Records which shared project this one belongs to. Nothing is transferred yet.");
-    case "publish":
-      return plural(
-        counts.ahead,
-        "Creates the project online and sends the {count} version on this device. Nothing here changes.",
-        "Creates the project online and sends the {count} versions on this device. Nothing here changes.",
-      );
-    case "pull":
-      return plural(
-        counts.behind,
-        "Applies the shared project's {count} version to this device. You see the plan first, and nothing is applied until you confirm it.",
-        "Applies the shared project's {count} versions to this device. You see the plan first, and nothing is applied until you confirm it.",
-      );
-    case "push":
-      return plural(
-        counts.ahead,
-        "Sends your {count} version to the shared project. Nothing on this device changes.",
-        "Sends your {count} versions to the shared project. Nothing on this device changes.",
-      );
-    case "combine":
-      // Both counts, because the whole question a person is weighing here is
-      // "what happens to my N versions, and to their M". Both are kept, and
-      // one new version joins them. The last clause is the promise the move
-      // keeps: everything up to the send is local.
-      return plural(
-        counts.ahead,
-        "Your {count} version and the shared project's {behind} are both kept, joined by one new version. Nothing in the shared project changes until it is sent.",
-        "Your {count} versions and the shared project's {behind} are both kept, joined by one new version. Nothing in the shared project changes until it is sent.",
-        { behind: counts.behind },
-      );
-    case "compare":
-      return plural(
-        counts.contested,
-        "Opens the book you both changed, side by side, so you decide what to keep. Nothing changes until you do.",
-        "Opens the {count} books you both changed, side by side, so you decide what to keep. Nothing changes until you do.",
-      );
-    case "resolve":
-      return t("Finishes the transfer that stopped. Your text is untouched until you choose.");
-    case "retry":
-      return t("Asks the shared project what it has. Nothing is sent and nothing is applied.");
-  }
-};
-
 /** "the front matter", "chapter 3" — one chapter, as a person names it. */
 const chapterLabel = (chapter: number): string =>
   chapter === FRONT_MATTER ? t("the front matter") : t("chapter {number}", { number: chapter });
@@ -272,51 +205,56 @@ export const chapterList = (chapters: readonly number[]): string => {
 };
 
 /**
- * The plan in one sentence — the one the gap analysis asked for by name:
- * "3 chapters of Mark changed on the cloud; 1 of them also changed here."
+ * What arrives, in verses — the unit a translator works in — as two
+ * sentences: what changed in the shared project, then whether any of it is
+ * a verse this device changed too. "There are changes to 3 verses in 2 books.
+ * You also changed 1 of those verses."
  *
- * Built from the totals rather than per-book, because the per-book detail is
- * right below it and a summary that repeats the list is not a summary.
+ * Built from the totals rather than per book, because the per-book detail is
+ * right below it and a summary that repeats the list is not a summary. A
+ * change the engine could not place in a verse falls back to books.
  */
 export const planSummary = (plan: IncomingPlan): string => {
-  if (plan.chapterCount === 0) {
+  if (plan.books.length === 0)
     return t("Nothing in your books changes; the updates are elsewhere in the project.");
-  }
-  // "3 chapters of Mark" reads better than "3 chapters across 1 book", and a
-  // single-book plan is the common one, so it gets its own sentence.
-  const where =
-    plan.books.length === 1
-      ? t("of {book}", { book: bookName(plan.books[0]?.bookId ?? "") })
-      : plural(plan.books.length, "across {count} book", "across {count} books");
-  const changed = plural(
-    plan.chapterCount,
-    "{count} chapter {where} changed in the shared project",
-    "{count} chapters {where} changed in the shared project",
-    { where },
-  );
-  if (plan.overlapCount === 0) {
-    return t("{changed}, and none of them changed here.", { changed });
-  }
-  return plural(
-    plan.overlapCount,
-    "{changed}; {count} of them also changed here.",
-    "{changed}; {count} of them also changed here.",
-    { changed },
-  );
+  const books = plural(plan.books.length, "{count} book", "{count} books");
+  if (plan.verseCount === 0) return t("There are changes in {books}.", { books });
+  const verses = plural(plan.verseCount, "{count} verse", "{count} verses");
+  return t("There are changes to {verses} in {books}.", { verses, books });
 };
 
 /**
- * A book's name from the file that holds it — "41-MRK.usfm" → "Mark".
- *
- * Combine names the books it is about to join before it reads a byte of
- * them, so there is no `\id` marker to go on yet; the file name is what a
- * project has. An unrecognised stem falls through `bookName` unchanged, which
- * shows the file rather than inventing a book.
+ * What the shared project has that you do not, in the plan's own numbers —
+ * "3 verses in 2 books differ from yours" — never in versions. However many
+ * versions it took them, a review compares the newest against yours ONCE, and
+ * "3 versions you don't have" read like three reviews.
  */
-export const bookFromPath = (path: string): string => {
-  const file = path.slice(path.lastIndexOf("/") + 1);
-  const stem = file.replace(/\.[^.]*$/u, "");
-  return bookName(stem.replace(/^\d+[-_]?/u, "").toUpperCase());
+export const incomingWords = (plan: IncomingPlan): string | undefined => {
+  if (plan.books.length === 0) return undefined;
+  const books = plural(plan.books.length, "{count} book", "{count} books");
+  if (plan.verseCount === 0) return t("{books} differ from yours", { books });
+  const verses = plural(plan.verseCount, "{count} verse", "{count} verses");
+  return t("{verses} in {books} differ from yours", { verses, books });
+};
+
+/** What you have that the shared project does not — said, not counted: see `incomingWords`. */
+export const outgoingWords = (): string => t("Saved changes not sent yet");
+
+/** The second sentence: whether you changed any of the same verses, and how it reads. */
+export const planOverlap = (
+  plan: IncomingPlan,
+): { readonly text: string; readonly mine: boolean } | undefined => {
+  if (plan.verseCount === 0) return undefined;
+  if (plan.verseOverlap === 0)
+    return { text: t("You have not changed any of those verses."), mine: false };
+  return {
+    text: plural(
+      plan.verseOverlap,
+      "You also changed {count} of those verses.",
+      "You also changed {count} of those verses.",
+    ),
+    mine: true,
+  };
 };
 
 /**
@@ -328,7 +266,7 @@ export const bookFromPath = (path: string): string => {
  * ends by saying where the work is, because a refused transfer is exactly when
  * somebody wonders.
  */
-/** Why a receive did not run, in the words the screen uses. */
+/** Why a receive did not run, in the words Review's receipt uses. */
 export const receiveRefusal = (refusal: ReceiveRefusal, books: readonly string[] = []): string => {
   switch (refusal) {
     case "review":
@@ -412,5 +350,84 @@ export const combineTrouble = (state: CombineState): string => {
       return t(
         "This device is part-way through a combine and could not be put back. Your versions are all still recorded — do not edit until someone has looked at it.",
       );
+  }
+};
+
+/**
+ * How a send ended, as the last line of a Record: the version is kept here
+ * either way, and the line says that first whenever the send did not get
+ * through. `state` is where the project stands afterwards, when it is known —
+ * a refused send has already been followed by a check, so "behind" and
+ * "diverged" can be told apart. A send to the person's own copy says so, and
+ * points at offering it rather than at the team.
+ */
+export const sendOutcomeCopy = (
+  outcome: SendOutcome,
+  state?: SyncState,
+): {
+  readonly tone: "success" | "warning" | "muted";
+  readonly title: string;
+  readonly detail: string;
+} => {
+  switch (outcome.kind) {
+    case "sent":
+      return outcome.toCopy === true
+        ? {
+            tone: "success",
+            title: t("Sent to your copy"),
+            detail: t("Offer your changes from the cloud menu when they are ready."),
+          }
+        : {
+            tone: "success",
+            title: t("Sent to the shared project"),
+            detail: t("Your team gets it the next time they check for changes."),
+          };
+    case "detached":
+      return {
+        tone: "muted",
+        title: t("Kept on this device"),
+        detail: t(
+          "This project is not connected to a shared project, so there is nowhere to send it.",
+        ),
+      };
+    case "held":
+      return {
+        tone: "muted",
+        title: t("Kept on this device; not sent"),
+        detail: t("This project does not send on save. Send it when you are ready."),
+      };
+    case "refused":
+      switch (outcome.reason) {
+        case "Rejected":
+          return {
+            tone: "warning",
+            title: t("Saved here. Not sent: the shared project has changed"),
+            detail:
+              state === "behind" || state === "diverged"
+                ? t(
+                    "It has versions you have not reviewed yet. Your work is safe on this device — compare the changes, choose, and record again to send.",
+                  )
+                : t(
+                    "The shared project would not take it as it is. Your work is safe on this device — check for changes and compare them.",
+                  ),
+          };
+        case "Network":
+        case "Unavailable":
+          return {
+            tone: "warning",
+            title: t("Saved here. Not sent: the shared project could not be reached"),
+            detail: t(
+              "You may be offline. Your work is safe on this device, and Sefer sends it the next time you record a version or press Send.",
+            ),
+          };
+        case "Unauthorized":
+          return {
+            tone: "warning",
+            title: t("Saved here. Not sent: sign in to send"),
+            detail: t(
+              "Your sign-in has expired, or this account may not write to the shared project. Your work is safe on this device.",
+            ),
+          };
+      }
   }
 };

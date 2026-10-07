@@ -66,6 +66,7 @@ import { reportEdits } from "../editReports";
 import { textDirection } from "../language";
 import { useShell } from "../ProjectContext";
 import { shellKeys } from "../settings";
+import { useAlignedGroup } from "./workspace/aligned";
 import { nameBlock } from "./workspace/blockNames";
 import { LocationBar } from "./workspace/LocationBar";
 import { metadataOf } from "./workspace/project";
@@ -156,6 +157,8 @@ export function BookEditor(props: BookEditorProps) {
   const bookId = untrack(() => props.book.id);
   const [stamp, setStamp] = createSignal<SourceStamp | undefined>(undefined, { name: "stamp" });
   const [bound, setBound] = createSignal<Bound | undefined>(undefined, { name: "boundView" });
+  /** The page's aligned group, when the editor is shown beside others. */
+  const aligned = useAlignedGroup();
   const [host, setHost] = createSignal<HTMLDivElement | undefined>(undefined, {
     name: "editorHost",
   });
@@ -358,8 +361,10 @@ export function BookEditor(props: BookEditorProps) {
       // silently rather than shifted onto an offset nobody measured.
       const corpus = (): void => {
         const list: CorpusFinding[] = [];
-        for (const finding of shell.services.projectAnalysis.crossBook())
-          if (finding.bookId === book.id && !stale(finding, book)) list.push(finding);
+        // This book's share only — converted on its own, not by converting the
+        // whole project's list to filter it.
+        for (const finding of shell.services.projectAnalysis.crossBookOf(book.id))
+          if (!stale(finding, book)) list.push(finding);
         showCorpusFindings(created, list);
         // Counts and ids only — a finding's message quotes the document and
         // never reaches the ring.
@@ -468,12 +473,16 @@ export function BookEditor(props: BookEditorProps) {
 
       setBound({ view: created, projection });
 
+      // Beside the references, the editor leads them and follows them.
+      const leave = aligned?.join({ view: created, book: bookId });
+
       // RETURNED, not `onCleanup`. A Solid 2 effect's cleanup is its return
       // value; `onCleanup` inside an effect callback is called outside any
       // owner and never runs at all (NO_OWNER_CLEANUP, which the dev build says
       // out loud). Everything below was leaking: the view was never destroyed,
       // the book stayed bound, and the analysis fiber outlived the screen.
       return () => {
+        leave?.();
         unwatch();
         // No editor, no caret. Left set, it would point into a document that
         // is gone and every pane beside it would keep a stale highlight.
@@ -574,6 +583,9 @@ export function BookEditor(props: BookEditorProps) {
         selection: { anchor: at },
         effects: EditorView.scrollIntoView(at, { y: aimed.at === "top" ? "start" : "center" }),
       });
+      // A jump on purpose leads the references beside it, as a scroll would;
+      // the group does not hear it otherwise, since nobody scrolled.
+      aligned?.lead(held.view);
       const cancel = flash(held.view, { from: at, to: end });
       return cancel;
     },

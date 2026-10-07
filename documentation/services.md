@@ -8,7 +8,7 @@ One section per service: what it is in plain words, what is wrong or constrained
 
 1. **Location** — done: every place question goes through Citation, Address and Location over the engine's TOC, and no regex reads a designator. Anchors (for comments) are the next piece, when comments start. See [Location](#location-and-reference) and [the Location chapter](architecture/location.md).
 2. **Git, top to bottom** — the lifecycle pass is built on the `git-lifecycle` branch (2026-09-30): one writer per repository, receive as a fast-forward through the Books, Combine as a decision commit, intake, check on open and send on save. History time travel is next. See [Git](#git).
-3. **One diff and sync model** — after the primitives settle: stop reading every book (the line diff is retired, 2026-09-27), one change classification for History, Review and Cloud. See [Diff](#diff) and `planning/01-discussing/diff-and-sync-model-2026-09-23.md`.
+3. **One diff and sync model** — after the primitives settle: stop reading every book (the line diff is retired, 2026-09-27), one change classification for History, Review and Cloud. See [Diff](#diff) and the retired Git lifecycle spec (`git log -- planning/01-discussing/diff-and-sync-model-2026-09-23.md`).
 4. **Data safety in Recovery** — done on the review branch (2026-09-28): a journal knows the text it started from by hash, and one subscriber on the canonical edit feed backs up every book. What is left is a damaged journal's valid prefix, and a recovery unit test (a candidate in the testing chapter). See [Recovery](#recovery).
 
 ## The graph
@@ -186,7 +186,7 @@ The pinned Scripture Kitchen WASM build (tagged git dependency, v0.1.8). Onion p
 
 ### Overview
 
-Sefer's whole-project consumer of Galley. It analyses every book when a project opens and re-analyses on a debounce. It holds the cross-book results, reference texts and the character inventory, each stamped for freshness. `rejudge()` is the door for a settings change: it drops the publication judged under the old settings, marks every book stale and lets the one debounced pass republish. `src/core/analysis/projectAnalysis.ts`. → [findings](architecture/findings.md), [inventory](architecture/inventory.md)
+Sefer's whole-project consumer of Galley. It analyses every book when a project opens and re-analyses on a debounce. It holds the cross-book results, reference texts and the character inventory, each stamped for freshness. `rejudge()` is the door for a settings change: it marks every book stale and lets the one debounced pass republish, keeping the old publication until that one replaces it, so Findings dims rather than empties (`findingsPending`). References (the project's source) register on project open, and again when Copied source words is turned on. The Sous half of the findings is converted a book at a time, only when something asks (`crossBookOf`, `corpusReader`), and `findingTotals()` counts without converting, so a keystroke's publication no longer builds every finding in the project. `src/core/analysis/projectAnalysis.ts`. → [findings](architecture/findings.md), [inventory](architecture/inventory.md)
 
 ### Constraints and known bugs
 
@@ -196,6 +196,7 @@ Sefer's whole-project consumer of Galley. It analyses every book when a project 
 ### Ideas / future
 
 - A per-project Scope that closes with the project.
+- Defer the first `corpus.publish` until after the editor mounts: it is ~321 ms of the ~620 ms `project.open` on x-en-ulb (warm, 2026-10-01), about a third of the time to the editor. Left as is for now (sub-second, sync wasm on the main thread either way); typing before it lands is safe, since an edit only re-arms the scheduler.
 
 ---
 
@@ -259,7 +260,7 @@ On it today: the palette, the sidebar's filter (`shell.location.books` for every
 
 ### Overview
 
-CodeMirror over an EditorBook: the phases, registry, mapping and plan; one funnel for every write (`src/editor/funnel.ts`); undo; regular and USFM modes; chapter and book views; clip. A projection on a surface is one extension, `modeView(name, surface?)` (`views.ts`). `src/editor`, mounted by `app/ui/BookEditor.tsx`. → [editor](architecture/editor.md), [solid](architecture/solid.md)
+CodeMirror over an EditorBook: the phases, registry, mapping and plan; one funnel for every write (`src/editor/funnel.ts`); undo; regular and USFM modes; chapter and book views; clip. A projection on a surface is one extension, `modeView(name, surface?)` (`views.ts`). Decoration covers a window round the viewport that moves at most once a frame (`render.ts`), through one windowed loop for both modes; two editors side by side align by verse through a group their container holds (`recipes/align.ts`). `src/editor`, mounted by `app/ui/BookEditor.tsx`. → [editor](architecture/editor.md), [solid](architecture/solid.md)
 
 ### Constraints and known bugs
 
@@ -267,6 +268,8 @@ CodeMirror over an EditorBook: the phases, registry, mapping and plan; one funne
 - Passthrough markers (a registered standalone such as `\s5`, and any unknown marker) are invisible in regular mode and immortal: the caret goes around them, no key takes one alone, and a delete that covers one takes it — the matrix's immortal rule; a `KEEP` bit that wrote around them instead was tried and dropped because it glued `\s5` to the next word. The space a paragraph shows where it flows through blank and `\s5` lines is the registry's `join` set, which owns those lines, so Backspace or Delete at it removes the whole gap in one step. → [editor](architecture/editor.md#passthrough-markers)
 - An unknown marker closes its paragraph in the engine at the end of its line, so unlike `\s5` the paragraph does not flow through it: the marker is invisible, the lines after it read as their own lines. Needs an engine answer (see Galley).
 - Input and accessibility have not been exercised at all: no IME, RTL, screen-reader or keyboard-only evidence, in either mode or any of the three desktop webviews. Only groundwork exists (text direction, bidi isolates).
+- On a slow machine (CPU 4×, Psalms) a key reaches the screen in ~100 ms, and the floor is the full parse. Chapter view is not a performance setting: the clip narrows decoration only. → [editor](architecture/editor.md#performance)
+- The aligned group's `exact` mode has no switch in the UI; everything uses `reveal`.
 
 ### Ideas / future
 
@@ -275,6 +278,7 @@ CodeMirror over an EditorBook: the phases, registry, mapping and plan; one funne
   - record evidence per mode and per webview
   - make a touch decision
 - USFM-aware copy profiles, and the aligned-word tooltip (both in `planning/04-parked/parked.md`).
+- Chapter-scoped parse, plan and paint, the one way chapter view becomes a typing win; it needs the CST resolved across chapter boundaries. Not before the parse is what is left.
 
 ## Satellites
 
@@ -317,7 +321,7 @@ One `Finding` shape over engine diagnostics and project checks, with a semantic 
 ### Constraints and known bugs
 
 - The inventory only lists characters the engine made a claim about; it waits on the Sous census.
-- A Sous finding's message is kitchen's descriptor rendered through its English ICU catalog (`src/core/findings/messages.ts`, `intl-messageformat`, locale `en`). Onion's messages are still the engine's catalogue strings, and there is no second language yet.
+- A Sous finding's message is kitchen's descriptor rendered through its English ICU catalog (`src/core/findings/messages.ts`, `intl-messageformat`, locale `en`), the first time it is read. Onion's messages are still the engine's catalogue strings, and there is no second language yet.
 
 ### Ideas / future
 
@@ -406,7 +410,7 @@ There is one diff: the engine's decision units, addressed by sid (`core/diff/ske
 
 ### Ideas / future
 
-- The plan: `planning/01-discussing/diff-and-sync-model-2026-09-23.md`. Skip by stamp, read only changed books, one change classification shared by History, Review and Cloud, — History and `projectSource` are on decision units and `core/diff/diff.ts` is deleted (2026-09-27); what remains is skipping the read by stamp.
+- The plan (the Git lifecycle spec, built and retired 2026-10-06; its decisions live in [sync](architecture/sync.md) and [git](architecture/git.md)). Skip by stamp, read only changed books, one change classification shared by History, Review and Cloud, — History and `projectSource` are on decision units and `core/diff/diff.ts` is deleted (2026-09-27); what remains is skipping the read by stamp.
 - The diff UI redesign is paused on `/project/$slug/playground`.
 - **Default baseline: the file on disk against the working session, not the last commit.**
 - **Open: files that aren't scripture** (a manifest, a versification file, `metadata.json`) have no comparison view. The agreed shape is `@codemirror/merge`'s read-only view, pick one side, behind Advanced; when it lands, the INVARIANTS rule becomes "Scripture diffs are sid-aligned". Until then Combine refuses a non-scripture file both sides changed.
@@ -415,7 +419,7 @@ There is one diff: the engine's decision units, addressed by sid (`core/diff/ske
 
 ### Overview
 
-The one compare screen, `/review`. Both sides are pickers over a `CompareSource` (the working project, a folder, a zip, a recorded version, the saved file, or the shared project — where each change says whether it changed there, here or in both places, and Record a version settles the difference). The differences are drawn on the texts as the editor reads them: cards per change across every book, or the whole book; split or unified; decisions per unit, card or book, next/previous change (`Alt-F5`). You decide, then Apply, and Record a version (save + commit). The app bar's More menu opens it (Compare). `src/core/compare`, `src/app/ui/review`. → [review](architecture/review.md)
+The one compare screen, `/review`. Both sides are pickers over a `CompareSource` (the working project, a folder, a zip, a recorded version, the saved file, or the shared project — where each change says whether it changed there, here or in both places, and Record a version settles the difference). The differences are drawn on the texts as the editor reads them, the other side on the left and your text on the right: cards per change across every book, or the whole book with the editor's location strip and its two texts aligned by verse; split or unified; decisions per unit, card, book or everything the view shows (Decide all), next/previous change (`Alt-F5`) from where you are. Save (save + commit) is the header's primary button and stays open on its receipt; a line under the header says where the project stands with the shared project. The app bar's More menu opens it (Compare), and so does the cloud's See the changes. `src/core/compare`, `src/app/ui/review`. → [review](architecture/review.md)
 
 ### Constraints and known bugs
 
@@ -425,6 +429,7 @@ The one compare screen, `/review`. Both sides are pickers over a `CompareSource`
 ### Ideas / future
 
 - Its own `/compare` route again, some day, if the flow splits.
+- A strip between Whole book's two texts for the decision column, if the panes are ever kept in exact alignment.
 
 ---
 
@@ -479,9 +484,9 @@ The flow needs one top-to-bottom pass before more is added.
 
 ### Ideas / future
 
-- **Measured direction (2026-09-25, Appendix A of `planning/01-discussing/diff-and-sync-model-2026-09-23.md`):** a pack-cached filesystem view under the Web port (37 s → ~2 s for a full walk; isomorphic-git's per-object probing is the cost), then a durable book-change index built at clone and extended at fetch (en_ulb: 4 s, 0.7 MB gzipped; any book's history in ~3 ms), two-point comparison from root trees (42 ms), and common-ancestor / changed-on-both-sides facts for incoming work.
-- **Next up:** book time travel: a read-only historical pane with previous/next, and a bounded log. Then chapter filtering via Location, with a per-(blob, chapter) hash cache and an LRU. Plan: `planning/01-discussing/diff-and-sync-model-2026-09-23.md`, the one Git lifecycle spec.
-- Detect Git changes made outside Sefer; add "back to latest" and an unhealthy-repository recovery flow.
+- **Measured direction (2026-09-25, the retired Git lifecycle spec's Appendix A, `git log -- planning/01-discussing/diff-and-sync-model-2026-09-23.md`):** a pack-cached filesystem view under the Web port (37 s → ~2 s for a full walk; isomorphic-git's per-object probing is the cost), then a durable book-change index built at clone and extended at fetch (en_ulb: 4 s, 0.7 MB gzipped; any book's history in ~3 ms), two-point comparison from root trees (42 ms), and common-ancestor / changed-on-both-sides facts for incoming work.
+- **Next up:** book time travel: a read-only historical pane with previous/next, and a bounded log. Then chapter filtering via Location, with a per-(blob, chapter) hash cache and an LRU. The Git lifecycle spec that planned it is retired; its decisions are in [sync](architecture/sync.md) and [git](architecture/git.md).
+- Detect Git changes made outside Sefer; add "back to latest" and an unhealthy-repository recovery flow. Decided in the retired spec, not built: when `.git` cannot be read, Saving still writes the files and skips the commit (said honestly), and Advanced offers Finish the interrupted transfer (only mid-merge), Rebuild the history index, and Start a new history (the old `.git` moved to `.git-unreadable-<date>`, never deleted).
 
 ---
 
@@ -497,7 +502,8 @@ Clone (the newest version only unless the caller asks for all; desktop backfills
 
 - Desktop transfer progress is a `TODO(seam)` (`platform/tauri/remote.ts:141`).
 - Desktop `git_clone` (git2 `RepoBuilder`) compiles but has not been run against a server; the web clone was checked on `main` and `master` repositories through the prod proxy, and (2026-09-25) stores the content host as `origin`.
-- Suggested changes (forks and pull requests, `core/remote/suggestions.ts`) are built but not exercised against a second account. They join the app at four seams and can be cut out; [git](architecture/git.md#suggested-changes).
+- Suggested changes (forks and pull requests, `core/remote/suggestions.ts`) were exercised on the Web with a second, non-writer account on 2026-10-06 — copy, offer, partial accept, decline — and not yet on desktop. On the Web each call depends on the WACS proxy's API allowlist; [git](architecture/git.md#suggested-changes).
+- A plain Decline only closes the pull request: its versions stay out of the shared project's history and come back in the person's next offer. Recording a decline as a decision commit is deferred; [git](architecture/git.md#suggested-changes).
 
 ### Ideas / future
 
@@ -507,13 +513,13 @@ Clone (the newest version only unless the caller asks for all; desktop backfills
 
 ### Overview
 
-The `/cloud` screen. It reads the two clocks and sorts the project into one of ten states, plans what a Receive would change from change facts and one overlap policy, receives by fast-forward, and Combines as one decision commit; a contested book is settled in Review against the shared project. The check on open and send on save run per project, on by default. Scripture text is never merged automatically. `src/core/sync`, `app/ui/cloud`. → [sync](architecture/sync.md)
+The app bar's cloud popover (state, clocks, the one right move, sign in and out, publish, how your suggestion stands), Settings' Cloud section (account, shared project, how you work — together in the shared project or in your own copy — and the per-project switches), and the Suggestions tab for editors. `/cloud` was deleted on 2026-10-06. It reads the two clocks and sorts the project into one of ten states, plans what a Receive would change from change facts and one overlap policy, receives by fast-forward, and Combines as one decision commit; a contested book is settled in Review against the shared project. The check on open and send on save run per project, on by default. Scripture text is never merged automatically. One reading for the whole application (`syncWatch`) feeds the app bar's cloud and its popover, `/cloud`, Review's sync line and Save's receipt; counts are verses and books, never versions. `src/core/sync`, `app/ui/cloud`. → [sync](architecture/sync.md)
 
 ### Constraints and known bugs
 
 - A contested book's link opens Review for the project, not that book: Review takes no book in its URL.
-- A direct reload onto `/cloud?fixture=1` has shown a blank screen; not yet known whether that predates the lifecycle work.
 - The overlap scope is `book` everywhere; `chapter` and `verse` exist in the policy with no setting.
+- The surfaces of 2026-10-05 — the app bar's cloud, Save's receipt, Review's sync line — have been driven on the fixture only: their behind, diverged and refused-send paths still want a run against a real shared project.
 
 ### Ideas / future
 
@@ -551,7 +557,7 @@ Staged, validated import with provenance (`stage` → `classify` → `commit`, `
 
 ### Ideas / future
 
-- Web Translation Notes import: pack per book straight from the zip entries, validate, then publish to the Library (`planning/01-discussing/web-translation-notes-import.md`).
+- Web Translation Notes import: pack per book straight from the zip entries, validate, then publish to the Library (`planning/01-discussing/resource-kinds-2026-10-01.md`, §5).
 - Cleanup of an import stage abandoned when the process dies.
 
 ## Library
@@ -595,7 +601,7 @@ Rename (this device's name only, in `.sefer/project.json`), delete, archive, exp
 
 ### Overview
 
-Composed exactly once (`composeApplication`), with services reached through `useComposition()`. It covers the command registry with `when()`, the routes under `/project/$slug/…`, ProjectContext, and event → core → stores. `src/app`, `src/routes`. → [shell](architecture/shell.md), [composition](architecture/composition.md) Every seated book's edits reach the shell, whichever surface made them: ProjectContext subscribes to each seat the Project announces and reports `book.apply` (and supplies the parse to ProjectAnalysis), except for the book the main editor shows, which `BookEditor` reports with its gesture trace. Before 2026-09-28 an edit made in a card (Find, Findings, Review) was invisible to the stamp and the corpus until the card released the book.
+Composed exactly once (`composeApplication`), with services reached through `useComposition()`. It covers the command registry with `when()`, the routes under `/project/$slug/…`, ProjectContext, and event → core → stores. `src/app`, `src/routes`. → [shell](architecture/shell.md), [composition](architecture/composition.md) Every seated book's edits reach the shell, whichever surface made them: ProjectContext subscribes to each seat the Project announces and reports `book.apply` (and invalidates the book in ProjectAnalysis, so the pass re-parses it through the engine's id door; a card's own parse was not made through it), except for the book the main editor shows, which `BookEditor` reports with its gesture trace. Before 2026-09-28 an edit made in a card (Find, Findings, Review) was invisible to the stamp and the corpus until the card released the book.
 
 ### Constraints and known bugs
 

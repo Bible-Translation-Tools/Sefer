@@ -84,3 +84,23 @@ Diffing a book against itself still takes 8.6 ms and returns 992 KB. With identi
 **Change:** add an option on `diff` (its options object from 0.1.7) that leaves `unchanged` units out of `units`, with slots and `afterUnit` renumbered or anchored so the order is still recoverable. Nothing reads an unchanged unit: a decision is only ever made on a changed one, `merge` re-diffs on its own side, and a view shows the unchanged text from the document itself. Keep the default as it is, so nothing that relies on the full skeleton breaks. A compact binary wire (spans in a `Uint32Array`) would be the next step if the JSON of the changed units ever matters. It doesn't yet.
 
 **Sefer side:** ask for changed-only, and skip calling `diff` at all when both sides have the same `sameSource` stamp (hash and length). That second check is Sefer's alone, and it removes every untouched book from an all-books review.
+
+## 9. `DiagnosticView.message()` leaves `{aux}` in
+
+**Asked 2026-10-01.** `message(slice)` fills `{anchor}` and `{second}` and nothing else, so every template that names its aux reaches the reader raw: "verse 4 skips ahead; expected {aux}", "\q2 mixes numbered and bare spellings with \q (levels 1-{aux})". Twelve catalogue rows carry an aux; `{aux}` appears in the templates of the `expectedNumber`, `numberingCap` and `version` ones.
+
+**Change:** `message()` also replaces `{aux}`: the number itself, and for a `version` aux the `USFM_VERSIONS` entry. Please confirm that a `version` aux IS an index into `USFM_VERSIONS`; Sefer assumes so.
+
+**Sefer side:** `diagnosticMessage` (`src/core/galley/analysis.ts`) fills it today; drop that once kitchen does.
+
+## 10. Every finding code as an exported union, to switch on
+
+**Asked 2026-10-01.** The wording is Sefer's to own (and to translate); kitchen ships no English for it. What Sefer needs is a closed vocabulary to switch on exhaustively. Today none is exported as such: onion's names are reachable only as `(typeof CODES)[number]["name"]`, and a sous finding's code is assembled by Sefer from three tuples (`HygieneClass`, `PresenceKind`, `Channel`) plus two lanes with no enum at all (source copy, length proportionality). Sefer keys `src/app/ui/panels/findingLabels.ts` by those today.
+
+**Change:** export the unions by name — `DiagnosticName` from the onion reader, and one for sous's finding kinds/lanes — so a consumer's `switch (code)` or `satisfies Record<…>` breaks when a code is added or dropped. English rule descriptions for agents may ride along as docs; Sefer still switches on the code for its own strings.
+
+**Sefer side:** key the label tables by the exported unions; nothing else moves.
+
+We can put in a scripture kitchen ask about the potential logic of tiling backward however so that stuff like a \p end up reading as part the one they attach too instead of previous as trailing info:
+
+sssssssssssssssssssssssere -> not trigger an error. Only 3 exactly.

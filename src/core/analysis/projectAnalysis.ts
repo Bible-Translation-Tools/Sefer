@@ -44,7 +44,13 @@
 import { Context, Duration, Effect, Latch, Layer, Option, PubSub, Scope, Stream } from "effect";
 
 import type { Book, BookId } from "../book/book";
-import { fromAnalysis, fromSnapshot, type Finding, type PublishedBook } from "../findings/finding";
+import {
+  corpusReader,
+  fromAnalysis,
+  type CorpusReader,
+  type Finding,
+  type PublishedBook,
+} from "../findings/finding";
 import { EMPTY as EMPTY_INVENTORY, inventory, type Inventory } from "../findings/inventory";
 import {
   describesExactly,
@@ -203,6 +209,18 @@ export interface ProjectAnalysisService {
   readonly crossBook: () => readonly Finding[];
 
   /**
+   * One book's share of the corpus half, converted on its own: an editor's
+   * squiggles need their book, not the project's whole list.
+   */
+  readonly crossBookOf: (bookId: BookId) => readonly Finding[];
+
+  /**
+   * How many errors and warnings `findings()` holds, counted without
+   * converting the corpus half — what a badge needs, at a fraction of the list.
+   */
+  readonly findingTotals: () => { readonly errors: number; readonly warnings: number };
+
+  /**
    * The last publication's pattern table, pivoted per character — what the
    * corpus does with its punctuation, and which sites were flagged.
    *
@@ -321,7 +339,8 @@ const make = (
     let attached: Project | undefined;
     let snapshot: FindingsSnapshot | undefined;
     let findingsCache: readonly Finding[] | undefined;
-    let corpusCache: readonly Finding[] | undefined;
+    let corpusCache: CorpusReader | undefined;
+    let totalsCache: { readonly errors: number; readonly warnings: number } | undefined;
     let inventoryCache: Inventory | undefined;
 
     const pubsub = yield* PubSub.unbounded<{
@@ -338,6 +357,7 @@ const make = (
     const invalidateCaches = (): void => {
       findingsCache = undefined;
       corpusCache = undefined;
+      totalsCache = undefined;
       inventoryCache = undefined;
     };
 
@@ -503,10 +523,31 @@ const make = (
       };
     };
 
-    const crossBook = (): readonly Finding[] => {
-      if (corpusCache !== undefined) return corpusCache;
-      corpusCache = snapshot === undefined ? [] : fromSnapshot(snapshot, resolveBook);
+    /** The publication's corpus findings, converted a book at a time as they are asked for. */
+    const corpus = (): CorpusReader | undefined => {
+      if (snapshot === undefined) return undefined;
+      corpusCache ??= corpusReader(snapshot, resolveBook);
       return corpusCache;
+    };
+    const crossBook = (): readonly Finding[] => corpus()?.all() ?? [];
+    const crossBookOf = (bookId: BookId): readonly Finding[] => corpus()?.of(bookId) ?? [];
+
+    const findingTotals = (): { readonly errors: number; readonly warnings: number } => {
+      if (totalsCache !== undefined) return totalsCache;
+      let errors = 0;
+      let warnings = 0;
+      for (const [bookId, entry] of entries) {
+        if (entry.analysis === undefined || entry.stamp === undefined) continue;
+        for (const finding of fromAnalysis(bookId, entry.analysis, entry.stamp))
+          if (finding.severity === "error") errors += 1;
+          else if (finding.severity === "warning") warnings += 1;
+      }
+      const shared = corpus()?.totals();
+      totalsCache = {
+        errors: errors + (shared?.errors ?? 0),
+        warnings: warnings + (shared?.warnings ?? 0),
+      };
+      return totalsCache;
     };
 
     const characters = (): Inventory => {
@@ -785,6 +826,8 @@ const make = (
       },
       findings,
       crossBook,
+      crossBookOf,
+      findingTotals,
       inventory: characters,
       watch: () => Stream.fromPubSub(pubsub),
     };

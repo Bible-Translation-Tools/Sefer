@@ -2,12 +2,12 @@
  * The "Shared project" card: choosing WHICH shared project a project on this
  * device is, and creating one when there is none.
  *
- * One card, two places. `CloudPanel` shows it beside the account on
- * `/settings`; the sync screen (`CloudScreen`) shows it whenever the next step
- * is to attach or publish, because a "Choose a shared project" button with the
- * card somewhere else did nothing at all. The screen drives it through
- * `actions`: its primary button lists the repositories, or puts the caret in
- * the new-name field.
+ * In Settings' Cloud section (`CloudPanel`), beside the account. The cloud
+ * popover publishes a project only on this device by itself; choosing one
+ * that already exists is here. Once a project is attached the card names its
+ * shared project, and choosing another sits behind "Change shared project…":
+ * it moves where this project receives from and sends to, so it is never the
+ * first button on the card.
  *
  * It holds no domain state. The session lives in `Credentials` (through
  * `Gitea`), the attachment in the repository's own `origin`, and the progress
@@ -15,44 +15,42 @@
  */
 
 import { Effect, Fiber, Stream } from "effect";
-import { For, Show, createEffect, createSignal, onCleanup, untrack } from "solid-js";
+import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 
 import { Git } from "#core/git/git";
 import { Gitea, type RemoteRepo } from "#core/remote/gitea";
 import { Remote } from "#core/remote/remote";
 
+import { collaboration } from "../../collaboration";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
+import { syncWatch } from "../../syncWatch";
 import { Button, Card, Input, PanelHeader } from "../primitives";
 import type { Account } from "./account";
-
-/** What a screen can ask of the card from its own button. */
-export interface SharedProjectActions {
-  /** List the repositories this account can write, to attach one. */
-  readonly list: () => void;
-  /** Put the caret in the new shared project's name. */
-  readonly focusName: () => void;
-}
 
 /**
  * `root` is the project this card attaches and publishes; optional because
  * `/settings` shows it with no project open, and then it says what is missing
  * rather than offering a button that would `git.init` whatever folder was at
- * hand. `onChanged` runs after an attach or publish succeeds, so a screen that
- * reads the sync state can read it again.
+ * hand. An attach or publish reads the sync state and the collaboration facts
+ * again, so every surface shows the new shared project.
  */
 export function SharedProjectCard(props: {
   readonly account: Account;
   readonly root?: string | undefined;
-  readonly onChanged?: () => void;
-  readonly actions?: (actions: SharedProjectActions) => void;
 }) {
   const shell = useShell();
   const { services } = shell;
   // The account is the caller's, so the two cards on one screen share one.
   // oxlint-disable-next-line solid/reactivity -- a handle, not a value: the same Account for the card's life
   const account = props.account;
-  let nameField: HTMLInputElement | undefined;
+  /** After an attach or publish: every surface reads the new shared project. */
+  const reread = (): void => {
+    const project = shell.project();
+    if (project === undefined) return;
+    void syncWatch.refresh(services, project).catch(() => undefined);
+    void collaboration.refresh(services, project);
+  };
 
   const [repos, setRepos] = createSignal<readonly RemoteRepo[]>([], { name: "cloudRepos" });
   const [newName, setNewName] = createSignal("", { name: "cloudNewName" });
@@ -110,7 +108,6 @@ export function SharedProjectCard(props: {
   /** Attach an existing repository as this project's `origin`. */
   const attach = (repo: RemoteRepo): void => {
     const root = props.root;
-    const changed = props.onChanged;
     if (root === undefined) return;
     account.attempt(async () => {
       await services.run(
@@ -122,7 +119,7 @@ export function SharedProjectCard(props: {
         }),
       );
       shell.report(t("attached {name}", { name: repo.fullName }));
-      changed?.();
+      reread();
     });
   };
 
@@ -151,28 +148,80 @@ export function SharedProjectCard(props: {
       );
       setNewName("");
       shell.report(t("published {name}", { name: staticName }));
-      props.onChanged?.();
+      reread();
     });
   };
 
-  // Handed over once: the screen holding the card keeps the same two actions.
-  untrack(() => props.actions)?.({ list: listRepos, focusName: () => nameField?.focus() });
+  /** The shared project this one is attached to, as a person reads it, when it is. */
+  const attachedTo = (): string | undefined => {
+    const origin = syncWatch.sync(shell.project()?.root)?.reading.origin;
+    return origin === undefined
+      ? undefined
+      : origin
+          .replace(/\.git$/u, "")
+          .split("/")
+          .slice(-2)
+          .join("/");
+  };
+
+  // Choosing or creating a shared project. Up front when there is none;
+  // behind "Change shared project…" when there is, because a click here moves
+  // where this project sends — not something to offer as a first button.
+  const controls = () => (
+    <>
+      <div class="flex flex-wrap items-center gap-2">
+        <Button onClick={listRepos} disabled={account.busy()}>
+          {t("Choose a shared project…")}
+        </Button>
+      </div>
+
+      <Show when={repos().length > 0}>
+        <ul class="flex flex-col gap-1" data-repos={repos().length}>
+          <For each={repos()}>
+            {(repo) => (
+              <li
+                class="flex items-center gap-3 rounded-md border border-surface-border px-3 py-2"
+                data-repo={repo.fullName}
+              >
+                <strong class="text-small">{repo.fullName}</strong>
+                <Button
+                  size="sm"
+                  class="ms-auto"
+                  onClick={() => attach(repo)}
+                  disabled={account.busy()}
+                >
+                  {t("Attach")}
+                </Button>
+              </li>
+            )}
+          </For>
+        </ul>
+      </Show>
+
+      <form
+        class="flex flex-wrap items-center gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          publish();
+        }}
+      >
+        <Input
+          type="text"
+          wrapperClass="w-64"
+          placeholder={t("new shared project name")}
+          value={newName()}
+          onInput={(event) => setNewName(event.currentTarget.value)}
+        />
+        <Button type="submit" disabled={account.busy()}>
+          {t("Create and publish")}
+        </Button>
+      </form>
+    </>
+  );
 
   return (
     <Card class="space-y-3" data-cloud-card="attach">
-      <PanelHeader
-        level={3}
-        title={t("Shared project")}
-        actions={
-          <a
-            class="text-small font-medium text-brand underline underline-offset-2"
-            href="/cloud"
-            data-cloud="open-sync"
-          >
-            {t("Open sync…")}
-          </a>
-        }
-      />
+      <PanelHeader level={3} title={t("Shared project")} />
 
       <Show
         when={account.host !== null && account.session() !== undefined}
@@ -190,54 +239,26 @@ export function SharedProjectCard(props: {
             </p>
           }
         >
-          <div class="flex flex-wrap items-center gap-2">
-            <Button onClick={listRepos} disabled={account.busy()}>
-              {t("Choose a shared project…")}
-            </Button>
-          </div>
-
-          <Show when={repos().length > 0}>
-            <ul class="flex flex-col gap-1" data-repos={repos().length}>
-              <For each={repos()}>
-                {(repo) => (
-                  <li
-                    class="flex items-center gap-3 rounded-md border border-surface-border px-3 py-2"
-                    data-repo={repo.fullName}
-                  >
-                    <strong class="text-small">{repo.fullName}</strong>
-                    <Button
-                      size="sm"
-                      class="ms-auto"
-                      onClick={() => attach(repo)}
-                      disabled={account.busy()}
-                    >
-                      {t("Attach")}
-                    </Button>
-                  </li>
-                )}
-              </For>
-            </ul>
+          <Show when={attachedTo()} fallback={<div class="space-y-3">{controls()}</div>}>
+            {(origin) => (
+              <div class="space-y-3">
+                <p class="text-small text-on-surface-secondary" data-cloud="attached-to">
+                  {t("This project is shared at {name}.", { name: origin() })}
+                </p>
+                <details class="space-y-3" data-cloud="change-shared">
+                  <summary class="cursor-pointer text-small text-on-surface-tertiary">
+                    {t("Change shared project…")}
+                  </summary>
+                  <p class="pt-2 text-smallest text-on-surface-tertiary">
+                    {t(
+                      "Your work stays on this device. Another shared project changes where this one receives from and sends to.",
+                    )}
+                  </p>
+                  {controls()}
+                </details>
+              </div>
+            )}
           </Show>
-
-          <form
-            class="flex flex-wrap items-center gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              publish();
-            }}
-          >
-            <Input
-              ref={(element: HTMLInputElement) => (nameField = element)}
-              type="text"
-              wrapperClass="w-64"
-              placeholder={t("new shared project name")}
-              value={newName()}
-              onInput={(event) => setNewName(event.currentTarget.value)}
-            />
-            <Button type="submit" disabled={account.busy()}>
-              {t("Create and publish")}
-            </Button>
-          </form>
         </Show>
       </Show>
 

@@ -2,10 +2,10 @@
  * Is this device on a network, is a check running, and did the last send get
  * through? One answer for the whole application, not one per screen.
  *
- * The check on open, send on save, the Save dialog's last line and `/cloud`
- * all ask the same questions, and a signal each screen made for itself would
- * let them disagree: `/cloud` showing "offline" while a save goes on trying to
- * send. So these live for the application's lifetime, at module level, the way
+ * The check on open, send on save, the Save dialog's last line and the cloud
+ * popover all ask the same questions, and a signal each surface made for
+ * itself would let them disagree: the popover showing "offline" while a save
+ * goes on trying to send. So these live for the application's lifetime, at module level, the way
  * `projectNames.ts` does.
  *
  * Online is read twice, because neither detector is enough alone.
