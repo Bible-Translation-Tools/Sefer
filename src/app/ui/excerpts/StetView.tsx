@@ -31,9 +31,8 @@ import CheckIcon from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import ChevronUp from "lucide-solid/icons/chevron-up";
-import CircleIcon from "lucide-solid/icons/circle";
-import CircleCheckIcon from "lucide-solid/icons/circle-check";
 import PencilIcon from "lucide-solid/icons/pencil";
+import ThumbsUpIcon from "lucide-solid/icons/thumbs-up";
 import { For, Show, createMemo, createSignal, onCleanup } from "solid-js";
 
 import type { BookId } from "#core/book/book";
@@ -109,7 +108,7 @@ function Definition(props: { readonly text: string }) {
     return held.length > 1 && held[0]?.endsWith(":") === true;
   };
   return (
-    <div class="flex flex-col gap-1 text-small text-on-surface-primary">
+    <div class="flex flex-col gap-1 text-small leading-[2] text-on-surface-primary">
       <Show when={listed()} fallback={<For each={lines()}>{(line) => <p>{line}</p>}</For>}>
         <p>{lines()[0]}</p>
         <ul class="list-disc space-y-1 ps-5">
@@ -414,9 +413,14 @@ export function StetView(props: StetViewProps) {
             : isEdited(excerpt.sid)
               ? t("Approve with edits")
               : t("Approve"),
-          icon: isApproved(excerpt.sid) ? CircleCheckIcon : CircleIcon,
+          icon: isApproved(excerpt.sid) ? CheckIcon : ThumbsUpIcon,
+          // As wide as its longest words ("Approved with edits"), whatever it
+          // says now, so approving never shifts the row.
+          class: "w-52 justify-center",
           pressed: isApproved(excerpt.sid),
-          emphasis: "tertiary",
+          // The card's call to action until it is done; approved, the pressed
+          // toggle (the light brand fill), pressed in rather than shouting.
+          emphasis: "primary",
           onPress: () => toggleApproved(excerpt),
         },
       ],
@@ -438,7 +442,7 @@ export function StetView(props: StetViewProps) {
         <Show
           when={!(props.loading === true && props.terms.length === 0)}
           fallback={
-            <p class="px-2 py-4 text-small text-on-surface-tertiary">
+            <p class="px-2 py-4 text-small text-on-surface-primary">
               {t("Loading spiritual terms…")}
             </p>
           }
@@ -446,7 +450,7 @@ export function StetView(props: StetViewProps) {
           <Show
             when={shown().length > 0}
             fallback={
-              <p class="px-2 py-4 text-small text-on-surface-tertiary">
+              <p class="px-2 py-4 text-small text-on-surface-primary">
                 {t("No term matches that.")}
               </p>
             }
@@ -512,7 +516,10 @@ export function StetView(props: StetViewProps) {
         <Show when={open()}>
           <div class="flex flex-col gap-2 px-4 pb-3">
             <Show when={rowProps.term.definition !== ""}>
-              <Definition text={rowProps.term.definition} />
+              {/* 16px more below the description (24px in all) before the verses. */}
+              <div class="pb-4">
+                <Definition text={rowProps.term.definition} />
+              </div>
             </Show>
             <Show
               when={verses().length > 0}
@@ -530,10 +537,10 @@ export function StetView(props: StetViewProps) {
                         type="button"
                         data-term-verse={excerpt.sid}
                         aria-current={activeSid() === excerpt.sid ? "true" : undefined}
-                        class="w-full cursor-pointer truncate rounded-lg px-3 py-2 text-start text-small tabular-nums transition-colors aria-current:bg-sidebar-surface-active aria-current:font-semibold aria-current:text-brand not-aria-current:text-on-surface-primary not-aria-current:hover:bg-sidebar-surface-hover"
+                        class="flex h-12 w-full cursor-pointer items-center truncate rounded-lg px-3 text-start text-small tabular-nums transition-colors aria-current:bg-sidebar-surface-active aria-current:font-semibold aria-current:text-brand not-aria-current:text-on-surface-primary not-aria-current:hover:bg-sidebar-surface-hover"
                         onClick={() => activate(excerpt.sid, "sidebar")}
                       >
-                        <span class="flex items-center gap-2">
+                        <span class="flex w-full min-w-0 items-center gap-2">
                           <span class="min-w-0 flex-1 truncate">{excerpt.label}</span>
                           <Status sid={excerpt.sid} size={16} />
                         </span>
@@ -548,7 +555,7 @@ export function StetView(props: StetViewProps) {
             <Show when={props.additionalCount > 0}>
               <Switch
                 labelFirst
-                class="w-full justify-between px-3 py-2"
+                class="h-12 w-full justify-between px-3"
                 checked={props.additional}
                 onChange={props.onAdditional}
                 // How many MORE, the same number the accordion on the right gives.
@@ -609,7 +616,7 @@ export function StetView(props: StetViewProps) {
         mode={props.mode ?? "regular"}
         pairedOf={paired}
         empty={
-          <p class="text-small text-on-surface-tertiary">
+          <p class="text-small text-on-surface-primary">
             {t("No occurrence of this term falls in a book this project has.")}
           </p>
         }

@@ -13,7 +13,7 @@ import { merge, omit } from "solid-js";
 import { variants } from "./cx";
 import { Tooltip, type TooltipSide } from "./Tooltip";
 
-export type IconButtonVariant = "subtle" | "filled" | "outlined" | "quiet";
+export type IconButtonVariant = "subtle" | "filled" | "outlined" | "quiet" | "bare";
 export type IconButtonSize = "sm" | "md" | "lg";
 
 const classes = variants({
@@ -37,6 +37,9 @@ const classes = variants({
       // Spiritual terms "Show more" row does.
       quiet:
         "border-transparent bg-transparent text-on-surface-secondary hover:not-disabled:bg-surface-primary hover:not-disabled:text-on-surface-primary",
+      // The glyph alone: no fill at rest or hovered, only darker on hover —
+      // for a control set into text (the Spiritual terms gutter).
+      bare: "border-transparent bg-transparent text-on-surface-secondary hover:not-disabled:text-on-surface-primary",
     },
     size: {
       // Radius lives with the size, as in `Button`: the 56px one matches

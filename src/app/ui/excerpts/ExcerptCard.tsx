@@ -38,10 +38,12 @@
 import { ChangeSet, StateField, type Text } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import type { JSX } from "@solidjs/web";
+import ChevronDownIcon from "lucide-solid/icons/chevron-down";
+import ChevronUpIcon from "lucide-solid/icons/chevron-up";
+import ChevronsDownIcon from "lucide-solid/icons/chevrons-down";
+import ChevronsUpIcon from "lucide-solid/icons/chevrons-up";
 import CodeIcon from "lucide-solid/icons/code";
-import FoldVerticalIcon from "lucide-solid/icons/fold-vertical";
 import SquareArrowOutUpRightIcon from "lucide-solid/icons/square-arrow-out-up-right";
-import UnfoldVerticalIcon from "lucide-solid/icons/unfold-vertical";
 import { Show, createEffect, createMemo, createSignal } from "solid-js";
 
 import {
@@ -58,10 +60,10 @@ import { useShell } from "../../ProjectContext";
 import { CardActions, type CardAction } from "../multibuffer/CardAction";
 import { CardEditor } from "../multibuffer/CardEditor";
 import { CardFrame } from "../multibuffer/CardFrame";
-import type { CardEvent, CardView } from "../multibuffer/cardState";
+import type { CardEvent, CardView, ContextStep } from "../multibuffer/cardState";
 import { ContextControl } from "../multibuffer/ContextControl";
 import { cardPolicy } from "../multibuffer/policy";
-import { Button, cx } from "../primitives";
+import { Button, cx, IconButton } from "../primitives";
 import { verseTextOf } from "../review/reading";
 import type { ExcerptCardSpec } from "./cardSpec";
 import { ExcerptReader } from "./ExcerptReader";
@@ -364,6 +366,33 @@ export function ExcerptCard(props: ExcerptCardProps) {
   );
 
   /**
+   * The text box's gutter (Spiritual terms): shown on an open direct card,
+   * chapter or not, with an equal empty one on the right. `doubled` once two verses of context have
+   * been added, either side or both — then each arrow doubles and opens the
+   * chapter.
+   */
+  const gutter = (): boolean => direct() && spec().context.kind === "chapter" && !condensed();
+  const doubled = (): boolean => props.excerpt.extent.up + props.excerpt.extent.down >= 2;
+  /**
+   * "Show Verse 20": the verse an arrow would add, counted out from the card's
+   * own verse by those already showing. A label, so one off across a bridge
+   * (`\v 3-4`) is harmless.
+   */
+  const verseLabel = (side: "up" | "down"): string => {
+    const address = props.excerpt.address;
+    if (address.kind !== "verses") return t("Show Verse");
+    const verse =
+      side === "up"
+        ? address.from.verse - props.excerpt.extent.up - 1
+        : address.to.verse + props.excerpt.extent.down + 1;
+    return verse >= 1 ? t("Show Verse {verse}", { verse }) : t("Show Verse");
+  };
+  const contextStep = (which: ContextStep): void => {
+    const held = spec().context;
+    if (held.kind === "chapter") held.step(props.excerpt.sid, which);
+  };
+
+  /**
    * Show more opens the whole chapter, which puts text above the verse. When
    * the card's animation has ended, the reading is scrolled back to the verse
    * the card is for — its Address, already resolved through the TOC to
@@ -430,7 +459,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
         when={book()}
         fallback={
           <Show when={refused()} fallback={reader()}>
-            <p class="px-3 py-2 text-small text-on-surface-tertiary">
+            <p class="px-3 py-2 text-small text-on-surface-primary">
               {t("That book could not be opened for editing.")}
             </p>
           </Show>
@@ -472,7 +501,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
           <Show
             when={pairedView()}
             fallback={
-              <p class="px-3 py-2 text-small text-on-surface-tertiary italic">
+              <p class="px-3 py-2 text-small text-on-surface-primary italic">
                 {t("{place} is not in {name}.", { place: props.excerpt.label, name: text().name })}
               </p>
             }
@@ -498,7 +527,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
       </Show>
       <Show when={pairedNone()}>
         {(missing) => (
-          <p class="px-3 py-2 text-small text-on-surface-tertiary italic">{missing().message}</p>
+          <p class="px-3 py-2 text-small text-on-surface-primary italic">{missing().message}</p>
         )}
       </Show>
     </section>
@@ -594,7 +623,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
                 by line under the header, and "2 matches" above them would be
                 the same count said twice in another vocabulary. */}
             <Show when={notes() === undefined && props.excerpt.hits.length > 1}>
-              <span class="text-smallest text-on-surface-tertiary">
+              <span class="text-small text-on-surface-primary">
                 {t("{count} matches", { count: props.excerpt.hits.length })}
               </span>
             </Show>
@@ -638,7 +667,10 @@ export function ExcerptCard(props: ExcerptCardProps) {
           class={cx(collapsible, condensed() ? "grid-rows-[0fr]" : "grid-rows-[1fr]")}
           inert={condensed()}
         >
-          <div class="min-h-0 overflow-hidden">
+          {/* Open, 8px of room below the content and the same pulled back:
+              inside this clip, so the primary button's drop shadow is not
+              cut off at the card's last line, and nothing below moves. */}
+          <div class={cx("min-h-0 overflow-hidden", !condensed() && "-mb-2 pb-2")}>
             <div
               ref={setBody}
               data-layout={props.paired === undefined ? "single" : wide() ? "side" : "stacked"}
@@ -655,7 +687,8 @@ export function ExcerptCard(props: ExcerptCardProps) {
               grey at rest and the editor's own brand one while editing
               (`editor.css`, `[data-direct-target]`). Its controls
               sit under it, in its column, so they start at its left edge. */}
-              <div class="flex min-w-0 flex-col gap-2">
+              {/* 12px between the text box and its buttons on a direct card. */}
+              <div class={cx("flex min-w-0 flex-col", direct() ? "gap-3" : "gap-2")}>
                 {/* Two boxes: the FRAME, which never scrolls and draws the
                     outline, and inside it the part that scrolls once the whole
                     chapter is showing — so the outline stays round the box
@@ -668,19 +701,86 @@ export function ExcerptCard(props: ExcerptCardProps) {
                   data-direct-target={direct() ? "" : undefined}
                   data-editing={direct() && props.editing ? "" : undefined}
                   data-chapter={direct() && chapterOpen() ? "" : undefined}
-                  class={cx("min-w-0", direct() && "cursor-pointer")}
+                  data-gutter={gutter() ? "" : undefined}
+                  class={cx(
+                    "min-w-0",
+                    direct() && "flex cursor-pointer overflow-hidden rounded-3xl",
+                  )}
                 >
+                  <Show when={gutter()}>
+                    {/* The gutter, 48px — one icon button, near the top and bottom corners
+                        (deliberately not on a line of text): one more verse before, one more
+                        after; once two have been added, either way, the whole
+                        chapter; and from the chapter, back (inward arrows). */}
+                    <div class="flex w-12 shrink-0 flex-col justify-between py-1">
+                      <IconButton
+                        variant="bare"
+                        data-step={chapterOpen() || doubled() ? "chapter" : "up"}
+                        label={
+                          chapterOpen()
+                            ? t("Show fewer verses")
+                            : doubled()
+                              ? t("Show the whole chapter")
+                              : verseLabel("up")
+                        }
+                        icon={
+                          chapterOpen() ? (
+                            <ChevronsDownIcon />
+                          ) : doubled() ? (
+                            <ChevronsUpIcon />
+                          ) : (
+                            <ChevronUpIcon />
+                          )
+                        }
+                        disabled={!chapterOpen() && !doubled() && !props.excerpt.more.up}
+                        onClick={() => contextStep(chapterOpen() || doubled() ? "chapter" : "up")}
+                      />
+                      <IconButton
+                        variant="bare"
+                        data-step={chapterOpen() || doubled() ? "chapter" : "down"}
+                        label={
+                          chapterOpen()
+                            ? t("Show fewer verses")
+                            : doubled()
+                              ? t("Show the whole chapter")
+                              : verseLabel("down")
+                        }
+                        icon={
+                          chapterOpen() ? (
+                            <ChevronsUpIcon />
+                          ) : doubled() ? (
+                            <ChevronsDownIcon />
+                          ) : (
+                            <ChevronDownIcon />
+                          )
+                        }
+                        disabled={!chapterOpen() && !doubled() && !props.excerpt.more.down}
+                        onClick={() => contextStep(chapterOpen() || doubled() ? "chapter" : "down")}
+                      />
+                    </div>
+                  </Show>
                   <div
                     class={cx(
+                      "min-w-0 flex-1",
                       chapterOpen() &&
                         "scrollbar-padded max-h-[var(--card-room,60vh)] overflow-y-auto",
                       // Inside the outline (2px in, 1.5px thick) and as round,
                       // so scrolled text is cut off at the border, not past it.
-                      direct() && "m-[3.5px] rounded-[8.5px]",
+                      // With the gutters either side, the text starts where
+                      // they end: no side margin here, no side padding inside.
+                      direct() && !gutter() && "m-[3.5px] rounded-[8.5px]",
                     )}
                   >
                     {target}
                   </div>
+                  <Show when={gutter()}>
+                    {/* The right gutter, as wide as the left: 48px, or 32px
+                        beside the chapter's own 16px scrollbar track. */}
+                    <div
+                      aria-hidden="true"
+                      class={cx("shrink-0", chapterOpen() ? "w-8" : "w-12")}
+                    />
+                  </Show>
                 </div>
                 <Show when={direct()}>
                   <div
@@ -702,24 +802,6 @@ export function ExcerptCard(props: ExcerptCardProps) {
                               spec().actions?.(props.excerpt, props.rowKey, props.view) ?? []
                             }
                           />
-                          <Show
-                            when={spec().context.kind === "chapter" ? spec().context : undefined}
-                          >
-                            {(context) => (
-                              <Button
-                                data-step="chapter"
-                                variant="tertiary"
-                                icon={chapterOpen() ? <FoldVerticalIcon /> : <UnfoldVerticalIcon />}
-                                onClick={() => {
-                                  const held = context();
-                                  if (held.kind === "chapter")
-                                    held.step(props.excerpt.sid, "chapter");
-                                }}
-                              >
-                                {chapterOpen() ? t("Show less") : t("Show more")}
-                              </Button>
-                            )}
-                          </Show>
                         </>
                       }
                     >

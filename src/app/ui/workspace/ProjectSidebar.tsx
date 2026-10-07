@@ -413,12 +413,12 @@ export function ProjectControl() {
               {projectName(shell.project())}
             </span>
             <Show when={projectLanguage(shell.project()) !== ""}>
-              <span class="block truncate text-smallest text-on-surface-tertiary">
+              <span class="block truncate text-small text-on-surface-primary">
                 {projectLanguage(shell.project())}
               </span>
             </Show>
           </span>
-          <ChevronDown size={16} aria-hidden="true" class="shrink-0 text-on-surface-tertiary" />
+          <ChevronDown aria-hidden="true" class="size-5 shrink-0 text-on-surface-primary" />
         </button>
       </Show>
     </div>

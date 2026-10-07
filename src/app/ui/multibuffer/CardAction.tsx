@@ -30,6 +30,8 @@ interface ActionBase {
   /** A native tooltip, for a button whose words need one ("Stop editing (Escape)"). */
   readonly title?: string;
   readonly onPress: () => void;
+  /** Extra classes on the button: a fixed width, so its words can change without it moving. */
+  readonly class?: string;
 }
 
 export type CardAction =
@@ -85,6 +87,7 @@ export function CardActionButton(props: {
             icon={action().icon === undefined ? undefined : <Dynamic component={action().icon} />}
             aria-pressed={pressedOf(action())}
             title={action().title}
+            class={action().class}
             data-card-action={action().id}
             onClick={() => action().onPress()}
           >

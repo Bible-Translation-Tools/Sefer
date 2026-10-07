@@ -1268,43 +1268,39 @@
 [data-direct-target][data-editing]::after {
   content: "";
   position: absolute;
-  inset: 2px;
+  inset: 0;
   border: 1.5px solid var(--brand-base);
-  border-radius: 10px;
+  border-radius: 24px;
   pointer-events: none;
   z-index: 1;
 }
 [data-direct-target]:not([data-editing])::after {
   content: "";
   position: absolute;
-  inset: 2px;
+  inset: 0;
   z-index: -1;
   border: 1px solid var(--surface-border);
-  border-radius: 10px;
+  border-radius: 24px;
   pointer-events: none;
   transition:
     background-color 150ms ease-in-out,
     border-color 150ms ease-in-out;
 }
-/* The whole chapter showing, it reads as one text: the context at full
-   strength, not dimmed round the verse. */
-[data-direct-target][data-chapter] .cm-excerpt-context {
-  opacity: 1;
+/* The card's own verse stays darker than its context, always: reading,
+   editing (where the editor would otherwise bring context to full strength)
+   and with the whole chapter open. */
+[data-direct-target] .cm-editing .cm-excerpt-context {
+  opacity: 0.55;
 }
-/* …and the verse the card is FOR is picked out of it: a light brand wash
-   behind its text, wrapped line by line, so the eye lands on it as the
-   reading opens on it. */
-[data-direct-target][data-chapter] .cm-excerpt-own {
-  background: color-mix(in srgb, var(--brand-base) 14%, transparent);
-  border-radius: 4px;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-}
-/* Hovered, it says it can be clicked: the canvas fill and the light brand
-   edge every field takes on hover (`Select`, `Input`: `border-brand/40`). */
+/* Hovered, it says it can be clicked: the light brand edge every field takes
+   on hover (`Select`, `Input`: `border-brand/40`). No fill. */
 [data-direct-target]:not([data-editing]):hover::after {
-  background: var(--surface-canvas);
   border-color: color-mix(in srgb, var(--brand-base) 40%, transparent);
+}
+/* Between the 48px gutters the text runs edge to edge — they are its margin —
+   with 24px above and below it, inside the box's 24px corners. */
+[data-direct-target][data-gutter] .cm-excerpt .cm-content {
+  padding: 24px 0;
 }
 [data-direct-target] .cm-excerpt .cm-content {
   /* 12px inside the outline: the scroller already sits 3.5px in from the
