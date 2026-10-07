@@ -1400,7 +1400,7 @@ export function ReviewPanel() {
         return;
       case "open":
         setRecordOpen(false);
-        void navigate({ to: "/settings" });
+        void navigate({ to: "/project/$slug/settings", params: { slug: shell.slug() } });
         return;
       case "retry":
       case "send":

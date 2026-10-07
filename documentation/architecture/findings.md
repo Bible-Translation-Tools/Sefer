@@ -79,7 +79,7 @@ What persists and what does not (vision §11.4: "category and severity filters s
 | `books`                                           | a session signal                                                 | a remembered book set hides the book you just opened  |
 | the view (by book, by code, by severity, or flat) | a session signal                                                 | a way of looking at what is on screen now             |
 
-`findings.filter` is a `Schema.Struct`, and the `/settings` form draws one widget per `kind` (`boolean | string | number`) — so the key is registered in `shellKeys` but deliberately left out of `shellSettings`. Its editor is the panel's own filter toolbar (`src/app/ui/panels/FindingsFilters.tsx`), which seeds from `Settings.get`, writes through `Settings.set` on every click (no debounce — a click is a deliberate act) and stays live on a fiber over `settings.changes`, exactly as `ProjectContext` does for `editor.preferChapterView`.
+`findings.filter` is a `Schema.Struct`, and the Settings form draws one widget per `kind` (`boolean | string | number`) — so the key is registered in `shellKeys` but deliberately left out of `shellSettings`. Its editor is the panel's own filter toolbar (`src/app/ui/panels/FindingsFilters.tsx`), which seeds from `Settings.get`, writes through `Settings.set` on every click (no debounce — a click is a deliberate act) and stays live on a fiber over `settings.changes`, exactly as `ProjectContext` does for `editor.preferChapterView`.
 
 Core cannot navigate. `navigateTarget` returns a value; the shell calls `project.instantiate(bookId)`, mounts a view and scrolls the semantic span into place. The span stays exact even when visual mode hides the markup it covers (vision §11.3) — a presentation anchor is the view's decision, never a substitution here, because the same span is what a fix would edit.
 
@@ -207,7 +207,7 @@ Kitchen decides why a squiggle fired and names it as a message id with parameter
 
 ## Proofreading settings
 
-`/settings` has a Proofreading card (`src/app/ui/SousSettingsPanel.tsx`) generated from kitchen's `SOUS_SETTINGS`: grouped by kitchen's `group`, each row kitchen's label, its plain description above the control, the control by `kind` (switch; number within its range; a share-bp shown as a percent), the default and a reset, and one Reset all. Sefer's only copy is the three group headings (`SOUS_GROUPS`, typed `satisfies Record<SousSettingGroup, …>`).
+Settings has a Proofreading card (`src/app/ui/SousSettingsPanel.tsx`) generated from kitchen's `SOUS_SETTINGS`: grouped by kitchen's `group`, each row kitchen's label, its plain description above the control, the control by `kind` (switch; number within its range; a share-bp shown as a percent), the default and a reset, and one Reset all. Sefer's only copy is the three group headings (`SOUS_GROUPS`, typed `satisfies Record<SousSettingGroup, …>`).
 
 They are stored globally, like every other preference, as one key (`sous.settings`) holding only the values the reader changed. `sousValues` fills the rest from kitchen's defaults and ignores a stored value that no longer fits its key's kind or range, so a setting kitchen adds or drops needs no migration.
 

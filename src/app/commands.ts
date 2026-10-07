@@ -438,7 +438,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       title: t("Settings"),
       keys: "Mod-,",
       run: () => {
-        void bridge.navigate({ to: "/settings" });
+        void bridge.navigate({ to: "/project/$slug/settings", params: { slug: bridge.slug() } });
       },
     }),
 
@@ -451,7 +451,13 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
         const key = shellKeys(bridge.services.settings).showAdvancedSettings;
         return Effect.gen(function* () {
           yield* bridge.services.settings.set(key, true);
-          yield* Effect.sync(() => void bridge.navigate({ to: "/settings" }));
+          yield* Effect.sync(
+            () =>
+              void bridge.navigate({
+                to: "/project/$slug/settings",
+                params: { slug: bridge.slug() },
+              }),
+          );
         });
       },
     }),

@@ -509,9 +509,9 @@ A token revoked on the server still reads as a session here until the next call 
 not made.
 
 `createAccount` (`src/app/ui/cloud/account.ts`) is the one implementation of "signed in": the popover
-and `CloudPanel` on `/settings` each make one, and `SignInForm` and `AccountCard`
+and `CloudPanel` on `/project/$slug/settings` each make one, and `SignInForm` and `AccountCard`
 (`src/app/ui/cloud/AccountCard.tsx`) draw it. The attach-and-publish half, `SharedProjectCard`
-(`src/app/ui/cloud/SharedProjectCard.tsx`), is on `/settings`. An attach or publish re-reads the sync
+(`src/app/ui/cloud/SharedProjectCard.tsx`), is there too. "How you work on this project" shows only once a shared project is attached: before that whether the account can write to it is unknown, and the card used to read that as "Sign in". An attach or publish re-reads the sync
 state.
 
 ## What the ports grew
