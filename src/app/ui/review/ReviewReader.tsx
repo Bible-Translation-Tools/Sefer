@@ -170,6 +170,14 @@ export function ReviewReader(props: {
    */
   readonly currentFirst?: boolean;
   /**
+   * Whether a decision is written into the Book as it is made. Defaults to
+   * `decidable`; the playground decides without writing, to try a card's
+   * look against real text without touching the project.
+   */
+  readonly writesDecisions?: boolean;
+  /** Dim the side a decided passage will not read as (`Controls.dimUnchosen`). */
+  readonly dimUnchosen?: boolean;
+  /**
    * When neither side is the Book (History's "what this version changed"):
    * each card's own actions for either side — Adopt, written into the
    * reader's text instead of a decision — and a row under it. In a split they
@@ -398,7 +406,8 @@ export function ReviewReader(props: {
           decide: (unit, side) => props.decide(bookId, [unit], side),
           keepTitle: t("Keep {source}'s", { source: props.currentShort }),
           takeTitle: t("Take {source}'s", { source: props.baselineShort }),
-          live: props.decidable,
+          live: props.writesDecisions ?? props.decidable,
+          dimUnchosen: props.dimUnchosen === true,
         }
       : undefined;
 
