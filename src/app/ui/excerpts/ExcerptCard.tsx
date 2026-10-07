@@ -35,12 +35,15 @@
  * flipped per card. The width is the CARD's (a ResizeObserver), not the
  * window's, because the same card lives in a full-width list and a side panel.
  */
-
+import { ChangeSet, StateField, type Text } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
 import type { JSX } from "@solidjs/web";
+import ChevronDownIcon from "lucide-solid/icons/chevron-down";
+import ChevronUpIcon from "lucide-solid/icons/chevron-up";
+import ChevronsDownIcon from "lucide-solid/icons/chevrons-down";
+import ChevronsUpIcon from "lucide-solid/icons/chevrons-up";
 import CodeIcon from "lucide-solid/icons/code";
-import FoldVerticalIcon from "lucide-solid/icons/fold-vertical";
 import SquareArrowOutUpRightIcon from "lucide-solid/icons/square-arrow-out-up-right";
-import UnfoldVerticalIcon from "lucide-solid/icons/unfold-vertical";
 import { Show, createEffect, createMemo, createSignal } from "solid-js";
 
 import {
@@ -57,13 +60,14 @@ import { useShell } from "../../ProjectContext";
 import { CardActions, type CardAction } from "../multibuffer/CardAction";
 import { CardEditor } from "../multibuffer/CardEditor";
 import { CardFrame } from "../multibuffer/CardFrame";
-import type { CardEvent, CardView } from "../multibuffer/cardState";
+import type { CardEvent, CardView, ContextStep } from "../multibuffer/cardState";
 import { ContextControl } from "../multibuffer/ContextControl";
 import { cardPolicy } from "../multibuffer/policy";
-import { Button, cx } from "../primitives";
+import { Button, cx, IconButton } from "../primitives";
 import { verseTextOf } from "../review/reading";
 import type { ExcerptCardSpec } from "./cardSpec";
 import { ExcerptReader } from "./ExcerptReader";
+import { lockVerseLabels } from "./lockVerseLabels";
 
 export type { ContextStep } from "../multibuffer/cardState";
 
@@ -295,6 +299,40 @@ export function ExcerptCard(props: ExcerptCardProps) {
     props.onDone();
   };
 
+  /**
+   * A direct card's edit is a SESSION with a way back. Everything typed lands
+   * in the book as it is typed (that is how the editor works); the session
+   * keeps every change composed since it opened (`sessionEdits`), so Cancel
+   * can hand the book the exact inverse and Save only has to stop. `dirty`
+   * is what turns the card's buttons into Save changes / Cancel.
+   */
+  const [dirty, setDirty] = createSignal(false, { name: "excerptDirty" });
+  let editView: EditorView | undefined;
+  let openedOn: Text | undefined;
+  const sessionEdits = StateField.define<ChangeSet>({
+    create: (state) => ChangeSet.empty(state.doc.length),
+    update: (held, transaction) =>
+      transaction.docChanged ? held.compose(transaction.changes) : held,
+  });
+  const sessionWatch = EditorView.updateListener.of((update) => {
+    if (update.docChanged) setDirty(!update.state.field(sessionEdits).empty);
+  });
+  const save = (): void => {
+    setDirty(false);
+    done();
+  };
+  const cancel = (): void => {
+    const view = editView;
+    if (view !== undefined && openedOn !== undefined && dirty()) {
+      const undo = view.state.field(sessionEdits, false)?.invert(openedOn);
+      // Past the card's own filters (the verse-number lock would refuse a
+      // revert that spans a label); the book still admits it as an edit.
+      if (undo !== undefined && !undo.empty) view.dispatch({ changes: undo, filter: false });
+    }
+    setDirty(false);
+    done();
+  };
+
   const reader = () => (
     <ExcerptReader
       analysis={props.excerpt.analysis}
@@ -328,6 +366,33 @@ export function ExcerptCard(props: ExcerptCardProps) {
   );
 
   /**
+   * The text box's gutter (Spiritual terms): shown on an open direct card,
+   * chapter or not, with an equal empty one on the right. `doubled` once two verses of context have
+   * been added, either side or both — then each arrow doubles and opens the
+   * chapter.
+   */
+  const gutter = (): boolean => direct() && spec().context.kind === "chapter" && !condensed();
+  const doubled = (): boolean => props.excerpt.extent.up + props.excerpt.extent.down >= 2;
+  /**
+   * "Show Verse 20": the verse an arrow would add, counted out from the card's
+   * own verse by those already showing. A label, so one off across a bridge
+   * (`\v 3-4`) is harmless.
+   */
+  const verseLabel = (side: "up" | "down"): string => {
+    const address = props.excerpt.address;
+    if (address.kind !== "verses") return t("Show Verse");
+    const verse =
+      side === "up"
+        ? address.from.verse - props.excerpt.extent.up - 1
+        : address.to.verse + props.excerpt.extent.down + 1;
+    return verse >= 1 ? t("Show Verse {verse}", { verse }) : t("Show Verse");
+  };
+  const contextStep = (which: ContextStep): void => {
+    const held = spec().context;
+    if (held.kind === "chapter") held.step(props.excerpt.sid, which);
+  };
+
+  /**
    * Show more opens the whole chapter, which puts text above the verse. When
    * the card's animation has ended, the reading is scrolled back to the verse
    * the card is for — its Address, already resolved through the TOC to
@@ -339,33 +404,44 @@ export function ExcerptCard(props: ExcerptCardProps) {
     () => chapterOpen(),
     (open) => {
       if (!open) return;
-      const timer = setTimeout(() => reveal?.(props.excerpt.own.from), 300);
+      // Whichever is showing: the reading, or — opened mid-edit — the editor.
+      const timer = setTimeout(() => {
+        const at = props.excerpt.own.from;
+        if (props.editing && editView !== undefined)
+          editView.dispatch({ effects: EditorView.scrollIntoView(at, { y: "start" }) });
+        else reveal?.(at);
+      }, 300);
       return () => clearTimeout(timer);
     },
   );
 
   /**
-   * A direct card's edit ends when the reader leaves the box: a press anywhere
-   * outside it, or focus going elsewhere (Tab, a click on something that takes
-   * focus), so the box never looks editable once it cannot be typed into.
+   * A direct card's edit ends when the reader leaves the box — a press
+   * anywhere outside it, or focus going elsewhere — and leaving is a CANCEL:
+   * nothing typed survives a click away. The row of buttons under the box
+   * counts as inside, so pressing Save changes is not first a cancel.
    */
+  let actionsRow: HTMLDivElement | undefined;
+  const inside = (node: Node, frame: HTMLElement): boolean =>
+    frame.contains(node) || actionsRow?.contains(node) === true;
   createEffect(
     () => (direct() && props.editing ? targetBox : undefined),
     (element) => {
       if (element === undefined) return;
       const press = (event: PointerEvent): void => {
-        if (props.editing && event.target instanceof Node && !element.contains(event.target))
-          done();
+        if (props.editing && event.target instanceof Node && !inside(event.target, element))
+          cancel();
       };
       const leave = (event: FocusEvent): void => {
         const next = event.relatedTarget;
-        if (next instanceof Node && element.contains(next)) return;
+        if (next instanceof Node && inside(next, element)) return;
         // After the move lands: focus that only passed through (the editor
         // replacing the reading) has come back by then.
         setTimeout(() => {
           // Still this card's edit: the press may have ended it and another
           // card begun its own since.
-          if (props.editing && !element.contains(document.activeElement)) done();
+          const now = document.activeElement;
+          if (props.editing && !(now !== null && inside(now, element))) cancel();
         }, 0);
       };
       document.addEventListener("pointerdown", press, true);
@@ -383,7 +459,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
         when={book()}
         fallback={
           <Show when={refused()} fallback={reader()}>
-            <p class="px-3 py-2 text-small text-on-surface-tertiary">
+            <p class="px-3 py-2 text-small text-on-surface-primary">
               {t("That book could not be opened for editing.")}
             </p>
           </Show>
@@ -400,7 +476,12 @@ export function ExcerptCard(props: ExcerptCardProps) {
             select={props.excerpt.hits[0]}
             analyze={props.analyze}
             label={`excerpt:${props.excerpt.sid}`}
-            onDone={done}
+            extensions={direct() ? [lockVerseLabels, sessionEdits, sessionWatch] : undefined}
+            onView={(view) => {
+              editView = view;
+              openedOn = view?.state.doc;
+            }}
+            onDone={direct() ? cancel : done}
           />
         )}
       </Show>
@@ -420,7 +501,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
           <Show
             when={pairedView()}
             fallback={
-              <p class="px-3 py-2 text-small text-on-surface-tertiary italic">
+              <p class="px-3 py-2 text-small text-on-surface-primary italic">
                 {t("{place} is not in {name}.", { place: props.excerpt.label, name: text().name })}
               </p>
             }
@@ -446,7 +527,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
       </Show>
       <Show when={pairedNone()}>
         {(missing) => (
-          <p class="px-3 py-2 text-small text-on-surface-tertiary italic">{missing().message}</p>
+          <p class="px-3 py-2 text-small text-on-surface-primary italic">{missing().message}</p>
         )}
       </Show>
     </section>
@@ -542,7 +623,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
                 by line under the header, and "2 matches" above them would be
                 the same count said twice in another vocabulary. */}
             <Show when={notes() === undefined && props.excerpt.hits.length > 1}>
-              <span class="text-smallest text-on-surface-tertiary">
+              <span class="text-small text-on-surface-primary">
                 {t("{count} matches", { count: props.excerpt.hits.length })}
               </span>
             </Show>
@@ -586,7 +667,10 @@ export function ExcerptCard(props: ExcerptCardProps) {
           class={cx(collapsible, condensed() ? "grid-rows-[0fr]" : "grid-rows-[1fr]")}
           inert={condensed()}
         >
-          <div class="min-h-0 overflow-hidden">
+          {/* Open, 8px of room below the content and the same pulled back:
+              inside this clip, so the primary button's drop shadow is not
+              cut off at the card's last line, and nothing below moves. */}
+          <div class={cx("min-h-0 overflow-hidden", !condensed() && "-mb-2 pb-2")}>
             <div
               ref={setBody}
               data-layout={props.paired === undefined ? "single" : wide() ? "side" : "stacked"}
@@ -603,7 +687,8 @@ export function ExcerptCard(props: ExcerptCardProps) {
               grey at rest and the editor's own brand one while editing
               (`editor.css`, `[data-direct-target]`). Its controls
               sit under it, in its column, so they start at its left edge. */}
-              <div class="flex min-w-0 flex-col gap-2">
+              {/* 12px between the text box and its buttons on a direct card. */}
+              <div class={cx("flex min-w-0 flex-col", direct() ? "gap-3" : "gap-2")}>
                 {/* Two boxes: the FRAME, which never scrolls and draws the
                     outline, and inside it the part that scrolls once the whole
                     chapter is showing — so the outline stays round the box
@@ -616,40 +701,116 @@ export function ExcerptCard(props: ExcerptCardProps) {
                   data-direct-target={direct() ? "" : undefined}
                   data-editing={direct() && props.editing ? "" : undefined}
                   data-chapter={direct() && chapterOpen() ? "" : undefined}
-                  class={cx("min-w-0", direct() && "cursor-pointer")}
+                  data-gutter={gutter() ? "" : undefined}
+                  class={cx(
+                    "min-w-0",
+                    direct() && "flex cursor-pointer overflow-hidden rounded-3xl",
+                  )}
                 >
+                  <Show when={gutter()}>
+                    {/* The gutter, 48px — one icon button, near the top and bottom corners
+                        (deliberately not on a line of text): one more verse before, one more
+                        after; once two have been added, either way, the whole
+                        chapter; and from the chapter, back (inward arrows). */}
+                    <div class="flex w-12 shrink-0 flex-col justify-between py-1">
+                      <IconButton
+                        variant="bare"
+                        data-step={chapterOpen() || doubled() ? "chapter" : "up"}
+                        label={
+                          chapterOpen()
+                            ? t("Show fewer verses")
+                            : doubled()
+                              ? t("Show the whole chapter")
+                              : verseLabel("up")
+                        }
+                        icon={
+                          chapterOpen() ? (
+                            <ChevronsDownIcon />
+                          ) : doubled() ? (
+                            <ChevronsUpIcon />
+                          ) : (
+                            <ChevronUpIcon />
+                          )
+                        }
+                        disabled={!chapterOpen() && !doubled() && !props.excerpt.more.up}
+                        onClick={() => contextStep(chapterOpen() || doubled() ? "chapter" : "up")}
+                      />
+                      <IconButton
+                        variant="bare"
+                        data-step={chapterOpen() || doubled() ? "chapter" : "down"}
+                        label={
+                          chapterOpen()
+                            ? t("Show fewer verses")
+                            : doubled()
+                              ? t("Show the whole chapter")
+                              : verseLabel("down")
+                        }
+                        icon={
+                          chapterOpen() ? (
+                            <ChevronsUpIcon />
+                          ) : doubled() ? (
+                            <ChevronsDownIcon />
+                          ) : (
+                            <ChevronDownIcon />
+                          )
+                        }
+                        disabled={!chapterOpen() && !doubled() && !props.excerpt.more.down}
+                        onClick={() => contextStep(chapterOpen() || doubled() ? "chapter" : "down")}
+                      />
+                    </div>
+                  </Show>
                   <div
                     class={cx(
+                      "min-w-0 flex-1",
                       chapterOpen() &&
                         "scrollbar-padded max-h-[var(--card-room,60vh)] overflow-y-auto",
                       // Inside the outline (2px in, 1.5px thick) and as round,
                       // so scrolled text is cut off at the border, not past it.
-                      direct() && "m-[3.5px] rounded-[8.5px]",
+                      // With the gutters either side, the text starts where
+                      // they end: no side margin here, no side padding inside.
+                      direct() && !gutter() && "m-[3.5px] rounded-[8.5px]",
                     )}
                   >
                     {target}
                   </div>
+                  <Show when={gutter()}>
+                    {/* The right gutter, as wide as the left: 48px, or 32px
+                        beside the chapter's own 16px scrollbar track. */}
+                    <div
+                      aria-hidden="true"
+                      class={cx("shrink-0", chapterOpen() ? "w-8" : "w-12")}
+                    />
+                  </Show>
                 </div>
                 <Show when={direct()}>
-                  <div data-card-actions class="flex items-center gap-controls">
-                    <CardActions
-                      size="md"
-                      actions={spec().actions?.(props.excerpt, props.rowKey, props.view) ?? []}
-                    />
-                    <Show when={spec().context.kind === "chapter" ? spec().context : undefined}>
-                      {(context) => (
-                        <Button
-                          data-step="chapter"
-                          variant="tertiary"
-                          icon={chapterOpen() ? <FoldVerticalIcon /> : <UnfoldVerticalIcon />}
-                          onClick={() => {
-                            const held = context();
-                            if (held.kind === "chapter") held.step(props.excerpt.sid, "chapter");
-                          }}
-                        >
-                          {chapterOpen() ? t("Show less") : t("Show more")}
-                        </Button>
-                      )}
+                  <div
+                    ref={(element: HTMLDivElement) => {
+                      actionsRow = element;
+                    }}
+                    data-card-actions
+                    class="flex items-center gap-controls"
+                  >
+                    {/* Changed while editing: the only two things to do are
+                        keep it or drop it. */}
+                    <Show
+                      when={props.editing && dirty()}
+                      fallback={
+                        <>
+                          <CardActions
+                            size="md"
+                            actions={
+                              spec().actions?.(props.excerpt, props.rowKey, props.view) ?? []
+                            }
+                          />
+                        </>
+                      }
+                    >
+                      <Button variant="primary" data-card-action="save" onClick={save}>
+                        {t("Save changes")}
+                      </Button>
+                      <Button variant="tertiary" data-card-action="cancel" onClick={cancel}>
+                        {t("Cancel")}
+                      </Button>
                     </Show>
                   </div>
                 </Show>

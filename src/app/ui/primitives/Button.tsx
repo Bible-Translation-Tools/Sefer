@@ -48,8 +48,9 @@ const classes = variants({
   ].join(" "),
   variants: {
     variant: {
-      primary:
-        "bg-button-primary-surface text-button-primary-on-surface border-button-primary-surface hover:not-disabled:bg-button-primary-surface-hover",
+      // Gradient, edge, shadow and its hover and pressed states: `.button-primary`
+      // in tokens.css, because a background of three layers is not a utility.
+      primary: "button-primary",
       secondary:
         "bg-surface-primary text-button-secondary-on-surface border-button-secondary-border hover:not-disabled:bg-button-secondary-surface-hover",
       accent:

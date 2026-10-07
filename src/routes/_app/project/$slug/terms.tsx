@@ -1,11 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/solid-router";
 import { Effect, Result } from "effect";
-import { createEffect, createMemo, createSignal, For, Show, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, Show, untrack } from "solid-js";
 
 import { t } from "#app/i18n";
 import { useShell } from "#app/ProjectContext";
 import { createExcerptFeed, readBooks, StetView } from "#app/ui/excerpts";
-import { PanelHeader, Select } from "#app/ui/primitives";
+import { PanelHeader, SegmentedControl } from "#app/ui/primitives";
 import { ShellGate } from "#app/ui/ShellGate";
 import { keyTermGuides, keyTerms, sourceReadings, type SourceReading } from "#app/workflows/stet";
 import { refOccurrences, type Occurrence } from "#core/excerpts/excerpts";
@@ -85,6 +85,7 @@ function Terms() {
   };
 
   const [terms, setTerms] = createSignal<readonly Term[]>([], { name: "terms" });
+
   const [guides, setGuides] = createSignal<readonly Guide[]>([], { name: "termGuides" });
   const [loading, setLoading] = createSignal(true, { name: "termsLoading" });
   const [problem, setProblem] = createSignal("", { name: "termsProblem" });
@@ -199,6 +200,33 @@ function Terms() {
   const allHits = createMemo(() => mapped(allAddresses()), { name: "termAllOccurrences" });
   const hits = (): readonly Occurrence[] => (additional() ? allHits() : curatedHits());
 
+  /**
+   * Every term's core verses that this project has: the denominator of each
+   * row's count in the sidebar, open or not. One read of the books the guide
+   * names, then each term's curated Addresses resolved through those books'
+   * TOCs — the same mapping the open term's list uses, for every term.
+   */
+  const coreTotals = createMemo(
+    (): ReadonlyMap<string, number> => {
+      const held = terms();
+      const coreOf = (term: Term): readonly Address[] => {
+        const curated = term.occurrences.filter((occurrence) => occurrence.curated);
+        return (curated.length > 0 ? curated : term.occurrences).map((each) => each.address);
+      };
+      const wanted = new Set(held.flatMap((term) => coreOf(term).map((address) => address.book)));
+      const books = readBooks(shell, wanted, analyze);
+      const out = new Map<string, number>();
+      for (const term of held) {
+        const addresses = coreOf(term);
+        let count = 0;
+        for (const book of books) count += refOccurrences(book, addresses).length;
+        out.set(term.id, count);
+      }
+      return out;
+    },
+    { name: "termCoreTotals" },
+  );
+
   /** The curated occurrences, by place: what the sidebar lists. */
   const curatedAt = createMemo(
     () => new Set(curatedHits().map((hit) => `${hit.bookId}:${hit.from}`)),
@@ -252,30 +280,32 @@ function Terms() {
       {/* The guide picker beside the title: it decides the source reading
           every card shows. Disabled while there is only one guide. */}
       <PanelHeader
-        title={t("Spiritual terms")}
+        // The term being worked on is the page's title; the screen's own name
+        // until one is chosen.
+        title={selected()?.term ?? t("Spiritual terms")}
         actions={
           <Show when={guides().length > 0}>
-            <Select
-              aria-label={t("Spiritual terms guide")}
+            {/* STET is published in a fixed set of source languages — the
+                guides — so they are all on show, one segment each. */}
+            <SegmentedControl
+              label={t("Spiritual terms source language")}
+              tone="light"
+              items={guides().map((guide) => ({
+                value: guide.locale,
+                // The language alone — "Spanish", not "Latin American Spanish":
+                // each STET language has one guide, so the region adds nothing.
+                label: languageOf(guide.locale.split("-")[0] ?? guide.locale),
+              }))}
               value={locale()}
-              disabled={guides().length < 2}
-              onChange={(event) => ask({ locale: event.currentTarget.value, term: undefined })}
-            >
-              <For each={guides()}>
-                {(guide) => (
-                  <option value={guide.locale}>
-                    {t("Source Language: {language}", { language: languageOf(guide.locale) })}
-                  </option>
-                )}
-              </For>
-            </Select>
+              onChange={(next) => ask({ locale: next, term: undefined })}
+            />
           </Show>
         }
       />
 
       <Show
         when={shell.project()}
-        fallback={<p class="text-small text-on-surface-tertiary">{t("Open a project first.")}</p>}
+        fallback={<p class="text-small text-on-surface-primary">{t("Open a project first.")}</p>}
       >
         <Show when={problem() !== ""}>
           <p class="rounded-md bg-surface-error px-4 py-3 text-small text-on-surface-error">
@@ -308,6 +338,7 @@ function Terms() {
           additional={additional()}
           onAdditional={setAdditional}
           additionalCount={allHits().length - curatedHits().length}
+          coreTotalOf={(id) => coreTotals().get(id) ?? 0}
           isCurated={(excerpt) =>
             excerpt.hits.some((hit) => curatedAt().has(`${hit.bookId}:${hit.from}`))
           }
