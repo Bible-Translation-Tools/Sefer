@@ -192,10 +192,13 @@ export interface Services {
   /**
    * A FileSystem with the Git and Remote that work over it, all in memory:
    * for a clone that is read once and thrown away (a Writer candidate). A
-   * fresh one per call. Undefined where cloning to disk is already cheap.
+   * fresh FileSystem per call, or `held`, one the caller already filled (a
+   * picked zip, unpacked in memory). Undefined where disk is already cheap.
    */
   readonly inMemoryTransfer:
-    | (() => Layer.Layer<FileSystem.FileSystem | Git | Remote, never, Credentials | Gitea>)
+    | ((
+        held?: FileSystem.FileSystem,
+      ) => Layer.Layer<FileSystem.FileSystem | Git | Remote, never, Credentials | Gitea>)
     | undefined;
 
   /** Plain → Instantiated: `openProject(root, { seat })`. */
@@ -690,7 +693,7 @@ export const composeServices = async (
     // it storage), and desktop's git2 on a native disk does not pay it.
     inMemoryTransfer:
       tauri === undefined
-        ? () =>
+        ? (held) =>
             Layer.provideMerge(
               Layer.merge(
                 WebGitLive,
@@ -700,7 +703,9 @@ export const composeServices = async (
                   appId: appIdFor(build),
                 }),
               ),
-              MemoryFileSystemLive(),
+              held === undefined
+                ? MemoryFileSystemLive()
+                : Layer.succeed(FileSystem.FileSystem, held),
             )
         : undefined,
     fixtureProject: fixture?.SMALL_NT_ROOT,

@@ -23,7 +23,7 @@ import { useNavigate } from "@tanstack/solid-router";
 import { Option } from "effect";
 import FileArchive from "lucide-solid/icons/file-archive";
 import FolderOpen from "lucide-solid/icons/folder-open";
-import { For, Show, createMemo, createSignal, untrack } from "solid-js";
+import { For, Show, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
 import { CANON } from "#core/location/canon";
 import { prefillForm } from "#core/migrate/assemble";
@@ -44,6 +44,7 @@ import { t } from "../../i18n";
 import {
   addToProject,
   assembleProject,
+  forgetPicked,
   openOne,
   pickLocal,
   remoteCandidates,
@@ -97,6 +98,9 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
     name: "migrateSelected",
   });
   const [assembling, setAssembling] = createSignal(false, { name: "migrateAssembling" });
+
+  // What a picked zip or folder unpacked into memory goes with the screen.
+  onCleanup(forgetPicked);
 
   const openedOf = (id: string): Opened => opened().get(id) ?? { state: "waiting" };
 

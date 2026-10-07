@@ -7,8 +7,9 @@
  * Library — things core may not name.
  */
 
-import { Effect, Option, Result } from "effect";
+import { Effect, FileSystem, Option, Result } from "effect";
 
+import { makeMemoryFileSystem } from "#core/fileSystem/memory";
 import { joinPath, lastSegment } from "#core/fileSystem/path";
 import type { IntakeResult } from "#core/git/intake";
 import { addBooks, assemble, type AssembleForm } from "#core/migrate/assemble";
@@ -50,9 +51,29 @@ export const remoteCandidates = (
 ): Promise<readonly BookCandidate[]> => catalogueFor(services.settings).writerBooks(language);
 
 /**
- * A picked folder or zip, as candidates. The browser copies what was picked
- * into staging first (the import hub's own intake); a native host reads the
- * folder where it is.
+ * Picked zips and folders unpacked in memory, by the root their candidates
+ * name: where `openOne` reads them back. Held for the run; `forgetPicked`
+ * lets them go when the screen closes.
+ */
+const picked = new Map<string, FileSystem.FileSystem>();
+
+export const forgetPicked = (): void => picked.clear();
+
+/** The in-memory FileSystem a picked candidate lives in, if it does. */
+const pickedFor = (candidate: BookCandidate): FileSystem.FileSystem | undefined => {
+  if (candidate.origin.kind === "remote") return undefined;
+  const { root } = candidate.origin;
+  for (const [base, fileSystem] of picked)
+    if (root === base || root.startsWith(`${base}/`)) return fileSystem;
+  return undefined;
+};
+
+/**
+ * A picked folder or zip, as candidates. A native host reads the folder
+ * where it is. A browser unpacks what was picked into MEMORY, never OPFS: a
+ * Writer project is hundreds of chunk files, and OPFS pays per file (see
+ * `documentation/architecture/storage.md`, "The OPFS tax"); the candidates are
+ * read once and only the rendered books are kept.
  */
 export const pickLocal = async (
   services: Services,
@@ -60,21 +81,21 @@ export const pickLocal = async (
 ): Promise<readonly BookCandidate[] | undefined> => {
   const capabilities = services.hostInfo.capabilities();
   if (kind === "folder" && capabilities.nativeDisk && capabilities.dialogs) {
-    const picked = Option.getOrUndefined(
+    const chosen = Option.getOrUndefined(
       await services.run(services.dialogs.pickFolder("Select BTT Writer projects")),
     );
-    if (picked === undefined) return undefined;
+    if (chosen === undefined) return undefined;
     return services.run(
-      localCandidates(services.fileSystem, picked, "folder", lastSegment(picked)),
+      localCandidates(services.fileSystem, chosen, "folder", lastSegment(chosen)),
     );
   }
   const intake = await import("#platform/web/intake");
-  const picked = kind === "zip" ? await intake.pickZip() : await intake.pickFolder();
-  if (picked === undefined) return undefined;
-  const staged = await services.run(
-    intake.intake(services.fileSystem, `${stagingRootOf(services)}/picked`, picked),
-  );
-  return services.run(localCandidates(services.fileSystem, staged.root, kind, picked.name));
+  const files = kind === "zip" ? await intake.pickZip() : await intake.pickFolder();
+  if (files === undefined) return undefined;
+  const memory = makeMemoryFileSystem().fileSystem;
+  const staged = await services.run(intake.intake(memory, "/picked", files));
+  picked.set(staged.root, memory);
+  return services.run(localCandidates(memory, staged.root, kind, files.name));
 };
 
 /** Opens, renders, validates and measures one candidate. Never rejects. */
@@ -87,9 +108,14 @@ export const openOne = async (services: Services, candidate: BookCandidate): Pro
     // A clone that does not finish in time is refused like an unreachable
     // one, so one slow repository never holds the run's Next behind it.
     // A remote candidate is cloned, read once and dropped, so on the Web it is
-    // cloned into memory: OPFS writes were most of its cost. A folder or zip
-    // candidate is read where it is.
-    const inMemory = candidate.origin.kind === "remote" ? services.inMemoryTransfer?.() : undefined;
+    // cloned into memory: OPFS writes were most of its cost. A picked zip or
+    // folder is read from the memory it was unpacked into; a native folder,
+    // where it is.
+    const held = pickedFor(candidate);
+    const inMemory =
+      candidate.origin.kind === "remote" || held !== undefined
+        ? services.inMemoryTransfer?.(held)
+        : undefined;
     const open = Effect.timeoutOption(
       openCandidate(candidate, inMemory === undefined ? stagingRootOf(services) : "/staging"),
       UPSTREAM_TIMEOUT,
