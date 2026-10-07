@@ -32,8 +32,6 @@
 import { useNavigate } from "@tanstack/solid-router";
 import ArrowLeftRight from "lucide-solid/icons/arrow-left-right";
 import Bell from "lucide-solid/icons/bell";
-import BookOpen from "lucide-solid/icons/book-open";
-import Code from "lucide-solid/icons/code";
 import MoreVertical from "lucide-solid/icons/more-vertical";
 import Redo2 from "lucide-solid/icons/redo-2";
 import SearchIcon from "lucide-solid/icons/search";
@@ -43,13 +41,12 @@ import { Show, createEffect, createSignal } from "solid-js";
 import { findCommand, runCommand } from "../../commands";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { Card, IconButton, Input, Popover, SegmentedControl } from "../primitives";
+import { Card, IconButton, Input, Popover } from "../primitives";
 import { bookName } from "./books";
 import { PanelToggle } from "./PanelToggle";
 import { metadataOf, projectName } from "./project";
 
 /** The two segments, as literal strings so Tailwind and the reader agree. */
-type Segment = "regular" | "usfm";
 
 export function Toolbar() {
   const navigate = useNavigate();
@@ -78,12 +75,6 @@ export function Toolbar() {
     if (clipped === null) return t("{book} ({project})", { book: named, project: of });
     const where = label === undefined || label === "" ? t("front") : label;
     return t("{book} {where} ({project})", { book: named, where, project: of });
-  };
-
-  const segment = (): Segment => (shell.mode() === "usfm" ? "usfm" : "regular");
-
-  const pick = (value: Segment): void => {
-    shell.setMode(value === "usfm" ? "usfm" : "default");
   };
 
   const findings = () => shell.findingCounts();
@@ -147,24 +138,7 @@ export function Toolbar() {
         </strong>
       </div>
 
-      <SegmentedControl<Segment>
-        class="mx-auto"
-        label={t("Mode")}
-        size="md"
-        /* Two modes, because that is what this control IS. Key terms was a
-           third segment here and it is not a mode — it is a screen, and
-           picking it navigated away, which made the other two look like
-           navigations too. It is an app bar mode, where the other destinations
-           are. Form is a SURFACE, not a projection, and will not live here. */
-        items={[
-          { value: "regular", label: t("Regular Mode"), icon: <BookOpen /> },
-          { value: "usfm", label: t("USFM"), icon: <Code /> },
-        ]}
-        value={segment()}
-        onChange={pick}
-      />
-
-      <Card class="flex items-center gap-1 p-1.5" padded={false}>
+      <Card class="ms-auto flex items-center gap-1 p-1.5" padded={false}>
         <Input
           size="sm"
           type="search"

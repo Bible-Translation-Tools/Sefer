@@ -23,6 +23,7 @@ import { createMemo } from "solid-js";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
+import { Switch } from "../primitives";
 import { bookName, CANON } from "./books";
 import { Crumbs, LocationStrip } from "./Crumbs";
 import { metadataOf } from "./project";
@@ -189,6 +190,16 @@ export function LocationBar(props: LocationBarProps) {
             return last();
           },
         }}
+        // The projection, at the end of the strip after the chapter arrows:
+        // off is the regular reading view, on shows the USFM markers.
+        end={
+          <Switch
+            class="ms-2"
+            label={t("USFM")}
+            checked={shell.mode() === "usfm"}
+            onChange={(on) => shell.setMode(on ? "usfm" : "default")}
+          />
+        }
       />
     </LocationStrip>
   );
