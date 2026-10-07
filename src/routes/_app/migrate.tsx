@@ -19,7 +19,7 @@ interface MigrateSearch {
 function MigrateRoute() {
   const search = Route.useSearch();
   return (
-    <main class="min-w-0 max-w-5xl space-y-4 p-6">
+    <main class="min-w-0 max-w-7xl space-y-4 p-6">
       <Breadcrumb
         crumbs={[
           { label: t("Sefer"), to: "/" },

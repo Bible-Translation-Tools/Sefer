@@ -2,16 +2,14 @@
  * Migrate from Writer: assemble one project from single-book BTT Writer
  * projects, choosing between rival copies up front.
  *
- * Four steps, one screen:
+ * Three steps, one screen:
  *
- *   sources   a folder, a zip, or the catalogue for a language — several may
- *             be combined in one run (a zip for Psalms, the catalogue for the
- *             rest), and every one works offline except the catalogue
- *   books     one row per book in canonical order, under OT and NT; a book
- *             with one candidate is settled, a book with more says "Choose"
- *   choose    one contested book at a time: a tab per candidate, its health
- *             against the source text, the book read as text, and
- *             "Differences from" another candidate in Review's reader
+ *   find      a folder or zip of Writer projects, or a language from "Writer
+ *             projects on WACS" (`WriterLanguages`) — several may be combined
+ *             in one run, and every one works offline except the catalogue
+ *   books     a sidebar of books in canonical order, under OT and NT, beside
+ *             the selected book's candidates as a table (`BookPane`): who,
+ *             status, updated, health, and passages differing from the pick
  *   project   the form, prefilled to bwc_reg's convention, then Assemble
  *
  * Inactive candidates are hidden by default; Primary is "Recommended". Every
@@ -22,7 +20,6 @@
 import { useNavigate } from "@tanstack/solid-router";
 import { Option } from "effect";
 import ChevronLeft from "lucide-solid/icons/chevron-left";
-import CloudDownload from "lucide-solid/icons/cloud-download";
 import FileArchive from "lucide-solid/icons/file-archive";
 import FolderOpen from "lucide-solid/icons/folder-open";
 import { For, Show, createMemo, createSignal, untrack } from "solid-js";
@@ -52,11 +49,21 @@ import {
   type Opened,
 } from "../../migrate";
 import { useShell } from "../../ProjectContext";
-import { Badge, Button, Card, Input, PanelHeader, Select, toasts } from "../primitives";
-import { ChooseStep } from "./ChooseStep";
-import { healthLine } from "./healthLine";
+import {
+  Badge,
+  Button,
+  Card,
+  Input,
+  PanelHeader,
+  Select,
+  cx,
+  toasts,
+  type BadgeTone,
+} from "../primitives";
+import { BookPane } from "./BookPane";
+import { WriterLanguages } from "./WriterLanguages";
 
-type Step = "books" | "choose" | "project";
+type Step = "find" | "books" | "project";
 
 const OPEN_AT_ONCE = 4;
 
@@ -91,12 +98,12 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
     onNone: () => "",
     onSome: (metadata) => metadata.language.tag.toLowerCase(),
   });
-  const [language, setLanguage] = createSignal(intoLanguage, { name: "migrateLanguage" });
   const [busy, setBusy] = createSignal(false, { name: "migrateBusy" });
   const [showInactive, setShowInactive] = createSignal(false, { name: "migrateInactive" });
-  const [step, setStep] = createSignal<Step>("books", { name: "migrateStep" });
-  const [choosing, setChoosing] = createSignal<string | undefined>(undefined, {
-    name: "migrateChoosing",
+  const [step, setStep] = createSignal<Step>("find", { name: "migrateStep" });
+  /** The book open in the main pane. */
+  const [selected, setSelected] = createSignal<string | undefined>(undefined, {
+    name: "migrateSelected",
   });
   const [form, setForm] = createSignal<AssembleForm | undefined>(undefined, {
     name: "migrateForm",
@@ -157,6 +164,7 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
       return;
     }
     setCandidates((held) => [...held, ...fresh]);
+    setStep("books");
     setSources((held) => [
       ...held,
       t("{label} · {count} Writer projects", { label, count: found.length }),
@@ -178,9 +186,7 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
     })();
   };
 
-  const fromCatalogue = (): void => {
-    const code = language().trim();
-    if (code === "") return;
+  const fromCatalogue = (code: string): void => {
     setBusy(true);
     void (async () => {
       try {
@@ -299,88 +305,63 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
     })();
   };
 
-  const rowStatus = (row: BookRow) => {
+  /** What the rule would pick for a book, marked Recommended. */
+  const recommended = (row: BookRow): BookCandidate | undefined => defaultCandidate(visible(row));
+
+  /** Every book still waiting on a choice takes the Recommended one. */
+  const useRecommended = (): void => {
+    setChosen((held) => {
+      const next = new Map(held);
+      for (const row of needsChoice()) {
+        const candidate = recommended(row);
+        if (candidate !== undefined) next.set(row.book, candidate.id);
+      }
+      return next;
+    });
+  };
+
+  /** The book in the main pane: the one picked in the list, else the first that needs a choice. */
+  const current = (): BookRow | undefined =>
+    allRows().find((row) => row.book === selected()) ?? needsChoice()[0] ?? allRows()[0];
+
+  /** A book's mark in the list: what it is waiting on, or who it comes from. */
+  const mark = (row: BookRow): { readonly tone: BadgeTone; readonly label: string } => {
     const shown = visible(row);
-    if (shown.length === 0) {
-      const inactive = row.candidates.filter((c) => c.hints.status === "Inactive").length;
-      const refused = row.candidates.find((c) => openedOf(c.id).state === "refused");
-      const reason =
-        refused === undefined
-          ? undefined
-          : (() => {
-              const held = openedOf(refused.id);
-              return held.state === "refused" ? held.reason : undefined;
-            })();
-      return {
-        tone: "muted" as const,
-        label: t("left out"),
-        note:
-          inactive > 0 && !showInactive()
-            ? t("Inactive only")
-            : reason === undefined
-              ? ""
-              : t("refused: {reason}", { reason }),
-      };
-    }
+    if (shown.length === 0) return { tone: "muted", label: t("left out") };
     if (shown.length > 1 && !chosen().has(row.book))
-      return {
-        tone: "warning" as const,
-        label: t("Choose · {count}", { count: shown.length }),
-        note: "",
-      };
+      return { tone: "warning", label: t("choose · {count}", { count: shown.length }) };
     const candidate = pick(row);
     const held = candidate === undefined ? undefined : openedOf(candidate.id);
-    const status = candidate?.hints.status;
-    return {
-      tone: "success" as const,
-      label: [candidate === undefined ? "" : candidateLabel(candidate), status ?? ""]
-        .filter((part) => part !== "")
-        .join(" · "),
-      note:
-        held?.state === "ready"
-          ? healthLine(held.health)
-          : held?.state === "refused"
-            ? t("refused: {reason}", { reason: held.reason })
-            : t("Checking…"),
-    };
+    if (held?.state === "refused") return { tone: "error", label: t("refused") };
+    if (held?.state !== "ready") return { tone: "neutral", label: t("checking") };
+    return { tone: "success", label: candidate === undefined ? "" : candidateLabel(candidate) };
   };
 
   const Section = (sectionProps: { readonly testament: "ot" | "nt"; readonly title: string }) => (
     <Show when={allRows().some((row) => testamentOfBook(row.book) === sectionProps.testament)}>
-      <div class="flex items-baseline justify-between border-b border-surface-border bg-surface-secondary px-4 py-2 text-small font-semibold text-on-surface-secondary">
+      <div class="flex items-baseline justify-between border-b border-surface-border bg-surface-secondary px-3 py-1.5 text-smallest font-semibold text-on-surface-secondary">
         <span>{sectionProps.title}</span>
         <span class="font-normal">{counted(sectionProps.testament)}</span>
       </div>
       <For each={allRows().filter((row) => testamentOfBook(row.book) === sectionProps.testament)}>
         {(row) => (
-          <div
+          <button
+            type="button"
             data-testid={`migrate-row-${row.book}`}
-            class="grid grid-cols-[1fr_auto] items-center gap-x-3 border-b border-surface-border px-4 py-2"
+            aria-current={current()?.book === row.book ? "true" : undefined}
+            class={cx(
+              "flex w-full items-center gap-2 border-b border-surface-border px-3 py-1.5 text-start text-small hover:bg-surface-secondary",
+              current()?.book === row.book && "bg-surface-tertiary font-semibold",
+            )}
+            onClick={() => setSelected(row.book)}
           >
-            <span class="font-medium">
+            <span class="me-auto truncate">
               {CANON.find((book) => book.id === row.book)?.name ?? row.book}
             </span>
-            <Show
-              when={contested(row)}
-              fallback={<Badge tone={rowStatus(row).tone}>{rowStatus(row).label}</Badge>}
-            >
-              <Button
-                size="sm"
-                variant={chosen().has(row.book) ? "secondary" : "accent"}
-                onClick={() => {
-                  setChoosing(row.book);
-                  setStep("choose");
-                }}
-              >
-                {rowStatus(row).label}
-              </Button>
-            </Show>
-            <Show when={rowStatus(row).note !== ""}>
-              <small class="col-span-2 text-smallest text-on-surface-tertiary">
-                {rowStatus(row).note}
-              </small>
-            </Show>
-          </div>
+            <Badge tone={mark(row).tone} class="max-w-28 truncate">
+              {mark(row).label}
+            </Badge>
+          </button>
         )}
       </For>
     </Show>
@@ -391,7 +372,7 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
 
   return (
     <div class="flex min-w-0 flex-col gap-4">
-      <Show when={step() === "books"}>
+      <Show when={step() === "find"}>
         <Card class="flex flex-col gap-3">
           <PanelHeader
             title={
@@ -400,7 +381,7 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
             subtitle={
               intoProject === undefined
                 ? t(
-                    "Assemble one project from BTT Writer's single-book projects. Pick where they are; you can combine several.",
+                    "Assemble one project from BTT Writer's single-book projects. Pick a language below, or a folder or zip of Writer projects; you can combine several.",
                   )
                 : t(
                     "Only books this project does not have yet, in its language, are offered. They arrive as one commit.",
@@ -415,7 +396,7 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
               icon={<FolderOpen aria-hidden="true" />}
               onClick={() => fromLocal("folder")}
             >
-              {t("Folder")}
+              {t("Folder of Writer projects")}
             </Button>
             <Button
               variant="secondary"
@@ -424,121 +405,113 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
               icon={<FileArchive aria-hidden="true" />}
               onClick={() => fromLocal("zip")}
             >
-              {t("Zip")}
+              {t("Zip of Writer projects")}
             </Button>
-            <form
-              class="flex items-center gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                fromCatalogue();
-              }}
-            >
-              <Input
-                aria-label={t("Language code")}
-                placeholder={t("Language code, e.g. bwc")}
-                value={language()}
-                disabled={!online}
-                onInput={(event) => setLanguage(event.currentTarget.value)}
-              />
-              <Button
-                type="submit"
-                variant="secondary"
-                data-testid="migrate-catalogue"
-                disabled={busy() || !online || language().trim() === ""}
-                title={online ? undefined : t("No WACS server is set for this build.")}
-                icon={<CloudDownload aria-hidden="true" />}
-              >
-                {t("From the catalogue (online)")}
+            <Show when={allRows().length > 0}>
+              <Button variant="tertiary" class="ms-auto" onClick={() => setStep("books")}>
+                {t("Back to {count} books", { count: allRows().length })}
               </Button>
-            </form>
+            </Show>
           </div>
           <Show when={sources().length > 0}>
             <p class="text-small text-on-surface-secondary">{sources().join(" · ")}</p>
           </Show>
         </Card>
-
-        <Show when={allRows().length > 0}>
-          <Card padded={false} class="overflow-hidden">
-            <div class="flex flex-wrap items-center gap-3 px-4 py-3">
-              <span class="me-auto font-semibold">
-                {[
-                  needsChoice().length > 0
-                    ? t("{count} books need a choice", { count: needsChoice().length })
-                    : t("{count} books ready", { count: picked().length - stillOpening() }),
-                  checking() > 0 ? t("checking {count} more…", { count: checking() }) : "",
-                ]
-                  .filter((part) => part !== "")
-                  .join(" · ")}
-              </span>
-              <Show when={inactiveCount() > 0}>
-                <Button
-                  size="sm"
-                  variant="tertiary"
-                  onClick={() => {
-                    const on = !showInactive();
-                    setShowInactive(on);
-                    if (on) void openPending(candidates(), true);
-                  }}
-                >
-                  {showInactive()
-                    ? t("Hide inactive")
-                    : t("Show inactive ({count})", { count: inactiveCount() })}
-                </Button>
-              </Show>
-              <Button
-                variant="primary"
-                data-testid="migrate-next"
-                loading={assembling()}
-                disabled={!canAssemble() || assembling()}
-                onClick={props.into === undefined ? toProject : runAdd}
-              >
-                {props.into === undefined
-                  ? t("Next")
-                  : t("Add {count} books", { count: picked().length })}
-              </Button>
-            </div>
-            <Section testament="ot" title={t("Old Testament")} />
-            <Section testament="nt" title={t("New Testament")} />
-          </Card>
+        <Show
+          when={online}
+          fallback={
+            <p class="text-small text-on-surface-secondary">
+              {t("No WACS server is set for this build: use a folder or a zip.")}
+            </p>
+          }
+        >
+          <Show
+            when={!busy()}
+            fallback={
+              <p class="py-8 text-center text-on-surface-tertiary">
+                {t("Listing Writer projects…")}
+              </p>
+            }
+          >
+            <WriterLanguages initial={intoLanguage} onPick={fromCatalogue} />
+          </Show>
         </Show>
       </Show>
 
-      <Show when={step() === "choose" ? choosing() : undefined}>
-        {(book) => (
-          <ChooseStep
-            book={book()}
-            candidates={visible(
-              allRows().find((row) => row.book === book()) ?? { book: book(), candidates: [] },
+      <Show when={step() === "books"}>
+        <Card padded={false} class="flex flex-wrap items-center gap-3 px-4 py-3">
+          <span class="font-semibold" data-testid="migrate-summary">
+            {[
+              needsChoice().length > 0
+                ? t("{count} books need a choice", { count: needsChoice().length })
+                : t("{count} books ready", { count: picked().length - stillOpening() }),
+              checking() > 0 ? t("checking {count} more…", { count: checking() }) : "",
+            ]
+              .filter((part) => part !== "")
+              .join(" · ")}
+          </span>
+          <span class="me-auto truncate text-small text-on-surface-tertiary">
+            {sources().join(" · ")}
+          </span>
+          <Button size="sm" variant="tertiary" onClick={() => setStep("find")}>
+            {t("Add more…")}
+          </Button>
+          <Show when={inactiveCount() > 0}>
+            <Button
+              size="sm"
+              variant="tertiary"
+              onClick={() => {
+                const on = !showInactive();
+                setShowInactive(on);
+                if (on) void openPending(candidates(), true);
+              }}
+            >
+              {showInactive()
+                ? t("Hide inactive")
+                : t("Show inactive ({count})", { count: inactiveCount() })}
+            </Button>
+          </Show>
+          <Show when={needsChoice().length > 0}>
+            <Button
+              size="sm"
+              variant="secondary"
+              data-testid="migrate-recommended"
+              onClick={useRecommended}
+            >
+              {t("Use the recommended one for {count} books", { count: needsChoice().length })}
+            </Button>
+          </Show>
+          <Button
+            variant="primary"
+            data-testid="migrate-next"
+            loading={assembling()}
+            disabled={!canAssemble() || assembling()}
+            onClick={props.into === undefined ? toProject : runAdd}
+          >
+            {props.into === undefined
+              ? t("Next")
+              : t("Add {count} books", { count: picked().length })}
+          </Button>
+        </Card>
+
+        <div class="grid min-h-0 grid-cols-[15rem_minmax(0,1fr)] items-start gap-4">
+          <Card padded={false} class="max-h-[75vh] overflow-y-auto">
+            <Section testament="ot" title={t("Old Testament")} />
+            <Section testament="nt" title={t("New Testament")} />
+          </Card>
+          <Show when={current()} keyed>
+            {(row) => (
+              <BookPane
+                book={row.book}
+                candidates={visible(row)}
+                opened={openedOf}
+                picked={pick(row)?.id}
+                recommended={recommended(row)?.id}
+                onUse={(id) => setChosen((held) => new Map(held).set(row.book, id))}
+              />
             )}
-            opened={openedOf}
-            initial={(() => {
-              const row = allRows().find((each) => each.book === book());
-              return row === undefined ? undefined : pick(row)?.id;
-            })()}
-            position={{
-              index: allRows()
-                .filter(contested)
-                .findIndex((row) => row.book === book()),
-              total: allRows().filter(contested).length,
-            }}
-            onStep={(delta) => {
-              const list = allRows().filter(contested);
-              const at = list.findIndex((row) => row.book === book());
-              const next = list[at + delta];
-              if (next !== undefined) setChoosing(next.book);
-            }}
-            onUse={(id) => {
-              setChosen((held) => new Map(held).set(book(), id));
-              const remaining = allRows().filter(
-                (row) => contested(row) && row.book !== book() && !chosen().has(row.book),
-              );
-              const next = remaining[0];
-              if (next === undefined) setStep("books");
-              else setChoosing(next.book);
-            }}
-            onBack={() => setStep("books")}
-          />
-        )}
+          </Show>
+        </div>
       </Show>
 
       <Show when={step() === "project" ? form() : undefined}>

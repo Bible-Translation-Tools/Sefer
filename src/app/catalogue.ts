@@ -126,6 +126,24 @@ export interface CatalogueService {
    * repository is left out: it is what a migration makes.
    */
   readonly writerBooks: (language: string) => Promise<readonly BookCandidate[]>;
+  /**
+   * The languages with Writer projects whose code or name contains `search`,
+   * one row each. The search runs on the server: every language at once is
+   * thousands of rows, so the screen asks only once two letters are typed.
+   */
+  readonly writerLanguages: (search: string) => Promise<readonly WriterLanguage[]>;
+}
+
+/** One language with single-book Writer projects on WACS. */
+export interface WriterLanguage {
+  readonly code: string;
+  readonly naturalName: string;
+  readonly anglicizedName: string;
+  readonly region: string | undefined;
+  /** How many Writer projects (one book each, almost always). */
+  readonly projects: number;
+  /** The newest change across them. */
+  readonly updated: string | undefined;
 }
 
 /**
@@ -199,6 +217,69 @@ const WRITER_BOOKS_QUERY = `query ($lang: String!) {
     }) { scriptural_rendering_metadata { book_slug } }
   }
 }`;
+
+/** What a Writer project is, as a `content` filter: one whole-book USFM, not consolidated. */
+const WRITER_CONTENT = `{
+  git_repo: { _not: { topics: { topic: { name: { _eq: "consolidated" } } } } }
+  rendered_contents: {
+    file_type: { _eq: "usfm" }
+    scriptural_rendering_metadata: { is_whole_book: { _eq: true } }
+  }
+}`;
+
+/**
+ * Counted on the server (`contents_aggregate`): the rows themselves are 37,000
+ * for a one-letter search, and only the count and the newest date are drawn.
+ * Alternate names are searched too, as the WACS table does.
+ */
+const WRITER_LANGUAGES_QUERY = `query ($s: String!) {
+  language(where: { _and: [
+    { _or: [
+      { ietf_code: { _ilike: $s } }
+      { english_name: { _ilike: $s } }
+      { national_name: { _ilike: $s } }
+      { language_alternate_names: { name: { _ilike: $s } } }
+    ] }
+    { contents: ${WRITER_CONTENT} }
+  ] }) {
+    ietf_code english_name national_name
+    contents_aggregate(where: ${WRITER_CONTENT}) { aggregate { count max { modified_on } } }
+  }
+}`;
+
+const WriterLanguages = Schema.Struct({
+  data: Schema.Struct({
+    language: Schema.Array(
+      Schema.Struct({
+        ietf_code: Schema.String,
+        english_name: Schema.NullOr(Schema.String),
+        national_name: Schema.NullOr(Schema.String),
+        contents_aggregate: Schema.Struct({
+          aggregate: Schema.NullOr(
+            Schema.Struct({
+              count: Schema.Number,
+              max: Schema.NullOr(Schema.Struct({ modified_on: Schema.NullOr(Schema.String) })),
+            }),
+          ),
+        }),
+      }),
+    ),
+  }),
+});
+
+const decodeWriterLanguages = Schema.decodeUnknownResult(WriterLanguages);
+
+const REGIONS_QUERY = `query ($codes: [String!]) { vw_langnames(where: { lc: { _in: $codes } }) { lc lr } }`;
+
+const Regions = Schema.Struct({
+  data: Schema.Struct({
+    vw_langnames: Schema.Array(
+      Schema.Struct({ lc: Schema.String, lr: Schema.NullOr(Schema.String) }),
+    ),
+  }),
+});
+
+const decodeRegions = Schema.decodeUnknownResult(Regions);
 
 const STATUSES: readonly CandidateStatus[] = ["Primary", "Active", "Inactive"];
 
@@ -312,6 +393,41 @@ const languageApiCatalogue = (origin: string): CatalogueService => ({
       });
     });
   },
+  writerLanguages: async (search) => {
+    const decoded = decodeWriterLanguages(
+      await graphql(origin, WRITER_LANGUAGES_QUERY, { s: `%${search.trim()}%` }),
+    );
+    if (Result.isFailure(decoded))
+      throw new CatalogueError(
+        `Language API payload not understood: ${decoded.failure.message}`,
+        "payload",
+      );
+    const languages = decoded.success.data.language;
+    // Regions are a second request, as for the WACS table; without them the
+    // rows still draw.
+    const regions = await graphql(origin, REGIONS_QUERY, {
+      codes: languages.map((language) => language.ietf_code),
+    })
+      .then((body) => decodeRegions(body))
+      .catch(() => undefined);
+    const regionOf = new Map(
+      regions !== undefined && Result.isSuccess(regions)
+        ? regions.success.data.vw_langnames.map((row) => [row.lc.toLowerCase(), row.lr])
+        : [],
+    );
+    return languages.map((language) => {
+      const english = language.english_name ?? "";
+      const natural = language.national_name ?? "";
+      return {
+        code: language.ietf_code,
+        naturalName: natural === "" ? english : natural,
+        anglicizedName: english === "" ? natural : english,
+        region: blankToUndefined(regionOf.get(language.ietf_code.toLowerCase())),
+        projects: language.contents_aggregate.aggregate?.count ?? 0,
+        updated: blankToUndefined(language.contents_aggregate.aggregate?.max?.modified_on),
+      };
+    });
+  },
   entries: async () => {
     const decoded = decodeRepos(await graphql(origin, REPOS_QUERY));
     if (Result.isFailure(decoded))
@@ -400,6 +516,7 @@ const sampleCatalogue = (): CatalogueService => ({
   entries: () => Promise.resolve({ rows: SAMPLE_CATALOGUE, enriched: true }),
   // Sample rows clone nothing, so they offer no books either.
   writerBooks: () => Promise.resolve([]),
+  writerLanguages: () => Promise.resolve([]),
 });
 
 /**

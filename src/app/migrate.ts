@@ -7,7 +7,7 @@
  * Library — things core may not name.
  */
 
-import { Effect, Option } from "effect";
+import { Effect, Option, Result } from "effect";
 
 import { joinPath, lastSegment } from "#core/fileSystem/path";
 import type { IntakeResult } from "#core/git/intake";
@@ -15,12 +15,14 @@ import { addBooks, assemble, type AssembleForm } from "#core/migrate/assemble";
 import { openCandidate, type BookCandidate, type StagedBook } from "#core/migrate/candidate";
 import { health, validate, type Health } from "#core/migrate/check";
 import { localCandidates } from "#core/migrate/local";
+import { UPSTREAM_TIMEOUT } from "#core/migrate/writerWork";
 import { Library, answers } from "#core/resources/library";
 import { highestVersions, type RelatedResource } from "#core/resources/relationships";
 
 import { APP_AUTHOR } from "./author";
-import { catalogueFor } from "./catalogue";
+import { catalogueFor, type WriterLanguage } from "./catalogue";
 import { describe } from "./describe";
+import { t } from "./i18n";
 import type { Domain, Services } from "./services";
 import { rememberProject } from "./ui/landing/summaries";
 
@@ -33,6 +35,12 @@ export type Opened =
   | { readonly state: "opening" }
   | { readonly state: "ready"; readonly staged: StagedBook; readonly health: Health }
   | { readonly state: "refused"; readonly reason: string };
+
+/** The languages with Writer projects matching a search of two letters or more. */
+export const writerLanguages = (
+  services: Services,
+  search: string,
+): Promise<readonly WriterLanguage[]> => catalogueFor(services.settings).writerLanguages(search);
 
 /** The catalogue's Writer projects for one language. */
 export const remoteCandidates = (
@@ -71,7 +79,13 @@ export const pickLocal = async (
 /** Opens, renders, validates and measures one candidate. Never rejects. */
 export const openOne = async (services: Services, candidate: BookCandidate): Promise<Opened> => {
   try {
-    const staged = await services.run(openCandidate(candidate, stagingRootOf(services)));
+    // A clone that does not finish in time is refused like an unreachable
+    // one, so one slow repository never holds the run's Next behind it.
+    const opened = await services.run(
+      Effect.timeoutOption(openCandidate(candidate, stagingRootOf(services)), UPSTREAM_TIMEOUT),
+    );
+    if (Option.isNone(opened)) return { state: "refused", reason: t("it did not answer in time") };
+    const staged = opened.value;
     const refused = validate(staged.usfm);
     if (refused !== undefined) return { state: "refused", reason: refused };
     return {
@@ -109,6 +123,22 @@ export const sourceCensus = (
     }
     return undefined;
   });
+
+/**
+ * How many passages of `other` differ from `picked`: Review's own decision
+ * units, counted. `undefined` when the engine's diff door is missing.
+ */
+export const passagesDiffering = (
+  services: Services,
+  picked: string,
+  other: string,
+): number | undefined => {
+  if (picked === other) return 0;
+  const diffed = services.galley.diff(picked, other);
+  return Result.isSuccess(diffed)
+    ? diffed.success.units.filter((unit) => unit.status !== "unchanged").length
+    : undefined;
+};
 
 /** A folder name for the new project that is not taken yet. */
 const freeFolder = (services: Services, name: string): Effect.Effect<string, never, Domain> =>
