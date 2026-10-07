@@ -41,6 +41,7 @@ import BookMarked from "lucide-solid/icons/book-marked";
 import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronUp from "lucide-solid/icons/chevron-up";
+import Combine from "lucide-solid/icons/combine";
 import Download from "lucide-solid/icons/download";
 import PanelLeftClose from "lucide-solid/icons/panel-left-close";
 import Trash from "lucide-solid/icons/trash-2";
@@ -119,6 +120,13 @@ export interface ReferenceColumnProps {
    * as it does when nothing is bound.
    */
   readonly onFolded?: (folded: boolean) => void;
+  /**
+   * `tab`: drawn inside the editor's card under Refine's Reference/Translation
+   * tabs — no collapse, no column padding. A design tweak; `column` otherwise.
+   */
+  readonly variant?: "column" | "tab";
+  /** Puts the reference back into the editor's card (the tabbed layout). Design builds only. */
+  readonly onCombine?: () => void;
 }
 
 export function ReferenceColumn(props: ReferenceColumnProps) {
@@ -745,7 +753,11 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   return (
     <aside
       aria-label={t("Reference texts")}
-      class="flex h-full min-w-0 flex-col gap-3 py-4 pe-[7.5px]"
+      class={
+        props.variant === "tab"
+          ? "flex min-h-0 min-w-0 flex-1 flex-col gap-3 px-3 pt-3"
+          : "flex h-full min-w-0 flex-col gap-3 py-4 pe-[7.5px]"
+      }
       data-references={entries().length}
     >
       <Show
@@ -774,13 +786,26 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           <div class="min-w-0 flex-1">
             <LanguagePicker />
           </div>
-          <IconButton
-            variant="subtle"
-            data-testid="reference-fold"
-            label={t("Collapse the reference text")}
-            icon={<PanelLeftClose />}
-            onClick={() => fold(true)}
-          />
+          <Show when={props.onCombine}>
+            {(combine) => (
+              <IconButton
+                variant="subtle"
+                data-testid="reference-combine"
+                label={t("Combine with the editor")}
+                icon={<Combine />}
+                onClick={() => combine()()}
+              />
+            )}
+          </Show>
+          <Show when={props.variant !== "tab"}>
+            <IconButton
+              variant="subtle"
+              data-testid="reference-fold"
+              label={t("Collapse the reference text")}
+              icon={<PanelLeftClose />}
+              onClick={() => fold(true)}
+            />
+          </Show>
         </div>
 
         {/* Only while nothing is picked: a person who chose a text has

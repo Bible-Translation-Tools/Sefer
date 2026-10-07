@@ -1,12 +1,13 @@
 import { createAlignedGroup } from "@sefer/editor";
 import { createFileRoute } from "@tanstack/solid-router";
-import { Show, createEffect, createSignal, untrack } from "solid-js";
+import Columns2 from "lucide-solid/icons/columns-2";
+import { Show, createEffect, createSignal, onCleanup, untrack } from "solid-js";
 
 import { t } from "#app/i18n";
 import { useShell } from "#app/ProjectContext";
 import { REFERENCE_WIDTH } from "#app/settings";
 import { BookEditor } from "#app/ui/BookEditor";
-import { DelayedSpinner, Resizable, cx } from "#app/ui/primitives";
+import { DelayedSpinner, IconButton, Resizable, SegmentedControl, cx } from "#app/ui/primitives";
 import { RecoveryBanner } from "#app/ui/recovery/RecoveryBanner";
 import { AlignedProvider } from "#app/ui/workspace/aligned";
 import { ReferenceColumn } from "#app/ui/workspace/ReferenceColumn";
@@ -78,6 +79,79 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
     },
   );
 
+  /**
+   * How the reference text and the editor relate — a DESIGN TWEAK, scaffolding
+   * until the question is settled (`pnpm design:scaffolding` lists it):
+   * `split`, the two side by side (what ships), or `tabs`, one card with a
+   * Reference / Translation switch where its location bar was. The Split and
+   * Combine buttons move between them; builds without the design surface are
+   * always `split` and show neither button.
+   */
+  // `ownedWrite`: the panel calls `onChange` once as the tweak registers,
+  // which is while this page is being built.
+  const [layout, setLayoutSignal] = createSignal<"split" | "tabs">("split", {
+    name: "refineLayout",
+    ownedWrite: true,
+  });
+  // SAFETY: under `__SEFER_DESIGN__` the design surface installs this handle
+  // (`src/dev/designSurface.ts`) with `register` and `set` of these shapes;
+  // `unknown` in the global's type only because platform may not import a dev tool.
+  const design = (__SEFER_DESIGN__ ? globalThis.__sefer?.design : undefined) as
+    | {
+        readonly register?: (registration: {
+          readonly namespace: string;
+          readonly tweaks: readonly {
+            readonly key: string;
+            readonly label: string;
+            readonly kind: "choice";
+            readonly options: readonly string[];
+          }[];
+          readonly onChange: (values: Readonly<Record<string, string>>) => void;
+        }) => () => void;
+        readonly set?: (key: string, value: string) => void;
+      }
+    | undefined;
+  /** The buttons set the tweak itself, so the panel and the URL agree. */
+  const setLayout = (next: "split" | "tabs"): void => {
+    if (design?.set !== undefined) design.set("refine.layout", next);
+    else setLayoutSignal(next);
+  };
+  if (__SEFER_DESIGN__) {
+    const release = design?.register?.({
+      namespace: "refine",
+      tweaks: [{ key: "layout", label: "Layout", kind: "choice", options: ["split", "tabs"] }],
+      onChange: (values) => {
+        setLayoutSignal(values["refine.layout"] === "tabs" ? "tabs" : "split");
+      },
+    });
+    if (release !== undefined) onCleanup(release);
+  }
+  /** Which side the tabbed card shows. */
+  const [tab, setTab] = createSignal<"reference" | "translation">("translation", {
+    name: "refineTab",
+  });
+  /** The tabbed card's top strip: the two tabs, and the way to split them apart. */
+  const Tabs = () => (
+    <div class="flex items-center gap-controls border-b border-surface-border p-3">
+      <SegmentedControl<"reference" | "translation">
+        label={t("Show")}
+        items={[
+          { value: "reference", label: t("Reference") },
+          { value: "translation", label: t("Translation") },
+        ]}
+        value={tab()}
+        onChange={setTab}
+      />
+      <IconButton
+        class="ms-auto"
+        data-testid="refine-split"
+        label={t("Show side by side")}
+        icon={<Columns2 />}
+        onClick={() => setLayout("split")}
+      />
+    </div>
+  );
+
   return (
     <main class="flex h-full min-h-0 min-w-0 flex-col gap-3 p-6">
       {/* Above everything, and on THIS route as well as the project page:
@@ -100,60 +174,91 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
           <>
             <Toolbar />
 
-            {/* The editor and its references are one aligned group: scroll
+            <Show
+              when={layout() === "split"}
+              fallback={
+                // The tabbed layout (a design tweak): ONE card, its top strip
+                // the Reference / Translation tabs. Both stay mounted and the
+                // other is hidden, so switching keeps each one's place.
+                <AlignedProvider value={aligned}>
+                  <div class="flex min-h-0 flex-1 flex-col">
+                    <div
+                      class={cx(
+                        "flex min-h-0 flex-1 flex-col",
+                        tab() !== "translation" && "hidden",
+                      )}
+                    >
+                      <Show when={book().id} keyed>
+                        <BookEditor book={book()} header={<Tabs />} />
+                      </Show>
+                    </div>
+                    <div class={cx("editor-host shadow-small", tab() !== "reference" && "hidden")}>
+                      <Tabs />
+                      <ReferenceColumn variant="tab" onBound={setReferences} />
+                    </div>
+                  </div>
+                </AlignedProvider>
+              }
+            >
+              {/* The editor and its references are one aligned group: scroll
                 either and a following pane brings the same verse into view. */}
-            <AlignedProvider value={aligned}>
-              <Resizable.Root
-                class="min-h-0 flex-1"
-                onSizesChange={(sizes) => {
-                  const first = sizes[0];
-                  if (first !== undefined) shell.setReferenceWidth(first);
-                }}
-              >
-                <Resizable.Panel
-                  initialSize={referenceInitial}
-                  minSize={referenceMin}
-                  maxSize={referenceMax}
-                  class={shut() ? "hidden" : collapsed() ? "[flex-basis:13rem]!" : undefined}
+              <AlignedProvider value={aligned}>
+                <Resizable.Root
+                  class="min-h-0 flex-1"
+                  onSizesChange={(sizes) => {
+                    const first = sizes[0];
+                    if (first !== undefined) shell.setReferenceWidth(first);
+                  }}
                 >
-                  {/* Unmounted while shut, the panel kept: its panes are
-                      editors, and nothing reads them while they are hidden. */}
-                  <Show when={!shut()}>
-                    <ReferenceColumn onBound={setReferences} onFolded={setFolded} />
-                  </Show>
-                </Resizable.Panel>
-                {/* Hidden rather than unmounted, same reason as the panel. */}
-                <Resizable.Handle
-                  label={t("Resize the reference pane")}
-                  class={collapsed() || shut() ? "hidden" : undefined}
-                />
-                {/* No `<Card>` around the editor: `.editor-host` (app.css) IS
+                  <Resizable.Panel
+                    initialSize={referenceInitial}
+                    minSize={referenceMin}
+                    maxSize={referenceMax}
+                    class={shut() ? "hidden" : collapsed() ? "[flex-basis:13rem]!" : undefined}
+                  >
+                    {/* Unmounted while shut, the panel kept: its panes are
+                        editors, and nothing reads them while they are hidden. */}
+                    <Show when={!shut()}>
+                      <ReferenceColumn
+                        onBound={setReferences}
+                        onFolded={setFolded}
+                        onCombine={__SEFER_DESIGN__ ? () => setLayout("tabs") : undefined}
+                      />
+                    </Show>
+                  </Resizable.Panel>
+                  {/* Hidden rather than unmounted, same reason as the panel. */}
+                  <Resizable.Handle
+                    label={t("Resize the reference pane")}
+                    class={collapsed() || shut() ? "hidden" : undefined}
+                  />
+                  {/* No `<Card>` around the editor: `.editor-host` (app.css) IS
                   the card — white, bordered, 12px radius — and the scripture's
                   own generous padding is inside the view, where CodeMirror can
                   keep the measure at 40rem and centre it. A second card would
                   be a second border around the same rectangle. */}
-                <Resizable.Panel
-                  class={cx(
-                    // 7.5px each side of the 9px handle: 24px between the
-                    // reference text and the editor, the page's own margin.
-                    "flex flex-col gap-2 py-4 ps-[7.5px]",
-                    // With the pane collapsed the editor takes the row back; the
-                    // `!` is load-bearing because `Resizable.Panel` writes its
-                    // share as an inline `flex-basis`.
-                    collapsed() || shut() ? "grow! [flex-basis:auto]!" : undefined,
-                  )}
-                >
-                  {/* Keyed on the book id: a different book is a different
+                  <Resizable.Panel
+                    class={cx(
+                      // 7.5px each side of the 9px handle: 24px between the
+                      // reference text and the editor, the page's own margin.
+                      "flex flex-col gap-2 py-4 ps-[7.5px]",
+                      // With the pane collapsed the editor takes the row back; the
+                      // `!` is load-bearing because `Resizable.Panel` writes its
+                      // share as an inline `flex-basis`.
+                      collapsed() || shut() ? "grow! [flex-basis:auto]!" : undefined,
+                    )}
+                  >
+                    {/* Keyed on the book id: a different book is a different
                     canonical state, so the view is rebuilt rather than
                     repointed. */}
-                  <div class="flex min-h-0 flex-1 flex-col">
-                    <Show when={book().id} keyed>
-                      <BookEditor book={book()} />
-                    </Show>
-                  </div>
-                </Resizable.Panel>
-              </Resizable.Root>
-            </AlignedProvider>
+                    <div class="flex min-h-0 flex-1 flex-col">
+                      <Show when={book().id} keyed>
+                        <BookEditor book={book()} />
+                      </Show>
+                    </div>
+                  </Resizable.Panel>
+                </Resizable.Root>
+              </AlignedProvider>
+            </Show>
           </>
         )}
       </Show>
