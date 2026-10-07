@@ -95,6 +95,13 @@ export interface ReviewBook {
   /** The RIGHT source's text — `baseline`. */
   readonly baselineText: string;
   readonly skeleton: DiffSkeleton;
+  /**
+   * Changed units this review leaves out: reviewing a suggestion, the
+   * passages only the editor changed are not the suggestion's, so they are
+   * counted in one line rather than shown as if it offered them. A decided
+   * unit is still shown, so it can be put back.
+   */
+  readonly hidden?: ReadonlySet<string>;
 }
 
 type Layout = "auto" | "split" | "unified";
@@ -267,7 +274,12 @@ export function ReviewReader(props: {
       baseline: analysisOf(book.bookId, "baseline", book.baselineText),
     };
     const units = book.skeleton.units;
-    const include = FILTERS[show];
+    const filtered = FILTERS[show];
+    const hidden = book.hidden;
+    const include =
+      hidden === undefined || hidden.size === 0
+        ? filtered
+        : (unit: DecisionUnit): boolean => filtered(unit) && !hidden.has(unit.id);
     // In an editable review a taken unit is unchanged now — it IS the other side's
     // text — and still keeps its card, to say so and to put it back.
     const keep = (unit: DecisionUnit): boolean =>
@@ -303,7 +315,7 @@ export function ReviewReader(props: {
    */
   let held = new Map<BookId, { readonly key: string; readonly prepared: Prepared }>();
   const keyOf = (book: ReviewBook, show: Filter, result: boolean): string =>
-    `${show}\0${result ? "r" : "c"}\0${book.currentText.length}\0${book.baselineText.length}\0${extentsOf(book.bookId)}`;
+    `${show}\0${result ? "r" : "c"}\0${book.currentText.length}\0${book.baselineText.length}\0${extentsOf(book.bookId)}\0${[...(book.hidden ?? [])].join(",")}`;
   const same = (was: Prepared, book: ReviewBook): boolean =>
     was.book.currentText === book.currentText && was.book.baselineText === book.baselineText;
 

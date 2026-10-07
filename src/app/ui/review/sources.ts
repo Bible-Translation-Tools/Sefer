@@ -79,6 +79,8 @@ export interface ChoiceContext {
   readonly shared: RecordedTexts;
   /** What that side is called: the shared project, or a suggestion to it. */
   readonly sharedLabel?: string | undefined;
+  /** What that side is, in a sentence, when it is not the shared project itself. */
+  readonly sharedExplainer?: string | undefined;
   /**
    * New work in the Writer projects the books follow, as texts: each book is
    * the project's own with their changes in the places they changed
@@ -148,7 +150,8 @@ export const sourceChoices = (context: ChoiceContext): readonly SourceChoice[] =
       explainer:
         context.shared.head === undefined
           ? t("Nothing has been received from a shared project yet.")
-          : t("The shared project's newest version, as the last check brought it here."),
+          : (context.sharedExplainer ??
+            t("The shared project's newest version, as the last check brought it here.")),
       available: project !== undefined && context.shared.head !== undefined,
       immediate: () =>
         project === undefined

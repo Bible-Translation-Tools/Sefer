@@ -335,7 +335,11 @@ export const suggestMyChanges = (services: Services, project: Project): Promise<
     }),
   );
 
-/** The open suggestions to the shared project, for whoever can write to it. */
+/**
+ * The open suggestions to the shared project, for whoever can write to it —
+ * less the signed-in person's own: those are "Yours", and listing them again
+ * under "To review" offered an editor their own work to judge.
+ */
 export const openSuggestions = (
   services: Services,
   project: Project,
@@ -345,7 +349,9 @@ export const openSuggestions = (
       Effect.gen(function* () {
         const at = yield* where(project);
         if (at === undefined) return [];
-        return yield* (yield* Suggestions).open(at.host, at.owner, at.name);
+        const open = yield* (yield* Suggestions).open(at.host, at.owner, at.name);
+        const me = at.me?.toLowerCase();
+        return me === undefined ? open : open.filter((each) => each.author.toLowerCase() !== me);
       }),
       (): readonly Suggestion[] => [],
     ),

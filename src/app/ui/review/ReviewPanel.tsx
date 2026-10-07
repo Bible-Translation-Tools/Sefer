@@ -297,6 +297,12 @@ export function ReviewPanel() {
       shared: shared.recorded(),
       sharedLabel:
         pull() !== undefined ? t("The suggested changes") : fromCopy() ? t("Your copy") : undefined,
+      sharedExplainer:
+        pull() !== undefined
+          ? t("What the suggestion offers: its author's copy, as they last sent it.")
+          : fromCopy()
+            ? t("Your copy, as another of your devices last sent it.")
+            : undefined,
       writer: writerSide(),
     });
 
@@ -793,6 +799,55 @@ export function ReviewPanel() {
         if (sides.there.has(sid)) there = true;
       }
     return here && there ? "both" : here ? "here" : there ? "there" : undefined;
+  };
+
+  /**
+   * Reviewing a suggestion: per book, the changed passages only the editor
+   * changed since the two last agreed. They are not what the suggestion
+   * offers — they are this device's own work, and the preset keeps them — so
+   * the reader leaves them out and one line counts them, with a way to look.
+   * Anywhere else (the shared project, your copy) both sides' work is the
+   * review, and nothing is left out.
+   */
+  const mineOnly = createMemo(
+    (): ReadonlyMap<BookId, ReadonlySet<string>> => {
+      const out = new Map<BookId, ReadonlySet<string>>();
+      if (pull() === undefined) return out;
+      for (const book of reviewBooks()) {
+        const ids = new Set<string>();
+        for (const unit of book.skeleton.units)
+          if (unit.status !== "unchanged" && originOf(book.bookId, [unit]) === "here")
+            ids.add(unit.id);
+        if (ids.size > 0) out.set(book.bookId, ids);
+      }
+      return out;
+    },
+    { name: "reviewMineOnly" },
+  );
+  const mineOnlyCount = (): number =>
+    [...mineOnly().values()].reduce((sum, ids) => sum + ids.size, 0);
+  const [showMine, setShowMine] = createSignal(false, { name: "reviewShowMine" });
+
+  /** The books as the reader draws them: `reviewBooks`, less what `mineOnly` leaves out. */
+  const readerBooks = createMemo(
+    (): readonly ReviewBook[] => {
+      const books = reviewBooks();
+      const hide = mineOnly();
+      if (showMine() || hide.size === 0) return books;
+      return books.map((book) => {
+        const hidden = hide.get(book.bookId);
+        return hidden === undefined ? book : { ...book, hidden };
+      });
+    },
+    { name: "reviewReaderBooks" },
+  );
+
+  /** What a suggestion offers that the editor does not already read: its changed passages, less yours. */
+  const offeredCount = (): number => {
+    let count = 0;
+    for (const book of reviewBooks())
+      for (const unit of book.skeleton.units) if (unit.status !== "unchanged") count += 1;
+    return count - mineOnlyCount();
   };
 
   /**
@@ -1708,6 +1763,20 @@ export function ReviewPanel() {
 
         {/* Against a suggestion: whose it is, and what its author said. */}
         <Show when={pull()}>{(number) => <SuggestionLine number={number()} />}</Show>
+        <Show when={pull() !== undefined && mineOnlyCount() > 0}>
+          <p
+            class="flex flex-wrap items-center gap-2 text-smallest text-on-surface-secondary"
+            data-review-mine-only={mineOnlyCount()}
+          >
+            {t(
+              "Your editor also has {count} change(s) that are not in this suggestion. They stay as they are.",
+              { count: mineOnlyCount() },
+            )}
+            <Button size="sm" variant="tertiary" onClick={() => setShowMine((on) => !on)}>
+              {showMine() ? t("Hide them") : t("Show them")}
+            </Button>
+          </p>
+        </Show>
 
         {/* An earlier session's unsaved work: the one prompt every project
             screen shows, answered once. Review keeps no list of its own. */}
@@ -1739,13 +1808,25 @@ export function ReviewPanel() {
           <Show
             when={changed().length > 0 || cardEditing()}
             fallback={
-              <EmptyState
-                icon={<Check size={20} />}
-                title={t("No differences.")}
-                description={t("Both sides hold exactly the same books and text.")}
-              />
+              <Show
+                when={pull() !== undefined}
+                fallback={
+                  <EmptyState
+                    icon={<Check size={20} />}
+                    title={t("No differences.")}
+                    description={t("Both sides hold exactly the same books and text.")}
+                  />
+                }
+              >
+                <SuggestionHere />
+              </Show>
             }
           >
+            <Show
+              when={pull() !== undefined && !showMine() && offeredCount() === 0 && !cardEditing()}
+            >
+              <SuggestionHere />
+            </Show>
             <Show when={oneSided().length > 0}>
               <p class="text-smallest text-on-surface-secondary" data-review-one-sided>
                 <Show
@@ -1811,7 +1892,7 @@ export function ReviewPanel() {
               data-review-units={totals().total}
             >
               <ReviewReader
-                books={reviewBooks()}
+                books={readerBooks()}
                 originOf={originOf}
                 decision={effectiveFor}
                 decide={decideAny}
@@ -2085,5 +2166,23 @@ function Receipt(props: {
         </Show>
       </div>
     </div>
+  );
+}
+
+/**
+ * A suggestion with nothing to show: everything it offers already reads that
+ * way in the editor — its author reviewing their own, or a reviewer who took
+ * it already. Not "no differences": the shared project does not have it yet,
+ * and Save is what brings it in.
+ */
+function SuggestionHere() {
+  return (
+    <EmptyState
+      icon={<Check size={20} />}
+      title={t("Everything this suggestion offers is already in your editor.")}
+      description={t(
+        "You may have written it here, or taken it already. Save brings it into the shared project and closes the suggestion.",
+      )}
+    />
   );
 }

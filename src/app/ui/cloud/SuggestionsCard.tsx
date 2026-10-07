@@ -120,10 +120,13 @@ export function SuggestionsCard(props: { readonly project: Project; readonly sig
                 <li class="space-y-2" data-suggestion={suggestion.number}>
                   <div class="flex items-center justify-between gap-3">
                     <span class="text-small">
-                      {t("{author} suggested changes", { author: suggestion.author })}
+                      {/* The title, not only the date: two from one person
+                          read as two rows of the same words otherwise. */}
+                      <span class="font-medium">{suggestion.title}</span>
                       <span class="text-on-surface-tertiary">
                         {" "}
-                        — {new Date(suggestion.updatedAt).toLocaleDateString()}
+                        — {suggestion.author} ·{" "}
+                        {new Date(suggestion.updatedAt).toLocaleDateString()}
                       </span>
                     </span>
                     <span class="flex gap-2">
