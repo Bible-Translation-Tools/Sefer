@@ -355,6 +355,13 @@ export interface ShellKeys {
   readonly editorFontSize: SettingKey<number>;
   /** Project root → ISO-8601 of the last open. See `RecentProjects`. */
   readonly recentProjects: SettingKey<RecentProjects>;
+  /**
+   * The projects that have had their default source text (Refine's reference
+   * panel), by project id. Remembered on this device so the default is given
+   * ONCE: a text the reader removes is never fetched again behind their back;
+   * "Add source…" still offers it. Not a form row — nothing to edit by hand.
+   */
+  readonly defaultedSources: SettingKey<readonly string[]>;
   /** Slug → project root, for `/project/<slug>`. See `ProjectSlugs`. */
   readonly projectSlugs: SettingKey<ProjectSlugs>;
   /** Project root → the book, the clip and the chapter the reader last had on screen. */
@@ -443,6 +450,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     zoom: settings.register("shell.zoom", Schema.Number, 100),
     editorFontSize: settings.register("editor.fontSize", Schema.Number, DEFAULT_EDITOR_FONT_SIZE),
     recentProjects: settings.register("shell.recentProjects", RecentProjects, {}),
+    defaultedSources: settings.register("references.defaulted", Schema.Array(Schema.String), []),
     projectSlugs: settings.register("shell.projectSlugs", ProjectSlugs, {}),
     lastLocation: settings.register("workspace.lastLocation", LastLocations, {}),
     referenceWidth: settings.register(

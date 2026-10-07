@@ -38,6 +38,7 @@ import type { Resource, Role } from "#core/resources/library";
 import { describe } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
+import { shellKeys } from "../../settings";
 import {
   DEFAULT_SOURCE_LANGUAGE,
   gatewayTextFor,
@@ -198,15 +199,27 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
 
   /**
    * A project with nothing bound gets its default source: its own gateway
-   * language when its manifest names one, else English. Once per project per
-   * session, so removing it on purpose is not undone behind the reader's back.
+   * language when its manifest names one, else English. ONCE per project on
+   * this device (`defaultedSources`): after that, nothing is fetched on the
+   * reader's behalf, so a text they removed stays removed — "Add source…"
+   * still offers it.
    */
-  const defaulted = new Set<string>();
+  const defaultedKey = shellKeys(services.settings).defaultedSources;
+  const defaulted = {
+    has: (id: string): boolean => services.settings.get(defaultedKey).includes(id),
+    add: (id: string): void => {
+      const held = services.settings.get(defaultedKey);
+      if (!held.includes(id)) void services.settings.set(defaultedKey, [...held, id]);
+    },
+  };
   createEffect(
     () => ({ project: shell.project(), ready: !loading(), count: entries().length }),
     ({ project, ready, count }) => {
-      if (project === undefined || !ready || count > 0 || defaulted.has(project.id)) return;
+      if (project === undefined || !ready || defaulted.has(project.id)) return;
+      // A project that already has a source has made its own choice: noted,
+      // so nothing is ever fetched for it automatically later either.
       defaulted.add(project.id);
+      if (count > 0) return;
       const language = metadataOf(project)?.sourceLanguage ?? DEFAULT_SOURCE_LANGUAGE;
       void texts().then((read) => {
         const text =
