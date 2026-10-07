@@ -24,6 +24,7 @@ import { Show } from "solid-js";
 
 import { t } from "../i18n";
 import { useShell } from "../ProjectContext";
+import { syncWatch } from "../syncWatch";
 import {
   AccountCard,
   CollabModeCard,
@@ -50,7 +51,12 @@ export function CloudPanel(props: { readonly root?: string | undefined }) {
       <Show when={props.root}>
         {(root) => (
           <>
-            <CollabModeCard />
+            {/* How a person works only means something once there is a shared
+                project to work with: before that its facts are unknown, and
+                the card read that as "Sign in" to someone signed in. */}
+            <Show when={syncWatch.sync(root())?.reading.origin !== undefined}>
+              <CollabModeCard />
+            </Show>
             <SyncSettingsCard root={root()} />
             <WriterFollowCard root={root()} />
           </>
