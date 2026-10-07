@@ -72,7 +72,7 @@ Tells the app which host it is on (Web or Tauri), the build identity, the locale
 
 ### Overview
 
-The port is `effect/FileSystem` used as-is. Implementations: memory (tests, fixture), Node (tooling), OPFS (Web), Tauri fs plugin (desktop, the only one with a real `watch`). `writeFileAtomic`, `scopedTo` and a 17-law contract suite live in `src/core/fileSystem`. `nodeView` is the Node-shaped `fs` that isomorphic-git reads through. → [storage](architecture/storage.md)
+The port is `effect/FileSystem` used as-is. Implementations: memory (tests, fixture), Node (tooling), OPFS (Web), Tauri fs plugin (desktop, the only one with a real `watch`). `writeFileAtomic`, `scopedTo` and a 17-law contract suite live in `src/core/fileSystem`. `nodeView` is the Node-shaped `fs` that isomorphic-git reads through. On the Web OPFS costs 6–9 ms PER FILE whatever the API, so many-file work is staged in memory and written once, as few files as possible ("The OPFS tax"). → [storage](architecture/storage.md)
 
 ### Constraints and known bugs
 
