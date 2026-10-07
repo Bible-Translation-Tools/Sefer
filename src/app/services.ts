@@ -696,7 +696,11 @@ export const composeServices = async (
         ? (held) =>
             Layer.provideMerge(
               Layer.merge(
-                WebGitLive,
+                // Fresh: `WebGitLive` is one constant Layer, and the runtime
+                // memoises Layers by identity, so without this the app's own
+                // Git — over OPFS — came back, and a clone in memory read as
+                // no repository (no history, no Writer commit to follow).
+                Layer.fresh(WebGitLive),
                 WebRemoteLive({
                   contentHost: resolveEndpoints(resolved.settings).contentHost,
                   transport: bootTransport(),

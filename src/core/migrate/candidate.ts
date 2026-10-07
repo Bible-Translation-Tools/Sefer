@@ -181,8 +181,10 @@ export const openCandidate = (
     const logged = observability.span("migrate.log");
     const committed: Author[] = [];
     const repo = yield* Effect.option(git.open(root));
+    let commits = 0;
     if (repo._tag === "Some") {
       const log = yield* Effect.orElseSucceed(git.log(repo.value), () => []);
+      commits = log.length;
       for (const commit of log) committed.push(commit.author);
       const head = log[0]?.id;
       const url =
@@ -194,7 +196,11 @@ export const openCandidate = (
       if (head !== undefined && url !== undefined) upstream = { url, commit: head };
     }
 
-    logged();
+    logged({
+      "migrate.repo": repo._tag === "Some",
+      "migrate.commits": commits,
+      "migrate.upstream": upstream !== undefined,
+    });
     const rendered = observability.span("migrate.render");
     const usfm = yield* render(project, root);
     rendered({ "migrate.bytes": usfm.length });
