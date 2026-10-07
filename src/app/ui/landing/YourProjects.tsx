@@ -257,6 +257,14 @@ export function YourProjects(props: {
               delete recent[row.root];
               yield* Effect.ignore(services.settings.set(keys.recentProjects, recent));
             }
+            // Its slug goes too: a project made later at the same folder is a
+            // new project, and a link to the old one should not open it.
+            const slugs = services.settings.get(keys.projectSlugs);
+            const kept = Object.fromEntries(
+              Object.entries(slugs).filter(([, root]) => root !== row.root),
+            );
+            if (Object.keys(kept).length !== Object.keys(slugs).length)
+              yield* Effect.ignore(services.settings.set(keys.projectSlugs, kept));
           }),
         ),
       )
