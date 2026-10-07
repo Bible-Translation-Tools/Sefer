@@ -30,7 +30,10 @@
 
 import { Effect, Result } from "effect";
 import BookMarked from "lucide-solid/icons/book-marked";
-import Plus from "lucide-solid/icons/plus";
+import Check from "lucide-solid/icons/check";
+import ChevronDown from "lucide-solid/icons/chevron-down";
+import ChevronUp from "lucide-solid/icons/chevron-up";
+import Download from "lucide-solid/icons/download";
 import { For, Show, createEffect, createSignal } from "solid-js";
 
 import type { Resource, Role } from "#core/resources/library";
@@ -46,7 +49,7 @@ import {
   useGatewaySource,
   type GatewayText,
 } from "../../workflows/gatewaySources";
-import { Button, EmptyState, MultiSelect, Resizable } from "../primitives";
+import { EmptyState, Menu, MenuItem } from "../primitives";
 import { metadataOf } from "./project";
 import { ReferencePane } from "./ReferencePane";
 
@@ -76,6 +79,17 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   /** The gateway languages on offer, once the catalogue has answered. */
   const [choices, setChoices] = createSignal<readonly GatewayText[] | undefined>(undefined, {
     name: "referenceChoices",
+  });
+  /**
+   * The one text on show. The reader's pick, while it is still bound; else
+   * the first source bound.
+   */
+  const [picked, setPicked] = createSignal<string | undefined>(undefined, {
+    name: "referencePicked",
+  });
+  /** Gateway texts already on this device, bound to this project or not. */
+  const [onDevice, setOnDevice] = createSignal<readonly Resource[]>([], {
+    name: "referenceOnDevice",
   });
   /** What is being fetched right now, said in the panel while it is. */
   const [fetching, setFetching] = createSignal("", { name: "referenceFetching" });
@@ -118,6 +132,11 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         )
         // oxlint-disable-next-line solid/reactivity -- a promise continuation: runs once, when the bindings resolve
         .then((found: readonly Entry[]) => {
+          void services.run(services.library.resources()).then((all) => {
+            setOnDevice(
+              all.filter((resource) => resource.root.startsWith(`${services.sourcesRoot}/`)),
+            );
+          });
           setEntries(found);
           setLoading(false);
           report(found.length);
@@ -159,12 +178,19 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     void texts();
   };
 
-  /** A gateway text already bound here is not on offer again. */
-  const candidates = (): readonly GatewayText[] =>
+  /** Installed: bound to this project, or downloaded to this device. One per text. */
+  const installed = (): readonly Resource[] => {
+    const seen = new Map<string, Resource>();
+    for (const entry of entries()) seen.set(entry.resource.id, entry.resource);
+    for (const resource of onDevice()) if (!seen.has(resource.id)) seen.set(resource.id, resource);
+    return [...seen.values()];
+  };
+  /** The catalogue's gateway languages not on this device yet. */
+  const downloadable = (): readonly GatewayText[] =>
     (choices() ?? []).filter(
       (text) =>
-        !entries().some(
-          (entry) => entry.resource.root === `${services.sourcesRoot}/${text.entry.repo}`,
+        !installed().some(
+          (resource) => resource.root === `${services.sourcesRoot}/${text.entry.repo}`,
         ),
     );
 
@@ -192,6 +218,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           );
           return false;
         }
+        setPicked(`${services.sourcesRoot}/${text.entry.repo}`);
         setBound((held) => held + 1);
         return true;
       });
@@ -229,108 +256,155 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     },
   );
 
-  const drop = (entry: Entry): void => {
+  /** The entry on show: the reader's pick while it is bound, else the first source. */
+  const shown = (): Entry | undefined => {
+    const list = entries();
+    const want = picked();
+    return (
+      list.find((entry) => entry.resource.id === want) ??
+      list.find((entry) => entry.role === "source") ??
+      list[0]
+    );
+  };
+
+  /** The pane's identity: the text on show and the open book. Either new, a new pane. */
+  const onShow = (): { readonly entry: Entry; readonly book: string } | undefined => {
+    const entry = shown();
+    const book = shell.focused()?.id;
+    return entry === undefined || book === undefined ? undefined : { entry, book };
+  };
+
+  /** Shows an installed text, binding it to this project first if it is not yet. */
+  const show = (resource: Resource): void => {
     const project = shell.project();
     if (project === undefined) return;
+    setPicked(resource.id);
+    if (entries().some((entry) => entry.resource.id === resource.id)) return;
     void services
-      .run(services.library.unbind(project.id, entry.role, entry.resource.id))
-      .then(() => {
-        setBound((held) => held + 1);
-      });
+      .run(services.library.bind(project.id, "source", resource.id))
+      .then(() => setBound((held) => held + 1));
   };
 
+  /** "English (en)": the language's name in English, then its tag. */
+  const nameOf = (resource: Resource | undefined): string => {
+    if (resource === undefined) return "";
+    // The Library's language when it read one; else, for a gateway text, the
+    // tag its repository is named for (`en_ulb`, `pt-br_ulb`).
+    const repo = resource.root.startsWith(`${services.sourcesRoot}/`)
+      ? (resource.root.split("/").at(-1) ?? "")
+      : "";
+    const code = resource.language ?? (repo.includes("_") ? (repo.split("_")[0] ?? "") : "");
+    if (code === "") return resource.title;
+    let name = code;
+    try {
+      name = new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code;
+    } catch {
+      name = code;
+    }
+    return `${name} (${code})`;
+  };
+
+  const [showOthers, setShowOthers] = createSignal(false, { name: "referenceShowOthers" });
+  /** Rows: 48px, 24px sides; the menu's own 8px plus 4px here is 12px above and below. */
+  const ROW = "px-6";
+
   /**
-   * The picker for one slot: the same searchable pick-one combobox Find's
-   * source text uses, behind this column's own "Add source…" button.
+   * The reference language: what is installed, and below it, folded away,
+   * the other gateway languages to download. Replaces "Add source…".
    */
-  const Picker = () => (
-    <MultiSelect
-      single
-      label={t("Choose a gateway language")}
-      summary=""
-      narrowed={false}
-      items={candidates()}
-      key={(text: GatewayText) => text.entry.id}
-      match={(text, query) =>
-        `${text.name} ${text.code}`.toLowerCase().includes(query.toLowerCase())
-      }
-      placeholder={t("Search languages…")}
-      empty={choices() === undefined ? t("Looking…") : t("No other gateway language to add.")}
-      selected={() => false}
-      onToggle={(text) => void choose(text)}
-      onOpen={offer}
+  const LanguagePicker = () => (
+    <Menu
+      label={t("Reference language")}
+      // Folded again each time it opens: the installed texts come first.
+      onOpenChange={(open) => {
+        if (open) setShowOthers(false);
+      }}
+      side="bottom"
+      align="start"
+      class="w-80"
+      fitViewport
       trigger={
-        <Button
-          variant="secondary"
-          class="w-full"
-          data-testid="add-source"
+        <button
+          type="button"
+          data-testid="reference-language"
           disabled={busy()}
-          icon={<Plus aria-hidden="true" />}
+          onClick={offer}
+          class="flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-2xl bg-surface-primary p-3 text-start transition-colors hover:bg-surface-secondary disabled:cursor-wait"
         >
-          {t("Add source…")}
-        </Button>
+          <span class="flex min-w-0 flex-1 flex-col">
+            <span class="text-small text-on-surface-secondary">{t("Reference language")}</span>
+            <span class="truncate text-small font-semibold text-on-surface-primary">
+              {fetching() === ""
+                ? nameOf(shown()?.resource) || t("None yet")
+                : t("Getting {language}…", { language: fetching() })}
+            </span>
+          </span>
+          <ChevronDown aria-hidden="true" class="size-5 shrink-0 text-on-surface-primary" />
+        </button>
       }
     >
-      {(text) => (
-        <span data-testid={`pick-${text.code}`} class="flex min-w-0 flex-1 flex-col">
-          <span class="truncate font-medium">{text.name}</span>
-          <span class="text-small text-on-surface-primary">{text.entry.repo}</span>
-        </span>
-      )}
-    </MultiSelect>
-  );
-
-  /**
-   * The panes, as one vertical split.
-   *
-   * Built from a plain `.map` and not a `<For>`: this component is remounted
-   * whenever the list changes (see the header), so the array is fixed for its
-   * whole life, and `Resizable.Panel` registers during render — which a `<For>`
-   * would re-run without a way to unregister what it replaced.
-   */
-  const Stack = (stackProps: { readonly list: readonly Entry[]; readonly book: string }) => (
-    <Resizable.Root orientation="vertical" class="min-h-0 flex-1">
-      <For each={stackProps.list}>
-        {(entry, index) => (
-          <>
-            <Show when={index() > 0}>
-              <Resizable.Handle label={t("Resize {title}", { title: entry.resource.title })} />
+      <div class="scrollbar-padded max-h-[min(60vh,25.5rem)] overflow-y-auto py-1">
+        <For each={installed()}>
+          {(resource) => (
+            <MenuItem class={ROW} onSelect={() => show(resource)}>
+              <span class="min-w-0 flex-1 truncate">{nameOf(resource)}</span>
+              <Show when={shown()?.resource.id === resource.id}>
+                <Check aria-label={t("Showing")} class="size-5 shrink-0 text-brand" />
+              </Show>
+            </MenuItem>
+          )}
+        </For>
+        <Show when={downloadable().length > 0}>
+          <button
+            type="button"
+            data-testid="reference-other-languages"
+            aria-expanded={showOthers() ? "true" : "false"}
+            class={`${ROW} flex h-12 w-full cursor-pointer items-center gap-3 text-start text-small font-semibold text-on-surface-primary outline-none hover:bg-surface-secondary focus-visible:bg-surface-secondary`}
+            onClick={() => setShowOthers(!showOthers())}
+          >
+            <span class="min-w-0 flex-1">
+              {t("Other languages ({count})", { count: downloadable().length })}
+            </span>
+            <Show when={showOthers()} fallback={<ChevronDown aria-hidden="true" class="size-5" />}>
+              <ChevronUp aria-hidden="true" class="size-5" />
             </Show>
-            <Resizable.Panel class="flex min-h-0 flex-col">
-              <ReferencePane
-                resource={entry.resource}
-                role={entry.role}
-                bookId={stackProps.book}
-                clip={clip}
-                onUnbind={stackProps.list.length > 1 ? () => drop(entry) : undefined}
-              />
-            </Resizable.Panel>
-          </>
-        )}
-      </For>
-    </Resizable.Root>
+          </button>
+          <Show when={showOthers()}>
+            <For each={downloadable()}>
+              {(text) => (
+                <MenuItem
+                  class={ROW}
+                  data-testid={`pick-${text.code}`}
+                  title={t("Download {language} to read beside this project", {
+                    language: text.name,
+                  })}
+                  onSelect={() => void choose(text)}
+                >
+                  <span class="min-w-0 flex-1 truncate">{text.name}</span>
+                  <Download aria-hidden="true" class="size-5 shrink-0" />
+                </MenuItem>
+              )}
+            </For>
+          </Show>
+        </Show>
+      </div>
+    </Menu>
   );
-
-  /** The split's identity: a new list, or a new book, is a new split. */
-  const stack = (): { readonly list: readonly Entry[]; readonly book: string } | undefined => {
-    const list = entries();
-    const book = shell.focused()?.id;
-    return list.length === 0 || book === undefined ? undefined : { list, book };
-  };
 
   return (
     <aside
       aria-label={t("Reference texts")}
-      class="flex h-full min-w-0 flex-col gap-2 py-4 ps-1"
+      class="flex h-full min-w-0 flex-col gap-3 py-4 ps-1"
       data-references={entries().length}
     >
+      <LanguagePicker />
+      {/* One text, straight on the page: the picker above says whose it is. */}
       <Show
-        when={stack()}
+        when={onShow()}
         keyed
         fallback={
           <Show when={!loading()}>
             <EmptyState
-              class="bg-surface-primary"
               icon={<BookMarked size={22} />}
               title={
                 fetching() === ""
@@ -339,28 +413,24 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
               }
               description={
                 fetching() === ""
-                  ? t("Add a gateway language to read beside this project.")
+                  ? t("Choose a reference language above to read beside this project.")
                   : t("Downloading it once, to read beside this project.")
               }
             />
           </Show>
         }
       >
-        {(held) => <Stack list={held.list} book={held.book} />}
-      </Show>
-
-      {/* Always there: another gateway language can be added beside the
-          ones bound. Under the panes rather than above them — a pane is a
-          page of scripture, and a button above it is a button in the reading. */}
-      <Show when={!loading()}>
-        <div class="flex shrink-0 flex-col gap-1.5">
-          <Show when={fetching() !== "" && stack() !== undefined}>
-            <p class="text-small text-on-surface-primary">
-              {t("Getting {language}…", { language: fetching() })}
-            </p>
-          </Show>
-          <Picker />
-        </div>
+        {(held) => (
+          <div class="flex min-h-0 flex-1 flex-col">
+            <ReferencePane
+              bare
+              resource={held.entry.resource}
+              role={held.entry.role}
+              bookId={held.book}
+              clip={clip}
+            />
+          </div>
+        )}
       </Show>
     </aside>
   );
