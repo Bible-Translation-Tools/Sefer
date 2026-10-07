@@ -59,9 +59,12 @@ import { sidebarClaim } from "#app/ui/workspace/sidebarSlot";
 function Workspace() {
   const shell = useShell();
   const path = useRouterState({ select: (state) => state.location.pathname });
-  // Never on `/` or `/projects`. `/` is home: it forwards to the last project,
-  // or draws `EmptyWorkspace` — a skeleton that draws its own sidebar.
-  const showing = (): boolean => shell.sidebarShowing() && path() !== "/projects" && path() !== "/";
+  // Never on `/`, `/projects` or `/migrate`. `/` is home: it forwards to the
+  // last project, or draws `EmptyWorkspace` — a skeleton that draws its own
+  // sidebar. `/migrate` is building ANOTHER project and has its own book list;
+  // the open project's sidebar there was only lost width (Will, 2026-10-07).
+  const showing = (): boolean =>
+    shell.sidebarShowing() && path() !== "/projects" && path() !== "/" && path() !== "/migrate";
   // Plain variables, not expressions in the props: `Resizable.Panel` reads its
   // three sizes ONCE, during registration, and a JSX expression is a lazy memo
   // Solid 2 warns about when it is read outside a tracking scope. The width is
