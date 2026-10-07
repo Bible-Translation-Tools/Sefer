@@ -30,16 +30,29 @@
 
 import { Effect, Result } from "effect";
 import BookMarked from "lucide-solid/icons/book-marked";
-import Plus from "lucide-solid/icons/plus";
+import Check from "lucide-solid/icons/check";
+import ChevronDown from "lucide-solid/icons/chevron-down";
+import ChevronUp from "lucide-solid/icons/chevron-up";
+import Download from "lucide-solid/icons/download";
+import PanelLeftClose from "lucide-solid/icons/panel-left-close";
 import { For, Show, createEffect, createSignal } from "solid-js";
 
 import type { Resource, Role } from "#core/resources/library";
 
+import { describe } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
-import { listProjects, type ProjectSummary } from "../landing/summaries";
-import { Button, EmptyState, MultiSelect, Resizable } from "../primitives";
+import {
+  DEFAULT_SOURCE_LANGUAGE,
+  gatewayTextFor,
+  gatewayTexts,
+  useGatewaySource,
+  type GatewayText,
+} from "../../workflows/gatewaySources";
+import { EmptyState, IconButton, Menu, MenuItem } from "../primitives";
+import { metadataOf } from "./project";
+import { ReferenceCard } from "./ReferenceCard";
 import { ReferencePane } from "./ReferencePane";
 
 /** The roles the column shows, in the order it shows them. */
@@ -58,6 +71,11 @@ export interface ReferenceColumnProps {
    * asking the Library a second time.
    */
   readonly onBound?: (count: number) => void;
+  /**
+   * Folded to its cards, or open: the ROUTE narrows the column for the cards,
+   * as it does when nothing is bound.
+   */
+  readonly onFolded?: (folded: boolean) => void;
 }
 
 export function ReferenceColumn(props: ReferenceColumnProps) {
@@ -65,9 +83,23 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   const { services } = shell;
   const [entries, setEntries] = createSignal<readonly Entry[]>([], { name: "referenceEntries" });
   const [loading, setLoading] = createSignal(true, { name: "referenceLoading" });
-  const [choices, setChoices] = createSignal<readonly ProjectSummary[] | undefined>(undefined, {
+  /** The gateway languages on offer, once the catalogue has answered. */
+  const [choices, setChoices] = createSignal<readonly GatewayText[] | undefined>(undefined, {
     name: "referenceChoices",
   });
+  /**
+   * The one text on show. The reader's pick, while it is still bound; else
+   * the first source bound.
+   */
+  const [picked, setPicked] = createSignal<string | undefined>(undefined, {
+    name: "referencePicked",
+  });
+  /** Gateway texts already on this device, bound to this project or not. */
+  const [onDevice, setOnDevice] = createSignal<readonly Resource[]>([], {
+    name: "referenceOnDevice",
+  });
+  /** What is being fetched right now, said in the panel while it is. */
+  const [fetching, setFetching] = createSignal("", { name: "referenceFetching" });
   const [busy, setBusy] = createSignal(false, { name: "referenceBusy" });
   /** Raised by a bind or an unbind, so the bindings re-resolve. */
   const [bound, setBound] = createSignal(0, { name: "referenceBound" });
@@ -107,6 +139,11 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         )
         // oxlint-disable-next-line solid/reactivity -- a promise continuation: runs once, when the bindings resolve
         .then((found: readonly Entry[]) => {
+          void services.run(services.library.resources()).then((all) => {
+            setOnDevice(
+              all.filter((resource) => resource.root.startsWith(`${services.sourcesRoot}/`)),
+            );
+          });
           setEntries(found);
           setLoading(false);
           report(found.length);
@@ -134,195 +171,316 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   const clip = (): number | null => numberAt(shell.chapter()) ?? null;
 
   /**
-   * Every project on this device that is not the open one.
-   *
-   * Read once per opening of a picker, not once per render: it is a directory
-   * listing and a JSON parse, and the answer only changes when someone imports
-   * a project on another screen.
+   * The gateway languages, read from the catalogue the first time anything
+   * asks — the picker opening, or a project needing its default source.
    */
+  const texts = async (): Promise<readonly GatewayText[]> => {
+    const held = choices();
+    if (held !== undefined) return held;
+    const read = await gatewayTexts(services).catch((): readonly GatewayText[] => []);
+    setChoices(read);
+    return read;
+  };
   const offer = (): void => {
-    if (choices() !== undefined) return;
-    const recent = services.settings.get(shellKeys(services.settings).recentProjects);
-    void services
-      .run(listProjects(services.projectsRoot, services.fixtureProject, recent))
-      .then(setChoices);
+    void texts();
   };
 
-  /** A project already bound here is not on offer; nor is the open one. */
-  const candidates = (): readonly ProjectSummary[] => {
-    const open = shell.project()?.root;
-    return (choices() ?? []).filter(
-      (row) => row.root !== open && !entries().some((entry) => entry.resource.id === row.root),
-    );
+  /** Installed: bound to this project, or downloaded to this device. One per text. */
+  const installed = (): readonly Resource[] => {
+    const seen = new Map<string, Resource>();
+    for (const entry of entries()) seen.set(entry.resource.id, entry.resource);
+    for (const resource of onDevice()) if (!seen.has(resource.id)) seen.set(resource.id, resource);
+    return [...seen.values()];
   };
+  /** The catalogue's gateway languages not on this device yet. */
+  const downloadable = (): readonly GatewayText[] =>
+    (choices() ?? []).filter(
+      (text) =>
+        !installed().some(
+          (resource) => resource.root === `${services.sourcesRoot}/${text.entry.repo}`,
+        ),
+    );
 
   /**
-   * Registers the chosen folder if the Library has not seen it, then binds it
-   * to this project under `role`.
-   *
-   * `add` is idempotent — it re-reads the metadata and replaces the entry — so
-   * it is called unconditionally rather than after a lookup, which would be
-   * one more question with the same answer.
+   * Makes `text` a source of this project: downloaded into the Library's
+   * folder if it is not on this device yet, then bound. A gateway text is
+   * never a project of its own (`workflows/gatewaySources.ts`).
    */
-  const choose = (role: Role, row: ProjectSummary): void => {
+  const choose = (text: GatewayText): Promise<boolean> => {
     const project = shell.project();
-    if (project === undefined) return;
+    if (project === undefined) return Promise.resolve(false);
     setBusy(true);
-    void services
-      .run(
-        Effect.result(
-          Effect.gen(function* () {
-            const resource = yield* services.library.add(row.root);
-            yield* services.library.bind(project.id, role, resource.id);
-            return resource;
-          }),
-        ),
-      )
+    setFetching(text.name);
+    return services
+      .run(Effect.result(useGatewaySource(services, project.id, text)))
       .then((outcome) => {
         setBusy(false);
+        setFetching("");
         if (Result.isFailure(outcome)) {
           shell.report(
             t("could not add {name}: {reason}", {
-              name: row.name,
-              reason: outcome.failure.description,
+              name: text.name,
+              reason: describe(outcome.failure),
             }),
           );
-          return;
+          return false;
         }
-        shell.report(t("{name} is bound as {role}", { name: outcome.success.title, role }));
+        setPicked(`${services.sourcesRoot}/${text.entry.repo}`);
         setBound((held) => held + 1);
+        return true;
       });
   };
 
-  const drop = (entry: Entry): void => {
+  /**
+   * A project with nothing bound gets its default source: its own gateway
+   * language when its manifest names one, else English. ONCE per project on
+   * this device (`defaultedSources`): after that, nothing is fetched on the
+   * reader's behalf, so a text they removed stays removed — "Add source…"
+   * still offers it.
+   */
+  const defaultedKey = shellKeys(services.settings).defaultedSources;
+  const defaulted = {
+    has: (id: string): boolean => services.settings.get(defaultedKey).includes(id),
+    add: (id: string): void => {
+      const held = services.settings.get(defaultedKey);
+      if (!held.includes(id)) void services.settings.set(defaultedKey, [...held, id]);
+    },
+  };
+  createEffect(
+    () => ({ project: shell.project(), ready: !loading(), count: entries().length }),
+    ({ project, ready, count }) => {
+      if (project === undefined || !ready || defaulted.has(project.id)) return;
+      // A project that already has a source has made its own choice: noted,
+      // so nothing is ever fetched for it automatically later either.
+      defaulted.add(project.id);
+      if (count > 0) return;
+      const language = metadataOf(project)?.sourceLanguage ?? DEFAULT_SOURCE_LANGUAGE;
+      void texts().then((read) => {
+        const text =
+          gatewayTextFor(read, language) ?? gatewayTextFor(read, DEFAULT_SOURCE_LANGUAGE);
+        if (text !== undefined) void choose(text);
+      });
+    },
+  );
+
+  /** The entry on show: the reader's pick while it is bound, else the first source. */
+  const shown = (): Entry | undefined => {
+    const list = entries();
+    const want = picked();
+    return (
+      list.find((entry) => entry.resource.id === want) ??
+      list.find((entry) => entry.role === "source") ??
+      list[0]
+    );
+  };
+
+  /** The pane's identity: the text on show and the open book. Either new, a new pane. */
+  const onShow = (): { readonly entry: Entry; readonly book: string } | undefined => {
+    const entry = shown();
+    const book = shell.focused()?.id;
+    return entry === undefined || book === undefined ? undefined : { entry, book };
+  };
+
+  /** Shows an installed text, binding it to this project first if it is not yet. */
+  const show = (resource: Resource): void => {
     const project = shell.project();
     if (project === undefined) return;
+    setPicked(resource.id);
+    if (entries().some((entry) => entry.resource.id === resource.id)) return;
     void services
-      .run(services.library.unbind(project.id, entry.role, entry.resource.id))
-      .then(() => {
-        setBound((held) => held + 1);
-      });
+      .run(services.library.bind(project.id, "source", resource.id))
+      .then(() => setBound((held) => held + 1));
   };
 
+  /** "English (en)": the language's name in English, then its tag. */
+  const nameOf = (resource: Resource | undefined): string => {
+    if (resource === undefined) return "";
+    // The Library's language when it read one; else, for a gateway text, the
+    // tag its repository is named for (`en_ulb`, `pt-br_ulb`).
+    const repo = resource.root.startsWith(`${services.sourcesRoot}/`)
+      ? (resource.root.split("/").at(-1) ?? "")
+      : "";
+    const code = resource.language ?? (repo.includes("_") ? (repo.split("_")[0] ?? "") : "");
+    if (code === "") return resource.title;
+    let name = code;
+    try {
+      name = new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code;
+    } catch {
+      name = code;
+    }
+    return `${name} (${code})`;
+  };
+
+  /** Folded to a stack of cards, one per installed text. */
+  const [folded, setFolded] = createSignal(false, { name: "referenceFolded" });
+  const fold = (next: boolean): void => {
+    setFolded(next);
+    props.onFolded?.(next);
+  };
+  /** "English": the language alone, for a card. */
+  const languageOf = (resource: Resource): string => nameOf(resource).replace(/ \([^)]*\)$/u, "");
+
+  const [showOthers, setShowOthers] = createSignal(false, { name: "referenceShowOthers" });
+  /** Rows: 48px, 24px sides; the menu's own 8px plus 4px here is 12px above and below. */
+  const ROW = "px-6";
+
   /**
-   * The picker for one slot: the same searchable pick-one combobox Find's
-   * source text uses, behind this column's own "Add source…" button.
+   * The reference language: what is installed, and below it, folded away,
+   * the other gateway languages to download. Replaces "Add source…".
    */
-  const Picker = (pickerProps: { readonly role: Role }) => (
-    <MultiSelect
-      single
-      label={t("Choose a text")}
-      summary=""
-      narrowed={false}
-      items={candidates()}
-      key={(row: ProjectSummary) => row.root}
-      match={(row, query) =>
-        `${row.name} ${row.language}`.toLowerCase().includes(query.toLowerCase())
-      }
-      placeholder={t("Search texts…")}
-      empty={choices() === undefined ? t("Looking…") : t("No other project on this device.")}
-      selected={() => false}
-      onToggle={(row) => choose(pickerProps.role, row)}
-      onOpen={offer}
+  const LanguagePicker = () => (
+    <Menu
+      label={t("Reference language")}
+      // Folded again each time it opens: the installed texts come first.
+      onOpenChange={(open) => {
+        if (open) setShowOthers(false);
+      }}
+      side="bottom"
+      align="start"
+      class="w-80"
+      fitViewport
       trigger={
-        <Button
-          variant="secondary"
-          size="sm"
-          class="w-full"
-          data-testid={`add-${pickerProps.role}`}
+        <button
+          type="button"
+          data-testid="reference-language"
           disabled={busy()}
-          icon={<Plus aria-hidden="true" />}
+          onClick={offer}
+          class="flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-2xl bg-surface-primary p-3 text-start transition-colors hover:bg-surface-secondary disabled:cursor-wait"
         >
-          {pickerProps.role === "source" ? t("Add source…") : t("Add reference…")}
-        </Button>
+          <span class="flex min-w-0 flex-1 flex-col">
+            <span class="text-small text-on-surface-secondary">{t("Reference language")}</span>
+            <span class="truncate text-small font-semibold text-on-surface-primary">
+              {fetching() === ""
+                ? nameOf(shown()?.resource) || t("None yet")
+                : t("Getting {language}…", { language: fetching() })}
+            </span>
+          </span>
+          <ChevronDown aria-hidden="true" class="size-5 shrink-0 text-on-surface-primary" />
+        </button>
       }
     >
-      {(row) => (
-        <span data-testid={`pick-${row.folder}`} class="flex min-w-0 flex-1 flex-col">
-          <span class="truncate font-medium">{row.name}</span>
-          <span class="text-smallest text-on-surface-tertiary">
-            {row.language === ""
-              ? t("{count} books", { count: row.books })
-              : t("{language} · {count} books", { language: row.language, count: row.books })}
-          </span>
-        </span>
-      )}
-    </MultiSelect>
-  );
-
-  /**
-   * The panes, as one vertical split.
-   *
-   * Built from a plain `.map` and not a `<For>`: this component is remounted
-   * whenever the list changes (see the header), so the array is fixed for its
-   * whole life, and `Resizable.Panel` registers during render — which a `<For>`
-   * would re-run without a way to unregister what it replaced.
-   */
-  const Stack = (stackProps: { readonly list: readonly Entry[]; readonly book: string }) => (
-    <Resizable.Root orientation="vertical" class="min-h-0 flex-1">
-      <For each={stackProps.list}>
-        {(entry, index) => (
-          <>
-            <Show when={index() > 0}>
-              <Resizable.Handle label={t("Resize {title}", { title: entry.resource.title })} />
+      <div class="scrollbar-padded max-h-[min(60vh,25.5rem)] overflow-y-auto py-1">
+        <For each={installed()}>
+          {(resource) => (
+            <MenuItem class={ROW} onSelect={() => show(resource)}>
+              <span class="min-w-0 flex-1 truncate">{nameOf(resource)}</span>
+              <Show when={shown()?.resource.id === resource.id}>
+                <Check aria-label={t("Showing")} class="size-5 shrink-0 text-brand" />
+              </Show>
+            </MenuItem>
+          )}
+        </For>
+        <Show when={downloadable().length > 0}>
+          <button
+            type="button"
+            data-testid="reference-other-languages"
+            aria-expanded={showOthers() ? "true" : "false"}
+            class={`${ROW} flex h-12 w-full cursor-pointer items-center gap-3 text-start text-small font-semibold text-on-surface-primary outline-none hover:bg-surface-secondary focus-visible:bg-surface-secondary`}
+            onClick={() => setShowOthers(!showOthers())}
+          >
+            <span class="min-w-0 flex-1">
+              {t("Other languages ({count})", { count: downloadable().length })}
+            </span>
+            <Show when={showOthers()} fallback={<ChevronDown aria-hidden="true" class="size-5" />}>
+              <ChevronUp aria-hidden="true" class="size-5" />
             </Show>
-            <Resizable.Panel class="flex min-h-0 flex-col">
-              <ReferencePane
-                resource={entry.resource}
-                role={entry.role}
-                bookId={stackProps.book}
-                clip={clip}
-                onUnbind={() => drop(entry)}
-              />
-            </Resizable.Panel>
-          </>
-        )}
-      </For>
-    </Resizable.Root>
+          </button>
+          <Show when={showOthers()}>
+            <For each={downloadable()}>
+              {(text) => (
+                <MenuItem
+                  class={ROW}
+                  data-testid={`pick-${text.code}`}
+                  title={t("Download {language} to read beside this project", {
+                    language: text.name,
+                  })}
+                  onSelect={() => void choose(text)}
+                >
+                  <span class="min-w-0 flex-1 truncate">{text.name}</span>
+                  <Download aria-hidden="true" class="size-5 shrink-0" />
+                </MenuItem>
+              )}
+            </For>
+          </Show>
+        </Show>
+      </div>
+    </Menu>
   );
-
-  /** The split's identity: a new list, or a new book, is a new split. */
-  const stack = (): { readonly list: readonly Entry[]; readonly book: string } | undefined => {
-    const list = entries();
-    const book = shell.focused()?.id;
-    return list.length === 0 || book === undefined ? undefined : { list, book };
-  };
 
   return (
     <aside
       aria-label={t("Reference texts")}
-      class="flex h-full min-w-0 flex-col gap-2 py-4 ps-1"
+      class="flex h-full min-w-0 flex-col gap-3 py-4 pe-[7.5px]"
       data-references={entries().length}
     >
       <Show
-        when={stack()}
-        keyed
+        when={!folded()}
         fallback={
-          <Show when={!loading()}>
-            <EmptyState
-              class="bg-surface-primary"
-              icon={<BookMarked size={22} />}
-              title={t("No reference texts yet")}
-              description={t(
-                "Choose another project on this device to read beside this one, at the passage you are in.",
+          // Folded: one card per installed text; pressing one opens the
+          // column on it.
+          <div class="flex min-h-0 flex-col gap-3 overflow-y-auto">
+            <For each={installed()}>
+              {(resource) => (
+                <ReferenceCard
+                  resource={resource}
+                  bookId={shell.focused()?.id ?? ""}
+                  language={languageOf(resource)}
+                  onOpen={() => {
+                    show(resource);
+                    fold(false);
+                  }}
+                />
               )}
-            />
-          </Show>
+            </For>
+          </div>
         }
       >
-        {(held) => <Stack list={held.list} book={held.book} />}
-      </Show>
-
-      {/* One text for now: a source, and only while there is none. The
-          source/reference distinction was not clear to people, so the
-          reference picker is gone until it is; references bound before still
-          show. The picker lives under the pane rather than above it: a pane
-          is a page of scripture, and a button above it is a button in the
-          reading. */}
-      <Show when={!loading() && entries().length === 0}>
-        <div class="flex shrink-0 flex-col gap-1.5">
-          <Picker role="source" />
+        <div class="flex items-center gap-controls">
+          <div class="min-w-0 flex-1">
+            <LanguagePicker />
+          </div>
+          <IconButton
+            variant="subtle"
+            data-testid="reference-fold"
+            label={t("Collapse the reference text")}
+            icon={<PanelLeftClose />}
+            onClick={() => fold(true)}
+          />
         </div>
+        {/* One text, straight on the page: the picker above says whose it is. */}
+        <Show
+          when={onShow()}
+          keyed
+          fallback={
+            <Show when={!loading()}>
+              <EmptyState
+                icon={<BookMarked size={22} />}
+                title={
+                  fetching() === ""
+                    ? t("No source text yet")
+                    : t("Getting {language}…", { language: fetching() })
+                }
+                description={
+                  fetching() === ""
+                    ? t("Choose a reference language above to read beside this project.")
+                    : t("Downloading it once, to read beside this project.")
+                }
+              />
+            </Show>
+          }
+        >
+          {(held) => (
+            <div class="flex min-h-0 flex-1 flex-col">
+              <ReferencePane
+                bare
+                resource={held.entry.resource}
+                role={held.entry.role}
+                bookId={held.book}
+                clip={clip}
+              />
+            </div>
+          )}
+        </Show>
       </Show>
     </aside>
   );

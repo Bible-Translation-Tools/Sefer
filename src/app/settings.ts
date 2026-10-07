@@ -262,6 +262,12 @@ export interface ShellKeys {
   readonly annotateEmptyParagraphs: SettingKey<boolean>;
   /** Enables the destructive multi-match action in Find. */
   readonly enableReplaceAll: SettingKey<boolean>;
+  /**
+   * Shows the gateway languages on the projects page, to download as a project
+   * to edit. Off for nearly everyone: a gateway text is a source to read, added
+   * from Refine's "Add source…", and editing one is the rare revision job.
+   */
+  readonly showGatewayProjects: SettingKey<boolean>;
   /** Ask about unsaved work found when a project opens. Backups are written either way. */
   readonly offerRecovery: SettingKey<boolean>;
   /**
@@ -349,6 +355,13 @@ export interface ShellKeys {
   readonly editorFontSize: SettingKey<number>;
   /** Project root → ISO-8601 of the last open. See `RecentProjects`. */
   readonly recentProjects: SettingKey<RecentProjects>;
+  /**
+   * The projects that have had their default source text (Refine's reference
+   * panel), by project id. Remembered on this device so the default is given
+   * ONCE: a text the reader removes is never fetched again behind their back;
+   * "Add source…" still offers it. Not a form row — nothing to edit by hand.
+   */
+  readonly defaultedSources: SettingKey<readonly string[]>;
   /** Slug → project root, for `/project/<slug>`. See `ProjectSlugs`. */
   readonly projectSlugs: SettingKey<ProjectSlugs>;
   /** Project root → the book, the clip and the chapter the reader last had on screen. */
@@ -413,6 +426,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
       true,
     ),
     enableReplaceAll: settings.register("find.enableReplaceAll", Schema.Boolean, false),
+    showGatewayProjects: settings.register("projects.showGateways", Schema.Boolean, false),
     offerRecovery: settings.register("recovery.offerOnOpen", Schema.Boolean, true),
     excerptContext: settings.register("excerpts.context", Schema.Number, 0),
     reviewLayout: settings.register("review.layout", Schema.String, "auto"),
@@ -436,6 +450,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     zoom: settings.register("shell.zoom", Schema.Number, 100),
     editorFontSize: settings.register("editor.fontSize", Schema.Number, DEFAULT_EDITOR_FONT_SIZE),
     recentProjects: settings.register("shell.recentProjects", RecentProjects, {}),
+    defaultedSources: settings.register("references.defaulted", Schema.Array(Schema.String), []),
     projectSlugs: settings.register("shell.projectSlugs", ProjectSlugs, {}),
     lastLocation: settings.register("workspace.lastLocation", LastLocations, {}),
     referenceWidth: settings.register(
@@ -620,6 +635,14 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
       key: keys.enableReplaceAll,
       label: "Enable Replace all",
       description: "Allow Find to replace every matching occurrence in one action.",
+      kind: "boolean",
+      group: "advanced",
+    },
+    {
+      key: keys.showGatewayProjects,
+      label: "Show gateway languages on the projects page",
+      description:
+        "Lets a gateway language be downloaded as a project to edit, for revising the gateway itself. Gateway languages to read are added from Refine's source panel.",
       kind: "boolean",
       group: "advanced",
     },

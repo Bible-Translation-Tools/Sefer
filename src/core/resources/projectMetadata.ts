@@ -79,6 +79,13 @@ export interface ProjectMetadata {
    * project's own default locale so both read the same way.
    */
   readonly bookNames: Readonly<Record<string, LocalizedText>>;
+  /**
+   * The language of the text this project was translated FROM, when it says:
+   * a Resource Container's first `dublin_core.source[].language` ("en"). The
+   * project's own gateway language, and so the source text to offer first.
+   * A burrito's `relationships` are not decoded yet, so it has none.
+   */
+  readonly sourceLanguage?: string;
 }
 
 const ONE = (locale: string | undefined, value: string): LocalizedText =>
@@ -149,6 +156,9 @@ const fromResourceContainer = (manifest: ResourceContainerManifest): ProjectMeta
     },
     defaultLocale: locale === "" ? undefined : locale,
     bookNames,
+    ...(core.source?.[0]?.language === undefined || core.source[0].language === ""
+      ? {}
+      : { sourceLanguage: core.source[0].language }),
   };
 };
 

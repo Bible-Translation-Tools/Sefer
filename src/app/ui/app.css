@@ -45,6 +45,14 @@
     min-block-size: 0;
   }
 
+  /* A reference pane drawn straight on the page (Refine's reference text):
+     no card, no paper — the text reads where it sits. */
+  .editor-host[data-bare] {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+  }
+
   .editor-host > .cm-host {
     flex: 1;
     min-block-size: 0;

@@ -45,6 +45,7 @@ import { describe, reasonOf, remoteReasonOf } from "../../describe";
 import { transportFor } from "../../endpoints";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
+import { shellKeys } from "../../settings";
 import {
   Button,
   Card,
@@ -252,6 +253,8 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
   // One catalogue per mount. It is a pure value over `env`, so there is nothing
   // to keep reactive and nothing to dispose.
   const catalogue = catalogueFor(services.settings);
+  /** Read when the page opens: the setting is changed on another screen. */
+  const gatewaysOffered = services.settings.get(shellKeys(services.settings).showGatewayProjects);
 
   // A row names its own server, which need not be this build's content host:
   // a catalogue can list repositories on more than one. Desktop reaches any
@@ -551,16 +554,21 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
     <section class="flex min-h-0 flex-1 flex-col gap-3">
       <div class="flex flex-wrap items-center gap-3">
         <PanelHeader title={t("Projects Available on WACS")} class="me-auto" />
-        <SegmentedControl
-          size="sm"
-          label={t("Which languages")}
-          items={[
-            { value: "translation", label: t("Translations") },
-            { value: "gateway", label: t("Gateway languages") },
-          ]}
-          value={kind()}
-          onChange={setKind}
-        />
+        {/* Gateway languages are offered here only to those who revise one
+            (Settings → Advanced); everyone else adds them to read from
+            Refine's "Add source…" (`workflows/gatewaySources.ts`). */}
+        <Show when={gatewaysOffered}>
+          <SegmentedControl
+            size="sm"
+            label={t("Which languages")}
+            items={[
+              { value: "translation", label: t("Translations") },
+              { value: "gateway", label: t("Gateway languages") },
+            ]}
+            value={kind()}
+            onChange={setKind}
+          />
+        </Show>
         <Input
           type="search"
           size="lg"
