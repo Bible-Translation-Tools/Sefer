@@ -126,7 +126,10 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                   be a second border around the same rectangle. */}
                 <Resizable.Panel
                   class={cx(
-                    "flex flex-col gap-2 py-4 pe-1",
+                    // 7.5px each side of the 9px handle: 24px between the
+                    // reference text and the editor, the page's left margin
+                    // (16px + the column's 8px).
+                    "flex flex-col gap-2 py-4 ps-[7.5px] pe-1",
                     // With the pane collapsed the editor takes the row back; the
                     // `!` is load-bearing because `Resizable.Panel` writes its
                     // share as an inline `flex-basis`.
