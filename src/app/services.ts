@@ -203,6 +203,12 @@ export interface Services {
   /** The subtree the projects list enumerates. */
   readonly projectsRoot: string;
   /**
+   * Where downloaded gateway texts live: inside the Library's own folder, NOT
+   * the projects root, so they are read beside a project and never listed as
+   * one to open and edit (`app/workflows/gatewaySources.ts`).
+   */
+  readonly sourcesRoot: string;
+  /**
    * The seeded fixture project's root, when this composition is running over
    * the fixture FileSystem. The projects list offers it as a one-click open,
    * which in a dev build is the shortest route to a real book on screen.
@@ -667,6 +673,7 @@ export const composeServices = async (
     // Desktop keeps its own projects beside its other app data; on Web that
     // subtree is all the projects list can honestly enumerate.
     projectsRoot: tauri === undefined ? PROJECTS_ROOT : `${paths.appData}/projects`,
+    sourcesRoot: `${paths.appData}/library/sources`,
     fixtureProject: fixture?.SMALL_NT_ROOT,
     hostFacts,
     logFiles,

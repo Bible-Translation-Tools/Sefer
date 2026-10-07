@@ -35,11 +35,18 @@ import { For, Show, createEffect, createSignal } from "solid-js";
 
 import type { Resource, Role } from "#core/resources/library";
 
+import { describe } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { shellKeys } from "../../settings";
-import { listProjects, type ProjectSummary } from "../landing/summaries";
+import {
+  DEFAULT_SOURCE_LANGUAGE,
+  gatewayTextFor,
+  gatewayTexts,
+  useGatewaySource,
+  type GatewayText,
+} from "../../workflows/gatewaySources";
 import { Button, EmptyState, MultiSelect, Resizable } from "../primitives";
+import { metadataOf } from "./project";
 import { ReferencePane } from "./ReferencePane";
 
 /** The roles the column shows, in the order it shows them. */
@@ -65,9 +72,12 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   const { services } = shell;
   const [entries, setEntries] = createSignal<readonly Entry[]>([], { name: "referenceEntries" });
   const [loading, setLoading] = createSignal(true, { name: "referenceLoading" });
-  const [choices, setChoices] = createSignal<readonly ProjectSummary[] | undefined>(undefined, {
+  /** The gateway languages on offer, once the catalogue has answered. */
+  const [choices, setChoices] = createSignal<readonly GatewayText[] | undefined>(undefined, {
     name: "referenceChoices",
   });
+  /** What is being fetched right now, said in the panel while it is. */
+  const [fetching, setFetching] = createSignal("", { name: "referenceFetching" });
   const [busy, setBusy] = createSignal(false, { name: "referenceBusy" });
   /** Raised by a bind or an unbind, so the bindings re-resolve. */
   const [bound, setBound] = createSignal(0, { name: "referenceBound" });
@@ -134,65 +144,77 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   const clip = (): number | null => numberAt(shell.chapter()) ?? null;
 
   /**
-   * Every project on this device that is not the open one.
-   *
-   * Read once per opening of a picker, not once per render: it is a directory
-   * listing and a JSON parse, and the answer only changes when someone imports
-   * a project on another screen.
+   * The gateway languages, read from the catalogue the first time anything
+   * asks — the picker opening, or a project needing its default source.
    */
+  const texts = async (): Promise<readonly GatewayText[]> => {
+    const held = choices();
+    if (held !== undefined) return held;
+    const read = await gatewayTexts(services).catch((): readonly GatewayText[] => []);
+    setChoices(read);
+    return read;
+  };
   const offer = (): void => {
-    if (choices() !== undefined) return;
-    const recent = services.settings.get(shellKeys(services.settings).recentProjects);
-    void services
-      .run(listProjects(services.projectsRoot, services.fixtureProject, recent))
-      .then(setChoices);
+    void texts();
   };
 
-  /** A project already bound here is not on offer; nor is the open one. */
-  const candidates = (): readonly ProjectSummary[] => {
-    const open = shell.project()?.root;
-    return (choices() ?? []).filter(
-      (row) => row.root !== open && !entries().some((entry) => entry.resource.id === row.root),
+  /** A gateway text already bound here is not on offer again. */
+  const candidates = (): readonly GatewayText[] =>
+    (choices() ?? []).filter(
+      (text) =>
+        !entries().some(
+          (entry) => entry.resource.root === `${services.sourcesRoot}/${text.entry.repo}`,
+        ),
     );
-  };
 
   /**
-   * Registers the chosen folder if the Library has not seen it, then binds it
-   * to this project under `role`.
-   *
-   * `add` is idempotent — it re-reads the metadata and replaces the entry — so
-   * it is called unconditionally rather than after a lookup, which would be
-   * one more question with the same answer.
+   * Makes `text` a source of this project: downloaded into the Library's
+   * folder if it is not on this device yet, then bound. A gateway text is
+   * never a project of its own (`workflows/gatewaySources.ts`).
    */
-  const choose = (role: Role, row: ProjectSummary): void => {
+  const choose = (text: GatewayText): Promise<boolean> => {
     const project = shell.project();
-    if (project === undefined) return;
+    if (project === undefined) return Promise.resolve(false);
     setBusy(true);
-    void services
-      .run(
-        Effect.result(
-          Effect.gen(function* () {
-            const resource = yield* services.library.add(row.root);
-            yield* services.library.bind(project.id, role, resource.id);
-            return resource;
-          }),
-        ),
-      )
+    setFetching(text.name);
+    return services
+      .run(Effect.result(useGatewaySource(services, project.id, text)))
       .then((outcome) => {
         setBusy(false);
+        setFetching("");
         if (Result.isFailure(outcome)) {
           shell.report(
             t("could not add {name}: {reason}", {
-              name: row.name,
-              reason: outcome.failure.description,
+              name: text.name,
+              reason: describe(outcome.failure),
             }),
           );
-          return;
+          return false;
         }
-        shell.report(t("{name} is bound as {role}", { name: outcome.success.title, role }));
         setBound((held) => held + 1);
+        return true;
       });
   };
+
+  /**
+   * A project with nothing bound gets its default source: its own gateway
+   * language when its manifest names one, else English. Once per project per
+   * session, so removing it on purpose is not undone behind the reader's back.
+   */
+  const defaulted = new Set<string>();
+  createEffect(
+    () => ({ project: shell.project(), ready: !loading(), count: entries().length }),
+    ({ project, ready, count }) => {
+      if (project === undefined || !ready || count > 0 || defaulted.has(project.id)) return;
+      defaulted.add(project.id);
+      const language = metadataOf(project)?.sourceLanguage ?? DEFAULT_SOURCE_LANGUAGE;
+      void texts().then((read) => {
+        const text =
+          gatewayTextFor(read, language) ?? gatewayTextFor(read, DEFAULT_SOURCE_LANGUAGE);
+        if (text !== undefined) void choose(text);
+      });
+    },
+  );
 
   const drop = (entry: Entry): void => {
     const project = shell.project();
@@ -208,43 +230,38 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
    * The picker for one slot: the same searchable pick-one combobox Find's
    * source text uses, behind this column's own "Add source…" button.
    */
-  const Picker = (pickerProps: { readonly role: Role }) => (
+  const Picker = () => (
     <MultiSelect
       single
-      label={t("Choose a text")}
+      label={t("Choose a gateway language")}
       summary=""
       narrowed={false}
       items={candidates()}
-      key={(row: ProjectSummary) => row.root}
-      match={(row, query) =>
-        `${row.name} ${row.language}`.toLowerCase().includes(query.toLowerCase())
+      key={(text: GatewayText) => text.entry.id}
+      match={(text, query) =>
+        `${text.name} ${text.code}`.toLowerCase().includes(query.toLowerCase())
       }
-      placeholder={t("Search texts…")}
-      empty={choices() === undefined ? t("Looking…") : t("No other project on this device.")}
+      placeholder={t("Search languages…")}
+      empty={choices() === undefined ? t("Looking…") : t("No other gateway language to add.")}
       selected={() => false}
-      onToggle={(row) => choose(pickerProps.role, row)}
+      onToggle={(text) => void choose(text)}
       onOpen={offer}
       trigger={
         <Button
           variant="secondary"
-          size="sm"
           class="w-full"
-          data-testid={`add-${pickerProps.role}`}
+          data-testid="add-source"
           disabled={busy()}
           icon={<Plus aria-hidden="true" />}
         >
-          {pickerProps.role === "source" ? t("Add source…") : t("Add reference…")}
+          {t("Add source…")}
         </Button>
       }
     >
-      {(row) => (
-        <span data-testid={`pick-${row.folder}`} class="flex min-w-0 flex-1 flex-col">
-          <span class="truncate font-medium">{row.name}</span>
-          <span class="text-smallest text-on-surface-tertiary">
-            {row.language === ""
-              ? t("{count} books", { count: row.books })
-              : t("{language} · {count} books", { language: row.language, count: row.books })}
-          </span>
+      {(text) => (
+        <span data-testid={`pick-${text.code}`} class="flex min-w-0 flex-1 flex-col">
+          <span class="truncate font-medium">{text.name}</span>
+          <span class="text-small text-on-surface-primary">{text.entry.repo}</span>
         </span>
       )}
     </MultiSelect>
@@ -272,7 +289,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
                 role={entry.role}
                 bookId={stackProps.book}
                 clip={clip}
-                onUnbind={() => drop(entry)}
+                onUnbind={stackProps.list.length > 1 ? () => drop(entry) : undefined}
               />
             </Resizable.Panel>
           </>
@@ -302,10 +319,16 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
             <EmptyState
               class="bg-surface-primary"
               icon={<BookMarked size={22} />}
-              title={t("No reference texts yet")}
-              description={t(
-                "Choose another project on this device to read beside this one, at the passage you are in.",
-              )}
+              title={
+                fetching() === ""
+                  ? t("No source text yet")
+                  : t("Getting {language}…", { language: fetching() })
+              }
+              description={
+                fetching() === ""
+                  ? t("Add a gateway language to read beside this project.")
+                  : t("Downloading it once, to read beside this project.")
+              }
             />
           </Show>
         }
@@ -313,15 +336,17 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         {(held) => <Stack list={held.list} book={held.book} />}
       </Show>
 
-      {/* One text for now: a source, and only while there is none. The
-          source/reference distinction was not clear to people, so the
-          reference picker is gone until it is; references bound before still
-          show. The picker lives under the pane rather than above it: a pane
-          is a page of scripture, and a button above it is a button in the
-          reading. */}
-      <Show when={!loading() && entries().length === 0}>
+      {/* Always there: another gateway language can be added beside the
+          ones bound. Under the panes rather than above them — a pane is a
+          page of scripture, and a button above it is a button in the reading. */}
+      <Show when={!loading()}>
         <div class="flex shrink-0 flex-col gap-1.5">
-          <Picker role="source" />
+          <Show when={fetching() !== "" && stack() !== undefined}>
+            <p class="text-small text-on-surface-primary">
+              {t("Getting {language}…", { language: fetching() })}
+            </p>
+          </Show>
+          <Picker />
         </div>
       </Show>
     </aside>

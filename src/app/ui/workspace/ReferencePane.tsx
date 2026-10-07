@@ -96,7 +96,8 @@ export interface ReferencePaneProps {
   readonly bookId: string;
   /** The chapter NUMBER the main editor is clipped to, or `null` for whole-book. */
   readonly clip: () => number | null;
-  readonly onUnbind: () => void;
+  /** Absent for the last text bound: the panel is never left empty by a click. */
+  readonly onUnbind?: () => void;
 }
 
 /** What the pane is showing, once the read has answered. */
@@ -527,14 +528,18 @@ export function ReferencePane(props: ReferencePaneProps) {
           startLabel={t("Let {title} follow the book", { title: props.resource.title })}
           onToggle={() => setFollowing((on) => !on)}
         />
-        <IconButton
-          size="sm"
-          data-testid={`unbind-${props.resource.id}`}
-          label={t("Remove {title}", { title: props.resource.title })}
-          tooltipSide="left"
-          icon={<X />}
-          onClick={() => props.onUnbind()}
-        />
+        <Show when={props.onUnbind}>
+          {(unbind) => (
+            <IconButton
+              size="sm"
+              data-testid={`unbind-${props.resource.id}`}
+              label={t("Remove {title}", { title: props.resource.title })}
+              tooltipSide="left"
+              icon={<X />}
+              onClick={() => unbind()()}
+            />
+          )}
+        </Show>
       </div>
 
       <Switch>
