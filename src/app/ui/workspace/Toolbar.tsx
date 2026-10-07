@@ -122,7 +122,8 @@ export function Toolbar() {
   );
 
   const item =
-    "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start text-small text-on-surface-primary transition-colors hover:bg-surface-secondary disabled:cursor-not-allowed disabled:text-on-surface-tertiary disabled:hover:bg-transparent";
+    // md: 48px rows, 12px padding and radius, 14px, 20px icons.
+    "flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-lg px-3 text-start text-small text-on-surface-primary transition-colors hover:bg-surface-secondary disabled:cursor-not-allowed disabled:text-on-surface-tertiary disabled:hover:bg-transparent [&>svg]:size-5";
 
   return (
     <div class="flex flex-wrap items-center gap-3" data-testid="toolbar">
@@ -138,9 +139,8 @@ export function Toolbar() {
         </strong>
       </div>
 
-      <Card class="ms-auto flex items-center gap-1 p-1.5" padded={false}>
+      <Card class="ms-auto flex items-center gap-controls p-1.5" padded={false}>
         <Input
-          size="sm"
           type="search"
           data-testid="toolbar-search"
           wrapperClass="w-44"
@@ -161,7 +161,6 @@ export function Toolbar() {
         />
 
         <IconButton
-          size="sm"
           data-testid="toolbar-undo"
           label={t("Undo")}
           icon={<Undo2 />}
@@ -169,7 +168,6 @@ export function Toolbar() {
           onClick={() => runCommand("book.undo")}
         />
         <IconButton
-          size="sm"
           data-testid="toolbar-redo"
           label={t("Redo")}
           icon={<Redo2 />}
@@ -183,7 +181,6 @@ export function Toolbar() {
             preview, and it is one step. */}
         <Show when={hasSource()}>
           <IconButton
-            size="sm"
             data-testid="toolbar-overlay"
             label={t("Match formatting from source")}
             icon={<ArrowLeftRight />}
@@ -194,7 +191,6 @@ export function Toolbar() {
 
         <span class="relative inline-flex">
           <IconButton
-            size="sm"
             data-testid="toolbar-findings"
             label={t("Findings")}
             icon={<Bell />}
@@ -221,16 +217,11 @@ export function Toolbar() {
           label={t("Book actions")}
           side="bottom"
           align="end"
-          class="w-56 p-1"
+          class="w-64 p-1"
           open={menuOpen()}
           onOpenChange={setMenuOpen}
           trigger={
-            <IconButton
-              size="sm"
-              data-testid="toolbar-kebab"
-              label={t("More")}
-              icon={<MoreVertical />}
-            />
+            <IconButton data-testid="toolbar-kebab" label={t("More")} icon={<MoreVertical />} />
           }
         >
           <button
