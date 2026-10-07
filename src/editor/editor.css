@@ -124,6 +124,12 @@
 .cm-mode-regular {
   background: var(--editor-paper);
 }
+/* A reference pane drawn straight on the page (Refine's reference text,
+   `ReferencePane bare`): no paper. Here, beside the rule it overrides, and not
+   in app.css: that file's rules sit in a layer, and this one does not. */
+[data-bare] .cm-mode-regular {
+  background: transparent;
+}
 .cm-mode-regular .cm-content {
   max-width: 40rem;
   margin: 0 auto;

@@ -52,9 +52,6 @@
     border: 0;
     border-radius: 0;
   }
-  .editor-host[data-bare] .cm-mode-regular {
-    background: transparent;
-  }
 
   .editor-host > .cm-host {
     flex: 1;
