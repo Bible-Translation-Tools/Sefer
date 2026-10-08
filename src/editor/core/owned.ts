@@ -51,6 +51,8 @@ interface TargetFacts {
   readonly scope: PlanSpan | null;
   readonly paint: PaintReach;
   readonly mutability: Mutability;
+  /** An immortal a press stops at rather than passes (`Cell.stop`). */
+  readonly stop: boolean;
   readonly policy: OwnershipBit | null;
   readonly paintsOwnLine: boolean;
   readonly empty: boolean;
@@ -155,6 +157,7 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
       scope: extra.scope ?? null,
       paint: row.cell.paint,
       mutability: row.cell.mutability,
+      stop: row.cell.stop === true,
       policy: ownershipOf(row) ?? null,
       paintsOwnLine: paintsItsOwnLineAmbient(cls),
       empty: extra.empty === true,

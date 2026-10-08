@@ -54,23 +54,36 @@ const startsALine = (s: DocStructure, pos: number): boolean => {
  * marker that must start its line (`bindsToItsLine` — a paragraph or heading)
  * owns the break that puts it there. A `\v` that happens to open its line does
  * not: `for me.\v 7 You` is valid USFM, so the newline before a locked verse
- * is a join the press may take (`…for me.\v 7 You`), not part of the verse.
+ * is a join the press may take (`…for me.\v 7 You`), not part of the verse —
+ * unless the lock is a STOP (`Cell.stop`, a card's verse numbers), where the
+ * number is the boundary between the card's verse and its context and the
+ * break that opens its line is part of that boundary.
  */
-const anchoredBack = (s: DocStructure, sp: PlanSpan): PlanSpan => {
+const anchoredBack = (s: DocStructure, sp: PlanSpan, stop = false): PlanSpan => {
   if (sp.from <= 0 || !startsALine(s, sp.from)) return sp;
+  if (stop) return { from: sp.from - 1, to: sp.to };
   const line = s.lines.maybe(lineIndexAt(s, sp.from));
   return line !== null && bindsToItsLine(line) ? { from: sp.from - 1, to: sp.to } : sp;
 };
 
-function reachesImmortal(ix: OwnedIndex, s: DocStructure, from: number, to: number): boolean {
+/** Whether a cut meets an immortal, and if so whether a press passes it or stops there. */
+function reachesImmortal(
+  ix: OwnedIndex,
+  s: DocStructure,
+  from: number,
+  to: number,
+): "none" | "pass" | "stop" {
   const lo = Math.min(from, to);
   const hi = Math.max(from, to);
+  let met: "none" | "pass" = "none";
   for (const h of ix.targetsIn(lo, hi + 1).hits) {
     if (h.target.mutability !== "immortal") continue;
-    const a = anchoredBack(s, h.target.wholeSpan);
-    if (a.to > lo && a.from < hi) return true;
+    const a = anchoredBack(s, h.target.wholeSpan, h.target.stop);
+    if (a.to <= lo || a.from >= hi) continue;
+    if (h.target.stop) return "stop";
+    met = "pass";
   }
-  return false;
+  return met;
 }
 
 function immortalGuard(
@@ -83,11 +96,15 @@ function immortalGuard(
   raw: (tr: Transaction) => void,
 ): (tr: Transaction) => void {
   return (tr) => {
-    let hits = false;
+    const met: ("pass" | "stop")[] = [];
     tr.changes.iterChanges((fromA, toA) => {
-      if (!hits && toA > fromA && reachesImmortal(ix, s, fromA, toA)) hits = true;
+      if (toA <= fromA) return;
+      const here = reachesImmortal(ix, s, fromA, toA);
+      if (here !== "none") met.push(here);
     });
-    if (hits) consumePress(state, s, r, at, back, raw);
+    // A stop is a wall: the press neither cuts nor carries the caret past it.
+    if (met.includes("stop")) return;
+    if (met.length > 0) consumePress(state, s, r, at, back, raw);
     else raw(tr);
   };
 }
@@ -168,11 +185,17 @@ const CELL_RULES: readonly CellRule[] = [
   {
     name: "immortal",
     when: (t) => t.mutability === "immortal",
-    say: (t) => ({
-      act: "consume",
-      say: `cell immortal — the ${t.set} cannot be taken; the press goes past it`,
-      span: t.wholeSpan,
-    }),
+    say: (t) =>
+      t.stop
+        ? {
+            act: "nothing",
+            say: `cell immortal — the ${t.set} cannot be taken; the press stops at it`,
+          }
+        : {
+            act: "consume",
+            say: `cell immortal — the ${t.set} cannot be taken; the press goes past it`,
+            span: t.wholeSpan,
+          },
   },
   {
     name: "empty",
@@ -504,7 +527,7 @@ function rangePlan(ix: OwnedIndex, s: DocStructure, from: number, to: number): R
     // writing around an invisible marker loses its terminator (`\s5lways`) and
     // keeps what the reader could not see (editor.md, "Passthrough markers").
     if (t.mutability !== "immortal" || (consented(t) && t.paint === "none")) continue;
-    const a = anchoredBack(s, t.wholeSpan);
+    const a = anchoredBack(s, t.wholeSpan, t.stop);
     const clipped = { from: Math.max(a.from, lo), to: Math.min(a.to, hi) };
     if (clipped.to <= clipped.from) continue;
     keep.push(clipped);
