@@ -90,9 +90,19 @@ Everything after that — grouping by verse sid, the outline with counts, Edit �
 
 The Library pass runs only over what the guide did not answer, and short-circuits entirely when no source resource is bound, which is the dev fixture's case.
 
+## Editing a card: a session with a way back
+
+A Key terms card is edited where it stands (`edit: { kind: "direct" }`), as a satellite over the canonical Book, so every keystroke lands in the Book and meets the editing phases as it is typed. What the card adds is a SESSION (`ExcerptCard.tsx`, `sessionUndo`): from the first change its buttons read Save changes / Cancel. Save keeps the edit in the working text and writes nothing to disk — the explicit save is unchanged. Cancel dispatches the inverse of this card's own changes; a change the Book pushed in from elsewhere (`fromCanonical`) is mapped over, never undone. The revert is an ordinary edit, so undo after a Cancel brings the text back.
+
+The session ends on Save, Cancel, Escape, or a press into another card's text (which cancels). A press anywhere else leaves it open. This is the provisional shape; a buffer in front of the Book, with its own history, is the alternative still being weighed beside approvals as project state.
+
+Verse numbers on these cards are locked by the card policy every card shares (`lock-verse-numbers` in Regular), not by anything of Key terms' own. The gutter's arrows step through the TOC's units (`tocUnits`) and name the one they would add; they double once two have been added beyond where the card started (`excerpts.context`).
+
+Which verses were edited, and which approved, is held in memory for the session (`StetView.tsx`). Where it lives for good is the approvals-and-suppressions decision.
+
 ## What is stubbed
 
-- **`done` counts are always 0.** Marking an occurrence settled needs a store that survives a reload, and nothing in Sefer keeps one yet. The term list says so in a muted line rather than showing progress that is not being recorded.
+- **Approval counts do not survive a reload.** Each term's row counts its core verses approved, but approvals and edits are held in memory for the session (see above); nothing keeps them yet.
 - **The guide is a fixture.** A key-terms guide is properly a Library resource under the `glossary` role, or a remote guides API. The port exists so that swapping the layer is the only change.
 - **No replace, no in-editor highlight.** The same non-goals the previous application had. An edit happens through a card's Edit button, in the satellite, where the editing phases judge it like any other keystroke.
 - **A bridge card loses its guide reading.** The source card is looked up by the excerpt's `sid`, so a target card at `JUD 1:1-2` finds nothing under the guide's `JUD 1:2` and says "No source text bound". It did the same before the cards were labelled by Address; the fix is to look up by the occurrence's Address, not the card's.
