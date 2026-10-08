@@ -35,6 +35,7 @@ import {
   StateEffect,
   Transaction,
   type Extension,
+  type Text,
   type TransactionSpec,
 } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
@@ -161,6 +162,42 @@ const originOf = (tr: Transaction): Origin => {
   if (event === undefined) return "keyboard";
   return event.startsWith("input.") ? event.slice("input.".length) : event;
 };
+
+const isHighSurrogate = (code: number): boolean => code >= 0xd800 && code <= 0xdbff;
+const isLowSurrogate = (code: number): boolean => code >= 0xdc00 && code <= 0xdfff;
+
+/**
+ * Each change at its smallest: text a surface deleted and inserted straight
+ * back is trimmed off both ends, so the phases judge what actually changes.
+ *
+ * A satellite's own filters keep a protected verse number by REPLACING it
+ * with itself (`5 be` → `5 X`). Judged as sent, the Book's write-around saw
+ * the number deleted, protected it a second time, and kept the insert that
+ * already held it: `\v 5 5 X`. Trimmed, the Book sees `be` → `X`, which is
+ * what the surface meant. A trim never ends inside a surrogate pair.
+ */
+const minimalChanges = (changes: readonly Change[], doc: Text): readonly Change[] =>
+  changes.map((change) => {
+    const removed = doc.sliceString(change.from, change.to);
+    const insert = change.insert;
+    const most = Math.min(removed.length, insert.length);
+    let head = 0;
+    while (head < most && removed.charCodeAt(head) === insert.charCodeAt(head)) head += 1;
+    if (head > 0 && isHighSurrogate(removed.charCodeAt(head - 1))) head -= 1;
+    let tail = 0;
+    while (
+      tail < most - head &&
+      removed.charCodeAt(removed.length - 1 - tail) === insert.charCodeAt(insert.length - 1 - tail)
+    )
+      tail += 1;
+    if (tail > 0 && isLowSurrogate(removed.charCodeAt(removed.length - tail))) tail -= 1;
+    if (head === 0 && tail === 0) return change;
+    return {
+      from: change.from + head,
+      to: change.to - tail,
+      insert: insert.slice(head, insert.length - tail),
+    };
+  });
 
 export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook => {
   const { id, path } = plain;
@@ -406,7 +443,7 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
     },
 
     applyFrom: (terms, changes, origin) => {
-      const list = asChangeList(changes);
+      const list = minimalChanges(asChangeList(changes), state().doc);
       clearRefusal();
       const judge = judgeFor(terms);
       // Judged as the gesture it was in the surface — a typed key, a paste —
