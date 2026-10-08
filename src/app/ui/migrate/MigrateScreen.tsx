@@ -25,6 +25,7 @@ import { useNavigate } from "@tanstack/solid-router";
 import { Option } from "effect";
 import FileArchive from "lucide-solid/icons/file-archive";
 import FolderOpen from "lucide-solid/icons/folder-open";
+import Link from "lucide-solid/icons/link";
 import { For, Show, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
 import { CANON } from "#core/location/canon";
@@ -50,6 +51,7 @@ import {
   openOne,
   pickLocal,
   remoteCandidates,
+  urlCandidate,
   type Opened,
 } from "../../migrate";
 import { useShell } from "../../ProjectContext";
@@ -57,6 +59,8 @@ import {
   Badge,
   Button,
   Card,
+  Dialog,
+  Input,
   Menu,
   MenuItem,
   PanelHeader,
@@ -103,6 +107,8 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
     onSome: (metadata) => metadata.language.tag.toLowerCase(),
   });
   const [busy, setBusy] = createSignal(false, { name: "migrateBusy" });
+  const [askingUrl, setAskingUrl] = createSignal(false, { name: "migrateAskingUrl" });
+  const [url, setUrl] = createSignal("", { name: "migrateUrl" });
   const [showInactive, setShowInactive] = createSignal(false, { name: "migrateInactive" });
   const [step, setStep] = createSignal<Step>("find", { name: "migrateStep" });
   /** The book open in the main pane. */
@@ -206,6 +212,33 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
         if (found !== undefined) add(kind === "zip" ? t("a zip") : t("a folder"), found);
       } catch (cause) {
         toasts.error({ title: t("Could not read it"), message: describe(cause) });
+      } finally {
+        setBusy(false);
+      }
+    })();
+  };
+
+  /**
+   * One Writer project pasted as a URL: for the one the catalogue has not
+   * caught up with yet. Checked, then added like a catalogue candidate.
+   */
+  const fromUrl = (): void => {
+    const typed = url().trim();
+    if (typed === "") return;
+    setBusy(true);
+    void (async () => {
+      try {
+        const candidate = await urlCandidate(services, typed);
+        add(
+          candidate.origin.kind === "remote"
+            ? `${candidate.origin.owner}/${candidate.origin.repo}`
+            : typed,
+          [candidate],
+        );
+        setAskingUrl(false);
+        setUrl("");
+      } catch (cause) {
+        toasts.error({ title: t("Could not add that Writer project"), message: describe(cause) });
       } finally {
         setBusy(false);
       }
@@ -490,6 +523,13 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
             <MenuItem icon={<FileArchive aria-hidden="true" />} onSelect={() => fromLocal("zip")}>
               {t("Zip…")}
             </MenuItem>
+            <MenuItem
+              icon={<Link aria-hidden="true" />}
+              disabled={!online}
+              onSelect={() => setAskingUrl(true)}
+            >
+              {t("From a URL…")}
+            </MenuItem>
           </Menu>
           <Show when={inactiveCount() > 0}>
             <Button
@@ -548,6 +588,41 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
           </Show>
         </div>
       </Show>
+      <Dialog
+        open={askingUrl()}
+        onOpenChange={setAskingUrl}
+        title={t("Add a Writer project from its URL")}
+        description={t(
+          "For a project the list above has not caught up with yet: its address on WACS, e.g. https://content.bibletranslationtools.org/owner/xyz_mat_text_reg",
+        )}
+        footer={<Button onClick={() => setAskingUrl(false)}>{t("Cancel")}</Button>}
+      >
+        <form
+          class="flex items-center gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            fromUrl();
+          }}
+        >
+          <Input
+            type="url"
+            wrapperClass="min-w-0 flex-1"
+            aria-label={t("Writer project URL")}
+            placeholder={t("https://content.bibletranslationtools.org/…")}
+            value={url()}
+            onInput={(event) => setUrl(event.currentTarget.value)}
+          />
+          <Button
+            type="submit"
+            variant="primary"
+            loading={busy()}
+            disabled={busy() || url().trim() === ""}
+            data-testid="migrate-url-add"
+          >
+            {t("Add")}
+          </Button>
+        </form>
+      </Dialog>
     </div>
   );
 }

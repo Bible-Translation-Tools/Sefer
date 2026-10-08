@@ -11,13 +11,16 @@ import { Effect, FileSystem, Option, Result } from "effect";
 
 import { makeMemoryFileSystem } from "#core/fileSystem/memory";
 import { joinPath, lastSegment } from "#core/fileSystem/path";
+import { Git } from "#core/git/git";
 import type { IntakeResult } from "#core/git/intake";
 import { addBooks, assemble, type AssembleForm } from "#core/migrate/assemble";
 import { openCandidate, type BookCandidate, type StagedBook } from "#core/migrate/candidate";
 import { health, validate, type Health } from "#core/migrate/check";
 import { localCandidates } from "#core/migrate/local";
+import { recognizeWriter } from "#core/migrate/writerBook";
 import { UPSTREAM_TIMEOUT } from "#core/migrate/writerWork";
 import { Observability } from "#core/observability";
+import { Remote } from "#core/remote/remote";
 import { Library, answers } from "#core/resources/library";
 import { highestVersions, type RelatedResource } from "#core/resources/relationships";
 
@@ -96,6 +99,81 @@ export const pickLocal = async (
   const staged = await services.run(intake.intake(memory, "/picked", files));
   picked.set(staged.root, memory);
   return services.run(localCandidates(memory, staged.root, kind, files.name));
+};
+
+/** Why a pasted URL is not a Writer candidate, said to the person. */
+class NotWriterUrl extends Error {
+  override readonly name = "NotWriterUrl";
+}
+
+/**
+ * A Writer project straight from its URL, for when the catalogue lags behind
+ * the server (it reads a public data API that is sometimes behind WACS).
+ *
+ * Checked the way the catalogue's own candidates are opened: the remote is
+ * probed (it answers, it is not empty), then cloned — newest version, into
+ * memory on the Web — and must recognise as a Writer project, its
+ * `manifest.json` naming a book and a language. The clone is dropped; the
+ * candidate goes through the run's ordinary open like any other.
+ */
+export const urlCandidate = async (services: Services, typed: string): Promise<BookCandidate> => {
+  const url = typed
+    .trim()
+    .replace(/\/+$/u, "")
+    .replace(/\.git$/iu, "");
+  const parts = (() => {
+    try {
+      return new URL(url).pathname.split("/").filter((part) => part !== "");
+    } catch {
+      return [];
+    }
+  })();
+  const owner = parts.at(-2);
+  const repo = parts.at(-1);
+  if (owner === undefined || repo === undefined)
+    throw new NotWriterUrl(t("That is not a repository URL: {url}", { url }));
+
+  const probe = await services.run(
+    Effect.timeoutOption(
+      Effect.flatMap(Remote, (remote) => remote.probe(url)),
+      UPSTREAM_TIMEOUT,
+    ),
+  );
+  if (Option.isNone(probe)) throw new NotWriterUrl(t("{url} did not answer in time.", { url }));
+  if (probe.value.empty) throw new NotWriterUrl(t("{url} has nothing in it yet.", { url }));
+
+  const inMemory = services.inMemoryTransfer?.();
+  // In memory on the Web; a native host checks in its temporary folder.
+  const root = `${inMemory === undefined ? stagingRootOf(services) : "/url-check"}/${owner}_${repo}`;
+  const look = Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const remote = yield* Remote;
+    const git = yield* Git;
+    yield* Effect.ignore(fileSystem.remove(root, { recursive: true }));
+    const { repo: cloned } = yield* remote.clone(url, root, { history: "latest" });
+    const project = yield* recognizeWriter(fileSystem, root);
+    const newest = (yield* Effect.orElseSucceed(git.log(cloned), () => []))[0];
+    yield* Effect.ignore(fileSystem.remove(root, { recursive: true }));
+    return { project, newest };
+  });
+  const where: Effect.Effect<
+    Effect.Success<typeof look>,
+    Effect.Error<typeof look>,
+    Domain
+  > = inMemory === undefined ? look : Effect.provide(look, inMemory);
+  const { project, newest } = await services.run(where);
+  if (project === undefined)
+    throw new NotWriterUrl(
+      t("{repo} is not a BTT Writer project: it has no manifest.json naming a book.", { repo }),
+    );
+  return {
+    id: `remote:${url}:${project.book}`,
+    book: project.book,
+    language: project.language.id.toLowerCase(),
+    resource: project.resource,
+    origin: { kind: "remote", owner, repo, url },
+    hints: newest === undefined ? {} : { modified: new Date(newest.at).toISOString() },
+  };
 };
 
 /** Opens, renders, validates and measures one candidate. Never rejects. */
