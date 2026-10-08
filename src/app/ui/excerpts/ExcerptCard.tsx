@@ -56,6 +56,7 @@ import { tocViewOf, type Analysis } from "#core/galley";
 import { tocUnits, unitIndexAt } from "#core/location/locate";
 import {
   fromCanonical,
+  ownEcho,
   type EditorBook,
   type EditorPolicy,
   type Funnel,
@@ -309,10 +310,11 @@ export function ExcerptCard(props: ExcerptCardProps) {
    * A direct card's edit is a SESSION with a way back. Everything typed lands
    * in the book as it is typed (that is how the editor works); the session
    * holds the INVERSE of this card's own changes (`sessionUndo`), so Cancel
-   * hands the book exactly that and Save only has to stop. A change the book
-   * pushed in from elsewhere (`fromCanonical`) is not the session's: the
-   * inverse is mapped over it, never composed with it, so Cancel cannot undo
-   * someone else's edit. `dirty` turns the buttons into Save changes / Cancel.
+   * hands the book exactly that and Save only has to stop. A satellite's own
+   * typing comes back from the Book as `fromCanonical` too, marked `ownEcho`;
+   * a change from anywhere else is mapped over, never composed, so Cancel
+   * cannot undo someone else's edit. `dirty` turns the buttons into Save
+   * changes / Cancel.
    */
   const [dirty, setDirty] = createSignal(false, { name: "excerptDirty" });
   let editView: EditorView | undefined;
@@ -320,7 +322,9 @@ export function ExcerptCard(props: ExcerptCardProps) {
     create: (state) => ChangeSet.empty(state.doc.length),
     update: (held, transaction) => {
       if (!transaction.docChanged) return held;
-      if (transaction.annotation(fromCanonical) === true) return held.map(transaction.changes);
+      const others =
+        transaction.annotation(fromCanonical) === true && transaction.annotation(ownEcho) !== true;
+      if (others) return held.map(transaction.changes);
       return transaction.changes.invert(transaction.startState.doc).compose(held);
     },
   });
@@ -335,9 +339,9 @@ export function ExcerptCard(props: ExcerptCardProps) {
     const view = editView;
     if (view !== undefined && dirty()) {
       const undo = view.state.field(sessionUndo, false);
-      // The revert goes through the card's filters and the book's like any
-      // edit: it only restores what this session typed.
-      if (undo !== undefined && !undo.empty) view.dispatch({ changes: undo });
+      // Past the card's own filters (a revert may span a verse number the
+      // card policy makes immortal); the Book still judges it as an edit.
+      if (undo !== undefined && !undo.empty) view.dispatch({ changes: undo, filter: false });
     }
     setDirty(false);
     done();
@@ -435,7 +439,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
 
   /**
    * A direct card's session ends on Cancel, Save changes, Escape — or a press
-   * into ANOTHER card's text, which is a Cancel: one session at a time, and
+   * into ANOTHER card, which is a Cancel: one session at a time, and
    * the one being left does not keep its edits by accident (Will,
    * 2026-10-08). A press anywhere else (the page, the sidebar, a scrollbar)
    * leaves the session open, so nothing typed is lost to a stray click.
@@ -446,8 +450,10 @@ export function ExcerptCard(props: ExcerptCardProps) {
       if (element === undefined) return;
       const press = (event: PointerEvent): void => {
         if (!props.editing || !(event.target instanceof Element)) return;
-        const other = event.target.closest("[data-direct-target]");
-        if (other !== null && other !== element) cancel();
+        // Anywhere in another card, not only its text: a folded card's teaser
+        // is outside its text box, and the press that opens it ends this edit.
+        const card = event.target.closest("[data-sid]");
+        if (card !== null && card.getAttribute("data-sid") !== props.excerpt.sid) cancel();
       };
       document.addEventListener("pointerdown", press, true);
       return () => document.removeEventListener("pointerdown", press, true);
