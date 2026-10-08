@@ -34,6 +34,13 @@ export interface FilterListProps<T> {
   /** The key of the row to mark as where you already are. */
   readonly current?: string;
   readonly placeholder?: string;
+  /**
+   * Told what was typed, for a list that is a window on something bigger
+   * (a server's search): the caller fetches and grows `items`.
+   */
+  readonly onQuery?: (query: string) => void;
+  /** A search the caller is running for what was typed: said instead of "Nothing matches". */
+  readonly searching?: boolean;
   /** Announced by the filter box; each picker says what it is a list of. */
   readonly label: string;
 }
@@ -53,6 +60,7 @@ export function FilterList<T>(props: FilterListProps<T>) {
   const retype = (value: string): void => {
     setQuery(value);
     setCursor(0);
+    props.onQuery?.(value.trim());
   };
 
   const take = (item: T | undefined): void => {
@@ -88,7 +96,9 @@ export function FilterList<T>(props: FilterListProps<T>) {
         when={shown().length > 0}
         fallback={
           <p class="px-2 py-3 text-center text-smallest text-on-surface-tertiary">
-            {t("Nothing matches {query}", { query: query() })}
+            {props.searching === true
+              ? t("Searching…")
+              : t("Nothing matches {query}", { query: query() })}
           </p>
         }
       >

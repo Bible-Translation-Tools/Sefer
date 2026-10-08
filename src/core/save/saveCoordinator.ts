@@ -182,6 +182,16 @@ export interface SaveCoordinatorService {
     origin: Origin,
     expect?: SourceStamp | "keep",
   ) => Effect.Effect<boolean, SaveError>;
+  /**
+   * Forgets every baseline, conflict and seen book: the project they described
+   * has closed. Keyed by `BookId` alone, they would otherwise judge the next
+   * project's `GEN` against the last project's text and path — every book
+   * "changed entirely" in Review, and a Record a version committing receipts
+   * for the wrong files. Called by the shell's `closeProject`; the next open
+   * adopts its own books from disk. The write queues are kept: they are keyed
+   * by path, and a write still finishing must keep its turn.
+   */
+  readonly forget: () => Effect.Effect<void>;
   /** The per-path write queue. Save is the only owner of write ordering. */
   readonly serialize: (
     path: string,
@@ -584,6 +594,13 @@ const make = (
         }),
 
       takeDisk,
+
+      forget: () =>
+        Effect.sync(() => {
+          baselines.clear();
+          conflicts.clear();
+          seen.clear();
+        }),
 
       serialize,
 

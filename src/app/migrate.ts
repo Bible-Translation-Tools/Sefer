@@ -1,0 +1,318 @@
+/**
+ * "Migrate from Writer", as the screen runs it: where candidates come from,
+ * opening them, the health line, and the assembly.
+ *
+ * The policy is core's (`src/core/migrate`); this is the app's half, because
+ * it knows the catalogue (a `fetch`), the pickers, the staging folder and the
+ * Library — things core may not name.
+ */
+
+import { Effect, FileSystem, Option, Result } from "effect";
+
+import { makeMemoryFileSystem } from "#core/fileSystem/memory";
+import { joinPath, lastSegment } from "#core/fileSystem/path";
+import { Git } from "#core/git/git";
+import type { IntakeResult } from "#core/git/intake";
+import { addBooks, assemble, type AssembleForm } from "#core/migrate/assemble";
+import { openCandidate, type BookCandidate, type StagedBook } from "#core/migrate/candidate";
+import { health, validate, type Health } from "#core/migrate/check";
+import { localCandidates } from "#core/migrate/local";
+import { recognizeWriter } from "#core/migrate/writerBook";
+import { UPSTREAM_TIMEOUT } from "#core/migrate/writerWork";
+import { Observability } from "#core/observability";
+import { Remote } from "#core/remote/remote";
+import { Library, answers } from "#core/resources/library";
+import { highestVersions, type RelatedResource } from "#core/resources/relationships";
+
+import { APP_AUTHOR } from "./author";
+import { catalogueFor, type WriterLanguage } from "./catalogue";
+import { describe } from "./describe";
+import { t } from "./i18n";
+import type { Domain, Services } from "./services";
+import { rememberProject } from "./ui/landing/summaries";
+
+/** Where opened candidates are staged. Temporary: nothing here is a project. */
+const stagingRootOf = (services: Services): string => `${services.hostInfo.paths().temp}/migrate`;
+
+/** A candidate as the screen holds it, from listed to opened or refused. */
+export type Opened =
+  | { readonly state: "waiting" }
+  | { readonly state: "opening" }
+  | { readonly state: "ready"; readonly staged: StagedBook; readonly health: Health }
+  | { readonly state: "refused"; readonly reason: string };
+
+/** The languages with Writer projects matching a search of two letters or more. */
+export const writerLanguages = (
+  services: Services,
+  search: string,
+): Promise<readonly WriterLanguage[]> => catalogueFor(services.settings).writerLanguages(search);
+
+/** The catalogue's Writer projects for one language. */
+export const remoteCandidates = (
+  services: Services,
+  language: string,
+): Promise<readonly BookCandidate[]> => catalogueFor(services.settings).writerBooks(language);
+
+/**
+ * Picked zips and folders unpacked in memory, by the root their candidates
+ * name: where `openOne` reads them back. Held for the run; `forgetPicked`
+ * lets them go when the screen closes.
+ */
+const picked = new Map<string, FileSystem.FileSystem>();
+
+export const forgetPicked = (): void => picked.clear();
+
+/** The in-memory FileSystem a picked candidate lives in, if it does. */
+const pickedFor = (candidate: BookCandidate): FileSystem.FileSystem | undefined => {
+  if (candidate.origin.kind === "remote") return undefined;
+  const { root } = candidate.origin;
+  for (const [base, fileSystem] of picked)
+    if (root === base || root.startsWith(`${base}/`)) return fileSystem;
+  return undefined;
+};
+
+/**
+ * A picked folder or zip, as candidates. A native host reads the folder
+ * where it is. A browser unpacks what was picked into MEMORY, never OPFS: a
+ * Writer project is hundreds of chunk files, and OPFS pays per file (see
+ * `documentation/architecture/storage.md`, "The OPFS tax"); the candidates are
+ * read once and only the rendered books are kept.
+ */
+export const pickLocal = async (
+  services: Services,
+  kind: "folder" | "zip",
+): Promise<readonly BookCandidate[] | undefined> => {
+  const capabilities = services.hostInfo.capabilities();
+  if (kind === "folder" && capabilities.nativeDisk && capabilities.dialogs) {
+    const chosen = Option.getOrUndefined(
+      await services.run(services.dialogs.pickFolder("Select BTT Writer projects")),
+    );
+    if (chosen === undefined) return undefined;
+    return services.run(
+      localCandidates(services.fileSystem, chosen, "folder", lastSegment(chosen)),
+    );
+  }
+  const intake = await import("#platform/web/intake");
+  const files = kind === "zip" ? await intake.pickZip() : await intake.pickFolder();
+  if (files === undefined) return undefined;
+  const memory = makeMemoryFileSystem().fileSystem;
+  const staged = await services.run(intake.intake(memory, "/picked", files));
+  picked.set(staged.root, memory);
+  return services.run(localCandidates(memory, staged.root, kind, files.name));
+};
+
+/** Why a pasted URL is not a Writer candidate, said to the person. */
+class NotWriterUrl extends Error {
+  override readonly name = "NotWriterUrl";
+}
+
+/**
+ * A Writer project straight from its URL, for when the catalogue lags behind
+ * the server (it reads a public data API that is sometimes behind WACS).
+ *
+ * Checked the way the catalogue's own candidates are opened: the remote is
+ * probed (it answers, it is not empty), then cloned — newest version, into
+ * memory on the Web — and must recognise as a Writer project, its
+ * `manifest.json` naming a book and a language. The clone is dropped; the
+ * candidate goes through the run's ordinary open like any other.
+ */
+export const urlCandidate = async (services: Services, typed: string): Promise<BookCandidate> => {
+  const url = typed
+    .trim()
+    .replace(/\/+$/u, "")
+    .replace(/\.git$/iu, "");
+  const parts = (() => {
+    try {
+      return new URL(url).pathname.split("/").filter((part) => part !== "");
+    } catch {
+      return [];
+    }
+  })();
+  const owner = parts.at(-2);
+  const repo = parts.at(-1);
+  if (owner === undefined || repo === undefined)
+    throw new NotWriterUrl(t("That is not a repository URL: {url}", { url }));
+
+  const probe = await services.run(
+    Effect.timeoutOption(
+      Effect.flatMap(Remote, (remote) => remote.probe(url)),
+      UPSTREAM_TIMEOUT,
+    ),
+  );
+  if (Option.isNone(probe)) throw new NotWriterUrl(t("{url} did not answer in time.", { url }));
+  if (probe.value.empty) throw new NotWriterUrl(t("{url} has nothing in it yet.", { url }));
+
+  const inMemory = services.inMemoryTransfer?.();
+  // In memory on the Web; a native host checks in its temporary folder.
+  const root = `${inMemory === undefined ? stagingRootOf(services) : "/url-check"}/${owner}_${repo}`;
+  const look = Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const remote = yield* Remote;
+    const git = yield* Git;
+    yield* Effect.ignore(fileSystem.remove(root, { recursive: true }));
+    const { repo: cloned } = yield* remote.clone(url, root, { history: "latest" });
+    const project = yield* recognizeWriter(fileSystem, root);
+    const newest = (yield* Effect.orElseSucceed(git.log(cloned), () => []))[0];
+    yield* Effect.ignore(fileSystem.remove(root, { recursive: true }));
+    return { project, newest };
+  });
+  const where: Effect.Effect<
+    Effect.Success<typeof look>,
+    Effect.Error<typeof look>,
+    Domain
+  > = inMemory === undefined ? look : Effect.provide(look, inMemory);
+  const { project, newest } = await services.run(where);
+  if (project === undefined)
+    throw new NotWriterUrl(
+      t("{repo} is not a BTT Writer project: it has no manifest.json naming a book.", { repo }),
+    );
+  return {
+    id: `remote:${url}:${project.book}`,
+    book: project.book,
+    language: project.language.id.toLowerCase(),
+    resource: project.resource,
+    origin: { kind: "remote", owner, repo, url },
+    hints: newest === undefined ? {} : { modified: new Date(newest.at).toISOString() },
+  };
+};
+
+/** Opens, renders, validates and measures one candidate. Never rejects. */
+export const openOne = async (services: Services, candidate: BookCandidate): Promise<Opened> => {
+  const operation = services.composition.observability.operation("migrate.open", {
+    "migrate.book": candidate.book,
+    "migrate.origin": candidate.origin.kind,
+  });
+  try {
+    // A clone that does not finish in time is refused like an unreachable
+    // one, so one slow repository never holds the run's Next behind it.
+    // A remote candidate is cloned, read once and dropped, so on the Web it is
+    // cloned into memory: OPFS writes were most of its cost. A picked zip or
+    // folder is read from the memory it was unpacked into; a native folder,
+    // where it is.
+    const held = pickedFor(candidate);
+    const inMemory =
+      candidate.origin.kind === "remote" || held !== undefined
+        ? services.inMemoryTransfer?.(held)
+        : undefined;
+    const open = Effect.timeoutOption(
+      openCandidate(candidate, inMemory === undefined ? stagingRootOf(services) : "/staging"),
+      UPSTREAM_TIMEOUT,
+    );
+    const where: Effect.Effect<Option.Option<StagedBook>, unknown, Domain> = inMemory === undefined
+      ? open
+      : Effect.provide(open, inMemory);
+    const opened = await services.run(Effect.provideService(where, Observability, operation));
+    if (Option.isNone(opened)) {
+      operation.end("unavailable", { "migrate.reason": "timeout" });
+      return { state: "refused", reason: t("it did not answer in time") };
+    }
+    const staged = opened.value;
+    const refused = validate(staged.usfm);
+    if (refused !== undefined) {
+      operation.end("refused", { "migrate.reason": refused });
+      return { state: "refused", reason: refused };
+    }
+    const measured = operation.span("migrate.health");
+    const census = health(services.galley, staged.project.book, staged.usfm);
+    measured();
+    operation.end("passed");
+    return { state: "ready", staged, health: census };
+  } catch (cause) {
+    operation.end("failed", { "migrate.reason": describe(cause) });
+    return { state: "refused", reason: describe(cause) };
+  }
+};
+
+/**
+ * The census of `book` in a source text on this device, for the health line
+ * to read against ("English ULB has 5 ch · 105 v"). The manifest's `ufw`
+ * versification says nothing, so the source text is the only honest
+ * expectation; with none here, there is none.
+ */
+export const sourceCensus = (
+  services: Services,
+  sources: readonly RelatedResource[],
+  book: string,
+): Effect.Effect<{ readonly title: string; readonly health: Health } | undefined, never, Domain> =>
+  Effect.gen(function* () {
+    const library = yield* Library;
+    const held = yield* library.resources();
+    for (const ref of highestVersions(sources)) {
+      const copy = held.find((resource) => answers(resource, ref));
+      if (copy === undefined) continue;
+      const text = yield* Effect.orElseSucceed(library.readBook(copy.id, book), () =>
+        Option.none<string>(),
+      );
+      if (Option.isNone(text)) continue;
+      return { title: copy.title, health: health(services.galley, book, text.value) };
+    }
+    return undefined;
+  });
+
+/**
+ * How many passages of `other` differ from `picked`: Review's own decision
+ * units, counted. `undefined` when the engine's diff door is missing.
+ */
+export const passagesDiffering = (
+  services: Services,
+  picked: string,
+  other: string,
+): number | undefined => {
+  if (picked === other) return 0;
+  const diffed = services.galley.diff(picked, other);
+  return Result.isSuccess(diffed)
+    ? diffed.success.units.filter((unit) => unit.status !== "unchanged").length
+    : undefined;
+};
+
+/** A folder name for the new project that is not taken yet. */
+const freeFolder = (services: Services, name: string): Effect.Effect<string, never, Domain> =>
+  Effect.gen(function* () {
+    for (let attempt = 1; ; attempt += 1) {
+      const root = joinPath(
+        services.projectsRoot,
+        attempt === 1 ? name : `${name}-${String(attempt)}`,
+      );
+      const taken = yield* Effect.orElseSucceed(services.fileSystem.exists(root), () => true);
+      if (!taken) return root;
+    }
+  });
+
+/** Assembles the chosen books into a new project, and lists it. */
+export const assembleProject = (
+  services: Services,
+  folder: string,
+  form: AssembleForm,
+  books: readonly StagedBook[],
+): Effect.Effect<{ readonly root: string; readonly result: IntakeResult }, unknown, Domain> =>
+  Effect.gen(function* () {
+    const root = yield* freeFolder(services, folder);
+    const result = yield* assemble({
+      root,
+      form,
+      books,
+      author: APP_AUTHOR,
+      date: new Date().toISOString().slice(0, 10),
+    });
+    yield* rememberProject(services.projectsRoot, root, undefined);
+    return { root, result };
+  });
+
+/** Adds the chosen books to a project that exists, in one commit. */
+export const addToProject = (
+  services: Services,
+  root: string,
+  held: readonly string[],
+  books: readonly StagedBook[],
+): Effect.Effect<IntakeResult, unknown, Domain> =>
+  Effect.gen(function* () {
+    const result = yield* addBooks({
+      root,
+      books,
+      held,
+      author: APP_AUTHOR,
+      date: new Date().toISOString().slice(0, 10),
+    });
+    yield* rememberProject(services.projectsRoot, root, undefined);
+    return result;
+  });

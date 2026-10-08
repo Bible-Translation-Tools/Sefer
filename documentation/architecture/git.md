@@ -220,7 +220,9 @@ empty ([landing](landing.md) has the record and the index field it feeds).
 `POST /api/v1/users/{user}/tokens` with HTTP Basic auth (plus `X-Gitea-OTP` when the account has two
 factors) mints a token scoped to `SESSION_TOKEN_SCOPES` and named `sefer-<platform>-<date>`, and the
 password is used for that one request and never stored. `login`, `logout`, `session`,
-`listWritableRepos`, `listOwnedRepos`, `createRepo`, `getRepo`, `forkRepo`; `GiteaError` reasons are
+`listWritableRepos` (one page of 50, or with `search` the page Gitea's own `q` matches),
+`listOwnedRepos`, `createRepo`, `getRepo`, `listForks`, `forkRepo` (with an
+optional name); `GiteaError` reasons are
 `Unauthorized`, `OtpRequired`, `Network`, `Refused`, `Io`, and a 401 that mentions OTP is `OtpRequired`
 rather than a wrong password. The session is a `Credential` (`username`, `token`, plus the token's name
 and id) in the host `Credentials` service and nowhere else — never a project file. Core may not touch
@@ -293,7 +295,12 @@ spot. "Pull request" is Gitea's word and the code's; the screen says "suggestion
 
 Known and deferred (2026-10-06): a plain Decline only closes the pull request, so its versions stay
 outside the shared project's history and ride along in the person's next offer. Recording a decline
-as a keep-ours decision commit, as a partial accept already does, would end that.
+as a keep-ours decision commit would end that, but would reset the author's own copy when they next
+receive, which Will ruled out on 2026-10-07; remembering declines by content is the proposal
+(`planning/00-ideas/cloud-git-followups-2026-10-06.md`).
+
+The editors' list ("To review", `SuggestionsCard`) names each suggestion by its title, and leaves
+out the signed-in person's own (`openSuggestions`): those are under Yours.
 
 `src/core/remote/suggestions.ts` is its own service (`Suggestions`, over the session `Gitea` keeps:
 `canWrite`, `open`, `one`, `from`, `noteOn`, `suggest`, `accept`, `decline`); `src/app/suggestions.ts` is the
@@ -308,11 +315,23 @@ person's own; `src/app/collaboration.ts` holds what the surfaces show. They join
    (`SuggestionsScreen` → `SuggestionsCard`, at `/project/$slug/suggestions`);
 4. `ReviewPanel.tsx` reads `?pull=<n>` through `suggestionRef`, and accepts after Record.
 
-A copy is never forked twice: Gitea refuses a second fork of the same project (409), so a copy made
-on another device is found (`RemoteRepo.parent`) and attached. On the Web every one of these calls goes
+A copy is never forked twice: Gitea refuses a second fork of the same project, and a name the
+person already holds (both 409). So a copy made on another device is found among the shared
+project's forks (`listForks`, the one owned by the signed-in account) whatever it is called, and
+attached. With none, a new one is forked under the upstream name, or — when the person already
+holds a repository of that name, such as a sibling fork from another project (Raphael/en_ulb, with
+Will_Kelly/en_ulb a fork of WA-Catalog/en_ulb) — under `<name>-<upstream owner>` (`en_ulb-raphael`),
+numbered on if that is taken too; the toast says so. A same-named sibling is never attached: it
+holds other work, and a suggestion from it would offer that too. Where the forks list cannot be read
+each name a copy may have is looked up instead and counts only when its parent is the shared
+project. Offering sends to the copy only when the copy lacks HEAD: Save has usually just sent it,
+and a second push of the same commit showed on WACS as "force-pushed X to X".
+
+On the Web every one of these calls goes
 through the WACS proxy (`../wacs-isomorphic-git-proxy`), which forwards only an explicit list of API
 paths: `pulls`, `pulls/{n}` (PATCH, to close), `pulls/{n}/merge` and `issues/{n}/comments` were
-added for this on 2026-10-06. A suggestion call missing from that list fails in the browser as
+added for this on 2026-10-06, and GET on `forks` (page, limit) on 2026-10-07 — committed in the
+proxy but not yet deployed, which is what the name-by-name fallback above covers. A suggestion call missing from that list fails in the browser as
 "Failed to fetch"; desktop talks to Gitea directly and never meets it. Forks and pull requests were exercised on the Web with a second, non-writer account on 2026-10-06; desktop is
 not yet exercised against a second account.
 

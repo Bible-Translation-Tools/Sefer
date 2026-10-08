@@ -87,6 +87,14 @@ export interface Controls {
    * was one too many.
    */
   readonly gutter?: boolean;
+  /**
+   * Dim, in a split, the side a decided unit will NOT read as — so the card
+   * shows the result by what stays bright, not by asking the reader to work it
+   * out from two marked paragraphs and a pressed button. Where decisions are
+   * written (`live`) the result is always the current side, the editor; where
+   * they are only held, it is the side chosen. A playground dial for now.
+   */
+  readonly dimUnchosen?: boolean;
 }
 
 /** A chevron pointing at the side it chooses: left takes the other side's, right keeps yours. */
@@ -170,7 +178,13 @@ export const sidePaint = (
       const end = usfm ? span.to : readingEnd(analysis, span.from, span.to);
       // Either side's marks count: a verse that only lost words is marked in
       // the baseline pane, and the current pane's text beside it is enough.
-      const line = tint(unit, decision, controls?.live === true, marksWords(unit, usfm));
+      const unchosen =
+        controls?.dimUnchosen === true &&
+        decision !== undefined &&
+        (controls.live === true ? side === "baseline" : decision !== side);
+      const line = unchosen
+        ? "cm-diff-unchosen"
+        : tint(unit, decision, controls?.live === true, marksWords(unit, usfm));
       if (line !== "")
         lines.push({ from: span.from, to: Math.max(span.from + 1, end), class: line });
       // Word marks only where there is something to compare: a unit only one

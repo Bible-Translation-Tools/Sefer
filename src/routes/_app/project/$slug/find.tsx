@@ -299,11 +299,9 @@ function Find() {
   const source = createFindSource(() => setRebound((held) => held + 1));
 
   createEffect(
-    // `project.id`, not `root`: the id is the key `Library.bind` writes under,
-    // and for a project that declares an identifier the two are different
-    // strings (`core/project/project.ts`). Keyed by root, this resolved nothing
-    // and the references scope was quietly unavailable.
-    () => ({ id: shell.project()?.id, tick: rebound() }),
+    // The ROOT: picks live in the project's own `.sefer/project.json`
+    // (`Library.pick`), which is where the root, and only the root, finds them.
+    () => ({ id: shell.project()?.root, tick: rebound() }),
     ({ id }) => {
       if (id === undefined) {
         setBound(Workflows.EMPTY);

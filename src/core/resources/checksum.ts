@@ -146,7 +146,8 @@ interface IngredientFingerprint {
   readonly size: number;
 }
 
-const fingerprint = (bytes: Uint8Array): IngredientFingerprint => ({
+/** The md5 and size a new ingredient records; `writeMetadata.ts` writes them. */
+export const fingerprint = (bytes: Uint8Array): IngredientFingerprint => ({
   md5: md5(bytes),
   size: bytes.length,
 });

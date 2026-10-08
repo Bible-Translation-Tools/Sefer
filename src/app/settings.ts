@@ -325,6 +325,8 @@ export interface ShellKeys {
    * once when the shell is built.
    */
   readonly sidebarOpen: SettingKey<boolean>;
+  /** Is the reference column beside the editor open (the crumb strip's split toggle). */
+  readonly referenceOpen: SettingKey<boolean>;
   /**
    * How wide the project sidebar is, as a FRACTION of the workspace row, because that is the unit `Resizable` speaks: a split conserves
    * fractions, so a pixel width would have to be converted against a root that
@@ -431,6 +433,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     ),
     sousSettings: settings.register("sous.settings", SousOverrides, {}),
     sidebarOpen: settings.register("workspace.sidebarOpen", Schema.Boolean, true),
+    referenceOpen: settings.register("workspace.referenceOpen", Schema.Boolean, true),
     sidebarWidth: settings.register("workspace.sidebarWidth", Schema.Number, SIDEBAR_WIDTH.default),
     fontSize: settings.register("shell.fontSize", Schema.Number, 16),
     zoom: settings.register("shell.zoom", Schema.Number, 100),

@@ -190,20 +190,28 @@ export const reclip = (view: EditorView, range: { from: number; to: number }): v
 };
 
 function collapseOutside(state: EditorState, range: { from: number; to: number }): DecorationSet {
-  const len = state.doc.length;
+  const doc = state.doc;
+  const len = doc.length;
   const out = [];
   const from = Math.max(0, Math.min(range.from, len));
   const to = Math.max(from, Math.min(range.to, len));
-  if (from > 0) out.push(Decoration.replace({ block: true }).range(0, Math.max(0, from - 1)));
+  const first = doc.lineAt(from);
+  const last = doc.lineAt(to);
+  // Whole lines outside the range go as blocks, which CodeMirror draws only
+  // between line boundaries; what is left of the first and last lines goes
+  // inline. A card over one verse of a paragraph written on one line
+  // (`\p \v 1 … \v 2 …`) shows that verse, not the paragraph.
+  if (first.from > 0) out.push(Decoration.replace({ block: true }).range(0, first.from - 1));
+  if (from > first.from) out.push(Decoration.replace({}).range(first.from, from));
   // Not inclusive at its start: what sits exactly at the range's end — a
   // widget drawn after the last line (a deleted verse's wording in a diff
   // card), or text typed at the very end of it — belongs to what is shown,
   // not to the hidden rest. An inclusive block sorts before every widget at
   // its position and swallows it.
-  if (to < len)
-    out.push(
-      Decoration.replace({ block: true, inclusiveStart: false }).range(Math.min(len, to), len),
-    );
+  if (to < last.to)
+    out.push(Decoration.replace({ inclusiveStart: false }).range(Math.max(to, from), last.to));
+  if (last.to < len)
+    out.push(Decoration.replace({ block: true, inclusiveStart: false }).range(last.to, len));
   return Decoration.set(out, true);
 }
 
@@ -236,11 +244,10 @@ export const clipped = (range: { from: number; to: number }): Extension => [
 ];
 
 /**
- * A span of the book, snapped to whole lines and clamped to the document.
- *
- * `collapseOutside` replaces what is outside the range with block widgets,
- * and a block replacement that does not start and end at a line boundary is
- * not something CodeMirror will draw. A unit's end is the next unit's anchor,
+ * A span of the book, snapped to whole lines and clamped to the document:
+ * what a render window takes (`setRenderRange`), which draws whole lines.
+ * A card's clip no longer snaps — `clipSpan` — because `collapseOutside`
+ * hides the rest of a partly shown line inline. A unit's end is the next unit's anchor,
  * which sits at the START of its own line, so the last line is the one before
  * it.
  */
@@ -269,6 +276,36 @@ export const wholeLinesOf = (
     from: start === 0 ? 0 : text.lastIndexOf("\n", start - 1) + 1,
     to: close < 0 ? text.length : close,
   };
+};
+
+/**
+ * A span of the book as a card shows it: clamped to the document, and
+ * without the whitespace it ends on, but NOT snapped to whole lines —
+ * `collapseOutside` hides the rest of a partly shown line inline. A unit's
+ * end is the next unit's anchor (`\v 3`), and the space or line break before
+ * it separates the two: left outside, so the next verse's number is hidden
+ * with the rest. Text typed at the end still shows: the range's end maps
+ * forward over an insertion there.
+ */
+export const clipSpanOf = (
+  text: string,
+  span: { readonly from: number; readonly to: number },
+): { from: number; to: number } => {
+  const from = Math.max(0, Math.min(span.from, text.length));
+  let to = Math.max(from, Math.min(span.to, text.length));
+  while (to > from && /\s/.test(text[to - 1] ?? "")) to -= 1;
+  return { from, to };
+};
+
+/** `clipSpanOf` over a document. */
+export const clipSpan = (
+  doc: { length: number; sliceString: (from: number, to: number) => string },
+  span: { readonly from: number; readonly to: number },
+): { from: number; to: number } => {
+  const from = Math.max(0, Math.min(span.from, doc.length));
+  let to = Math.max(from, Math.min(span.to, doc.length));
+  while (to > from && /\s/.test(doc.sliceString(to - 1, to))) to -= 1;
+  return { from, to };
 };
 
 /**

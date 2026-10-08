@@ -40,7 +40,7 @@ import {
   readingLayer,
   reclip,
   remark,
-  wholeLines,
+  clipSpan,
   type EditorBook,
   type MarkedRange,
   type Satellite,
@@ -102,7 +102,7 @@ export function CardEditor(props: CardEditorProps) {
       if (parent === undefined) return;
       // One book over one stretch: a different card is a different instance.
       const book = untrack(() => props.book);
-      const range = wholeLines(
+      const range = clipSpan(
         book.state.doc,
         untrack(() => props.range),
       );
@@ -184,7 +184,7 @@ export function CardEditor(props: CardEditorProps) {
     () => ({ held: live(), range: props.range }),
     ({ held, range }) => {
       if (held === undefined || untrack(() => props.reclip) === false) return;
-      reclip(held.satellite.view, wholeLines(held.satellite.view.state.doc, range));
+      reclip(held.satellite.view, clipSpan(held.satellite.view.state.doc, range));
     },
   );
 

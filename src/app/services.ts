@@ -34,6 +34,7 @@ import {
 } from "#core/analysis/projectAnalysis";
 import type { BookId } from "#core/book/book";
 import type { HostFacts } from "#core/diagnostics/header";
+import { MemoryFileSystemLive } from "#core/fileSystem/memory";
 import {
   Galley,
   type EngineLoadError,
@@ -99,6 +100,8 @@ import { env } from "./env";
  * subtree — this one.
  */
 const PROJECTS_ROOT = `${OPFS_ROOT}/projects`;
+
+const libraryRootIn = (appData: string): string => `${appData}/library`;
 
 /**
  * The desktop host's whole Layer set, as a TYPE only.
@@ -186,6 +189,17 @@ export interface Services {
   readonly gitea: GiteaService;
   readonly remote: RemoteService;
   readonly admin: ProjectAdminService;
+  /**
+   * A FileSystem with the Git and Remote that work over it, all in memory:
+   * for a clone that is read once and thrown away (a Writer candidate). A
+   * fresh FileSystem per call, or `held`, one the caller already filled (a
+   * picked zip, unpacked in memory). Undefined where disk is already cheap.
+   */
+  readonly inMemoryTransfer:
+    | ((
+        held?: FileSystem.FileSystem,
+      ) => Layer.Layer<FileSystem.FileSystem | Git | Remote, never, Credentials | Gitea>)
+    | undefined;
 
   /** Plain → Instantiated: `openProject(root, { seat })`. */
   readonly seat: Seat;
@@ -202,6 +216,12 @@ export interface Services {
   readonly storage: "opfs" | "native" | "fixture";
   /** The subtree the projects list enumerates. */
   readonly projectsRoot: string;
+  /**
+   * The Library's folder: `library.json`, and the copies of source texts and
+   * reference material cloned for it. Outside `projectsRoot`, so the projects
+   * list never shows them (Will, 2026-10-06).
+   */
+  readonly libraryRoot: string;
   /**
    * The seeded fixture project's root, when this composition is running over
    * the fixture FileSystem. The projects list offers it as a one-click open,
@@ -448,8 +468,8 @@ const domainLayer = (
         return Layer.mergeAll(
           // The project census, the held per-book analyses, and every finding.
           ProjectAnalysisLive,
-          // Imported resources and the role bindings a project reads them through.
-          LibraryLive({ libraryRoot: `${paths.appData}/library` }),
+          // Imported resources; a project's picks of them live in its own `.sefer/`.
+          LibraryLive({ libraryRoot: libraryRootIn(paths.appData) }),
           // History and transfer, every call in its repository's lane.
           laned(
             // git2 through Tauri commands on desktop, isomorphic-git over the
@@ -667,6 +687,31 @@ export const composeServices = async (
     // Desktop keeps its own projects beside its other app data; on Web that
     // subtree is all the projects list can honestly enumerate.
     projectsRoot: tauri === undefined ? PROJECTS_ROOT : `${paths.appData}/projects`,
+    libraryRoot: libraryRootIn(paths.appData),
+    // Web only: isomorphic-git writing to OPFS is the cost of a throwaway
+    // clone (measured 2026-10-07: 2.7 s for a tiny Writer project, most of
+    // it storage), and desktop's git2 on a native disk does not pay it.
+    inMemoryTransfer:
+      tauri === undefined
+        ? (held) =>
+            Layer.provideMerge(
+              Layer.merge(
+                // Fresh: `WebGitLive` is one constant Layer, and the runtime
+                // memoises Layers by identity, so without this the app's own
+                // Git — over OPFS — came back, and a clone in memory read as
+                // no repository (no history, no Writer commit to follow).
+                Layer.fresh(WebGitLive),
+                WebRemoteLive({
+                  contentHost: resolveEndpoints(resolved.settings).contentHost,
+                  transport: bootTransport(),
+                  appId: appIdFor(build),
+                }),
+              ),
+              held === undefined
+                ? MemoryFileSystemLive()
+                : Layer.succeed(FileSystem.FileSystem, held),
+            )
+        : undefined,
     fixtureProject: fixture?.SMALL_NT_ROOT,
     hostFacts,
     logFiles,

@@ -24,6 +24,7 @@ import { zipSync } from "fflate";
 import { writeFileAtomic, writeFileStringAtomic } from "../fileSystem/atomic";
 import { joinPath, lastSegment, parentPath } from "../fileSystem/path";
 import { MANIFEST_FILE, METADATA_FILE } from "../project/discovery";
+import { PROJECT_STATE_FILE, updateProjectState } from "../project/projectState";
 import { type BurritoMetadata, decodeBurritoMetadata } from "../resources/burrito";
 import { refreshIngredientChecksums } from "../resources/checksum";
 import {
@@ -36,7 +37,7 @@ import {
  * Where a project's name lives when it is not a burrito. `.sefer/` is Sefer's
  * own corner of a project folder — never something another tool reads.
  */
-const SEFER_PROJECT_FILE = ".sefer/project.json";
+const SEFER_PROJECT_FILE = PROJECT_STATE_FILE;
 
 export type ExportFormat = "burrito" | "usfm-zip";
 
@@ -339,18 +340,8 @@ const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminServic
         // name two people changed there is a difference nobody can reconcile.
         // `.sefer/` is excluded from the repository, so this never reaches a
         // commit and someone else's rename never overwrites it.
-        yield* Effect.mapError(
-          fileSystem.makeDirectory(`${root}/.sefer`, { recursive: true }),
-          ioFailure,
-        );
-        yield* Effect.mapError(
-          writeFileStringAtomic(
-            fileSystem,
-            `${root}/${SEFER_PROJECT_FILE}`,
-            `${JSON.stringify({ name }, null, 2)}\n`,
-          ),
-          ioFailure,
-        );
+        // Merged, so the reference picks kept in the same file survive.
+        yield* Effect.mapError(updateProjectState(fileSystem, root, { name }), ioFailure);
       }),
 
     delete: (root, confirm) =>

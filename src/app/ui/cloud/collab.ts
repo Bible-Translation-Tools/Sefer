@@ -25,9 +25,15 @@ export const chooseOwnCopy = async (services: Services, project: Project): Promi
       case "copy":
         toasts.success({
           title: t("You're working in your own copy"),
-          message: t("Your changes go to {copy}. Offer them to the shared project when ready.", {
-            copy: outcome.copy,
-          }),
+          message:
+            outcome.renamed === true
+              ? t(
+                  "You already had a project of that name, so your copy is {copy}. Your changes go there; offer them to the shared project when ready.",
+                  { copy: outcome.copy },
+                )
+              : t("Your changes go to {copy}. Offer them to the shared project when ready.", {
+                  copy: outcome.copy,
+                }),
         });
         break;
       case "rerooted":

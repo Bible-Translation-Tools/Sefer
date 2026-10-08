@@ -38,8 +38,14 @@ export const recordVersion = async (
   books: readonly Book[],
   message: string,
   author: Author,
+  /**
+   * Files Sefer wrote beside the books that belong in the same version: the
+   * `.upstreams.json` a review against Writer marks taken. Recorded even
+   * when no book changed, so "I looked and kept mine" is kept too.
+   */
+  also: readonly string[] = [],
 ): Promise<RecordOutcome> => {
-  if (books.length === 0) return { kind: "nothing" };
+  if (books.length === 0 && also.length === 0) return { kind: "nothing" };
   const saved = await services.run(Effect.result(services.save.saveAll(project.books)));
   if (Result.isFailure(saved)) return { kind: "not-written", error: saved.failure };
 
@@ -49,6 +55,7 @@ export const recordVersion = async (
     if (Option.isNone(baseline)) continue;
     receipts.push({ path: baseline.value.path, stamp: baseline.value.stamp });
   }
+  for (const path of also) receipts.push({ path, stamp: { revision: 0, length: 0 } });
   if (receipts.length === 0) return { kind: "nothing" };
   const staged = new Set(receipts.map((receipt) => receipt.path));
   for (const receipt of saved.success)

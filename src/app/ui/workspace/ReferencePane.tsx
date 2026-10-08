@@ -49,6 +49,7 @@
  * gets one line, not an empty editor.
  */
 
+import type { JSX } from "@solidjs/web";
 import { Effect, Fiber, Option, Result, Stream } from "effect";
 import X from "lucide-solid/icons/x";
 import {
@@ -96,7 +97,13 @@ export interface ReferencePaneProps {
   readonly bookId: string;
   /** The chapter NUMBER the main editor is clipped to, or `null` for whole-book. */
   readonly clip: () => number | null;
-  readonly onUnbind: () => void;
+  /** Absent for a text the project declares: nothing was picked to remove. */
+  readonly onUnbind?: () => void;
+  /**
+   * In place of the title, when the column holds more than one text: the
+   * choice of which one this pane shows (one at a time; Will, 2026-10-08).
+   */
+  readonly title?: JSX.Element;
 }
 
 /** What the pane is showing, once the read has answered. */
@@ -513,7 +520,12 @@ export function ReferencePane(props: ReferencePaneProps) {
           every other project's binding to it is untouched. */}
       <div class="flex items-center gap-2 border-b border-surface-border px-3 py-1.5">
         <p class="min-w-0 flex-1 truncate text-smallest text-on-surface-secondary">
-          <span class="font-bold text-on-surface-primary">{props.resource.title}</span>
+          <Show
+            when={props.title}
+            fallback={<span class="font-bold text-on-surface-primary">{props.resource.title}</span>}
+          >
+            {props.title}
+          </Show>
           <Show when={props.resource.language}>{(language) => <span> · {language()}</span>}</Show>
           <span> · {props.role === "source" ? t("Source") : t("Reference")}</span>
         </p>
@@ -527,14 +539,18 @@ export function ReferencePane(props: ReferencePaneProps) {
           startLabel={t("Let {title} follow the book", { title: props.resource.title })}
           onToggle={() => setFollowing((on) => !on)}
         />
-        <IconButton
-          size="sm"
-          data-testid={`unbind-${props.resource.id}`}
-          label={t("Remove {title}", { title: props.resource.title })}
-          tooltipSide="left"
-          icon={<X />}
-          onClick={() => props.onUnbind()}
-        />
+        <Show when={props.onUnbind}>
+          {(unbind) => (
+            <IconButton
+              size="sm"
+              data-testid={`unbind-${props.resource.id}`}
+              label={t("Remove {title}", { title: props.resource.title })}
+              tooltipSide="left"
+              icon={<X />}
+              onClick={() => unbind()()}
+            />
+          )}
+        </Show>
       </div>
 
       <Switch>

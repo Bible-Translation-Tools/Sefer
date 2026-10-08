@@ -19,7 +19,7 @@ The `X-Requested-With` app id the proxies gate on is not configured: `appIdFor` 
 
 ## All three can be overridden at runtime
 
-The build's values are DEFAULTS. Somebody testing a deployed build has to be able to point it at the dev content host, and a self-hoster at their own, without either waiting for a release — so all three are preferences too, on the Network card of `/settings`, which is drawn only when Advanced is showing. The transport is editable there only because a flags screen is where somebody debugging a proxy goes; a wrong pair breaks every transfer to that host.
+The build's values are DEFAULTS. Somebody testing a deployed build has to be able to point it at the dev content host, and a self-hoster at their own, without either waiting for a release — so all three are preferences too, on the Network card of Settings (`/project/$slug/settings`), which is drawn only when Advanced is showing. Settings live under an open project since 2026-10-07, so the Catalogue override the projects page reads is changed from inside a project. The transport is editable there only because a flags screen is where somebody debugging a proxy goes; a wrong pair breaks every transfer to that host.
 
 The one-reader rule survives the change rather than being bent by it. `env.ts` is the one reader of every endpoint in `import.meta.env`; `src/app/endpoints.ts` is the only reader of the override, and resolves `preference ?? build ?? null`. Nothing else reads either, and there is no fallback literal in `src`: every hostname arrives from `tools/deploy/channels.ts` or an `.env` file. An endpoint nobody configured is `null` and says so.
 

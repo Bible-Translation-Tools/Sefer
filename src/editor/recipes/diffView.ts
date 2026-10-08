@@ -46,7 +46,7 @@ import { borrowedStructure, structureAt, type DocStructure } from "../core/docSt
 import { renderRangeField } from "../core/render";
 import { span } from "../core/timing";
 import { modeView, type ProjectionName } from "../views";
-import { clipped, wholeLinesOf } from "./satellite";
+import { clipSpanOf, clipped, wholeLinesOf } from "./satellite";
 import { giveBack, takeView } from "./viewPool";
 
 /**
@@ -578,7 +578,7 @@ export function mountDiffView(options: DiffViewOptions): DiffViewMount {
   const done = span("diff-mount", `${(options.text.length / 1024) | 0}KB`);
   const projection = new Compartment();
   const surface = options.surface ?? "cm-diff";
-  const clip = options.clip === undefined ? undefined : wholeLinesOf(options.text, options.clip);
+  const clip = options.clip === undefined ? undefined : clipSpanOf(options.text, options.clip);
 
   const state = EditorState.create({
     doc: options.text,
@@ -588,7 +588,9 @@ export function mountDiffView(options: DiffViewOptions): DiffViewMount {
       readingLayer,
       viewLayer(),
       projection.of(modeView(options.mode, surface)),
-      ...(clip === undefined ? [] : [clipped(clip), renderRangeField.init(() => clip)]),
+      ...(clip === undefined
+        ? []
+        : [clipped(clip), renderRangeField.init(() => wholeLinesOf(options.text, clip))]),
       // Seeded with the first paint, so the gutter's first pass has markers.
       paintField.init((state) => painted(state, options.paint, new Set<string>())),
       controlGutter(),

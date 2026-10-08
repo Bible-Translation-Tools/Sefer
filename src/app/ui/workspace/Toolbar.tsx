@@ -116,7 +116,7 @@ export function Toolbar() {
    */
   const [hasSource, setHasSource] = createSignal(false, { name: "toolbarHasSource" });
   createEffect(
-    () => ({ project: shell.project()?.id, book: shell.focused()?.id }),
+    () => ({ project: shell.project()?.root, book: shell.focused()?.id }),
     ({ project }) => {
       if (project === undefined) {
         setHasSource(false);

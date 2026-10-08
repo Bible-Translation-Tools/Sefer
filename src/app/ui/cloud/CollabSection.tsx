@@ -71,7 +71,7 @@ export function CollabSection(props: { readonly onLeave: () => void }) {
 
   const toSettings = (): void => {
     props.onLeave();
-    void navigate({ to: "/settings" });
+    void navigate({ to: "/project/$slug/settings", params: { slug: shell.slug() } });
   };
 
   /** Something to say: the frame is not drawn around nothing. */

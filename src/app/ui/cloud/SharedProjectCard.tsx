@@ -15,7 +15,7 @@
  */
 
 import { Effect, Fiber, Stream } from "effect";
-import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
+import { Show, createEffect, createSignal, onCleanup } from "solid-js";
 
 import { Git } from "#core/git/git";
 import { Gitea, type RemoteRepo } from "#core/remote/gitea";
@@ -25,7 +25,7 @@ import { collaboration } from "../../collaboration";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { syncWatch } from "../../syncWatch";
-import { Button, Card, Input, PanelHeader } from "../primitives";
+import { Button, Card, FilterList, Input, PanelHeader, Popover } from "../primitives";
 import type { Account } from "./account";
 
 /**
@@ -53,6 +53,7 @@ export function SharedProjectCard(props: {
   };
 
   const [repos, setRepos] = createSignal<readonly RemoteRepo[]>([], { name: "cloudRepos" });
+  const [choosing, setChoosing] = createSignal(false, { name: "cloudChoosing" });
   const [newName, setNewName] = createSignal("", { name: "cloudNewName" });
   const [phase, setPhase] = createSignal("", { name: "cloudPhase" });
 
@@ -96,6 +97,42 @@ export function SharedProjectCard(props: {
       );
     },
   );
+
+  const [searching, setSearching] = createSignal(false, { name: "cloudRepoSearching" });
+  let searchTimer: ReturnType<typeof setTimeout> | undefined;
+  let searchTicket = 0;
+  /**
+   * What was typed, asked of Gitea: the first list is one page, and an
+   * organisation holds more than a page. What comes back joins the list, so
+   * the filter finds it.
+   */
+  const searchRepos = (text: string): void => {
+    clearTimeout(searchTimer);
+    const base = account.host;
+    searchTicket += 1;
+    const ticket = searchTicket;
+    if (base === null || text === "") {
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    searchTimer = setTimeout(() => {
+      void services
+        .run(Effect.flatMap(Gitea, (gitea) => gitea.listWritableRepos(base, text)))
+        .then((found) => {
+          if (ticket !== searchTicket) return;
+          setRepos((held) => {
+            const known = new Set(held.map((repo) => repo.fullName));
+            return [...held, ...found.filter((repo) => !known.has(repo.fullName))];
+          });
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (ticket === searchTicket) setSearching(false);
+        });
+    }, 300);
+  };
+  onCleanup(() => clearTimeout(searchTimer));
 
   const listRepos = (): void => {
     const base = account.host;
@@ -169,34 +206,55 @@ export function SharedProjectCard(props: {
   // where this project sends — not something to offer as a first button.
   const controls = () => (
     <>
+      {/* A list you type at, not every repository the account can write
+          to drawn as a card each: an organisation holds hundreds. */}
       <div class="flex flex-wrap items-center gap-2">
-        <Button onClick={listRepos} disabled={account.busy()}>
-          {t("Choose a shared project…")}
-        </Button>
+        <Popover
+          label={t("Shared projects")}
+          side="bottom"
+          align="start"
+          class="flex max-h-[60vh] w-96 flex-col p-2"
+          open={choosing()}
+          onOpenChange={(open) => {
+            setChoosing(open);
+            if (open && repos().length === 0) listRepos();
+          }}
+          trigger={
+            <Button disabled={account.busy()} data-testid="choose-shared-project">
+              {t("Choose a shared project…")}
+            </Button>
+          }
+        >
+          <Show
+            when={repos().length > 0}
+            fallback={
+              <p class="p-2 text-small text-on-surface-tertiary">
+                {account.host === null
+                  ? t("Sign in to choose a shared project.")
+                  : account.busy()
+                    ? t("Listing your projects…")
+                    : t("No projects to choose from.")}
+              </p>
+            }
+          >
+            <FilterList
+              label={t("Filter shared projects")}
+              placeholder={t("Name or owner…")}
+              items={repos()}
+              key={(repo) => repo.fullName}
+              match={(repo, query) => repo.fullName.toLowerCase().includes(query.toLowerCase())}
+              onQuery={searchRepos}
+              searching={searching()}
+              onPick={(repo) => {
+                setChoosing(false);
+                attach(repo);
+              }}
+            >
+              {(repo) => <span class="truncate">{repo.fullName}</span>}
+            </FilterList>
+          </Show>
+        </Popover>
       </div>
-
-      <Show when={repos().length > 0}>
-        <ul class="flex flex-col gap-1" data-repos={repos().length}>
-          <For each={repos()}>
-            {(repo) => (
-              <li
-                class="flex items-center gap-3 rounded-md border border-surface-border px-3 py-2"
-                data-repo={repo.fullName}
-              >
-                <strong class="text-small">{repo.fullName}</strong>
-                <Button
-                  size="sm"
-                  class="ms-auto"
-                  onClick={() => attach(repo)}
-                  disabled={account.busy()}
-                >
-                  {t("Attach")}
-                </Button>
-              </li>
-            )}
-          </For>
-        </ul>
-      </Show>
 
       <form
         class="flex flex-wrap items-center gap-2"

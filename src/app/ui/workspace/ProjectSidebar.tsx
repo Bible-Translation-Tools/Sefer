@@ -21,6 +21,7 @@ import BookIcon from "lucide-solid/icons/book";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import Library from "lucide-solid/icons/library";
+import Plus from "lucide-solid/icons/plus";
 import SearchIcon from "lucide-solid/icons/search";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
@@ -29,7 +30,7 @@ import { chaptersAddress, introAddress } from "#core/location/address";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { Badge, IconButton, Input, SegmentedControl } from "../primitives";
+import { Badge, Button, IconButton, Input, SegmentedControl } from "../primitives";
 import { bookName, testamentOf, type Testament } from "./books";
 import { metadataOf, projectLanguage, projectName } from "./project";
 import { chapterOf, typedChapter } from "./typedPlace";
@@ -351,6 +352,21 @@ export function ProjectSidebar() {
               <For each={shown()}>{(row) => <BookRow row={row} />}</For>
             </ul>
           </Show>
+          {/* Writer books this project does not have yet: the migration's
+              own screen, filtered to this project (`/migrate?into=`). */}
+          <Button
+            variant="tertiary"
+            size="sm"
+            class="mt-2 w-full"
+            data-testid="add-book"
+            icon={<Plus aria-hidden="true" />}
+            onClick={() => {
+              const root = shell.project()?.root;
+              if (root !== undefined) void navigate({ to: "/migrate", search: { into: root } });
+            }}
+          >
+            {t("Add a book…")}
+          </Button>
         </nav>
       </Show>
 

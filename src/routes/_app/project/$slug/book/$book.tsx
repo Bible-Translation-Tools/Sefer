@@ -56,6 +56,8 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
    */
   const [references, setReferences] = createSignal(0, { name: "boundReferences" });
   const collapsed = (): boolean => references() === 0;
+  /** Shut from the crumb strip's toggle: the column is gone and the editor has the row. */
+  const shut = (): boolean => !shell.referenceOpen();
 
   // Open the project and seat the book the URL names, and do it again whenever
   // the URL names a different one. Idempotent: `focus` runs
@@ -110,14 +112,18 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                   initialSize={referenceInitial}
                   minSize={referenceMin}
                   maxSize={referenceMax}
-                  class={collapsed() ? "[flex-basis:13rem]!" : undefined}
+                  class={shut() ? "hidden" : collapsed() ? "[flex-basis:13rem]!" : undefined}
                 >
-                  <ReferenceColumn onBound={setReferences} />
+                  {/* Unmounted while shut, the panel kept: its panes are
+                      editors, and nothing reads them while they are hidden. */}
+                  <Show when={!shut()}>
+                    <ReferenceColumn onBound={setReferences} />
+                  </Show>
                 </Resizable.Panel>
                 {/* Hidden rather than unmounted, same reason as the panel. */}
                 <Resizable.Handle
                   label={t("Resize the reference pane")}
-                  class={collapsed() ? "hidden" : undefined}
+                  class={collapsed() || shut() ? "hidden" : undefined}
                 />
                 {/* No `<Card>` around the editor: `.editor-host` (app.css) IS
                   the card — white, bordered, 12px radius — and the scripture's
@@ -130,7 +136,7 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                     // With the pane collapsed the editor takes the row back; the
                     // `!` is load-bearing because `Resizable.Panel` writes its
                     // share as an inline `flex-basis`.
-                    collapsed() ? "grow! [flex-basis:auto]!" : undefined,
+                    collapsed() || shut() ? "grow! [flex-basis:auto]!" : undefined,
                   )}
                 >
                   {/* Keyed on the book id: a different book is a different

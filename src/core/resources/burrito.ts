@@ -73,6 +73,18 @@ const LocalizedName = Schema.Struct({
   abbr: Schema.optionalKey(LocalizedText),
 });
 
+/**
+ * A related burrito (Burrito 1.0.0 `Relationship`). `flavor` and the rest are
+ * carried by the file and not read here; `relationships.ts` reads `id` and
+ * `revision`.
+ */
+const Relationship = Schema.Struct({
+  relationType: Schema.String,
+  flavor: Schema.optionalKey(Schema.String),
+  id: Schema.String,
+  revision: Schema.optionalKey(Schema.String),
+});
+
 const BurritoMetadata = Schema.Struct({
   format: Schema.Literal("scripture burrito"),
   meta: Meta,
@@ -82,6 +94,7 @@ const BurritoMetadata = Schema.Struct({
   languages: Schema.Array(Language),
   ingredients: Schema.Record(Schema.String, Ingredient),
   localizedNames: Schema.optionalKey(Schema.Record(Schema.String, LocalizedName)),
+  relationships: Schema.optionalKey(Schema.Array(Relationship)),
 });
 
 export type BurritoMetadata = typeof BurritoMetadata.Type;

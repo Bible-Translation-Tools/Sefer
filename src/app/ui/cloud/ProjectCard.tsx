@@ -23,7 +23,7 @@ import type { Clock, IncomingPlan, Sync } from "#core/sync";
 
 import { t } from "../../i18n";
 import { ago, exact } from "../panels/format";
-import { cx, type BadgeTone } from "../primitives";
+import { cx } from "../primitives";
 import { incomingWords, outgoingWords } from "./copy";
 
 function ClockLine(props: {
@@ -34,14 +34,15 @@ function ClockLine(props: {
 }) {
   return (
     <div class="flex-1 space-y-0.5" data-clock={props.test}>
-      <p class="text-smallest tracking-wide text-on-surface-tertiary uppercase">{props.label}</p>
+      <p class="text-smallest font-medium text-on-surface-tertiary">{props.label}</p>
       <p
         class="text-small"
         title={props.clock.at === undefined ? undefined : exact(props.clock.at)}
       >
         <Show when={props.clock.at !== undefined} fallback={<span>{t("no versions yet")}</span>}>
-          {/* The time is the answer to "when", so it is the coloured word. */}
-          <span class="font-medium text-brand">{ago(props.clock.at ?? 0)}</span>
+          {/* The time is the answer to "when", so it is the strong word —
+              in ink, not brand: colour is kept for what asks something. */}
+          <span class="font-medium text-on-surface-primary">{ago(props.clock.at ?? 0)}</span>
           <Show when={props.clock.by !== undefined}>
             <span class="text-on-surface-tertiary">
               {" "}
@@ -63,23 +64,6 @@ function ClockLine(props: {
     </div>
   );
 }
-
-/**
- * A state's tone as the colour of its headline. No chip: the sentence itself
- * says the state, and colours it only when it wants something from you.
- */
-export const toneText = (tone: BadgeTone): string => {
-  switch (tone) {
-    case "success":
-      return "text-on-surface-success";
-    case "warning":
-      return "text-on-surface-warning";
-    case "error":
-      return "text-on-surface-error";
-    default:
-      return "text-on-surface-primary";
-  }
-};
 
 /** The two clocks, side by side: this device's and the shared project's. */
 export function SyncClocks(props: {

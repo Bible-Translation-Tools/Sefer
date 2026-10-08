@@ -48,10 +48,7 @@ import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import CircleCheck from "lucide-solid/icons/circle-check";
 import CircleX from "lucide-solid/icons/circle-x";
-import Eraser from "lucide-solid/icons/eraser";
-import History from "lucide-solid/icons/history";
 import Info from "lucide-solid/icons/info";
-import MoreVertical from "lucide-solid/icons/more-vertical";
 import Save from "lucide-solid/icons/save";
 import Scale from "lucide-solid/icons/scale";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
@@ -66,7 +63,7 @@ import {
   type CompareSource,
 } from "#core/compare";
 import { diffSkeleton, type SkeletonResult } from "#core/diff/skeleton";
-import type { DecisionUnit, DiffSkeleton, MergeSide } from "#core/galley";
+import type { DecisionUnit, MergeSide } from "#core/galley";
 import type { Author } from "#core/git/git";
 import { Observability } from "#core/observability";
 import type { Restorable } from "#core/recovery/recovery";
@@ -89,21 +86,18 @@ import {
 import { sendAfterSave, sendNow, settleWithShared, type SendOutcome } from "../../syncActions";
 import { setAuthorName, syncPreferences } from "../../syncSettings";
 import { syncWatch } from "../../syncWatch";
+import { forgetWriterWork, takeWriterWork, writerWatch } from "../../writerWatch";
 import { combineRefusal, combineTrouble, receiveRefusal, sendOutcomeCopy } from "../cloud/copy";
 import { SyncLine } from "../cloud/SyncLine";
 import { unsavedChanges } from "../panels/changes";
-import { ago, exact } from "../panels/format";
+import { ago } from "../panels/format";
 import { createRecordedVersion } from "../panels/recorded";
 import {
   Badge,
   Button,
   Dialog,
   EmptyState,
-  IconButton,
   Input,
-  Menu,
-  MenuItem,
-  MenuSeparator,
   Popover,
   Select,
   Switch,
@@ -183,9 +177,15 @@ export function ReviewPanel() {
 
   const [leftId, setLeftId] = createSignal("project", { name: "reviewLeftKind" });
   const [rightId, setRightId] = createSignal(
-    untrack(() => search().against) === "shared" ? "shared" : "disk",
+    untrack(() => search().against) === "shared"
+      ? "shared"
+      : untrack(() => search().against) === "writer"
+        ? "writer"
+        : "disk",
     { name: "reviewRightKind" },
   );
+  /** Is one side new work from Writer? Then recording also marks it taken. */
+  const againstWriter = (): boolean => rightId() === "writer" || leftId() === "writer";
   const [leftPicked, setLeftPicked] = createSignal<CompareSource | undefined>(undefined, {
     name: "reviewLeftPicked",
   });
@@ -256,6 +256,31 @@ export function ReviewPanel() {
     name: "reviewJournals",
   });
 
+  /** New Writer work as the Writer side's texts: the project's books with their changes in. */
+  // Every book is on this side: the project's own text where Writer has
+  // nothing new, so only the books with work differ and no book reads as
+  // missing from one side.
+  const writerSide = () => {
+    const project = shell.project();
+    const work = writerWatch.facts(project?.root).work;
+    if (project === undefined || work.length === 0) return undefined;
+    const owners = [...new Set(work.map((each) => each.owner))];
+    const texts = new Map<BookId, { text: string; stamp: { revision: number; length: number } }>();
+    for (const book of project.books) {
+      const text = book.source().text;
+      texts.set(book.id, { text, stamp: { revision: 0, length: text.length } });
+    }
+    for (const each of work)
+      texts.set(each.book, {
+        text: each.proposal,
+        stamp: { revision: 0, length: each.proposal.length },
+      });
+    return {
+      label: t("From Writer ({owners})", { owners: owners.join(", ") }),
+      texts: { head: `writer:${work.map((each) => each.head.slice(0, 7)).join("+")}`, texts },
+    };
+  };
+
   const choices = (): readonly SourceChoice[] =>
     sourceChoices({
       services,
@@ -265,6 +290,13 @@ export function ReviewPanel() {
       shared: shared.recorded(),
       sharedLabel:
         pull() !== undefined ? t("The suggested changes") : fromCopy() ? t("Your copy") : undefined,
+      sharedExplainer:
+        pull() !== undefined
+          ? t("What the suggestion offers: its author's copy, as they last sent it.")
+          : fromCopy()
+            ? t("Your copy, as another of your devices last sent it.")
+            : undefined,
+      writer: writerSide(),
     });
 
   const choiceOf = (id: string): SourceChoice | undefined =>
@@ -642,12 +674,6 @@ export function ReviewPanel() {
     { name: "reviewSkeleton" },
   );
 
-  /** The selected book's decision units. */
-  const skeleton = (): DiffSkeleton | undefined => {
-    const found = selectedSkeleton();
-    return found !== undefined && Result.isSuccess(found) ? found.success : undefined;
-  };
-
   /**
    * The engine has no diff door — which means the artifact in this build is
    * not the pinned build. Said in as many words, because the
@@ -760,6 +786,55 @@ export function ReviewPanel() {
         if (sides.there.has(sid)) there = true;
       }
     return here && there ? "both" : here ? "here" : there ? "there" : undefined;
+  };
+
+  /**
+   * Reviewing a suggestion: per book, the changed passages only the editor
+   * changed since the two last agreed. They are not what the suggestion
+   * offers — they are this device's own work, and the preset keeps them — so
+   * the reader leaves them out and one line counts them, with a way to look.
+   * Anywhere else (the shared project, your copy) both sides' work is the
+   * review, and nothing is left out.
+   */
+  const mineOnly = createMemo(
+    (): ReadonlyMap<BookId, ReadonlySet<string>> => {
+      const out = new Map<BookId, ReadonlySet<string>>();
+      if (pull() === undefined) return out;
+      for (const book of reviewBooks()) {
+        const ids = new Set<string>();
+        for (const unit of book.skeleton.units)
+          if (unit.status !== "unchanged" && originOf(book.bookId, [unit]) === "here")
+            ids.add(unit.id);
+        if (ids.size > 0) out.set(book.bookId, ids);
+      }
+      return out;
+    },
+    { name: "reviewMineOnly" },
+  );
+  const mineOnlyCount = (): number =>
+    [...mineOnly().values()].reduce((sum, ids) => sum + ids.size, 0);
+  const [showMine, setShowMine] = createSignal(false, { name: "reviewShowMine" });
+
+  /** The books as the reader draws them: `reviewBooks`, less what `mineOnly` leaves out. */
+  const readerBooks = createMemo(
+    (): readonly ReviewBook[] => {
+      const books = reviewBooks();
+      const hide = mineOnly();
+      if (showMine() || hide.size === 0) return books;
+      return books.map((book) => {
+        const hidden = hide.get(book.bookId);
+        return hidden === undefined ? book : { ...book, hidden };
+      });
+    },
+    { name: "reviewReaderBooks" },
+  );
+
+  /** What a suggestion offers that the editor does not already read: its changed passages, less yours. */
+  const offeredCount = (): number => {
+    let count = 0;
+    for (const book of reviewBooks())
+      for (const unit of book.skeleton.units) if (unit.status !== "unchanged") count += 1;
+    return count - mineOnlyCount();
   };
 
   /**
@@ -979,25 +1054,6 @@ export function ReviewPanel() {
     writeNow(bookId, staticUnits, putBackPreset ? "current" : side);
   };
 
-  /**
-   * "Clear every decision": in an editable review that means taking the takes
-   * back, as each book's own Clear does — through `writeNow`, one Undo step
-   * per book. Resetting the map alone left the takes written, their cards
-   * gone, and only Undo to reach them.
-   */
-  const clearEverything = (): void => {
-    if (!editable()) {
-      setDecisions(new Map());
-      return;
-    }
-    for (const book of reviewBooks()) {
-      const decided = book.skeleton.units.filter(
-        (unit) => decisionFor(book.bookId, unit.id) !== undefined,
-      );
-      if (decided.length > 0) writeNow(book.bookId, decided, undefined);
-    }
-  };
-
   const seatBook = async (bookId: BookId): Promise<EditorBook | undefined> => {
     const project = shell.project();
     if (project === undefined) return undefined;
@@ -1034,7 +1090,7 @@ export function ReviewPanel() {
     const project = shell.project();
     const review = unsaved();
     if (project === undefined || recording()) return;
-    if (review.length === 0 && !againstShared()) return;
+    if (review.length === 0 && !againstShared() && !againstWriter()) return;
     // Taken before the save: afterwards no book is unsaved, and the default
     // would name none of them.
     const typedMessage = message().trim();
@@ -1215,7 +1271,41 @@ export function ReviewPanel() {
       return;
     }
     const books = review.map((entry) => entry.book);
-    const outcome = await recordVersion(services, project, books, staticMessage, by);
+    // Against Writer, what was looked at is marked taken in the same version,
+    // whether its saves were taken or every passage kept as it was.
+    // Every book the Writer side holds, not only those still differing: a
+    // book whose every change was taken differs no longer, and is taken too.
+    const writerBooks = againstWriter()
+      ? writerWatch.facts(project.root).work.map((each) => each.book)
+      : [];
+    const writerFile =
+      writerBooks.length === 0
+        ? undefined
+        : await services
+            .run(takeWriterWork(services, project, writerBooks))
+            .catch((cause: unknown) => {
+              toasts.error({
+                title: t("Could not mark the Writer work taken"),
+                message: describe(cause),
+              });
+              return undefined;
+            });
+    const writerMessage =
+      writerBooks.length === 0 || typedMessage !== ""
+        ? staticMessage
+        : t("Reviewed Writer work: {books}", {
+            books: writerBooks.map((id) => bookName(id, metadataOf(project))).join(", "),
+          });
+    const outcome = await recordVersion(
+      services,
+      project,
+      books,
+      writerMessage,
+      by,
+      writerFile === undefined ? [] : [writerFile],
+    );
+    if (outcome.kind === "recorded" && writerBooks.length > 0)
+      forgetWriterWork(project.root, writerBooks);
     switch (outcome.kind) {
       case "nothing":
         setRecordedLine({ tone: "muted", title: t("Nothing to record") });
@@ -1333,7 +1423,7 @@ export function ReviewPanel() {
         return;
       case "open":
         setRecordOpen(false);
-        void navigate({ to: "/settings" });
+        void navigate({ to: "/project/$slug/settings", params: { slug: shell.slug() } });
         return;
       case "retry":
       case "send":
@@ -1376,10 +1466,13 @@ export function ReviewPanel() {
 
   // The cloud popover's "See the changes" navigates here with `against=shared`;
   // when Review is already open that is a search change, not a mount.
+  // "Review their changes" does the same with `against=writer`.
   createEffect(
     () => search().against,
     (against) => {
       if (against === "shared") untrack(seeShared);
+      if (against === "writer" && untrack(rightId) !== "writer" && untrack(leftId) !== "writer")
+        untrack(() => pick("right", "writer"));
     },
   );
 
@@ -1483,13 +1576,13 @@ export function ReviewPanel() {
         when={shell.project()}
         fallback={<EmptyState icon={<Scale size={22} />} title={t("Open a project first.")} />}
       >
-        {/* ONE row of chrome. What is compared is a chip that opens the two
-            pickers; how far along the review is, is a count; the one write is
-            the primary button. Everything else is in the menu — the reading
-            below is what this screen is for. */}
-        <header class="flex min-w-0 flex-wrap items-center gap-2" data-review-header>
+        {/* ONE row of chrome, in the order a reader asks: WHAT is compared —
+            the page's title, as Spiritual terms' title is the term, and
+            pressing it changes the two sides — then the one write, then the
+            way back. How many lives on the status line under it; deciding in
+            bulk lives with the cards it decides. */}
+        <header class="flex min-h-12 min-w-0 flex-wrap items-center gap-2" data-review-header>
           {pageLeading()}
-          <h1 class="text-h3 font-semibold text-on-surface-primary">{t("Review")}</h1>
           <Popover
             label={t("What is compared")}
             align="start"
@@ -1497,10 +1590,21 @@ export function ReviewPanel() {
             open={sourcesOpen()}
             onOpenChange={setSourcesOpen}
             trigger={
-              <Button size="sm" variant="secondary" data-review-sources title={sourcesLabel()}>
-                <span class="max-w-[40ch] truncate">{sourcesLabel()}</span>
-                <ChevronDown aria-hidden="true" />
-              </Button>
+              <button
+                type="button"
+                data-review-sources
+                title={t("Change what is compared")}
+                class="-mx-1.5 inline-flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 text-start transition-colors hover:bg-button-tertiary-surface-hover"
+              >
+                <h1 class="min-w-0 truncate text-h3 font-semibold text-on-surface-primary">
+                  {sourcesLabel()}
+                </h1>
+                <ChevronDown
+                  size={18}
+                  aria-hidden="true"
+                  class="shrink-0 text-on-surface-tertiary"
+                />
+              </button>
             }
           >
             <div class="space-y-3">
@@ -1520,22 +1624,6 @@ export function ReviewPanel() {
               </p>
             </div>
           </Popover>
-          <Show when={result()}>
-            {(found) => (
-              <span class="text-small text-on-surface-secondary tabular-nums" data-review-decided>
-                <span data-review-changed={found().changedBooks}>
-                  {t("{count} book(s) differ", { count: found().changedBooks })}
-                </span>
-                <Show when={totals().total > 0}>
-                  {" · "}
-                  {t("{decided} of {total} decided", {
-                    decided: totals().decided,
-                    total: totals().total,
-                  })}
-                </Show>
-              </span>
-            )}
-          </Show>
           <Show when={target() === undefined && result() !== undefined}>
             <Badge tone="muted" data-review-readonly>
               {t("Reading only")}
@@ -1574,70 +1662,58 @@ export function ReviewPanel() {
                 icon={<Save />}
                 data-review-record
                 disabled={unsaved().length === 0 && !againstShared()}
-                title={t("{count} book(s) with changes", {
-                  count: unsaved().length,
-                })}
+                title={
+                  lastBackup() === undefined
+                    ? t("Write and keep a version")
+                    : t("Write and keep a version. Your work was last backed up {when}.", {
+                        when: ago(lastBackup() ?? 0),
+                      })
+                }
                 onClick={openRecord}
               >
                 {t("Save")}
               </Button>
             </Show>
-            <Menu
-              label={t("Review actions")}
-              side="bottom"
-              align="end"
-              class="w-60"
-              trigger={
-                <IconButton size="sm" label={t("More review actions")} icon={<MoreVertical />} />
-              }
-            >
-              <MenuItem
-                icon={<Eraser aria-hidden="true" />}
-                disabled={decisions().size === 0}
-                onSelect={clearEverything}
-              >
-                {t("Clear every decision")}
-              </MenuItem>
-              <MenuItem
-                icon={<History aria-hidden="true" />}
-                onSelect={() =>
-                  void navigate({
-                    to: "/project/$slug/history",
-                    params: { slug: shell.slug() },
-                    search: {},
-                  })
-                }
-              >
-                {t("History")}
-              </MenuItem>
-              <Show when={skeleton()}>
-                <MenuSeparator />
-                <p
-                  class="px-3 pb-2 text-smallest text-on-surface-tertiary"
-                  data-review-engine="engine"
-                >
-                  {t("Differences are the engine's: by verse, then by word.")}
-                  <Show when={lastBackup()}>
-                    {(at) => (
-                      <span title={exact(at())} data-backup="last">
-                        {" "}
-                        {t("Working-state backup: {when}", { when: ago(at()) })}
-                      </span>
-                    )}
-                  </Show>
-                </p>
-              </Show>
-            </Menu>
             <BackToEditor quiet />
           </div>
         </header>
 
-        {/* Where the project stands with the shared project, and the one
-            move: what `git status` says, in words. */}
-        <SyncLine onSee={seeShared} seeing={againstShared()} />
+        {/* How many and where, each in its own place: this comparison's
+            counts, the shared project as the last check left it, and Writer
+            work — one quiet line instead of a count in the header and a
+            banner under it that read as the same number. */}
+        <SyncLine
+          comparison={
+            result() === undefined
+              ? undefined
+              : {
+                  changes: totals().total,
+                  books: result()?.changedBooks ?? 0,
+                  decided: totals().decided,
+                }
+          }
+          onSee={seeShared}
+          seeing={againstShared()}
+          onSeeWriter={() => pick("right", "writer")}
+          seeingWriter={againstWriter()}
+        />
 
         {/* Against a suggestion: whose it is, and what its author said. */}
         <Show when={pull()}>{(number) => <SuggestionLine number={number()} />}</Show>
+        <Show when={pull() !== undefined && mineOnlyCount() > 0}>
+          <p
+            class="flex flex-wrap items-center gap-2 text-smallest text-on-surface-secondary"
+            data-review-mine-only={mineOnlyCount()}
+          >
+            {t(
+              "Your editor also has {count} change(s) that are not in this suggestion. They stay as they are.",
+              { count: mineOnlyCount() },
+            )}
+            <Button size="sm" variant="tertiary" onClick={() => setShowMine((on) => !on)}>
+              {showMine() ? t("Hide them") : t("Show them")}
+            </Button>
+          </p>
+        </Show>
 
         {/* An earlier session's unsaved work: the one prompt every project
             screen shows, answered once. Review keeps no list of its own. */}
@@ -1669,13 +1745,25 @@ export function ReviewPanel() {
           <Show
             when={changed().length > 0 || cardEditing()}
             fallback={
-              <EmptyState
-                icon={<Check size={20} />}
-                title={t("No differences.")}
-                description={t("Both sides hold exactly the same books and text.")}
-              />
+              <Show
+                when={pull() !== undefined}
+                fallback={
+                  <EmptyState
+                    icon={<Check size={20} />}
+                    title={t("No differences.")}
+                    description={t("Both sides hold exactly the same books and text.")}
+                  />
+                }
+              >
+                <SuggestionHere />
+              </Show>
             }
           >
+            <Show
+              when={pull() !== undefined && !showMine() && offeredCount() === 0 && !cardEditing()}
+            >
+              <SuggestionHere />
+            </Show>
             <Show when={oneSided().length > 0}>
               <p class="text-smallest text-on-surface-secondary" data-review-one-sided>
                 <Show
@@ -1741,7 +1829,7 @@ export function ReviewPanel() {
               data-review-units={totals().total}
             >
               <ReviewReader
-                books={reviewBooks()}
+                books={readerBooks()}
                 originOf={originOf}
                 decision={effectiveFor}
                 decide={decideAny}
@@ -2015,5 +2103,23 @@ function Receipt(props: {
         </Show>
       </div>
     </div>
+  );
+}
+
+/**
+ * A suggestion with nothing to show: everything it offers already reads that
+ * way in the editor — its author reviewing their own, or a reviewer who took
+ * it already. Not "no differences": the shared project does not have it yet,
+ * and Save is what brings it in.
+ */
+function SuggestionHere() {
+  return (
+    <EmptyState
+      icon={<Check size={20} />}
+      title={t("Everything this suggestion offers is already in your editor.")}
+      description={t(
+        "You may have written it here, or taken it already. Save brings it into the shared project and closes the suggestion.",
+      )}
+    />
   );
 }

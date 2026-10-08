@@ -26,7 +26,8 @@ flowchart TB
   end
   book[book] --> source
   project[project] --> book & source & fileSystem & resources
-  resources[resources] --> book & source & fileSystem
+  resources[resources] --> book & source & fileSystem & project
+  migrate[migrate] --> analysis & fileSystem & git & remote & resources
   findings[findings] --> book & galley & source
   analysis[analysis] --> book & findings & galley & project & source
   fixes[fixes] --> book & findings & galley & source
@@ -47,7 +48,7 @@ flowchart TB
 
 Above core: `src/editor` (CodeMirror; Book → EditorBook, the funnel, recipes) and `src/platform/{web,tauri,node}` (one Layer per host capability). Above those sits `src/app` (composition, commands, ProjectContext, stores, workflows, UI) with `src/routes`. `src/dev` is the design surface and never ships. [Boundaries](architecture/boundaries.md) is the enforced version of this.
 
-Save ↔ Recovery is the one two-way pair: recovery reads the Baseline type, and save optionally asks for Recovery to clear a journal.
+Save ↔ Recovery is one two-way pair: recovery reads the Baseline type, and save optionally asks for Recovery to clear a journal. Resources ↔ Project is the other: the Library describes a folder through `discovery.ts`'s `readProjectMetadata` (so a Resource Container's `manifest.yaml` names it), and discovery decodes through the resources schemas. No file imports back into itself; `pnpm deadcode` checks the cycles.
 
 ---
 
@@ -71,7 +72,7 @@ Tells the app which host it is on (Web or Tauri), the build identity, the locale
 
 ### Overview
 
-The port is `effect/FileSystem` used as-is. Implementations: memory (tests, fixture), Node (tooling), OPFS (Web), Tauri fs plugin (desktop, the only one with a real `watch`). `writeFileAtomic`, `scopedTo` and a 17-law contract suite live in `src/core/fileSystem`. `nodeView` is the Node-shaped `fs` that isomorphic-git reads through. → [storage](architecture/storage.md)
+The port is `effect/FileSystem` used as-is. Implementations: memory (tests, fixture), Node (tooling), OPFS (Web), Tauri fs plugin (desktop, the only one with a real `watch`). `writeFileAtomic`, `scopedTo` and a 17-law contract suite live in `src/core/fileSystem`. `nodeView` is the Node-shaped `fs` that isomorphic-git reads through. On the Web OPFS pays per file (about 1 ms on a clean machine, 6–9 ms under an on-access scanner like the one on WA's Macs), so many-file work is staged in memory and written once, as few files as possible ("The OPFS tax"). → [storage](architecture/storage.md)
 
 ### Constraints and known bugs
 
@@ -87,7 +88,7 @@ The port is `effect/FileSystem` used as-is. Implementations: memory (tests, fixt
 
 ### Overview
 
-Schema-validated preferences persisted as JSON through `writeFileAtomic`. Each module registers its own keys and gets a token back; a bad value falls back to its default. Writes go one at a time (a one-permit `Semaphore` across snapshot, save and publish): overlapping `set`s used to each save a file missing the other's key, and opening a project — three keys at once — lost its slug, so a reload found no project. `src/core/host/settings.ts`, `src/app/settings.ts`, the `/settings` route. → [host](architecture/host.md), [shell](architecture/shell.md)
+Schema-validated preferences persisted as JSON through `writeFileAtomic`. Each module registers its own keys and gets a token back; a bad value falls back to its default. Writes go one at a time (a one-permit `Semaphore` across snapshot, save and publish): overlapping `set`s used to each save a file missing the other's key, and opening a project — three keys at once — lost its slug, so a reload found no project. `src/core/host/settings.ts`, `src/app/settings.ts`, the `/project/$slug/settings` route (`/settings` redirects to `/projects`). → [host](architecture/host.md), [shell](architecture/shell.md)
 
 ### Constraints and known bugs
 
@@ -423,8 +424,9 @@ The one compare screen, `/review`. Both sides are pickers over a `CompareSource`
 
 ### Constraints and known bugs
 
-- The flow itself needs design work.
-- The copy says "Save & Review" and stays that way until the product-copy pass.
+- The flow itself needs design work. For a suggestion: sides named by who wrote them, the unchosen side dimmed and a one-sentence header are on the playground's "Suggestion review" (2026-10-07), awaiting a ruling.
+- Reviewing a suggestion leaves out passages only the editor changed (counted in one line). A reviewer who is behind the shared project still sees, as the suggestion's, shared-project changes the suggestion carries and the editor lacks: the common version is merge-base(HEAD, suggestion), not (shared tip, suggestion) as WACS's "Files changed" uses.
+- The copy says "Save & Review" and stays that way until the product-copy pass. "Not in {caption}." puts a side's full caption mid-sentence ("Not in The suggested changes.").
 
 ### Ideas / future
 
@@ -446,6 +448,7 @@ The one compare screen, `/review`. Both sides are pickers over a `CompareSource`
 - `externalChanges`/`resolve` exist but nothing calls them, and Web has no `watch`. Something changing a file under OPFS or the sandbox mid-session is unlikely, but not impossible.
 - There is no disk-identity check at save time.
 - Partial `saveAll` failures have no user-facing report.
+- Baselines are keyed by book, not project: `forget()` on close (2026-10-07) is what keeps one project's text from judging the next. The seats in `services.ts` are keyed the same way and not cleared — harmless while callers only ask for the open project's books. A hot reload under an open project rebuilds the coordinator empty, and Review against the file then says "No differences" until the project is reopened.
 
 ### Ideas / future
 
@@ -503,7 +506,8 @@ Clone (the newest version only unless the caller asks for all; desktop backfills
 - Desktop transfer progress is a `TODO(seam)` (`platform/tauri/remote.ts:141`).
 - Desktop `git_clone` (git2 `RepoBuilder`) compiles but has not been run against a server; the web clone was checked on `main` and `master` repositories through the prod proxy, and (2026-09-25) stores the content host as `origin`.
 - Suggested changes (forks and pull requests, `core/remote/suggestions.ts`) were exercised on the Web with a second, non-writer account on 2026-10-06 — copy, offer, partial accept, decline — and not yet on desktop. On the Web each call depends on the WACS proxy's API allowlist; [git](architecture/git.md#suggested-changes).
-- A plain Decline only closes the pull request: its versions stay out of the shared project's history and come back in the person's next offer. Recording a decline as a decision commit is deferred; [git](architecture/git.md#suggested-changes).
+- A plain Decline only closes the pull request: its versions stay out of the shared project's history and come back in the person's next offer. Recording a decline as a decision commit was ruled out on 2026-10-07 (it resets the author's copy); remembering declines by content is proposed; [git](architecture/git.md#suggested-changes).
+- Finding a person's copy reads the shared project's forks (`listForks`, 2026-10-07); the WACS proxy allows that GET in a commit not yet deployed, and until it is the Web falls back to looking up each name a copy may have. A clash with a repository of the same name forks as `<name>-<owner>`. Not yet walked against WACS.
 
 ### Ideas / future
 
@@ -513,7 +517,7 @@ Clone (the newest version only unless the caller asks for all; desktop backfills
 
 ### Overview
 
-The app bar's cloud popover (state, clocks, the one right move, sign in and out, publish, how your suggestion stands), Settings' Cloud section (account, shared project, how you work — together in the shared project or in your own copy — and the per-project switches), and the Suggestions tab for editors. `/cloud` was deleted on 2026-10-06. It reads the two clocks and sorts the project into one of ten states, plans what a Receive would change from change facts and one overlap policy, receives by fast-forward, and Combines as one decision commit; a contested book is settled in Review against the shared project. The check on open and send on save run per project, on by default. Scripture text is never merged automatically. One reading for the whole application (`syncWatch`) feeds the app bar's cloud and its popover, `/cloud`, Review's sync line and Save's receipt; counts are verses and books, never versions. `src/core/sync`, `app/ui/cloud`. → [sync](architecture/sync.md)
+The app bar's cloud popover (state, clocks, the one right move, sign in and out, publish, how your suggestion stands), Settings' Cloud section (account, shared project, how you work — together in the shared project or in your own copy — and the per-project switches), and the Suggestions tab for editors. `/cloud` was deleted on 2026-10-06. It reads the two clocks and sorts the project into one of ten states, plans what a Receive would change from change facts and one overlap policy, receives by fast-forward, and Combines as one decision commit; a contested book is settled in Review against the shared project. The check on open and send on save run per project, on by default. Scripture text is never merged automatically. A project from Writer also checks the Writer projects its books follow, after the shared project, and offers their work in the popover and Review. One reading for the whole application (`syncWatch`) feeds the app bar's cloud and its popover, `/cloud`, Review's sync line and Save's receipt; counts are verses and books, never versions. `src/core/sync`, `app/ui/cloud`. → [sync](architecture/sync.md)
 
 ### Constraints and known bugs
 
@@ -529,7 +533,7 @@ The app bar's cloud popover (state, clocks, the one right move, sign in and out,
 
 ### Overview
 
-Browsing the online catalogue on the projects page: the Language API's GraphQL endpoint, prod and dev, listing each repository with its git URL on its own server. One `catalogue.browse` operation per load of the table: a Language API that is down or answers non-2xx ends `unavailable`, a payload the decoder cannot read `failed`, and a failed second query (regions, alternates, dates) is `catalogue.enriched: false` on a passed browse. `src/app/catalogue.ts`. → [landing](architecture/landing.md)
+Browsing the online catalogue on the projects page: the Language API's GraphQL endpoint, prod and dev, listing each repository with its git URL on its own server. `writerBooks(language)` lists a language's single-book Writer repositories as book candidates for the Writer migration, one query. One `catalogue.browse` operation per load of the table: a Language API that is down or answers non-2xx ends `unavailable`, a payload the decoder cannot read `failed`, and a failed second query (regions, alternates, dates) is `catalogue.enriched: false` on a passed browse. `src/app/catalogue.ts`. → [landing](architecture/landing.md)
 
 ### Constraints and known bugs
 
@@ -564,17 +568,39 @@ Staged, validated import with provenance (`stage` → `classify` → `commit`, `
 
 ### Overview
 
-Stable resource identities bound to project roles (`source`, `reference`, `tn`, `tw`, `tq`). The read-only reference pane with caret-driven block pairing. `src/core/resources/library.ts`, `app/workflows/references.ts`, `ReferencePane.tsx`. → [resources](architecture/resources.md)
+Every text this device can read beside a project, and which one a project reads. A copy cloned for the Library (a WACS gateway row, or a source text a project declares) lives in `<appData>/library/<owner>/<repo>`, outside the projects folder, so "Your projects" never lists it; its row records the URL it came from and the commit it holds. A project's declared source texts (Burrito `relationships`, RC `source`, Writer `source_translations`, read by `relationships.ts`) are what `resolve(projectRoot, "source")` answers with when nobody picked one. A pick is this device's memory of one project, kept with the project as `referencePicks` in its `.sefer/project.json` (one merging writer, `core/project/projectState.ts`); picks an older build kept in `library.json` move there when the project is next read. The reference column lists the copies as "Source texts" and "Reference material" before other projects, offers a declared text that is missing for download, shows one text at a time (a select in the pane's title when there are more), and the crumb strip's split toggle shuts the column. "Edit as your own project" moves a copy into the projects folder, from Settings' "Source texts on this device". `src/core/resources/library.ts`, `relationships.ts`, `src/app/arrival.ts`, `ReferenceColumn.tsx`, `ReferencePane.tsx`. → [resources](architecture/resources.md)
 
 ### Constraints and known bugs
 
 - Scripture only: a `tn`/`tw` binding can be made, but nothing reads it.
-- No UI for recovering a missing binding.
+- A copy is the repository's newest version. A project that lists `24-02` gets `24-07` when that is newest, and the toast says so; checking out an older listed version is not built (Burrito `revision` holds the listed version, not a commit, so nothing records which commit was meant).
+- Source texts are pulled on arrival (download, import, clone, assembly), not on open: a project that arrived before 2026-10-06 shows its declared text as missing until Download is pressed.
+- Gateway texts downloaded before 2026-10-06 stay in the projects folder (ruled: they are not moved).
 
 ### Ideas / future
 
 - A Translation Notes reader and pane.
 - The key-terms guide as a Library resource instead of a fixture.
+- The source-text upstream check: "en_ulb 24-07 is available", over `Remote.probe`.
+
+## Writer migration
+
+### Overview
+
+"Migrate from Writer" (`/migrate`, from Import) assembles one project from BTT Writer's single-book projects: a folder, a zip, or a language found in "Writer projects on WACS" (the WACS table's shape, searched on the server from two letters), combined in one run. Every candidate is opened, rendered through one template (txt2USFM's header, then chapters and chunks in order; the translator's text is never repaired) and measured as a Book census row. A book with rival copies is chosen up front from a table of who, status, updated, health and passages differing from the pick, with "Use the recommended one" for every book and "Compare" in Review's reader. Assemble writes the books, `metadata.json`, `manifest.yaml` and `.upstreams.json` and records them as ONE commit, crediting the Writer authors; Books → "Add a book…" brings more into a project the same way. `src/core/migrate/`, `src/core/resources/writeMetadata.ts`, `src/app/migrate.ts`, `src/app/ui/migrate/`. → [landing](architecture/landing.md), plan in `planning/00-ideas/consolidate-book-repos.md`
+
+### Constraints and known bugs
+
+- Checking the Writer projects a project follows is part of every check for changes, after the shared project's ([sync](architecture/sync.md), "Writer projects a project follows"); "Stop following Writer projects…" in Settings ends it. A Writer project whose history was rewritten past the commit taken is reviewed two-way (all of their text), not in the verses they changed.
+- The Writer facts are in memory: a reload forgets them until the next check, which runs on open.
+- A folder pick on the Web copies the whole folder into staging first, as import does.
+- The health line compares against the source text only when one is on this device; nothing compares against a versification.
+- Opening a language's candidates from the catalogue is a clone each: about 3 minutes for `bwc`'s 84 active ones on 2026-10-06. Staged clones are reused within a session.
+- Commit authors who left no email are named in the commit body, not `Co-authored-by`.
+
+### Ideas / future
+
+- A consolidated repository from the catalogue as one more candidate per book.
 
 ## ProjectAdmin
 

@@ -3,43 +3,51 @@
  * ALONGSIDE, at the passage the editor is showing — and the one place a
  * reader binds one.
  *
- * It is a stack of READ-ONLY EDITORS (`ReferencePane`), one per bound
- * resource, over the same book the reader has open, painted by the same
- * projection as the editor beside them — a read-only editor in the same mode,
- * with a splitter between. Not a card holding a regex-sliced passage: that
- * could not show markup, could not be scrolled, and would disagree with the
- * editor about what a verse looks like. A pane is the same `decoField` over
- * the same `DocStructure`, so the two sides cannot drift.
+ * It shows ONE READ-ONLY EDITOR (`ReferencePane`) at a time over the book
+ * the reader has open, painted by the same projection as the editor beside
+ * it — a read-only editor in the same mode. With more than one text, the
+ * pane's title is a select between them: a split stack of panes was noise in
+ * a workspace meant to stay quiet (Will, 2026-10-08). Not a card holding a
+ * regex-sliced passage: that could not show markup, could not be scrolled,
+ * and would disagree with the editor about what a verse looks like. A pane is
+ * the same `decoField` over the same `DocStructure`, so the two sides cannot
+ * drift. The whole column can be shut from the editor's crumb strip
+ * (`shell.referenceOpen`).
  *
  * What stays from the card round: `source` and `reference` are two SLOTS and
  * not one list, because the distinction is the project's — a source is the
  * text this translation is made from and there is one of it, references are
  * everything else you keep open beside it. The source slot is shown first for
- * the same reason. The picker is unchanged: every project on this device that
- * is not the open one, registered with the Library if it is not already, then
- * bound. A reference Bible on this device IS another project, so there is no
- * second importer here and no second idea of what a resource is.
+ * the same reason. The picker offers the Library's own copies first — source
+ * texts, then reference material, the PO's two words — and then every other
+ * project on this device, registered with the Library if it is not already,
+ * then bound.
  *
- * Why the stack is remounted rather than reconciled: `Resizable` registers its
- * panels DURING render, in document order, and has no unregister — so a panel
- * list that changes length has to be a new split. `<Show keyed>` over the
- * entries array gives exactly that, and the only things that change it are
- * binding, unbinding and opening a different book, each of which is already a
- * reason to rebuild every pane.
+ * With nothing picked, the source slot shows what the project DECLARES
+ * (`Library.resolve` falls back to it; Will, 2026-10-06). Such a pane has no
+ * remove button, because nothing was picked to remove; choosing another text
+ * replaces it. A declared text that is not on this device is offered for
+ * download instead.
+ *
+ * The pane is remounted, not reconciled, for a different text or book: it
+ * is an editor over one book's text, and a new text is a new document.
  */
 
-import { Effect, Result } from "effect";
+import { Effect, Option, Result } from "effect";
 import BookMarked from "lucide-solid/icons/book-marked";
 import Plus from "lucide-solid/icons/plus";
-import { For, Show, createEffect, createSignal } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
-import type { Resource, Role } from "#core/resources/library";
+import { lastSegment } from "#core/fileSystem/path";
+import { answers, type Resource, type Role } from "#core/resources/library";
+import { highestVersions, type RelatedResource } from "#core/resources/relationships";
 
+import { announceSourceTexts, libraryRevision } from "../../arrival";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import { listProjects, type ProjectSummary } from "../landing/summaries";
-import { Button, EmptyState, MultiSelect, Resizable } from "../primitives";
+import { Button, EmptyState, MultiSelect, Select } from "../primitives";
 import { ReferencePane } from "./ReferencePane";
 
 /** The roles the column shows, in the order it shows them. */
@@ -48,7 +56,26 @@ const ROLES: readonly Role[] = ["source", "reference"];
 interface Entry {
   readonly resource: Resource;
   readonly role: Role;
+  /** Shown because the project declares it, not because anyone picked it. */
+  readonly declared: boolean;
 }
+
+/**
+ * One row of the picker: a copy the Library holds, or another project. The
+ * PO's words: a Bible is a source text, helps such as TN are reference
+ * material (2026-10-06).
+ */
+type Choice =
+  | { readonly kind: "library"; readonly resource: Resource }
+  | { readonly kind: "project"; readonly row: ProjectSummary };
+
+/** `textTranslation` (Burrito) and `Bible` (RC) are scripture; anything else is helps. */
+const isBible = (resource: Resource): boolean =>
+  resource.subject === undefined ||
+  /^(bible|textTranslation|aligned bible)$/i.test(resource.subject);
+
+const choiceKey = (choice: Choice): string =>
+  choice.kind === "library" ? choice.resource.root : choice.row.root;
 
 export interface ReferenceColumnProps {
   /**
@@ -65,8 +92,12 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   const { services } = shell;
   const [entries, setEntries] = createSignal<readonly Entry[]>([], { name: "referenceEntries" });
   const [loading, setLoading] = createSignal(true, { name: "referenceLoading" });
-  const [choices, setChoices] = createSignal<readonly ProjectSummary[] | undefined>(undefined, {
+  const [choices, setChoices] = createSignal<readonly Choice[] | undefined>(undefined, {
     name: "referenceChoices",
+  });
+  /** Declared source texts with no copy on this device. */
+  const [missing, setMissing] = createSignal<readonly RelatedResource[]>([], {
+    name: "referenceMissing",
   });
   const [busy, setBusy] = createSignal(false, { name: "referenceBusy" });
   /** Raised by a bind or an unbind, so the bindings re-resolve. */
@@ -87,10 +118,20 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
    * panes rather than to update them.
    */
   createEffect(
-    () => ({ project: shell.project()?.id, book: shell.focused()?.id, tick: bound() }),
-    ({ project }) => {
+    () => ({
+      project: shell.project()?.root,
+      book: shell.focused()?.id,
+      tick: bound(),
+      library: libraryRevision(),
+      declared: Option.match(shell.project()?.metadata() ?? Option.none(), {
+        onNone: (): readonly RelatedResource[] => [],
+        onSome: (metadata) => highestVersions(metadata.related),
+      }),
+    }),
+    ({ project, declared }) => {
       if (project === undefined) {
         setEntries([]);
+        setMissing([]);
         setLoading(false);
         return;
       }
@@ -98,16 +139,24 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       void services
         .run(
           Effect.gen(function* () {
+            const picked = new Set(
+              (yield* services.library.picked(project)).map((each) => each.resource.id),
+            );
             const found: Entry[] = [];
             for (const role of ROLES)
               for (const resource of yield* services.library.resolve(project, role))
-                found.push({ resource, role });
-            return found;
+                found.push({ resource, role, declared: !picked.has(resource.id) });
+            const held = yield* services.library.resources();
+            const absent = declared.filter(
+              (ref) => !held.some((resource) => answers(resource, ref)),
+            );
+            return { found, absent };
           }),
         )
         // oxlint-disable-next-line solid/reactivity -- a promise continuation: runs once, when the bindings resolve
-        .then((found: readonly Entry[]) => {
+        .then(({ found, absent }) => {
           setEntries(found);
+          setMissing(absent);
           setLoading(false);
           report(found.length);
         });
@@ -144,16 +193,47 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     if (choices() !== undefined) return;
     const recent = services.settings.get(shellKeys(services.settings).recentProjects);
     void services
-      .run(listProjects(services.projectsRoot, services.fixtureProject, recent))
+      .run(
+        Effect.gen(function* () {
+          const held = yield* services.library.resources();
+          const copies = held.filter((resource) =>
+            resource.root.startsWith(`${services.libraryRoot}/`),
+          );
+          const projects = yield* listProjects(
+            services.projectsRoot,
+            services.fixtureProject,
+            recent,
+          );
+          return [
+            ...copies.filter(isBible).map((resource): Choice => ({ kind: "library", resource })),
+            ...copies
+              .filter((resource) => !isBible(resource))
+              .map((resource): Choice => ({ kind: "library", resource })),
+            ...projects.map((row): Choice => ({ kind: "project", row })),
+          ];
+        }),
+      )
       .then(setChoices);
   };
 
-  /** A project already bound here is not on offer; nor is the open one. */
-  const candidates = (): readonly ProjectSummary[] => {
+  /** Pulls the declared source texts that are not here, then shows them. */
+  const download = (): void => {
+    const project = shell.project();
+    if (project === undefined) return;
+    setBusy(true);
+    void announceSourceTexts(services, project.root).finally(() => {
+      setBusy(false);
+      setBound((held) => held + 1);
+    });
+  };
+
+  /** A text already shown here is not on offer; nor is the open project. */
+  const candidates = (): readonly Choice[] => {
     const open = shell.project()?.root;
-    return (choices() ?? []).filter(
-      (row) => row.root !== open && !entries().some((entry) => entry.resource.id === row.root),
-    );
+    return (choices() ?? []).filter((choice) => {
+      const root = choiceKey(choice);
+      return root !== open && !entries().some((entry) => entry.resource.root === root);
+    });
   };
 
   /**
@@ -164,16 +244,18 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
    * it is called unconditionally rather than after a lookup, which would be
    * one more question with the same answer.
    */
-  const choose = (role: Role, row: ProjectSummary): void => {
+  const choose = (role: Role, choice: Choice): void => {
     const project = shell.project();
     if (project === undefined) return;
     setBusy(true);
+    const root = choiceKey(choice);
+    const name = choice.kind === "library" ? choice.resource.title : choice.row.name;
     void services
       .run(
         Effect.result(
           Effect.gen(function* () {
-            const resource = yield* services.library.add(row.root);
-            yield* services.library.bind(project.id, role, resource.id);
+            const resource = yield* services.library.add(root);
+            yield* services.library.pick(project.root, role, resource.id);
             return resource;
           }),
         ),
@@ -183,7 +265,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         if (Result.isFailure(outcome)) {
           shell.report(
             t("could not add {name}: {reason}", {
-              name: row.name,
+              name,
               reason: outcome.failure.description,
             }),
           );
@@ -198,7 +280,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     const project = shell.project();
     if (project === undefined) return;
     void services
-      .run(services.library.unbind(project.id, entry.role, entry.resource.id))
+      .run(services.library.unpick(project.root, entry.role, entry.resource.id))
       .then(() => {
         setBound((held) => held + 1);
       });
@@ -208,21 +290,26 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
    * The picker for one slot: the same searchable pick-one combobox Find's
    * source text uses, behind this column's own "Add source…" button.
    */
-  const Picker = (pickerProps: { readonly role: Role }) => (
+  const Picker = (pickerProps: { readonly role: Role; readonly replacing: boolean }) => (
     <MultiSelect
       single
       label={t("Choose a text")}
       summary=""
       narrowed={false}
       items={candidates()}
-      key={(row: ProjectSummary) => row.root}
-      match={(row, query) =>
-        `${row.name} ${row.language}`.toLowerCase().includes(query.toLowerCase())
+      key={choiceKey}
+      match={(choice, query) =>
+        (choice.kind === "library"
+          ? `${choice.resource.title} ${choice.resource.language ?? ""}`
+          : `${choice.row.name} ${choice.row.language}`
+        )
+          .toLowerCase()
+          .includes(query.toLowerCase())
       }
       placeholder={t("Search texts…")}
-      empty={choices() === undefined ? t("Looking…") : t("No other project on this device.")}
+      empty={choices() === undefined ? t("Looking…") : t("No other text on this device.")}
       selected={() => false}
-      onToggle={(row) => choose(pickerProps.role, row)}
+      onToggle={(choice) => choose(pickerProps.role, choice)}
       onOpen={offer}
       trigger={
         <Button
@@ -233,60 +320,86 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           disabled={busy()}
           icon={<Plus aria-hidden="true" />}
         >
-          {pickerProps.role === "source" ? t("Add source…") : t("Add reference…")}
+          {pickerProps.replacing
+            ? t("Choose another text…")
+            : pickerProps.role === "source"
+              ? t("Add source…")
+              : t("Add reference…")}
         </Button>
       }
     >
-      {(row) => (
-        <span data-testid={`pick-${row.folder}`} class="flex min-w-0 flex-1 flex-col">
-          <span class="truncate font-medium">{row.name}</span>
+      {(choice) => (
+        <span
+          data-testid={`pick-${choice.kind === "library" ? lastSegment(choice.resource.root) : choice.row.folder}`}
+          class="flex min-w-0 flex-1 flex-col"
+        >
+          <span class="truncate font-medium">
+            {choice.kind === "library" ? choice.resource.title : choice.row.name}
+          </span>
           <span class="text-smallest text-on-surface-tertiary">
-            {row.language === ""
-              ? t("{count} books", { count: row.books })
-              : t("{language} · {count} books", { language: row.language, count: row.books })}
+            {choice.kind === "library"
+              ? [
+                  isBible(choice.resource) ? t("Source text") : t("Reference material"),
+                  choice.resource.language,
+                  choice.resource.version,
+                ]
+                  .filter((part) => part !== undefined && part !== "")
+                  .join(" · ")
+              : choice.row.language === ""
+                ? t("Your project · {count} books", { count: choice.row.books })
+                : t("Your project · {language} · {count} books", {
+                    language: choice.row.language,
+                    count: choice.row.books,
+                  })}
           </span>
         </span>
       )}
     </MultiSelect>
   );
 
+  /** Which text the column shows, by resource id; the first when none was chosen. */
+  const [chosen, setChosen] = createSignal<string | undefined>(undefined, {
+    name: "referenceShown",
+  });
+
   /**
-   * The panes, as one vertical split.
-   *
-   * Built from a plain `.map` and not a `<For>`: this component is remounted
-   * whenever the list changes (see the header), so the array is fixed for its
-   * whole life, and `Resizable.Panel` registers during render — which a `<For>`
-   * would re-run without a way to unregister what it replaced.
+   * The ONE pane, and the book it reads: a different text, or a different
+   * book, is a new pane. Compared by ids so a re-resolve that finds the same
+   * text does not rebuild the editor inside it.
    */
-  const Stack = (stackProps: { readonly list: readonly Entry[]; readonly book: string }) => (
-    <Resizable.Root orientation="vertical" class="min-h-0 flex-1">
-      <For each={stackProps.list}>
-        {(entry, index) => (
-          <>
-            <Show when={index() > 0}>
-              <Resizable.Handle label={t("Resize {title}", { title: entry.resource.title })} />
-            </Show>
-            <Resizable.Panel class="flex min-h-0 flex-col">
-              <ReferencePane
-                resource={entry.resource}
-                role={entry.role}
-                bookId={stackProps.book}
-                clip={clip}
-                onUnbind={() => drop(entry)}
-              />
-            </Resizable.Panel>
-          </>
-        )}
-      </For>
-    </Resizable.Root>
+  type Shown = { readonly entry: Entry; readonly book: string } | undefined;
+  const shown = createMemo(
+    (): Shown => {
+      const list = entries();
+      const book = shell.focused()?.id;
+      const entry = list.find((each) => each.resource.id === chosen()) ?? list[0];
+      return entry === undefined || book === undefined ? undefined : { entry, book };
+    },
+    {
+      name: "referenceShownPane",
+      equals: (a: Shown, b: Shown) =>
+        a?.entry.resource.id === b?.entry.resource.id &&
+        a?.entry.declared === b?.entry.declared &&
+        a?.book === b?.book,
+    },
   );
 
-  /** The split's identity: a new list, or a new book, is a new split. */
-  const stack = (): { readonly list: readonly Entry[]; readonly book: string } | undefined => {
-    const list = entries();
-    const book = shell.focused()?.id;
-    return list.length === 0 || book === undefined ? undefined : { list, book };
-  };
+  /** With more than one text, the pane's title is the choice between them. */
+  const switcher = (current: Entry) =>
+    entries().length > 1 ? (
+      <Select
+        size="sm"
+        aria-label={t("Reference text")}
+        data-testid="reference-switch"
+        class="max-w-full font-bold"
+        value={current.resource.id}
+        onChange={(event) => setChosen(event.currentTarget.value)}
+      >
+        <For each={entries()}>
+          {(entry) => <option value={entry.resource.id}>{entry.resource.title}</option>}
+        </For>
+      </Select>
+    ) : undefined;
 
   return (
     <aside
@@ -295,7 +408,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       data-references={entries().length}
     >
       <Show
-        when={stack()}
+        when={shown()}
         keyed
         fallback={
           <Show when={!loading()}>
@@ -304,13 +417,24 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
               icon={<BookMarked size={22} />}
               title={t("No reference texts yet")}
               description={t(
-                "Choose another project on this device to read beside this one, at the passage you are in.",
+                "Choose a source text, or another project on this device, to read beside this one at the passage you are in.",
               )}
             />
           </Show>
         }
       >
-        {(held) => <Stack list={held.list} book={held.book} />}
+        {(held) => (
+          <div class="flex min-h-0 flex-1 flex-col">
+            <ReferencePane
+              resource={held.entry.resource}
+              role={held.entry.role}
+              bookId={held.book}
+              clip={clip}
+              title={switcher(held.entry)}
+              {...(held.entry.declared ? {} : { onUnbind: () => drop(held.entry) })}
+            />
+          </div>
+        )}
       </Show>
 
       {/* One text for now: a source, and only while there is none. The
@@ -319,9 +443,33 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           show. The picker lives under the pane rather than above it: a pane
           is a page of scripture, and a button above it is a button in the
           reading. */}
-      <Show when={!loading() && entries().length === 0}>
+      {/* Only while nothing is picked: a person who chose a text has answered
+          the question this row asks. */}
+      <Show when={!loading() && missing().length > 0 && entries().every((entry) => entry.declared)}>
+        <div
+          data-testid="declared-missing"
+          class="flex shrink-0 flex-col gap-1.5 rounded-md bg-surface-secondary px-3 py-2 text-small"
+        >
+          <p class="text-on-surface-secondary">
+            {t("This project's source text is not on this device: {texts}.", {
+              texts: missing()
+                .map((ref) =>
+                  ref.version === undefined
+                    ? `${ref.language}_${ref.resource}`
+                    : `${ref.language}_${ref.resource} ${ref.version}`,
+                )
+                .join(", "),
+            })}
+          </p>
+          <Button variant="secondary" size="sm" disabled={busy()} onClick={download}>
+            {t("Download")}
+          </Button>
+        </div>
+      </Show>
+
+      <Show when={!loading() && entries().every((entry) => entry.declared)}>
         <div class="flex shrink-0 flex-col gap-1.5">
-          <Picker role="source" />
+          <Picker role="source" replacing={entries().length > 0} />
         </div>
       </Show>
     </aside>

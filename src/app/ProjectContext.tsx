@@ -52,6 +52,7 @@ import { openProject as openProjectEffect, type Project } from "#core/project/pr
 import { mintSlug } from "#core/project/slug";
 import { DEFAULT_JOURNAL_POLICY, type Restorable } from "#core/recovery/recovery";
 import { pendingOnOpen } from "#core/recovery/reopen";
+import { highestVersions } from "#core/resources/relationships";
 import { SaveCoordinator } from "#core/save/saveCoordinator";
 import type { SourceStamp } from "#core/source/source";
 import { anchorFrom, type ChapterRow, type EditorBook, type ProjectionName } from "#editor/index";
@@ -368,6 +369,13 @@ export interface Shell {
   readonly referenceWidth: Accessor<number>;
   readonly setReferenceWidth: (fraction: number) => void;
   /**
+   * Is the reference column beside the editor open at all. The toggle is in
+   * the editor's crumb strip and the column is the book route's, so the
+   * answer lives here, as `sidebarOpen` does.
+   */
+  readonly referenceOpen: Accessor<boolean>;
+  readonly setReferenceOpen: (open: boolean) => void;
+  /**
    * The project roots this device has opened, newest first — `shell.recentProjects`
    * read as a list. The landing screen writes the key as it opens a project;
    * the sidebar reads it so a window with nothing open still offers the way
@@ -609,7 +617,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
           return;
         }
         void services
-          .run(Workflows.bindReferences(project.id, { fresh: true }))
+          .run(Workflows.bindReferences(project.root, { fresh: true }))
           .then(() => services.projectAnalysis.rejudge());
       }),
     ),
@@ -704,6 +712,10 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   const [referenceWidth, setReferenceWidth] = createSignal(
     services.settings.get(keys.referenceWidth),
     { name: "referenceWidth" },
+  );
+  const [referenceOpen, setReferenceOpen] = createSignal(
+    services.settings.get(keys.referenceOpen),
+    { name: "referenceOpen" },
   );
 
   // Where the reader was in each project. Same discipline as the two above —
@@ -835,6 +847,9 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     // so nothing applies to a Book of a project that is already closed.
     await services.run(Effect.flatMap(Repositories, (lanes) => lanes.close(staticOpen.root)));
     await services.run(Effect.provideService(staticOpen.close(), Observability, closing));
+    // Save's baselines are keyed by book alone and live for the session: the
+    // next project's books must not be measured against this one's text.
+    await services.run(services.save.forget());
     closing.end("passed");
   };
 
@@ -939,6 +954,17 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     );
     gesture.end("ready", { "project.books": ready.books.length });
     live = ready;
+    // What the project declares as its source texts: the Library answers
+    // "source" with these when the person has picked none.
+    await services.run(
+      services.library.declare(
+        ready.root,
+        Option.match(ready.metadata(), {
+          onNone: () => [],
+          onSome: (metadata) => highestVersions(metadata.related),
+        }),
+      ),
+    );
     setProject(ready);
     setCursor(0);
     // A name chosen on this device lives in `.sefer/project.json`, never in
@@ -984,7 +1010,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     // visiting Find first. In the background; once they are in, ONE book is
     // invalidated, which is a pass and so a publication that reads them —
     // not a re-judge, which would re-analyse every book.
-    void services.run(Workflows.bindReferences(ready.id)).then((bound) => {
+    void services.run(Workflows.bindReferences(ready.root)).then((bound) => {
       const first = ready.books[0]?.id;
       if (live === ready && bound.ids.length > 0 && first !== undefined)
         services.projectAnalysis.invalidate(first);
@@ -1451,6 +1477,11 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       persist(keys.sidebarOpen, open);
     },
     sidebarShowing: () => sidebarOpen() && project() !== undefined,
+    referenceOpen,
+    setReferenceOpen: (open) => {
+      setReferenceOpen(open);
+      persist(keys.referenceOpen, open);
+    },
     recentProjects,
     slugFor,
     slug,

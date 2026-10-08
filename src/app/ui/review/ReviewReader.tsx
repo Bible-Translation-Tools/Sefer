@@ -78,7 +78,6 @@ import {
   MenuRadio,
   MenuSeparator,
   SegmentedControl,
-  Select,
   type VirtualSection,
 } from "../primitives";
 import { ChangesHistorySidebar } from "../workspace/ChangesHistorySidebar";
@@ -95,6 +94,13 @@ export interface ReviewBook {
   /** The RIGHT source's text — `baseline`. */
   readonly baselineText: string;
   readonly skeleton: DiffSkeleton;
+  /**
+   * Changed units this review leaves out: reviewing a suggestion, the
+   * passages only the editor changed are not the suggestion's, so they are
+   * counted in one line rather than shown as if it offered them. A decided
+   * unit is still shown, so it can be put back.
+   */
+  readonly hidden?: ReadonlySet<string>;
 }
 
 type Layout = "auto" | "split" | "unified";
@@ -162,6 +168,14 @@ export function ReviewReader(props: {
    * left to right as was-then-now, the way History lays out time.
    */
   readonly currentFirst?: boolean;
+  /**
+   * Whether a decision is written into the Book as it is made. Defaults to
+   * `decidable`; the playground decides without writing, to try a card's
+   * look against real text without touching the project.
+   */
+  readonly writesDecisions?: boolean;
+  /** Dim the side a decided passage will not read as (`Controls.dimUnchosen`). */
+  readonly dimUnchosen?: boolean;
   /**
    * When neither side is the Book (History's "what this version changed"):
    * each card's own actions for either side — Adopt, written into the
@@ -267,7 +281,12 @@ export function ReviewReader(props: {
       baseline: analysisOf(book.bookId, "baseline", book.baselineText),
     };
     const units = book.skeleton.units;
-    const include = FILTERS[show];
+    const filtered = FILTERS[show];
+    const hidden = book.hidden;
+    const include =
+      hidden === undefined || hidden.size === 0
+        ? filtered
+        : (unit: DecisionUnit): boolean => filtered(unit) && !hidden.has(unit.id);
     // In an editable review a taken unit is unchanged now — it IS the other side's
     // text — and still keeps its card, to say so and to put it back.
     const keep = (unit: DecisionUnit): boolean =>
@@ -303,7 +322,7 @@ export function ReviewReader(props: {
    */
   let held = new Map<BookId, { readonly key: string; readonly prepared: Prepared }>();
   const keyOf = (book: ReviewBook, show: Filter, result: boolean): string =>
-    `${show}\0${result ? "r" : "c"}\0${book.currentText.length}\0${book.baselineText.length}\0${extentsOf(book.bookId)}`;
+    `${show}\0${result ? "r" : "c"}\0${book.currentText.length}\0${book.baselineText.length}\0${extentsOf(book.bookId)}\0${[...(book.hidden ?? [])].join(",")}`;
   const same = (was: Prepared, book: ReviewBook): boolean =>
     was.book.currentText === book.currentText && was.book.baselineText === book.baselineText;
 
@@ -386,7 +405,8 @@ export function ReviewReader(props: {
           decide: (unit, side) => props.decide(bookId, [unit], side),
           keepTitle: t("Keep {source}'s", { source: props.currentShort }),
           takeTitle: t("Take {source}'s", { source: props.baselineShort }),
-          live: props.decidable,
+          live: props.writesDecisions ?? props.decidable,
+          dimUnchosen: props.dimUnchosen === true,
         }
       : undefined;
 
@@ -704,22 +724,24 @@ export function ReviewReader(props: {
           align="end"
           class="w-72"
           trigger={
-            <Button size="sm" variant="secondary" data-review-decide-all>
+            <Button size="sm" variant="tertiary" data-review-decide-all>
               {t("Decide all")}
               <ChevronDown aria-hidden="true" />
             </Button>
           }
         >
           <MenuLabel>
-            {scope() === "changes"
-              ? t("{count} change(s) in {books} book(s)", {
-                  count: scopeCount(),
-                  books: inScope().filter((held) => held.shown.length > 0).length,
-                })
-              : t("{count} change(s) in {book}", {
-                  count: scopeCount(),
-                  book: inScope()[0]?.book.name ?? "",
-                })}
+            {(() => {
+              const count = scopeCount();
+              const changes = t(count === 1 ? "{count} change" : "{count} changes", { count });
+              if (scope() !== "changes")
+                return t("{changes} in {book}", { changes, book: inScope()[0]?.book.name ?? "" });
+              const books = inScope().filter((held) => held.shown.length > 0).length;
+              return t("{changes} in {books}", {
+                changes,
+                books: t(books === 1 ? "{count} book" : "{count} books", { count: books }),
+              });
+            })()}
           </MenuLabel>
           <MenuItem data-review-take-all onSelect={() => decideAll("baseline")}>
             {t("Take {source}'s for all", { source: props.baselineShort })}
@@ -753,15 +775,15 @@ export function ReviewReader(props: {
     const choose = (chosen: MergeSide): void =>
       props.decide(hunk.bookId, hunk.units, side === chosen ? undefined : chosen);
     // In the columns' order: the other side's on the left, yours on the right.
-    // Both at Edit's weight — deciding is what this card is for, so its two
-    // buttons are not the quietest thing on it — and the pressed one says
-    // which side was chosen. Pressed again it puts the passage back, which it
+    // Quiet until chosen — tertiary, like Edit beside them — so a page of
+    // undecided cards is not a page of outlined buttons; the pressed one takes
+    // the brand outline and says which side was chosen. Pressed again it puts the passage back, which it
     // no longer spells out ("— put back" read as an instruction on every card).
     return [
       {
         kind: "button",
         id: "take",
-        emphasis: "secondary",
+        emphasis: "tertiary",
         pressed: side === "baseline",
         label:
           side === "baseline"
@@ -774,7 +796,7 @@ export function ReviewReader(props: {
       {
         kind: "button",
         id: "keep",
-        emphasis: "secondary",
+        emphasis: "tertiary",
         pressed: side === "current",
         label: one
           ? t("Keep {source}'s", { source: props.currentShort })
@@ -811,10 +833,16 @@ export function ReviewReader(props: {
         <ChangesHistorySidebar active="changes" changes={prepared().length}>
           <div class="px-4 pt-3 pb-2">
             <p class="px-2 text-small text-on-surface-secondary">
-              {t("{count} in {books} book(s)", {
-                count: prepared().reduce((sum, held) => sum + held.shown.length, 0),
-                books: prepared().length,
-              })}
+              {/* The status line's words, so the two never read as different
+                  answers: "2 changes in 1 book". */}
+              {(() => {
+                const count = prepared().reduce((sum, held) => sum + held.shown.length, 0);
+                const books = prepared().length;
+                return t("{changes} in {books}", {
+                  changes: t(count === 1 ? "{count} change" : "{count} changes", { count }),
+                  books: t(books === 1 ? "{count} book" : "{count} books", { count: books }),
+                });
+              })()}
             </p>
           </div>
           <nav aria-label={t("Changes")} class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
@@ -991,21 +1019,6 @@ export function ReviewReader(props: {
             },
           ]}
         />
-        <Select
-          size="sm"
-          wrapperClass="min-w-0"
-          aria-label={t("Which changes")}
-          data-review-filter
-          value={filter()}
-          onChange={(event) => {
-            setFilter(toFilter(event.currentTarget.value));
-            setPlace(undefined);
-          }}
-        >
-          <option value="all">{t("All changes")}</option>
-          <option value="words">{t("Changes to the words")}</option>
-          <option value="formatting">{t("Markup and spacing only")}</option>
-        </Select>
         <Menu
           label={t("View")}
           side="bottom"
@@ -1014,11 +1027,40 @@ export function ReviewReader(props: {
           trigger={
             <Button size="sm" variant="tertiary" data-review-view>
               <Columns2 aria-hidden="true" />
-              {t("View")}
+              {/* Says when it is hiding something, since the filter that does
+                  so now lives inside it. */}
+              {filter() === "all"
+                ? t("View")
+                : filter() === "words"
+                  ? t("View · words only")
+                  : t("View · markup only")}
               <ChevronDown aria-hidden="true" />
             </Button>
           }
         >
+          {/* Which changes: in here with how they are drawn, rather than a
+              select of its own in the toolbar — it is a way of looking, and
+              most reviews never change it. */}
+          <MenuLabel>{t("Show")}</MenuLabel>
+          <For each={["all", "words", "formatting"] as const}>
+            {(value) => (
+              <MenuRadio
+                checked={filter() === value}
+                data-review-filter={value}
+                onSelect={() => {
+                  setFilter(value);
+                  setPlace(undefined);
+                }}
+              >
+                {value === "all"
+                  ? t("All changes")
+                  : value === "words"
+                    ? t("Changes to the words")
+                    : t("Markup and spacing only")}
+              </MenuRadio>
+            )}
+          </For>
+          <MenuSeparator />
           <MenuLabel>{t("Layout")}</MenuLabel>
           <MenuRadio checked={layout() === "auto"} onSelect={() => setLayout("auto")}>
             {t("Side by side when there is room")}
@@ -1036,12 +1078,14 @@ export function ReviewReader(props: {
         </Menu>
         <div class="ms-auto flex items-center gap-1">
           <DecideAll />
-          <Show when={props.decidable && scopeCount() > 0}>
-            <span aria-hidden="true" class="mx-1 h-4 w-px bg-surface-border" />
+          {/* Where you are, once you have stepped: the how-many is the status
+              line's, and a second total here (cards, not changes) read as a
+              different answer to the same question. */}
+          <Show when={place() !== undefined}>
+            <span class="text-smallest text-on-surface-tertiary tabular-nums" data-review-counter>
+              {counter()}
+            </span>
           </Show>
-          <span class="text-smallest text-on-surface-tertiary tabular-nums" data-review-counter>
-            {counter()}
-          </span>
           <IconButton
             size="sm"
             label={t("Previous change (Alt-Shift-F5)")}
@@ -1224,9 +1268,6 @@ export function ReviewReader(props: {
 
 const labelOf = (label: string | ((bookId: BookId) => string), bookId: BookId): string =>
   typeof label === "string" ? label : label(bookId);
-
-const toFilter = (value: string): Filter =>
-  value === "words" || value === "formatting" ? value : "all";
 
 const toLayout = (value: string): Layout =>
   value === "split" || value === "unified" ? value : "auto";

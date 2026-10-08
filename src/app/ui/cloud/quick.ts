@@ -146,7 +146,7 @@ export const createQuickSync = (
       // Cloud section's on a surface without the popover's own forms.
       case "open":
       case "sign-in":
-        void navigate({ to: "/settings" });
+        void navigate({ to: "/project/$slug/settings", params: { slug: shell.slug() } });
         return;
       case "resolve":
         // A hard reset underneath, which is why `abortMerge` refuses when no

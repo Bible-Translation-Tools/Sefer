@@ -14,7 +14,7 @@ it is not a version.
 
 That raises the stakes on the debounce and changes what the banner means. The
 backup's timing is now a preference a reader can see — "Back up work after" on
-`/settings`, `shell.backupIdleMs`, pushed into `Recovery.setPolicy` by the
+Settings, `shell.backupIdleMs`, pushed into `Recovery.setPolicy` by the
 shell — because it is exactly the question "how much work may a crash cost me".
 The debounce fiber re-reads its two bounds on every pass, so moving the stepper
 lands on the next burst.
