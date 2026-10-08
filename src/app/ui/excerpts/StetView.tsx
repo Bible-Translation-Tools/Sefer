@@ -36,7 +36,7 @@ import ThumbsUpIcon from "lucide-solid/icons/thumbs-up";
 import { For, Show, createMemo, createSignal, onCleanup } from "solid-js";
 
 import type { BookId } from "#core/book/book";
-import type { BookExcerpts, Excerpt, OutlineRow } from "#core/excerpts/excerpts";
+import type { BookExcerpts, Excerpt, Extent, OutlineRow } from "#core/excerpts/excerpts";
 import type { Analysis } from "#core/galley";
 import type { Guide, Term } from "#core/stet/stet";
 import type { EditorBook, Funnel } from "#editor/index";
@@ -74,6 +74,8 @@ export interface StetViewProps {
   readonly shownOf?: (excerpt: Excerpt) => Excerpt;
   readonly analyze: (text: string) => Analysis;
   readonly onEdited?: (bookId: BookId) => void;
+  /** Where every card starts: the feed's reading of the context setting. */
+  readonly initial: Extent;
   readonly onExpand: (sid: string, step: ContextStep) => void;
   /** The shell's mode, handed to the excerpt cards. */
   readonly mode?: "regular" | "usfm";
@@ -374,6 +376,7 @@ export function StetView(props: StetViewProps) {
   const card = excerptCard(
     {
       kind: "chapter",
+      from: props.initial,
       step: (sid, step) => {
         props.onExpand(sid, step);
       },

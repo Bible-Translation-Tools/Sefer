@@ -332,6 +332,7 @@ function Terms() {
           shownOf={feed.shownOf}
           analyze={feed.analyze}
           onEdited={feed.edited}
+          initial={feed.initial}
           onExpand={feed.expand}
           mode={shell.mode() === "usfm" ? "usfm" : "regular"}
           sourceOf={(excerpt) => readings().get(excerpt.sid)}

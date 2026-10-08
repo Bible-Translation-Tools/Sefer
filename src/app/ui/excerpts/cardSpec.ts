@@ -25,7 +25,7 @@
 import type { JSX } from "@solidjs/web";
 
 import type { BookId } from "#core/book/book";
-import type { Excerpt, OutlineRow, BookExcerpts } from "#core/excerpts/excerpts";
+import type { Excerpt, Extent, OutlineRow, BookExcerpts } from "#core/excerpts/excerpts";
 import type { EditorPolicy } from "#editor/index";
 
 import type { CardAction } from "../multibuffer/CardAction";
@@ -57,8 +57,16 @@ export type Context =
   | { readonly kind: "none" }
   /** The default steps — a unit up or down, the whole chapter, fold — told to `step`. */
   | { readonly kind: "steps"; readonly step: (sid: string, step: ContextStep) => void }
-  /** One expand control, at the footer's end: the whole chapter, or back. Key terms'. */
-  | { readonly kind: "chapter"; readonly step: (sid: string, step: ContextStep) => void };
+  /**
+   * One expand control, at the footer's end: the whole chapter, or back. Key
+   * terms'. `from` is where every card starts (the reader's context setting),
+   * so the card can tell what was added from what it opened with.
+   */
+  | {
+      readonly kind: "chapter";
+      readonly from: Extent;
+      readonly step: (sid: string, step: ContextStep) => void;
+    };
 
 export type Open =
   | { readonly kind: "none" }

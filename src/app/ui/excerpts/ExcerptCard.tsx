@@ -35,7 +35,7 @@
  * flipped per card. The width is the CARD's (a ResizeObserver), not the
  * window's, because the same card lives in a full-width list and a side panel.
  */
-import { ChangeSet, StateField, type Text } from "@codemirror/state";
+import { ChangeSet, StateField } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import type { JSX } from "@solidjs/web";
 import ChevronDownIcon from "lucide-solid/icons/chevron-down";
@@ -52,8 +52,15 @@ import {
   type Excerpt,
   type Occurrence,
 } from "#core/excerpts/excerpts";
-import type { Analysis } from "#core/galley";
-import { type EditorBook, type EditorPolicy, type Funnel, type MarkedRange } from "#editor/index";
+import { tocViewOf, type Analysis } from "#core/galley";
+import { tocUnits, unitIndexAt } from "#core/location/locate";
+import {
+  fromCanonical,
+  type EditorBook,
+  type EditorPolicy,
+  type Funnel,
+  type MarkedRange,
+} from "#editor/index";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
@@ -67,7 +74,6 @@ import { Button, cx, IconButton } from "../primitives";
 import { verseTextOf } from "../review/reading";
 import type { ExcerptCardSpec } from "./cardSpec";
 import { ExcerptReader } from "./ExcerptReader";
-import { lockVerseLabels } from "./lockVerseLabels";
 
 export type { ContextStep } from "../multibuffer/cardState";
 
@@ -302,20 +308,24 @@ export function ExcerptCard(props: ExcerptCardProps) {
   /**
    * A direct card's edit is a SESSION with a way back. Everything typed lands
    * in the book as it is typed (that is how the editor works); the session
-   * keeps every change composed since it opened (`sessionEdits`), so Cancel
-   * can hand the book the exact inverse and Save only has to stop. `dirty`
-   * is what turns the card's buttons into Save changes / Cancel.
+   * holds the INVERSE of this card's own changes (`sessionUndo`), so Cancel
+   * hands the book exactly that and Save only has to stop. A change the book
+   * pushed in from elsewhere (`fromCanonical`) is not the session's: the
+   * inverse is mapped over it, never composed with it, so Cancel cannot undo
+   * someone else's edit. `dirty` turns the buttons into Save changes / Cancel.
    */
   const [dirty, setDirty] = createSignal(false, { name: "excerptDirty" });
   let editView: EditorView | undefined;
-  let openedOn: Text | undefined;
-  const sessionEdits = StateField.define<ChangeSet>({
+  const sessionUndo = StateField.define<ChangeSet>({
     create: (state) => ChangeSet.empty(state.doc.length),
-    update: (held, transaction) =>
-      transaction.docChanged ? held.compose(transaction.changes) : held,
+    update: (held, transaction) => {
+      if (!transaction.docChanged) return held;
+      if (transaction.annotation(fromCanonical) === true) return held.map(transaction.changes);
+      return transaction.changes.invert(transaction.startState.doc).compose(held);
+    },
   });
   const sessionWatch = EditorView.updateListener.of((update) => {
-    if (update.docChanged) setDirty(!update.state.field(sessionEdits).empty);
+    if (update.docChanged) setDirty(!update.state.field(sessionUndo).empty);
   });
   const save = (): void => {
     setDirty(false);
@@ -323,11 +333,11 @@ export function ExcerptCard(props: ExcerptCardProps) {
   };
   const cancel = (): void => {
     const view = editView;
-    if (view !== undefined && openedOn !== undefined && dirty()) {
-      const undo = view.state.field(sessionEdits, false)?.invert(openedOn);
-      // Past the card's own filters (the verse-number lock would refuse a
-      // revert that spans a label); the book still admits it as an edit.
-      if (undo !== undefined && !undo.empty) view.dispatch({ changes: undo, filter: false });
+    if (view !== undefined && dirty()) {
+      const undo = view.state.field(sessionUndo, false);
+      // The revert goes through the card's filters and the book's like any
+      // edit: it only restores what this session typed.
+      if (undo !== undefined && !undo.empty) view.dispatch({ changes: undo });
     }
     setDirty(false);
     done();
@@ -372,20 +382,28 @@ export function ExcerptCard(props: ExcerptCardProps) {
    * chapter.
    */
   const gutter = (): boolean => direct() && spec().context.kind === "chapter" && !condensed();
-  const doubled = (): boolean => props.excerpt.extent.up + props.excerpt.extent.down >= 2;
+  /** Counted from where the card started (the context setting), not from its own verse. */
+  const doubled = (): boolean => {
+    const held = spec().context;
+    const from = held.kind === "chapter" ? held.from : { up: 0, down: 0 };
+    const { up, down } = props.excerpt.extent;
+    return up - from.up + (down - from.down) >= 2;
+  };
   /**
-   * "Show Verse 20": the verse an arrow would add, counted out from the card's
-   * own verse by those already showing. A label, so one off across a bridge
-   * (`\v 3-4`) is harmless.
+   * "Show Verse 20": the TOC unit an arrow would add — the one before what is
+   * showing, or the one after — so a bridge reads "Show Verse 3-4". Anything
+   * that is not a verse of this chapter keeps the plain label.
    */
   const verseLabel = (side: "up" | "down"): string => {
-    const address = props.excerpt.address;
-    if (address.kind !== "verses") return t("Show Verse");
-    const verse =
-      side === "up"
-        ? address.from.verse - props.excerpt.extent.up - 1
-        : address.to.verse + props.excerpt.extent.down + 1;
-    return verse >= 1 ? t("Show Verse {verse}", { verse }) : t("Show Verse");
+    const all = tocUnits(tocViewOf(props.excerpt.analysis));
+    const { span, own } = props.excerpt;
+    const home = all[unitIndexAt(all, own.from)];
+    const next =
+      side === "up" ? all[unitIndexAt(all, span.from) - 1] : all[unitIndexAt(all, span.to - 1) + 1];
+    const verse = next?.verse;
+    if (verse === undefined || verse.first === 0 || next?.row !== home?.row) return t("Show Verse");
+    const label = verse.last > verse.first ? `${verse.first}-${verse.last}` : `${verse.first}`;
+    return t("Show Verse {verse}", { verse: label });
   };
   const contextStep = (which: ContextStep): void => {
     const held = spec().context;
@@ -416,40 +434,23 @@ export function ExcerptCard(props: ExcerptCardProps) {
   );
 
   /**
-   * A direct card's edit ends when the reader leaves the box — a press
-   * anywhere outside it, or focus going elsewhere — and leaving is a CANCEL:
-   * nothing typed survives a click away. The row of buttons under the box
-   * counts as inside, so pressing Save changes is not first a cancel.
+   * A direct card's session ends on Cancel, Save changes, Escape — or a press
+   * into ANOTHER card's text, which is a Cancel: one session at a time, and
+   * the one being left does not keep its edits by accident (Will,
+   * 2026-10-08). A press anywhere else (the page, the sidebar, a scrollbar)
+   * leaves the session open, so nothing typed is lost to a stray click.
    */
-  let actionsRow: HTMLDivElement | undefined;
-  const inside = (node: Node, frame: HTMLElement): boolean =>
-    frame.contains(node) || actionsRow?.contains(node) === true;
   createEffect(
     () => (direct() && props.editing ? targetBox : undefined),
     (element) => {
       if (element === undefined) return;
       const press = (event: PointerEvent): void => {
-        if (props.editing && event.target instanceof Node && !inside(event.target, element))
-          cancel();
-      };
-      const leave = (event: FocusEvent): void => {
-        const next = event.relatedTarget;
-        if (next instanceof Node && inside(next, element)) return;
-        // After the move lands: focus that only passed through (the editor
-        // replacing the reading) has come back by then.
-        setTimeout(() => {
-          // Still this card's edit: the press may have ended it and another
-          // card begun its own since.
-          const now = document.activeElement;
-          if (props.editing && !(now !== null && inside(now, element))) cancel();
-        }, 0);
+        if (!props.editing || !(event.target instanceof Element)) return;
+        const other = event.target.closest("[data-direct-target]");
+        if (other !== null && other !== element) cancel();
       };
       document.addEventListener("pointerdown", press, true);
-      element.addEventListener("focusout", leave);
-      return () => {
-        document.removeEventListener("pointerdown", press, true);
-        element.removeEventListener("focusout", leave);
-      };
+      return () => document.removeEventListener("pointerdown", press, true);
     },
   );
 
@@ -476,10 +477,9 @@ export function ExcerptCard(props: ExcerptCardProps) {
             select={props.excerpt.hits[0]}
             analyze={props.analyze}
             label={`excerpt:${props.excerpt.sid}`}
-            extensions={direct() ? [lockVerseLabels, sessionEdits, sessionWatch] : undefined}
+            extensions={direct() ? [sessionUndo, sessionWatch] : undefined}
             onView={(view) => {
               editView = view;
-              openedOn = view?.state.doc;
             }}
             onDone={direct() ? cancel : done}
           />
@@ -783,13 +783,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
                   </Show>
                 </div>
                 <Show when={direct()}>
-                  <div
-                    ref={(element: HTMLDivElement) => {
-                      actionsRow = element;
-                    }}
-                    data-card-actions
-                    class="flex items-center gap-controls"
-                  >
+                  <div data-card-actions class="flex items-center gap-controls">
                     {/* Changed while editing: the only two things to do are
                         keep it or drop it. */}
                     <Show

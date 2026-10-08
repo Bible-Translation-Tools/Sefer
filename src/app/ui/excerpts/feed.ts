@@ -42,6 +42,8 @@ import { createCardViews, type CardViews } from "../multibuffer/cardViews";
 export interface ExcerptFeed {
   /** Every card's view on this screen — its reach, its USFM, its open lines. */
   readonly views: CardViews<Excerpt>;
+  /** Where every card starts: the reader's context setting, read when the screen opened. */
+  readonly initial: Extent;
   readonly groups: Accessor<readonly BookExcerpts[]>;
   readonly outline: Accessor<readonly OutlineRow[]>;
   /** One memoized parse for the whole screen; handed to every open satellite. */
@@ -376,6 +378,7 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
 
   return {
     views,
+    initial,
     groups: () => model().groups,
     outline: () => model().outline,
     shownOf,
