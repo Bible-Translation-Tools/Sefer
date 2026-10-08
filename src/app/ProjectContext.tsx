@@ -369,6 +369,13 @@ export interface Shell {
   readonly referenceWidth: Accessor<number>;
   readonly setReferenceWidth: (fraction: number) => void;
   /**
+   * Is the reference column beside the editor open at all. The toggle is in
+   * the editor's crumb strip and the column is the book route's, so the
+   * answer lives here, as `sidebarOpen` does.
+   */
+  readonly referenceOpen: Accessor<boolean>;
+  readonly setReferenceOpen: (open: boolean) => void;
+  /**
    * The project roots this device has opened, newest first — `shell.recentProjects`
    * read as a list. The landing screen writes the key as it opens a project;
    * the sidebar reads it so a window with nothing open still offers the way
@@ -705,6 +712,10 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   const [referenceWidth, setReferenceWidth] = createSignal(
     services.settings.get(keys.referenceWidth),
     { name: "referenceWidth" },
+  );
+  const [referenceOpen, setReferenceOpen] = createSignal(
+    services.settings.get(keys.referenceOpen),
+    { name: "referenceOpen" },
   );
 
   // Where the reader was in each project. Same discipline as the two above —
@@ -1466,6 +1477,11 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       persist(keys.sidebarOpen, open);
     },
     sidebarShowing: () => sidebarOpen() && project() !== undefined,
+    referenceOpen,
+    setReferenceOpen: (open) => {
+      setReferenceOpen(open);
+      persist(keys.referenceOpen, open);
+    },
     recentProjects,
     slugFor,
     slug,
