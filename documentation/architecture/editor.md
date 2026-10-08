@@ -4,6 +4,8 @@
 
 Nothing above the editor imports CodeMirror. The editor imports [Galley](galley.md)'s `Analysis` and core's `Book`/`Source` vocabulary, and nothing else from the application. Import from `src/editor` (the barrel).
 
+**A CodeMirror line is not a USFM line.** In regular mode a newline means whatever its context draws: a paragraph break before a block marker, a space where it only joins text (`newline.inside`, "a joined newline IS a space", [Deleting at a join](#deleting-at-a-join)), nothing at all inside a held gap. So `doc.line`, `lineAt` and `split("\n")` say nothing about verses, paragraphs or what the reader sees; ask the structure instead (the TOC tile, the concrete syntax tree's nodes). Lines are only a unit where the editor says so: render windows (`wholeLinesOf`), the gutter — which is why a book with no paragraph markers has almost nothing to number — and USFM mode. Splitting on lines is the most common way new code gets this wrong.
+
 ## The analyzer facet
 
 The spike called a module-level engine singleton. Sefer has none: the engine's lifetime belongs to the `Galley` Layer, and each Book gets its own memo. So the engine reaches a state through a facet — `analyzer`, in `core/analyzer.ts` — and `usfmEditor({ analyze })` / `usfmEditorHeadless({ analyze })` supply it. Composition passes `galley.memoize()`, one per Book, so a keystroke in Philemon does not evict the parse of Jude. `analyze` is **required**: the facet's own `combine` throws if it is missing, because a USFM editor with no engine is a text box wearing our class names.
