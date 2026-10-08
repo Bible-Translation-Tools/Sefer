@@ -90,6 +90,7 @@ export function ExcerptReader(props: ExcerptReaderProps) {
         marks: untrack(() => props.marks),
         surface: "cm-excerpt",
         label: untrack(() => props.label),
+        selectable: untrack(() => props.direct) !== true,
       });
       setLive(mount);
       // RETURNED, not `onCleanup` — an effect's callback has no owner in
@@ -142,9 +143,11 @@ export function ExcerptReader(props: ExcerptReaderProps) {
     if (edit === undefined) return;
     const mount = live();
     const point = { x: event.clientX, y: event.clientY };
-    // Best effort: a view just re-clipped (a chapter folded back) can throw
-    // here before it has re-measured. The click still edits — the editor
-    // answers the same point on its own fresh view (`CardEditor`).
+    // Best effort: a view just re-clipped (a chapter folded back, a verse
+    // added above) can throw here before it has re-measured. The click still
+    // edits — the editor answers the same point on its own fresh view
+    // (`CardEditor`). A direct card's reader takes no mousedown at all
+    // (`selectable: false`), so CodeMirror's own handler cannot throw first.
     let at: number | null = null;
     try {
       at = mount === undefined ? null : mount.view.posAtCoords(point);
