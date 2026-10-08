@@ -22,6 +22,7 @@ import {
   Switch,
 } from "#app/ui/primitives";
 import { ShellGate } from "#app/ui/ShellGate";
+import { SourceTextsCard } from "#app/ui/SourceTextsCard";
 import { SousSettingsPanel } from "#app/ui/SousSettingsPanel";
 import {
   applyAppearance,
@@ -438,6 +439,8 @@ function SettingsPage() {
       <UpdatePanel />
 
       <CloudPanel root={shell.project()?.root} />
+
+      <SourceTextsCard />
 
       <p class="text-smallest text-on-surface-tertiary">
         {t("Stored in {file}", {

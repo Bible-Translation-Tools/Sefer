@@ -3,13 +3,16 @@
  * ALONGSIDE, at the passage the editor is showing — and the one place a
  * reader binds one.
  *
- * It is a stack of READ-ONLY EDITORS (`ReferencePane`), one per bound
- * resource, over the same book the reader has open, painted by the same
- * projection as the editor beside them — a read-only editor in the same mode,
- * with a splitter between. Not a card holding a regex-sliced passage: that
- * could not show markup, could not be scrolled, and would disagree with the
- * editor about what a verse looks like. A pane is the same `decoField` over
- * the same `DocStructure`, so the two sides cannot drift.
+ * It shows ONE READ-ONLY EDITOR (`ReferencePane`) at a time over the book
+ * the reader has open, painted by the same projection as the editor beside
+ * it — a read-only editor in the same mode. With more than one text, the
+ * pane's title is a select between them: a split stack of panes was noise in
+ * a workspace meant to stay quiet (Will, 2026-10-08). Not a card holding a
+ * regex-sliced passage: that could not show markup, could not be scrolled,
+ * and would disagree with the editor about what a verse looks like. A pane is
+ * the same `decoField` over the same `DocStructure`, so the two sides cannot
+ * drift. The whole column can be shut from the editor's crumb strip
+ * (`shell.referenceOpen`).
  *
  * What stays from the card round: `source` and `reference` are two SLOTS and
  * not one list, because the distinction is the project's — a source is the
@@ -26,29 +29,25 @@
  * replaces it. A declared text that is not on this device is offered for
  * download instead.
  *
- * Why the stack is remounted rather than reconciled: `Resizable` registers its
- * panels DURING render, in document order, and has no unregister — so a panel
- * list that changes length has to be a new split. `<Show keyed>` over the
- * entries array gives exactly that, and the only things that change it are
- * binding, unbinding and opening a different book, each of which is already a
- * reason to rebuild every pane.
+ * The pane is remounted, not reconciled, for a different text or book: it
+ * is an editor over one book's text, and a new text is a new document.
  */
 
 import { Effect, Option, Result } from "effect";
 import BookMarked from "lucide-solid/icons/book-marked";
 import Plus from "lucide-solid/icons/plus";
-import { For, Show, createEffect, createSignal } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
 import { lastSegment } from "#core/fileSystem/path";
 import { answers, type Resource, type Role } from "#core/resources/library";
 import { highestVersions, type RelatedResource } from "#core/resources/relationships";
 
-import { adoptAsProject, announceSourceTexts, libraryRevision } from "../../arrival";
+import { announceSourceTexts, libraryRevision } from "../../arrival";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import { listProjects, type ProjectSummary } from "../landing/summaries";
-import { Button, EmptyState, MultiSelect, Resizable } from "../primitives";
+import { Button, EmptyState, MultiSelect, Select } from "../primitives";
 import { ReferencePane } from "./ReferencePane";
 
 /** The roles the column shows, in the order it shows them. */
@@ -228,18 +227,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     });
   };
 
-  /** "Edit it as your own project": the copy leaves the Library for the projects folder. */
-  const adopt = (resource: Resource): void => {
-    void services.run(Effect.result(adoptAsProject(services, resource))).then((outcome) => {
-      if (Result.isFailure(outcome)) {
-        shell.report(t("could not move {title}", { title: resource.title }));
-        return;
-      }
-      setChoices(undefined);
-      shell.report(t("{title} is now one of your projects", { title: resource.title }));
-    });
-  };
-
   /** A text already shown here is not on offer; nor is the open project. */
   const candidates = (): readonly Choice[] => {
     const open = shell.project()?.root;
@@ -370,46 +357,49 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     </MultiSelect>
   );
 
+  /** Which text the column shows, by resource id; the first when none was chosen. */
+  const [chosen, setChosen] = createSignal<string | undefined>(undefined, {
+    name: "referenceShown",
+  });
+
   /**
-   * The panes, as one vertical split.
-   *
-   * Built from a plain `.map` and not a `<For>`: this component is remounted
-   * whenever the list changes (see the header), so the array is fixed for its
-   * whole life, and `Resizable.Panel` registers during render — which a `<For>`
-   * would re-run without a way to unregister what it replaced.
+   * The ONE pane, and the book it reads: a different text, or a different
+   * book, is a new pane. Compared by ids so a re-resolve that finds the same
+   * text does not rebuild the editor inside it.
    */
-  const Stack = (stackProps: { readonly list: readonly Entry[]; readonly book: string }) => (
-    <Resizable.Root orientation="vertical" class="min-h-0 flex-1">
-      <For each={stackProps.list}>
-        {(entry, index) => (
-          <>
-            <Show when={index() > 0}>
-              <Resizable.Handle label={t("Resize {title}", { title: entry.resource.title })} />
-            </Show>
-            <Resizable.Panel class="flex min-h-0 flex-col">
-              <ReferencePane
-                resource={entry.resource}
-                role={entry.role}
-                bookId={stackProps.book}
-                clip={clip}
-                {...(entry.declared ? {} : { onUnbind: () => drop(entry) })}
-                {...(entry.resource.root.startsWith(`${services.libraryRoot}/`)
-                  ? { onAdopt: () => adopt(entry.resource) }
-                  : {})}
-              />
-            </Resizable.Panel>
-          </>
-        )}
-      </For>
-    </Resizable.Root>
+  type Shown = { readonly entry: Entry; readonly book: string } | undefined;
+  const shown = createMemo(
+    (): Shown => {
+      const list = entries();
+      const book = shell.focused()?.id;
+      const entry = list.find((each) => each.resource.id === chosen()) ?? list[0];
+      return entry === undefined || book === undefined ? undefined : { entry, book };
+    },
+    {
+      name: "referenceShownPane",
+      equals: (a: Shown, b: Shown) =>
+        a?.entry.resource.id === b?.entry.resource.id &&
+        a?.entry.declared === b?.entry.declared &&
+        a?.book === b?.book,
+    },
   );
 
-  /** The split's identity: a new list, or a new book, is a new split. */
-  const stack = (): { readonly list: readonly Entry[]; readonly book: string } | undefined => {
-    const list = entries();
-    const book = shell.focused()?.id;
-    return list.length === 0 || book === undefined ? undefined : { list, book };
-  };
+  /** With more than one text, the pane's title is the choice between them. */
+  const switcher = (current: Entry) =>
+    entries().length > 1 ? (
+      <Select
+        size="sm"
+        aria-label={t("Reference text")}
+        data-testid="reference-switch"
+        class="max-w-full font-bold"
+        value={current.resource.id}
+        onChange={(event) => setChosen(event.currentTarget.value)}
+      >
+        <For each={entries()}>
+          {(entry) => <option value={entry.resource.id}>{entry.resource.title}</option>}
+        </For>
+      </Select>
+    ) : undefined;
 
   return (
     <aside
@@ -418,7 +408,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       data-references={entries().length}
     >
       <Show
-        when={stack()}
+        when={shown()}
         keyed
         fallback={
           <Show when={!loading()}>
@@ -433,7 +423,18 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           </Show>
         }
       >
-        {(held) => <Stack list={held.list} book={held.book} />}
+        {(held) => (
+          <div class="flex min-h-0 flex-1 flex-col">
+            <ReferencePane
+              resource={held.entry.resource}
+              role={held.entry.role}
+              bookId={held.book}
+              clip={clip}
+              title={switcher(held.entry)}
+              {...(held.entry.declared ? {} : { onUnbind: () => drop(held.entry) })}
+            />
+          </div>
+        )}
       </Show>
 
       {/* One text for now: a source, and only while there is none. The
