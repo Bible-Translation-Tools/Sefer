@@ -32,6 +32,16 @@ import { afterAll, describe, expect, it } from "vitest";
 import { commitBody, packWriter, treeBody, type CommitSignature } from "#core/git/pack";
 
 const encoder = new TextEncoder();
+/**
+ * Git with none of the caller's `GIT_*`: run from a commit hook, git has set
+ * `GIT_DIR` and `GIT_INDEX_FILE` for the repository being committed, and a
+ * child git would read those rather than the folder it was pointed at.
+ */
+const clean = Object.fromEntries(
+  Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_")),
+);
+const run = (args: readonly string[], input?: Buffer): Buffer =>
+  execFileSync("git", args, { env: clean, ...(input === undefined ? {} : { input }) });
 const work = mkdtempSync(join(tmpdir(), "sefer-pack-"));
 afterAll(() => rmSync(work, { recursive: true, force: true }));
 
@@ -120,7 +130,7 @@ const zone = (minutes: number): string => {
 /** The same history through `git fast-import`. */
 const gits = (): string => {
   const dir = join(work, "fast-import");
-  execFileSync("git", ["init", "-q", "--bare", dir]);
+  run(["init", "-q", "--bare", dir]);
   const stream: Buffer[] = [];
   const data = (text: string) => {
     const bytes = Buffer.from(text, "utf8");
@@ -138,8 +148,8 @@ const gits = (): string => {
     stream.push(Buffer.from(`M 100644 inline ${step.file}\n`));
     data(step.text);
   });
-  execFileSync("git", ["-C", dir, "fast-import", "--quiet"], { input: Buffer.concat(stream) });
-  return execFileSync("git", ["-C", dir, "rev-parse", "main"]).toString().trim();
+  run(["-C", dir, "fast-import", "--quiet"], Buffer.concat(stream));
+  return run(["-C", dir, "rev-parse", "main"]).toString().trim();
 };
 
 describe("packWriter against git", () => {
@@ -153,18 +163,18 @@ describe("packWriter against git", () => {
       expect(written.stats.deltas).toBeGreaterThan(0);
 
       const dir = join(work, "ours");
-      execFileSync("git", ["init", "-q", "--bare", dir]);
+      run(["init", "-q", "--bare", dir]);
       writeFileSync(join(dir, "objects/pack", `${written.name}.pack`), written.pack);
       writeFileSync(join(dir, "objects/pack", `${written.name}.idx`), written.idx);
       writeFileSync(join(dir, "refs/heads/main"), `${written.head ?? ""}\n`);
       writeFileSync(join(dir, "HEAD"), "ref: refs/heads/main\n");
-      execFileSync("git", ["-C", dir, "fsck", "--full", "--strict", "--no-progress"]);
+      run(["-C", dir, "fsck", "--full", "--strict", "--no-progress"]);
 
       const again = join(work, "reindexed");
       mkdirSync(again);
       const copy = join(again, "copy.pack");
       writeFileSync(copy, written.pack);
-      execFileSync("git", ["index-pack", "--strict", "-o", join(again, "copy.idx"), copy]);
+      run(["index-pack", "--strict", "-o", join(again, "copy.idx"), copy]);
       expect(Buffer.compare(readFileSync(join(again, "copy.idx")), Buffer.from(written.idx))).toBe(
         0,
       );
