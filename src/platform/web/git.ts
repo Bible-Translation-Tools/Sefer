@@ -263,14 +263,21 @@ const makeWebGit = (
           else if (isFile(was)) out.push({ path, blob: null });
         }
       };
+      // Each commit is read once: as itself, and then as the next one's parent.
+      type Read = Awaited<ReturnType<typeof git.readCommit>>["commit"];
+      const commits = new Map<string, Read>();
+      const commitAt = async (oid: string): Promise<Read> => {
+        const held = commits.get(oid);
+        if (held !== undefined) return held;
+        const { commit } = await git.readCommit({ fs, dir, oid, cache });
+        commits.set(oid, commit);
+        return commit;
+      };
       const line: WalkedCommit[] = [];
       for (let oid: string | undefined = head; oid !== undefined;) {
-        const { commit } = await git.readCommit({ fs, dir, oid, cache });
+        const commit = await commitAt(oid);
         const parent = commit.parent[0];
-        const parentTree =
-          parent === undefined
-            ? undefined
-            : (await git.readCommit({ fs, dir, oid: parent, cache })).commit.tree;
+        const parentTree = parent === undefined ? undefined : (await commitAt(parent)).tree;
         const changes: WalkedChange[] = [];
         await compare(parentTree, commit.tree, "", changes);
         // isomorphic-git's timezoneOffset is JavaScript's: minutes WEST of UTC.
