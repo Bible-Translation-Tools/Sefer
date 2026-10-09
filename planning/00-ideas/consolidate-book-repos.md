@@ -9,6 +9,13 @@ Writer migration), [resources](../../documentation/architecture/resources.md)
 and [landing](../../documentation/architecture/landing.md). Next:
 [resource kinds](../01-discussing/resource-kinds-2026-10-01.md) and TN.
 
+**Superseded 2026-10-09:** Writer saves are now KEPT. Assembly replays every
+save that changed a book's text as a commit of the whole book file (original
+author, date, zone; books interleaved by time) and commits the assembly on
+top; see [landing](../../documentation/architecture/landing.md), "The
+history". The "one commit, autosaves carry no intent" ruling below is
+replaced; "Add a book…" is still one commit.
+
 **Where the build differs from this note:**
 
 - **No version checkout.** A copy is the repository's newest version, and a
