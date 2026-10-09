@@ -93,13 +93,17 @@ export const readWriterHistory = (
     return { book, title, source, saves };
   });
 
-/** `5:1–11`: the chapter and the verses a chunk holds; the chapter alone when it holds none. */
+/**
+ * `5:1–11`: the chapter and the verses a chunk holds. A chunk with no verse
+ * marker (its `\v` lost, or a chapter's opening text) says so, rather than a
+ * bare `5` that reads as a verse beside the others.
+ */
 const versesOf = (chapter: number, chunk: string): string => {
   const verses = [...chunk.matchAll(/\\v\s+(\d+)(?:-(\d+))?/g)].map((match): [number, number] => [
     Number(match[1]),
     Number(match[2] ?? match[1]),
   ]);
-  if (verses.length === 0) return String(chapter);
+  if (verses.length === 0) return `${String(chapter)} (no verse number)`;
   const low = Math.min(...verses.map(([from]) => from));
   const high = Math.max(...verses.map(([, to]) => to));
   return low === high

@@ -335,10 +335,17 @@ export const addBooks = (options: {
             description: `the Writer history could not be written: ${error.message}`,
           }),
       );
-    replaying?.({
-      "migrate.commits": replayed?.commits ?? 0,
-      "migrate.pack_bytes": replayed?.stats.packBytes ?? 0,
-    });
+    replaying?.(
+      replayed === undefined
+        ? { "migrate.commits": 0 }
+        : {
+            "migrate.commits": replayed.commits,
+            "migrate.unchanged": replayed.unchanged,
+            "migrate.objects": replayed.stats.objects,
+            "migrate.deltas": replayed.stats.deltas,
+            "migrate.pack_bytes": replayed.stats.packBytes,
+          },
+    );
 
     const written: string[] = [];
     const write = (name: string, text: string | Uint8Array) =>
