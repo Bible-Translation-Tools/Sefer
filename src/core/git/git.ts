@@ -53,6 +53,40 @@ export interface Commit {
   readonly at: number;
 }
 
+/**
+ * Who and when, exactly as a commit records it: what `walk` hands back so a
+ * history can be rewritten into another shape without losing a minute or a
+ * zone.
+ */
+export interface Signature {
+  readonly name: string;
+  readonly email: string;
+  /** Seconds since the epoch, as git stores it. */
+  readonly at: number;
+  /** The zone the person was in, in minutes east of UTC: `+0200` is 120. */
+  readonly offset: number;
+}
+
+/** One file a commit changed: its new blob, or `null` when the commit deleted it. */
+export interface WalkedChange {
+  readonly path: string;
+  readonly blob: string | null;
+}
+
+export interface WalkedCommit {
+  readonly id: CommitId;
+  readonly parents: readonly CommitId[];
+  /** Verbatim, trailing newline and all. */
+  readonly message: string;
+  readonly author: Signature;
+  readonly committer: Signature;
+  /**
+   * The files it changed from its first parent (from nothing, for the first
+   * commit): repository-relative, files only, renames as a delete and an add.
+   */
+  readonly changes: readonly WalkedChange[];
+}
+
 export type ChangeKind = "added" | "modified" | "deleted" | "untracked";
 
 export interface ChangedPath {
@@ -170,6 +204,18 @@ export interface GitService {
     from: string,
     to: string,
   ) => Effect.Effect<readonly ChangedPath[], GitError>;
+  /**
+   * HEAD's first-parent line, OLDEST first: each commit's who, when and
+   * message, and which files it changed — blob ids, not bytes. One call, so a
+   * host walks its own object database once (Writer migration replays a
+   * book's hundreds of saves from it). An unborn HEAD is an empty history.
+   */
+  readonly walk: (repo: Repo) => Effect.Effect<readonly WalkedCommit[], GitError>;
+  /** The bytes of each blob, by id: what `walk` named and the caller chose to read. */
+  readonly blobs: (
+    repo: Repo,
+    ids: readonly string[],
+  ) => Effect.Effect<ReadonlyMap<string, Uint8Array>, GitError>;
   /** The bytes of `path` at `rev` — a ref name or a commit id. */
   readonly show: (repo: Repo, rev: string, path: string) => Effect.Effect<Uint8Array, GitError>;
   /** The per-file history of `path`, newest first, bytes on demand. */

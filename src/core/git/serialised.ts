@@ -46,6 +46,8 @@ export const serialiseGit = (git: GitService, repositories: RepositoriesService)
     shallow: (repo) => read(repo.root, git.shallow(repo)),
     changedPathsBetween: (repo, from, to) =>
       read(repo.root, git.changedPathsBetween(repo, from, to)),
+    walk: (repo) => read(repo.root, git.walk(repo)),
+    blobs: (repo, ids) => read(repo.root, git.blobs(repo, ids)),
     show: (repo, rev, path) => read(repo.root, git.show(repo, rev, path)),
     // The list is read in the lane; each version's bytes are read later, by
     // id, which needs none.

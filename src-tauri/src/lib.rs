@@ -46,6 +46,8 @@ pub fn run() {
             git::git_log,
             git::git_previous_versions,
             git::git_show,
+            git::git_walk,
+            git::git_blobs,
             git::git_log_from,
             git::git_resolve_ref,
             git::git_current_branch,
