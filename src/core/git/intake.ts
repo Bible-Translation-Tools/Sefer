@@ -142,6 +142,12 @@ export interface IntakeOptions {
   readonly author: Author;
   /** The whole message, when "Imported from …" is not enough (the Writer assembly's credits). */
   readonly message?: string;
+  /**
+   * Histories the arrival joins as further parents: a book added from Writer
+   * brings its replayed saves as a side branch, and the arrival is the commit
+   * that merges them in without rewriting the project's own history.
+   */
+  readonly alsoParents?: readonly string[];
 }
 
 const isPrivate = (path: string): boolean =>
@@ -217,6 +223,7 @@ const program = (options: IntakeOptions) =>
             receipts,
             options.message ?? `Imported from ${options.from}`,
             options.author,
+            options.alsoParents === undefined ? undefined : { alsoParents: options.alsoParents },
           );
     observability?.note(
       "repository.arrival",

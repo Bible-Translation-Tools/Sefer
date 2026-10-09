@@ -181,7 +181,7 @@ const deltaOf = (base: Uint8Array, target: Uint8Array): Uint8Array => {
 };
 
 /** A git object's id: SHA-1 over `"<type> <size>\0"` and the body. */
-export const objectId = async (type: ObjectType, body: Uint8Array): Promise<string> =>
+const objectId = async (type: ObjectType, body: Uint8Array): Promise<string> =>
   toHex(await sha1(concat([encoder.encode(`${type} ${String(body.length)}\0`), body])));
 
 export interface PackStats {
