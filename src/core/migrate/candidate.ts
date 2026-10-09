@@ -218,19 +218,26 @@ export const openCandidate = (
     let history: WriterHistory | undefined;
     if (repo._tag === "Some") {
       const read = observability.span("migrate.history.read");
-      history = yield* Effect.mapError(
-        readWriterHistory(
-          repo.value,
-          project.book,
-          fallbackTitle(project),
-          candidate.origin.kind === "remote"
-            ? `${candidate.origin.owner}/${candidate.origin.repo}`
-            : lastSegment(root),
+      history = yield* Effect.tapError(
+        Effect.mapError(
+          readWriterHistory(
+            repo.value,
+            project.book,
+            fallbackTitle(project),
+            candidate.origin.kind === "remote"
+              ? `${candidate.origin.owner}/${candidate.origin.repo}`
+              : lastSegment(root),
+          ),
+          (error) =>
+            new CandidateError({
+              reason: "History",
+              description: `its history could not be read: ${error.description ?? error.reason}`,
+            }),
         ),
         (error) =>
-          new CandidateError({
-            reason: "History",
-            description: `its history could not be read: ${error.description ?? error.reason}`,
+          Effect.sync(() => {
+            read({ "migrate.reason": error.description });
+            observability.note("migrate.history.read", "failed", error.description);
           }),
       );
       read({ "migrate.saves": history.saves.length });

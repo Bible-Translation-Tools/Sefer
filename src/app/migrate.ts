@@ -176,6 +176,14 @@ export const urlCandidate = async (services: Services, typed: string): Promise<B
   };
 };
 
+/**
+ * How long one candidate may take to open: a whole-history clone, then its
+ * saves read. Longer than an upstream probe's, which only asks for a head —
+ * a long book's thousands of autosaves on a slow field link must not read as
+ * "it did not answer in time" when it was only slow.
+ */
+const CANDIDATE_TIMEOUT = "60 seconds";
+
 /** Opens, renders, validates and measures one candidate. Never rejects. */
 export const openOne = async (services: Services, candidate: BookCandidate): Promise<Opened> => {
   const operation = services.composition.observability.operation("migrate.open", {
@@ -196,7 +204,7 @@ export const openOne = async (services: Services, candidate: BookCandidate): Pro
         : undefined;
     const open = Effect.timeoutOption(
       openCandidate(candidate, inMemory === undefined ? stagingRootOf(services) : "/staging"),
-      UPSTREAM_TIMEOUT,
+      CANDIDATE_TIMEOUT,
     );
     const where: Effect.Effect<Option.Option<StagedBook>, unknown, Domain> = inMemory === undefined
       ? open

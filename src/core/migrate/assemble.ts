@@ -29,7 +29,7 @@ import { Data, Effect, FileSystem, Option, Result } from "effect";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 import { joinPath } from "../fileSystem/path";
-import { DEFAULT_BRANCH, type Author, type Git } from "../git/git";
+import { DEFAULT_BRANCH, Git, type Author, type GitError } from "../git/git";
 import { intakeRepository, type IntakeResult } from "../git/intake";
 import type { Repositories } from "../git/repository";
 import { CANON } from "../location/canon";
@@ -117,11 +117,6 @@ const assemblyMessage = (form: AssembleForm, books: readonly StagedBook[]): stri
 
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
 
-/**
- * The replayed history as a repository intake can adopt: its pack and index,
- * the branch at its last commit, and HEAD on that branch. Intake writes the
- * config and commits the assembly on top.
- */
 /** The replayed pack and its index, into a repository's object store. */
 const writePack = (fileSystem: FileSystem.FileSystem, root: string, replayed: Replayed) =>
   Effect.gen(function* () {
@@ -132,6 +127,11 @@ const writePack = (fileSystem: FileSystem.FileSystem, root: string, replayed: Re
     yield* fileSystem.writeFile(joinPath(git, `objects/pack/${replayed.name}.idx`), replayed.idx);
   });
 
+/**
+ * The replayed history as a repository intake can adopt: its pack and index,
+ * the branch at its last commit, and HEAD on that branch. Intake writes the
+ * config and commits the assembly on top.
+ */
 const writeHistory = (fileSystem: FileSystem.FileSystem, root: string, replayed: Replayed) =>
   Effect.gen(function* () {
     const git = joinPath(root, ".git");
@@ -192,75 +192,82 @@ export const assemble = (options: {
 
     yield* Effect.mapError(fileSystem.makeDirectory(options.root, { recursive: true }), io);
 
-    // The Writer saves first, so the assembly commits on top of them.
-    const observability = Option.getOrUndefined(yield* Effect.serviceOption(Observability));
-    const histories = options.books.flatMap((staged) =>
-      staged.history === undefined ? [] : [staged.history],
-    );
-    const replaying = observability?.span("migrate.history", undefined, {
-      "migrate.books": histories.length,
-      "migrate.saves": histories.reduce((sum, history) => sum + history.saves.length, 0),
-    });
-    const abandon = (description: string) =>
-      Effect.andThen(
-        Effect.ignore(fileSystem.remove(options.root, { recursive: true })),
-        Effect.fail(new AssembleError({ reason: "History", description })),
+    // Everything from here writes into the new folder, and any failure removes
+    // it again: a project never arrives half made, or without its history.
+    const build = Effect.gen(function* () {
+      // The Writer saves first, so the assembly commits on top of them.
+      const observability = Option.getOrUndefined(yield* Effect.serviceOption(Observability));
+      const histories = options.books.flatMap((staged) =>
+        staged.history === undefined ? [] : [staged.history],
       );
-    const replayed = yield* Effect.catch(
-      Effect.tryPromise(() => replayWriterHistories(histories)),
-      (cause) =>
-        abandon(
-          `the Writer history could not be replayed: ${cause instanceof Error ? cause.message : String(cause)}`,
-        ),
-    );
-    if (replayed !== undefined)
-      yield* Effect.catch(writeHistory(fileSystem, options.root, replayed), (error) =>
-        abandon(`the Writer history could not be written: ${error.message}`),
+      const replaying = observability?.span("migrate.history", undefined, {
+        "migrate.books": histories.length,
+        "migrate.saves": histories.reduce((sum, history) => sum + history.saves.length, 0),
+      });
+      const abandon = (description: string) => {
+        replaying?.({ "migrate.reason": description });
+        observability?.note("migrate.history", "failed", description);
+        return Effect.fail(new AssembleError({ reason: "History", description }));
+      };
+      const replayed = yield* Effect.catch(
+        Effect.tryPromise(() => replayWriterHistories(histories)),
+        (cause) =>
+          abandon(
+            `the Writer history could not be replayed: ${cause instanceof Error ? cause.message : String(cause)}`,
+          ),
       );
-    replaying?.(
-      replayed === undefined
-        ? { "migrate.commits": 0 }
-        : {
-            "migrate.commits": replayed.commits,
-            "migrate.unchanged": replayed.unchanged,
-            "migrate.objects": replayed.stats.objects,
-            "migrate.deltas": replayed.stats.deltas,
-            "migrate.pack_bytes": replayed.stats.packBytes,
+      if (replayed !== undefined)
+        yield* Effect.catch(writeHistory(fileSystem, options.root, replayed), (error) =>
+          abandon(`the Writer history could not be written: ${error.message}`),
+        );
+
+      const written: string[] = [];
+      const write = (name: string, bytes: Uint8Array) =>
+        Effect.map(
+          Effect.mapError(fileSystem.writeFile(joinPath(options.root, name), bytes), io),
+          () => {
+            written.push(name);
           },
-    );
+        );
+      for (const book of books) yield* write(book.path, book.bytes);
+      yield* write("metadata.json", encode(burrito.success));
+      yield* write("manifest.yaml", encode(resourceContainerText(form)));
+      if (upstreams.length > 0) yield* write(".upstreams.json", encode(upstreamsText(upstreams)));
 
-    const written: string[] = [];
-    const write = (name: string, bytes: Uint8Array) =>
-      Effect.map(
-        Effect.mapError(fileSystem.writeFile(joinPath(options.root, name), bytes), io),
-        () => {
-          written.push(name);
-        },
-      );
-    for (const book of books) yield* write(book.path, book.bytes);
-    yield* write("metadata.json", encode(burrito.success));
-    yield* write("manifest.yaml", encode(resourceContainerText(form)));
-    if (upstreams.length > 0) yield* write(".upstreams.json", encode(upstreamsText(upstreams)));
-
-    const result = yield* Effect.mapError(
-      intakeRepository({
-        root: options.root,
-        written,
-        from: "Writer",
-        author: options.author,
-        message: assemblyMessage(options.form, options.books),
-      }),
-      (error) =>
-        new AssembleError({
-          reason: "Io",
-          description: "description" in error ? String(error.description) : String(error),
+      const result = yield* Effect.mapError(
+        intakeRepository({
+          root: options.root,
+          written,
+          from: "Writer",
+          author: options.author,
+          message: assemblyMessage(options.form, options.books),
         }),
+        (error) =>
+          new AssembleError({
+            reason: "Io",
+            description: "description" in error ? String(error.description) : String(error),
+          }),
+      );
+      // Intake starts a fresh repository when it cannot open the one it found,
+      // which here would be the replayed history, lost without a word.
+      if (replayed !== undefined && !result.adopted)
+        return yield* abandon("the replayed Writer history could not be opened");
+      replaying?.(
+        replayed === undefined
+          ? { "migrate.commits": 0 }
+          : {
+              "migrate.commits": replayed.commits,
+              "migrate.unchanged": replayed.unchanged,
+              "migrate.objects": replayed.stats.objects,
+              "migrate.deltas": replayed.stats.deltas,
+              "migrate.pack_bytes": replayed.stats.packBytes,
+            },
+      );
+      return result;
+    });
+    return yield* Effect.tapError(build, () =>
+      Effect.ignore(fileSystem.remove(options.root, { recursive: true })),
     );
-    // Intake starts a fresh repository when it cannot open the one it found,
-    // which here would be the replayed history, lost without a word.
-    if (replayed !== undefined && !result.adopted)
-      return yield* abandon("the replayed Writer history could not be opened");
-    return result;
   });
 
 /** The text of a file under `root`, or `undefined` when it is not there. */
@@ -272,7 +279,9 @@ const readIfThere = (
 
 /**
  * Brings Writer books into a project that exists: Books → "Add a book…".
- * The same arrival as an assembly, for some books, and one commit for them.
+ * The same arrival as an assembly, for some books, and one commit for them,
+ * made on the project's own repository as it is — never adopted or begun
+ * again — joining the books' replayed Writer saves as a second parent.
  *
  * Refuses a book the project already holds: no Bible prints John twice, and
  * a newer copy of one of its books is an update, which goes through Review,
@@ -412,21 +421,40 @@ export const addBooks = (options: {
       yield* write(UPSTREAMS_FILE, upstreamsText([...kept, ...fresh]));
     }
 
-    return yield* Effect.mapError(
-      intakeRepository({
-        root: options.root,
-        written,
-        from: "Writer",
-        author: options.author,
-        message: assemblyMessage({ ...prefillForm(options.books), title: "Books" }, options.books),
-        ...(replayed === undefined ? {} : { alsoParents: [replayed.head] }),
-      }),
-      (error) =>
-        new AssembleError({
-          reason: "Io",
-          description: "description" in error ? String(error.description) : String(error),
-        }),
+    // The project's own repository, as it is: no adopt (that rewrites the
+    // config and drops `refs/remotes`, which is where sync keeps its
+    // baseline), and no fresh repository if it will not open — that would
+    // throw the project's history away to make room for the books.
+    const git = yield* Git;
+    const failed = (what: string) => (error: GitError) =>
+      new AssembleError({
+        reason: "Io",
+        description: `${what}: ${error.description ?? error.reason}`,
+      });
+    const repo = yield* Effect.mapError(
+      git.open(options.root),
+      failed("the project's repository would not open"),
     );
+    const changed = new Set(
+      (yield* Effect.mapError(
+        git.status(repo),
+        failed("the project's status could not be read"),
+      )).changed.map((entry) => entry.path),
+    );
+    const receipts = written
+      .filter((path) => changed.has(path))
+      .map((path) => ({ path: joinPath(options.root, path), stamp: { revision: 0, length: 0 } }));
+    const arrival = yield* Effect.mapError(
+      git.commit(
+        repo,
+        receipts,
+        assemblyMessage({ ...prefillForm(options.books), title: "Books" }, options.books),
+        options.author,
+        replayed === undefined ? undefined : { alsoParents: [replayed.head] },
+      ),
+      failed("the books could not be committed"),
+    );
+    return { repo, adopted: true, fallback: undefined, arrival };
   });
 
 type Added = {

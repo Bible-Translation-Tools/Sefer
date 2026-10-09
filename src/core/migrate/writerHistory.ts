@@ -148,10 +148,20 @@ export interface Replayed extends FinishedPack {
 export const replayWriterHistories = async (
   histories: readonly WriterHistory[],
 ): Promise<Replayed | undefined> => {
+  // Interleaved by author time, but a book's own saves never reorder: each
+  // save stores its files' new text, so a save replayed before an earlier one
+  // would leave the book as it was before. A device whose clock ran wrong
+  // (a reset battery's 2000-01-01) is where author time goes backwards, so a
+  // save's key is never earlier than the save before it in the same book.
   const events = histories
-    .flatMap((history) => history.saves.map((save) => ({ history, save })))
-    .map((event, order) => ({ ...event, order }))
-    .sort((a, b) => a.save.author.at - b.save.author.at || a.order - b.order);
+    .flatMap((history, book) => {
+      let key = -Infinity;
+      return history.saves.map((save, index) => {
+        key = Math.max(key, save.author.at);
+        return { history, save, key, book, index };
+      });
+    })
+    .sort((a, b) => a.key - b.key || a.book - b.book || a.index - b.index);
 
   const writer = packWriter();
   const files = new Map(histories.map((history) => [history.book, new Map<string, string>()]));

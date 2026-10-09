@@ -76,7 +76,10 @@ export interface WalkedChange {
 export interface WalkedCommit {
   readonly id: CommitId;
   readonly parents: readonly CommitId[];
-  /** Verbatim, trailing newline and all. */
+  /**
+   * As the host reads it: verbatim on desktop; the Web's reader normalises
+   * line endings and ends it with one newline. Its first line is the same.
+   */
   readonly message: string;
   readonly author: Signature;
   readonly committer: Signature;

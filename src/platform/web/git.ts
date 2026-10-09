@@ -273,10 +273,23 @@ const makeWebGit = (
         commits.set(oid, commit);
         return commit;
       };
+      // A shallow clone's boundary commits have parents that are not here:
+      // they are roots, as git2 treats them on desktop.
+      const shallow = new Set(
+        await fs
+          .readFile(`${dir}/.git/shallow`, "utf8")
+          .then((text) =>
+            String(text)
+              .split("\n")
+              .filter((line) => line.trim() !== ""),
+          )
+          .catch((): string[] => []),
+      );
       const line: WalkedCommit[] = [];
       for (let oid: string | undefined = head; oid !== undefined;) {
         const commit = await commitAt(oid);
-        const parent = commit.parent[0];
+        const parents: readonly string[] = shallow.has(oid) ? [] : commit.parent;
+        const parent: string | undefined = parents[0];
         const parentTree = parent === undefined ? undefined : (await commitAt(parent)).tree;
         const changes: WalkedChange[] = [];
         await compare(parentTree, commit.tree, "", changes);
@@ -289,7 +302,7 @@ const makeWebGit = (
         });
         line.push({
           id: oid,
-          parents: commit.parent,
+          parents,
           message: commit.message,
           author: signed(commit.author),
           committer: signed(commit.committer),

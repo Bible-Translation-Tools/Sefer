@@ -631,7 +631,7 @@ pub fn git_walk(root: String) -> Result<Vec<GitWalkedCommit>, String> {
                 continue;
             };
             changes.push(GitWalkedChange {
-                path: path.replace('\\', "/"),
+                path: path.to_string(),
                 blob: if deleted { None } else { Some(file.id().to_string()) },
             });
         }

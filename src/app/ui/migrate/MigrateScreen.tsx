@@ -565,7 +565,7 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
           >
             {/* While it runs, what takes the time: every Writer save is
                 written into the new project's history. */}
-            {assembling()
+            {assembling() && ready().some((staged) => (staged.history?.saves.length ?? 0) > 0)
               ? t("Writing {count} books' history…", { count: picked().length })
               : props.into === undefined
                 ? t("Assemble {count} books", { count: picked().length })
