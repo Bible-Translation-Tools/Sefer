@@ -83,6 +83,34 @@ The on-disk layout stays upstream's; what Sefer reads is a derived per-book pack
 
 `en_tn` is offered in two places, from `HELP_TEXTS` (`src/app/catalogue.ts`), a stated second source because the catalogue lists no helps: the reference column's menu under **Reference material**, and the projects page's **Translation Notes** section ([landing](landing.md)). Both download through `downloadHelp` (`src/app/kinds/download.ts`): one `import.remote` operation and one progress toast that moves the whole way — the megabytes received (the Web transport counts the pack as it arrives, since git reports nothing between "Compressing objects" and the end of the download), then reading, then "Packing ROM: book 45 of 66" — and ends saying what happened. On slow 3G (400 kbit/s) en_tn took 176 s and the toast moved every 5 s throughout. Picked, the column draws it through the registry as `NotesPane`: the notes for `shell.place()`, each its own block, consumed through `createHeld` so the last verse's notes stay while the next load.
 
+### Provenance and updates
+
+Every copy of reference material records where it came from and which version it holds, so an update check needs nothing new on disk. **The check itself is not built.**
+
+**What is recorded, and where:**
+
+| Fact                           | Where                                                                                                                                                                        | Written by                                                                                                                         |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| The upstream URL and commit    | `Resource.upstream { url, commit }` in `<libraryRoot>/library.json` (the URL stored normalised)                                                                              | `arrival.referenceCopy`: after the newest-only clone it resolves `HEAD` and calls `Library.add(into, { url, commit })`, both hosts |
+| The commit each pack came from | the pack's stamp, `{ kind: "import", at, commit }`, in every `<root>/.sefer/packs/tn/<BOOK>.json`                                                                            | `packHelp`, on the Web, where the packs ARE the resource                                                                           |
+| What the copy holds            | the copy's own `.git` (desktop: an ordinary clone, `HEAD` is the commit) and its listing fingerprint in each pack stamp, `{ kind: "tree", fingerprint }`                     | the clone; `bookPack` on first read of each book                                                                                   |
+| The arrival                    | `<root>/.sefer/provenance.json` (desktop only: on the Web the clone is staged in memory and this record is dropped with it; the Library row carries the same URL and commit) | `cloneRepository`                                                                                                                  |
+
+`Resource.upstream` is the same generic pattern every Library copy uses (a gateway source text records it the same way, and `Library.cloned(url)` finds a copy by it, which is what makes a second download none). It is per device: a project never names a copy by URL.
+
+**How an update check would work:**
+
+1. **Ask.** `Remote.probe(upstream.url)`: the server's refs in one round trip, no transfer. If `head` equals `upstream.commit`, nothing is new. This is the question the shared project's check asks first (`checkForChanges`, [sync](sync.md), "Checking on open, and sending on save") and the one the Writer upstream check asks for each `.upstreams.json` row (same chapter, "Writer projects a project follows").
+2. **Say.** "Translation Notes have changed upstream": on the `/projects` Notes section's row, and wherever the copy is picked. Nothing moves without the person.
+3. **Bring it in.**
+   - **Web:** `referenceCopy` again, into a fresh folder beside the old one: clone newest-only into memory, `packHelp` writes every book's pack (about 13 s for `en_tn` in all, of which packing is under 4 s, so re-packing only the changed books from the clone's own diff, `Git.changedPathsBetween`, would save little), `Library.add` with the new commit, then the old folder is removed. A failure leaves the old copy as it was.
+   - **Desktop:** a fast-forward pull in the copy itself. Nobody edits a reference copy, so it never conflicts. The pull changes files in the chapter directories, each book's listing fingerprint moves, and `bookPack` rebuilds exactly the books the pull touched the next time each is read. Then `Library.add(root, { url, commit: newHead })` records the new commit.
+4. **Release.** An open handle on the old copy is released (`shell.resources`), so panes reopen on the new packs.
+
+**Why a pull never fights the packs:** the on-disk layout is upstream's, untouched: the chapter directories of chunk files a `git pull` updates. What Sefer derived from it lives only in `.sefer/packs/`, which is in the clone's git exclude, is never committed, and is rebuilt from the files whenever they move. There is no restructured copy of upstream's content for a pull to conflict with. On the Web there is no working tree at all, so "pull" is "download again and re-pack", and the stamped commit is how the copy says which upstream version its packs describe.
+
+**How it differs from the two upstream checks that exist:** the shared project's check (`syncActions.checkForChanges`) and the Writer upstream check (`writerWatch.ts`, `.upstreams.json`) both concern a project's TEXT, which is merged or reviewed, never overwritten. A reference copy is read-only and nobody's work, so its update is a replacement, not a merge, and needs no Review. `.upstreams.json` is committed in a project because teammates follow the same Writer projects; a reference copy's upstream is this device's fact, in `library.json`.
+
 ## Binding a reference, and where the binding lives
 
 The Library had no surface, which made "how is a reference Bible supposed to work?" a fair question: the port could bind, and nothing could call it. The reference column
