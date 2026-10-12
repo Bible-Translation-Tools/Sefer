@@ -26,6 +26,8 @@ baseline for it and `SaveCoordinator.dirty(book)` says the text differs. The row
 event names the book, never during a render, because `dirty` can cost an engine hash. A book opened from
 disk has its baseline `adopt`ed at focus, so an untouched book never reads dirty ([save](review.md)).
 
+`shell.place()` is where the reader is as an Address — the unit of the open book the caret stands in (`PSA 1:3`, `PSA 1` at a chapter's head, `PSA intro`) — read from ProjectAnalysis' held analysis over Location's `addressAt` when that analysis describes the book's current stamp, and holding its last answer while the analysis is a pass behind. It is a signal and deliberately not a `ShellEvent` variant (Will, 2026-10-12): it moves no Book. Resource panes follow it ([resources](resources.md), "Resource kinds"). `shell.resources` opens a resource's handle once, on first need, and releases every handle when the project closes, because a handle can be costly to hold and a pane is remounted on every pick.
+
 The context carries a stable handle — `useShellState()` (always available) and `useShell()` (only inside a `ShellGate`) — because a Solid 2 context value is read when the provider is created and cannot be swapped later.
 
 ## The Solid/Book boundary

@@ -7,6 +7,7 @@
 - `findInReading(readings, books, query, options?)` — **the default.** Scans each book's READING — what the reader sees in visual mode, the markup cut out — and places every hit back in the source.
 - `find(books, query, options?)` — the raw scan of canonical USFM, for a search deliberately aimed at the markup.
 - `findInReferences(readings, references, query, options?)` — the same scan as `findInReading`, over the project's bound source and reference resources.
+- `findInDocuments(documents, query, options?)` — the default text find over a resource kind's haystack (below).
 
 What is matched against (reading or raw) and what is matched with (literal or regex) are two switches, so all four combinations work. Matching is a JS `RegExp` — a literal is escaped into one — with the `i` flag unless `caseSensitive`, and `wholeWord` is checked on the characters either side of the match (`\p{L}\p{N}_`), so it works for literals and regexes alike and for non-ASCII scripts, where `\b` would not.
 
@@ -50,6 +51,12 @@ Search is a module, not a screen, so a screen with a question asks it in place. 
 `/find` resolves each hit's Address against the project's own book (`refOccurrences`, below) and draws the reference hit above the project's matching verse card — paired verse by verse over both Addresses, so a bridge on either side still pairs — read-only, with no Edit, no Open in editor and no staleness badge. A reference hit with no Address has no card to sit on.
 
 **Registration is not automatic.** `ProjectAnalysis.attachReferences(refs)` registers the books, and `src/app/workflows/references.ts` resolves the Library's `source` and `reference` bindings into texts and calls it. The set is REPLACED on each call and cleared when a project is attached. A project with nothing bound has no Reference scope: the segment on `/find` is disabled with the reason as its tooltip.
+
+## Reference material: a kind's own haystack
+
+A resource that is not scripture — Translation Notes today — is searched by the same matcher, over what its kind chooses. That is the override point ([resources](resources.md), "Resource kinds"): a `ResourceHandle` with a `documents` slot hands back `HaystackDocument { id, text, addresses }`, and `findInDocuments` matches each text as it is (the identity reading: no mask), with the same case, whole-word, regex and preview rules as every other door. `DocumentHit { document, addresses, from, to, preview, previewMatch }` carries no stamp: offsets are into the document's text, somewhere to highlight.
+
+`/find` shows a **Search {title}** switch when any resource the project picked has a haystack — the handle is asked for the slot, never its kind — and the scope `helps` (`?scope=helps`) runs each handle's `documents.list(projectBooks, borrowedContext)` through `findInDocuments`. Like the reference scope, the project's own verse is the card: each hit's Addresses are resolved in the project's text (`refOccurrences`) and the note sits beside the card as a static, read-only pair, its exact Markdown with the match marked. A hit with no verse in this project (a book or chapter introduction, a book not translated yet) has no card, and the gap is stated ("14 in Translation Notes"). A kind with a better question than text (Macula's facets) would bring its own panel rather than a haystack; not built.
 
 ## Replace
 
