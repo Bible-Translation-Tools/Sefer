@@ -52,6 +52,12 @@ export interface Step {
   readonly spotlight?: Spotlight;
   /** "user" waits for Next; a function moves on as soon as it holds. */
   readonly advance?: "user" | ((context: TourContext) => boolean);
+  /**
+   * How long this step may wait to become ready, when the default is too
+   * short: a step that waits on the network (a download, a source text
+   * registering) names its own.
+   */
+  readonly timeoutMs?: number;
 }
 
 export interface Tour {
@@ -98,11 +104,11 @@ const [running, setRunning] = createSignal<Running | undefined>(undefined, {
 export const runningTour = running;
 
 /**
- * How long a step may wait to become ready before the card says so. Short,
- * because a step that is not ready in a few seconds is almost always one the
- * UI has moved out from under, and waiting longer only looks like a hang.
+ * How long a step may wait to become ready before the card says so, unless
+ * it names its own `timeoutMs`. A step not ready in this long is almost
+ * always one the UI has moved out from under.
  */
-const READY_TIMEOUT_MS = 6_000;
+const READY_TIMEOUT_MS = 10_000;
 const POLL_MS = 100;
 
 let poll: ReturnType<typeof setInterval> | undefined;
@@ -206,7 +212,7 @@ const enter = (context: TourContext, tour: Tour, index: number): void => {
         // its job by being reached.
         if (step.spotlight === undefined && step.advance === undefined)
           enter(context, tour, index + 1);
-      } else if (Date.now() - started > READY_TIMEOUT_MS) {
+      } else if (Date.now() - started > (step.timeoutMs ?? READY_TIMEOUT_MS)) {
         stopPolling();
         drifted(context, tour, index, "never became ready");
         setRunning({ tour, index, phase: "timedOut" });

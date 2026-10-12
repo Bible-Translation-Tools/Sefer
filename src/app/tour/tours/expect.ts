@@ -59,6 +59,9 @@ export const expectTour: Tour = {
     {
       go: (context) => find(context, undefined),
       ready: results,
+      // The first search waits on the English source text registering, and on
+      // a first visit on its download too.
+      timeoutMs: 60_000,
       spotlight: {
         anchor: "[data-tour=find-search]",
         title: "Find, in the source text",
