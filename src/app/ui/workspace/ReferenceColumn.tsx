@@ -51,7 +51,7 @@ import {
   type RelatedResource,
 } from "#core/resources/relationships";
 
-import { announceSourceTexts, libraryRevision, referenceCopy, sourceTextCopy } from "../../arrival";
+import { announceSourceTexts, libraryRevision, sourceTextCopy } from "../../arrival";
 import {
   catalogueFor,
   gatewayTexts,
@@ -60,8 +60,8 @@ import {
   type HelpText,
 } from "../../catalogue";
 import { describe, remoteReasonOf } from "../../describe";
-import { contentHostFor } from "../../endpoints";
 import { t } from "../../i18n";
+import { downloadHelp, helpUrl } from "../../kinds/download";
 import { KIND_ROLES, roleFor } from "../../kinds/table";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
@@ -354,42 +354,26 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
    * cloned from: the helps the catalogue does not list (`HELP_TEXTS`).
    */
   const helps = (): readonly { readonly help: HelpText; readonly url: string }[] => {
-    const host = contentHostFor(services.settings);
-    if (host === null) return [];
     const held = new Set(
       copies().flatMap((resource) =>
         resource.upstream === undefined ? [] : [normaliseRepoUrl(resource.upstream.url)],
       ),
     );
-    return HELP_TEXTS.map((help) => ({ help, url: `${host}/${help.repository}` })).filter(
-      ({ url }) => !held.has(normaliseRepoUrl(url)),
-    );
+    return HELP_TEXTS.flatMap((help) => {
+      const url = helpUrl(services, help);
+      return url === undefined || held.has(normaliseRepoUrl(url)) ? [] : [{ help, url }];
+    });
   };
 
   /** Downloads reference material into the Library (once per device), then shows it. */
-  const fetchHelp = (help: HelpText, url: string): void => {
-    const operation = services.composition.observability.operation("import.remote", {
-      "import.source": "reference-material",
-      "import.host": services.hostInfo.kind(),
-    });
+  const fetchHelp = (help: HelpText): void => {
     setBusy(true);
     setFetching(help.title);
-    void services
-      .run(Effect.provideService(referenceCopy(services, url), Observability, operation))
+    void downloadHelp(services, help)
       // oxlint-disable-next-line solid/reactivity -- a promise continuation: runs once, when the copy is here
-      .then((resource) => {
-        operation.end("passed", {
-          "import.phase": "complete",
-          "resource.content": resource.content,
-        });
-        show(resource);
-      })
-      .catch((cause: unknown) => {
-        operation.end(remoteVerdict(remoteReasonOf(cause)));
-        shell.report(
-          t("could not add {name}: {reason}", { name: help.title, reason: describe(cause) }),
-        );
-      })
+      .then((resource) => show(resource))
+      // The toast has said why; nothing more to do here.
+      .catch(() => undefined)
       .finally(() => {
         setBusy(false);
         setFetching("");
@@ -575,7 +559,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
                   title={t("Download {title} to read beside this project", {
                     title: entry.help.title,
                   })}
-                  onSelect={() => fetchHelp(entry.help, entry.url)}
+                  onSelect={() => fetchHelp(entry.help)}
                 >
                   <RowText
                     name={entry.help.title}

@@ -19,6 +19,7 @@ import type { ContentKind } from "#core/resources/kinds/content";
 import { Unavailable, type OpenHandle } from "#core/resources/kinds/handle";
 import { openTranslationNotes } from "#core/resources/kinds/tn/adapter";
 import { packHelp } from "#core/resources/kinds/tn/pack";
+import type { PackProgress, UpstreamTree } from "#core/resources/kinds/tree";
 import { ROLES, type Resource, type Role } from "#core/resources/library";
 
 interface KindRow {
@@ -36,9 +37,10 @@ interface KindRow {
    * holding only what the kind reads. Absent: the tree is kept as cloned.
    */
   readonly pack?: (
-    from: { readonly fileSystem: FileSystem.FileSystem; readonly root: string },
+    from: UpstreamTree,
     to: { readonly fileSystem: FileSystem.FileSystem; readonly root: string },
     provenance: { readonly at: string; readonly commit?: string },
+    onProgress?: (progress: PackProgress) => void,
   ) => Effect.Effect<unknown, Unavailable>;
   readonly open: (
     fileSystem: FileSystem.FileSystem,

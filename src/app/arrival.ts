@@ -16,7 +16,7 @@
  * was cloned from, and a held copy is used, not cloned again.
  */
 
-import { Effect, FileSystem, Option } from "effect";
+import { Effect, FileSystem, Option, Stream, type Scope } from "effect";
 import { createSignal } from "solid-js";
 
 import { lastSegment } from "#core/fileSystem/path";
@@ -24,7 +24,9 @@ import { Git } from "#core/git/git";
 import { Observability } from "#core/observability";
 import { readProjectMetadata } from "#core/project/discovery";
 import { cloneRepository } from "#core/remote/clone";
+import { Remote } from "#core/remote/remote";
 import type { CloneOptions, Progress } from "#core/remote/remote";
+import { treeInFolder } from "#core/resources/kinds/tree";
 import { Library, recognizeRoot, type Resource } from "#core/resources/library";
 import {
   catalogueUrl,
@@ -138,6 +140,51 @@ export const sourceTextCopy = (
     return yield* Effect.fail(new Error(`${url} arrived without a Library entry`));
   });
 
+/** How far a reference copy has got, for a progress readout. */
+export type CopyProgress =
+  /** The transfer, as git reports it: its own step ("Receiving objects"), `loaded` of `total`. */
+  | {
+      readonly phase: "downloading";
+      readonly step: string;
+      readonly loaded: number;
+      readonly total?: number;
+      /** `bytes` while the pack itself arrives; otherwise git's object counts. */
+      readonly unit?: "objects" | "bytes";
+    }
+  /** Unpacking what arrived and reading its manifest. */
+  | { readonly phase: "reading" }
+  /** Writing the kind's packs: book `done` of `of`. */
+  | {
+      readonly phase: "packing";
+      readonly done: number;
+      readonly of: number;
+      readonly book: string;
+    };
+
+/** Every transfer progress event of the Remote in scope, as `downloading`, until interrupted. */
+const reportDownload = (
+  onProgress: ((progress: CopyProgress) => void) | undefined,
+): Effect.Effect<void, never, Remote | Scope.Scope> =>
+  onProgress === undefined
+    ? Effect.void
+    : Effect.asVoid(
+        Effect.forkScoped(
+          Effect.flatMap(Remote, (remote) =>
+            Stream.runForEach(remote.progress(), (progress) =>
+              Effect.sync(() =>
+                onProgress({
+                  phase: "downloading",
+                  step: progress.phase,
+                  loaded: progress.loaded,
+                  ...(progress.total === undefined ? {} : { total: progress.total }),
+                  ...(progress.unit === undefined ? {} : { unit: progress.unit }),
+                }),
+              ),
+            ),
+          ),
+        ),
+      );
+
 /**
  * The Library's copy of reference material — a help, not a scripture text:
  * the one on this device, else a fresh one.
@@ -145,18 +192,25 @@ export const sourceTextCopy = (
  * Where disk is cheap (desktop) it is an ordinary clone into the Library's
  * folder, upstream's layout kept as it is; the kind's reader indexes it on
  * first read. On the Web the tree may be tens of thousands of files, and
- * OPFS pays per file (29,300 for `en_tn`, 22.6 s to write against 0.14 s
- * for its packs, `storage.md`), so the clone is made in MEMORY, recognised
- * there from its manifest, and only what the kind's `pack` step writes —
- * one file per book, the manifest and the licence — reaches storage. A kind
- * with no `pack` step keeps its tree as a plain clone does.
+ * OPFS pays per file (29,300 for `en_tn`, `storage.md`), so it is cloned
+ * newest-only into MEMORY, recognised there by the same `recognizeRoot`
+ * every other root is, and the kind's `pack` step writes only what the kind
+ * reads: one file per book, the manifest and the licence. A kind with no
+ * `pack` step is refused here rather than half-kept.
+ *
+ * A shallow clone, not an archive download (Will, 2026-10-12). Set aside the
+ * same day after measuring: a clone with no working tree, reading the
+ * commit's blobs through isomorphic-git, saved about 1.8 s of clone and cost
+ * more than that in blob reads (14.1 s against 13.2 s in all).
  *
  * Nothing is registered until the copy is complete: a failed pack removes
- * what it wrote, and the Library never lists half a resource.
+ * what it wrote, and the Library never lists half a resource. `onProgress`
+ * hears the download, the reading and each book packed.
  */
 export const referenceCopy = (
   services: Services,
   url: string,
+  onProgress?: (progress: CopyProgress) => void,
 ): Effect.Effect<Resource, unknown, Domain> =>
   Effect.gen(function* () {
     const library = yield* Library;
@@ -164,7 +218,9 @@ export const referenceCopy = (
     if (Option.isSome(held)) return held.value;
     const inMemory = services.inMemoryTransfer?.();
     if (inMemory === undefined) {
-      const arrived = yield* cloneArrival(services, "sourceText", url);
+      const arrived = yield* Effect.scoped(
+        Effect.flatMap(reportDownload(onProgress), () => cloneArrival(services, "sourceText", url)),
+      );
       if (arrived.resource !== undefined) return arrived.resource;
       return yield* Effect.fail(new Error(`${url} arrived without a Library entry`));
     }
@@ -173,31 +229,38 @@ export const referenceCopy = (
     const staged = `/staging/${owner}_${repo}`;
     const observability = yield* Observability;
     const stage: Effect.Effect<string | undefined, unknown, Domain> = Effect.provide(
-      Effect.gen(function* () {
-        const fileSystem = yield* FileSystem.FileSystem;
-        const git = yield* Git;
-        const cloning = observability.span("reference.clone");
-        const { repo: cloned } = yield* cloneRepository(url, staged, undefined, {
-          history: "latest",
-        });
-        cloning();
-        const head = Option.getOrUndefined(yield* git.resolve(cloned, "HEAD"));
-        const recognition = yield* recognizeRoot(fileSystem, staged);
-        const pack = packFor(recognition.content);
-        if (pack === undefined)
-          return yield* Effect.fail(
-            new Error(`${url} holds ${recognition.content}, which is cloned, not packed`),
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fileSystem = yield* FileSystem.FileSystem;
+          const git = yield* Git;
+          const cloning = observability.span("reference.clone");
+          yield* reportDownload(onProgress);
+          // Newest version only: a read-only copy never needs its history,
+          // and `history` said is what keeps a backfill from starting behind.
+          const { repo: cloned } = yield* cloneRepository(url, staged, undefined, {
+            history: "latest",
+          });
+          cloning();
+          onProgress?.({ phase: "reading" });
+          const head = Option.getOrUndefined(yield* git.resolve(cloned, "HEAD"));
+          const recognition = yield* recognizeRoot(fileSystem, staged);
+          const pack = packFor(recognition.content);
+          if (pack === undefined)
+            return yield* Effect.fail(
+              new Error(`${url} holds ${recognition.content}, which is cloned, not packed`),
+            );
+          const packing = observability.span("reference.pack");
+          yield* pack(
+            treeInFolder(fileSystem, staged),
+            { fileSystem: services.fileSystem, root: into },
+            { at: new Date().toISOString(), ...(head === undefined ? {} : { commit: head }) },
+            (progress) => onProgress?.({ phase: "packing", ...progress }),
           );
-        const packing = observability.span("reference.pack");
-        yield* pack(
-          { fileSystem, root: staged },
-          { fileSystem: services.fileSystem, root: into },
-          { at: new Date().toISOString(), ...(head === undefined ? {} : { commit: head }) },
-        );
-        packing();
-        yield* Effect.ignore(fileSystem.remove(staged, { recursive: true }));
-        return head;
-      }),
+          packing();
+          yield* Effect.ignore(fileSystem.remove(staged, { recursive: true }));
+          return head;
+        }),
+      ),
       inMemory,
     );
     const head = yield* stage;
@@ -208,6 +271,33 @@ export const referenceCopy = (
     yield* Effect.sync(libraryChanged);
     return resource;
   });
+
+/** What a progress toast says for a copy's progress. */
+export const describeCopy = (progress: CopyProgress): string => {
+  switch (progress.phase) {
+    case "downloading":
+      if (progress.unit === "bytes")
+        return t("Downloading: {size} MB received", {
+          size: (progress.loaded / 1_000_000).toFixed(1),
+        });
+      return progress.total === undefined || progress.total === 0
+        ? t("Downloading: {step}…", { step: progress.step })
+        : t("Downloading: {step} {percent}%", {
+            step: progress.step,
+            percent: Math.min(100, Math.round((progress.loaded / progress.total) * 100)),
+          });
+    case "reading":
+      return t("Reading what arrived…");
+    case "packing":
+      return progress.done >= progress.of
+        ? t("Finishing…")
+        : t("Packing {book}: book {at} of {of}", {
+            book: progress.book,
+            at: progress.done + 1,
+            of: progress.of,
+          });
+  }
+};
 
 /** One declared source text, after the pull: held already, pulled now, or not. */
 interface SourceTextRow {

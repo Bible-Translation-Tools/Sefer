@@ -132,6 +132,21 @@ export const update = (id: string, options: Omit<ToastOptions, "id">): void => {
   arm(id, options.tone === "error" ? (options.autoClose ?? false) : options.autoClose);
 };
 
+/**
+ * A progress toast's NEXT step, in place: new words, still spinning, still
+ * not closing by itself. `update` is for the end of the work; this is for
+ * the middle of it, where `update`'s settling (spinner off, the auto-close
+ * armed) would make a slow download's toast vanish before it finished. A
+ * toast the reader closed stays closed.
+ */
+export const advance = (id: string, options: Pick<ToastOptions, "title" | "message">): void => {
+  setList((held) =>
+    held.map((each) =>
+      each.id === id ? { ...each, title: options.title, message: options.message } : each,
+    ),
+  );
+};
+
 export const dismiss = (id: string): void => {
   clearTimer(id);
   setList((held) => held.filter((each) => each.id !== id));

@@ -23,6 +23,12 @@ export interface Progress {
   readonly phase: string;
   readonly loaded: number;
   readonly total?: number | undefined;
+  /**
+   * What `loaded` counts: git's own phases count objects; `bytes` is the
+   * transport counting the pack as it arrives, the one readout that moves
+   * during a slow download (git reports nothing until the pack is in).
+   */
+  readonly unit?: "objects" | "bytes";
 }
 
 /**

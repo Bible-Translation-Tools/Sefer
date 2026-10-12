@@ -183,10 +183,28 @@ const makeWebRemote = (
             signal: controller.signal,
           });
           const chunks = response.body;
+          // The pack itself, counted as it arrives: isomorphic-git says
+          // nothing between the server's "Compressing objects" and the end of
+          // the download, which on a slow line is minutes of a still toast.
+          const counting = request.url.endsWith("/git-upload-pack");
+          let received = 0;
+          let said = 0;
           const body = async function* (): AsyncGenerator<Uint8Array> {
             try {
               for await (const chunk of chunks ?? []) {
                 restart();
+                if (counting) {
+                  received += chunk.byteLength;
+                  // A readout, not a log: once per 64 KB is plenty.
+                  if (received - said >= 65_536) {
+                    said = received;
+                    PubSub.publishUnsafe(events, {
+                      phase: "Receiving data",
+                      loaded: received,
+                      unit: "bytes",
+                    });
+                  }
+                }
                 yield chunk;
               }
             } finally {

@@ -23,10 +23,11 @@
 import { Effect, FileSystem, Result, Schema } from "effect";
 
 import { writeFileStringAtomic } from "../../../fileSystem/atomic";
-import { escapesRoot, joinPath } from "../../../fileSystem/path";
+import { joinPath, normalisePath } from "../../../fileSystem/path";
 import { decode } from "../../../source/source";
 import { readResourceContainerManifest } from "../../projectMetadata";
 import { Unavailable } from "../handle";
+import { filesBelow, treeInFolder, type PackProgress, type UpstreamTree } from "../tree";
 import { readHelpBook, type BookFile } from "./rcHelpMarkdown";
 
 /** Bumped when the pack's shape or the reader's output changes: an older pack is rebuilt. */
@@ -92,55 +93,40 @@ const unavailable = (reason: Unavailable["reason"], description: string): Unavai
 const packPath = (root: string, book: string): string =>
   joinPath(root, `${PACK_DIR}/${book.toUpperCase()}.json`);
 
-/**
- * The books a help declares, from its `manifest.yaml`'s `projects[]`. A path
- * that leaves the root is refused, never followed.
- */
+/** The books a help's manifest declares. A path that leaves the root is refused, never followed. */
+const booksIn = (text: string): Result.Result<readonly HelpBook[], Unavailable> => {
+  const manifest = readResourceContainerManifest(text);
+  if (Result.isFailure(manifest))
+    return Result.fail(unavailable("Unreadable", manifest.failure.description));
+  const books: HelpBook[] = [];
+  for (const project of manifest.success.projects) {
+    const path = normalisePath(project.path);
+    if (path.startsWith("..") || path.startsWith("/"))
+      return Result.fail(
+        unavailable("Unreadable", `${project.identifier}: ${project.path} leaves the resource`),
+      );
+    books.push({ book: project.identifier.toUpperCase(), path });
+  }
+  return Result.succeed(books);
+};
+
+const manifestOf = (tree: UpstreamTree): Effect.Effect<readonly HelpBook[], Unavailable> =>
+  Effect.gen(function* () {
+    const bytes = yield* tree.file("manifest.yaml");
+    if (bytes === undefined)
+      return yield* Effect.fail(unavailable("Unreadable", "no manifest.yaml"));
+    const text = decode(bytes);
+    if (Result.isFailure(text))
+      return yield* Effect.fail(unavailable("Unreadable", text.failure.description));
+    const books = booksIn(text.success.text);
+    return Result.isSuccess(books) ? books.success : yield* Effect.fail(books.failure);
+  });
+
+/** The books a help on a `FileSystem` declares, from its `manifest.yaml`'s `projects[]`. */
 export const helpBooks = (
   fileSystem: FileSystem.FileSystem,
   root: string,
-): Effect.Effect<readonly HelpBook[], Unavailable> =>
-  Effect.gen(function* () {
-    const text = yield* Effect.mapError(
-      fileSystem.readFileString(joinPath(root, "manifest.yaml")),
-      (error) => unavailable("Unreadable", `manifest.yaml: ${error.message}`),
-    );
-    const manifest = readResourceContainerManifest(text);
-    if (Result.isFailure(manifest))
-      return yield* Effect.fail(unavailable("Unreadable", manifest.failure.description));
-    const books: HelpBook[] = [];
-    for (const project of manifest.success.projects) {
-      const resolved = joinPath(root, project.path);
-      if (escapesRoot(root, resolved))
-        return yield* Effect.fail(
-          unavailable("Unreadable", `${project.identifier}: ${project.path} leaves the resource`),
-        );
-      books.push({ book: project.identifier.toUpperCase(), path: project.path });
-    }
-    return books;
-  });
-
-/** Every file below `directory`, relative to it, sorted. */
-const filesBelow = (
-  fileSystem: FileSystem.FileSystem,
-  directory: string,
-): Effect.Effect<
-  readonly { readonly path: string; readonly size: number; readonly mtime: number }[]
-> =>
-  Effect.gen(function* () {
-    const entries = yield* Effect.orElseSucceed(
-      fileSystem.readDirectory(directory, { recursive: true }),
-      (): readonly string[] => [],
-    );
-    const files: { path: string; size: number; mtime: number }[] = [];
-    for (const entry of [...entries].sort()) {
-      const info = yield* Effect.option(fileSystem.stat(joinPath(directory, entry)));
-      if (info._tag === "None" || info.value.type !== "File") continue;
-      const mtime = info.value.mtime._tag === "Some" ? info.value.mtime.value.getTime() : 0;
-      files.push({ path: entry.replaceAll("\\", "/"), size: Number(info.value.size), mtime });
-    }
-    return files;
-  });
+): Effect.Effect<readonly HelpBook[], Unavailable> => manifestOf(treeInFolder(fileSystem, root));
 
 /**
  * A book directory's LISTING, folded to one string: each file's path, size
@@ -162,29 +148,27 @@ const fingerprint = (
   return `${files.length}:${hash.toString(16)}`;
 };
 
-/** Reads one book's raw tree and runs the reader over it. */
+/** Reads one book's files and runs the reader over them. */
 const buildPack = (
-  fileSystem: FileSystem.FileSystem,
-  root: string,
+  tree: UpstreamTree,
   help: HelpBook,
   stamp: Stamp,
-  listed?: readonly { readonly path: string }[],
+  listed?: readonly string[],
 ): Effect.Effect<Pack, Unavailable> =>
   Effect.gen(function* () {
-    const directory = joinPath(root, help.path);
-    const files = listed ?? (yield* filesBelow(fileSystem, directory));
+    const files = listed ?? (yield* tree.below(help.path));
+    const bytes = yield* tree.read(help.path, files);
     const read: BookFile[] = [];
-    for (const file of files) {
-      const bytes = yield* Effect.mapError(
-        fileSystem.readFile(joinPath(directory, file.path)),
-        (error) => unavailable("Unreadable", `${help.book} ${file.path}: ${error.message}`),
-      );
-      const source = decode(bytes);
+    for (const path of files) {
+      const held = bytes.get(path);
+      if (held === undefined)
+        return yield* Effect.fail(unavailable("Unreadable", `${help.book} ${path}: not read`));
+      const source = decode(held);
       if (Result.isFailure(source))
         return yield* Effect.fail(
-          unavailable("Unreadable", `${help.book} ${file.path}: ${source.failure.description}`),
+          unavailable("Unreadable", `${help.book} ${path}: ${source.failure.description}`),
         );
-      read.push({ path: file.path, text: source.success.text });
+      read.push({ path, text: source.success.text });
     }
     const book = readHelpBook(read);
     if (book.kind === "refused")
@@ -215,6 +199,41 @@ const readPack = (
     }
     const decoded = decodePack(parsed);
     return Result.isSuccess(decoded) ? decoded.success : undefined;
+  });
+
+/**
+ * That a pack just written is on disk whole: its bytes read back, parse, and
+ * name the same book and the same number of notes. Not the full schema
+ * decode every later read makes — that was most of a pack step's time
+ * (2.4 s of en_tn's, 2026-10-12) for data this module had just encoded from
+ * typed values.
+ */
+const readsBack = (
+  fileSystem: FileSystem.FileSystem,
+  root: string,
+  pack: Pack,
+): Effect.Effect<void, Unavailable> =>
+  Effect.gen(function* () {
+    const fail = unavailable("Unreadable", `${pack.book}: the pack did not read back`);
+    const text = yield* Effect.mapError(
+      fileSystem.readFileString(packPath(root, pack.book)),
+      () => fail,
+    );
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return yield* Effect.fail(fail);
+    }
+    const same =
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "book" in parsed &&
+      parsed.book === pack.book &&
+      "notes" in parsed &&
+      Array.isArray(parsed.notes) &&
+      parsed.notes.length === pack.notes.length;
+    if (!same) return yield* Effect.fail(fail);
   });
 
 const writePack = (
@@ -254,7 +273,12 @@ export const bookPack = (
     const listed = yield* filesBelow(fileSystem, directory);
     const stamp: Stamp = { kind: "tree", fingerprint: fingerprint(listed) };
     if (held?.stamp.kind === "tree" && held.stamp.fingerprint === stamp.fingerprint) return held;
-    const built = yield* buildPack(fileSystem, root, help, stamp, listed);
+    const built = yield* buildPack(
+      treeInFolder(fileSystem, root),
+      help,
+      stamp,
+      listed.map((file) => file.path),
+    );
     yield* Effect.ignore(writePack(fileSystem, root, built));
     return built;
   });
@@ -264,29 +288,29 @@ const KEPT = ["manifest.yaml", "LICENSE.md", "README.md", "media.yaml"] as const
 
 /**
  * A raw help tree, packed into a root that will hold ONLY packs: the Web's
- * import, from a clone staged in the in-memory FileSystem (`from`) to OPFS
- * (`to`). Every book is built from `from` and written to `to`, each written
- * pack is read back and must decode, and the manifest and licence are copied
- * — 29,300 files in, about seventy out. On any failure `toRoot` is removed:
- * nothing half-packed is ever left to be registered.
+ * import, from a clone's objects (`treeOfCommit`) or a staged folder
+ * (`treeInFolder`) to OPFS. Every book is built from `from` and written to
+ * `to`, each written pack is read back and must decode, and the manifest and
+ * licence are copied — 29,300 files in, about seventy out. On any failure
+ * `to.root` is removed: nothing half-packed is ever left to be registered.
  */
 export const packHelp = (
-  from: { readonly fileSystem: FileSystem.FileSystem; readonly root: string },
+  from: UpstreamTree,
   to: { readonly fileSystem: FileSystem.FileSystem; readonly root: string },
   provenance: { readonly at: string; readonly commit?: string },
+  onBook?: (progress: PackProgress) => void,
 ): Effect.Effect<{ readonly books: number; readonly notes: number }, Unavailable> =>
   Effect.onError(
     Effect.gen(function* () {
-      const books = yield* helpBooks(from.fileSystem, from.root);
+      const books = yield* manifestOf(from);
       yield* Effect.mapError(to.fileSystem.makeDirectory(to.root, { recursive: true }), (error) =>
         unavailable("Unreadable", `${to.root}: ${error.message}`),
       );
       for (const name of KEPT) {
-        const bytes = yield* Effect.option(from.fileSystem.readFile(joinPath(from.root, name)));
-        if (bytes._tag === "None") continue;
-        yield* Effect.mapError(
-          to.fileSystem.writeFile(joinPath(to.root, name), bytes.value),
-          (error) => unavailable("Unreadable", `${name}: ${error.message}`),
+        const bytes = yield* from.file(name);
+        if (bytes === undefined) continue;
+        yield* Effect.mapError(to.fileSystem.writeFile(joinPath(to.root, name), bytes), (error) =>
+          unavailable("Unreadable", `${name}: ${error.message}`),
         );
       }
       const stamp: Stamp = {
@@ -294,24 +318,29 @@ export const packHelp = (
         at: provenance.at,
         ...(provenance.commit === undefined ? {} : { commit: provenance.commit }),
       };
-      let notes = 0;
-      for (const help of books) {
-        const exists = yield* Effect.orElseSucceed(
-          from.fileSystem.exists(joinPath(from.root, help.path)),
-          () => false,
-        );
-        // A manifest may list a book its tree does not hold; the pack simply
-        // is not there, and that book answers `Missing`.
-        if (!exists) continue;
-        const pack = yield* buildPack(from.fileSystem, from.root, help, stamp);
-        yield* writePack(to.fileSystem, to.root, pack);
-        const back = yield* readPack(to.fileSystem, to.root, help.book);
-        if (back === undefined)
-          return yield* Effect.fail(
-            unavailable("Unreadable", `${help.book}: the pack did not read back`),
-          );
-        notes += pack.notes.length;
-      }
+      // One book at a time: four at once measured slower (pack 5.9 s against
+      // 3.8 s for en_tn on OPFS, 2026-10-12); the work is CPU-bound in one
+      // thread, and there are only 66 writes.
+      let done = 0;
+      const counts = yield* Effect.forEach(
+        books,
+        (help) =>
+          Effect.gen(function* () {
+            onBook?.({ done, of: books.length, book: help.book });
+            const files = yield* from.below(help.path);
+            // A manifest may list a book its tree does not hold; the pack
+            // simply is not there, and that book answers `Missing`.
+            if (files.length === 0) return 0;
+            const pack = yield* buildPack(from, help, stamp, files);
+            yield* writePack(to.fileSystem, to.root, pack);
+            yield* readsBack(to.fileSystem, to.root, pack);
+            done += 1;
+            return pack.notes.length;
+          }),
+        { concurrency: 1 },
+      );
+      const notes = counts.reduce((sum, count) => sum + count, 0);
+      onBook?.({ done: books.length, of: books.length, book: "" });
       return { books: books.length, notes };
     }),
     () => Effect.ignore(to.fileSystem.remove(to.root, { recursive: true })),
