@@ -80,6 +80,10 @@ export interface ForkParent {
 export interface CreateRepoRequest {
   readonly name: string;
   readonly description?: string | undefined;
+  /**
+   * Public unless asked: a shared project is one others clone and copy, and
+   * a copy of it (a fork) is public already.
+   */
   readonly private?: boolean | undefined;
 }
 
@@ -597,7 +601,7 @@ const makeGitea = (options: {
           body: JSON.stringify({
             name: create.name,
             description: create.description ?? "",
-            private: create.private ?? true,
+            private: create.private ?? false,
             // Sefer pushes an existing project's history; an auto-initialised
             // repository would give the first push a commit to conflict with.
             auto_init: false,
