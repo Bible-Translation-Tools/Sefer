@@ -102,7 +102,7 @@ const hex = (bytes: Uint8Array): string => {
 };
 
 /** Every entry of a raw tree, in order, read without judging any name. */
-const entriesOf = function* (
+export const entriesOf = function* (
   tree: Uint8Array,
 ): Generator<{ readonly mode: string; readonly name: string; readonly id: string }> {
   let at = 0;

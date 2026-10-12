@@ -28,6 +28,7 @@ import {
   writerBookToUsfm,
   type WriterProject,
 } from "./writerBook";
+import { readWriterHistory, type WriterHistory } from "./writerHistory";
 
 /** What the catalogue says about a candidate. Inactive ones are hidden by default. */
 export type CandidateStatus = "Primary" | "Active" | "Inactive";
@@ -66,10 +67,12 @@ export interface StagedBook {
   readonly authors: readonly Author[];
   /** Where it was pulled from, when it was: what `.upstreams.json` records. */
   readonly upstream?: { readonly url: string; readonly commit: string };
+  /** Its Writer saves, oldest first, when it has a history: what assembly replays. */
+  readonly history?: WriterHistory;
 }
 
 class CandidateError extends Data.TaggedError("CandidateError")<{
-  readonly reason: "NotWriter" | "Unreachable" | "Mismatch";
+  readonly reason: "NotWriter" | "Unreachable" | "Mismatch" | "History";
   readonly description: string;
 }> {}
 
@@ -108,12 +111,15 @@ const authorsFrom = (project: WriterProject, committed: readonly Author[]): read
   return out;
 };
 
+/** The title the template falls back to when the project has none: the canon's name for the book. */
+const fallbackTitle = (project: WriterProject): string =>
+  CANON.find((entry) => entry.id === project.book)?.name ?? project.book;
+
 const render = (project: WriterProject, root: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const tree = yield* readWriterTree(fileSystem, root);
-    const fallback = CANON.find((entry) => entry.id === project.book)?.name ?? project.book;
-    return writerBookToUsfm(tree, project.book, fallback);
+    return writerBookToUsfm(tree, project.book, fallbackTitle(project));
   });
 
 /**
@@ -139,17 +145,21 @@ export const openCandidate = (
     let upstream: StagedBook["upstream"];
     if (candidate.origin.kind === "remote") {
       root = `${stagingRoot}/${candidate.origin.owner}_${candidate.origin.repo}`;
-      // A staging folder from an earlier look is reused: the clone is the
-      // newest version, and the run asks for each candidate once.
-      const staged = yield* Effect.orElseSucceed(
-        fileSystem.exists(`${root}/manifest.json`),
-        () => false,
-      );
+      // A staging folder from an earlier look is reused, unless it is
+      // shallow: its history is replayed into the project, so all of it is
+      // cloned (Writer projects are 50–100 KB), and one an older build left
+      // with only its newest version is cloned again.
+      const staged =
+        (yield* Effect.orElseSucceed(fileSystem.exists(`${root}/manifest.json`), () => false)) &&
+        !(yield* Effect.orElseSucceed(
+          Effect.flatMap(git.open(root), (repo) => git.shallow(repo)),
+          () => true,
+        ));
       if (!staged) {
         const cloned = observability.span("migrate.clone");
         yield* Effect.ignore(fileSystem.remove(root, { recursive: true }));
         yield* Effect.mapError(
-          remote.clone(candidate.origin.url, root, { history: "latest" }),
+          remote.clone(candidate.origin.url, root, { history: "all" }),
           (error) =>
             new CandidateError({
               reason: "Unreachable",
@@ -201,6 +211,37 @@ export const openCandidate = (
       "migrate.commits": commits,
       "migrate.upstream": upstream !== undefined,
     });
+
+    // The saves to replay. A history that cannot be read refuses the
+    // candidate, saying why, rather than arriving without it (Will,
+    // 2026-10-09: fail loud).
+    let history: WriterHistory | undefined;
+    if (repo._tag === "Some") {
+      const read = observability.span("migrate.history.read");
+      history = yield* Effect.tapError(
+        Effect.mapError(
+          readWriterHistory(
+            repo.value,
+            project.book,
+            fallbackTitle(project),
+            candidate.origin.kind === "remote"
+              ? `${candidate.origin.owner}/${candidate.origin.repo}`
+              : lastSegment(root),
+          ),
+          (error) =>
+            new CandidateError({
+              reason: "History",
+              description: `its history could not be read: ${error.description ?? error.reason}`,
+            }),
+        ),
+        (error) =>
+          Effect.sync(() => {
+            read({ "migrate.reason": error.description });
+            observability.note("migrate.history.read", "failed", error.description);
+          }),
+      );
+      read({ "migrate.saves": history.saves.length });
+    }
     const rendered = observability.span("migrate.render");
     const usfm = yield* render(project, root);
     rendered({ "migrate.bytes": usfm.length });
@@ -210,6 +251,7 @@ export const openCandidate = (
       usfm,
       authors: authorsFrom(project, committed),
       ...(upstream === undefined ? {} : { upstream }),
+      ...(history === undefined ? {} : { history }),
     };
   });
 

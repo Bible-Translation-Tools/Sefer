@@ -32,6 +32,7 @@ import {
   type Repo,
   type Status,
   type Version,
+  type WalkedCommit,
 } from "#core/git/git";
 
 /** The wire shape of `git.rs`'s `GitCommit`. */
@@ -42,6 +43,12 @@ interface WireCommit {
   readonly author_email: string;
   readonly at: number;
 }
+
+/**
+ * The wire shape of `git.rs`'s `GitWalkedCommit`: already the port's shape,
+ * so it is passed through. `serde` names the fields as the port does.
+ */
+type WireWalkedCommit = WalkedCommit;
 
 interface WireChangedPath {
   readonly path: string;
@@ -188,6 +195,17 @@ const tauriGit = {
       }),
       (changed): readonly ChangedPath[] =>
         changed.map((entry) => ({ path: entry.path, kind: changeKindOf(entry.kind) })),
+    ),
+
+  walk: (repo) => call<readonly WireWalkedCommit[]>("git_walk", { root: repo.root }),
+
+  // One call for the lot: a replay asks for hundreds of small blobs, and each
+  // `invoke` is a round trip. Number arrays, as `show`; Writer chunks are tiny.
+  blobs: (repo, ids) =>
+    Effect.map(
+      call<readonly (readonly number[])[]>("git_blobs", { root: repo.root, ids }),
+      (bytes): ReadonlyMap<string, Uint8Array> =>
+        new Map(ids.map((id, index) => [id, new Uint8Array(bytes[index] ?? [])])),
     ),
 
   show,

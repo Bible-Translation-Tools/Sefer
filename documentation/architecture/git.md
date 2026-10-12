@@ -7,14 +7,18 @@ USFM bytes on disk; git records what Save already wrote.
 
 `src/core/git/git.ts` defines `Git` (`Context.Service`) as the intersection of the user's jobs, not the
 union of two libraries' APIs: `open`, `init`, `status`, `commit`, `mergeBase`, `log`, `logFrom`,
-`resolve`, `branch`, `changedPathsBetween`, `show`, `previousVersions`. `mergeBase` and the four after
+`resolve`, `branch`, `changedPathsBetween`, `show`, `previousVersions`, `walk`, `blobs`. `mergeBase` and the four after
 `log` exist for the sync surface — the commit two histories share, the cloud's side of a comparison,
 whether it exists at all, what to call the tracking ref, and which paths differ between two revisions
 ([sync.md](sync.md)) — and BOTH hosts answer them. A repository Sefer creates starts on
 `DEFAULT_BRANCH`, `"master"`, on both hosts; a clone takes whatever the server's HEAD names. A `Repo` is just its work-tree `root`. Every method fails with `GitError`, whose `reason` is
 `NotARepository`, `Io`, `Conflict`, or `Refused` — a read that could not fail would force a host layer
 to lie. `Version` pairs a `Commit` with `bytes()`, so a history list stays cheap and content is read
-only when something displays or diffs it. Core names no library; `repositoryPath(root, path)` is the one
+only when something displays or diffs it. `walk` is HEAD's first-parent line oldest first — each
+commit's author and committer with their zones (`Signature`: seconds and minutes east of UTC), its
+message, and the files it changed from its first parent as blob ids — and `blobs` reads the bytes of
+the ids a caller chose: two calls, so desktop crosses the Tauri bridge twice for a history of
+hundreds of commits (Writer migration's replay, below). Core names no library; `repositoryPath(root, path)` is the one
 path rule the port owns — a saved path becomes repository-relative or `None`, and `None` means refuse.
 
 ## The receipts rule
@@ -169,10 +173,48 @@ reflogs. That is an ALLOWLIST applied in place (`objects`, `refs/heads`, `refs/t
 `.git` that cannot be adopted — a gitfile pointing elsewhere, a merge left half done, history that
 cannot be read — is replaced by a fresh repository, and the files are kept either way.
 
+Writer migration relies on that for its history: it writes the replayed Writer saves into the new
+folder's `.git` first (below), so intake ADOPTS them and the arrival is the assembly commit on top —
+and because a `.git` intake could not open would be replaced without a word, assembly fails unless
+intake reports the history adopted. Adopt is for a repository ARRIVING; it must never run on a
+project's live repository, since it rewrites `config` and removes `refs/remotes`, which is where sync
+keeps its baseline. "Add a book…" therefore does not go through intake: it opens the project's
+repository and commits the arrival directly (2026-10-09, after a review found the adopt path dropping
+a synced project's remote).
+
 Then `.sefer/` goes into `.git/info/exclude` (`excludeSeferFolder`, which a clone runs as well), so
 the device's own corner — provenance, the name chosen here — never reaches a commit. Last comes the
 ARRIVAL COMMIT: the files the import wrote, as receipts, when git sees any of them as new, authored
 "Sefer" with an empty email because no person made it.
+
+## Writing a history directly: the pack writer
+
+`src/core/git/pack.ts` writes a whole history as ONE pack (v2) and its index (v2), with no loose
+objects and no repack. It exists for Writer migration, which replays thousands of autosaves
+(`src/core/migrate/writerHistory.ts`): through a git library each object is a loose file — thousands
+of OPFS writes at a measured 1–9 ms each — and isomorphic-git's own `packObjects` stores every version
+whole (35 MB for one New Testament). Here the same history is one 2.7 MB pack, and the new `.git` is
+five files.
+
+- **Objects are git's.** `objectId` is SHA-1 over `"<type> <size>\0"` and the body; `treeBody` and
+  `commitBody` serialise as git does (a tree of `100644` files sorted bytewise; author and committer
+  with their zones; the message verbatim). Each object is hashed once and deflated once.
+- **Deltas per lane.** An object added with a lane — a book's file, the root tree — may be stored as
+  an `OFS_DELTA` on that lane's previous object: copy the shared head, insert what differs, copy the
+  shared tail. A Writer save changes one chunk, so that is nearly all of the saving. Only the newest
+  body per lane is held. Chains stop at 50, git's own default, so no read replays more.
+- **Native identical, where it can be.** The ids are the ones `git fast-import` gives the same input,
+  and `git index-pack --strict` rebuilds the index byte for byte from the pack. The pack bytes
+  themselves are this writer's, as any two writers' differ.
+- **Pure and portable.** Web Crypto (`crypto.subtle`) and `CompressionStream("deflate")`, which the
+  browser, the desktop webview and Node all have, and no imports — so desktop runs the same code, and
+  it can move to a shared package unchanged (Will, 2026-10-09). It reports counts (objects, deltas,
+  bytes); the caller instruments.
+- **Its one test** checks it against real git (`src/platform/web/pack.test.ts`; see
+  [testing](testing.md)).
+
+A replayed history is not shallow, so History's deepen never runs for it, and the Web's book-change
+index (above) builds over the pack the first time History opens, as for any project.
 
 ## Remote
 

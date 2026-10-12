@@ -28,9 +28,12 @@ import {
   sharedFrom,
   type Status,
   type Version,
+  type WalkedChange,
+  type WalkedCommit,
 } from "#core/git/git";
 import {
   bookHistoryFrom,
+  entriesOf,
   entryIn,
   isIndexedBook,
   reachableFrom,
@@ -204,7 +207,127 @@ const makeWebGit = (
       return entries.map(commitOf);
     });
 
+  /**
+   * HEAD's first-parent line, oldest first, each commit's changes found by
+   * comparing RAW trees — descending only into subtrees whose ids differ, and
+   * reading names without judging them (see `show`). A tree's entries are
+   * read once per walk however many commits share it.
+   */
+  const walk = (repo: Repo): Effect.Effect<readonly WalkedCommit[], GitError> =>
+    attempt("Io", async () => {
+      const cache = {};
+      const dir = repo.root;
+      let head: string;
+      try {
+        head = await git.resolveRef({ fs, dir, ref: "HEAD" });
+      } catch {
+        return []; // an unborn HEAD: no history yet
+      }
+      type Entry = { readonly mode: string; readonly id: string };
+      const trees = new Map<string, ReadonlyMap<string, Entry>>();
+      const entries = async (oid: string | undefined): Promise<ReadonlyMap<string, Entry>> => {
+        if (oid === undefined) return new Map();
+        const held = trees.get(oid);
+        if (held !== undefined) return held;
+        const { object } = await git.readObject({ fs, dir, oid, format: "content", cache });
+        const found = new Map<string, Entry>();
+        if (object instanceof Uint8Array)
+          for (const entry of entriesOf(object)) found.set(entry.name, entry);
+        trees.set(oid, found);
+        return found;
+      };
+      const isTree = (entry: Entry | undefined): boolean =>
+        entry !== undefined && (entry.mode === "40000" || entry.mode === "040000");
+      const isFile = (entry: Entry | undefined): boolean =>
+        entry !== undefined && !isTree(entry) && entry.mode !== "160000";
+      const compare = async (
+        before: string | undefined,
+        after: string | undefined,
+        prefix: string,
+        out: WalkedChange[],
+      ): Promise<void> => {
+        const [old, now] = await Promise.all([entries(before), entries(after)]);
+        for (const name of new Set([...old.keys(), ...now.keys()])) {
+          const was = old.get(name);
+          const is = now.get(name);
+          if (was?.id === is?.id && was?.mode === is?.mode) continue;
+          const path = `${prefix}${name}`;
+          if (isTree(was) || isTree(is))
+            await compare(
+              isTree(was) ? was?.id : undefined,
+              isTree(is) ? is?.id : undefined,
+              `${path}/`,
+              out,
+            );
+          if (isFile(is)) out.push({ path, blob: is?.id ?? null });
+          else if (isFile(was)) out.push({ path, blob: null });
+        }
+      };
+      // Each commit is read once: as itself, and then as the next one's parent.
+      type Read = Awaited<ReturnType<typeof git.readCommit>>["commit"];
+      const commits = new Map<string, Read>();
+      const commitAt = async (oid: string): Promise<Read> => {
+        const held = commits.get(oid);
+        if (held !== undefined) return held;
+        const { commit } = await git.readCommit({ fs, dir, oid, cache });
+        commits.set(oid, commit);
+        return commit;
+      };
+      // A shallow clone's boundary commits have parents that are not here:
+      // they are roots, as git2 treats them on desktop.
+      const shallow = new Set(
+        await fs
+          .readFile(`${dir}/.git/shallow`, "utf8")
+          .then((text) =>
+            String(text)
+              .split("\n")
+              .filter((line) => line.trim() !== ""),
+          )
+          .catch((): string[] => []),
+      );
+      const line: WalkedCommit[] = [];
+      for (let oid: string | undefined = head; oid !== undefined;) {
+        const commit = await commitAt(oid);
+        const parents: readonly string[] = shallow.has(oid) ? [] : commit.parent;
+        const parent: string | undefined = parents[0];
+        const parentTree = parent === undefined ? undefined : (await commitAt(parent)).tree;
+        const changes: WalkedChange[] = [];
+        await compare(parentTree, commit.tree, "", changes);
+        // isomorphic-git's timezoneOffset is JavaScript's: minutes WEST of UTC.
+        const signed = (who: typeof commit.author) => ({
+          name: who.name,
+          email: who.email,
+          at: who.timestamp,
+          offset: who.timezoneOffset === 0 ? 0 : -who.timezoneOffset,
+        });
+        line.push({
+          id: oid,
+          parents,
+          message: commit.message,
+          author: signed(commit.author),
+          committer: signed(commit.committer),
+          changes,
+        });
+        oid = parent;
+      }
+      return line.reverse();
+    });
+
+  const blobs = (
+    repo: Repo,
+    ids: readonly string[],
+  ): Effect.Effect<ReadonlyMap<string, Uint8Array>, GitError> =>
+    attempt("Io", async () => {
+      const cache = {};
+      const out = new Map<string, Uint8Array>();
+      for (const oid of new Set(ids))
+        out.set(oid, (await git.readBlob({ fs, dir: repo.root, oid, cache })).blob);
+      return out;
+    });
+
   const service: Omit<GitService, "timeline"> = {
+    walk,
+    blobs,
     open: (root) =>
       Effect.gen(function* () {
         const present = yield* Effect.orElseSucceed(

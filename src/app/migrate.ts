@@ -176,6 +176,14 @@ export const urlCandidate = async (services: Services, typed: string): Promise<B
   };
 };
 
+/**
+ * How long one candidate may take to open: a whole-history clone, then its
+ * saves read. Longer than an upstream probe's, which only asks for a head —
+ * a long book's thousands of autosaves on a slow field link must not read as
+ * "it did not answer in time" when it was only slow.
+ */
+const CANDIDATE_TIMEOUT = "60 seconds";
+
 /** Opens, renders, validates and measures one candidate. Never rejects. */
 export const openOne = async (services: Services, candidate: BookCandidate): Promise<Opened> => {
   const operation = services.composition.observability.operation("migrate.open", {
@@ -196,7 +204,7 @@ export const openOne = async (services: Services, candidate: BookCandidate): Pro
         : undefined;
     const open = Effect.timeoutOption(
       openCandidate(candidate, inMemory === undefined ? stagingRootOf(services) : "/staging"),
-      UPSTREAM_TIMEOUT,
+      CANDIDATE_TIMEOUT,
     );
     const where: Effect.Effect<Option.Option<StagedBook>, unknown, Domain> = inMemory === undefined
       ? open
@@ -278,7 +286,11 @@ const freeFolder = (services: Services, name: string): Effect.Effect<string, nev
     }
   });
 
-/** Assembles the chosen books into a new project, and lists it. */
+/**
+ * Assembles the chosen books into a new project, with their replayed Writer
+ * history, and lists it. One `migrate.assemble` operation, so the replay's
+ * span and a failure's reason are read in one place.
+ */
 export const assembleProject = (
   services: Services,
   folder: string,
@@ -286,19 +298,36 @@ export const assembleProject = (
   books: readonly StagedBook[],
 ): Effect.Effect<{ readonly root: string; readonly result: IntakeResult }, unknown, Domain> =>
   Effect.gen(function* () {
-    const root = yield* freeFolder(services, folder);
-    const result = yield* assemble({
-      root,
-      form,
-      books,
-      author: APP_AUTHOR,
-      date: new Date().toISOString().slice(0, 10),
+    const operation = services.composition.observability.operation("migrate.assemble", {
+      "migrate.books": books.length,
     });
-    yield* rememberProject(services.projectsRoot, root, undefined);
-    return { root, result };
+    const assembled = yield* Effect.result(
+      Effect.provideService(
+        Effect.gen(function* () {
+          const root = yield* freeFolder(services, folder);
+          const result = yield* assemble({
+            root,
+            form,
+            books,
+            author: APP_AUTHOR,
+            date: new Date().toISOString().slice(0, 10),
+          });
+          yield* rememberProject(services.projectsRoot, root, undefined);
+          return { root, result };
+        }),
+        Observability,
+        operation,
+      ),
+    );
+    if (Result.isFailure(assembled)) {
+      operation.end("failed", { "migrate.reason": describe(assembled.failure) });
+      return yield* Effect.fail(assembled.failure);
+    }
+    operation.end("passed");
+    return assembled.success;
   });
 
-/** Adds the chosen books to a project that exists, in one commit. */
+/** Adds the chosen books to a project that exists: one commit, joining their replayed Writer history. */
 export const addToProject = (
   services: Services,
   root: string,
@@ -306,13 +335,28 @@ export const addToProject = (
   books: readonly StagedBook[],
 ): Effect.Effect<IntakeResult, unknown, Domain> =>
   Effect.gen(function* () {
-    const result = yield* addBooks({
-      root,
-      books,
-      held,
-      author: APP_AUTHOR,
-      date: new Date().toISOString().slice(0, 10),
+    const operation = services.composition.observability.operation("migrate.assemble", {
+      "migrate.books": books.length,
+      "migrate.into": true,
     });
+    const added = yield* Effect.result(
+      Effect.provideService(
+        addBooks({
+          root,
+          books,
+          held,
+          author: APP_AUTHOR,
+          date: new Date().toISOString().slice(0, 10),
+        }),
+        Observability,
+        operation,
+      ),
+    );
+    if (Result.isFailure(added)) {
+      operation.end("failed", { "migrate.reason": describe(added.failure) });
+      return yield* Effect.fail(added.failure);
+    }
+    operation.end("passed");
     yield* rememberProject(services.projectsRoot, root, undefined);
-    return result;
+    return added.success;
   });
