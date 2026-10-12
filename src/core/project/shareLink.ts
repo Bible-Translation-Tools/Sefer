@@ -13,8 +13,11 @@
  * the arriving device puts its own slug in front of it. `at` is the version
  * the sender was looking at, so the receiver can be told when theirs differs:
  * a demo or a review is only about the same text when it is the same commit.
- * `host` is written only when the source is not on the receiver's configured
- * content host, which is the exception.
+ * `host` is always written. The sender's configured cloud says nothing about
+ * the receiver's: the dev channel's is WACS dev and production's is WACS, so
+ * a link copied on one and opened on the other found nothing when it was left
+ * out for "the usual host" (2026-10-12). A link without it (typed by hand,
+ * or made before) is looked for on the receiver's configured host.
  *
  * Owner and repository go into the path as they are: Gitea allows only
  * letters, digits, `-`, `_` and `.` in either (2026-10-12, `IsValidUsername`
@@ -85,13 +88,12 @@ export const shareLinkPath = (
   rest: string,
   search: URLSearchParams,
   at: string | undefined,
-  contentHost: string | undefined,
 ): string => {
   const query = new URLSearchParams(search);
   query.delete("at");
   query.delete("host");
   if (at !== undefined) query.set("at", at);
-  if (contentHost === undefined || source.host !== contentHost) query.set("host", source.host);
+  query.set("host", source.host);
   const tail = query.size === 0 ? "" : `?${query.toString()}`;
   return `/r/${source.owner}/${source.repo}${rest}${tail}`;
 };

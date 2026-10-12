@@ -330,7 +330,7 @@ Top level: `/`, `/projects`, `/settings` (a redirect to `/projects`: Settings li
 
 ### Share links: `/r/$owner/$repo/…`
 
-A slug is this device's name for a project, so it cannot be sent to anyone. A **share link** names the shared project instead: `/r/<owner>/<repo>/<place>?at=<commit>`, where `<place>` is everything after `/project/<slug>` (`/book/JUD`, `/terms?…`), `at` is the version the sender was looking at, and `host=` appears only when the project is not on the receiver's configured content host. The format is `src/core/project/shareLink.ts`; the device's half is `src/app/shareLinks.ts`; the route is `src/routes/_app/r/$owner/$repo/$.tsx` and its screen `src/app/ui/landing/OpenByLink.tsx`.
+A slug is this device's name for a project, so it cannot be sent to anyone. A **share link** names the shared project instead: `/r/<owner>/<repo>/<place>?at=<commit>`, where `<place>` is everything after `/project/<slug>` (`/book/JUD`, `/terms?…`), `at` is the version the sender was looking at, and `host=` names the project's cloud, always: the sender's configured cloud says nothing about the receiver's (the dev channel's is WACS dev, production's is WACS), and a link that left it out for "the usual host" found nothing when opened on the other channel. A link without it is looked for on the receiver's configured host. The format is `src/core/project/shareLink.ts`; the device's half is `src/app/shareLinks.ts`; the route is `src/routes/_app/r/$owner/$repo/$.tsx` and its screen `src/app/ui/landing/OpenByLink.tsx`.
 
 Arriving, the one question is whether this device holds a project whose `origin` is that shared project (`origin` is the shared project in both ways to work; [sync](sync.md)). Owner and repository compare without case, as Gitea does.
 

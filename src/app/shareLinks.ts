@@ -12,7 +12,6 @@ import { Effect, Option } from "effect";
 
 import { Git } from "#core/git/git";
 import {
-  hostOfUrl,
   sameSource,
   shareLinkPath,
   sourceOf,
@@ -22,7 +21,6 @@ import {
 } from "#core/project/shareLink";
 import { Remote } from "#core/remote/remote";
 
-import { contentHostFor } from "./endpoints";
 import { t } from "./i18n";
 import type { Domain, Services } from "./services";
 import { listProjects } from "./ui/landing/summaries";
@@ -104,14 +102,7 @@ const shareLinkFor = (
       Effect.flatMap(git.open(root), (repo) => git.resolve(repo, "HEAD")),
       () => Option.none<string>(),
     );
-    const contentHost = contentHostFor(services.settings);
-    return shareLinkPath(
-      source,
-      rest,
-      search,
-      Option.getOrUndefined(head),
-      contentHost === null ? undefined : hostOfUrl(contentHost),
-    );
+    return shareLinkPath(source, rest, search, Option.getOrUndefined(head));
   });
 
 /**
