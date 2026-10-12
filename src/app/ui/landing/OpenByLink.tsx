@@ -2,7 +2,7 @@ import { useNavigate } from "@tanstack/solid-router";
 import { Effect, Result } from "effect";
 import { Match, Switch, createEffect, createSignal, untrack } from "solid-js";
 
-import { cloneArrival } from "#app/arrival";
+import { announceSourceTexts, cloneArrival } from "#app/arrival";
 import { describe } from "#app/describe";
 import { contentHostFor } from "#app/endpoints";
 import { t } from "#app/i18n";
@@ -176,8 +176,15 @@ export function OpenByLink(props: {
     setPhase({ kind: "downloading" });
     void shell.services
       .run(Effect.result(cloneArrival(shell.services, "project", sourceUrl(named))))
-      .then((arrived) => {
-        if (Result.isSuccess(arrived)) return openAt(arrived.success.root, target);
+      .then(async (arrived) => {
+        // The source texts the project declares come with it, as from every
+        // other import, and BEFORE the place opens: a link into a screen
+        // that reads beside the source (Find's reference scope) needs them
+        // registered when it mounts.
+        if (Result.isSuccess(arrived)) {
+          await announceSourceTexts(shell.services, arrived.success.root);
+          return openAt(arrived.success.root, target);
+        }
         toasts.error({
           title: t("Could not download the project"),
           message: describe(arrived.failure),
