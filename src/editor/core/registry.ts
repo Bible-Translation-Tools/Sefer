@@ -18,6 +18,15 @@ export type Mutability = "direct" | "via-anchor" | "trusted-only" | "immortal";
 export interface Cell {
   paint: PaintReach;
   mutability: Mutability;
+  /**
+   * For an immortal cell: a Backspace or Delete that meets it STOPS there,
+   * instead of going past it to act on the next mutable thing
+   * (`deletion.ts`). A card's verse numbers: its place is its verse, so a
+   * press from inside the verse never reaches the context around it (Will,
+   * 2026-10-08). Without it an immortal is passed, as a drafting surface's
+   * locked designators are (Will, 2026-09-30).
+   */
+  stop?: boolean;
 }
 
 export type OwnershipBit = "JOIN" | "REFUSE" | "DISSOLVE";
@@ -289,6 +298,7 @@ function resolve(base: Registry, deltas: readonly AssignmentDelta[]): Assignment
       if (rows[cls].residual && rows[cls].widget) {
         const m = rows[cls].cell.mutability;
         rows[cls].cell = {
+          ...rows[cls].cell,
           paint: "point",
           mutability: m === "immortal" || m === "trusted-only" ? m : "via-anchor",
         };
@@ -343,8 +353,9 @@ export const PROJECTIONS: Record<string, AssignmentDelta> = {
   // A verse number as a pip no key takes: hidden and immortal, which the pip
   // clamp draws as the verse pip and keeps immortal. For a surface whose place
   // IS its verse — a card — where renumbering or deleting a verse would leave
-  // the card pointing at nothing.
-  "lock-verse-numbers": { "slot.v": { paint: "none", mutability: "immortal" } },
+  // the card pointing at nothing. A press stops at it rather than going past
+  // into the verse beside: on a card that is context, not the card's text.
+  "lock-verse-numbers": { "slot.v": { paint: "none", mutability: "immortal", stop: true } },
 };
 
 export const assignment = Facet.define<AssignmentDelta, Assignment>({

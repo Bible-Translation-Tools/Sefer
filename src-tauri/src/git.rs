@@ -43,6 +43,34 @@ pub struct GitCommit {
     pub at: i64,
 }
 
+/// Who and when, as the commit records it. Mirrors the port's `Signature`:
+/// seconds since the epoch, and the zone in minutes east of UTC.
+#[derive(Serialize)]
+pub struct GitSignature {
+    pub name: String,
+    pub email: String,
+    pub at: i64,
+    pub offset: i32,
+}
+
+/// One file a commit changed: its new blob id, or `None` when it was deleted.
+#[derive(Serialize)]
+pub struct GitWalkedChange {
+    pub path: String,
+    pub blob: Option<String>,
+}
+
+/// Mirrors the port's `WalkedCommit`, field for field.
+#[derive(Serialize)]
+pub struct GitWalkedCommit {
+    pub id: String,
+    pub parents: Vec<String>,
+    pub message: String,
+    pub author: GitSignature,
+    pub committer: GitSignature,
+    pub changes: Vec<GitWalkedChange>,
+}
+
 #[derive(Serialize)]
 pub struct GitChangedPath {
     pub path: String,
@@ -554,6 +582,85 @@ pub fn git_show(root: String, rev: String, path: String) -> Result<Vec<u8>, Stri
         .into_blob()
         .map_err(|_| fail(CONFLICT, format!("{path} is not a file at {rev}")))?;
     Ok(blob.content().to_vec())
+}
+
+fn signature_of(who: &Signature<'_>) -> GitSignature {
+    GitSignature {
+        name: who.name().unwrap_or("").to_string(),
+        email: who.email().unwrap_or("").to_string(),
+        at: who.when().seconds(),
+        offset: who.when().offset_minutes(),
+    }
+}
+
+/// HEAD's first-parent line, OLDEST first, each commit with the files it
+/// changed from its first parent (blob ids, not bytes). An unborn HEAD is an
+/// empty history. Renames are not detected: a rename is a delete and an add,
+/// which is what the port says.
+#[tauri::command]
+pub fn git_walk(root: String) -> Result<Vec<GitWalkedCommit>, String> {
+    let repo = open_repo(&root)?;
+    if repo.head().is_err() {
+        return Ok(Vec::new());
+    }
+    let mut walk = repo.revwalk().map_err(io)?;
+    walk.push_head().map_err(io)?;
+    walk.simplify_first_parent().map_err(io)?;
+    walk.set_sorting(Sort::TOPOLOGICAL | Sort::REVERSE).map_err(io)?;
+    let mut out = Vec::new();
+    for oid in walk {
+        let commit = repo.find_commit(oid.map_err(io)?).map_err(io)?;
+        let tree = commit.tree().map_err(io)?;
+        let before = if commit.parent_count() > 0 {
+            Some(commit.parent(0).map_err(io)?.tree().map_err(io)?)
+        } else {
+            None
+        };
+        let diff = repo
+            .diff_tree_to_tree(before.as_ref(), Some(&tree), None)
+            .map_err(io)?;
+        let mut changes = Vec::new();
+        for delta in diff.deltas() {
+            let deleted = delta.status() == Delta::Deleted;
+            let file = if deleted { delta.old_file() } else { delta.new_file() };
+            // A submodule is not a file of this repository.
+            if file.mode() == git2::FileMode::Commit {
+                continue;
+            }
+            let Some(path) = file.path().and_then(|path| path.to_str()) else {
+                continue;
+            };
+            changes.push(GitWalkedChange {
+                path: path.to_string(),
+                blob: if deleted { None } else { Some(file.id().to_string()) },
+            });
+        }
+        out.push(GitWalkedCommit {
+            id: commit.id().to_string(),
+            parents: commit.parent_ids().map(|id| id.to_string()).collect(),
+            message: String::from_utf8_lossy(commit.message_raw_bytes()).into_owned(),
+            author: signature_of(&commit.author()),
+            committer: signature_of(&commit.committer()),
+            changes,
+        });
+    }
+    Ok(out)
+}
+
+/// The bytes of each blob, in the order asked. One call for many, because a
+/// replay reads hundreds of small blobs and each `invoke` is a round trip.
+#[tauri::command]
+pub fn git_blobs(root: String, ids: Vec<String>) -> Result<Vec<Vec<u8>>, String> {
+    let repo = open_repo(&root)?;
+    ids.iter()
+        .map(|id| {
+            let oid = Oid::from_str(id).map_err(|error| fail(CONFLICT, error.message()))?;
+            let blob = repo
+                .find_blob(oid)
+                .map_err(|error| fail(CONFLICT, error.message()))?;
+            Ok(blob.content().to_vec())
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------

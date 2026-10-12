@@ -563,9 +563,13 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
             disabled={!canAssemble() || assembling()}
             onClick={props.into === undefined ? runAssemble : runAdd}
           >
-            {props.into === undefined
-              ? t("Assemble {count} books", { count: picked().length })
-              : t("Add {count} books", { count: picked().length })}
+            {/* While it runs, what takes the time: every Writer save is
+                written into the new project's history. */}
+            {assembling() && ready().some((staged) => (staged.history?.saves.length ?? 0) > 0)
+              ? t("Writing {count} books' history…", { count: picked().length })
+              : props.into === undefined
+                ? t("Assemble {count} books", { count: picked().length })
+                : t("Add {count} books", { count: picked().length })}
           </Button>
         </Card>
 
