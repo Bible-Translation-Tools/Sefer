@@ -477,12 +477,13 @@ A JSONL journal of edits to the dirty buffer, debounced and compacted. On open, 
 
 ### Overview
 
-One port answered by isomorphic-git over OPFS on Web and git2 0.21 through Rust commands on desktop: commit (with decision-commit parents), mergeBase, log, show, `previousVersions`, branch, resolve, `changedPathsBetween`. Every call runs in its repository's lane — one writer per repository, across tabs by Web Locks — under a lifecycle (absent / opening / ready / busy / unhealthy / closing). Intake gives every arriving project a repository and an arrival commit, adopting an arriving `.git` through an allowlist. History is a list of versions with a diff against working and a per-hunk Revert; on the Web a book's history comes from the book-change index (built in a worker, extended at each change of HEAD), which fixed Genesis's history on en_ulb and the unbounded walk. `src/core/git`, `src-tauri/src/git.rs`. → [git](architecture/git.md), [desktop](architecture/desktop.md)
+One port answered by isomorphic-git over OPFS on Web and git2 0.21 through Rust commands on desktop: commit (with decision-commit parents), mergeBase, log, show, `previousVersions`, branch, resolve, `changedPathsBetween`, and `walk`/`blobs` (a history's first-parent line with its authors, zones and changed files, then the chosen blobs — what Writer migration replays). A history can also be written directly as one pack and its index (`src/core/git/pack.ts`), so a replayed Writer history reaches OPFS as five files; its one test checks it against real git. Every call runs in its repository's lane — one writer per repository, across tabs by Web Locks — under a lifecycle (absent / opening / ready / busy / unhealthy / closing). Intake gives every arriving project a repository and an arrival commit, adopting an arriving `.git` through an allowlist. History is a list of versions with a diff against working and a per-hunk Revert; on the Web a book's history comes from the book-change index (built in a worker, extended at each change of HEAD), which fixed Genesis's history on en_ulb and the unbounded walk. `src/core/git`, `src-tauri/src/git.rs`. → [git](architecture/git.md), [desktop](architecture/desktop.md)
 
 ### Constraints and known bugs
 
 The flow needs one top-to-bottom pass before more is added.
 
+- `git_walk` and `git_blobs` (desktop) compile but no migration has been run in the desktop app (2026-10-09).
 - The lifecycle, the lanes and the desktop commands are built but the desktop app has not been run against them; Web Locks across two tabs has not been exercised either (2026-09-30).
 - The only repair an `unhealthy` repository allows is aborting a merge; there is no screen for it.
 

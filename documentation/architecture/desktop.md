@@ -60,6 +60,8 @@ command per port member, and the whole `Git` port is answered — no member refu
 | `git_current_branch`        | `Git.branch`                               | `Git`    |
 | `git_changed_paths_between` | `Git.changedPathsBetween`                  | `Git`    |
 | `git_merge_base`            | `Git.mergeBase`                            | `Git`    |
+| `git_walk`                  | `Git.walk`                                 | `Git`    |
+| `git_blobs`                 | `Git.blobs`                                | `Git`    |
 | `git_clone`                 | `Remote.clone`                             | `Remote` |
 | `git_ensure_remote`         | `Remote.attach`                            | `Remote` |
 | `git_remote_url`            | `Remote.origin`                            | `Remote` |
