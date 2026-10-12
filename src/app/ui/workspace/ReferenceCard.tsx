@@ -20,6 +20,8 @@ import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { ExcerptReader } from "../excerpts/ExcerptReader";
 import { cardPolicy } from "../multibuffer/policy";
+import { bookName } from "./books";
+import { metadataOf } from "./project";
 
 /** How many verses a card shows before it fades: enough to recognise the text. */
 const VERSES = 4;
@@ -33,7 +35,8 @@ export interface ReferenceCardProps {
 }
 
 export function ReferenceCard(props: ReferenceCardProps) {
-  const { services } = useShell();
+  const shell = useShell();
+  const { services } = shell;
   const [preview, setPreview] = createSignal<
     { readonly analysis: Analysis; readonly from: number; readonly to: number } | undefined
   >(undefined, { name: "referenceCardPreview" });
@@ -76,7 +79,10 @@ export function ReferenceCard(props: ReferenceCardProps) {
           when={preview()}
           fallback={
             <p class="text-small text-on-surface-primary">
-              {t("{title} has no {book}", { title: props.resource.title, book: props.bookId })}
+              {t("{title} has no {book}", {
+                title: props.resource.title,
+                book: bookName(props.bookId, metadataOf(shell.project())),
+              })}
             </p>
           }
         >

@@ -45,7 +45,8 @@ import {
   reclip,
   remark,
   satelliteRange,
-  wholeLines,
+  clipSpan,
+  clipSpanOf,
   wholeLinesOf,
   type MarkedRange,
 } from "./satellite";
@@ -122,7 +123,7 @@ export function mountReader(options: ReaderOptions): ReaderMount {
       readingLayer,
       viewLayer(),
       projection.of(policyView(options.policy, options.surface)),
-      clipped(wholeLinesOf(text, options.range)),
+      clipped(clipSpanOf(text, options.range)),
       // The render window starts as the clip. Left to itself it starts as
       // nothing, which the decorator reads as "the whole document" — every
       // card decorated its whole book, and then again once the view reported
@@ -144,7 +145,7 @@ export function mountReader(options: ReaderOptions): ReaderMount {
   // costs nothing. A reconfigure rebuilds every decoration, and on a list that
   // mounts a card per frame while scrolling that was the largest single cost.
   let policy = options.policy;
-  let clip = wholeLinesOf(text, options.range);
+  let clip = clipSpanOf(text, options.range);
   let marks = options.marks;
   let detach: (() => void) | undefined;
   /**
@@ -189,7 +190,7 @@ export function mountReader(options: ReaderOptions): ReaderMount {
     reclip: (range) => {
       // A range is in the canonical text's coordinates: catch up first.
       flush();
-      const next = wholeLines(view.state.doc, range);
+      const next = clipSpan(view.state.doc, range);
       if (next.from === clip.from && next.to === clip.to) return;
       clip = next;
       reclip(view, next);

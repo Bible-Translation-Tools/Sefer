@@ -1132,6 +1132,11 @@
 .cm-diff-taken {
   background-color: transparent;
 }
+/* The side a decided unit will not read as (`Controls.dimUnchosen`): still
+   there to compare, but the brighter side is the result. */
+.cm-diff-unchosen {
+  opacity: 0.45;
+}
 /* Kept words are settled. Under a TAKE they stay marked: in
    an editable review, what differs there now is the reader's own fix. */
 .cm-diff-kept .cm-diff-added {

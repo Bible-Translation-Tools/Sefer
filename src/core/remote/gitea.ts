@@ -142,8 +142,15 @@ export interface GiteaService {
    */
   readonly logout: (host: string) => Effect.Effect<void>;
   readonly session: (host: string) => Effect.Effect<Option.Option<Session>>;
-  /** Repositories the signed-in user can push to, owned or collaborated on. */
-  readonly listWritableRepos: (host: string) => Effect.Effect<readonly RemoteRepo[], GiteaError>;
+  /**
+   * Repositories the signed-in user can push to, owned or collaborated on:
+   * one page of them, or, with `search`, the page whose names match it
+   * (Gitea's own `q`). An organisation holds more than a page.
+   */
+  readonly listWritableRepos: (
+    host: string,
+    search?: string,
+  ) => Effect.Effect<readonly RemoteRepo[], GiteaError>;
   /** Repositories the signed-in user owns, writable or not. */
   readonly listOwnedRepos: (host: string) => Effect.Effect<readonly RemoteRepo[], GiteaError>;
   /** Creates the repository under the signed-in user. `Refused` if it exists. */
@@ -158,14 +165,28 @@ export interface GiteaService {
     name: string,
   ) => Effect.Effect<Option.Option<RemoteRepo>, GiteaError>;
   /**
-   * Forks `owner/name` into the signed-in user's account. Gitea refuses a
-   * second fork of the same repository (409), so a caller looks for one first
-   * (`RemoteRepo.parent` on the user's repository of the same name).
+   * The direct forks of `owner/name`, every page of them. How a caller finds
+   * the signed-in user's own copy whatever it is called: looking up
+   * `<me>/<same name>` finds the wrong repository when the person already
+   * owns one of that name from another project (a sibling fork, say).
+   */
+  readonly listForks: (
+    host: string,
+    owner: string,
+    name: string,
+  ) => Effect.Effect<readonly RemoteRepo[], GiteaError>;
+  /**
+   * Forks `owner/name` into the signed-in user's account, under `as` when
+   * given and the upstream name otherwise. Gitea refuses a second fork of the
+   * same repository, and a name the user already holds (409), so a caller
+   * looks for their fork first (`listForks`) and names a new one when the
+   * upstream name is taken.
    */
   readonly forkRepo: (
     host: string,
     owner: string,
     name: string,
+    as?: string,
   ) => Effect.Effect<RemoteRepo, GiteaError>;
 }
 
@@ -194,6 +215,8 @@ const SESSION_TOKEN_SCOPES: readonly string[] = [
 
 /** How many repositories one page of a listing asks for. */
 const PAGE_SIZE = 50;
+/** Pages of forks read before giving up: 500 forks. */
+const FORK_PAGES = 10;
 
 // ---------------------------------------------------------------------------
 // Wire shapes
@@ -583,8 +606,11 @@ const makeGitea = (options: {
 
     session: readSession,
 
-    listWritableRepos: (host) =>
-      Effect.map(search(host, {}), (repos) => repos.filter((repo) => repo.canWrite)),
+    listWritableRepos: (host, text) =>
+      Effect.map(
+        search(host, text === undefined || text.trim() === "" ? {} : { q: text.trim() }),
+        (repos) => repos.filter((repo) => repo.canWrite),
+      ),
 
     listOwnedRepos: (host) => search(host, { exclusive: "true" }),
 
@@ -622,7 +648,30 @@ const makeGitea = (options: {
         return Option.some(yield* one(session, response));
       }),
 
-    forkRepo: (host, owner, name) =>
+    listForks: (host, owner, name) =>
+      Effect.gen(function* () {
+        const session = yield* authorised(host);
+        const found: RemoteRepo[] = [];
+        // Bounded: a repository with more forks than this is not one a
+        // translator's copy is hiding in, and an unbounded loop is a hang.
+        for (let page = 1; page <= FORK_PAGES; page += 1) {
+          const response = yield* request(
+            url(
+              session.host,
+              `/api/v1/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/forks`,
+              { page: String(page), limit: String(PAGE_SIZE) },
+            ),
+            { headers: tokenHeaders(session) },
+          );
+          if (!response.ok) return yield* refuse(response);
+          const rows = yield* records(yield* json(response));
+          for (const record of rows) found.push(repoOf(record, session.username));
+          if (rows.length < PAGE_SIZE) break;
+        }
+        return found;
+      }),
+
+    forkRepo: (host, owner, name, as) =>
       Effect.gen(function* () {
         const session = yield* authorised(host);
         const response = yield* request(
@@ -633,9 +682,9 @@ const makeGitea = (options: {
           {
             method: "POST",
             headers: { ...tokenHeaders(session), "Content-Type": "application/json" },
-            // An empty body forks into the authenticated user's account and
-            // keeps the upstream name.
-            body: "{}",
+            // Into the authenticated user's account; without a name Gitea
+            // keeps the upstream one.
+            body: JSON.stringify(as === undefined ? {} : { name: as }),
           },
         );
         if (!response.ok) return yield* refuse(response);

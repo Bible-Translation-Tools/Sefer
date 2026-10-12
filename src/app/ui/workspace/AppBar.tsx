@@ -255,12 +255,18 @@ export function AppBar() {
             <BarButton label={t("Import")} testId="app-bar-import" icon={<Download size={20} />} />
           }
         />
+        {/* Settings live under the open project, so there is none to show
+            from the projects page. */}
         <BarButton
           label={t("Settings")}
           testId="app-bar-settings"
           pressed={at("/settings")}
           icon={<SettingsIcon size={20} />}
-          onClick={() => void navigate({ to: "/settings" })}
+          disabled={!open()}
+          title={open() ? undefined : t("Open a project to see Settings")}
+          onClick={() =>
+            void navigate({ to: "/project/$slug/settings", params: { slug: shell.slug() } })
+          }
         />
         {/* A placeholder until there is an account to read a name from. */}
         <BarButton

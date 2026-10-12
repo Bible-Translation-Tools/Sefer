@@ -438,7 +438,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       title: t("Settings"),
       keys: "Mod-,",
       run: () => {
-        void bridge.navigate({ to: "/settings" });
+        void bridge.navigate({ to: "/project/$slug/settings", params: { slug: bridge.slug() } });
       },
     }),
 
@@ -451,7 +451,13 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
         const key = shellKeys(bridge.services.settings).showAdvancedSettings;
         return Effect.gen(function* () {
           yield* bridge.services.settings.set(key, true);
-          yield* Effect.sync(() => void bridge.navigate({ to: "/settings" }));
+          yield* Effect.sync(
+            () =>
+              void bridge.navigate({
+                to: "/project/$slug/settings",
+                params: { slug: bridge.slug() },
+              }),
+          );
         });
       },
     }),
@@ -851,8 +857,8 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
        * the source role only — a `reference` is something read beside the
        * text, never something its shape is taken from.
        */
-      const boundSource = (projectId: string) =>
-        Effect.map(bridge.services.library.resolve(projectId, "source"), (bound) => bound[0]);
+      const boundSource = (projectRoot: string) =>
+        Effect.map(bridge.services.library.resolve(projectRoot, "source"), (bound) => bound[0]);
 
       /**
        * What an overlay LEFT for a human, and taking the reader to it.
@@ -907,7 +913,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
             bridge.report(t("put the cursor in a chapter first"));
             return;
           }
-          const source = yield* boundSource(project.id);
+          const source = yield* boundSource(project.root);
           if (source === undefined) {
             bridge.report(t("no source text is bound to this project"));
             return;
@@ -972,7 +978,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
         Effect.gen(function* () {
           const project = bridge.project();
           if (project === undefined) return;
-          const source = yield* boundSource(project.id);
+          const source = yield* boundSource(project.root);
           if (source === undefined) {
             bridge.report(t("no source text is bound to this project"));
             return;

@@ -48,7 +48,7 @@ export function ContextControl(props: {
         role="group"
         aria-label={t("Context")}
         data-context
-        class="inline-flex items-stretch divide-x divide-surface-border overflow-hidden rounded-md border border-surface-border"
+        class="inline-flex items-stretch overflow-hidden rounded-md"
       >
         <button
           type="button"

@@ -263,9 +263,10 @@ export interface ShellKeys {
   /** Enables the destructive multi-match action in Find. */
   readonly enableReplaceAll: SettingKey<boolean>;
   /**
-   * Shows the gateway languages on the projects page, to download as a project
-   * to edit. Off for nearly everyone: a gateway text is a source to read, added
-   * from Refine's "Add source…", and editing one is the rare revision job.
+   * Shows the gateway languages on the projects page. Off for nearly everyone:
+   * a gateway text is a source to read, chosen from the reference column's
+   * language menu. A download from the projects page still lands in the
+   * Library, never the projects folder (`arrival.ts`).
    */
   readonly showGatewayProjects: SettingKey<boolean>;
   /** Ask about unsaved work found when a project opens. Backups are written either way. */
@@ -331,6 +332,8 @@ export interface ShellKeys {
    * once when the shell is built.
    */
   readonly sidebarOpen: SettingKey<boolean>;
+  /** Is the reference column beside the editor open (the crumb strip's split toggle). */
+  readonly referenceOpen: SettingKey<boolean>;
   /**
    * How wide the project sidebar is, as a FRACTION of the workspace row, because that is the unit `Resizable` speaks: a split conserves
    * fractions, so a pixel width would have to be converted against a root that
@@ -355,13 +358,6 @@ export interface ShellKeys {
   readonly editorFontSize: SettingKey<number>;
   /** Project root → ISO-8601 of the last open. See `RecentProjects`. */
   readonly recentProjects: SettingKey<RecentProjects>;
-  /**
-   * The projects that have had their default source text (Refine's reference
-   * panel), by project id. Remembered on this device so the default is given
-   * ONCE: a text the reader removes is never fetched again behind their back;
-   * "Add source…" still offers it. Not a form row — nothing to edit by hand.
-   */
-  readonly defaultedSources: SettingKey<readonly string[]>;
   /** Slug → project root, for `/project/<slug>`. See `ProjectSlugs`. */
   readonly projectSlugs: SettingKey<ProjectSlugs>;
   /** Project root → the book, the clip and the chapter the reader last had on screen. */
@@ -445,12 +441,12 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     ),
     sousSettings: settings.register("sous.settings", SousOverrides, {}),
     sidebarOpen: settings.register("workspace.sidebarOpen", Schema.Boolean, true),
+    referenceOpen: settings.register("workspace.referenceOpen", Schema.Boolean, true),
     sidebarWidth: settings.register("workspace.sidebarWidth", Schema.Number, SIDEBAR_WIDTH.default),
     fontSize: settings.register("shell.fontSize", Schema.Number, 16),
     zoom: settings.register("shell.zoom", Schema.Number, 100),
     editorFontSize: settings.register("editor.fontSize", Schema.Number, DEFAULT_EDITOR_FONT_SIZE),
     recentProjects: settings.register("shell.recentProjects", RecentProjects, {}),
-    defaultedSources: settings.register("references.defaulted", Schema.Array(Schema.String), []),
     projectSlugs: settings.register("shell.projectSlugs", ProjectSlugs, {}),
     lastLocation: settings.register("workspace.lastLocation", LastLocations, {}),
     referenceWidth: settings.register(
@@ -642,7 +638,7 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
       key: keys.showGatewayProjects,
       label: "Show gateway languages on the projects page",
       description:
-        "Lets a gateway language be downloaded as a project to edit, for revising the gateway itself. Gateway languages to read are added from Refine's source panel.",
+        "Lists the gateway languages on the projects page too. A download from there goes to Source texts, never Your projects; to revise one, use Edit as your own project in Settings.",
       kind: "boolean",
       group: "advanced",
     },

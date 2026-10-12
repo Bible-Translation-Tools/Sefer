@@ -87,7 +87,7 @@ export interface SourceReading {
  */
 export const sourceReadings = (
   library: LibraryService,
-  projectId: string,
+  projectRoot: string,
   occurrences: readonly TermOccurrence[],
 ): Effect.Effect<ReadonlyMap<string, SourceReading>, never, Galley> =>
   Effect.gen(function* () {
@@ -106,7 +106,7 @@ export const sourceReadings = (
     }
     if (missing.length === 0) return out;
 
-    const resource = yield* sourceResource(library, projectId);
+    const resource = yield* sourceResource(library, projectRoot);
     if (Option.isNone(resource)) return out;
     const galley = yield* Galley;
     // One parse per book, not per occurrence: a term's occurrences cluster.
@@ -152,9 +152,9 @@ const verseReading = (analysis: Analysis, occurrence: TermOccurrence): string | 
  */
 const sourceResource = (
   library: LibraryService,
-  projectId: string,
+  projectRoot: string,
 ): Effect.Effect<Option.Option<Resource>> =>
-  Effect.map(library.resolve(projectId, ROLES.source), (found) => {
+  Effect.map(library.resolve(projectRoot, ROLES.source), (found) => {
     const first = found[0];
     return first === undefined ? Option.none<Resource>() : Option.some(first);
   });

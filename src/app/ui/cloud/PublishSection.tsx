@@ -108,7 +108,7 @@ export function PublishSection(props: {
           class="text-smallest text-brand underline"
           onClick={() => {
             props.onLeave();
-            void navigate({ to: "/settings" });
+            void navigate({ to: "/project/$slug/settings", params: { slug: shell.slug() } });
           }}
         >
           {t("Or choose a shared project that already exists")}

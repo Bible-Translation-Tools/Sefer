@@ -29,7 +29,7 @@ import MoreVertical from "lucide-solid/icons/more-vertical";
 import PencilLine from "lucide-solid/icons/pencil-line";
 import Share2 from "lucide-solid/icons/share-2";
 import Trash2 from "lucide-solid/icons/trash-2";
-import { For, Show, createEffect, createSignal } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
 import { touchProject } from "#core/project/projectIndex";
 
@@ -88,6 +88,18 @@ export function YourProjects(props: {
     name: "renamingProject",
   });
   const [newName, setNewName] = createSignal("", { name: "newProjectName" });
+  /** What a card shows of a project: two with the same are told apart by folder. */
+  const lookalike = (row: ProjectSummary): string =>
+    `${row.name}\u0000${row.language}\u0000${row.languageTag}`;
+  const twins = createMemo(
+    (): ReadonlySet<string> => {
+      const seen = new Map<string, number>();
+      for (const row of rows() ?? []) seen.set(lookalike(row), (seen.get(lookalike(row)) ?? 0) + 1);
+      return new Set([...seen].filter(([, count]) => count > 1).map(([key]) => key));
+    },
+    { name: "projectTwins" },
+  );
+
   const [deleting, setDeleting] = createSignal<ProjectSummary | undefined>(undefined, {
     name: "deletingProject",
   });
@@ -257,6 +269,14 @@ export function YourProjects(props: {
               delete recent[row.root];
               yield* Effect.ignore(services.settings.set(keys.recentProjects, recent));
             }
+            // Its slug goes too: a project made later at the same folder is a
+            // new project, and a link to the old one should not open it.
+            const slugs = services.settings.get(keys.projectSlugs);
+            const kept = Object.fromEntries(
+              Object.entries(slugs).filter(([, root]) => root !== row.root),
+            );
+            if (Object.keys(kept).length !== Object.keys(slugs).length)
+              yield* Effect.ignore(services.settings.set(keys.projectSlugs, kept));
           }),
         ),
       )
@@ -389,9 +409,19 @@ export function YourProjects(props: {
                       </Show>
                     </div>
                     {/* The code, or the folder when the metadata declares no
-                        language — muted, so it never reads as one. */}
-                    <code class="truncate font-mono text-smallest text-on-surface-tertiary">
-                      {row.languageTag || row.folder}
+                        language — muted, so it never reads as one. Two cards
+                        that would read the same (two migrations of one
+                        language) also name their folders, so the right one
+                        can be opened or deleted. */}
+                    <code
+                      class="truncate font-mono text-smallest text-on-surface-tertiary"
+                      data-project-folder={row.folder}
+                    >
+                      {row.languageTag === ""
+                        ? row.folder
+                        : twins().has(lookalike(row))
+                          ? `${row.languageTag} · ${row.folder}`
+                          : row.languageTag}
                     </code>
 
                     {/* `mt-auto` keeps the button on the card's floor when a

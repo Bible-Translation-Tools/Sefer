@@ -1,17 +1,29 @@
 /**
- * One line of where the project stands with the shared project, for the
- * screen where versions are made: Review.
+ * Review's status line: one quiet row under the header that says HOW MANY and
+ * WHERE, each in its own place, so no number on the screen can be read as
+ * another's.
  *
- * It is the status bar's "↑2 ↓3" said in words — "Saved changes not sent
- * yet · 3 verses in 2 books differ from yours" — with the one move beside it.
- * Shown only when there is something to say: both sides agreeing, or a project
- * attached to nothing, is no line at all.
+ *   4 changes in 2 books · 1 decided        Shared project  2 verses in 1 book to receive · checked 3 min ago ↻  See the changes
+ *
+ * - **This comparison** — what the two sides picked above differ by, counted
+ *   in passages and books, and how many are decided. It moves with every edit.
+ * - **Shared project** — where the project stands with it, as the last check
+ *   left it: what it has that you do not, what you saved and have not sent.
+ *   It is measured between recorded versions, so an edit does not move it;
+ *   that is why it says when it was checked and can be checked again.
+ * - **Writer** — new work in the Writer projects the books follow, when there
+ *   is some.
+ *
+ * Plain text on the page's ground, no box: colour is spent only on what asks
+ * something of the reader (a dot), and the one move for each place is a quiet
+ * link-weight button beside it. It replaced a warning-tinted banner whose
+ * "2 verses in 1 book differ from yours" sat over a "4 changes" it had nothing
+ * to do with.
  */
 
-import CloudAlert from "lucide-solid/icons/cloud-alert";
-import CloudDownload from "lucide-solid/icons/cloud-download";
-import CloudOff from "lucide-solid/icons/cloud-off";
-import CloudUpload from "lucide-solid/icons/cloud-upload";
+import type { JSX } from "@solidjs/web";
+import CloudIcon from "lucide-solid/icons/cloud";
+import RefreshCw from "lucide-solid/icons/refresh-cw";
 import { Show } from "solid-js";
 
 import type { IncomingPlan, Sync } from "#core/sync";
@@ -19,96 +31,192 @@ import type { IncomingPlan, Sync } from "#core/sync";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { syncWatch } from "../../syncWatch";
-import { Button, cx } from "../primitives";
-import { incomingWords, outgoingWords } from "./copy";
+import { writerWatch } from "../../writerWatch";
+import { ago } from "../panels/format";
+import { Button, IconButton, cx } from "../primitives";
 import { attentionOf, createQuickSync, quickActionOf, quickLabel } from "./quick";
 
-const SAID = new Set(["ahead", "behind", "diverged", "offline", "unauthorized", "conflicted"]);
+/** What this comparison differs by. */
+export interface ComparisonCount {
+  readonly changes: number;
+  readonly books: number;
+  readonly decided: number;
+}
 
-const glyphOf = (sync: Sync) => {
-  switch (sync.state) {
-    case "ahead":
-      return <CloudUpload size={16} />;
-    case "behind":
-      return <CloudDownload size={16} />;
-    case "offline":
-      return <CloudOff size={16} />;
-    default:
-      return <CloudAlert size={16} />;
-  }
+const plural = (count: number, one: string, many: string): string =>
+  t(count === 1 ? one : many, { count });
+
+/** "4 changes in 2 books · 1 decided", or that both sides read the same. */
+const comparisonWords = (count: ComparisonCount): string => {
+  if (count.changes === 0) return t("No differences");
+  const changes = plural(count.changes, "{count} change", "{count} changes");
+  const books = plural(count.books, "{count} book", "{count} books");
+  const said = t("{changes} in {books}", { changes, books });
+  return count.decided === 0
+    ? said
+    : t("{said} · {decided} decided", { said, decided: count.decided });
 };
 
 /**
- * "Saved changes not sent yet · 3 verses in 2 books differ from yours" — the
- * plan's numbers, never a count of versions (`incomingWords`).
+ * The shared project's side of things, in its own nouns: what it has that you
+ * do not ("to receive"), and what you have that it does not ("not sent").
  */
-const countsOf = (sync: Sync, plan: IncomingPlan | undefined): string => {
+const sharedWords = (sync: Sync, plan: IncomingPlan | undefined): string => {
+  switch (sync.state) {
+    case "offline":
+      return t("offline — your saved changes stay here until you're back");
+    case "unauthorized":
+      return t("sign in to send your changes");
+    case "checking":
+      return t("checking…");
+    case "conflicted":
+      return t("a transfer did not finish");
+    default:
+      break;
+  }
   const parts: string[] = [];
-  if (sync.clocks.local.unshared > 0) parts.push(outgoingWords());
-  if (sync.clocks.shared.unshared > 0)
+  if (sync.clocks.shared.unshared > 0) {
+    const books = plan === undefined ? 0 : plan.books.length;
+    const verses = plan?.verseCount ?? 0;
     parts.push(
-      (plan === undefined ? undefined : incomingWords(plan)) ??
-        t("the shared project has changes you don't have yet"),
+      books === 0
+        ? t("has changes you don't have yet")
+        : verses === 0
+          ? t("{books} to receive", {
+              books: plural(books, "{count} book", "{count} books"),
+            })
+          : t("{verses} in {books} to receive", {
+              verses: plural(verses, "{count} verse", "{count} verses"),
+              books: plural(books, "{count} book", "{count} books"),
+            }),
     );
-  return parts.join(" · ");
+  }
+  if (sync.clocks.local.unshared > 0) parts.push(t("your saved changes aren't sent yet"));
+  return parts.length === 0 ? t("up to date") : parts.join(" · ");
 };
 
+/** A label, quiet, then what it labels. */
+const Zone = (props: {
+  readonly label: string;
+  readonly icon?: JSX.Element;
+  /** A dot when the place asks something of the reader. */
+  readonly attention?: boolean;
+  readonly children: JSX.Element;
+  readonly data?: string;
+}) => (
+  <span
+    class="inline-flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
+    data-review-zone={props.data}
+  >
+    <span class="inline-flex items-center gap-1.5 text-on-surface-tertiary">
+      {props.icon}
+      {props.label}
+      <Show when={props.attention}>
+        <span aria-hidden="true" class="size-1.5 rounded-full bg-on-surface-warning" />
+      </Show>
+    </span>
+    {props.children}
+  </span>
+);
+
 export function SyncLine(props: {
+  /** This comparison's counts; absent while it is still being read. */
+  readonly comparison: ComparisonCount | undefined;
   /** What "See the changes" does here: Review sets itself against the shared project. */
   readonly onSee: () => void;
   /** Review is already against the shared project, so "See the changes" is this screen. */
   readonly seeing: boolean;
+  /** Set Review against the Writer projects' new work. */
+  readonly onSeeWriter: () => void;
+  readonly seeingWriter: boolean;
 }) {
   const shell = useShell();
   const quick = createQuickSync(shell, () => props.onSee());
-  const shown = (): Sync | undefined => {
+  const root = (): string | undefined => shell.project()?.root;
+  const sync = (): Sync | undefined => {
     const held = quick.sync();
-    return held !== undefined && held.reading.origin !== undefined && SAID.has(held.state)
-      ? held
-      : undefined;
+    return held !== undefined && held.reading.origin !== undefined ? held : undefined;
+  };
+  const checkedAt = (): number | undefined => {
+    const at = root();
+    return at === undefined ? undefined : syncWatch.fetchedAt(at);
+  };
+  const writer = () => writerWatch.facts(root());
+  /** The shared project's one move here, when there is one to make from this screen. */
+  const move = (held: Sync) => {
+    const action = quickActionOf(held);
+    if (action === "check") return undefined;
+    if (action === "see" && props.seeing) return undefined;
+    return action;
   };
 
   return (
-    <Show when={shown()}>
-      {(held) => (
-        <div
-          class={cx(
-            "flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-surface-border px-3 py-1.5 text-small",
-            attentionOf(held()) === "none"
-              ? "text-on-surface-secondary"
-              : "text-on-surface-warning",
-          )}
-          data-sync-line={held().state}
-        >
-          <span aria-hidden="true" class="inline-flex">
-            {glyphOf(held())}
+    <div
+      class="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-1 text-smallest text-on-surface-secondary"
+      data-review-status
+    >
+      <Show when={props.comparison}>
+        {(count) => (
+          <span class="tabular-nums" data-review-decided data-review-changed={count().books}>
+            {comparisonWords(count())}
           </span>
-          <span>
-            {held().state === "offline"
-              ? t("Offline — your saved changes stay on this device until you're back.")
-              : held().state === "unauthorized"
-                ? t("Sign in to send your changes.")
-                : countsOf(held(), syncWatch.facts(shell.project()?.root)?.plan)}
-          </span>
-          <Show
-            when={
-              !(props.seeing && quickActionOf(held()) === "see") &&
-              quickActionOf(held()) !== "check"
-            }
+        )}
+      </Show>
+
+      <Show when={sync()}>
+        {(held) => (
+          <Zone
+            label={t("Shared project")}
+            icon={<CloudIcon size={14} aria-hidden="true" />}
+            attention={attentionOf(held()) === "alert"}
+            data="shared"
           >
-            <Button
-              size="sm"
-              variant="secondary"
-              class="ms-auto"
-              loading={quick.busy() !== ""}
-              data-sync-line-action={quickActionOf(held())}
-              onClick={() => quick.run(quickActionOf(held()))}
-            >
-              {quickLabel(quickActionOf(held()))}
+            <span data-sync-line={held().state}>
+              {sharedWords(held(), syncWatch.facts(root())?.plan)}
+            </span>
+            <span class="inline-flex items-center gap-0.5 text-on-surface-tertiary">
+              <Show when={checkedAt()}>
+                {(at) => <span>{t("checked {when}", { when: ago(at()) })}</span>}
+              </Show>
+              <IconButton
+                size="sm"
+                label={t("Check for changes")}
+                disabled={quick.busy() !== ""}
+                icon={<RefreshCw class={cx(quick.busy() === "check" && "animate-spin")} />}
+                onClick={() => quick.run("check")}
+              />
+            </span>
+            <Show when={move(held())}>
+              {(action) => (
+                <Button
+                  size="sm"
+                  variant="link"
+                  loading={quick.busy() !== "" && quick.busy() !== "check"}
+                  data-sync-line-action={action()}
+                  onClick={() => quick.run(action())}
+                >
+                  {quickLabel(action())}
+                </Button>
+              )}
+            </Show>
+          </Zone>
+        )}
+      </Show>
+
+      <Show when={writer().work.length > 0}>
+        <Zone label={t("Writer")} attention={!props.seeingWriter} data="writer">
+          <span>
+            {t("new work in {books}", {
+              books: plural(writer().work.length, "{count} book", "{count} books"),
+            })}
+          </span>
+          <Show when={!props.seeingWriter}>
+            <Button size="sm" variant="link" onClick={() => props.onSeeWriter()}>
+              {t("See it")}
             </Button>
           </Show>
-        </div>
-      )}
-    </Show>
+        </Zone>
+      </Show>
+    </div>
   );
 }

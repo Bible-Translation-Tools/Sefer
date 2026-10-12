@@ -19,11 +19,12 @@
  */
 
 import { useNavigate } from "@tanstack/solid-router";
+import SquareSplitHorizontal from "lucide-solid/icons/square-split-horizontal";
 import { createMemo } from "solid-js";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { Switch } from "../primitives";
+import { IconButton, Switch } from "../primitives";
 import { bookName, CANON } from "./books";
 import { Crumbs, LocationStrip } from "./Crumbs";
 import { metadataOf } from "./project";
@@ -164,6 +165,18 @@ export function LocationBar(props: LocationBarProps) {
 
   return (
     <LocationStrip testId="location-bar">
+      {/* The reference column, open or shut: first in the strip, on the side
+          the column is on. Shut, the editor has the whole row. */}
+      <IconButton
+        size="sm"
+        label={
+          shell.referenceOpen() ? t("Hide the reference texts") : t("Show the reference texts")
+        }
+        aria-pressed={shell.referenceOpen() ? "true" : "false"}
+        data-testid="toggle-references"
+        icon={<SquareSplitHorizontal aria-hidden="true" />}
+        onClick={() => shell.setReferenceOpen(!shell.referenceOpen())}
+      />
       <Crumbs
         book={name()}
         books={books}

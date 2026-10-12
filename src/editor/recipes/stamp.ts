@@ -47,6 +47,7 @@ import {
   clipped,
   markedRanges,
   marksEffect,
+  clipSpan,
   wholeLines,
   type MarkedRange,
 } from "./satellite";
@@ -149,7 +150,7 @@ const pressRange = (
   const view = pressView();
   if (view.state !== state) view.setState(state);
   const doc = view.state.doc;
-  const clip = wholeLines(doc, range);
+  const clip = clipSpan(doc, range);
   const lines: Node[] = [];
   let from = clip.from;
   while (from <= clip.to) {
@@ -157,7 +158,11 @@ const pressRange = (
     const want = Math.min(clip.to, from + SLICE);
     const to = want >= clip.to ? clip.to : doc.lineAt(want).to;
     view.dispatch({
-      effects: [clipEffect({ from, to }), setRenderRange.of({ from, to }), marksEffect(marks)],
+      effects: [
+        clipEffect({ from, to }),
+        setRenderRange.of(wholeLines(doc, { from, to })),
+        marksEffect(marks),
+      ],
     });
     for (const child of Array.from(view.contentDOM.children)) {
       // A line or a block widget the clip left standing; the collapsed book

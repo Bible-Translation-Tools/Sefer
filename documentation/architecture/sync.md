@@ -338,6 +338,32 @@ when nothing changed. It never moves a file. With "Skip review of incoming chang
 follows, and the receive refuses whenever a book needs a person, so nothing arrives unreviewed that
 the policy would have shown. It runs as the `sync.check` operation.
 
+### Writer projects a project follows
+
+A project that came from BTT Writer (the Writer migration) records, per book, the Writer project
+it came from and the commit it took: `.upstreams.json`, committed, so a teammate follows the same
+ones. While a project follows any, `checkForChanges` checks them too, AFTER the shared project's
+check and any receive — also for a project attached to no shared project, since an assembly sends
+nothing until someone shares it (`src/app/writerWatch.ts`, the `upstream.check` operation). There is
+no switch of its own: "Stop following Writer projects…" in Settings' Cloud section empties the file as
+one version, and that is the end of it (Will, 2026-10-06).
+
+Each upstream is a `Remote.probe`, six at a time (67 in about 4 s). A head that is the commit the
+project took, or the one the shared project's `.upstreams.json` records — a teammate took it and it
+arrives through ordinary sync — is nothing new: two people never take the same Writer saves twice.
+A moved one is cloned with history into staging (50–100 KB; in memory on the Web, through `Services.inMemoryTransfer`, and `<temp>/writer` on desktop), rendered through the import template at
+its head and at the commit the project took, and saves that touched no chunk or title (Writer
+autosaves its manifest) are not work (`src/core/migrate/writerWork.ts`). What the person reviews is
+`incoming`: the project's own book with THEIR text only in the verses they changed since that commit,
+so a review against Writer shows their changes and none of the project's own edits, and a verse both
+changed is a difference to decide. Nothing is merged automatically.
+
+The cloud popover says it by person and book — "mary_chishimba is still working on 1 Yohane in
+Writer: saved Oct 1" — with "Review their changes", and the cloud carries its "!" while any waits.
+Review against "From Writer (owner)" holds every book, the project's own text where Writer has
+nothing new. Record writes `.upstreams.json`'s new heads into the same version, also when every
+passage was kept: the work was looked at, and is not offered again.
+
 `sendAfterSave` runs after Record a version, and only sends: the server's fast-forward rule is the
 check, and a refusal starts `checkForChanges` at once so every surface reads `behind` or `diverged`
 with the facts rather than a bare error. It returns how the send ended (`SendOutcome`: sent, held
@@ -384,7 +410,7 @@ call goes through the WACS proxy's allowlist ([git](git.md), Suggested changes).
 `src/app/syncWatch.ts` holds the open project's last reading (`readSync` and its plan) for the whole
 application, the way `syncStatus` holds the network. The check on open, every send, a combine or
 receive from Review leave their reading there; the app bar's cloud button (`SyncButton`) and
-Review's status line (`SyncLine`) read it. A reading is local work — refs
+Review's status line (`SyncLine`, the "Shared project" part, with when it was checked and a refresh) read it. A reading is local work — refs
 and logs already in the object database — so opening the cloud popover reads again; only a check or
 a send touches the network.
 
@@ -483,9 +509,12 @@ A token revoked on the server still reads as a session here until the next call 
 not made.
 
 `createAccount` (`src/app/ui/cloud/account.ts`) is the one implementation of "signed in": the popover
-and `CloudPanel` on `/settings` each make one, and `SignInForm` and `AccountCard`
+and `CloudPanel` on `/project/$slug/settings` each make one, and `SignInForm` and `AccountCard`
 (`src/app/ui/cloud/AccountCard.tsx`) draw it. The attach-and-publish half, `SharedProjectCard`
-(`src/app/ui/cloud/SharedProjectCard.tsx`), is on `/settings`. An attach or publish re-reads the sync
+(`src/app/ui/cloud/SharedProjectCard.tsx`), is there too. "Choose a shared project…" is a list you
+type at (`FilterList`) over the repositories the account can write to, and picking a row attaches
+it; the first list is one page of 50, so after a 300 ms pause what was typed is searched on Gitea
+(`listWritableRepos` with `q`) and what comes back joins the list. "How you work on this project" shows only once a shared project is attached: before that whether the account can write to it is unknown, and the card used to read that as "Sign in". An attach or publish re-reads the sync
 state.
 
 ## What the ports grew

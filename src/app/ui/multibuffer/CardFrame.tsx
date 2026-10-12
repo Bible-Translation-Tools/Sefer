@@ -90,7 +90,16 @@ const editAction = (edit: CardEdit): CardAction | undefined =>
           title: t("Stop editing (Escape)"),
           onPress: edit.onDone,
         }
-      : { kind: "button", id: "edit", label: t("Edit"), icon: PencilIcon, onPress: edit.onEdit };
+      : {
+          kind: "button",
+          id: "edit",
+          label: t("Edit"),
+          icon: PencilIcon,
+          // Quiet: on a page of cards, an outlined Edit on every one is the
+          // loudest thing on the page and the least often pressed.
+          emphasis: "tertiary",
+          onPress: edit.onEdit,
+        };
 
 export function CardFrame(props: CardFrameProps) {
   const editing = (): boolean => props.edit.kind === "edit" && props.edit.editing;
@@ -111,7 +120,7 @@ export function CardFrame(props: CardFrameProps) {
         props.condensed === true ? t("Open {place}", { place: String(props.title) }) : undefined
       }
       class={cx(
-        "overflow-hidden",
+        "group/card overflow-hidden",
         // An outline, not a ring: `shadow-small` sets box-shadow outright, and
         // a ring is a box-shadow, so on a raised card it never showed.
         props.current === true && "outline-2 -outline-offset-1 outline-brand",
@@ -181,8 +190,13 @@ export function CardFrame(props: CardFrameProps) {
       {props.children}
 
       <Show when={hasFooter()}>
-        <footer class="flex items-center gap-2 border-t border-surface-border px-3 py-1.5">
-          {props.context}
+        <footer class="flex items-center gap-2 px-3 pt-0.5 pb-1.5">
+          {/* The context steps are there when wanted and faint otherwise:
+              they belong to the card under the pointer, not to every card at
+              once. Keyboard focus inside the card brings them up too. */}
+          <div class="opacity-50 transition-opacity group-hover/card:opacity-100 group-focus-within/card:opacity-100 motion-reduce:transition-none">
+            {props.context}
+          </div>
           <div data-card-actions class="ms-auto flex items-center gap-1">
             <CardActions actions={props.actions ?? []} />
           </div>

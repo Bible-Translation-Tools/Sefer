@@ -272,6 +272,14 @@ const versesIn = (rows: {
   return verses;
 };
 
+/**
+ * Chapters as a reader counts them. Row 0 of `chapterRows` is ALWAYS the
+ * synthetic front-matter row (Kitchen's `toc-reader.ts`), so Genesis has 51
+ * rows and 50 chapters.
+ */
+const chaptersIn = (analysis: Analysis): number =>
+  Math.max(0, analysis.dish.toc.chapterRows.length - 1);
+
 /** The two rungs the census reports, counted once over the one shape. */
 const countsOf = (
   bookId: BookId,
@@ -286,6 +294,21 @@ const countsOf = (
   }
   return { errors, warnings };
 };
+
+/**
+ * One book's census counts from one analysis: what a Book census row shows,
+ * for text that is not (yet) a project's book. The Writer migration's health
+ * line is this, so it cannot disagree with the book list once the book
+ * arrives.
+ */
+export const censusOf = (
+  bookId: BookId,
+  analysis: Analysis,
+): Pick<BookSummary, "chapters" | "verses" | "diagnostics"> => ({
+  chapters: chaptersIn(analysis),
+  verses: versesIn(analysis.dish.toc.verseRows),
+  diagnostics: countsOf(bookId, analysis, { revision: 0, length: 0 }),
+});
 
 const summaryOf = (bookId: BookId, entry: Entry): BookSummary => {
   const analysis = entry.analysis;
@@ -303,7 +326,7 @@ const summaryOf = (bookId: BookId, entry: Entry): BookSummary => {
     bookId,
     path: entry.path,
     stamp: entry.stamp,
-    chapters: toc.chapterRows.length,
+    chapters: chaptersIn(analysis),
     verses: versesIn(toc.verseRows),
     diagnostics: countsOf(bookId, analysis, entry.stamp),
   };

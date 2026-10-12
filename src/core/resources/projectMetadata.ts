@@ -29,6 +29,11 @@ import { parse as parseYaml } from "yaml";
 
 import type { BurritoMetadata } from "./burrito";
 import {
+  fromBurritoRelationships,
+  fromResourceContainerSource,
+  type RelatedResource,
+} from "./relationships";
+import {
   decodeResourceContainerManifest,
   type ResourceContainerManifest,
 } from "./resourceContainer";
@@ -80,12 +85,18 @@ export interface ProjectMetadata {
    */
   readonly bookNames: Readonly<Record<string, LocalizedText>>;
   /**
-   * The language of the text this project was translated FROM, when it says:
-   * a Resource Container's first `dublin_core.source[].language` ("en"). The
-   * project's own gateway language, and so the source text to offer first.
-   * A burrito's `relationships` are not decoded yet, so it has none.
+   * The source texts the project declares — Burrito `relationships`, or a
+   * Resource Container's `dublin_core.source` — every listed version, as
+   * written. `highestVersions` picks the one to hold.
    */
-  readonly sourceLanguage?: string;
+  readonly related: readonly RelatedResource[];
+  /**
+   * What the container says it holds: a Burrito flavor (`textTranslation`)
+   * or a Resource Container subject (`Bible`, `Translation Notes`).
+   */
+  readonly subject: string | undefined;
+  /** The version the resource declares (`dublin_core.version`); Burrito has none. */
+  readonly version: string | undefined;
 }
 
 const ONE = (locale: string | undefined, value: string): LocalizedText =>
@@ -122,6 +133,9 @@ export const fromBurrito = (metadata: BurritoMetadata): ProjectMetadata => {
     },
     defaultLocale: metadata.meta.defaultLocale,
     bookNames,
+    related: fromBurritoRelationships(metadata.relationships ?? []),
+    subject: metadata.type.flavorType.flavor.name,
+    version: undefined,
   };
 };
 
@@ -156,9 +170,9 @@ const fromResourceContainer = (manifest: ResourceContainerManifest): ProjectMeta
     },
     defaultLocale: locale === "" ? undefined : locale,
     bookNames,
-    ...(core.source?.[0]?.language === undefined || core.source[0].language === ""
-      ? {}
-      : { sourceLanguage: core.source[0].language }),
+    related: fromResourceContainerSource(core.source ?? []),
+    subject: core.subject,
+    version: core.version,
   };
 };
 

@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as DesignRouteImport } from './routes/design'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppMigrateRouteImport } from './routes/_app/migrate'
 import { Route as AppProjectsRouteImport } from './routes/_app/projects'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppDevFixtureRouteImport } from './routes/_app/dev/fixture'
@@ -25,6 +26,7 @@ import { Route as AppProjectSlugHistoryRouteImport } from './routes/_app/project
 import { Route as AppProjectSlugInventoryRouteImport } from './routes/_app/project/$slug/inventory'
 import { Route as AppProjectSlugPlaygroundRouteImport } from './routes/_app/project/$slug/playground'
 import { Route as AppProjectSlugReviewRouteImport } from './routes/_app/project/$slug/review'
+import { Route as AppProjectSlugSettingsRouteImport } from './routes/_app/project/$slug/settings'
 import { Route as AppProjectSlugSuggestionsRouteImport } from './routes/_app/project/$slug/suggestions'
 import { Route as AppProjectSlugTermsRouteImport } from './routes/_app/project/$slug/terms'
 import { Route as AppProjectSlugBookBookRouteImport } from './routes/_app/project/$slug/book/$book'
@@ -41,6 +43,11 @@ const DesignRoute = DesignRouteImport.update({
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppMigrateRoute = AppMigrateRouteImport.update({
+  id: '/migrate',
+  path: '/migrate',
   getParentRoute: () => AppRoute,
 } as any)
 const AppProjectsRoute = AppProjectsRouteImport.update({
@@ -110,6 +117,11 @@ const AppProjectSlugReviewRoute = AppProjectSlugReviewRouteImport.update({
   path: '/review',
   getParentRoute: () => AppProjectSlugRoute,
 } as any)
+const AppProjectSlugSettingsRoute = AppProjectSlugSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AppProjectSlugRoute,
+} as any)
 const AppProjectSlugSuggestionsRoute =
   AppProjectSlugSuggestionsRouteImport.update({
     id: '/suggestions',
@@ -130,6 +142,7 @@ const AppProjectSlugBookBookRoute = AppProjectSlugBookBookRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/design': typeof DesignRoute
+  '/migrate': typeof AppMigrateRoute
   '/projects': typeof AppProjectsRoute
   '/settings': typeof AppSettingsRoute
   '/dev/fixture': typeof AppDevFixtureRoute
@@ -142,6 +155,7 @@ export interface FileRoutesByFullPath {
   '/project/$slug/inventory': typeof AppProjectSlugInventoryRoute
   '/project/$slug/playground': typeof AppProjectSlugPlaygroundRoute
   '/project/$slug/review': typeof AppProjectSlugReviewRoute
+  '/project/$slug/settings': typeof AppProjectSlugSettingsRoute
   '/project/$slug/suggestions': typeof AppProjectSlugSuggestionsRoute
   '/project/$slug/terms': typeof AppProjectSlugTermsRoute
   '/project/$slug/': typeof AppProjectSlugIndexRoute
@@ -149,6 +163,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/design': typeof DesignRoute
+  '/migrate': typeof AppMigrateRoute
   '/projects': typeof AppProjectsRoute
   '/settings': typeof AppSettingsRoute
   '/': typeof AppIndexRoute
@@ -161,6 +176,7 @@ export interface FileRoutesByTo {
   '/project/$slug/inventory': typeof AppProjectSlugInventoryRoute
   '/project/$slug/playground': typeof AppProjectSlugPlaygroundRoute
   '/project/$slug/review': typeof AppProjectSlugReviewRoute
+  '/project/$slug/settings': typeof AppProjectSlugSettingsRoute
   '/project/$slug/suggestions': typeof AppProjectSlugSuggestionsRoute
   '/project/$slug/terms': typeof AppProjectSlugTermsRoute
   '/project/$slug': typeof AppProjectSlugIndexRoute
@@ -170,6 +186,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/design': typeof DesignRoute
+  '/_app/migrate': typeof AppMigrateRoute
   '/_app/projects': typeof AppProjectsRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/': typeof AppIndexRoute
@@ -183,6 +200,7 @@ export interface FileRoutesById {
   '/_app/project/$slug/inventory': typeof AppProjectSlugInventoryRoute
   '/_app/project/$slug/playground': typeof AppProjectSlugPlaygroundRoute
   '/_app/project/$slug/review': typeof AppProjectSlugReviewRoute
+  '/_app/project/$slug/settings': typeof AppProjectSlugSettingsRoute
   '/_app/project/$slug/suggestions': typeof AppProjectSlugSuggestionsRoute
   '/_app/project/$slug/terms': typeof AppProjectSlugTermsRoute
   '/_app/project/$slug/': typeof AppProjectSlugIndexRoute
@@ -193,6 +211,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/design'
+    | '/migrate'
     | '/projects'
     | '/settings'
     | '/dev/fixture'
@@ -205,6 +224,7 @@ export interface FileRouteTypes {
     | '/project/$slug/inventory'
     | '/project/$slug/playground'
     | '/project/$slug/review'
+    | '/project/$slug/settings'
     | '/project/$slug/suggestions'
     | '/project/$slug/terms'
     | '/project/$slug/'
@@ -212,6 +232,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/design'
+    | '/migrate'
     | '/projects'
     | '/settings'
     | '/'
@@ -224,6 +245,7 @@ export interface FileRouteTypes {
     | '/project/$slug/inventory'
     | '/project/$slug/playground'
     | '/project/$slug/review'
+    | '/project/$slug/settings'
     | '/project/$slug/suggestions'
     | '/project/$slug/terms'
     | '/project/$slug'
@@ -232,6 +254,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_app'
     | '/design'
+    | '/_app/migrate'
     | '/_app/projects'
     | '/_app/settings'
     | '/_app/'
@@ -245,6 +268,7 @@ export interface FileRouteTypes {
     | '/_app/project/$slug/inventory'
     | '/_app/project/$slug/playground'
     | '/_app/project/$slug/review'
+    | '/_app/project/$slug/settings'
     | '/_app/project/$slug/suggestions'
     | '/_app/project/$slug/terms'
     | '/_app/project/$slug/'
@@ -277,6 +301,13 @@ declare module '@tanstack/solid-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/migrate': {
+      id: '/_app/migrate'
+      path: '/migrate'
+      fullPath: '/migrate'
+      preLoaderRoute: typeof AppMigrateRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/projects': {
@@ -370,6 +401,13 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof AppProjectSlugReviewRouteImport
       parentRoute: typeof AppProjectSlugRoute
     }
+    '/_app/project/$slug/settings': {
+      id: '/_app/project/$slug/settings'
+      path: '/settings'
+      fullPath: '/project/$slug/settings'
+      preLoaderRoute: typeof AppProjectSlugSettingsRouteImport
+      parentRoute: typeof AppProjectSlugRoute
+    }
     '/_app/project/$slug/suggestions': {
       id: '/_app/project/$slug/suggestions'
       path: '/suggestions'
@@ -401,6 +439,7 @@ interface AppProjectSlugRouteChildren {
   AppProjectSlugInventoryRoute: typeof AppProjectSlugInventoryRoute
   AppProjectSlugPlaygroundRoute: typeof AppProjectSlugPlaygroundRoute
   AppProjectSlugReviewRoute: typeof AppProjectSlugReviewRoute
+  AppProjectSlugSettingsRoute: typeof AppProjectSlugSettingsRoute
   AppProjectSlugSuggestionsRoute: typeof AppProjectSlugSuggestionsRoute
   AppProjectSlugTermsRoute: typeof AppProjectSlugTermsRoute
   AppProjectSlugIndexRoute: typeof AppProjectSlugIndexRoute
@@ -414,6 +453,7 @@ const AppProjectSlugRouteChildren: AppProjectSlugRouteChildren = {
   AppProjectSlugInventoryRoute: AppProjectSlugInventoryRoute,
   AppProjectSlugPlaygroundRoute: AppProjectSlugPlaygroundRoute,
   AppProjectSlugReviewRoute: AppProjectSlugReviewRoute,
+  AppProjectSlugSettingsRoute: AppProjectSlugSettingsRoute,
   AppProjectSlugSuggestionsRoute: AppProjectSlugSuggestionsRoute,
   AppProjectSlugTermsRoute: AppProjectSlugTermsRoute,
   AppProjectSlugIndexRoute: AppProjectSlugIndexRoute,
@@ -425,6 +465,7 @@ const AppProjectSlugRouteWithChildren = AppProjectSlugRoute._addFileChildren(
 )
 
 interface AppRouteChildren {
+  AppMigrateRoute: typeof AppMigrateRoute
   AppProjectsRoute: typeof AppProjectsRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -435,6 +476,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppMigrateRoute: AppMigrateRoute,
   AppProjectsRoute: AppProjectsRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppIndexRoute: AppIndexRoute,

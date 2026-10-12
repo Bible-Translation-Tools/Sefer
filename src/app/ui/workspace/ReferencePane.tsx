@@ -49,6 +49,7 @@
  * gets one line, not an empty editor.
  */
 
+import type { JSX } from "@solidjs/web";
 import { Effect, Fiber, Option, Result, Stream } from "effect";
 import X from "lucide-solid/icons/x";
 import {
@@ -96,11 +97,17 @@ export interface ReferencePaneProps {
   readonly bookId: string;
   /** The chapter NUMBER the main editor is clipped to, or `null` for whole-book. */
   readonly clip: () => number | null;
-  /** Absent for the last text bound: the panel is never left empty by a click. */
+  /** Absent for a text the project declares: nothing was picked to remove. */
   readonly onUnbind?: () => void;
   /**
-   * Drawn straight on the page: no card, no paper, no header line — the
+   * In place of the title, when the column holds more than one text: the
+   * choice of which one this pane shows (one at a time; Will, 2026-10-08).
+   */
+  readonly title?: JSX.Element;
+  /**
+   * Drawn straight on the page: no card, no paper, no title line — the
    * column's language picker says whose text it is (Refine's reference text).
+   * Follow stays, as the one control in its place (Will, 2026-10-08).
    */
   readonly bare?: boolean;
 }
@@ -518,10 +525,30 @@ export function ReferencePane(props: ReferencePaneProps) {
       {/* The header line: whose text this is, and the one way out of it. The
           × unbinds and does not delete — the resource stays registered, and
           every other project's binding to it is untouched. */}
-      <Show when={props.bare !== true}>
+      <Show
+        when={props.bare !== true}
+        fallback={
+          <div class="flex justify-end">
+            <FollowToggle
+              testId={`follow-${props.resource.id}`}
+              following={following()}
+              stopLabel={t("Stop {title} following the book", { title: props.resource.title })}
+              startLabel={t("Let {title} follow the book", { title: props.resource.title })}
+              onToggle={() => setFollowing((on) => !on)}
+            />
+          </div>
+        }
+      >
         <div class="flex items-center gap-2 border-b border-surface-border px-3 py-1.5">
           <p class="min-w-0 flex-1 truncate text-smallest text-on-surface-secondary">
-            <span class="font-bold text-on-surface-primary">{props.resource.title}</span>
+            <Show
+              when={props.title}
+              fallback={
+                <span class="font-bold text-on-surface-primary">{props.resource.title}</span>
+              }
+            >
+              {props.title}
+            </Show>
             <Show when={props.resource.language}>{(language) => <span> · {language()}</span>}</Show>
             <span> · {props.role === "source" ? t("Source") : t("Reference")}</span>
           </p>

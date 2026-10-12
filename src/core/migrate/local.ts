@@ -1,0 +1,74 @@
+/**
+ * The offline producers: every BTT Writer project under a folder or an
+ * unzipped zip, as candidates. No network, ever: a zip carried over Bluetooth
+ * or a USB stick must work as well as the catalogue does.
+ *
+ * Writer's own working directory holds one folder per project, and a zip
+ * holds either one project or a folder of them, so this looks at the root and
+ * two levels below it — deep enough for both, shallow enough that picking a
+ * home folder does not walk a disk.
+ */
+
+import { Effect, FileSystem } from "effect";
+
+import { joinPath, lastSegment } from "../fileSystem/path";
+import type { BookCandidate } from "./candidate";
+import { recognizeWriter } from "./writerBook";
+
+const DEPTH = 2;
+
+/** Folders under `root`, skipping dot folders (`.git`, `.sefer`) and chapter folders. */
+const childFolders = (
+  fileSystem: FileSystem.FileSystem,
+  root: string,
+): Effect.Effect<readonly string[]> =>
+  Effect.gen(function* () {
+    const names = yield* Effect.orElseSucceed(
+      fileSystem.readDirectory(root),
+      (): readonly string[] => [],
+    );
+    const out: string[] = [];
+    for (const name of names) {
+      if (name.startsWith(".") || /^\d{2,3}$/.test(name) || name === "front") continue;
+      const path = joinPath(root, name);
+      const info = yield* Effect.option(fileSystem.stat(path));
+      if (info._tag === "Some" && info.value.type === "Directory") out.push(path);
+    }
+    return out;
+  });
+
+/**
+ * One candidate per Writer project found under `root`. `kind` and `name` say
+ * where they came from, for the tab a person chooses between ("from
+ * psalms.zip").
+ */
+export const localCandidates = (
+  fileSystem: FileSystem.FileSystem,
+  root: string,
+  kind: "folder" | "zip",
+  name: string,
+): Effect.Effect<readonly BookCandidate[]> =>
+  Effect.gen(function* () {
+    const found: BookCandidate[] = [];
+    let level: readonly string[] = [root];
+    for (let depth = 0; depth <= DEPTH && level.length > 0; depth += 1) {
+      const next: string[] = [];
+      for (const folder of level) {
+        const project = yield* recognizeWriter(fileSystem, folder);
+        if (project === undefined) {
+          next.push(...(yield* childFolders(fileSystem, folder)));
+          continue;
+        }
+        found.push({
+          id: `${kind}:${folder}`,
+          book: project.book,
+          language: project.language.id,
+          resource: project.resource,
+          origin: { kind, name: folder === root ? name : lastSegment(folder), root: folder },
+          hints: {},
+        });
+      }
+      level = next;
+    }
+    return found;
+  });

@@ -19,7 +19,7 @@
  * transfer configured, gets a disabled link with the reason in a tooltip.
  */
 
-import { Effect, Fiber, Stream } from "effect";
+import { Effect, Fiber, Option, Stream } from "effect";
 import ArrowDown from "lucide-solid/icons/arrow-down";
 import ArrowUp from "lucide-solid/icons/arrow-up";
 import ChevronsUpDown from "lucide-solid/icons/chevrons-up-down";
@@ -29,12 +29,11 @@ import SearchIcon from "lucide-solid/icons/search";
 import X from "lucide-solid/icons/x";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
-import { lastSegment } from "#core/fileSystem/path";
 import { Observability } from "#core/observability";
-import { cloneRepository } from "#core/remote/clone";
 import { Remote, remoteVerdict } from "#core/remote/remote";
 import { through } from "#core/remote/transport";
 
+import { announceSourceTexts, arrivalRoot, cloneArrival, type ArrivalKind } from "../../arrival";
 import {
   catalogueFailureAttrs,
   catalogueFor,
@@ -66,7 +65,7 @@ import {
 import type { PendingDownload } from "./downloads";
 import { ImportHub } from "./ImportHub";
 import { RegionIcon } from "./RegionIcon";
-import { formatDate, rememberProject } from "./summaries";
+import { formatDate } from "./summaries";
 
 /** The four sortable columns, in the order they are drawn. */
 const SORTABLE: readonly (readonly [Column, () => string])[] = [
@@ -470,35 +469,49 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
    * not per clone, which is fine while `busy` allows one download at a time.
    */
   const download = (entry: CatalogueEntry, from: DOMRect): void => {
-    const into = `${services.projectsRoot}/${lastSegment(entry.gitUrl.replace(/\.git$/u, ""))}`;
+    // A gateway text is a source text: it goes to the Library, never to the
+    // projects list (`src/app/arrival.ts`). A translation is a project.
+    const kind: ArrivalKind = entry.type === "gateway" ? "sourceText" : "project";
+    const into = arrivalRoot(services, kind, entry.gitUrl);
     // Read once, at the click: the callbacks below run long after, outside
     // any tracking scope, and must not read props there.
     const { downloads } = props;
     setBusy(entry.id);
-    downloads.start(
-      {
-        id: entry.id,
-        root: into,
-        language: entry.naturalName,
-        code: entry.code,
-        state: "downloading",
-        status: t("Starting…"),
-        percent: undefined,
-      },
-      from,
-    );
+    // A project flies up to the installed list as a card that carries the
+    // progress. A source text has no card to become, so a toast carries it.
+    const toast =
+      kind === "sourceText"
+        ? toasts.progress({ title: t("Downloading {name}", { name: entry.repo }), message: "" })
+        : undefined;
+    if (toast === undefined)
+      downloads.start(
+        {
+          id: entry.id,
+          root: into,
+          language: entry.naturalName,
+          code: entry.code,
+          state: "downloading",
+          status: t("Starting…"),
+          percent: undefined,
+        },
+        from,
+      );
     const watching = services.runtime.runFork(
       Effect.flatMap(Remote, (remote) =>
         Stream.runForEach(remote.progress(), (progress) =>
-          Effect.sync(() =>
-            downloads.update(entry.id, {
-              status: progress.phase,
-              percent:
-                progress.total === undefined || progress.total === 0
-                  ? undefined
-                  : Math.min(100, Math.round((progress.loaded / progress.total) * 100)),
-            }),
-          ),
+          Effect.sync(() => {
+            const percent =
+              progress.total === undefined || progress.total === 0
+                ? undefined
+                : Math.min(100, Math.round((progress.loaded / progress.total) * 100));
+            if (toast === undefined)
+              downloads.update(entry.id, { status: progress.phase, percent });
+            else
+              toasts.update(toast, {
+                title: t("Downloading {name}", { name: entry.repo }),
+                message: percent === undefined ? progress.phase : `${progress.phase} ${percent}%`,
+              });
+          }),
         ),
       ),
     );
@@ -513,30 +526,42 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
     void services
       .run(
         Effect.provideService(
-          // The index learns about the project in the same pipeline, the moment
-          // its files and history are on disk, so the list and its links are
-          // right before the card says it is done.
-          // A gateway text is read beside a translation, never worked in: its
-          // newest version is all it needs, on every host.
-          cloneRepository(
-            entry.gitUrl,
-            into,
-            entry.id,
-            entry.type === "gateway" ? { history: "latest" } : undefined,
-          ).pipe(Effect.andThen(rememberProject(services.projectsRoot, into, undefined))),
+          Effect.gen(function* () {
+            // Pulled once per device: a copy already in the Library is the
+            // answer, whichever project or download brought it.
+            if (kind === "sourceText") {
+              const held = yield* services.library.cloned(entry.gitUrl);
+              if (Option.isSome(held)) return "held" as const;
+            }
+            yield* cloneArrival(services, kind, entry.gitUrl, { catalogueId: entry.id });
+            return "cloned" as const;
+          }),
           Observability,
           operation,
         ),
       )
-      .then(() => {
-        operation.end("passed", { "import.phase": "complete" });
-        downloads.update(entry.id, { status: t("Done"), percent: 100 });
+      .then((outcome) => {
+        operation.end("passed", { "import.phase": "complete", "import.outcome": outcome });
+        if (toast !== undefined)
+          toasts.update(toast, {
+            title: entry.repo,
+            message:
+              outcome === "held"
+                ? t("Already on this device, under Source texts.")
+                : t("Downloaded. Choose it as a source text beside any project."),
+            tone: "success",
+          });
+        else {
+          downloads.update(entry.id, { status: t("Done"), percent: 100 });
+          void announceSourceTexts(services, into);
+        }
       })
       .catch((cause: unknown) => {
         operation.end(remoteVerdict(remoteReasonOf(cause)), {
           "import.reason": reasonOf(cause) ?? "Unknown",
         });
-        downloads.update(entry.id, { state: "failed", status: describe(cause) });
+        if (toast !== undefined) toasts.dismiss(toast);
+        else downloads.update(entry.id, { state: "failed", status: describe(cause) });
         toasts.error({
           title: t("Could not download {name}", { name: entry.repo }),
           message: describe(cause),
@@ -554,9 +579,10 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
     <section class="flex min-h-0 flex-1 flex-col gap-3">
       <div class="flex flex-wrap items-center gap-3">
         <PanelHeader title={t("Projects Available on WACS")} class="me-auto" />
-        {/* Gateway languages are offered here only to those who revise one
-            (Settings → Advanced); everyone else adds them to read from
-            Refine's "Add source…" (`workflows/gatewaySources.ts`). */}
+        {/* Gateway languages are listed here only with Settings → Advanced
+            on; everyone else chooses one to read from the reference column's
+            language menu. Either way a gateway row is a source text and lands
+            in the Library (`arrival.ts`). */}
         <Show when={gatewaysOffered}>
           <SegmentedControl
             size="sm"
