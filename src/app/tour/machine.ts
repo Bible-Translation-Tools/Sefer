@@ -37,6 +37,17 @@ export interface TourContext {
   readonly run: (command: string, argument?: unknown) => void;
 }
 
+/**
+ * A card docked to the corner of the screen, with no ring and no dimming:
+ * what a workflow step shows while the person works in the screen itself.
+ * Its strings are shown as given (a workflow builds them from the project's
+ * own findings, already in the reader's words).
+ */
+export interface Panel {
+  readonly title: string;
+  readonly body: string;
+}
+
 /** A ring around an element and a card of explanation beside it. */
 export interface Spotlight {
   /** A CSS selector; the first match is the anchor. Prefer `[data-tour=…]`. */
@@ -50,6 +61,7 @@ export interface Step {
   /** True once the step can be shown. Defaults to "the anchor is on screen". */
   readonly ready?: (context: TourContext) => boolean;
   readonly spotlight?: Spotlight;
+  readonly panel?: Panel;
   /** "user" waits for Next; a function moves on as soon as it holds. */
   readonly advance?: "user" | ((context: TourContext) => boolean);
   /**
@@ -62,6 +74,13 @@ export interface Step {
 
 export interface Tour {
   readonly id: string;
+  /**
+   * A tutorial explains (spotlights, the person presses Next). A workflow
+   * drives (panels, each step moving on when the state it is about changes).
+   * The same machine runs both; the kind decides where it is listed and what
+   * its buttons say.
+   */
+  readonly kind: "tutorial" | "workflow";
   readonly title: string;
   /** One line for the list in Settings. */
   readonly summary: string;
@@ -73,7 +92,18 @@ export interface Tour {
    * with `?tour=<id>` added, so the project is opened, or downloaded, first.
    */
   readonly start?: string;
-  readonly steps: readonly Step[];
+  /**
+   * The steps, or a function that builds them when the tour starts: a
+   * workflow's steps are the project's state at that moment (one per
+   * finding), not something written down in advance.
+   */
+  readonly steps: readonly Step[] | ((context: TourContext) => readonly Step[]);
+  /**
+   * Whether the state the steps are built from is ready yet (a workflow over
+   * findings waits for the analysis to finish). Waited on for up to
+   * `READY_TIMEOUT_MS` before the steps are built, and then built anyway.
+   */
+  readonly startable?: (context: TourContext) => boolean;
 }
 
 /** The URL that opens a tutorial's own place and starts it there. */
@@ -92,6 +122,8 @@ export const beginTour = (context: TourContext, tour: Tour): void => {
 /** Which tour is running and where it is, or nothing. */
 interface Running {
   readonly tour: Tour;
+  /** The steps as built when it started. */
+  readonly steps: readonly Step[];
   readonly index: number;
   /** `waiting` until the step's `ready` holds; `timedOut` if it never did. */
   readonly phase: "waiting" | "showing" | "timedOut";
@@ -142,9 +174,9 @@ const drifted = (
     {
       "tour.id": tour.id,
       "tour.step": index + 1,
-      ...(tour.steps[index]?.spotlight === undefined
+      ...(running()?.steps[index]?.spotlight === undefined
         ? {}
-        : { "tour.anchor": tour.steps[index]?.spotlight?.anchor ?? "" }),
+        : { "tour.anchor": running()?.steps[index]?.spotlight?.anchor ?? "" }),
     },
   );
 };
@@ -182,15 +214,15 @@ export const anchored = (selector: string): Element | null => {
 const anchorPresent = (step: Step): boolean =>
   step.spotlight === undefined || anchored(step.spotlight.anchor) !== null;
 
-const enter = (context: TourContext, tour: Tour, index: number): void => {
+const enter = (context: TourContext, tour: Tour, steps: readonly Step[], index: number): void => {
   stopPolling();
-  const step = tour.steps[index];
+  const step = steps[index];
   if (step === undefined) {
     setRunning(undefined);
     return;
   }
   const reported = new Set<string>();
-  setRunning({ tour, index, phase: "waiting" });
+  setRunning({ tour, steps, index, phase: "waiting" });
   safely(context, tour, index, "go", () => step.go?.(context), undefined, reported);
   const started = Date.now();
   poll = setInterval(() => {
@@ -207,15 +239,15 @@ const enter = (context: TourContext, tour: Tour, index: number): void => {
         reported,
       );
       if (ready) {
-        setRunning({ tour, index, phase: "showing" });
+        setRunning({ tour, steps, index, phase: "showing" });
         // A step with nothing to show and no condition of its own has done
         // its job by being reached.
-        if (step.spotlight === undefined && step.advance === undefined)
-          enter(context, tour, index + 1);
+        if (step.spotlight === undefined && step.panel === undefined && step.advance === undefined)
+          enter(context, tour, steps, index + 1);
       } else if (Date.now() - started > (step.timeoutMs ?? READY_TIMEOUT_MS)) {
         stopPolling();
         drifted(context, tour, index, "never became ready");
-        setRunning({ tour, index, phase: "timedOut" });
+        setRunning({ tour, steps, index, phase: "timedOut" });
       }
       return;
     }
@@ -224,18 +256,56 @@ const enter = (context: TourContext, tour: Tour, index: number): void => {
       typeof advance === "function" &&
       safely(context, tour, index, "advance", () => advance(context), false, reported)
     )
-      enter(context, tour, index + 1);
+      enter(context, tour, steps, index + 1);
   }, POLL_MS);
 };
 
 export const startTour = (context: TourContext, tour: Tour): void => {
-  enter(context, tour, 0);
+  stopPolling();
+  const startable = tour.startable;
+  if (startable !== undefined) {
+    const started = Date.now();
+    const ready = (): boolean => {
+      try {
+        return startable(context);
+      } catch {
+        return true;
+      }
+    };
+    if (!ready()) {
+      poll = setInterval(() => {
+        if (ready() || Date.now() - started > READY_TIMEOUT_MS) {
+          stopPolling();
+          build(context, tour);
+        }
+      }, POLL_MS);
+      return;
+    }
+  }
+  build(context, tour);
+};
+
+const build = (context: TourContext, tour: Tour): void => {
+  // Built once, at the start: a workflow's steps are the state it found.
+  // Building them fails open like any step.
+  let steps: readonly Step[] = [];
+  try {
+    steps = typeof tour.steps === "function" ? tour.steps(context) : tour.steps;
+  } catch (error) {
+    context.shell.services.composition.observability.note(
+      "tour.step",
+      "failed",
+      `steps threw: ${String(error)}`,
+      { "tour.id": tour.id },
+    );
+  }
+  enter(context, tour, steps, 0);
 };
 
 export const stepTour = (context: TourContext, delta: 1 | -1): void => {
   const now = running();
   if (now === undefined) return;
-  enter(context, now.tour, Math.max(0, now.index + delta));
+  enter(context, now.tour, now.steps, Math.max(0, now.index + delta));
 };
 
 export const stopTour = (): void => {

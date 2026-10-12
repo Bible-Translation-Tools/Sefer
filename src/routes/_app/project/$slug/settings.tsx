@@ -350,7 +350,11 @@ function SettingsPage() {
       </nav>
 
       <Show when={tab() === "tutorials"}>
-        <TutorialsCard />
+        <TutorialsCard kind="tutorial" />
+      </Show>
+
+      <Show when={tab() === "workflows"}>
+        <TutorialsCard kind="workflow" />
       </Show>
 
       <Show when={tab() === "preferences"}>
@@ -502,10 +506,11 @@ function DiffSample() {
 }
 
 /** Settings' tabs. Preferences is the default and carries no `?tab=`. */
-type SettingsTab = "preferences" | "tutorials";
+type SettingsTab = "preferences" | "tutorials" | "workflows";
 const SETTINGS_TABS: readonly { readonly id: SettingsTab; readonly label: string }[] = [
   { id: "preferences", label: "Preferences" },
   { id: "tutorials", label: "Tutorials" },
+  { id: "workflows", label: "Workflows" },
 ];
 
 /** The same tab look as Changes and History. */
@@ -518,7 +523,7 @@ const TAB = [
 
 export const Route = createFileRoute("/_app/project/$slug/settings")({
   validateSearch: (search: Record<string, unknown>): { readonly tab?: SettingsTab } =>
-    search["tab"] === "tutorials" ? { tab: "tutorials" } : {},
+    search["tab"] === "tutorials" || search["tab"] === "workflows" ? { tab: search["tab"] } : {},
   head: () => ({ meta: [{ title: "Sefer — settings" }] }),
   component: () => <ShellGate>{() => <SettingsPage />}</ShellGate>,
 });

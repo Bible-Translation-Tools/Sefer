@@ -37,6 +37,8 @@ interface Box {
 const RING_PAD = 6;
 const CARD_GAP = 12;
 const CARD_WIDTH = 320;
+/** Where a workflow's panel sits: the corner, out of the text's way. */
+const DOCKED = { bottom: "24px", right: "24px" };
 /** Where a card goes with nothing to anchor it to. */
 const CENTRED = { top: "20vh", left: `calc(50vw - ${CARD_WIDTH / 2}px)` };
 
@@ -51,13 +53,18 @@ export function TourOutlet() {
   const shell = useShell();
   const navigate = useNavigate();
   const context = useTourContext();
-  // One palette command per tutorial, registered for as long as the outlet
-  // is mounted, which is the life of the app.
+  // One palette command per tutorial and per workflow, registered for as
+  // long as the outlet is mounted, which is the life of the app. A workflow
+  // is a thing to do, so it is listed by its own name ("Triage verse
+  // numbers"); a tutorial says it is one.
   for (const tour of TOURS) {
     onCleanup(
       registerCommand({
-        id: `tour.${tour.id}`,
-        title: t("Start tutorial: {title}", { title: t(tour.title) }),
+        id: `${tour.kind}.${tour.id}`,
+        title:
+          tour.kind === "workflow"
+            ? t(tour.title)
+            : t("Start tutorial: {title}", { title: t(tour.title) }),
         when: () => !tour.needsProject || tour.start !== undefined || shell.project() !== undefined,
         run: () => beginTour(context, tour),
       }),
@@ -74,7 +81,8 @@ export function TourOutlet() {
   // for the project it needs rather than refusing because it came too early.
   createEffect(
     () => {
-      const id = new URLSearchParams(searchStr()).get("tour");
+      const query = new URLSearchParams(searchStr());
+      const id = query.get("tour") ?? query.get("workflow");
       const where = path();
       if (id === null || where.startsWith("/r/")) return null;
       const tour = tourById(id);
@@ -90,6 +98,7 @@ export function TourOutlet() {
       if (id === null) return;
       const rest = new URLSearchParams(untrack(searchStr));
       rest.delete("tour");
+      rest.delete("workflow");
       const query = rest.size === 0 ? "" : `?${rest.toString()}`;
       void navigate({ href: `${untrack(path)}${query}`, replace: true });
       const tour = tourById(id);
@@ -107,7 +116,7 @@ export function TourOutlet() {
 
   const step = () => {
     const now = runningTour();
-    return now === undefined ? undefined : now.tour.steps[now.index];
+    return now === undefined ? undefined : now.steps[now.index];
   };
 
   // Where the anchor is, measured every frame while a step shows: the page
@@ -167,12 +176,14 @@ export function TourOutlet() {
     const now = runningTour();
     return now === undefined
       ? ""
-      : t("{at} of {count}", { at: now.index + 1, count: now.tour.steps.length });
+      : t("{at} of {count}", { at: now.index + 1, count: now.steps.length });
   };
   const last = () => {
     const now = runningTour();
-    return now !== undefined && now.index === now.tour.steps.length - 1;
+    return now !== undefined && now.index === now.steps.length - 1;
   };
+  /** A workflow skips a step and stops; a tutorial moves on and is skipped. */
+  const workflow = () => runningTour()?.tour.kind === "workflow";
 
   const card = (title: string, body: string, style: Record<string, string>) => (
     <div
@@ -191,7 +202,7 @@ export function TourOutlet() {
       <p class="text-small text-on-surface-secondary">{body}</p>
       <div class="flex items-center justify-between gap-2">
         <Button size="sm" variant="secondary" onClick={stopTour}>
-          {last() ? t("Close") : t("Skip tutorial")}
+          {last() ? t("Close") : workflow() ? t("Stop") : t("Skip tutorial")}
         </Button>
         <div class="flex gap-2">
           <Show when={(runningTour()?.index ?? 0) > 0}>
@@ -204,7 +215,7 @@ export function TourOutlet() {
             variant="primary"
             onClick={() => (last() ? stopTour() : stepTour(context, 1))}
           >
-            {last() ? t("Done") : t("Next")}
+            {last() ? t("Done") : workflow() ? t("Skip") : t("Next")}
           </Button>
         </div>
       </div>
@@ -243,6 +254,11 @@ export function TourOutlet() {
                 )}
               </Show>
             )}
+          </Show>
+          {/* A workflow's panel: docked, no ring, no dimming, because the
+              person is working in the screen underneath it. */}
+          <Show when={now().phase === "showing" && step()?.panel}>
+            {(panel) => card(panel().title, panel().body, DOCKED)}
           </Show>
           <Show when={now().phase === "timedOut"}>
             {card(
