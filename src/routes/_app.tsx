@@ -5,6 +5,7 @@ import { installCommandKeys } from "#app/commands";
 import { t } from "#app/i18n";
 import { readyShell, useShell, useShellState } from "#app/ProjectContext";
 import { SIDEBAR_WIDTH } from "#app/settings";
+import { TourOutlet } from "#app/tour/TourOutlet";
 import { CommandPalette } from "#app/ui/CommandPalette";
 import { PageDoor, PageLeading, Resizable, Toaster } from "#app/ui/primitives";
 import { AppBar } from "#app/ui/workspace/AppBar";
@@ -187,6 +188,9 @@ function Chrome() {
             onClose={() => ready().setPaletteOpen(false)}
           />
         )}
+      </Show>
+      <Show when={shell()}>
+        <TourOutlet />
       </Show>
       <Toaster />
     </div>

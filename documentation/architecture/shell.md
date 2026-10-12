@@ -302,6 +302,16 @@ An Effect-returning command is run on the app runtime by the runner `registerShe
 
 **The editor's chords are bound twice.** `editor.insert.verse` / `.paragraph` / `.poetry` / `.footnote` are registered here with `Mod-Shift-v/p/l/n` _and_ inside CodeMirror's own keymap (`usfmKeys`), because an insertion needs the caret. The document listener skips an event the editor already consumed (`event.defaultPrevented`), so a chord fires once. The footnote is `Mod-Shift-n` — for **n**ote — and not `Mod-Shift-f`, which is `search.open`: one chord meaning "footnote" inside the editor and "find in project" outside it is two commands wearing one press. `editor.frontmatter.edit` has no chord and focuses the front matter card's first field. See [the editor](editor.md), "Structured entry".
 
+## Tutorials: `src/app/tour/`
+
+A tutorial is a list of steps run by one small machine (`machine.ts`), and the same machine is meant for workflows that drive the UI. A step is `go` (take the app there: navigate, run a command, scroll), `ready` (wait until it can be shown; by default, until its anchor is on screen; polled every 100 ms, so it reads a signal or the DOM alike, and gives up after 10 s with a card that says so), and an effect: for a tutorial, a **spotlight**, a ring around an anchor and a card of explanation beside it. It then moves on when the person presses Next, or when its own `advance` condition holds. Every card has Back, Next (Done on the last) and Skip; Esc dismisses at any point.
+
+Steps reach the app through `TourContext` (the shell, `navigate`, `runCommand`) and through the DOM. No screen knows a tutorial exists beyond carrying a stable handle: `data-testid` where one exists, else `data-tour="…"` (the findings filters carry `data-tour="findings-filters"`). No state is lifted for a tutorial's sake; a step that has to ask the DOM is a hint that the state could be lifted later.
+
+`TourOutlet.tsx` is mounted once in the `_app` chrome, so a tutorial can cross routes; it draws the ring and card and registers a palette command per tutorial ("Start tutorial: …"). A tutorial also starts from the URL: `?tour=<id>` on any screen, which is then taken off the address. It waits on `/r/…` (the share link hands its query on) and while a project route is still opening its project, so `/r/owner/repo/book/JUD?tour=findings` opens the project and then starts. Settings lists every tutorial in its Tutorials card. Each tutorial is one file in `tours/`, registered in `tours/index.ts`; its strings are raw and translated where they are drawn, as Settings' group titles are, so a translation catalogue covers them with nothing tour-specific.
+
+The first is **Working through findings** (`tours/findings.ts`, six steps): the bell, the Findings screen, its filters, a finding card, walking the list from the keyboard, and Alt+F8 from the editor.
+
 `format.book` and `format.project` apply Onion's own whole-book transaction through `Fixes.formatBook`/`applyFormat` — see [findings](findings.md), "Format". `format.project` and the every-book overlay run through the shell's one `MultiBook`: one instance over a thunk of the project's books, so the cross-book Undo offer has somewhere to live.
 
 ## Routes and tokens

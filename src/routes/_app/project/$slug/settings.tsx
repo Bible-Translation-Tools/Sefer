@@ -10,6 +10,7 @@ import { BUILD_ENDPOINTS, endpointsChangedSinceBoot } from "#app/endpoints";
 import { t } from "#app/i18n";
 import { useShell } from "#app/ProjectContext";
 import { SETTING_GROUPS, shellKeys, shellSettings, type AnyDescriptor } from "#app/settings";
+import { TutorialsCard } from "#app/tour/TutorialsCard";
 import { CloudPanel } from "#app/ui/CloudPanel";
 import { Breadcrumb } from "#app/ui/landing/Breadcrumb";
 import {
@@ -408,6 +409,8 @@ function SettingsPage() {
       <Show when={problem() !== ""}>
         <p class="text-small text-on-surface-error">{problem()}</p>
       </Show>
+
+      <TutorialsCard />
 
       <SousSettingsPanel />
 
