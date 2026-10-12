@@ -1,5 +1,5 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/solid-router";
-import { Option, Result } from "effect";
+import { Effect, Exit, Option, Result } from "effect";
 import CaseSensitiveIcon from "lucide-solid/icons/case-sensitive";
 import ChevronDownIcon from "lucide-solid/icons/chevron-down";
 import ChevronUpIcon from "lucide-solid/icons/chevron-up";
@@ -10,6 +10,7 @@ import WholeWordIcon from "lucide-solid/icons/whole-word";
 import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
 import { t } from "#app/i18n";
+import { borrowedContext } from "#app/kinds/context";
 import { useShell } from "#app/ProjectContext";
 import { shellKeys } from "#app/settings";
 import {
@@ -45,6 +46,8 @@ import {
 import { bookHeading, type Analysis } from "#core/galley";
 import type { Address } from "#core/location/address";
 import { bookName } from "#core/location/canon";
+import type { Documents } from "#core/resources/kinds/handle";
+import type { Resource } from "#core/resources/library";
 import { createFreshReadings, createReadings } from "#core/search/reading";
 import * as Search from "#core/search/search";
 
@@ -96,7 +99,23 @@ import * as Search from "#core/search/search";
  * — the pair STET renders for a source verse. The reference side is never
  * editable, because there is no Book behind it and nothing to write to.
  */
-type Scope = BookScopeKind | "reference";
+type Scope = BookScopeKind | "reference" | "helps";
+
+/**
+ * One hit in reference material (`helps`): the resource it came from, and the
+ * document's own text so the card can show the note beside your verse.
+ */
+interface HelpHit {
+  readonly title: string;
+  readonly text: string;
+  readonly hit: Search.DocumentHit;
+}
+
+/** A picked resource whose kind supplies a haystack for the default find. */
+interface Searchable {
+  readonly resource: Resource;
+  readonly documents: Documents;
+}
 
 /**
  * The last path segment of a registered reference id.
@@ -181,6 +200,7 @@ function Find() {
   const [referenceHits, setReferenceHits] = createSignal<readonly Search.ReferenceHit[]>([], {
     name: "referenceHits",
   });
+  const [helpHits, setHelpHits] = createSignal<readonly HelpHit[]>([], { name: "helpHits" });
   const [problem, setProblem] = createSignal("", { name: "problem" });
   const [cursor, setCursor] = createSignal(0, { name: "cursor" });
   const replaceKey = shellKeys(shell.services.settings).enableReplaceAll;
@@ -259,6 +279,48 @@ function Find() {
   );
 
   /**
+   * Reference material's hits, as this project's verses: each hit's own
+   * Addresses resolved in the project's text, the reference scope's join.
+   */
+  const helpMatches = createMemo(
+    (): readonly Occurrence[] => {
+      const addresses = helpHits().flatMap(({ hit }) => hit.addresses);
+      if (addresses.length === 0) return [];
+      const books = readBooks(shell, new Set(addresses.map((address) => address.book)), analyze);
+      return books.flatMap((book) => refOccurrences(book, addresses));
+    },
+    { name: "helpMatches" },
+  );
+
+  /** The first help hit per verse, keyed as `referenceReadings` keys its own. */
+  const helpReadings = createMemo(
+    (): ReadonlyMap<string, HelpHit> => {
+      const out = new Map<string, HelpHit>();
+      for (const held of helpHits())
+        for (const address of held.hit.addresses)
+          for (const key of verseKeys(address)) if (!out.has(key)) out.set(key, held);
+      return out;
+    },
+    { name: "helpReadings" },
+  );
+
+  /** The note beside your verse: its exact text, the match marked. Static: nothing to edit. */
+  const helpPairedOf = (excerpt: Excerpt): Paired | undefined => {
+    const readings = helpReadings();
+    for (const key of verseKeys(excerpt.address)) {
+      const held = readings.get(key);
+      if (held !== undefined)
+        return {
+          kind: "static",
+          name: held.title,
+          text: held.text,
+          spans: [{ from: held.hit.from, to: held.hit.to }],
+        };
+    }
+    return undefined;
+  };
+
+  /**
    * The search box takes the caret when Find opens.
    *
    * Arriving at Find is asking to search; a screen that makes you click its one
@@ -314,6 +376,51 @@ function Find() {
   const hasReference = (): boolean => bound().ids.length > 0;
 
   /**
+   * The picked resources whose kind hands Find a haystack (`documents`):
+   * Translation Notes today. Asked of each handle, never of its kind — a
+   * kind that fills the slot later is searchable here without a change.
+   */
+  const [searchable, setSearchable] = createSignal<readonly Searchable[]>([], {
+    name: "findSearchable",
+  });
+  createEffect(
+    () => ({ root: shell.project()?.root, tick: rebound() }),
+    ({ root }) => {
+      if (root === undefined) {
+        setSearchable([]);
+        return;
+      }
+      void shell.services
+        .run(shell.services.library.picked(root))
+        .then(async (picks) => {
+          const found: Searchable[] = [];
+          const seen = new Set<string>();
+          for (const { resource } of picks) {
+            if (seen.has(resource.id)) continue;
+            seen.add(resource.id);
+            const exit = await shell.resources.open(resource);
+            if (Exit.isSuccess(exit) && exit.value.handle.documents !== undefined)
+              found.push({ resource, documents: exit.value.handle.documents });
+          }
+          return found;
+        })
+        .then(setSearchable);
+    },
+  );
+  // A link straight into `?scope=helps` searches before the handles are
+  // open; once they are, the search is taken again.
+  createEffect(
+    () => searchable(),
+    (now) => {
+      if (now.length > 0 && untrack(scope) === "helps") void untrack(() => run());
+    },
+  );
+  const helpsTitle = (): string =>
+    searchable()
+      .map((each) => each.resource.title)
+      .join(", ");
+
+  /**
    * What the next search should look for.
    *
    * `over` is not a convenience. Solid 2 BATCHES writes: a handler that wrote
@@ -342,12 +449,14 @@ function Find() {
   /** The book scope on show; a source search keeps the project's. */
   const bookScope = (): BookScopeKind => {
     const held = scope();
-    return held === "reference" ? "project" : held;
+    return held === "reference" || held === "helps" ? "project" : held;
   };
 
   /** The books a scope limits the search to, or `undefined` for every book. */
   const booksFor = (want: Scope): readonly BookId[] | undefined =>
-    want === "reference" ? undefined : scopeBooks(want, projectBooks(), focusedBook(), custom());
+    want === "reference" || want === "helps"
+      ? undefined
+      : scopeBooks(want, projectBooks(), focusedBook(), custom());
   const signature = (q: Search.Query, want: Scope): string =>
     JSON.stringify([want, booksFor(want), q.text, q.caseSensitive, q.wholeWord, q.regex, markup()]);
 
@@ -380,6 +489,7 @@ function Find() {
     if (staticQuery.text === "") {
       setHits([]);
       setReferenceHits([]);
+      setHelpHits([]);
       setProblem("");
       return;
     }
@@ -390,6 +500,7 @@ function Find() {
     if (!Search.longEnough(staticQuery.text)) {
       setHits([]);
       setReferenceHits([]);
+      setHelpHits([]);
       setProblem(
         t("Type at least {count} characters to search the whole project.", {
           count: Search.MINIMUM_QUERY,
@@ -415,6 +526,39 @@ function Find() {
     // different result shape — read-only hits, no stamp, nothing to edit — so
     // it is answered here rather than folded into the path below. Synchronous
     // like the rest since it stopped going through the engine.
+    // Reference material: each resource's own haystack (`documents`), the
+    // project's books, through the default find. Read-only hits like the
+    // reference scope's; the verse is the join to this project's cards.
+    if (want === "helps") {
+      const context = borrowedContext(shell.services);
+      const stop = search.span("find.scan");
+      const found: HelpHit[] = [];
+      for (const { resource, documents } of untrack(searchable)) {
+        const listed = await shell.services.run(
+          Effect.result(documents.list(projectBooks(), context)),
+        );
+        if (Result.isFailure(listed)) continue;
+        const texts = new Map(listed.success.map((document) => [document.id, document.text]));
+        const scanned = Search.findInDocuments(listed.success, staticQuery);
+        if (Result.isFailure(scanned)) {
+          stop();
+          setProblem(scanned.failure.description);
+          setHelpHits([]);
+          search.end("refused", { "find.reason": scanned.failure.reason });
+          return;
+        }
+        for (const hit of scanned.success)
+          found.push({ title: resource.title, text: texts.get(hit.document) ?? "", hit });
+      }
+      stop();
+      setHits([]);
+      setReferenceHits([]);
+      setProblem("");
+      setHelpHits(found);
+      search.end("ready", { "find.hits": found.length, "find.resources": searchable().length });
+      return;
+    }
+
     if (want === "reference") {
       const analysis = shell.services.projectAnalysis;
       const references = analysis.references().flatMap((id) => {
@@ -426,6 +570,7 @@ function Find() {
       const found = Search.findInReferences(readings, references, staticQuery, options);
       stop();
       setHits([]);
+      setHelpHits([]);
       if (Result.isFailure(found)) {
         setProblem(found.failure.description);
         setReferenceHits([]);
@@ -449,6 +594,7 @@ function Find() {
       : Search.findInReading(readings, books, staticQuery, options);
     stop();
     setReferenceHits([]);
+    setHelpHits([]);
     if (Result.isFailure(found)) {
       setProblem(found.failure.description);
       setHits([]);
@@ -480,7 +626,7 @@ function Find() {
     const want = scope();
     if (project === undefined || book === undefined) return;
     // Not a book search, or not one this list holds: the whole search again.
-    if (want === "reference" || !Search.longEnough(staticQuery.text)) return;
+    if (want === "reference" || want === "helps" || !Search.longEnough(staticQuery.text)) return;
     const only = booksFor(want);
     if (only !== undefined && !only.includes(bookId)) return;
     const op = shell.services.composition.observability.operation("find.retake", {
@@ -509,7 +655,8 @@ function Find() {
   };
 
   const previewReplace = (): void => {
-    if (!replaceEnabled() || scope() === "reference" || hits().length === 0) return;
+    if (!replaceEnabled() || scope() === "reference" || scope() === "helps" || hits().length === 0)
+      return;
     const current = signature(query(), scope());
     if (current !== searched()) {
       setProblem(t("Run Find again before replacing."));
@@ -632,7 +779,8 @@ function Find() {
    * along as the card's pair, which is what STET does with a source verse.
    */
   const feedHits = createMemo(
-    (): readonly Occurrence[] => (scope() === "reference" ? referenceMatches() : hits()),
+    (): readonly Occurrence[] =>
+      scope() === "reference" ? referenceMatches() : scope() === "helps" ? helpMatches() : hits(),
     { name: "feedHits" },
   );
 
@@ -844,7 +992,7 @@ function Find() {
                 custom={custom()}
                 onCustom={setCustom}
                 hasFocused={focusedBook() !== undefined}
-                disabled={scope() === "reference"}
+                disabled={scope() === "reference" || scope() === "helps"}
               />
               {/* Which text is shown beside yours, and which is searched:
                   either without the other. */}
@@ -856,6 +1004,13 @@ function Find() {
                   disabled={!hasReference()}
                   onChange={(on) => ask({ scope: on ? "reference" : "project" })}
                 />
+                <Show when={searchable().length > 0}>
+                  <Switch
+                    label={t("Search {title}", { title: helpsTitle() })}
+                    checked={scope() === "helps"}
+                    onChange={(on) => ask({ scope: on ? "helps" : "project" })}
+                  />
+                </Show>
               </div>
               <div class="ms-auto flex items-center gap-1">
                 {/* The gap is stated, never swallowed. A reference search counts
@@ -863,6 +1018,11 @@ function Find() {
                     project has. A reference book this project has not translated
                     yet makes those two numbers differ, and saying only the second
                     would quietly lose the difference. */}
+                <Show when={scope() === "helps" && helpHits().length !== feedHits().length}>
+                  <span class="text-smallest tabular-nums text-on-surface-tertiary">
+                    {t("{count} in {title}", { count: helpHits().length, title: helpsTitle() })}
+                  </span>
+                </Show>
                 <Show
                   when={scope() === "reference" && referenceHits().length !== feedHits().length}
                 >
@@ -897,7 +1057,7 @@ function Find() {
           </div>
         </Card>
 
-        <Show when={replaceEnabled() && scope() !== "reference"}>
+        <Show when={replaceEnabled() && scope() !== "reference" && scope() !== "helps"}>
           <Card>
             <div class="flex flex-wrap items-center gap-2">
               <Input
@@ -975,7 +1135,13 @@ function Find() {
           activeHit={cursorAt()}
           mode={mode()}
           pairedOf={
-            !source.shown() ? undefined : scope() === "reference" ? pairedOf : source.pairedOf
+            scope() === "helps"
+              ? helpPairedOf
+              : !source.shown()
+                ? undefined
+                : scope() === "reference"
+                  ? pairedOf
+                  : source.pairedOf
           }
           empty={
             <EmptyState
@@ -1007,7 +1173,8 @@ export const Route = createFileRoute("/_app/project/$slug/find")({
     search["scope"] === "ot" ||
     search["scope"] === "nt" ||
     search["scope"] === "custom" ||
-    search["scope"] === "reference"
+    search["scope"] === "reference" ||
+    search["scope"] === "helps"
       ? { scope: search["scope"] }
       : {}),
   }),
