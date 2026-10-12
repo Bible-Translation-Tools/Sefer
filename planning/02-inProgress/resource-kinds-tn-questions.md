@@ -1,100 +1,72 @@
 # Resource kinds, TN proof: questions for Will
 
-**Status:** open, 2026-10-12. Written while building the Translation Notes proof unattended (plan: `planning/01-discussing/resource-kinds-2026-10-01.md`, "Built so far"). Each entry: the question, the options, what was chosen for now and why, and how hard it is to change. Every choice taken is the conservative, reversible one; none is load-bearing enough to have stopped for.
+**Status:** refreshed 2026-10-12, after rounds 1 and 2 (Translation Notes read-only on the Web: Library, reference column, `/projects` Notes section, Find, progress, tutorial). Each open entry: the question, the options, what is chosen now, and the cost to change. Every choice taken was the conservative, reversible one. Settled and moot entries are kept short at the end, so a decision is not asked twice.
 
-## 1. Where the notes show
+How to add the next kind is now its own chapter: [`documentation/architecture/resource-kinds.md`](../../documentation/architecture/resource-kinds.md). Provenance and the (unbuilt) update check: `documentation/architecture/resources.md`, "Provenance and updates".
 
-The reference column shows one text at a time (your 2026-10-08 ruling). Notes could be (a) one more choice in the same "Reference language" menu, replacing the scripture pane while chosen, or (b) a second section under the scripture pane, both at once.
+## Open
 
-**Chosen: (a).** No layout change, and the menu already had "Reference material" as a heading in its ordering. The cost is that reading the ULB and its notes together means switching. **To change:** small — the renderer registry hands back a pane for any resource; the column would render two `ResourcePane`s. The design question (does a notes section break the "quiet workspace") is yours or the designer's.
+### 1. Where the notes show, and remembering which text is shown
 
-## 2. The last chunk of a chapter
+The reference column shows one text at a time (Will, 2026-10-08), so Translation Notes are one more choice in the "Reference language" menu and replace the scripture pane while chosen. Reading the ULB and its notes together means switching. Which text is SHOWN is a signal in the column, not saved: reopening a project shows the first entry (the declared scripture source) again, and the notes must be chosen again. The pick itself is saved.
 
-A chunk file's range closes at the next sibling (convention). The last chunk of a chapter runs "to the chapter's end", which needs a verse count, which is versification (plan §11.1).
+**Options:** (a) as now; (b) remember the shown resource per project in `.sefer/project.json` beside `referencePicks`; (c) a notes section under the scripture pane, both at once. **Chosen:** (a). **Cost:** (b) small; (c) small in code (the registry hands back a pane for any resource, the column would render two `ResourcePane`s), but it is a design call about the quiet workspace.
 
-**Chosen:** the handle borrows the open project's table of contents (`PlaceContext.versesIn`, `src/app/kinds/context.ts`). Without one — a book the project does not hold — the note's Address is its first verse and it is marked `openEnded`, and the pane says "From Romans 1:32 to the chapter's end". Asking "notes for verse 33" still finds it: covering a verse needs no count. **To change:** medium, and it waits on §11.1: a real versification table replaces `borrowedContext` in one place.
+### 2. The last chunk of a chapter (versification)
 
-## 3. Chapter and book introductions
+A chunk's range closes at the next sibling (convention, `closeAtNextSibling`); a chapter's last chunk runs to the chapter's end, which needs a verse count (plan §11.1).
 
-`01/intro.md` and `front/intro.md` are notes with an Address of the chapter (`GEN 1`) or the book's introduction (`GEN intro`).
+**Chosen:** the handle borrows the open project's table of contents (`PlaceContext.versesIn`, `src/app/kinds/context.ts`). In a book the project does not hold, the note's Address is its first verse, marked `openEnded`, and the pane says "From Romans 1:32 to the chapter's end". Asking for verse 33 still finds it: covering a verse needs no count. **Cost:** medium, and waits on a tier-2 versification table, which replaces `borrowedContext` in one place.
 
-**Chosen:** they answer only when the reader stands at the chapter's head or the book's introduction, not beside every verse of the chapter, which would put a page of introduction above every verse's notes. **To change:** trivial (`answersPlace` in `src/core/resources/kinds/tn/note.ts`). Whether intros want their own affordance ("Chapter 1 introduction" link at the top of the pane) is a UX question.
+### 3. Chapter and book introductions
 
-## 4. Where `en_tn` comes from
+**Chosen:** `NN/intro.md` and `front/intro.md` answer only at the chapter's head (`GEN 1`) or the book's introduction (`GEN intro`), not beside every verse. **Options:** also a "Chapter 1 introduction" link at the top of the pane. **Cost:** trivial (`answersPlace`, `src/core/resources/kinds/tn/note.ts`); the link is a UX question.
 
-The Language API's view has no rows for the helps (plan §6, "Catalogue gap").
+### 4. Where `en_tn` comes from
 
-**Chosen:** a second source, stated once: `HELP_TEXTS` in `src/app/catalogue.ts` lists `WycliffeAssociates/en_tn` on the configured content host, and the column offers it under "Reference material (n)" until it is on the device. **To change:** trivial to add rows; replacing it with API rows is a small change once the API has them. The content-host-relative URL means the dev channel's WACS dev host would need its own copy of `en_tn` (it may not have one; untested there).
+The Language API's view has no rows for the helps. **Chosen:** a second source stated once, `HELP_TEXTS` in `src/app/catalogue.ts` (`WycliffeAssociates/en_tn` on the configured content host), offered in the reference column's menu and the `/projects` Notes section. The URL is relative to the configured host, so the dev channel's WACS dev would need its own `en_tn` (untested there). **Cost:** trivial to add rows; small to switch to API rows once the API has them.
 
-## 5. Where the packs live, and when they are stale
+### 5. Packs: where, and the staleness stamp
 
-**Chosen:** `<resource root>/.sefer/packs/tn/<BOOK>.json`. On desktop that is inside the clone, which `remote/clone.ts` already excludes from git (`.git/info/exclude`), so the working tree stays upstream's. A pack built from a raw tree is stamped with a fingerprint of the book directory's listing (path, size, mtime per file) and rebuilt when it moves; a root that holds no raw tree (the Web) treats its packs as the resource, stamped with the import time and the commit cloned. **To change:** medium (`src/core/resources/kinds/tn/pack.ts` only). The fingerprint is a change detector, not a content hash, and would miss a same-size edit inside one mtime tick — fine for read-only, worth revisiting for editable TN.
+**Chosen:** `<root>/.sefer/packs/tn/<BOOK>.json` (inside a clone, `.sefer/` is in git's exclude, so the working tree stays upstream's). With the raw tree present (desktop), a pack is stamped with a fingerprint of its book directory's listing (path, size, mtime) and rebuilt when that moves. Without it (the Web) the packs are the resource, stamped with the import time and the commit cloned. **Cost:** medium, one file (`pack.ts`). The fingerprint is a change detector, not a content hash: it could miss a same-size edit within one mtime tick. That does not matter while TN is read-only; revisit for editable TN.
 
-## 6. Keeping `en_tn` current on the Web
+### 6. Update check for a held copy
 
-A packed-only root has no `.git`, so the plan's "realistic first ask" (a fast-forward pull of `en_tn`) is, on the Web, a re-download and re-pack (13.4 s measured onto OPFS). There is no "a newer en_tn is available" check yet. **Options:** probe the remote's HEAD against the stamped commit (cheap; `Remote.probe` exists) and re-pack; or publish per-book packs as a Gitea release (plan §5, the content-team ask). **Chosen:** nothing yet. **To change:** small for the probe.
+Nothing checks whether `en_tn` (or a held source text) has moved upstream. Everything needed is recorded: `Resource.upstream { url, commit }` in `library.json`, and on the Web the commit in every pack's stamp. How the check would work is written down in `resources.md`, "Provenance and updates". **Options:** a probe on project open beside `checkForChanges`; a button in the Notes section; both. **Chosen:** not built. **Cost:** small for the probe and the message; the Web re-pack is `referenceCopy` again into a fresh folder, then a swap.
 
-## 7. What `recognize` refuses
+### 7. Notes follow the caret, not the scroll
 
-**Chosen:** an RC of type `help` with identifier `tn` and format `text/markdown` is TN; `tn` in another format (unfoldingWord's TSV), `tq`, `tw`, and RC types it does not know are refused with a sentence (`Unsupported`); an RC that declares no type, or `book`/`bundle`, is scripture, as every RC was before kinds (refusing those would empty reference columns that work). A Burrito is scripture only for flavour `textTranslation`. Library rows written before kinds are recognised again from their metadata on load; a row that is now refused is left out of the list (telemetry `library.load declined`), its files untouched. **To change:** trivial (`src/core/resources/kinds/content.ts`).
+`shell.place` is the caret's Address; scrolling without moving the caret does not move the notes. **Options:** also feed the aligned group's anchor into `place`. **Chosen:** caret only. **Cost:** small.
 
-## 8. Files the reader does not read
+### 8. Adding a local folder or zip of notes
 
-`NN/index.md` (48 files in `en_tn`, each a chapter's translationWords links), `title.md`, anything in `front/` but `intro.md`, and any name that is not the layout's are listed in the pack's `skipped`, never guessed at. Two files claiming one place (`1.md` and `01.md`) refuse the book. **To change:** trivial. `index.md` is TW's verse links and may matter when TW arrives.
+Desktop: `Library.add(folder)` recognises and indexes a picked folder in place (not run in the app; no desktop run was made). The Web has no button; the path exists (`packHelp` reads any `UpstreamTree`, and a zip staged in the memory FileSystem, as Writer's `pickLocal` stages one, is a `treeInFolder`). **Cost:** small; where the button goes is a UX question.
 
-## 9. Find over notes
+### 9. Remove does not release an open handle
 
-**Chosen:** one switch per project, "Search Translation Notes" (it names every picked resource whose handle has a haystack), scope `helps` in the URL. It searches the project's books only, since a hit is shown as your verse's card with the note beside it; hits on intro notes have no verse card and are counted in the gap ("14 in Translation Notes" above "1/1"). The note beside the card is its exact Markdown as plain text, the match marked; it is not rendered. **To change:** small. A per-resource scope, and rendering the pair, are both easy once wanted.
+Remove on `/projects` forgets the Library row and deletes the folder (only inside the Library's own directory). A project open at the time keeps its handle until it closes (`shell.resources` releases on close), so its pane may still answer until then. **Cost:** small: release that one handle on remove.
 
-## 10. "Exact" bodies, and line endings
+### 10. A note beside a Find card shows raw Markdown
 
-Notes are cut from the text exactly where the parser's headings start, and a file's notes concatenate back to the file. The text is first decoded the one way Sefer decodes anything (`core/source/source.ts`: strict UTF-8, BOM dropped, CRLF to LF). So "exact" is exact against canonical text, not against the original bytes. **To change:** only matters for editable TN, where Book already writes back the dominant EOL/BOM.
+In "Search Translation Notes" the note beside your verse is its exact text, so a heading reads "# sons of God". It is plain on purpose, so the match can be marked. **Options:** render it and mark the match in the rendered text; or strip the heading's `#` for display. **Cost:** small. Also open: one switch for all searchable resources, not one per resource (easy when wanted).
 
-## 11. The role a TN pick takes
+## Settled or moot
 
-**Chosen:** `tn` (`ROLES.translationNotes`, which already existed and nothing read), not `notes`. It is persisted in the project's `.sefer/project.json` picks. **To change:** trivial in code (`src/app/kinds/table.ts`), but picks already written would keep the old role.
+- **What `recognize` refuses.** RC `help` + `tn` + `text/markdown` is TN; other formats of `tn`, `tq`, `tw` and unknown RC types are refused as "no reader yet" (`Unsupported`); an RC with no type, `book` or `bundle` is scripture; a Burrito is scripture only for flavour `textTranslation`. Old Library rows are recognised again on load; one now refused is left out of the list, its files untouched. Documented in the kinds guide. (Was question 7.)
+- **Files the reader does not read.** `NN/index.md` (a chapter's TW links), `title.md`, other `front/` files and names outside the layout go in the pack's `skipped`; two files claiming one place refuse the book. `index.md` matters again only when TW is built. (Was 8.)
+- **"Exact" bodies.** Exact against canonical text (strict UTF-8, BOM dropped, CRLF to LF), not the original bytes; matters only for editable TN, where Book writes back the dominant EOL/BOM. (Was 10.)
+- **The role a TN pick takes:** `tn` (`ROLES.translationNotes`), from the kind table. (Was 11.)
+- **Download speed.** Will ruled the newest-only shallow clone fine (2026-10-12): 13.2 s before round 2, 13.9 s after, on one machine (noise about ±0.5 s). The archive endpoint cannot be reached from a browser (the WACS proxy refuses `/archive/`; the content host challenges direct requests); a clone without a working tree was slower overall. If speed matters later, the lever is reading the git pack directly through its `.idx`, not an archive. Measurements in `storage.md`. (Was 15.)
+- **Progress on a slow line.** Built: the toast moves the whole way (megabytes received, reading, "Packing ROM: book 45 of 66"); 176 s on slow 3G. (Round 2.)
+- **The tutorial's project.** The Bisa Bible (`Will_Kelly/leb-x-bisa_reg`, `host=` named); `x-en-ulb` declares an `en_asv` source WACS refuses with 401. One constant in `tours/notes.ts`. (Was 17.)
 
-## 12. Notes follow the caret, not the scroll
+## Interface changes the next kinds will need
 
-`shell.place` is the caret's Address. Scrolling the editor without moving the caret does not move the notes. **Options:** feed the aligned group's anchor into `place` too. **Chosen:** caret only, which is the "verse the editor is on" in the narrowest sense. **To change:** small.
+Recorded rather than built: building them now would shape the interface around kinds nobody has asked for. Each is additive. The kinds guide repeats them per kind.
 
-## 13. Local folder or zip of TN
-
-Desktop: `Library.add(folder)` recognises and indexes a picked folder in place (untested in the app — no desktop run was made). The Web has no UI to add a picked folder or zip of TN; the path exists (`packHelp` from a memory FileSystem, as Writer's `pickLocal` stages a zip in memory) but is not wired to a button. **To change:** small; where the button goes is a UX question.
-
-## Second round (2026-10-12, after the merge of `r-links`)
-
-### 14. Which text the reference column shows is not remembered
-
-Picking Translation Notes saves the pick in the project, but which pick is SHOWN is a signal in the column. Reopening the project shows the first entry, the declared scripture source, so the notes have to be chosen again from the menu. This is how the column already treated two scripture texts; notes make it more noticeable. **Options:** remember the shown resource per project in `.sefer/project.json` beside `referencePicks`; or show notes in their own section (question 1). **Chosen:** nothing yet. **To change:** small.
-
-### 15. Download speed: what was tried
-
-Will ruled a shallow clone fine (2026-10-12). Measured on this machine, fresh profile, real OPFS: **13.2 s before, 13.9 s after** (run-to-run noise is about ±0.5 s). Before Will's ruling arrived I had already measured two speed-ups; both are set aside and reverted, nothing of them shipped:
-
-- the archive endpoint cannot be reached from a browser: the WACS proxy answers `/archive/` with "Only Git smart-HTTP and the allowed API paths are exposed", and the content host answers a browser's direct request with a Cloudflare challenge page;
-- a clone with no working tree, reading blobs through isomorphic-git, was slower overall: clone 7.8 s, but packing 6 to 8.5 s, because isomorphic-git's per-object reads cost more than reading checked-out files from memory.
-
-What stayed: the read-back check is now "same book, same number of notes" instead of a second full schema decode. If speed matters later, the next lever is reading the pack file directly (its `.idx` gives every object's offset), not the archive.
-
-### 16. Remove on the projects page
-
-Remove forgets the Library row and deletes the folder, but only for a copy in the Library's own directory; a folder someone picked stays where it is. An open project that had the notes picked keeps its open handle until the project closes (`shell.resources` is released on close), so the pane may still answer until then. **To change:** small: release that one handle on remove.
-
-### 17. The tutorial's project
-
-The tutorial opens the Bisa Bible (`Will_Kelly/leb-x-bisa_reg`, with `host=` named), because notes are read beside a translation. I tried `Will_Kelly/x-en-ulb` first. It declares an `en_asv` source text that WACS refuses with a 401, so a red toast sat over the last five steps. On a first visit the Bisa Bible also pulls its English ULB source (the toast "listed 24-02; this copy is 24-07" appears), which takes a few seconds more. **To change:** one constant in `tours/notes.ts`.
-
-### 18. A note beside a Find card shows its raw Markdown
-
-In Find's "Search Translation Notes" the note beside your verse is its exact text, so a heading shows as "# sons of God". The pane renders Markdown; the card's paired text is plain on purpose, so the match can be marked. **Options:** render it, marking the match inside the rendered text; or strip the heading's `#` for display only. Not touched.
-
-## Interface findings (from walking Macula and TW through the interfaces)
-
-These are places where an interface will have to change for the next kind; recorded rather than built, because building them now would be shaping the interface around kinds not yet authorized.
-
-- **Opening with progress.** Macula's `openCorpus` reports download progress (44 MB Hebrew); `KindRow.open` has no progress channel. When Macula is built, `open` gains an optional `onProgress` (or returns a progress stream beside the Effect). Additive.
-- **What `open` is given.** Rows get `(fileSystem, resource)`. Macula's row needs a fetch and a wasm URL; it would close over its platform module (`src/platform/web/macula.ts`), which the table may import since it lives in `src/app`. If that proves awkward, `open` takes `Services`. Additive.
-- **A kind's own search.** Macula's faceted find is not a haystack. `ResourceHandle` has no slot for it yet; when built it is an optional slot (e.g. `query`) and a search panel in the renderer registry, and Find gains that panel beside the text find (plan §9). Additive; `documents` stays the default.
-- **Below the verse.** Macula's entries are a verse's words, so `Places.at(verse)` carries them; aligned-word highlighting would need a finer answer than Address (plan §11.2). Not forced by anything built.
-- **Dictionary hits.** TW's documents have many Addresses each; Find's join would make one card per occurrence verse, which may be too many. A kind-supplied hit card in the panel (plan §9's "the kind's own hit cards") would be the fix. Not built.
+- **Opening with progress.** Macula's `openCorpus` reports download progress (Hebrew is about 44 MB); `KindRow.open` has no progress channel. It gains an optional `onProgress`, as `pack` already has. TW does not need it.
+- **What `open` is given.** Rows get `(fileSystem, resource)`. Macula's row needs fetch and a wasm URL; it closes over its platform module (`src/platform/web/macula.ts`), which the table may import from `src/app`. If that is awkward, `open` takes `Services`.
+- **A kind's own search.** Macula's faceted find is not a haystack: an optional handle slot (e.g. `query`) and a search panel in the renderer registry, shown by Find beside the text find (plan §9). `documents` stays the default.
+- **Below the verse.** Macula's entries are a verse's words, which `Places.at(verse)` carries; aligned-word highlighting needs an answer finer than Address (plan §11.2). Not forced by anything built.
+- **Dictionary hits.** A TW document has many Addresses, so Find's join makes a card per occurrence verse; a kind-supplied hit card in the panel would read better. TW would also add an `rcDictMarkdown` format and an `Article` entry type.
+- **A `builtin` container.** Macula has no manifest: `ContainerKind` gains `builtin`, registered by its adapter with `content` set directly, never through `recognize`.
