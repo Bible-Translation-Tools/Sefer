@@ -56,6 +56,7 @@ import type { EngineHit } from "../galley/galley";
 import { tocViewOf } from "../galley/location";
 import type { Address } from "../location/address";
 import { addressAt } from "../location/locate";
+import type { HaystackDocument } from "../resources/kinds/handle";
 import type { Change, SourceStamp } from "../source/source";
 import type { Reading, Readings } from "./reading";
 
@@ -662,6 +663,73 @@ export const findInReferences = (
         ...withAddress(addressOf(first.from)),
         from: first.from,
         to: first.to,
+      });
+      if (limit !== undefined && hits.length >= limit) return Result.succeed(hits);
+    }
+  }
+  return Result.succeed(hits);
+};
+
+// ---------------------------------------------------------------------------
+// Find, in a resource kind's haystack
+// ---------------------------------------------------------------------------
+
+/**
+ * One hit in a resource's document — a note, an article — and not in any
+ * text Sefer edits. Like `ReferenceHit` it carries no stamp: offsets are into
+ * the document's text, somewhere to highlight, never somewhere to write.
+ * `addresses` are the document's own (`HaystackDocument.addresses`), which is
+ * how a screen joins the hit to a verse of the project.
+ */
+export interface DocumentHit {
+  /** The document's id, as its kind's handle gave it. */
+  readonly document: string;
+  readonly addresses: readonly Address[];
+  readonly from: number;
+  readonly to: number;
+  readonly preview: string;
+  readonly previewMatch: { readonly from: number; readonly to: number };
+}
+
+/**
+ * The default text find over a kind's haystack (`ResourceHandle.documents`):
+ * the same matcher, the same whole-word rule and the same preview as every
+ * other door here, over the document's text as it is — the identity reading.
+ *
+ * This is the override point the plan names (§5): a kind chooses WHAT is
+ * searched by what its `documents` slot hands back; how it is matched and
+ * reported is shared, so Translation Notes, and Translation Words after it,
+ * get Find without a search of their own. A kind with a better question to
+ * ask (Macula's faceted find) supplies its own panel instead.
+ */
+export const findInDocuments = (
+  documents: readonly HaystackDocument[],
+  query: Query,
+  options?: Pick<Options, "limit" | "previewWidth">,
+): Result.Result<readonly DocumentHit[], SearchError> => {
+  if (query.text === "") return Result.succeed([]);
+  const matcher = matcherFor(query);
+  if (Result.isFailure(matcher)) return Result.fail(matcher.failure);
+  const pattern = matcher.success;
+  const limit = options?.limit;
+  if (limit !== undefined && limit <= 0) return Result.succeed([]);
+
+  const hits: DocumentHit[] = [];
+  for (const document of documents) {
+    const { text } = document;
+    pattern.lastIndex = 0;
+    for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) {
+      const from = match.index;
+      const to = from + match[0].length;
+      if (to === from) pattern.lastIndex = from + 1;
+      if (query.wholeWord === true && (isWordChar(text, from - 1) || isWordChar(text, to)))
+        continue;
+      hits.push({
+        document: document.id,
+        addresses: document.addresses,
+        from,
+        to,
+        ...previewAt(text, from, to, options?.previewWidth),
       });
       if (limit !== undefined && hits.length >= limit) return Result.succeed(hits);
     }
