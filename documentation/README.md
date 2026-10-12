@@ -14,6 +14,7 @@ This folder holds durable project guidance for humans and agents. Root `AGENTS.m
 - Reading or writing files: [storage](./architecture/storage.md).
 - Working with a book's canonical text or its stamp: [source and book](./architecture/source.md).
 - Validating Scripture Burrito or Resource Container metadata, importing, or binding a library resource to a role: [resources](./architecture/resources.md).
+- Adding a resource kind, a format or a container (Translation Words, Macula, TSV notes): [adding a resource kind](./architecture/resource-kinds.md).
 - Parsing or proofreading USFM through the pinned engine: [Galley](./architecture/galley.md).
 - Editing USFM — the editing phases, the editor-backed Book, windows and satellites, the render window, two editors aligned by verse, and what a keystroke costs: [editor](./architecture/editor.md).
 - Reading a diagnostic or applying an offered repair: [findings and fixes](./architecture/findings.md).
