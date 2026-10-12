@@ -18,6 +18,10 @@ The only state on the landing page is `reload`: a counter the import hub raises 
 
 Above the list sits the [recovery](recovery.md) banner, rendered only when a project is open and only when that project has work in the journal that never reached disk.
 
+## Translation Notes
+
+Between "Projects Loaded into Sefer" and the WACS table, `NotesSection.tsx` lists reference material: what the Library holds that is not scripture (the kind table's `roleFor`, never a subject string), with **Remove**, and the helps that can be downloaded (`HELP_TEXTS`, today WA's `en_tn`), with **Download**. A search box filters both by title and language. Download is `downloadHelp`, the same call and progress toast as the reference column's menu ([resources](resources.md), "Translation Notes"). Remove forgets the copy and deletes its folder only when it is in the Library's own directory (a reference copy, nobody's work); a project that had picked it shows nothing for it. Its handles (`data-tour="notes-section"`, `notes-search`, `notes-download`, `notes-remove`) are what the Translation Notes tutorial anchors on.
+
 ## Your projects
 
 ### The index

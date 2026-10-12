@@ -62,6 +62,33 @@ Notes are cut from the text exactly where the parser's headings start, and a fil
 
 Desktop: `Library.add(folder)` recognises and indexes a picked folder in place (untested in the app — no desktop run was made). The Web has no UI to add a picked folder or zip of TN; the path exists (`packHelp` from a memory FileSystem, as Writer's `pickLocal` stages a zip in memory) but is not wired to a button. **To change:** small; where the button goes is a UX question.
 
+## Second round (2026-10-12, after the merge of `r-links`)
+
+### 14. Which text the reference column shows is not remembered
+
+Picking Translation Notes saves the pick in the project, but which pick is SHOWN is a signal in the column. Reopening the project shows the first entry, the declared scripture source, so the notes have to be chosen again from the menu. This is how the column already treated two scripture texts; notes make it more noticeable. **Options:** remember the shown resource per project in `.sefer/project.json` beside `referencePicks`; or show notes in their own section (question 1). **Chosen:** nothing yet. **To change:** small.
+
+### 15. Download speed: what was tried
+
+Will ruled a shallow clone fine (2026-10-12). Measured on this machine, fresh profile, real OPFS: **13.2 s before, 13.9 s after** (run-to-run noise is about ±0.5 s). Before Will's ruling arrived I had already measured two speed-ups; both are set aside and reverted, nothing of them shipped:
+
+- the archive endpoint cannot be reached from a browser: the WACS proxy answers `/archive/` with "Only Git smart-HTTP and the allowed API paths are exposed", and the content host answers a browser's direct request with a Cloudflare challenge page;
+- a clone with no working tree, reading blobs through isomorphic-git, was slower overall: clone 7.8 s, but packing 6 to 8.5 s, because isomorphic-git's per-object reads cost more than reading checked-out files from memory.
+
+What stayed: the read-back check is now "same book, same number of notes" instead of a second full schema decode. If speed matters later, the next lever is reading the pack file directly (its `.idx` gives every object's offset), not the archive.
+
+### 16. Remove on the projects page
+
+Remove forgets the Library row and deletes the folder, but only for a copy in the Library's own directory; a folder someone picked stays where it is. An open project that had the notes picked keeps its open handle until the project closes (`shell.resources` is released on close), so the pane may still answer until then. **To change:** small: release that one handle on remove.
+
+### 17. The tutorial's project
+
+The tutorial opens the Bisa Bible (`Will_Kelly/leb-x-bisa_reg`, with `host=` named), because notes are read beside a translation. I tried `Will_Kelly/x-en-ulb` first. It declares an `en_asv` source text that WACS refuses with a 401, so a red toast sat over the last five steps. On a first visit the Bisa Bible also pulls its English ULB source (the toast "listed 24-02; this copy is 24-07" appears), which takes a few seconds more. **To change:** one constant in `tours/notes.ts`.
+
+### 18. A note beside a Find card shows its raw Markdown
+
+In Find's "Search Translation Notes" the note beside your verse is its exact text, so a heading shows as "# sons of God". The pane renders Markdown; the card's paired text is plain on purpose, so the match can be marked. **Options:** render it, marking the match inside the rendered text; or strip the heading's `#` for display only. Not touched.
+
 ## Interface findings (from walking Macula and TW through the interfaces)
 
 These are places where an interface will have to change for the next kind; recorded rather than built, because building them now would be shaping the interface around kinds not yet authorized.
