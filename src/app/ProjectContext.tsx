@@ -45,8 +45,8 @@ import * as Fixes from "#core/fixes/fixes";
 import { tocViewOf } from "#core/galley";
 import { Repositories } from "#core/git/repository";
 import type { SettingKey } from "#core/host/settings";
-import { chaptersAddress, type Address } from "#core/location/address";
-import { resolve } from "#core/location/locate";
+import { addressCode, chaptersAddress, type Address } from "#core/location/address";
+import { addressAt, resolve } from "#core/location/locate";
 import { Observability } from "#core/observability";
 import { openProject as openProjectEffect, type Project } from "#core/project/project";
 import { mintSlug } from "#core/project/slug";
@@ -62,6 +62,7 @@ import { registerShellCommands, type ShellBridge } from "./commands";
 import { useComposition } from "./CompositionContext";
 import { editsReported } from "./editReports";
 import { t } from "./i18n";
+import { createResourceHandles, type ResourceHandles } from "./kinds/handles";
 import { registerLegacyMarkers } from "./legacyMarkers";
 import { createLocation, type Location } from "./location";
 import { registerProjectCommands } from "./projectCommands";
@@ -240,6 +241,22 @@ export interface Shell {
    * BLOCK changes, which is a good deal less often.
    */
   readonly noteCaret: (offset: number | undefined) => void;
+
+  /**
+   * Where the reader is, as an Address: the unit of the open book the caret
+   * stands in (`LUK 3:1`, `LUK 3` at a chapter's head, `LUK intro`), from
+   * the engine's table of contents of the text as it stands.
+   *
+   * A signal, not a `ShellEvent`: it moves no Book, and what follows it — a
+   * resource pane, the notes for the verse — reads it like any other. It
+   * HOLDS: while the held analysis is a pass behind a keystroke the answer
+   * stays the last one rather than blinking to nothing, and a stale analysis
+   * never names a verse the text may no longer be.
+   */
+  readonly place: Accessor<Address | undefined>;
+
+  /** The open project's resource handles, opened on first need and released with the project. */
+  readonly resources: ResourceHandles;
 
   /**
    * The editor reporting which chapter is at the TOP of its viewport, so that
@@ -833,6 +850,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     live = undefined;
     setFocused(undefined);
     setProject(undefined);
+    resources.releaseAll();
     // The stores describe a project. With none open they describe nothing.
     stores.clear();
     if (staticOpen === undefined) return;
@@ -1199,6 +1217,26 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     setCaret(offset);
   };
 
+  const place = createMemo(
+    (held: Address | undefined): Address | undefined => {
+      const at = caret();
+      const book = focused();
+      if (at === undefined || book === undefined) return undefined;
+      const stamp = stampOf(book.id);
+      const analysis = Option.getOrUndefined(services.projectAnalysis.analysis(book.id));
+      if (stamp === undefined || analysis === undefined) return held;
+      if (analysis.stamp.revision !== stamp.revision) return held;
+      return addressAt(book.id, tocViewOf(analysis.analysis), at) ?? held;
+    },
+    {
+      name: "place",
+      equals: (a, b) =>
+        a === b || (a !== undefined && b !== undefined && addressCode(a) === addressCode(b)),
+    },
+  );
+
+  const resources = createResourceHandles(services);
+
   const noteChapterAtTop = (ordinal: number, place?: LastLocation["place"]): void => {
     // Every read here is a one-time snapshot, for the same reason as in
     // `remember`: this is the editor REPORTING where the viewport got to, so
@@ -1450,6 +1488,8 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     location,
     caret,
     noteCaret,
+    place,
+    resources,
     noteChapterAtTop,
     lastLocation,
     finding,

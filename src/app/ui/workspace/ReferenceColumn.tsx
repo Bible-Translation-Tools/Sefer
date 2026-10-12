@@ -51,19 +51,29 @@ import {
   type RelatedResource,
 } from "#core/resources/relationships";
 
-import { announceSourceTexts, libraryRevision, sourceTextCopy } from "../../arrival";
-import { catalogueFor, gatewayTexts, type CatalogueEntry } from "../../catalogue";
+import { announceSourceTexts, libraryRevision, referenceCopy, sourceTextCopy } from "../../arrival";
+import {
+  catalogueFor,
+  gatewayTexts,
+  HELP_TEXTS,
+  type CatalogueEntry,
+  type HelpText,
+} from "../../catalogue";
 import { describe, remoteReasonOf } from "../../describe";
+import { contentHostFor } from "../../endpoints";
 import { t } from "../../i18n";
+import { KIND_ROLES, roleFor } from "../../kinds/table";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
+import { ResourceCard, ResourcePane } from "../kinds/registry";
 import { listProjects, type ProjectSummary } from "../landing/summaries";
 import { Button, EmptyState, IconButton, Menu, MenuItem } from "../primitives";
-import { ReferenceCard } from "./ReferenceCard";
-import { ReferencePane } from "./ReferencePane";
 
-/** The roles the column shows, in the order it shows them. */
-const ROLES: readonly Role[] = ["source", "reference"];
+/**
+ * The roles the column shows, in the order it shows them: every role some
+ * kind is picked under (`app/kinds/table.ts`), scripture's first.
+ */
+const ROLES: readonly Role[] = KIND_ROLES;
 
 interface Entry {
   readonly resource: Resource;
@@ -72,10 +82,8 @@ interface Entry {
   readonly declared: boolean;
 }
 
-/** `textTranslation` (Burrito) and `Bible` (RC) are scripture; anything else is helps. */
-const isBible = (resource: Resource): boolean =>
-  resource.subject === undefined ||
-  /^(bible|textTranslation|aligned bible)$/i.test(resource.subject);
+/** Scripture is picked as a source text; everything else is reference material. */
+const isBible = (resource: Resource): boolean => roleFor(resource) === "source";
 
 /** "English", from a language tag; the tag itself when the browser does not know it. */
 const languageName = (code: string | undefined): string | undefined => {
@@ -280,7 +288,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     setChosen(resource.id);
     if (entries().some((entry) => entry.resource.id === resource.id)) return;
     void services
-      .run(services.library.pick(project.root, "source", resource.id))
+      .run(services.library.pick(project.root, roleFor(resource), resource.id))
       .then(() => setBound((held) => held + 1));
   };
 
@@ -341,6 +349,53 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       });
   };
 
+  /**
+   * Reference material this device does not hold yet, by the URL it would be
+   * cloned from: the helps the catalogue does not list (`HELP_TEXTS`).
+   */
+  const helps = (): readonly { readonly help: HelpText; readonly url: string }[] => {
+    const host = contentHostFor(services.settings);
+    if (host === null) return [];
+    const held = new Set(
+      copies().flatMap((resource) =>
+        resource.upstream === undefined ? [] : [normaliseRepoUrl(resource.upstream.url)],
+      ),
+    );
+    return HELP_TEXTS.map((help) => ({ help, url: `${host}/${help.repository}` })).filter(
+      ({ url }) => !held.has(normaliseRepoUrl(url)),
+    );
+  };
+
+  /** Downloads reference material into the Library (once per device), then shows it. */
+  const fetchHelp = (help: HelpText, url: string): void => {
+    const operation = services.composition.observability.operation("import.remote", {
+      "import.source": "reference-material",
+      "import.host": services.hostInfo.kind(),
+    });
+    setBusy(true);
+    setFetching(help.title);
+    void services
+      .run(Effect.provideService(referenceCopy(services, url), Observability, operation))
+      // oxlint-disable-next-line solid/reactivity -- a promise continuation: runs once, when the copy is here
+      .then((resource) => {
+        operation.end("passed", {
+          "import.phase": "complete",
+          "resource.content": resource.content,
+        });
+        show(resource);
+      })
+      .catch((cause: unknown) => {
+        operation.end(remoteVerdict(remoteReasonOf(cause)));
+        shell.report(
+          t("could not add {name}: {reason}", { name: help.title, reason: describe(cause) }),
+        );
+      })
+      .finally(() => {
+        setBusy(false);
+        setFetching("");
+      });
+  };
+
   /** Pulls the declared source texts that are not here, then shows them. */
   const download = (): void => {
     const project = shell.project();
@@ -378,7 +433,12 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   const nameOf = (resource: Resource | undefined): string => {
     if (resource === undefined) return "";
     const name = languageName(resource.language);
-    return name === undefined ? resource.title : `${name} (${resource.language ?? ""})`;
+    if (name === undefined) return resource.title;
+    // Reference material says what it is: "English (en)" alone would not tell
+    // a language's notes from its scripture.
+    return isBible(resource)
+      ? `${name} (${resource.language ?? ""})`
+      : `${resource.title} · ${name} (${resource.language ?? ""})`;
   };
 
   /** Folded to a stack of cards, one per installed text. */
@@ -390,6 +450,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
 
   const [showProjects, setShowProjects] = createSignal(false, { name: "referenceShowProjects" });
   const [showOthers, setShowOthers] = createSignal(false, { name: "referenceShowOthers" });
+  const [showHelps, setShowHelps] = createSignal(false, { name: "referenceShowHelps" });
   /** Rows: 48px, 24px sides; the menu's own 8px plus 4px here is 12px above and below. */
   const ROW = "px-6";
 
@@ -440,6 +501,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         if (!open) return;
         setShowProjects(false);
         setShowOthers(false);
+        setShowHelps(false);
         offer();
       }}
       side="bottom"
@@ -497,6 +559,34 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
             </For>
           </Show>
         </Show>
+        <Show when={helps().length > 0}>
+          <GroupToggle
+            testId="reference-material"
+            label={t("Reference material ({count})", { count: helps().length })}
+            open={showHelps()}
+            onToggle={() => setShowHelps(!showHelps())}
+          />
+          <Show when={showHelps()}>
+            <For each={helps()}>
+              {(entry) => (
+                <MenuItem
+                  class={ROW}
+                  data-testid={`pick-help-${entry.help.repository}`}
+                  title={t("Download {title} to read beside this project", {
+                    title: entry.help.title,
+                  })}
+                  onSelect={() => fetchHelp(entry.help, entry.url)}
+                >
+                  <RowText
+                    name={entry.help.title}
+                    detail={languageName(entry.help.language) ?? entry.help.language}
+                  />
+                  <Download aria-hidden="true" class="size-5 shrink-0" />
+                </MenuItem>
+              )}
+            </For>
+          </Show>
+        </Show>
         <Show when={downloadable().length > 0}>
           <GroupToggle
             testId="reference-other-languages"
@@ -542,7 +632,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           <div class="flex min-h-0 flex-col gap-3 overflow-y-auto">
             <For each={installed()}>
               {(resource) => (
-                <ReferenceCard
+                <ResourceCard
                   resource={resource}
                   bookId={shell.focused()?.id ?? ""}
                   language={languageName(resource.language) ?? resource.title}
@@ -619,8 +709,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         >
           {(held) => (
             <div class="flex min-h-0 flex-1 flex-col">
-              <ReferencePane
-                bare
+              <ResourcePane
                 resource={held.entry.resource}
                 role={held.entry.role}
                 bookId={held.book}

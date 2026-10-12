@@ -297,7 +297,10 @@ const describeAndRecognize = (
   root: string,
   container: ContainerKind,
 ): Effect.Effect<
-  Omit<Resource, "id" | "root" | "upstream" | "container"> & { readonly container: ContainerKind },
+  {
+    readonly recognition: Recognition;
+    readonly fields: Omit<Resource, "id" | "root" | "upstream">;
+  },
   LibraryError
 > =>
   Effect.gen(function* () {
@@ -312,7 +315,30 @@ const describeAndRecognize = (
       return yield* Effect.fail(
         refuse("Unsupported", `${root}: ${recognized.failure.description}`),
       );
-    return { container, ...recognized.success, ...described };
+    return {
+      recognition: recognized.success,
+      fields: { container, ...recognized.success, ...described },
+    };
+  });
+
+/**
+ * What a root holds, before it is registered: the same classification and
+ * recognition `add` makes, for a caller that must know the kind to decide
+ * how to store it (the Web packs a help rather than keep its tree,
+ * `app/arrival.ts`). Reads metadata only.
+ */
+export const recognizeRoot = (
+  fileSystem: FileSystem.FileSystem,
+  root: string,
+): Effect.Effect<Recognition, LibraryError> =>
+  Effect.gen(function* () {
+    const classification = yield* classify(fileSystem, { root });
+    if (classification === "unknown")
+      return yield* Effect.fail(
+        refuse("Unclassified", `${root} is neither a Burrito, a Resource Container nor USFM`),
+      );
+    const { recognition } = yield* describeAndRecognize(fileSystem, root, classification);
+    return recognition;
   });
 
 /**
@@ -376,7 +402,7 @@ const makeLibrary = (
           );
           if (Result.isSuccess(again))
             resources.push({
-              ...again.success,
+              ...again.success.fields,
               id: record.id,
               root: record.root,
               ...(record.upstream === undefined ? {} : { upstream: record.upstream }),
@@ -482,7 +508,11 @@ const makeLibrary = (
             return yield* Effect.fail(
               refuse("Unclassified", `${root} is neither a Burrito, a Resource Container nor USFM`),
             );
-          const described = yield* describeAndRecognize(fileSystem, root, classification);
+          const { fields: described } = yield* describeAndRecognize(
+            fileSystem,
+            root,
+            classification,
+          );
           // Re-adding a root keeps where it came from unless told otherwise:
           // a person picking a downloaded copy again has not changed its origin.
           const known = upstream ?? find(root)?.upstream;

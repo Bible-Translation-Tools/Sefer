@@ -35,6 +35,8 @@ import { joinPath } from "#core/fileSystem/path";
 import { Library, ROLES, type Resource } from "#core/resources/library";
 import { decode } from "#core/source/source";
 
+import { holdsEngineBooks } from "../kinds/table";
+
 /** What a screen needs to know: which resources answer, and how many books. */
 export interface BoundReferences {
   /** The resources bound under `source` or `reference`, in binding order. */
@@ -112,7 +114,9 @@ export const bindReferences = (
     const seen = new Set<string>();
     const resources: Resource[] = [];
     for (const resource of [...sources, ...references]) {
-      if (seen.has(resource.id)) continue;
+      // Only a kind whose files are USFM books: notes picked beside a text
+      // are not a reference for the engine to register.
+      if (seen.has(resource.id) || !holdsEngineBooks(resource)) continue;
       seen.add(resource.id);
       resources.push(resource);
     }

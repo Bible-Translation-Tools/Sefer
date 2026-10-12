@@ -535,6 +535,26 @@ export const catalogueFor = (settings: SettingsService): CatalogueService => {
  * column offers to download. WA publishes them under `wa-catalog`; where it
  * has several in one language, the ULB is the one a translator reads from.
  */
+/** Reference material to download, where the catalogue lists none. */
+export interface HelpText {
+  /** What the menu says: "Translation Notes". */
+  readonly title: string;
+  /** Its language's tag. */
+  readonly language: string;
+  /** Where it is on the content host, `Owner/repo`. */
+  readonly repository: string;
+}
+
+/**
+ * The helps Sefer can read, by repository, because the Language API's view
+ * has no rows for them (plan §6, "Catalogue gap"): a second source, stated
+ * here and nowhere else, until the API lists them. WA's canonical `en_tn`,
+ * not `en_tn_condensed`.
+ */
+export const HELP_TEXTS: readonly HelpText[] = [
+  { title: "Translation Notes", language: "en", repository: "WycliffeAssociates/en_tn" },
+];
+
 export const gatewayTexts = (rows: readonly CatalogueEntry[]): readonly CatalogueEntry[] => {
   const ulb = (entry: CatalogueEntry): boolean => /_ulb$/iu.test(entry.repo);
   const best = new Map<string, CatalogueEntry>();

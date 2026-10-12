@@ -16,7 +16,7 @@
  * was cloned from, and a held copy is used, not cloned again.
  */
 
-import { Effect, Option } from "effect";
+import { Effect, FileSystem, Option } from "effect";
 import { createSignal } from "solid-js";
 
 import { lastSegment } from "#core/fileSystem/path";
@@ -25,7 +25,7 @@ import { Observability } from "#core/observability";
 import { readProjectMetadata } from "#core/project/discovery";
 import { cloneRepository } from "#core/remote/clone";
 import type { CloneOptions, Progress } from "#core/remote/remote";
-import { Library, type Resource } from "#core/resources/library";
+import { Library, recognizeRoot, type Resource } from "#core/resources/library";
 import {
   catalogueUrl,
   highestVersions,
@@ -37,6 +37,7 @@ import {
 import { describe } from "./describe";
 import { contentHostFor } from "./endpoints";
 import { t } from "./i18n";
+import { packFor } from "./kinds/table";
 import type { Domain, Services } from "./services";
 import { rememberProject } from "./ui/landing/summaries";
 import { toasts } from "./ui/primitives";
@@ -135,6 +136,77 @@ export const sourceTextCopy = (
     );
     if (arrived.resource !== undefined) return arrived.resource;
     return yield* Effect.fail(new Error(`${url} arrived without a Library entry`));
+  });
+
+/**
+ * The Library's copy of reference material — a help, not a scripture text:
+ * the one on this device, else a fresh one.
+ *
+ * Where disk is cheap (desktop) it is an ordinary clone into the Library's
+ * folder, upstream's layout kept as it is; the kind's reader indexes it on
+ * first read. On the Web the tree may be tens of thousands of files, and
+ * OPFS pays per file (29,300 for `en_tn`, 22.6 s to write against 0.14 s
+ * for its packs, `storage.md`), so the clone is made in MEMORY, recognised
+ * there from its manifest, and only what the kind's `pack` step writes —
+ * one file per book, the manifest and the licence — reaches storage. A kind
+ * with no `pack` step keeps its tree as a plain clone does.
+ *
+ * Nothing is registered until the copy is complete: a failed pack removes
+ * what it wrote, and the Library never lists half a resource.
+ */
+export const referenceCopy = (
+  services: Services,
+  url: string,
+): Effect.Effect<Resource, unknown, Domain> =>
+  Effect.gen(function* () {
+    const library = yield* Library;
+    const held = yield* library.cloned(url);
+    if (Option.isSome(held)) return held.value;
+    const inMemory = services.inMemoryTransfer?.();
+    if (inMemory === undefined) {
+      const arrived = yield* cloneArrival(services, "sourceText", url);
+      if (arrived.resource !== undefined) return arrived.resource;
+      return yield* Effect.fail(new Error(`${url} arrived without a Library entry`));
+    }
+    const into = arrivalRoot(services, "sourceText", url);
+    const { owner, repo } = ownerAndRepo(url);
+    const staged = `/staging/${owner}_${repo}`;
+    const observability = yield* Observability;
+    const stage: Effect.Effect<string | undefined, unknown, Domain> = Effect.provide(
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const git = yield* Git;
+        const cloning = observability.span("reference.clone");
+        const { repo: cloned } = yield* cloneRepository(url, staged, undefined, {
+          history: "latest",
+        });
+        cloning();
+        const head = Option.getOrUndefined(yield* git.resolve(cloned, "HEAD"));
+        const recognition = yield* recognizeRoot(fileSystem, staged);
+        const pack = packFor(recognition.content);
+        if (pack === undefined)
+          return yield* Effect.fail(
+            new Error(`${url} holds ${recognition.content}, which is cloned, not packed`),
+          );
+        const packing = observability.span("reference.pack");
+        yield* pack(
+          { fileSystem, root: staged },
+          { fileSystem: services.fileSystem, root: into },
+          { at: new Date().toISOString(), ...(head === undefined ? {} : { commit: head }) },
+        );
+        packing();
+        yield* Effect.ignore(fileSystem.remove(staged, { recursive: true }));
+        return head;
+      }),
+      inMemory,
+    );
+    const head = yield* stage;
+    const resource = yield* Effect.tapError(
+      library.add(into, head === undefined ? undefined : { url, commit: head }),
+      () => Effect.ignore(services.fileSystem.remove(into, { recursive: true })),
+    );
+    yield* Effect.sync(libraryChanged);
+    return resource;
   });
 
 /** One declared source text, after the pull: held already, pulled now, or not. */

@@ -254,6 +254,21 @@ export const addressAt = (book: BookId, toc: TocView, offset: number): Address |
 };
 
 /**
+ * The highest verse this text numbers in `chapter`, or `undefined` when it
+ * has no such chapter. One text's answer, not the versification's: what a
+ * resource borrows to close a range its own layout leaves open
+ * (`PlaceContext.versesIn`).
+ */
+export const lastVerseOf = (toc: TocView, chapter: number): number | undefined => {
+  const row = toc.chapters.findIndex((each) => each.number === chapter);
+  if (row < 0) return undefined;
+  let last: number | undefined;
+  for (const verse of toc.verses)
+    if (verse.row === row && verse.last > 0) last = Math.max(last ?? 0, verse.last);
+  return last;
+};
+
+/**
  * Every Address a selection covers, in order and without repeats. Half-open:
  * a selection ending exactly where a verse begins does not include that
  * verse. An empty selection asks `addressAt(from)`. Gaps between the places
