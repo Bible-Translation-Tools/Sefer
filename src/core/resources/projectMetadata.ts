@@ -97,6 +97,21 @@ export interface ProjectMetadata {
   readonly subject: string | undefined;
   /** The version the resource declares (`dublin_core.version`); Burrito has none. */
   readonly version: string | undefined;
+  /**
+   * A Resource Container's `dublin_core.type` (`book`, `bundle`, `help`,
+   * `dict`, `man`) and `dublin_core.format` (one MIME type for the whole
+   * resource, `text/markdown`). What `recognize` (`kinds/content.ts`) reads,
+   * with `id`, to say what the resource holds and which reader parses it.
+   * Burrito answers neither here: its flavor is `subject`, and its MIME types
+   * are per ingredient.
+   */
+  readonly declared: Declared;
+}
+
+/** What a Resource Container declares it is, in its own words. */
+export interface Declared {
+  readonly type: string | undefined;
+  readonly format: string | undefined;
 }
 
 const ONE = (locale: string | undefined, value: string): LocalizedText =>
@@ -136,6 +151,7 @@ export const fromBurrito = (metadata: BurritoMetadata): ProjectMetadata => {
     related: fromBurritoRelationships(metadata.relationships ?? []),
     subject: metadata.type.flavorType.flavor.name,
     version: undefined,
+    declared: { type: undefined, format: undefined },
   };
 };
 
@@ -173,6 +189,7 @@ const fromResourceContainer = (manifest: ResourceContainerManifest): ProjectMeta
     related: fromResourceContainerSource(core.source ?? []),
     subject: core.subject,
     version: core.version,
+    declared: { type: core.type, format: core.format },
   };
 };
 
@@ -192,7 +209,18 @@ class MetadataError extends Data.TaggedError("MetadataError")<{
  */
 export const readResourceContainer = (
   text: string,
-): Result.Result<ProjectMetadata, MetadataError> => {
+): Result.Result<ProjectMetadata, MetadataError> =>
+  Result.map(readResourceContainerManifest(text), fromResourceContainer);
+
+/**
+ * The same bytes, decoded but not narrowed: for a reader inside
+ * `src/core/resources` that needs what `ProjectMetadata` leaves out — the
+ * per-book `projects[]` paths a help's reader walks (`kinds/tn`). The raw
+ * container type still never leaves this folder.
+ */
+export const readResourceContainerManifest = (
+  text: string,
+): Result.Result<ResourceContainerManifest, MetadataError> => {
   let parsed: unknown;
   try {
     parsed = parseYaml(text);
@@ -202,7 +230,7 @@ export const readResourceContainer = (
   const decoded = decodeResourceContainerManifest(parsed);
   return Result.isFailure(decoded)
     ? Result.fail(new MetadataError({ reason: "Shape", description: decoded.failure.message }))
-    : Result.succeed(fromResourceContainer(decoded.success));
+    : Result.succeed(decoded.success);
 };
 
 /**

@@ -41,17 +41,9 @@ import { readProjectMetadata } from "../project/discovery";
 import { readProjectState, updateProjectState } from "../project/projectState";
 import { decode } from "../source/source";
 import { classify, readJson, type Classification } from "./import";
-import { localized } from "./projectMetadata";
+import { recognize, type ContainerKind, type ContentKind, type Recognition } from "./kinds/content";
+import { localized, type Declared } from "./projectMetadata";
 import { normaliseRepoUrl, type RelatedResource } from "./relationships";
-
-/**
- * How a resource is packed. The `unknown` classification is never registered.
- *
- * Named for the container, not "kind", because what a resource holds (USFM,
- * notes, questions) is a second fact that resource kinds will add beside it
- * (`planning/01-discussing/resource-kinds-2026-10-01.md`, §3).
- */
-export type ContainerKind = "burrito" | "resourceContainer" | "looseUsfm";
 
 /**
  * What a resource is *for*, in one project. The well-known roles are named
@@ -80,6 +72,14 @@ export interface Resource {
    */
   readonly id: string;
   readonly container: ContainerKind;
+  /**
+   * What it HOLDS (`kinds/content.ts`), recognised from its metadata when it
+   * was added and kept. A surface asks a handle for a slot, never this; the
+   * kind table and the renderer registry are the two that read it.
+   */
+  readonly content: ContentKind;
+  /** The one reader that parses it, chosen with `content`. */
+  readonly format: Recognition["format"];
   readonly root: string;
   readonly title: string;
   readonly language?: string;
@@ -108,7 +108,7 @@ export interface Upstream {
   readonly commit: string;
 }
 
-type LibraryRefusal = "Unclassified" | "NotFound" | "Io";
+type LibraryRefusal = "Unclassified" | "Unsupported" | "NotFound" | "Io";
 
 class LibraryError extends Data.TaggedError("LibraryError")<{
   readonly reason: LibraryRefusal;
@@ -119,8 +119,10 @@ export interface LibraryService {
   /** Every registered resource, in the order it was added. */
   readonly resources: () => Effect.Effect<readonly Resource[]>;
   /**
-   * Classifies `root` and registers it. Refuses `Unclassified` when
-   * ./import.ts cannot say what the folder holds. Adding a root that is already
+   * Classifies `root`, recognises what it holds, and registers it. Refuses
+   * `Unclassified` when ./import.ts cannot say what the folder is, and
+   * `Unsupported` when its metadata declares a kind or format Sefer has no
+   * reader for (`kinds/content.ts`). Adding a root that is already
    * registered re-reads its metadata and replaces the entry.
    */
   readonly add: (root: string, upstream?: Upstream) => Effect.Effect<Resource, LibraryError>;
@@ -184,6 +186,14 @@ const REGISTRY_FILE = "library.json";
 const ResourceRecord = Schema.Struct({
   id: Schema.String,
   container: Schema.Literals(["burrito", "resourceContainer", "looseUsfm"]),
+  /**
+   * Optional in the record only: a registry written before kinds has none,
+   * and those rows are recognised again from their metadata on load.
+   */
+  content: Schema.optionalKey(
+    Schema.Literals(["usfm", "tn", "tq", "tw", "macula-greek", "macula-hebrew"]),
+  ),
+  format: Schema.optionalKey(Schema.Literals(["usfm", "rcHelpMarkdown"])),
   root: Schema.String,
   title: Schema.String,
   language: Schema.optionalKey(Schema.String),
@@ -210,7 +220,11 @@ const Registry = Schema.Struct({
   bindings: Schema.optionalKey(Schema.Record(Schema.String, Picks)),
 });
 
-type Registry = typeof Registry.Type;
+/** What is held and written: every row recognised, so `content` is always there. */
+interface Registry {
+  readonly resources: readonly Resource[];
+  readonly bindings?: (typeof Registry.Type)["bindings"];
+}
 
 const decodeRegistry = Schema.decodeUnknownResult(Registry);
 
@@ -245,22 +259,24 @@ const failure = (error: PlatformError.PlatformError): LibraryError => refuse("Io
 
 const isUsfm = (path: string): boolean => path.toLowerCase().endsWith(".usfm");
 
+type Described = Pick<Resource, "title" | "language" | "subject" | "identifier" | "version"> & {
+  readonly declared?: Declared;
+};
+
 /**
  * Title, language and what a root declares about itself, read through the
  * same `readProjectMetadata` a project's own header uses, so a Resource
  * Container's `manifest.yaml` is read here too. For loose USFM, or metadata
  * that does not decode, the folder name is the title.
  */
-const describe = (
-  fileSystem: FileSystem.FileSystem,
-  root: string,
-): Effect.Effect<Pick<Resource, "title" | "language" | "subject" | "identifier" | "version">> =>
+const describe = (fileSystem: FileSystem.FileSystem, root: string): Effect.Effect<Described> =>
   Effect.map(readProjectMetadata(fileSystem, root), (read) =>
     Option.match(read.metadata, {
-      onNone: () => ({ title: lastSegment(root) }),
-      onSome: (metadata) => {
+      onNone: (): Described => ({ title: lastSegment(root) }),
+      onSome: (metadata): Described => {
         const title = localized(metadata.name, [metadata.defaultLocale]);
         return {
+          declared: metadata.declared,
           title: title === "" ? lastSegment(root) : title,
           ...(metadata.language.tag === "" ? {} : { language: metadata.language.tag }),
           ...(metadata.subject === undefined ? {} : { subject: metadata.subject }),
@@ -270,6 +286,34 @@ const describe = (
       },
     }),
   );
+
+/**
+ * A root, described and recognised: what `add` registers, and what a row
+ * written before kinds is recognised as again. `Unsupported` names what the
+ * metadata declared.
+ */
+const describeAndRecognize = (
+  fileSystem: FileSystem.FileSystem,
+  root: string,
+  container: ContainerKind,
+): Effect.Effect<
+  Omit<Resource, "id" | "root" | "upstream" | "container"> & { readonly container: ContainerKind },
+  LibraryError
+> =>
+  Effect.gen(function* () {
+    const { declared, ...described } = yield* describe(fileSystem, root);
+    const recognized = recognize({
+      container,
+      ...(described.subject === undefined ? {} : { subject: described.subject }),
+      ...(described.identifier === undefined ? {} : { identifier: described.identifier }),
+      ...(declared === undefined ? {} : { declared }),
+    });
+    if (Result.isFailure(recognized))
+      return yield* Effect.fail(
+        refuse("Unsupported", `${root}: ${recognized.failure.description}`),
+      );
+    return { container, ...recognized.success, ...described };
+  });
 
 /**
  * Whether a held resource is the copy a project's declaration names: cloned
@@ -315,8 +359,35 @@ const makeLibrary = (
     let held = EMPTY;
     if (stored !== undefined) {
       const decoded = decodeRegistry(withContainer(stored));
-      if (Result.isSuccess(decoded)) held = decoded.success;
-      else
+      if (Result.isSuccess(decoded)) {
+        // A row written before kinds says nothing about what it holds. It is
+        // recognised again from its own metadata, never assumed: a row whose
+        // metadata now declares something Sefer cannot read is left out (and
+        // said so); its files are still on disk to add again.
+        const resources: Resource[] = [];
+        for (const record of decoded.success.resources) {
+          const { content, format, ...rest } = record;
+          if (content !== undefined && format !== undefined) {
+            resources.push({ ...rest, content, format });
+            continue;
+          }
+          const again = yield* Effect.result(
+            describeAndRecognize(fileSystem, record.root, record.container),
+          );
+          if (Result.isSuccess(again))
+            resources.push({
+              ...again.success,
+              id: record.id,
+              root: record.root,
+              ...(record.upstream === undefined ? {} : { upstream: record.upstream }),
+            });
+          else observability?.note("library.load", "declined", again.failure.description);
+        }
+        held = {
+          resources,
+          ...(decoded.success.bindings === undefined ? {} : { bindings: decoded.success.bindings }),
+        };
+      } else
         // A registry we cannot decode is not a reason to refuse to start: the
         // user's resources are still on disk and can be added again. Say so
         // loudly in telemetry and carry on with an empty library.
@@ -411,13 +482,12 @@ const makeLibrary = (
             return yield* Effect.fail(
               refuse("Unclassified", `${root} is neither a Burrito, a Resource Container nor USFM`),
             );
-          const described = yield* describe(fileSystem, root);
+          const described = yield* describeAndRecognize(fileSystem, root, classification);
           // Re-adding a root keeps where it came from unless told otherwise:
           // a person picking a downloaded copy again has not changed its origin.
           const known = upstream ?? find(root)?.upstream;
           const resource: Resource = {
             id: root,
-            container: classification,
             root,
             ...described,
             ...(known === undefined
@@ -431,6 +501,8 @@ const makeLibrary = (
           observability?.note("library.add", "ready", undefined, {
             "resource.id": resource.id,
             "resource.classification": classification,
+            "resource.content": resource.content,
+            "resource.format": resource.format,
             "resource.cloned": upstream !== undefined,
           });
           return resource;

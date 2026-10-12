@@ -19,6 +19,7 @@ import { joinPath, lastSegment, parentPath } from "../fileSystem/path";
 import { appendArrival } from "../project/provenance";
 import { decode } from "../source/source";
 import { decodeBurritoMetadata } from "./burrito";
+import { readResourceContainerManifest } from "./projectMetadata";
 import { decodeResourceContainerManifest } from "./resourceContainer";
 
 /**
@@ -141,19 +142,6 @@ export const readJson = (
 const readTextOrEmpty = (fileSystem: FileSystem.FileSystem, path: string): Effect.Effect<string> =>
   Effect.orElseSucceed(fileSystem.readFileString(path), () => "");
 
-// There is no YAML parser dependency in Sefer, and adding one to decide a
-// classification would be a large dependency for a small question. So a
-// `manifest.yaml` counts as a Resource Container on textual evidence only: its
-// first lines declare `dublin_core:` at column zero, which every RC manifest
-// does. (A `manifest.json` sibling is the stronger signal and is checked first,
-// because that value can actually be decoded against the schema.) When the
-// manifest is really parsed — at commit-to-project time, by whoever needs its
-// projects list — that reader supplies the YAML.
-const YAML_DUBLIN_CORE = /^dublin_core\s*:/m;
-
-const looksLikeResourceContainerYaml = (text: string): boolean =>
-  YAML_DUBLIN_CORE.test(text.split("\n").slice(0, 20).join("\n"));
-
 /**
  * Decides what a staged (or already-on-disk) resource root holds. Never fails:
  * an unreadable or undecodable candidate simply is not that kind, and the
@@ -175,8 +163,12 @@ export const classify = (
     if (manifest !== undefined && Result.isSuccess(decodeResourceContainerManifest(manifest)))
       return "resourceContainer";
 
+    // Decoded, not sniffed: `recognize` reads this same manifest to say what
+    // the container holds, so a YAML file that is not a manifest must not
+    // classify as one.
     const yaml = yield* readTextOrEmpty(fileSystem, joinPath(root, "manifest.yaml"));
-    if (looksLikeResourceContainerYaml(yaml)) return "resourceContainer";
+    if (yaml !== "" && Result.isSuccess(readResourceContainerManifest(yaml)))
+      return "resourceContainer";
 
     const files = yield* Effect.orElseSucceed(
       filesUnder(fileSystem, root),
