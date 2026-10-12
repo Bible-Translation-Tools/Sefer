@@ -65,6 +65,12 @@ export interface Spotlight {
   readonly anchor: string;
   readonly title: string;
   readonly body: string;
+  /**
+   * Where the card goes: below the anchor (above when there is no room) by
+   * default; `right` beside it, for a step that asks the person to open a
+   * menu or popover under the anchor, which a card below would cover.
+   */
+  readonly side?: "right";
 }
 
 export interface Step {

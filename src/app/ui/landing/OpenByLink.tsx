@@ -217,7 +217,11 @@ export function OpenByLink(props: {
             description={t("Download it to open the link. It is added to your projects.")}
             action={
               <div class="flex gap-2">
-                <Button onClick={download} disabled={phase().kind === "downloading"}>
+                <Button
+                  data-tour="open-by-link-download"
+                  onClick={download}
+                  disabled={phase().kind === "downloading"}
+                >
                   {phase().kind === "downloading" ? t("Downloading…") : t("Download")}
                 </Button>
                 <Button variant="secondary" onClick={toProjects}>

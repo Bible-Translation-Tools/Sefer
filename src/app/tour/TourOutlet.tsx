@@ -158,8 +158,20 @@ export function TourOutlet() {
   document.addEventListener("keydown", onKeyDown);
   onCleanup(() => document.removeEventListener("keydown", onKeyDown));
 
-  /** The card below the anchor when there is room, else above it. */
-  const cardStyle = (held: Box): Record<string, string> => {
+  /**
+   * The card below the anchor when there is room, else above it; beside it,
+   * on the right, when the step asks (`Spotlight.side`), clamped to the
+   * window.
+   */
+  const cardStyle = (held: Box, side?: "right"): Record<string, string> => {
+    if (side === "right")
+      return {
+        top: `${Math.max(CARD_GAP, held.top)}px`,
+        left: `${Math.min(
+          held.left + held.width + RING_PAD + CARD_GAP,
+          window.innerWidth - CARD_WIDTH - CARD_GAP,
+        )}px`,
+      };
     const left = Math.min(
       Math.max(CARD_GAP, held.left + held.width / 2 - CARD_WIDTH / 2),
       window.innerWidth - CARD_WIDTH - CARD_GAP,
@@ -278,7 +290,11 @@ export function TourOutlet() {
                         height: `${held().height + RING_PAD * 2}px`,
                       }}
                     />
-                    {card(t(spotlight().title), t(spotlight().body), cardStyle(held()))}
+                    {card(
+                      t(spotlight().title),
+                      t(spotlight().body),
+                      cardStyle(held(), spotlight().side),
+                    )}
                   </>
                 )}
               </Show>

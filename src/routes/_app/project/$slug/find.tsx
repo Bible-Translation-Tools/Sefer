@@ -1059,11 +1059,13 @@ function Find() {
                   onChange={(on) => ask({ scope: on ? "reference" : "project" })}
                 />
                 <Show when={searchable().length > 0}>
-                  <Switch
-                    label={t("Search {title}", { title: helpsTitle() })}
-                    checked={scope() === "helps"}
-                    onChange={(on) => ask({ scope: on ? "helps" : "project" })}
-                  />
+                  <span data-tour="find-helps">
+                    <Switch
+                      label={t("Search {title}", { title: helpsTitle() })}
+                      checked={scope() === "helps"}
+                      onChange={(on) => ask({ scope: on ? "helps" : "project" })}
+                    />
+                  </span>
                 </Show>
               </div>
               <div class="ms-auto flex items-center gap-1">
