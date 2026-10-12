@@ -97,8 +97,12 @@ const [running, setRunning] = createSignal<Running | undefined>(undefined, {
 });
 export const runningTour = running;
 
-/** How long a step may wait to become ready before the card says so. */
-const READY_TIMEOUT_MS = 10_000;
+/**
+ * How long a step may wait to become ready before the card says so. Short,
+ * because a step that is not ready in a few seconds is almost always one the
+ * UI has moved out from under, and waiting longer only looks like a hang.
+ */
+const READY_TIMEOUT_MS = 6_000;
 const POLL_MS = 100;
 
 let poll: ReturnType<typeof setInterval> | undefined;
@@ -107,8 +111,70 @@ const stopPolling = (): void => {
   poll = undefined;
 };
 
+/*
+ * Tutorials FAIL OPEN. They are written against screens that are still being
+ * redesigned, and nothing at build time can tell that a selector or a route a
+ * step names has gone. So nothing a step does may stop the tutorial or the
+ * app: a `go`, `ready` or `advance` that throws (an anchor that is no longer a
+ * valid selector, a route that moved) is caught and counted as "not ready";
+ * a step that is never ready times out to a card that says so and offers
+ * Next, Back and Skip; and every such miss is recorded as a failed
+ * `tour.step` event, so `__sefer.observability.failures()` names the
+ * tutorial and step that drifted.
+ */
+const drifted = (
+  context: TourContext,
+  tour: Tour,
+  index: number,
+  why: string,
+  error?: unknown,
+): void => {
+  context.shell.services.composition.observability.note(
+    "tour.step",
+    "failed",
+    error === undefined ? why : `${why}: ${String(error)}`,
+    {
+      "tour.id": tour.id,
+      "tour.step": index + 1,
+      ...(tour.steps[index]?.spotlight === undefined
+        ? {}
+        : { "tour.anchor": tour.steps[index]?.spotlight?.anchor ?? "" }),
+    },
+  );
+};
+
+/** Runs part of a step, and answers `fallback` (once reported) if it throws. */
+const safely = <A>(
+  context: TourContext,
+  tour: Tour,
+  index: number,
+  part: string,
+  run: () => A,
+  fallback: A,
+  reported: Set<string>,
+): A => {
+  try {
+    return run();
+  } catch (error) {
+    if (!reported.has(part)) {
+      reported.add(part);
+      drifted(context, tour, index, `${part} threw`, error);
+    }
+    return fallback;
+  }
+};
+
+/** Whether a selector matches; an invalid one simply does not. */
+export const anchored = (selector: string): Element | null => {
+  try {
+    return document.querySelector(selector);
+  } catch {
+    return null;
+  }
+};
+
 const anchorPresent = (step: Step): boolean =>
-  step.spotlight === undefined || document.querySelector(step.spotlight.anchor) !== null;
+  step.spotlight === undefined || anchored(step.spotlight.anchor) !== null;
 
 const enter = (context: TourContext, tour: Tour, index: number): void => {
   stopPolling();
@@ -117,14 +183,24 @@ const enter = (context: TourContext, tour: Tour, index: number): void => {
     setRunning(undefined);
     return;
   }
+  const reported = new Set<string>();
   setRunning({ tour, index, phase: "waiting" });
-  step.go?.(context);
+  safely(context, tour, index, "go", () => step.go?.(context), undefined, reported);
   const started = Date.now();
   poll = setInterval(() => {
     const now = running();
     if (now === undefined || now.tour !== tour || now.index !== index) return stopPolling();
     if (now.phase === "waiting") {
-      if ((step.ready ?? (() => anchorPresent(step)))(context)) {
+      const ready = safely(
+        context,
+        tour,
+        index,
+        "ready",
+        () => (step.ready ?? (() => anchorPresent(step)))(context),
+        false,
+        reported,
+      );
+      if (ready) {
         setRunning({ tour, index, phase: "showing" });
         // A step with nothing to show and no condition of its own has done
         // its job by being reached.
@@ -132,11 +208,16 @@ const enter = (context: TourContext, tour: Tour, index: number): void => {
           enter(context, tour, index + 1);
       } else if (Date.now() - started > READY_TIMEOUT_MS) {
         stopPolling();
+        drifted(context, tour, index, "never became ready");
         setRunning({ tour, index, phase: "timedOut" });
       }
       return;
     }
-    if (typeof step.advance === "function" && step.advance(context))
+    const advance = step.advance;
+    if (
+      typeof advance === "function" &&
+      safely(context, tour, index, "advance", () => advance(context), false, reported)
+    )
       enter(context, tour, index + 1);
   }, POLL_MS);
 };

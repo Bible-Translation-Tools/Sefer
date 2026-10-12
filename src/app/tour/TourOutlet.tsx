@@ -5,7 +5,15 @@ import { registerCommand, runCommand } from "../commands";
 import { t } from "../i18n";
 import { useShell } from "../ProjectContext";
 import { Button, toasts } from "../ui/primitives";
-import { beginTour, runningTour, startTour, stepTour, stopTour, type TourContext } from "./machine";
+import {
+  anchored,
+  beginTour,
+  runningTour,
+  startTour,
+  stepTour,
+  stopTour,
+  type TourContext,
+} from "./machine";
 import { TOURS, tourById } from "./tours";
 
 /**
@@ -29,6 +37,8 @@ interface Box {
 const RING_PAD = 6;
 const CARD_GAP = 12;
 const CARD_WIDTH = 320;
+/** Where a card goes with nothing to anchor it to. */
+const CENTRED = { top: "20vh", left: `calc(50vw - ${CARD_WIDTH / 2}px)` };
 
 /** The context a step reaches the app through. */
 export const useTourContext = (): TourContext => {
@@ -108,7 +118,7 @@ export function TourOutlet() {
   const measure = (): void => {
     const now = runningTour();
     const anchor = now?.phase === "showing" ? step()?.spotlight?.anchor : undefined;
-    const element = anchor === undefined ? null : document.querySelector(anchor);
+    const element = anchor === undefined ? null : anchored(anchor);
     if (element === null) setBox(undefined);
     else {
       // Brought into view once per step, not every frame.
@@ -207,7 +217,14 @@ export function TourOutlet() {
         <div class="pointer-events-none fixed inset-0 z-50" data-tour-outlet={now().tour.id}>
           <Show when={now().phase === "showing" && step()?.spotlight}>
             {(spotlight) => (
-              <Show when={box()}>
+              // Fail open: an anchor that vanishes after the step showed (a
+              // re-render, a screen that moved on) leaves the card in the
+              // middle of the screen, still readable and still dismissable,
+              // rather than taking every control away with the ring.
+              <Show
+                when={box()}
+                fallback={card(t(spotlight().title), t(spotlight().body), CENTRED)}
+              >
                 {(held) => (
                   <>
                     <div
@@ -231,9 +248,9 @@ export function TourOutlet() {
             {card(
               t("This step could not be shown"),
               t(
-                "What it points at is not on screen. The app may have changed since the tutorial was written.",
+                "What it points at is not on screen; the app has probably changed since this tutorial was written. Next skips this step.",
               ),
-              { top: "20vh", left: `calc(50vw - ${CARD_WIDTH / 2}px)` },
+              CENTRED,
             )}
           </Show>
         </div>
