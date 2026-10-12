@@ -262,6 +262,13 @@ export interface ShellKeys {
   readonly annotateEmptyParagraphs: SettingKey<boolean>;
   /** Enables the destructive multi-match action in Find. */
   readonly enableReplaceAll: SettingKey<boolean>;
+  /**
+   * Shows the gateway languages on the projects page. Off for nearly everyone:
+   * a gateway text is a source to read, chosen from the reference column's
+   * language menu. A download from the projects page still lands in the
+   * Library, never the projects folder (`arrival.ts`).
+   */
+  readonly showGatewayProjects: SettingKey<boolean>;
   /** Ask about unsaved work found when a project opens. Backups are written either way. */
   readonly offerRecovery: SettingKey<boolean>;
   /**
@@ -415,6 +422,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
       true,
     ),
     enableReplaceAll: settings.register("find.enableReplaceAll", Schema.Boolean, false),
+    showGatewayProjects: settings.register("projects.showGateways", Schema.Boolean, false),
     offerRecovery: settings.register("recovery.offerOnOpen", Schema.Boolean, true),
     excerptContext: settings.register("excerpts.context", Schema.Number, 0),
     reviewLayout: settings.register("review.layout", Schema.String, "auto"),
@@ -623,6 +631,14 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
       key: keys.enableReplaceAll,
       label: "Enable Replace all",
       description: "Allow Find to replace every matching occurrence in one action.",
+      kind: "boolean",
+      group: "advanced",
+    },
+    {
+      key: keys.showGatewayProjects,
+      label: "Show gateway languages on the projects page",
+      description:
+        "Lists the gateway languages on the projects page too. A download from there goes to Source texts, never Your projects; to revise one, use Edit as your own project in Settings.",
       kind: "boolean",
       group: "advanced",
     },

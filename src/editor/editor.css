@@ -124,6 +124,26 @@
 .cm-mode-regular {
   background: var(--editor-paper);
 }
+/* A reference pane drawn straight on the page (Refine's reference text,
+   `ReferencePane bare`): no paper. Here, beside the rule it overrides, and not
+   in app.css: that file's rules sit in a layer, and this one does not. */
+[data-bare] .cm-mode-regular {
+  background: transparent;
+}
+/* A collapsed reference text's card (`ReferenceCard.tsx`): its opening verses
+   at the interface's 14px, edge to edge in the card, fading out at the
+   bottom — a glance at the text, not a page of it. */
+[data-reference-preview] {
+  mask-image: linear-gradient(to bottom, #000 40%, transparent);
+}
+[data-reference-preview] .cm-excerpt.cm-mode-regular {
+  background: transparent;
+}
+[data-reference-preview] .cm-excerpt .cm-content {
+  padding: 0;
+  font-size: var(--text-small);
+  line-height: 1.6;
+}
 .cm-mode-regular .cm-content {
   max-width: 40rem;
   margin: 0 auto;

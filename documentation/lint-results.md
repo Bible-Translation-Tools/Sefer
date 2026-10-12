@@ -47,8 +47,8 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | oxlint errors | 0 | `pnpm lint`, every commit |
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
 | fallow dead code (`pnpm deadcode`) | 0 issue(s) | every deploy; advisory on branches |
-| fallow duplication | 1.7% in 63 clone group(s) | none — advisory |
-| suppression comments | 11 | each listed below with its reason |
+| fallow duplication | 1.8% in 64 clone group(s) | none — advisory |
+| suppression comments | 14 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file
 
@@ -63,7 +63,10 @@ None.
 | `src/app/ui/cloud/SharedProjectCard.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a handle, not a value: the same Account for the card's life |
 | `src/app/ui/cloud/SharedProjectCard.tsx` | `oxlint-disable-next-line` | solid/reactivity -- the account's work: runs once per press, reading the field at the moment of the ask |
 | `src/app/ui/workspace/BackToEditor.tsx` | `fallow-ignore-next-line` | unused-export -- the behaviour half, for a screen that draws its own door; BackToEditor is the only consumer today. |
+| `src/app/ui/workspace/ReferenceCard.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: runs once, when the book is read |
 | `src/app/ui/workspace/ReferenceColumn.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: runs once, when the bindings resolve |
+| `src/app/ui/workspace/ReferenceColumn.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: runs once, when the project is registered |
+| `src/app/ui/workspace/ReferenceColumn.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: runs once, when the copy is here |
 | `src/app/workflows/drafting.ts` | `fallow-ignore-file` | unused-file -- a deliberate stub; see the note below for why it is not wired. |
 | `src/core/git/contract.ts` | `fallow-ignore-file` | unused-file -- registered nowhere on purpose; see the note below. |
 | `src/editor/core/instrument.ts` | `oxlint-disable-next-line` | no-console -- no ring is registered: a standalone editor still says it broke |

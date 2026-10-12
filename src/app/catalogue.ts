@@ -529,3 +529,22 @@ export const catalogueFor = (settings: SettingsService): CatalogueService => {
   const url = catalogueUrlFor(settings);
   return url === null ? sampleCatalogue() : languageApiCatalogue(url);
 };
+
+/**
+ * One text per gateway language, A–Z by English name: what the reference
+ * column offers to download. WA publishes them under `wa-catalog`; where it
+ * has several in one language, the ULB is the one a translator reads from.
+ */
+export const gatewayTexts = (rows: readonly CatalogueEntry[]): readonly CatalogueEntry[] => {
+  const ulb = (entry: CatalogueEntry): boolean => /_ulb$/iu.test(entry.repo);
+  const best = new Map<string, CatalogueEntry>();
+  for (const row of rows) {
+    if (row.type !== "gateway" || row.owner.toLowerCase() !== "wa-catalog" || row.gitUrl === "")
+      continue;
+    const held = best.get(row.code);
+    if (held === undefined || (!ulb(held) && ulb(row))) best.set(row.code, row);
+  }
+  return [...best.values()].sort((a, b) =>
+    (a.anglicizedName || a.naturalName).localeCompare(b.anglicizedName || b.naturalName),
+  );
+};

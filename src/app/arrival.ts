@@ -113,6 +113,30 @@ export const cloneArrival = (
     return { root: into, progress: cloned.progress, resource };
   });
 
+/**
+ * The Library's copy of a source text: the one already on this device when
+ * there is one, else a fresh clone into the Library's folder. Once per device,
+ * whoever asks — the projects page, a project's arrival, the reference column.
+ */
+export const sourceTextCopy = (
+  services: Services,
+  url: string,
+  catalogueId?: string,
+): Effect.Effect<Resource, unknown, Domain> =>
+  Effect.gen(function* () {
+    const library = yield* Library;
+    const held = yield* library.cloned(url);
+    if (Option.isSome(held)) return held.value;
+    const arrived = yield* cloneArrival(
+      services,
+      "sourceText",
+      url,
+      catalogueId === undefined ? undefined : { catalogueId },
+    );
+    if (arrived.resource !== undefined) return arrived.resource;
+    return yield* Effect.fail(new Error(`${url} arrived without a Library entry`));
+  });
+
 /** One declared source text, after the pull: held already, pulled now, or not. */
 interface SourceTextRow {
   readonly ref: RelatedResource;

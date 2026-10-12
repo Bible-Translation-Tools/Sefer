@@ -104,6 +104,12 @@ export interface ReferencePaneProps {
    * choice of which one this pane shows (one at a time; Will, 2026-10-08).
    */
   readonly title?: JSX.Element;
+  /**
+   * Drawn straight on the page: no card, no paper, no title line — the
+   * column's language picker says whose text it is (Refine's reference text).
+   * Follow stays, as the one control in its place (Will, 2026-10-08).
+   */
+  readonly bare?: boolean;
 }
 
 /** What the pane is showing, once the read has answered. */
@@ -506,6 +512,7 @@ export function ReferencePane(props: ReferencePaneProps) {
   return (
     <div
       class="editor-host"
+      data-bare={props.bare === true ? "" : undefined}
       data-reference={props.resource.id}
       data-role={props.role}
       data-mode={shell.mode()}
@@ -518,40 +525,57 @@ export function ReferencePane(props: ReferencePaneProps) {
       {/* The header line: whose text this is, and the one way out of it. The
           × unbinds and does not delete — the resource stays registered, and
           every other project's binding to it is untouched. */}
-      <div class="flex items-center gap-2 border-b border-surface-border px-3 py-1.5">
-        <p class="min-w-0 flex-1 truncate text-smallest text-on-surface-secondary">
-          <Show
-            when={props.title}
-            fallback={<span class="font-bold text-on-surface-primary">{props.resource.title}</span>}
-          >
-            {props.title}
-          </Show>
-          <Show when={props.resource.language}>{(language) => <span> · {language()}</span>}</Show>
-          <span> · {props.role === "source" ? t("Source") : t("Reference")}</span>
-        </p>
-        {/* Follow, or hold still. In the header rather than only in settings
+      <Show
+        when={props.bare !== true}
+        fallback={
+          <div class="flex justify-end">
+            <FollowToggle
+              testId={`follow-${props.resource.id}`}
+              following={following()}
+              stopLabel={t("Stop {title} following the book", { title: props.resource.title })}
+              startLabel={t("Let {title} follow the book", { title: props.resource.title })}
+              onToggle={() => setFollowing((on) => !on)}
+            />
+          </div>
+        }
+      >
+        <div class="flex items-center gap-2 border-b border-surface-border px-3 py-1.5">
+          <p class="min-w-0 flex-1 truncate text-smallest text-on-surface-secondary">
+            <Show
+              when={props.title}
+              fallback={
+                <span class="font-bold text-on-surface-primary">{props.resource.title}</span>
+              }
+            >
+              {props.title}
+            </Show>
+            <Show when={props.resource.language}>{(language) => <span> · {language()}</span>}</Show>
+            <span> · {props.role === "source" ? t("Source") : t("Reference")}</span>
+          </p>
+          {/* Follow, or hold still. In the header rather than only in settings
             because it is a per-pane decision made while reading — you pin the
             one you are cross-checking and let the others follow. */}
-        <FollowToggle
-          testId={`follow-${props.resource.id}`}
-          following={following()}
-          stopLabel={t("Stop {title} following the book", { title: props.resource.title })}
-          startLabel={t("Let {title} follow the book", { title: props.resource.title })}
-          onToggle={() => setFollowing((on) => !on)}
-        />
-        <Show when={props.onUnbind}>
-          {(unbind) => (
-            <IconButton
-              size="sm"
-              data-testid={`unbind-${props.resource.id}`}
-              label={t("Remove {title}", { title: props.resource.title })}
-              tooltipSide="left"
-              icon={<X />}
-              onClick={() => unbind()()}
-            />
-          )}
-        </Show>
-      </div>
+          <FollowToggle
+            testId={`follow-${props.resource.id}`}
+            following={following()}
+            stopLabel={t("Stop {title} following the book", { title: props.resource.title })}
+            startLabel={t("Let {title} follow the book", { title: props.resource.title })}
+            onToggle={() => setFollowing((on) => !on)}
+          />
+          <Show when={props.onUnbind}>
+            {(unbind) => (
+              <IconButton
+                size="sm"
+                data-testid={`unbind-${props.resource.id}`}
+                label={t("Remove {title}", { title: props.resource.title })}
+                tooltipSide="left"
+                icon={<X />}
+                onClick={() => unbind()()}
+              />
+            )}
+          </Show>
+        </div>
+      </Show>
 
       <Switch>
         <Match when={held().kind === "loading"}>
