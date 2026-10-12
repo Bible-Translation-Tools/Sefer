@@ -182,7 +182,7 @@ export function OpenByLink(props: {
         // that reads beside the source (Find's reference scope) needs them
         // registered when it mounts.
         if (Result.isSuccess(arrived)) {
-          await announceSourceTexts(shell.services, arrived.success.root);
+          await announceSourceTexts(shell.services, arrived.success.root, `https://${named.host}`);
           return openAt(arrived.success.root, target);
         }
         toasts.error({

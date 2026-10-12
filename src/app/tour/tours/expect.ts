@@ -55,7 +55,10 @@ export const expectTour: Tour = {
   summary:
     "Where the source says “Jesus”, a Bisa translation should say “Yesu”. Sefer shows the verses that do not.",
   needsProject: true,
-  start: "/r/Will_Kelly/leb-x-bisa_reg/find?q=Jesus&scope=reference",
+  // The host named, so the link works from any channel: the dev channel's
+  // own cloud is WACS dev, and the Bisa Bible lives on WACS.
+  start:
+    "/r/Will_Kelly/leb-x-bisa_reg/find?q=Jesus&scope=reference&host=content.bibletranslationtools.org",
   steps: [
     {
       go: (context) => find(context, undefined),
