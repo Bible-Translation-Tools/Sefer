@@ -34,6 +34,7 @@ import { t } from "./i18n";
 import { recordVersion } from "./recordVersion";
 import type { Domain, Services } from "./services";
 import { shellKeys } from "./settings";
+import { copyPlaceLink } from "./shareLinks";
 import type { ShellEvent } from "./shellEvent";
 import { sendAfterSave, sendNow } from "./syncActions";
 import { syncPreferences } from "./syncSettings";
@@ -439,6 +440,16 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
       keys: "Mod-,",
       run: () => {
         void bridge.navigate({ to: "/project/$slug/settings", params: { slug: bridge.slug() } });
+      },
+    }),
+
+    registerCommand({
+      id: "project.copyLink",
+      title: t("Copy a link to this place"),
+      when: () => bridge.project() !== undefined,
+      run: () => {
+        const root = bridge.project()?.root;
+        return root === undefined ? undefined : copyPlaceLink(bridge.services, root);
       },
     }),
 
