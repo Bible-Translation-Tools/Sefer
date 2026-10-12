@@ -16,10 +16,21 @@ import { createEffect, createSignal, type Accessor } from "solid-js";
 
 import { Gitea, type Session } from "#core/remote/gitea";
 
+import { collaboration } from "../../collaboration";
 import { describe } from "../../describe";
 import { contentHostFor } from "../../endpoints";
 import { t } from "../../i18n";
 import type { Shell } from "../../ProjectContext";
+
+/**
+ * Who is signed in decides whether they can write to the shared project, so
+ * every sign-in and sign-out asks again. Without it the mode card stays at
+ * "Sign in to choose this." after a sign-in from Settings.
+ */
+const reask = (shell: Shell): void => {
+  const project = shell.project();
+  if (project !== undefined) void collaboration.refresh(shell.services, project);
+};
 
 export interface Account {
   /** The Gitea host this build talks to; `null` when none is configured. */
@@ -103,6 +114,7 @@ export const createAccount = (shell: Shell): Account => {
         );
         setSession(held);
         setOtpWanted(false);
+        reask(shell);
         shell.report(t("signed in to {host} as {user}", { host: base, user: held.username }));
       });
     },
@@ -112,6 +124,7 @@ export const createAccount = (shell: Shell): Account => {
       attempt(async () => {
         await services.run(Effect.flatMap(Gitea, (gitea) => gitea.logout(base)));
         setSession(undefined);
+        reask(shell);
       });
     },
   };

@@ -653,7 +653,7 @@ export function FindingsPanel() {
       {/* One toolbar row, not a column: the filters are four questions asked
           rarely, and on a project of sixty-six books the book chips alone used
           to push the findings below the fold. */}
-      <Card class="space-y-2">
+      <Card class="space-y-2" data-tour="findings-filters">
         <div class="flex items-start gap-2">
           <FindingsFilters
             class="min-w-0 flex-1"

@@ -1,5 +1,5 @@
 import type { JSX } from "@solidjs/web";
-import { createFileRoute } from "@tanstack/solid-router";
+import { Link, createFileRoute } from "@tanstack/solid-router";
 import { Effect, Fiber, Result, Stream } from "effect";
 import Minus from "lucide-solid/icons/minus";
 import Plus from "lucide-solid/icons/plus";
@@ -10,6 +10,7 @@ import { BUILD_ENDPOINTS, endpointsChangedSinceBoot } from "#app/endpoints";
 import { t } from "#app/i18n";
 import { useShell } from "#app/ProjectContext";
 import { SETTING_GROUPS, shellKeys, shellSettings, type AnyDescriptor } from "#app/settings";
+import { TutorialsCard } from "#app/tour/TutorialsCard";
 import { CloudPanel } from "#app/ui/CloudPanel";
 import { Breadcrumb } from "#app/ui/landing/Breadcrumb";
 import {
@@ -67,6 +68,8 @@ import "#editor/editor.css";
 function SettingsPage() {
   const shell = useShell();
   const { services } = shell;
+  const search = Route.useSearch();
+  const tab = (): SettingsTab => search().tab ?? "preferences";
   const keys = shellKeys(services.settings);
   const descriptors = shellSettings(services.settings);
   const [tick, setTick] = createSignal(0, { name: "settingsTick" });
@@ -328,125 +331,153 @@ function SettingsPage() {
         })}
       />
 
-      <For each={SETTING_GROUPS}>
-        {(group) => {
-          // A function, not a value: `advancedVisible` changes while the
-          // screen is open, and the rows must follow it.
-          const rows = () =>
-            descriptors.filter(
-              (descriptor) =>
-                descriptor.group === group.id &&
-                // The network card is machinery too: which servers a build
-                // talks to is the build's answer, and overriding it is for
-                // somebody who has opened Advanced on purpose.
-                ((group.id !== "advanced" && group.id !== "network") || advancedVisible()) &&
-                // A preference that cannot matter on this host is not drawn:
-                // the browser transport, which desktop has no use for.
-                (descriptor.hosts === undefined ||
-                  descriptor.hosts.includes(services.hostInfo.kind())),
-            );
-          return (
-            <Show when={rows().length > 0}>
-              <Card class="space-y-1" data-settings-group={group.id}>
-                <PanelHeader level={3} title={t(group.title)} subtitle={t(group.subtitle)} />
-                <div class="divide-y divide-surface-border">
-                  <For each={rows()}>
-                    {(descriptor) =>
-                      descriptor.group === "network" && descriptor.kind === "string" ? (
-                        <NetworkRow descriptor={descriptor} />
-                      ) : (
-                        <div
-                          class="flex items-center gap-6 py-3"
-                          data-setting={descriptor.key.name}
-                        >
-                          <div class="min-w-0 flex-1">
-                            <label
-                              for={descriptor.key.name}
-                              class="block text-small text-on-surface-primary"
-                            >
-                              {t(descriptor.label)}
-                              <Show when={descriptor.description}>
-                                {(description) => (
-                                  <span class="block text-smallest text-on-surface-tertiary">
-                                    {t(description())}
-                                  </span>
-                                )}
-                              </Show>
-                            </label>
-                            <Show when={descriptor.kind === "choice" && descriptor.preview}>
-                              <DiffSample />
-                            </Show>
-                          </div>
-                          <div class="shrink-0">{widget(descriptor)}</div>
-                        </div>
-                      )
-                    }
-                  </For>
-                </div>
-                <Show when={group.id === "network" && drifted()}>
-                  <div class="flex items-center gap-3 pt-3">
-                    <p class="min-w-0 flex-1 text-smallest text-on-surface-tertiary">
-                      {t(
-                        "Screens are using the new endpoint already; transfers and the catalogue were built with the old one and change on reload.",
-                      )}
-                    </p>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => globalThis.location.reload()}
-                    >
-                      {t("Reload")}
-                    </Button>
-                  </div>
-                </Show>
-              </Card>
-            </Show>
-          );
-        }}
-      </For>
-
-      <Show when={problem() !== ""}>
-        <p class="text-small text-on-surface-error">{problem()}</p>
-      </Show>
-
-      <SousSettingsPanel />
-
-      <Show when={advancedVisible()}>
-        <Card class="space-y-1" data-settings-group="diagnostics">
-          <PanelHeader
-            level={3}
-            title={t("Diagnostics")}
-            subtitle={t(
-              "What Sefer recorded on this device, as one file to send to someone helping you. Paths are shortened and account names are left out.",
-            )}
-          />
-          <div class="flex items-center gap-6 py-3">
-            <p class="min-w-0 flex-1 text-smallest text-on-surface-tertiary">
-              {t("Kept for seven days, at most {size} MB.", { size: 5 })}
-            </p>
-            <Button
-              size="sm"
-              variant="secondary"
-              data-action="export-diagnostics"
-              onClick={() => void exportDiagnostics(services, shell.project())}
+      {/* Tabs, in the URL (`?tab=`), so a tab can be linked to. */}
+      <nav aria-label={t("Settings sections")} class="flex border-b border-surface-border">
+        <For each={SETTINGS_TABS}>
+          {(entry) => (
+            <Link
+              to="/project/$slug/settings"
+              params={{ slug: shell.slug() }}
+              search={entry.id === "preferences" ? {} : { tab: entry.id }}
+              class={TAB}
+              aria-current={tab() === entry.id ? "page" : undefined}
+              data-settings-tab={entry.id}
             >
-              {t("Export diagnostics")}
-            </Button>
-          </div>
-        </Card>
+              {t(entry.label)}
+            </Link>
+          )}
+        </For>
+      </nav>
+
+      <Show when={tab() === "tutorials"}>
+        <TutorialsCard kind="tutorial" />
       </Show>
 
-      <UpdatePanel />
+      <Show when={tab() === "workflows"}>
+        <TutorialsCard kind="workflow" />
+      </Show>
 
-      <CloudPanel root={shell.project()?.root} />
+      <Show when={tab() === "preferences"}>
+        <For each={SETTING_GROUPS}>
+          {(group) => {
+            // A function, not a value: `advancedVisible` changes while the
+            // screen is open, and the rows must follow it.
+            const rows = () =>
+              descriptors.filter(
+                (descriptor) =>
+                  descriptor.group === group.id &&
+                  // The network card is machinery too: which servers a build
+                  // talks to is the build's answer, and overriding it is for
+                  // somebody who has opened Advanced on purpose.
+                  ((group.id !== "advanced" && group.id !== "network") || advancedVisible()) &&
+                  // A preference that cannot matter on this host is not drawn:
+                  // the browser transport, which desktop has no use for.
+                  (descriptor.hosts === undefined ||
+                    descriptor.hosts.includes(services.hostInfo.kind())),
+              );
+            return (
+              <Show when={rows().length > 0}>
+                <Card class="space-y-1" data-settings-group={group.id}>
+                  <PanelHeader level={3} title={t(group.title)} subtitle={t(group.subtitle)} />
+                  <div class="divide-y divide-surface-border">
+                    <For each={rows()}>
+                      {(descriptor) =>
+                        descriptor.group === "network" && descriptor.kind === "string" ? (
+                          <NetworkRow descriptor={descriptor} />
+                        ) : (
+                          <div
+                            class="flex items-center gap-6 py-3"
+                            data-setting={descriptor.key.name}
+                          >
+                            <div class="min-w-0 flex-1">
+                              <label
+                                for={descriptor.key.name}
+                                class="block text-small text-on-surface-primary"
+                              >
+                                {t(descriptor.label)}
+                                <Show when={descriptor.description}>
+                                  {(description) => (
+                                    <span class="block text-smallest text-on-surface-tertiary">
+                                      {t(description())}
+                                    </span>
+                                  )}
+                                </Show>
+                              </label>
+                              <Show when={descriptor.kind === "choice" && descriptor.preview}>
+                                <DiffSample />
+                              </Show>
+                            </div>
+                            <div class="shrink-0">{widget(descriptor)}</div>
+                          </div>
+                        )
+                      }
+                    </For>
+                  </div>
+                  <Show when={group.id === "network" && drifted()}>
+                    <div class="flex items-center gap-3 pt-3">
+                      <p class="min-w-0 flex-1 text-smallest text-on-surface-tertiary">
+                        {t(
+                          "Screens are using the new endpoint already; transfers and the catalogue were built with the old one and change on reload.",
+                        )}
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => globalThis.location.reload()}
+                      >
+                        {t("Reload")}
+                      </Button>
+                    </div>
+                  </Show>
+                </Card>
+              </Show>
+            );
+          }}
+        </For>
 
-      <SourceTextsCard />
+        <Show when={problem() !== ""}>
+          <p class="text-small text-on-surface-error">{problem()}</p>
+        </Show>
 
-      <p class="text-smallest text-on-surface-tertiary">
-        {t("Stored in {file}", {
-          file: `${services.hostInfo.paths().appData}/settings.json`,
-        })}
-      </p>
+        <SousSettingsPanel />
+
+        <Show when={advancedVisible()}>
+          <Card class="space-y-1" data-settings-group="diagnostics">
+            <PanelHeader
+              level={3}
+              title={t("Diagnostics")}
+              subtitle={t(
+                "What Sefer recorded on this device, as one file to send to someone helping you. Paths are shortened and account names are left out.",
+              )}
+            />
+            <div class="flex items-center gap-6 py-3">
+              <p class="min-w-0 flex-1 text-smallest text-on-surface-tertiary">
+                {t("Kept for seven days, at most {size} MB.", { size: 5 })}
+              </p>
+              <Button
+                size="sm"
+                variant="secondary"
+                data-action="export-diagnostics"
+                onClick={() => void exportDiagnostics(services, shell.project())}
+              >
+                {t("Export diagnostics")}
+              </Button>
+            </div>
+          </Card>
+        </Show>
+
+        <UpdatePanel />
+
+        <CloudPanel root={shell.project()?.root} />
+
+        <SourceTextsCard />
+
+        <p class="text-smallest text-on-surface-tertiary">
+          {t("Stored in {file}", {
+            file: `${services.hostInfo.paths().appData}/settings.json`,
+          })}
+        </p>
+      </Show>
     </main>
   );
 }
@@ -474,7 +505,25 @@ function DiffSample() {
   );
 }
 
+/** Settings' tabs. Preferences is the default and carries no `?tab=`. */
+type SettingsTab = "preferences" | "tutorials" | "workflows";
+const SETTINGS_TABS: readonly { readonly id: SettingsTab; readonly label: string }[] = [
+  { id: "preferences", label: "Preferences" },
+  { id: "tutorials", label: "Tutorials" },
+  { id: "workflows", label: "Workflows" },
+];
+
+/** The same tab look as Changes and History. */
+const TAB = [
+  "border-b-2 px-3 py-2 text-center text-small no-underline transition-colors",
+  "aria-[current=page]:border-brand aria-[current=page]:font-medium aria-[current=page]:text-on-surface-primary",
+  "not-aria-[current=page]:border-transparent not-aria-[current=page]:text-on-surface-tertiary",
+  "not-aria-[current=page]:hover:text-on-surface-secondary",
+].join(" ");
+
 export const Route = createFileRoute("/_app/project/$slug/settings")({
+  validateSearch: (search: Record<string, unknown>): { readonly tab?: SettingsTab } =>
+    search["tab"] === "tutorials" || search["tab"] === "workflows" ? { tab: search["tab"] } : {},
   head: () => ({ meta: [{ title: "Sefer — settings" }] }),
   component: () => <ShellGate>{() => <SettingsPage />}</ShellGate>,
 });

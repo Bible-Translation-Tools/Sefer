@@ -227,9 +227,13 @@ interface SourceTextRow {
 const pullSourceTexts = (
   services: Services,
   projectRoot: string,
+  fromHost?: string,
 ): Effect.Effect<readonly SourceTextRow[], never, Domain> =>
   Effect.gen(function* () {
-    const host = contentHostFor(services.settings);
+    // The cloud the project came from, when the caller knows it: a project
+    // from another host (a share link with `host=`) declares texts that live
+    // THERE, and the configured host may not hold them at all.
+    const host = fromHost ?? contentHostFor(services.settings);
     const read = yield* readProjectMetadata(services.fileSystem, projectRoot);
     const refs = Option.match(read.metadata, {
       onNone: () => [],
@@ -289,8 +293,9 @@ const pullSourceTexts = (
 export const announceSourceTexts = async (
   services: Services,
   projectRoot: string,
+  fromHost?: string,
 ): Promise<void> => {
-  const rows = await services.run(pullSourceTexts(services, projectRoot));
+  const rows = await services.run(pullSourceTexts(services, projectRoot, fromHost));
   const worth = rows.filter((row) => row.outcome !== "held" || row.note !== undefined);
   if (worth.length === 0) return;
   const lines = worth.map((row) => {

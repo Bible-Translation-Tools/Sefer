@@ -50,6 +50,14 @@ Search is a module, not a screen, so a screen with a question asks it in place. 
 
 `/find` resolves each hit's Address against the project's own book (`refOccurrences`, below) and draws the reference hit above the project's matching verse card — paired verse by verse over both Addresses, so a bridge on either side still pairs — read-only, with no Edit, no Open in editor and no staleness badge. A reference hit with no Address has no card to sit on.
 
+### Expect
+
+Find gives places and the reference scope gives each place in both texts. **Expect** (`src/core/search/expect.ts`) is the assertion over that alignment: _where the source says A, my text says B_. `expectedPattern(typed)` turns what was typed into a pattern (`Yesu` is those letters touching in any case; `a + n + g` is those letters in order within one word, for vowel insertion and harakat; `/…/` is a regular expression), and `expectIn(book, addresses, pattern)` checks each verse a reference hit names and splits them into those that have it (the match, its typed pieces marked) and those that do not. Pure, so Key terms could put it over a guide's verses as well.
+
+On `/find` it shows in the reference scope only, and lives in the URL like the rest of the screen: `expect=Yesu`, and `show=without|with|all` (without, when absent). The cards are the chosen side. Searching the Bisa Bible's English source for "Jesus" (1,276 hits) and expecting "Yesu" leaves 56 verses without it, and among them the slips no spell checker for Bisa could find: "Yesa" at Matthew 27:58, "Ysu" at John 14:6, "Yessu", "Yesiu", "Yes". The rest are deliberate (a pronoun where English names Jesus), which is why expect narrows and never decides. A verse holding both a slip and the right spelling has it, and is not listed. The "Expect: catching spelling slips (Bisa demo)" tutorial walks through exactly this ([shell](shell.md), "Tutorials").
+
+A link that arrives with `scope=reference` searches again once the project's sources are registered, a moment after mount; before that fix it searched an empty set and showed nothing until Find was pressed.
+
 **Registration is not automatic.** `ProjectAnalysis.attachReferences(refs)` registers the books, and `src/app/workflows/references.ts` resolves the Library's `source` and `reference` bindings into texts and calls it. The set is REPLACED on each call and cleared when a project is attached. A project with nothing bound has no Reference scope: the segment on `/find` is disabled with the reason as its tooltip.
 
 ## Reference material: a kind's own haystack

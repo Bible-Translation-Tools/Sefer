@@ -106,6 +106,13 @@ export interface Finding {
   readonly engine: EngineStamp;
   readonly fix?: FixRef;
   /**
+   * The number an Onion ordering finding expected, from the catalogue's
+   * `expectedNumber` aux: "verse 3 repeats the verse at 3; expected 4" is
+   * span "3", expected 4. Absent for every other code. With the span, it is
+   * everything a renumber needs, without reading the text.
+   */
+  readonly expected?: number;
+  /**
    * Row in the publication's pattern table, for a Sous `Convention` finding
    * only. It is NOT a durable identity — the next publication renumbers the
    * table exactly as it renumbers findings — so it is only meaningful against
@@ -224,6 +231,7 @@ const fromDiagnostics = (input: {
       stamp,
       engine,
       ...(fix === undefined ? {} : { fix }),
+      ...(view.code().aux === "expectedNumber" ? { expected: view.aux() } : {}),
     });
   }
   return out;

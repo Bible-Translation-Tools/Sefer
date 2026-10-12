@@ -30,7 +30,7 @@ Both halves are drawn by the one `linter`, so there is one gutter, one popover a
 
 ## The one shape
 
-`Finding { id, bookId, severity, code, producer, message, details?, described?, from, to, stamp, engine, fix? }` — `src/core/findings/finding.ts` is the only place either producer is translated into it.
+`Finding { id, bookId, severity, code, producer, message, details?, described?, from, to, stamp, engine, fix?, expected? }` — `src/core/findings/finding.ts` is the only place either producer is translated into it.
 
 - `severity` is `error | warning | info`. Onion's `hint` folds into `info`; a code that says nothing at the document's declared `\usfm` version (and the whole `form` category) is **dropped**, so the census counts stay honest.
 - Sous carries no severity ladder at all, so Sefer's presentation policy is stated once in `corpusSeverity`: Hygiene is an error (a control character or a conflict marker is a defect in the file), Presence is a warning, everything statistical is info.
@@ -39,6 +39,7 @@ Both halves are drawn by the one `linter`, so there is one gutter, one popover a
 - `from`/`to` are UTF-16 offsets into the text the stamps name, exactly as the engine reported them. Nothing shifts an offset. A Sous publication whose `coordinateSpace` is UTF-8 is dropped whole rather than mixed with UTF-16 findings.
 - `message` is plain panel text; for a Sous finding it is the headline, and `details` and `described` are its second tier ("What a Sous finding says", below).
 - `fix` is a **pointer** (`{ kind: 'engine', diagnosticIndex }`), not the edits: a panel of four hundred findings resolves none of them.
+- `expected` is the number an Onion ordering finding expected, the catalogue's `expectedNumber` aux (`chapter-duplicate`, `verse-duplicate`, `verse-out-of-order`, `verse-gap`, `missing-verse-one`…): "verse 3 repeats the verse at 3; expected 4" is span "3" (the span is the number itself) and `expected: 4`. It is what the message's `{aux}` is filled from, carried as a number so a caller can act on it without reading the message or the text. Triage verse numbers' Renumber is the first ([shell](shell.md), "Workflows").
 - `Finding` carries no Address. A chapter:verse address is only derivable from a table of contents, and one from another revision names the wrong verse with total confidence — so `navigateTarget(finding)` returns only the book and span, and a label comes from `shell.location.addressAt`, which names a place only when the analysis it is handed matches the finding's engine stamp.
 
 ## Freshness

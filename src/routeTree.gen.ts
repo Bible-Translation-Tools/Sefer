@@ -30,6 +30,7 @@ import { Route as AppProjectSlugSettingsRouteImport } from './routes/_app/projec
 import { Route as AppProjectSlugSuggestionsRouteImport } from './routes/_app/project/$slug/suggestions'
 import { Route as AppProjectSlugTermsRouteImport } from './routes/_app/project/$slug/terms'
 import { Route as AppProjectSlugBookBookRouteImport } from './routes/_app/project/$slug/book/$book'
+import { Route as AppROwnerRepoSplatRouteImport } from './routes/_app/r/$owner/$repo/$'
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
@@ -138,6 +139,11 @@ const AppProjectSlugBookBookRoute = AppProjectSlugBookBookRouteImport.update({
   path: '/book/$book',
   getParentRoute: () => AppProjectSlugRoute,
 } as any)
+const AppROwnerRepoSplatRoute = AppROwnerRepoSplatRouteImport.update({
+  id: '/r/$owner/$repo/$',
+  path: '/r/$owner/$repo/$',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -160,6 +166,7 @@ export interface FileRoutesByFullPath {
   '/project/$slug/terms': typeof AppProjectSlugTermsRoute
   '/project/$slug/': typeof AppProjectSlugIndexRoute
   '/project/$slug/book/$book': typeof AppProjectSlugBookBookRoute
+  '/r/$owner/$repo/$': typeof AppROwnerRepoSplatRoute
 }
 export interface FileRoutesByTo {
   '/design': typeof DesignRoute
@@ -181,6 +188,7 @@ export interface FileRoutesByTo {
   '/project/$slug/terms': typeof AppProjectSlugTermsRoute
   '/project/$slug': typeof AppProjectSlugIndexRoute
   '/project/$slug/book/$book': typeof AppProjectSlugBookBookRoute
+  '/r/$owner/$repo/$': typeof AppROwnerRepoSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -205,6 +213,7 @@ export interface FileRoutesById {
   '/_app/project/$slug/terms': typeof AppProjectSlugTermsRoute
   '/_app/project/$slug/': typeof AppProjectSlugIndexRoute
   '/_app/project/$slug/book/$book': typeof AppProjectSlugBookBookRoute
+  '/_app/r/$owner/$repo/$': typeof AppROwnerRepoSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -229,6 +238,7 @@ export interface FileRouteTypes {
     | '/project/$slug/terms'
     | '/project/$slug/'
     | '/project/$slug/book/$book'
+    | '/r/$owner/$repo/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/design'
@@ -250,6 +260,7 @@ export interface FileRouteTypes {
     | '/project/$slug/terms'
     | '/project/$slug'
     | '/project/$slug/book/$book'
+    | '/r/$owner/$repo/$'
   id:
     | '__root__'
     | '/_app'
@@ -273,6 +284,7 @@ export interface FileRouteTypes {
     | '/_app/project/$slug/terms'
     | '/_app/project/$slug/'
     | '/_app/project/$slug/book/$book'
+    | '/_app/r/$owner/$repo/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -429,6 +441,13 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof AppProjectSlugBookBookRouteImport
       parentRoute: typeof AppProjectSlugRoute
     }
+    '/_app/r/$owner/$repo/$': {
+      id: '/_app/r/$owner/$repo/$'
+      path: '/r/$owner/$repo/$'
+      fullPath: '/r/$owner/$repo/$'
+      preLoaderRoute: typeof AppROwnerRepoSplatRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
@@ -473,6 +492,7 @@ interface AppRouteChildren {
   AppPlaygroundHistoryDiffRoute: typeof AppPlaygroundHistoryDiffRoute
   AppProjectSlugRoute: typeof AppProjectSlugRouteWithChildren
   AppStartCreateRoute: typeof AppStartCreateRoute
+  AppROwnerRepoSplatRoute: typeof AppROwnerRepoSplatRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -484,6 +504,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppPlaygroundHistoryDiffRoute: AppPlaygroundHistoryDiffRoute,
   AppProjectSlugRoute: AppProjectSlugRouteWithChildren,
   AppStartCreateRoute: AppStartCreateRoute,
+  AppROwnerRepoSplatRoute: AppROwnerRepoSplatRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
