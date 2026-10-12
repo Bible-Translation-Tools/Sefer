@@ -46,6 +46,17 @@ export interface TourContext {
 export interface Panel {
   readonly title: string;
   readonly body: string;
+  /**
+   * Buttons that do the work from the panel ("Renumber to 4"). `label`
+   * answers undefined when the action is not on offer right now, and the
+   * button is not drawn; it is read reactively, so it follows the text.
+   */
+  readonly actions?: readonly PanelAction[];
+}
+
+export interface PanelAction {
+  readonly label: () => string | undefined;
+  readonly run: () => void;
 }
 
 /** A ring around an element and a card of explanation beside it. */
@@ -62,6 +73,14 @@ export interface Step {
   readonly ready?: (context: TourContext) => boolean;
   readonly spotlight?: Spotlight;
   readonly panel?: Panel;
+  /**
+   * Whether the work this step is about looks done. The card then says so
+   * and WAITS for Next: it never moves on by itself, because the moment a
+   * problem disappears is often the middle of an edit (a Backspace on "3"
+   * clears "verse 3 repeated" before the "4" is typed). Polled like `ready`,
+   * so it goes false again if the text goes back.
+   */
+  readonly done?: (context: TourContext) => boolean;
   /** "user" waits for Next; a function moves on as soon as it holds. */
   readonly advance?: "user" | ((context: TourContext) => boolean);
   /**
@@ -127,6 +146,8 @@ interface Running {
   readonly index: number;
   /** `waiting` until the step's `ready` holds; `timedOut` if it never did. */
   readonly phase: "waiting" | "showing" | "timedOut";
+  /** The step's `done` holds right now. */
+  readonly fixed: boolean;
 }
 
 const [running, setRunning] = createSignal<Running | undefined>(undefined, {
@@ -222,7 +243,7 @@ const enter = (context: TourContext, tour: Tour, steps: readonly Step[], index: 
     return;
   }
   const reported = new Set<string>();
-  setRunning({ tour, steps, index, phase: "waiting" });
+  setRunning({ tour, steps, index, phase: "waiting", fixed: false });
   safely(context, tour, index, "go", () => step.go?.(context), undefined, reported);
   const started = Date.now();
   poll = setInterval(() => {
@@ -239,7 +260,7 @@ const enter = (context: TourContext, tour: Tour, steps: readonly Step[], index: 
         reported,
       );
       if (ready) {
-        setRunning({ tour, steps, index, phase: "showing" });
+        setRunning({ tour, steps, index, phase: "showing", fixed: false });
         // A step with nothing to show and no condition of its own has done
         // its job by being reached.
         if (step.spotlight === undefined && step.panel === undefined && step.advance === undefined)
@@ -247,9 +268,14 @@ const enter = (context: TourContext, tour: Tour, steps: readonly Step[], index: 
       } else if (Date.now() - started > (step.timeoutMs ?? READY_TIMEOUT_MS)) {
         stopPolling();
         drifted(context, tour, index, "never became ready");
-        setRunning({ tour, steps, index, phase: "timedOut" });
+        setRunning({ tour, steps, index, phase: "timedOut", fixed: false });
       }
       return;
+    }
+    const done = step.done;
+    if (done !== undefined) {
+      const fixed = safely(context, tour, index, "done", () => done(context), false, reported);
+      if (fixed !== now.fixed) setRunning({ ...now, fixed });
     }
     const advance = step.advance;
     if (

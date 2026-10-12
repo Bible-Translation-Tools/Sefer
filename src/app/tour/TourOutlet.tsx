@@ -1,5 +1,5 @@
 import { useNavigate, useRouterState } from "@tanstack/solid-router";
-import { Show, createEffect, createSignal, onCleanup, untrack } from "solid-js";
+import { For, Show, createEffect, createSignal, onCleanup, untrack } from "solid-js";
 
 import { registerCommand, runCommand } from "../commands";
 import { t } from "../i18n";
@@ -12,6 +12,7 @@ import {
   startTour,
   stepTour,
   stopTour,
+  type PanelAction,
   type TourContext,
 } from "./machine";
 import { TOURS, tourById } from "./tours";
@@ -185,7 +186,15 @@ export function TourOutlet() {
   /** A workflow skips a step and stops; a tutorial moves on and is skipped. */
   const workflow = () => runningTour()?.tour.kind === "workflow";
 
-  const card = (title: string, body: string, style: Record<string, string>) => (
+  /** The step's work looks done: the card says so, and Next replaces Skip. */
+  const fixed = () => runningTour()?.fixed === true;
+
+  const card = (
+    title: string,
+    body: string,
+    style: Record<string, string>,
+    actions?: readonly PanelAction[],
+  ) => (
     <div
       role="dialog"
       aria-label={title}
@@ -200,6 +209,26 @@ export function TourOutlet() {
         </span>
       </div>
       <p class="text-small text-on-surface-secondary">{body}</p>
+      <Show when={fixed()}>
+        <p class="text-small font-medium text-on-surface-success" data-tour-fixed>
+          {t("Looks fixed. Press Next when you are done here.")}
+        </p>
+      </Show>
+      <Show when={actions !== undefined && actions.length > 0 && !fixed()}>
+        <div class="flex flex-wrap gap-2" data-tour-actions>
+          <For each={actions ?? []}>
+            {(action) => (
+              <Show when={action.label()}>
+                {(label) => (
+                  <Button size="sm" variant="secondary" onClick={() => action.run()}>
+                    {label()}
+                  </Button>
+                )}
+              </Show>
+            )}
+          </For>
+        </div>
+      </Show>
       <div class="flex items-center justify-between gap-2">
         <Button size="sm" variant="secondary" onClick={stopTour}>
           {last() ? t("Close") : workflow() ? t("Stop") : t("Skip tutorial")}
@@ -215,7 +244,7 @@ export function TourOutlet() {
             variant="primary"
             onClick={() => (last() ? stopTour() : stepTour(context, 1))}
           >
-            {last() ? t("Done") : workflow() ? t("Skip") : t("Next")}
+            {last() ? t("Done") : workflow() && !fixed() ? t("Skip") : t("Next")}
           </Button>
         </div>
       </div>
@@ -258,7 +287,7 @@ export function TourOutlet() {
           {/* A workflow's panel: docked, no ring, no dimming, because the
               person is working in the screen underneath it. */}
           <Show when={now().phase === "showing" && step()?.panel}>
-            {(panel) => card(panel().title, panel().body, DOCKED)}
+            {(panel) => card(panel().title, panel().body, DOCKED, panel().actions)}
           </Show>
           <Show when={now().phase === "timedOut"}>
             {card(
