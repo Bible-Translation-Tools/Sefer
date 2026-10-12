@@ -61,8 +61,27 @@ export interface Tour {
   readonly summary: string;
   /** Whether a project must be open to start it. */
   readonly needsProject: boolean;
+  /**
+   * Where the tutorial starts, for one written over a particular project: a
+   * path (usually a share link, `/r/<owner>/<repo>/…`) that Start navigates to
+   * with `?tour=<id>` added, so the project is opened, or downloaded, first.
+   */
+  readonly start?: string;
   readonly steps: readonly Step[];
 }
+
+/** The URL that opens a tutorial's own place and starts it there. */
+const startUrl = (tour: Tour, start: string): string =>
+  `${start}${start.includes("?") ? "&" : "?"}tour=${encodeURIComponent(tour.id)}`;
+
+/**
+ * Starts a tutorial from a button or the palette: at its own `start` when it
+ * has one (the outlet picks `?tour=` up there), here otherwise.
+ */
+export const beginTour = (context: TourContext, tour: Tour): void => {
+  if (tour.start === undefined) startTour(context, tour);
+  else void context.navigate({ href: startUrl(tour, tour.start) });
+};
 
 /** Which tour is running and where it is, or nothing. */
 interface Running {

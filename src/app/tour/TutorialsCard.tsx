@@ -3,7 +3,7 @@ import { For } from "solid-js";
 import { t } from "../i18n";
 import { useShell } from "../ProjectContext";
 import { Button, Card, PanelHeader } from "../ui/primitives";
-import { startTour } from "./machine";
+import { beginTour } from "./machine";
 import { useTourContext } from "./TourOutlet";
 import { TOURS } from "./tours";
 
@@ -29,8 +29,10 @@ export function TutorialsCard() {
               <Button
                 size="sm"
                 variant="secondary"
-                disabled={tour.needsProject && shell.project() === undefined}
-                onClick={() => startTour(context, tour)}
+                disabled={
+                  tour.needsProject && tour.start === undefined && shell.project() === undefined
+                }
+                onClick={() => beginTour(context, tour)}
               >
                 {t("Start")}
               </Button>

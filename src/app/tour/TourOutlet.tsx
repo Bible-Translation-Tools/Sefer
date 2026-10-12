@@ -5,7 +5,7 @@ import { registerCommand, runCommand } from "../commands";
 import { t } from "../i18n";
 import { useShell } from "../ProjectContext";
 import { Button, toasts } from "../ui/primitives";
-import { runningTour, startTour, stepTour, stopTour, type TourContext } from "./machine";
+import { beginTour, runningTour, startTour, stepTour, stopTour, type TourContext } from "./machine";
 import { TOURS, tourById } from "./tours";
 
 /**
@@ -48,8 +48,8 @@ export function TourOutlet() {
       registerCommand({
         id: `tour.${tour.id}`,
         title: t("Start tutorial: {title}", { title: t(tour.title) }),
-        when: () => !tour.needsProject || shell.project() !== undefined,
-        run: () => startTour(context, tour),
+        when: () => !tour.needsProject || tour.start !== undefined || shell.project() !== undefined,
+        run: () => beginTour(context, tour),
       }),
     );
   }
@@ -68,7 +68,12 @@ export function TourOutlet() {
       const where = path();
       if (id === null || where.startsWith("/r/")) return null;
       const tour = tourById(id);
-      const opening = where.startsWith("/project/") && shell.project() === undefined;
+      // Opening until the open project is the one the URL names: arriving
+      // from another project, the old one is still open for a moment, and a
+      // step's `go` would navigate inside it.
+      const named = /^\/project\/([^/]+)/u.exec(where)?.[1];
+      const opening =
+        named !== undefined && (shell.project() === undefined || shell.slug() !== named);
       return tour?.needsProject === true && opening ? null : id;
     },
     (id) => {
