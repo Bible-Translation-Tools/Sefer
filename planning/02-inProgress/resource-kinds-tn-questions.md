@@ -32,7 +32,7 @@ The Language API's view has no rows for the helps (plan §6, "Catalogue gap").
 
 ## 6. Keeping `en_tn` current on the Web
 
-A packed-only root has no `.git`, so the plan's "realistic first ask" (a fast-forward pull of `en_tn`) is, on the Web, a re-download and re-pack (11.6 s measured, below). There is no "a newer en_tn is available" check yet. **Options:** probe the remote's HEAD against the stamped commit (cheap; `Remote.probe` exists) and re-pack; or publish per-book packs as a Gitea release (plan §5, the content-team ask). **Chosen:** nothing yet. **To change:** small for the probe.
+A packed-only root has no `.git`, so the plan's "realistic first ask" (a fast-forward pull of `en_tn`) is, on the Web, a re-download and re-pack (13.4 s measured onto OPFS). There is no "a newer en_tn is available" check yet. **Options:** probe the remote's HEAD against the stamped commit (cheap; `Remote.probe` exists) and re-pack; or publish per-book packs as a Gitea release (plan §5, the content-team ask). **Chosen:** nothing yet. **To change:** small for the probe.
 
 ## 7. What `recognize` refuses
 
