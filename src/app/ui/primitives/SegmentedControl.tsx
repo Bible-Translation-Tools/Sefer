@@ -48,6 +48,8 @@ export interface SegmentedControlProps<T extends string> {
    * dropping to icons). `sm` is the compact 24px one.
    */
   readonly size?: "sm" | "md" | "lg";
+  /** `light`: a white track and the chosen segment on the light brand fill. */
+  readonly tone?: "default" | "light";
   /**
    * Below `md`, drop to icons, the labels kept for screen readers — the app
    * bar's modes. Only honoured when every segment has an icon.
@@ -79,7 +81,12 @@ const sizeClass = (size: SegmentedControlProps<string>["size"], collapse: boolea
   );
 };
 
-const toneClass = (chosen: boolean): string => {
+const toneClass = (chosen: boolean, tone: SegmentedControlProps<string>["tone"]): string => {
+  // Light: a white track, and the chosen segment on the light brand fill.
+  if (tone === "light")
+    return chosen
+      ? "bg-brand-light text-brand"
+      : "text-on-surface-secondary hover:not-disabled:bg-surface-secondary hover:not-disabled:text-on-surface-primary";
   return chosen
     ? "bg-surface-primary text-brand shadow-small"
     : // A step darker than the track on hover, so the target is the segment.
@@ -111,7 +118,9 @@ export function SegmentedControl<T extends string>(props: SegmentedControlProps<
         props.size === "sm"
           ? "gap-0.5 rounded-lg p-0.5"
           : "h-12 min-w-0 gap-0.75 rounded-2xl p-0.75",
-        "border border-surface-border bg-surface-secondary",
+        props.tone === "light"
+          ? "border border-surface-border bg-surface-primary"
+          : "border border-surface-border bg-surface-secondary",
         props.class,
       )}
       onKeyDown={(event) => {
@@ -145,7 +154,7 @@ export function SegmentedControl<T extends string>(props: SegmentedControlProps<
               sizeClass(props.size, collapses()),
               // In a very narrow control the padding gives way to the words.
               item.shortLabel !== undefined && "@max-[8rem]:px-1",
-              toneClass(item.value === props.value),
+              toneClass(item.value === props.value, props.tone),
             )}
             onClick={() => props.onChange(item.value)}
           >

@@ -32,6 +32,8 @@ interface ActionBase {
   /** Shown and not pressable: History's Adopt where your text already reads that way. */
   readonly disabled?: boolean;
   readonly onPress: () => void;
+  /** Extra classes on the button: a fixed width, so its words can change without it moving. */
+  readonly class?: string;
 }
 
 export type CardAction =
@@ -88,6 +90,7 @@ export function CardActionButton(props: {
             icon={action().icon === undefined ? undefined : <Dynamic component={action().icon} />}
             aria-pressed={pressedOf(action())}
             title={action().title}
+            class={action().class}
             disabled={action().disabled}
             data-card-action={action().id}
             onClick={() => action().onPress()}

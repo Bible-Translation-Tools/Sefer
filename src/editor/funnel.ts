@@ -43,6 +43,15 @@ import type { AssignmentDelta } from "./core/registry";
  */
 export const fromCanonical = Annotation.define<boolean>();
 
+/**
+ * On a `fromCanonical` transaction: the text coming back is THIS surface's own
+ * edit, echoed by the Book while the surface's submit was still running. A
+ * satellite never applies its typing locally, so this is the only way a
+ * surface can tell its own changes from another surface's (Key terms' edit
+ * session undoes only its own).
+ */
+export const ownEcho = Annotation.define<boolean>();
+
 /** Told what was accepted, and the state that now holds it. */
 export type Receive = (changes: ChangeSet, state: EditorState) => void;
 

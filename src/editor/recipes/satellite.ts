@@ -35,7 +35,7 @@ import { isVisual, modeFacet, trusted } from "../core/kernel";
 import { assignment } from "../core/registry";
 import { stopsIn } from "../core/stops";
 import { span } from "../core/timing";
-import { changesOf, fromCanonical, type Funnel, type SurfaceTerms } from "../funnel";
+import { changesOf, fromCanonical, ownEcho, type Funnel, type SurfaceTerms } from "../funnel";
 
 export interface Satellite {
   view: EditorView;
@@ -469,6 +469,7 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
     ],
   });
 
+  let submitting = false;
   const view = new EditorView({
     state,
     parent: opts.parent,
@@ -478,7 +479,15 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
         return;
       }
       const done2 = span("satellite-reconcile", opts.label);
-      const outcome = opts.host.submit(changesOf(tr.changes), opts.label, termsOf(tr));
+      // The Book broadcasts what it accepted synchronously, inside `submit`,
+      // so an echo that arrives while this is set is this surface's own edit.
+      submitting = true;
+      let outcome: ReturnType<typeof opts.host.submit>;
+      try {
+        outcome = opts.host.submit(changesOf(tr.changes), opts.label, termsOf(tr));
+      } finally {
+        submitting = false;
+      }
       // The caret follows an ACCEPTED edit. A refused one left the text as it
       // was, and `tr.selection` is in the coordinates of a text that never
       // came to be — past the end of it, for a refused deletion — so the
@@ -502,7 +511,7 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
   detach = opts.host.attach((changes) => {
     view.dispatch({
       changes,
-      annotations: [fromCanonical.of(true), trusted.of("canonical")],
+      annotations: [fromCanonical.of(true), ownEcho.of(submitting), trusted.of("canonical")],
       filter: false,
     });
   });

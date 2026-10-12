@@ -68,6 +68,14 @@ export interface ReaderOptions {
   readonly surface: string;
   /** Names the view in the timing ring. */
   readonly label: string;
+  /**
+   * Whether a press selects text, as in any page. `false` for a reader whose
+   * click opens an editor in its place (a Key terms card): there a selection
+   * is never kept, and CodeMirror's mouse handling only re-reads coordinates
+   * a just re-clipped view may not have caught up with — after a card gained a
+   * verse above, it threw inside `posAtCoords` on the opening click.
+   */
+  readonly selectable?: boolean;
 }
 
 export interface ReaderMount {
@@ -132,6 +140,7 @@ export function mountReader(options: ReaderOptions): ReaderMount {
       markedRanges(options.marks),
       EditorState.readOnly.of(true),
       EditorView.editable.of(false),
+      options.selectable === false ? EditorView.domEventHandlers({ mousedown: () => true }) : [],
     ],
   });
   if (!lent.has(analysis)) lent.set(analysis, structureAt(state));

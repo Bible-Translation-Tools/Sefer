@@ -155,6 +155,15 @@ Units follow the same rule. Text sizes come from the type scale (`text-body`,
 grows when somebody raises their browser's font size; hairlines and borders
 stay px. See [merging designer code](../../agents/skills/merging-designer-code/SKILL.md).
 
+One primitive's look is plain CSS on purpose: `.button-primary` in
+`tokens.css`. Its fill is three background layers with their own clips (the
+gradient, a faint white edge, the border box), which no Tailwind class says,
+and hover and pressed move the gradient's two ends through registered colour
+properties (`@property --button-primary-from` / `-to`) so the change eases
+instead of dropping the fill for a frame. `Button variant="primary"` is the
+only thing that puts the class on an element; the colours are the
+`--button-primary-*` tokens, light and dark, like every other surface.
+
 ### corvu lives only inside `primitives/`
 
 `Tooltip.tsx`, `Popover.tsx` and `Dialog.tsx` are the only files in the

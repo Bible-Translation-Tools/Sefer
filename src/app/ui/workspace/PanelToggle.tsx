@@ -23,6 +23,7 @@ export function PanelToggle() {
   const showing = (): boolean => shell.sidebarShowing();
   return (
     <IconButton
+      variant="quiet"
       data-testid="panel-toggle"
       aria-expanded={showing() ? "true" : "false"}
       label={showing() ? t("Hide the project panel") : t("Show the project panel")}
