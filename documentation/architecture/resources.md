@@ -85,7 +85,7 @@ The on-disk layout stays upstream's; what Sefer reads is a derived per-book pack
 
 ### Provenance and updates
 
-Every copy of reference material records where it came from and which version it holds, so an update check needs nothing new on disk. **The check itself is not built.**
+Every copy of reference material records where it came from and which version it holds, so an update check needs nothing new on disk. **The check itself is not built.** This is one case of the one upstream pattern for anything from a git remote (record `{ url, commit }`, probe the head, compare, offer), stated once in [sync](sync.md), "Upstreams: one pattern for everything from a git remote", with where integrating it belongs.
 
 **What is recorded, and where:**
 

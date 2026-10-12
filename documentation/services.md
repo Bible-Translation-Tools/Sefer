@@ -591,7 +591,7 @@ Open questions, each with what is chosen now and the cost to change: `planning/0
 ### Ideas / future
 
 - Translation Words and Macula: sketched in [adding a resource kind](architecture/resource-kinds.md) with the interface additions each needs; **not built, and not to be started without a PO decision** (Will, 2026-10-12).
-- The update check for held copies, over `Remote.probe` against `Resource.upstream.commit` ([resources](architecture/resources.md), "Provenance and updates"): "en_ulb 24-07 is available", "Translation Notes have changed upstream".
+- The update check for held copies, over `Remote.probe` against `Resource.upstream.commit`: "en_ulb 24-07 is available", "Translation Notes have changed upstream". One pattern for every copy from a git remote, registered with the existing check or run as idle background work: [sync](architecture/sync.md), "Upstreams: one pattern for everything from a git remote".
 - The key-terms guide as a Library resource instead of a fixture.
 
 ## Writer migration

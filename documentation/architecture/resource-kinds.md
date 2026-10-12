@@ -24,7 +24,8 @@ renderer registry: switch (content) → pane                       src/app/ui/ki
 5. **Typed discriminants, not `kind === …` checks.** Code outside `content.ts`, `app/kinds/table.ts` and `ui/kinds/registry.tsx` never reads `Resource.content`. A workflow asks the table (`holdsEngineBooks(resource)`, `roleFor(resource)`); a screen asks the handle (`handle.documents !== undefined`).
 6. **Address is the only place vocabulary.** A kind speaks to the rest of the app in `Address` (`src/core/location/address.ts`): what it holds at a place, and the places an entry belongs to. No marker, no Book, no offsets into somebody else's text cross the handle.
 7. **Fail with `Unavailable`.** Every handle call is an Effect failing `Unavailable { reason: "Missing" | "Unreadable" | "Unsupported", description }`. "This resource has nothing for Philemon" is `Missing`, an ordinary answer a pane says in one line.
-8. **Readers are pure.** A reader takes bytes (as text) and returns records, importing nothing of Sefer's but `Address`'s vocabulary and a parser. Whatever is convention rather than spec lives in that one reader, in a function named for it (TN's `closeAtNextSibling`).
+8. **A copy from a git remote records its upstream, so it can be checked.** `Library.add(root, { url, commit })` with the commit it holds (`arrival.referenceCopy` does); the pattern and where checking belongs: [sync](sync.md), "Upstreams: one pattern for everything from a git remote".
+9. **Readers are pure.** A reader takes bytes (as text) and returns records, importing nothing of Sefer's but `Address`'s vocabulary and a parser. Whatever is convention rather than spec lives in that one reader, in a function named for it (TN's `closeAtNextSibling`).
 
 ## A new content kind
 

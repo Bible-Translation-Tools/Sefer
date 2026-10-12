@@ -336,7 +336,7 @@ cheapest question first — `Remote.probe`, the server's refs in one round trip 
 the server's tip is not the one this device already holds; against the sandbox that is about 450 ms
 when nothing changed. It never moves a file. With "Skip review of incoming changes" on, a receive
 follows, and the receive refuses whenever a book needs a person, so nothing arrives unreviewed that
-the policy would have shown. It runs as the `sync.check` operation.
+the policy would have shown. It runs as the `sync.check` operation. It is one instance of the upstream pattern every copy from a git remote follows ("Upstreams: one pattern for everything from a git remote", below).
 
 ### Writer projects a project follows
 
@@ -451,6 +451,28 @@ push. The same file keeps this device's author name.
 `src/app/author.ts`: the signed-in account's username; else the name this device was given, asked
 once the first time a version is recorded; and "Sefer" only for Sefer's own bookkeeping (an import's
 arrival). The email is empty rather than invented.
+
+## Upstreams: one pattern for everything from a git remote
+
+**The rule.** Anything Sefer gets from a git remote records where it came from and which commit it holds, and so can always be checked for something newer the same way: **probe the remote's head, compare it with the recorded commit, offer what is new.** It is one pattern, not a feature of any one kind of copy, and it is the rule for every future arrival from a git remote: an arrival that does not record its upstream cannot be checked, and is a bug.
+
+| What arrived                           | Where its upstream is recorded                                                      | What "offer" means                                                                                                                          | Checked today                                |
+| -------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| A project (the shared project)         | the repository's own `origin` and `HEAD`                                            | Review incoming work, never merged automatically (above)                                                                                    | yes: `checkForChanges`                       |
+| A project's Writer upstreams           | `.upstreams.json`, one `{ url, commit, books }` per Writer project, committed       | Review their changes since the commit taken ("Writer projects a project follows")                                                           | yes: `checkWriter`, after the shared project |
+| A source text in the Library           | `Resource.upstream { url, commit }` in `library.json`                               | "en_ulb 24-07 is available": download the newer copy                                                                                        | no                                           |
+| Reference material (Translation Notes) | `Resource.upstream { url, commit }`, and on the Web the commit in each pack's stamp | "Translation Notes have changed upstream": replace the copy, no Review, nobody's work ([resources](resources.md), "Provenance and updates") | no                                           |
+
+The first step is the same for all four: `Remote.probe(url)` answers the server's refs in one round trip, and if `head` is the recorded commit there is nothing to do. What differs is only the third step: a project's text is reviewed, a Library copy is replaced.
+
+**Where integrating it belongs** (direction; not built for Library copies):
+
+- **In the check the app already runs.** Today that check is `checkForChanges` (`src/app/syncActions.ts`): when a project opens (if `checkOnOpen`, `ProjectContext.tsx`), after a refused send, and from the cloud popover's button (`ui/cloud/quick.ts`). It runs the shared project's probe, then the Writer upstreams' (`writerWatch.ts`, six probes at a time). There is no timer: nothing checks again while a project stays open. The next kinds of remote copy should register with that one check — a list of `{ url, recorded commit, offer }` sources it probes together, the way it already probes the Writer upstreams — rather than each growing its own checker. The Library's copies are per device, not per project, so they would register once per session, not per project open.
+- **More ideally, as an idle background job,** so probing many remotes never competes with editing: a probe is a few hundred milliseconds of network, but the Writer migration's 67 probes took about 4 s. Two shapes, with what the code shows about each:
+  - **An idle callback on the main thread** (`requestIdleCallback`, with a timeout): the smallest change. Every service the probe needs is already there; the probes are network-bound, so being on the main thread costs little if they are spread over idle time. Nothing in the app schedules idle work today.
+  - **A Web Worker:** possible, and there is a precedent: `src/platform/web/history/worker.ts` builds the history index in a dedicated worker, opening OPFS itself (same origin, same OPFS) and running isomorphic-git there over `nodeFsView`. A probe needs no filesystem at all (`getRemoteInfo2` over HTTP), only the Web Remote's transport: `fetch`, the proxy table (`through`, `src/core/remote/transport.ts`) and the `X-Requested-With` app id. Constraints: credentials live in `localStorage` (`src/platform/web/credentials.ts`), which a worker cannot read, so a private repository's token would have to be passed in with the request; the worker gets no `Services` or Effect runtime of the page's, so it would compose only the transport it needs; the results (which sources moved) come back as a message, and the offer, the toast and any transfer stay on the page. A transfer (a clone or fetch into OPFS) in a worker would also have to take the repository's lane the way the history worker relies on the page holding it.
+
+Whichever runs it, the answer is published once for every surface, the way `syncWatch.ts` already publishes the shared project's reading.
 
 ## Offline
 
