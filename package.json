@@ -61,6 +61,7 @@
     "intl-messageformat": "^12.1.2",
     "isomorphic-git": "1.42.2",
     "lucide-solid": "1.47.0",
+    "markdown-it": "^14.3.2",
     "solid-js": "^2.0.0-rc.9",
     "yaml": "^2.9.1"
   },
@@ -73,6 +74,7 @@
     "@tailwindcss/vite": "4.3.3",
     "@tanstack/router-plugin": "1.168.40",
     "@tauri-apps/cli": "2.11.5",
+    "@types/markdown-it": "^14.2.0",
     "@types/node": "26.6.2",
     "@vitest/browser": "5.0.1",
     "@vitest/browser-playwright": "5.0.1",
