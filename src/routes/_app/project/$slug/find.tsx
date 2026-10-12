@@ -29,6 +29,7 @@ import {
   BookScope,
   scopeBooks,
   type BookScopeKind,
+  SegmentedControl,
   Switch,
 } from "#app/ui/primitives";
 import { createFindSource } from "#app/ui/search/findSource";
@@ -45,6 +46,7 @@ import {
 import { bookHeading, type Analysis } from "#core/galley";
 import type { Address } from "#core/location/address";
 import { bookName } from "#core/location/canon";
+import { expectIn, expectedPattern } from "#core/search/expect";
 import { createFreshReadings, createReadings } from "#core/search/reading";
 import * as Search from "#core/search/search";
 
@@ -125,9 +127,19 @@ const verseKeys = (address: Address): readonly string[] => {
   return keys;
 };
 
+/** Which side of an expectation the cards show. */
+type Expected = "without" | "with" | "all";
+
 interface FindSearch {
   readonly q?: string;
   readonly scope?: Scope;
+  /**
+   * What your text should say where the reference matched
+   * (`core/search/expect.ts`). Only read in the reference scope.
+   */
+  readonly expect?: string;
+  /** Which verses to show once `expect` is set; "without" when absent. */
+  readonly show?: Expected;
 }
 
 function Find() {
@@ -585,8 +597,16 @@ function Find() {
    * `untrack` around the call keeps the toggles out of THIS effect: they have
    * their own, below, which re-runs the search without rewriting the box.
    */
+  // `references` is in the key for the reference scope alone: a link that
+  // arrives with `scope=reference` searches before the project's sources are
+  // registered (`bound` resolves a moment after mount), finds nothing, and
+  // has to search again once they are.
   createEffect(
-    () => ({ q: asked(), scope: scope() }),
+    () => ({
+      q: asked(),
+      scope: scope(),
+      references: scope() === "reference" ? bound().ids.length : 0,
+    }),
     (now) => {
       setText(now.q);
       untrack(() => {
@@ -631,8 +651,42 @@ function Find() {
    * same cards, same grouping, same editing. The reference's own reading rides
    * along as the card's pair, which is what STET does with a source verse.
    */
+  /**
+   * The reference scope's verses, split by an expectation: where the
+   * reference matched, does YOUR verse say what `expect` says it should?
+   * Undefined outside the reference scope or with nothing expected.
+   */
+  const expectation = createMemo(
+    () => {
+      if (scope() !== "reference") return undefined;
+      const pattern = expectedPattern(params().expect ?? "");
+      if (pattern === undefined) return undefined;
+      const addresses = referenceHits().flatMap((hit) =>
+        hit.address === undefined ? [] : [hit.address],
+      );
+      const books = readBooks(shell, new Set(addresses.map((address) => address.book)), analyze);
+      const split = books.map((book) => expectIn(book, addresses, pattern));
+      return {
+        has: split.flatMap((book) => book.has),
+        missing: split.flatMap((book) => book.missing),
+      };
+    },
+    { name: "expectation" },
+  );
+  const showing = (): Expected => params().show ?? "without";
+
   const feedHits = createMemo(
-    (): readonly Occurrence[] => (scope() === "reference" ? referenceMatches() : hits()),
+    (): readonly Occurrence[] => {
+      if (scope() !== "reference") return hits();
+      const split = expectation();
+      if (split === undefined) return referenceMatches();
+      const shown = showing();
+      return shown === "with"
+        ? split.has
+        : shown === "without"
+          ? split.missing
+          : [...split.missing, ...split.has];
+    },
     { name: "feedHits" },
   );
 
@@ -780,7 +834,7 @@ function Find() {
             the place in the results. */}
         <Card>
           <div class="flex flex-col gap-3">
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2" data-tour="find-search">
               <Input
                 ref={setBox}
                 type="search"
@@ -848,7 +902,7 @@ function Find() {
               />
               {/* Which text is shown beside yours, and which is searched:
                   either without the other. */}
-              <div class="flex items-center gap-3">
+              <div class="flex items-center gap-3" data-tour="find-reference">
                 <source.Picker />
                 <Switch
                   label={t("Search the source text")}
@@ -896,6 +950,56 @@ function Find() {
             </div>
           </div>
         </Card>
+
+        {/* Expect: an assertion over the reference search's verses. */}
+        <Show when={scope() === "reference"}>
+          <Card data-tour="find-expect">
+            <div class="flex flex-wrap items-center gap-3">
+              <Input
+                aria-label={t("Expected in your text")}
+                wrapperClass="w-64"
+                placeholder={t("Expected in your text, e.g. Yesu")}
+                value={params().expect ?? ""}
+                onChange={(event) => ask({ expect: event.currentTarget.value.trim() || undefined })}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter")
+                    ask({ expect: event.currentTarget.value.trim() || undefined });
+                }}
+              />
+              <Show
+                when={expectation()}
+                fallback={
+                  <span class="text-small text-on-surface-tertiary">
+                    {t(
+                      "Where the source matched, what should your text say? Sefer shows the verses that do not say it.",
+                    )}
+                  </span>
+                }
+              >
+                {(split) => (
+                  <div data-tour="find-expect-split">
+                    <SegmentedControl<Expected>
+                      label={t("Which verses to show")}
+                      items={[
+                        {
+                          value: "without",
+                          label: t("Without it ({count})", { count: split().missing.length }),
+                        },
+                        {
+                          value: "with",
+                          label: t("With it ({count})", { count: split().has.length }),
+                        },
+                        { value: "all", label: t("All") },
+                      ]}
+                      value={showing()}
+                      onChange={(show) => ask({ show })}
+                    />
+                  </div>
+                )}
+              </Show>
+            </div>
+          </Card>
+        </Show>
 
         <Show when={replaceEnabled() && scope() !== "reference"}>
           <Card>
@@ -1009,6 +1113,15 @@ export const Route = createFileRoute("/_app/project/$slug/find")({
     search["scope"] === "custom" ||
     search["scope"] === "reference"
       ? { scope: search["scope"] }
+      : {}),
+    // The router reads each value as JSON first, so a number-only rendering
+    // arrives as a number; it is still the text that was typed.
+    ...((typeof search["expect"] === "string" && search["expect"] !== "") ||
+    typeof search["expect"] === "number"
+      ? { expect: String(search["expect"]) }
+      : {}),
+    ...(search["show"] === "with" || search["show"] === "all" || search["show"] === "without"
+      ? { show: search["show"] }
       : {}),
   }),
   /**
