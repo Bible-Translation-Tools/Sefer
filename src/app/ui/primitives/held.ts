@@ -16,11 +16,19 @@ import { createEffect, createSignal, type Accessor } from "solid-js";
 
 import { PENDING_MS } from "./DelayedSpinner";
 
-export interface Held<T, E> {
+/** A load that died rather than failing (a throw inside a handle): still said, never a spinner. */
+export interface HeldDefect {
+  readonly _tag: "Defect";
+  readonly description: string;
+}
+
+export interface Held<Q, T, E> {
   /** The last answer, kept while the next is on its way. */
   readonly value: Accessor<T | undefined>;
+  /** The question `value` (or `failure`) answers: what to label the answer with. */
+  readonly answered: Accessor<Q | undefined>;
   /** Why the last question had no answer; cleared by the next answer. */
-  readonly failure: Accessor<E | undefined>;
+  readonly failure: Accessor<E | HeldDefect | undefined>;
   /** A question has been waiting longer than `PENDING_MS`. */
   readonly late: Accessor<boolean>;
 }
@@ -35,9 +43,14 @@ export const createHeld = <Q, T, E>(
   question: () => Q | undefined,
   load: (question: Q) => Effect.Effect<T, E>,
   same: (a: Q, b: Q) => boolean = Object.is,
-): Held<T, E> => {
+): Held<Q, T, E> => {
   const [value, setValue] = createSignal<T | undefined>(undefined, { name: "heldValue" });
-  const [failure, setFailure] = createSignal<E | undefined>(undefined, { name: "heldFailure" });
+  const [answered, setAnswered] = createSignal<Q | undefined>(undefined, {
+    name: "heldAnswered",
+  });
+  const [failure, setFailure] = createSignal<E | HeldDefect | undefined>(undefined, {
+    name: "heldFailure",
+  });
   const [late, setLate] = createSignal(false, { name: "heldLate" });
 
   createEffect(
@@ -56,14 +69,25 @@ export const createHeld = <Q, T, E>(
               setLate(false);
               if (Exit.isSuccess(exit)) {
                 setValue(() => exit.value);
+                setAnswered(() => asked);
                 setFailure(undefined);
                 return;
               }
-              const error = exit.cause.reasons.find(Cause.isFailReason);
               // An interruption is the next question taking over: not a failure.
-              if (error === undefined) return;
+              if (Cause.hasInterruptsOnly(exit.cause)) return;
+              const error = exit.cause.reasons.find(Cause.isFailReason);
               setValue(undefined);
-              setFailure(() => error.error);
+              setAnswered(() => asked);
+              // A defect (a throw inside the load) is said too, or the pane
+              // would wait on a spinner for an answer that is never coming.
+              setFailure(() =>
+                error === undefined
+                  ? ({
+                      _tag: "Defect",
+                      description: String(Cause.squash(exit.cause)),
+                    } satisfies HeldDefect)
+                  : error.error,
+              );
             }),
           ),
         ),
@@ -76,5 +100,5 @@ export const createHeld = <Q, T, E>(
     },
   );
 
-  return { value, failure, late };
+  return { value, answered, failure, late };
 };

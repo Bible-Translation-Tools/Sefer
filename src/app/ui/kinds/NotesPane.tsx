@@ -53,14 +53,19 @@ export function NotesPane(props: NotesPaneProps) {
     (a, b) => a.handle === b.handle && addressCode(a.place) === addressCode(b.place),
   );
 
-  /** Which place the notes on screen answer: the one asked, once it has answered. */
+  /**
+   * Which place the notes on screen answer: the one asked, once it has
+   * answered. Not `shell.place()`, which moves first: while the next verse's
+   * notes load, the last verse's stay, and so does its name.
+   */
+  const answeredPlace = (): Address | undefined => held.answered()?.place;
   const label = (): string => {
-    const place = shell.place();
+    const place = answeredPlace();
     return place === undefined ? "" : shell.location.label(place);
   };
 
   const placeCode = (): string => {
-    const place = shell.place();
+    const place = answeredPlace();
     return place === undefined ? "" : addressCode(place);
   };
 
@@ -130,7 +135,8 @@ export function NotesPane(props: NotesPaneProps) {
                         <Show
                           when={
                             note.openEnded === true ||
-                            addressCode(note.address) !== addressCode(shell.place() ?? note.address)
+                            addressCode(note.address) !==
+                              addressCode(answeredPlace() ?? note.address)
                           }
                         >
                           <p class="text-smallest text-on-surface-tertiary">
