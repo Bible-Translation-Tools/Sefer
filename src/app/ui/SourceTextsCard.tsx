@@ -16,6 +16,7 @@ import type { Resource } from "#core/resources/library";
 
 import { adoptAsProject, libraryRevision } from "../arrival";
 import { t } from "../i18n";
+import { roleFor } from "../kinds/table";
 import { useShell } from "../ProjectContext";
 import { Button, Card, PanelHeader, toasts } from "./primitives";
 
@@ -31,13 +32,19 @@ export function SourceTextsCard() {
   createEffect(
     () => libraryRevision(),
     () => {
-      void services
-        .run(services.library.resources())
-        .then((held) =>
-          setCopies(
-            held.filter((resource) => resource.root.startsWith(`${services.libraryRoot}/`)),
+      void services.run(services.library.resources()).then((held) =>
+        setCopies(
+          // Scripture only: "Edit as your own project" makes a project of
+          // a copy's books, and reference material (Translation Notes,
+          // packed on the Web) has none; it is removed from the projects
+          // page instead.
+          held.filter(
+            (resource) =>
+              resource.root.startsWith(`${services.libraryRoot}/`) &&
+              roleFor(resource) === "source",
           ),
-        );
+        ),
+      );
     },
   );
 
