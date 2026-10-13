@@ -446,7 +446,15 @@ const domainLayer = (
       // text, not revision counts.
       Layer.unwrap(
         Effect.map(Galley, (galley) =>
-          RecoveryLive({ journalRoot: paths.appData, cause: gestureTrace, hasher: hashOf(galley) }),
+          RecoveryLive({
+            journalRoot: paths.appData,
+            // The Library always sits in app data, and desktop's projects do
+            // too: neither holds a journal, and walking them to find the
+            // journals was every project's `.git` and en_tn's 1,300 folders.
+            notJournals: [libraryRootIn(paths.appData), `${paths.appData}/projects`],
+            cause: gestureTrace,
+            hasher: hashOf(galley),
+          }),
         ),
       ),
       ProjectAdminLive,

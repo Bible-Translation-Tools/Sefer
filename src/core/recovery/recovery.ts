@@ -178,6 +178,14 @@ export interface RecoveryOptions {
    * should pass `HostInfo.paths().appData` once that service exists.
    */
   readonly journalRoot: string;
+  /**
+   * Folders under `journalRoot` that hold no journals and are never walked
+   * looking for them. Desktop keeps its projects and its Library in the same
+   * app-data folder as the journals, and finding the journals walked all of
+   * it: every project's `.git`, and en_tn's 1,300 folders, at one IPC call per
+   * folder (`journal.offer` took 7 s awake and 170–350 s asleep, 2026-10-13).
+   */
+  readonly notJournals?: readonly string[];
   /** Defaults to 500 ms of quiet, 5 s maximum: off the keystroke path. */
   readonly policy?: DebouncePolicy;
   /**
@@ -541,12 +549,36 @@ const make = (
      * nothing on either real host. The id is only a handle; a journal's
      * identity is the header it carries, which is what `pending` reads.
      */
-    const listIds = Effect.map(
-      Effect.orElseSucceed(fileSystem.readDirectory(root, { recursive: true }), () => []),
-      (names) =>
-        names
-          .filter((name) => name.endsWith(JOURNAL_SUFFIX) && name.split("/").length >= 2)
-          .map((name) => journalId(name.slice(0, -JOURNAL_SUFFIX.length))),
+    const skipped = new Set((options.notJournals ?? []).map((path) => normalisePath(path)));
+    /**
+     * Every name below the root, as a recursive listing would give it, but
+     * never descending into a folder `notJournals` names: the root's own
+     * entries, then each one that is not skipped, recursively. A file at the
+     * top level lists nothing below itself, which is the empty answer.
+     */
+    const journalNames: Effect.Effect<readonly string[]> =
+      skipped.size === 0
+        ? Effect.orElseSucceed(fileSystem.readDirectory(root, { recursive: true }), () => [])
+        : Effect.gen(function* () {
+            const top = yield* Effect.orElseSucceed(fileSystem.readDirectory(root), () => []);
+            const names: string[] = [];
+            for (const entry of top) {
+              const path = joinPath(root, entry);
+              if (skipped.has(normalisePath(path))) continue;
+              names.push(entry);
+              const below = yield* Effect.orElseSucceed(
+                fileSystem.readDirectory(path, { recursive: true }),
+                (): readonly string[] => [],
+              );
+              for (const name of below) names.push(`${entry}/${name}`);
+            }
+            return names;
+          });
+
+    const listIds = Effect.map(journalNames, (names) =>
+      names
+        .filter((name) => name.endsWith(JOURNAL_SUFFIX) && name.split("/").length >= 2)
+        .map((name) => journalId(name.slice(0, -JOURNAL_SUFFIX.length))),
     );
 
     const prune = (
