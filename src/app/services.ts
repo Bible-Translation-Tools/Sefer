@@ -447,11 +447,19 @@ const domainLayer = (
       Layer.unwrap(
         Effect.map(Galley, (galley) =>
           RecoveryLive({
-            journalRoot: paths.appData,
-            // The Library always sits in app data, and desktop's projects do
-            // too: neither holds a journal, and walking them to find the
-            // journals was every project's `.git` and en_tn's 1,300 folders.
-            notJournals: [libraryRootIn(paths.appData), `${paths.appData}/projects`],
+            // Journals have their own folder since 2026-10-13. Until then
+            // they sat at the top of app data, beside the Library and
+            // desktop's projects, which finding them had to skip.
+            journalRoot: `${paths.appData}/journals`,
+            // TODO(2026-10-13): read for one more release so unsaved work an
+            // older build left is still offered; stop the release after next
+            // by deleting `formerRoot` and `notJournals` here.
+            formerRoot: paths.appData,
+            notJournals: [
+              libraryRootIn(paths.appData),
+              `${paths.appData}/projects`,
+              `${paths.appData}/journals`,
+            ],
             cause: gestureTrace,
             hasher: hashOf(galley),
           }),
