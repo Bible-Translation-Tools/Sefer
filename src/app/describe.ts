@@ -19,7 +19,9 @@
  * three copies drifted apart once already.
  */
 
-import type { RemoteFailureReason } from "#core/remote/remote";
+import type { Progress, RemoteFailureReason } from "#core/remote/remote";
+
+import { t } from "./i18n";
 
 /** Bounded so a server that answers with an HTML error page cannot fill a toast. */
 const MAX = 400;
@@ -99,4 +101,24 @@ export const remoteReasonOf = (cause: unknown): RemoteFailureReason | undefined 
   return reason !== undefined && REMOTE_REASONS.has(reason)
     ? (reason as RemoteFailureReason)
     : undefined;
+};
+
+/**
+ * One line for a transfer's progress, whoever shows it. Git's own phases
+ * count objects ("Receiving objects 40%"); the Web transport's `bytes`
+ * events count the pack as it arrives ("Receiving data: 4.7 MB"), and must
+ * never be read as a count of objects.
+ */
+export const describeTransfer = (progress: Progress): string => {
+  if (progress.unit === "bytes")
+    return t("{phase}: {size} MB", {
+      phase: progress.phase,
+      size: (progress.loaded / 1_000_000).toFixed(1),
+    });
+  if (progress.total === undefined || progress.total === 0)
+    return t("{phase} {loaded}", { phase: progress.phase, loaded: progress.loaded });
+  return t("{phase} {percent}%", {
+    phase: progress.phase,
+    percent: Math.min(100, Math.round((progress.loaded / progress.total) * 100)),
+  });
 };

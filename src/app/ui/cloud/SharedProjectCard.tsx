@@ -22,6 +22,7 @@ import { Gitea, type RemoteRepo } from "#core/remote/gitea";
 import { Remote } from "#core/remote/remote";
 
 import { collaboration } from "../../collaboration";
+import { describeTransfer } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { syncWatch } from "../../syncWatch";
@@ -81,17 +82,7 @@ export function SharedProjectCard(props: {
       progressFiber = services.runtime.runFork(
         Effect.flatMap(Remote, (remote) =>
           Stream.runForEach(remote.progress(), (progress) =>
-            Effect.sync(() =>
-              setPhase(
-                progress.total === undefined
-                  ? t("{phase} {loaded}", { phase: progress.phase, loaded: progress.loaded })
-                  : t("{phase} {loaded}/{total}", {
-                      phase: progress.phase,
-                      loaded: progress.loaded,
-                      total: progress.total,
-                    }),
-              ),
-            ),
+            Effect.sync(() => setPhase(describeTransfer(progress))),
           ),
         ),
       );

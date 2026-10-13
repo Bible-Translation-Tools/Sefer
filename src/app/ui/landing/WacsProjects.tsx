@@ -40,7 +40,7 @@ import {
   catalogueVerdict,
   type CatalogueEntry,
 } from "../../catalogue";
-import { describe, reasonOf, remoteReasonOf } from "../../describe";
+import { describe, describeTransfer, reasonOf, remoteReasonOf } from "../../describe";
 import { transportFor } from "../../endpoints";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
@@ -505,11 +505,15 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
                 ? undefined
                 : Math.min(100, Math.round((progress.loaded / progress.total) * 100));
             if (toast === undefined)
-              downloads.update(entry.id, { status: progress.phase, percent });
+              downloads.update(entry.id, {
+                status: progress.unit === "bytes" ? describeTransfer(progress) : progress.phase,
+                // A byte count has no total, and says nothing about the bar.
+                ...(progress.unit === "bytes" ? {} : { percent }),
+              });
             else
-              toasts.update(toast, {
+              toasts.advance(toast, {
                 title: t("Downloading {name}", { name: entry.repo }),
-                message: percent === undefined ? progress.phase : `${progress.phase} ${percent}%`,
+                message: describeTransfer(progress),
               });
           }),
         ),

@@ -36,7 +36,7 @@ import {
   type RelatedResource,
 } from "#core/resources/relationships";
 
-import { describe } from "./describe";
+import { describe, describeTransfer } from "./describe";
 import { contentHostFor } from "./endpoints";
 import { t } from "./i18n";
 import { packFor } from "./kinds/table";
@@ -278,16 +278,14 @@ export const referenceCopy = (
 export const describeCopy = (progress: CopyProgress): string => {
   switch (progress.phase) {
     case "downloading":
-      if (progress.unit === "bytes")
-        return t("Downloading: {size} MB received", {
-          size: (progress.loaded / 1_000_000).toFixed(1),
-        });
-      return progress.total === undefined || progress.total === 0
-        ? t("Downloading: {step}…", { step: progress.step })
-        : t("Downloading: {step} {percent}%", {
-            step: progress.step,
-            percent: Math.min(100, Math.round((progress.loaded / progress.total) * 100)),
-          });
+      return t("Downloading: {transfer}", {
+        transfer: describeTransfer({
+          phase: progress.step,
+          loaded: progress.loaded,
+          total: progress.total,
+          ...(progress.unit === undefined ? {} : { unit: progress.unit }),
+        }),
+      });
     case "reading":
       return t("Reading what arrived…");
     case "packing":
