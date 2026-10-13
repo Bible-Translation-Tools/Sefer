@@ -219,7 +219,9 @@ matrix: Preview is the last rehearsal before a tag, not a place to put something
 - **Remote progress is a final tally, not a live trickle.** git2 reports progress through callbacks
   inside one blocking command; a live readout needs the Rust side to emit Tauri events.
 - **No mobile.** The Rust is `cfg`-gated for it and the icon set omits `ios/` and `android/`.
-- `copy`, `chmod`, `truncate`, `utimes`, `open`, `link`/`symlink` and `glob` are unimplemented on
+- `chmod`, `truncate`, `utimes`, `open`, `link`/`symlink` and `glob` are unimplemented on
   `TauriFileSystemLive` and fail with a `PlatformError` naming the method, as on the other two hosts.
+  `copy` is implemented (2026-10-12), recursively, as on OPFS: the import pipeline's `stage` and
+  `commit` copy whole trees, and while it was missing every folder import on desktop failed.
   Everything the contract suite (`src/core/fileSystem/contract.ts`) exercises IS implemented, temp
   directories included — which is why `$TEMP` is in the capability scope.

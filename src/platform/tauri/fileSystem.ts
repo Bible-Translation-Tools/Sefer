@@ -258,15 +258,38 @@ const makeTauriFileSystem = (): FileSystem.FileSystem => {
       return file;
     });
 
+  const copyFileAt: FileSystem.FileSystem["copyFile"] = (fromPath, toPath) =>
+    attempt("copyFile", normalisePath(fromPath), () =>
+      copyFile(normalisePath(fromPath), normalisePath(toPath)),
+    );
+
+  /**
+   * Copy, recursively, because the plugin's only copy is one file and the
+   * import pipeline copies whole project trees (`stage`, then `commit`). A file
+   * is `copyFile`; a directory is its entries, one at a time, into a directory
+   * made on demand — the OPFS layer's shape. Left unimplemented this refused
+   * every folder import on desktop ("copy is not implemented by the Tauri
+   * FileSystem", found driving the app on 2026-10-12). `overwrite` is not
+   * honoured: the OS copy replaces a file, which every caller asks for.
+   */
+  const copy: FileSystem.FileSystem["copy"] = (fromPath, toPath) =>
+    Effect.gen(function* () {
+      const from = normalisePath(fromPath);
+      const to = normalisePath(toPath);
+      const info = yield* attempt("copy", from, () => stat(from));
+      if (!info.isDirectory) return yield* copyFileAt(from, to);
+      yield* attempt("copy", to, () => mkdir(to, { recursive: true }));
+      const entries = yield* attempt("copy", from, () => readDir(from));
+      for (const entry of entries)
+        yield* copy(joinPath(from, entry.name), joinPath(to, entry.name));
+    });
+
   const fileSystem = FileSystem.make({
     access,
     chmod: () => unimplementedEffect("chmod"),
     chown: () => unimplementedEffect("chown"),
-    copy: () => unimplementedEffect("copy"),
-    copyFile: (fromPath, toPath) =>
-      attempt("copyFile", normalisePath(fromPath), () =>
-        copyFile(normalisePath(fromPath), normalisePath(toPath)),
-      ),
+    copy,
+    copyFile: copyFileAt,
     glob: () => unimplementedEffect("glob"),
     link: () => unimplementedEffect("link"),
     makeDirectory: (path, options) =>
