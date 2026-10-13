@@ -68,20 +68,41 @@ export const openTranslationNotes = (
           .map((record) => noteOf(address.book, record, context)),
       );
 
+    /**
+     * The haystack, per book, for the life of the handle. A search reads
+     * every book, and through the three-book `held` that was every pack read
+     * and decoded again on each search (about 0.65 s for en_tn over the
+     * Bisa Bible's 66 books, each time). Kept here instead, released with
+     * the handle (the project's close): the texts of the books searched, a
+     * few megabytes, in exchange for searches that are only the scan.
+     *
+     * Addresses are built with the `context` of the first search: a later
+     * change to the project's verse counts moves only an open-ended note's
+     * last verse, until the handle is reopened.
+     */
+    const haystack = new Map<string, readonly HaystackDocument[]>();
     const list = (requested: readonly BookId[], context?: PlaceContext) =>
       Effect.gen(function* () {
         const documents: HaystackDocument[] = [];
         for (const book of requested) {
-          if (!books.has(book.toUpperCase())) continue;
+          const id = book.toUpperCase();
+          if (!books.has(id)) continue;
+          const kept = haystack.get(id);
+          if (kept !== undefined) {
+            documents.push(...kept);
+            continue;
+          }
           const pack = yield* packOf(book);
-          pack.notes.forEach((record, index) => {
+          const made = pack.notes.map((record, index): HaystackDocument => {
             const note = noteOf(book, record, context);
-            documents.push({
+            return {
               id: `${pack.book}#${index}`,
               text: `${note.heading ?? ""}${note.body}`,
               addresses: [note.address],
-            });
+            };
           });
+          haystack.set(id, made);
+          documents.push(...made);
         }
         return documents;
       });
@@ -95,6 +116,9 @@ export const openTranslationNotes = (
       },
       places: { at, of: (note) => [note.address] },
       documents: { list },
-      release: Effect.sync(() => held.clear()),
+      release: Effect.sync(() => {
+        held.clear();
+        haystack.clear();
+      }),
     };
   });
