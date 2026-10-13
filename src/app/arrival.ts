@@ -81,14 +81,26 @@ export const cloneArrival = (
   services: Services,
   kind: ArrivalKind,
   url: string,
-  options?: { readonly catalogueId?: string; readonly clone?: CloneOptions },
+  options?: {
+    readonly catalogueId?: string;
+    readonly clone?: CloneOptions;
+    /**
+     * A project into the first free folder (`root`, `root-2`, …) rather than
+     * the repository's name: a share link's download, where a failed try left
+     * a partial folder that cannot be cloned into, or another owner's
+     * repository of the same name already sits there. Nothing is cleared.
+     */
+    readonly freeFolder?: true;
+  },
 ): Effect.Effect<
   { readonly root: string; readonly progress: Progress; readonly resource?: Resource },
   unknown,
   Domain
 > =>
   Effect.gen(function* () {
-    const into = arrivalRoot(services, kind, url);
+    const named = arrivalRoot(services, kind, url);
+    const into =
+      kind === "project" && options?.freeFolder === true ? yield* freeRoot(services, named) : named;
     const clone = cloneRepository(
       url,
       into,

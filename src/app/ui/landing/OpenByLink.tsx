@@ -1,6 +1,6 @@
 import { useNavigate } from "@tanstack/solid-router";
 import { Effect, Result } from "effect";
-import { Match, Switch, createEffect, createSignal, untrack } from "solid-js";
+import { Match, Switch, createEffect, createSignal, onCleanup, untrack } from "solid-js";
 
 import { announceSourceTexts, cloneArrival } from "#app/arrival";
 import { describe } from "#app/describe";
@@ -96,6 +96,12 @@ export function OpenByLink(props: {
   const shell = useShell();
   const navigate = useNavigate();
   const [phase, setPhase] = createSignal<Phase>({ kind: "looking" });
+  // The lookups and the download answer after a wait; once the person has
+  // left this screen they must not navigate away from wherever they went.
+  let alive = true;
+  onCleanup(() => {
+    alive = false;
+  });
 
   const query = (): URLSearchParams => new URLSearchParams(props.searchStr);
 
@@ -116,6 +122,7 @@ export function OpenByLink(props: {
   const place = (): Place => ({ rest: props.rest, query: query() });
 
   const openAt = async (root: string, at: Place): Promise<void> => {
+    if (!alive) return;
     const kept = new URLSearchParams(at.query);
     const version = kept.get("at") ?? undefined;
     kept.delete("at");
@@ -144,6 +151,7 @@ export function OpenByLink(props: {
         untrack(shell.recentProjects).map((row) => [row.root, row.at]),
       );
       void shell.services.run(projectsFrom(shell.services, named, recent)).then(async (roots) => {
+        if (!alive) return;
         const [root] = roots;
         if (root !== undefined) return openAt(root, target);
         const probed = await shell.services.run(
@@ -154,6 +162,7 @@ export function OpenByLink(props: {
             }),
           ),
         );
+        if (!alive) return;
         setPhase(
           Result.isSuccess(probed) && !probed.success.empty
             ? { kind: "offer" }
@@ -175,7 +184,11 @@ export function OpenByLink(props: {
     const target = place();
     setPhase({ kind: "downloading" });
     void shell.services
-      .run(Effect.result(cloneArrival(shell.services, "project", sourceUrl(named))))
+      .run(
+        Effect.result(
+          cloneArrival(shell.services, "project", sourceUrl(named), { freeFolder: true }),
+        ),
+      )
       .then(async (arrived) => {
         // The source texts the project declares come with it, as from every
         // other import, and BEFORE the place opens: a link into a screen
@@ -189,7 +202,7 @@ export function OpenByLink(props: {
           title: t("Could not download the project"),
           message: describe(arrived.failure),
         });
-        setPhase({ kind: "offer" });
+        if (alive) setPhase({ kind: "offer" });
       });
   };
 
