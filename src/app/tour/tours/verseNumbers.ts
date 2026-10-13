@@ -162,7 +162,12 @@ const steps = (context: TourContext): readonly Step[] => {
     const place = placeOf(context, finding);
     return {
       go: () => {
-        context.shell.aim(finding.bookId, finding.from);
+        // Where the finding is NOW: the offset recorded at start has moved
+        // with any edit earlier in the book since.
+        context.shell.aim(
+          finding.bookId,
+          current(context, finding.code, place.key)?.from ?? finding.from,
+        );
         void context.navigate({
           to: "/project/$slug/book/$book",
           params: { slug: context.shell.slug(), book: encodeURIComponent(finding.bookId) },
