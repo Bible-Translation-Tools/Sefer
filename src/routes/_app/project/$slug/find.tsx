@@ -841,6 +841,18 @@ function Find() {
     { name: "expectation" },
   );
   const showing = (): Expected => params().show ?? "without";
+  /**
+   * Expect is a tool turned on when there is a rendering to check, so its box
+   * is hidden until the toggle beside "Search the source text" shows it. A
+   * link that carries `expect=` opens with it shown (the URL is first-class);
+   * turning it off clears `expect` and `show` from the URL.
+   */
+  const [expecting, setExpecting] = createSignal(false, { name: "findExpecting" });
+  const expectShown = (): boolean => expecting() || params().expect !== undefined;
+  const toggleExpect = (on: boolean): void => {
+    setExpecting(on);
+    if (!on) ask({ expect: undefined, show: undefined });
+  };
 
   const feedHits = createMemo(
     (): readonly Occurrence[] => {
@@ -1078,6 +1090,11 @@ function Find() {
                   disabled={!hasReference()}
                   onChange={(on) => ask({ scope: on ? "reference" : "project" })}
                 />
+                <Show when={scope() === "reference"}>
+                  <span data-tour="find-expect-toggle">
+                    <Switch label={t("Expect…")} checked={expectShown()} onChange={toggleExpect} />
+                  </span>
+                </Show>
                 <Show when={searchable().length > 0}>
                   <span data-tour="find-helps">
                     <Switch
@@ -1134,7 +1151,7 @@ function Find() {
         </Card>
 
         {/* Expect: an assertion over the reference search's verses. */}
-        <Show when={scope() === "reference"}>
+        <Show when={scope() === "reference" && expectShown()}>
           <Card data-tour="find-expect">
             <div class="flex flex-wrap items-center gap-3">
               <Input

@@ -43,6 +43,11 @@ const toChapter = (book: string, chapter: string): void => {
   clickWhen(chip);
 };
 
+/** Find's Expect toggle (hidden box by default), and whether it is on. */
+const EXPECT_TOGGLE = "[data-tour=find-expect-toggle] [role=switch]";
+const expectOn = (): boolean =>
+  document.querySelector(EXPECT_TOGGLE)?.getAttribute("aria-checked") === "true";
+
 const results = (): boolean => {
   const count = document.querySelector("[data-count]")?.getAttribute("data-count");
   return count !== undefined && count !== null && count !== "0";
@@ -78,6 +83,19 @@ export const expectTour: Tour = {
         anchor: "[data-count]",
         title: "Over a thousand verses",
         body: "Checking by eye how the name was spelled in each of these is days of work, and the few slips hide among hundreds of correct ones.",
+      },
+      advance: "user",
+    },
+    {
+      // Pressed, as a person would: the box it shows is still empty.
+      go: () => {
+        if (!expectOn()) clickWhen(EXPECT_TOGGLE);
+      },
+      ready: expectOn,
+      spotlight: {
+        anchor: "[data-tour=find-expect-toggle]",
+        title: "Turn on Expect",
+        body: "Expect is a tool you turn on when you have a rendering to check. It stays out of the way otherwise; this switch shows it.",
       },
       advance: "user",
     },
