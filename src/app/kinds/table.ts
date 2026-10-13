@@ -18,7 +18,7 @@ import { Effect, type FileSystem } from "effect";
 import type { ContentKind } from "#core/resources/kinds/content";
 import { Unavailable, type OpenHandle } from "#core/resources/kinds/handle";
 import { openTranslationNotes } from "#core/resources/kinds/tn/adapter";
-import { packHelp } from "#core/resources/kinds/tn/pack";
+import { indexHelp, packHelp } from "#core/resources/kinds/tn/pack";
 import type { PackProgress, UpstreamTree } from "#core/resources/kinds/tree";
 import { ROLES, type Resource, type Role } from "#core/resources/library";
 
@@ -40,6 +40,16 @@ interface KindRow {
     from: UpstreamTree,
     to: { readonly fileSystem: FileSystem.FileSystem; readonly root: string },
     provenance: { readonly at: string; readonly commit?: string },
+    onProgress?: (progress: PackProgress) => void,
+  ) => Effect.Effect<unknown, Unavailable>;
+  /**
+   * How the kind readies a tree kept as cloned (desktop), once, when it
+   * arrives, so its first read is not the one that indexes it. Absent:
+   * nothing to ready.
+   */
+  readonly index?: (
+    fileSystem: FileSystem.FileSystem,
+    root: string,
     onProgress?: (progress: PackProgress) => void,
   ) => Effect.Effect<unknown, Unavailable>;
   readonly open: (
@@ -75,6 +85,7 @@ const KINDS: { readonly [K in ContentKind]: KindRow } = {
     role: ROLES.translationNotes,
     engineBooks: false,
     pack: packHelp,
+    index: indexHelp,
     open: (fileSystem, resource) =>
       Effect.map(openTranslationNotes(fileSystem, resource), (handle) => ({
         content: "tn",
@@ -99,6 +110,8 @@ export const roleFor = (resource: Resource): Role => KINDS[resource.content].rol
 
 /** How `content` is packed where its tree is not kept, or `undefined` to keep the tree. */
 export const packFor = (content: ContentKind): KindRow["pack"] => KINDS[content].pack;
+
+export const indexFor = (content: ContentKind): KindRow["index"] => KINDS[content].index;
 
 /** Whether `resource`'s files are USFM books for the engine's corpus. */
 export const holdsEngineBooks = (resource: Resource): boolean =>

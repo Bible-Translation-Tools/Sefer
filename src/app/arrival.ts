@@ -39,7 +39,7 @@ import {
 import { describe, describeTransfer } from "./describe";
 import { contentHostFor } from "./endpoints";
 import { t } from "./i18n";
-import { packFor } from "./kinds/table";
+import { indexFor, packFor } from "./kinds/table";
 import type { Domain, Services } from "./services";
 import { rememberProject } from "./ui/landing/summaries";
 import { toasts } from "./ui/primitives";
@@ -223,8 +223,23 @@ export const referenceCopy = (
       const arrived = yield* Effect.scoped(
         Effect.flatMap(reportDownload(onProgress), () => cloneArrival(services, "sourceText", url)),
       );
-      if (arrived.resource !== undefined) return arrived.resource;
-      return yield* Effect.fail(new Error(`${url} arrived without a Library entry`));
+      if (arrived.resource === undefined)
+        return yield* Effect.fail(new Error(`${url} arrived without a Library entry`));
+      // The tree stays as cloned, and the kind readies it now, with the same
+      // "Packing" progress the Web shows, rather than on its first read. Its
+      // packs are a convenience a read rebuilds, so a failure here is no
+      // reason to fail the download.
+      const index = indexFor(arrived.resource.content);
+      if (index !== undefined) {
+        const indexing = (yield* Observability).span("reference.index");
+        yield* Effect.ignore(
+          index(services.fileSystem, arrived.resource.root, (progress) =>
+            onProgress?.({ phase: "packing", ...progress }),
+          ),
+        );
+        indexing();
+      }
+      return arrived.resource;
     }
     const into = arrivalRoot(services, "sourceText", url);
     const { owner, repo } = ownerAndRepo(url);

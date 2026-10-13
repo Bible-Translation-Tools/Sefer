@@ -299,6 +299,33 @@ export const bookPack = (
     return built;
   });
 
+/**
+ * Every book's pack, built in place beside a raw tree that is kept (desktop's
+ * clone), so the first read of a book, or the first search over a Bible, is
+ * not the moment it is built: that was 66 books packed one by one while Find
+ * said "0 results" (about seven minutes for the Bisa Bible's first search of
+ * the notes, display awake, 2026-10-13). A book already packed and unchanged
+ * costs one listing. Returns how many books and notes are packed.
+ */
+export const indexHelp = (
+  fileSystem: FileSystem.FileSystem,
+  root: string,
+  onBook?: (progress: PackProgress) => void,
+): Effect.Effect<{ readonly books: number; readonly notes: number }, Unavailable> =>
+  Effect.gen(function* () {
+    const books = yield* helpBooks(fileSystem, root);
+    let notes = 0;
+    for (const [done, help] of books.entries()) {
+      onBook?.({ done, of: books.length, book: help.book });
+      // A book the manifest lists and the tree lacks answers `Missing` on
+      // read, as it would have; it is no reason to stop indexing the rest.
+      const pack = yield* Effect.option(bookPack(fileSystem, root, help));
+      if (pack._tag === "Some") notes += pack.value.notes.length;
+    }
+    onBook?.({ done: books.length, of: books.length, book: "" });
+    return { books: books.length, notes };
+  });
+
 /** The small files a packed root keeps beside its packs: what it is, and its licence. */
 const KEPT = ["manifest.yaml", "LICENSE.md", "README.md", "media.yaml"] as const;
 
