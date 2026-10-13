@@ -8,6 +8,10 @@
     // tools/vite/lucideSolid.ts redirects lucide-solid's `solid-js` imports
     // here, so its exports are consumed through a Vite alias no static tool sees.
     "tools/vite/lucideSolidShim.ts",
+    // `pnpm test:desktop` hands this config to the `wdio` binary by path, and
+    // WebdriverIO loads the specs it names by glob.
+    "e2e-desktop/wdio.conf.ts",
+    "e2e-desktop/**/*.desktop.ts",
   ],
   "ignorePatterns": ["src/routeTree.gen.ts"],
   "ignoreDependencies": [
@@ -18,5 +22,13 @@
     // The Rust side registers the plugin for "reveal in Finder"; the JS
     // binding is installed ahead of the first screen that calls it.
     "@tauri-apps/plugin-opener",
+    // The desktop WebdriverIO runner: `wdio` is spawned as a binary by
+    // tools/verify/desktopTest.ts, and the rest are named as strings in
+    // e2e-desktop/wdio.conf.ts (runner, framework, reporter, service).
+    "@wdio/cli",
+    "@wdio/local-runner",
+    "@wdio/mocha-framework",
+    "@wdio/spec-reporter",
+    "@wdio/tauri-service",
   ],
 }

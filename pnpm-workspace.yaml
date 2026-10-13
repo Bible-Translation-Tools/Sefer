@@ -8,7 +8,9 @@ packages:
   - "workers/*"
 
 allowBuilds:
+  edgedriver: false
   esbuild: true
+  geckodriver: false
   lefthook: true
   msgpackr-extract: false
   workerd: true
