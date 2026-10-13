@@ -3595,6 +3595,7 @@ version = "0.0.0"
 dependencies = [
  "git2",
  "keyring",
+ "objc2-foundation",
  "openssl",
  "serde",
  "serde_json",

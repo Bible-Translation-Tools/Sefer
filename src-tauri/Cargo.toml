@@ -57,6 +57,9 @@ tauri-plugin-window-state = "2"
 # own.
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }
+# The driven build's App Nap opt-out (`NSProcessInfo` activity); only the
+# `webdriver` feature names it. Already in the lock file through Tauri.
+objc2-foundation = { version = "0.3", optional = true, features = ["NSProcessInfo", "NSString"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }
@@ -67,7 +70,7 @@ keyring = { version = "3", features = ["sync-secret-service"] }
 [features]
 custom-protocol = ["tauri/custom-protocol"]
 # Debug builds only; `src/lib.rs` refuses to compile it into a release.
-webdriver = ["dep:tauri-plugin-wdio-webdriver"]
+webdriver = ["dep:tauri-plugin-wdio-webdriver", "dep:objc2-foundation"]
 
 [profile.dev]
 incremental = true

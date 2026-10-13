@@ -66,6 +66,20 @@ pub fn run() {
             window.background_throttling =
                 Some(tauri::utils::config::BackgroundThrottlingPolicy::Disabled);
         }
+        // That covers WebKit's own suspension, not App Nap: once the process
+        // has sat unseen for a few minutes macOS coalesces its run loop's
+        // timers, and IPC answered on that loop went back to 2–3 s a call.
+        // An activity held for the process's life keeps it awake.
+        #[cfg(target_os = "macos")]
+        {
+            use objc2_foundation::{NSActivityOptions, NSProcessInfo, NSString};
+            let activity = NSProcessInfo::processInfo().beginActivityWithOptions_reason(
+                NSActivityOptions::UserInitiatedAllowingIdleSystemSleep
+                    | NSActivityOptions::LatencyCritical,
+                &NSString::from_str("Sefer is being driven over WebDriver"),
+            );
+            std::mem::forget(activity);
+        }
     }
 
     builder
