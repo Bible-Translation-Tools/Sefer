@@ -65,7 +65,19 @@ window, so four things keep it in debug builds:
 - Proved on 2026-10-12: `target/release/sefer` carries none of the server's strings (`wdio`,
   `TAURI_WEBDRIVER_PORT`, "tauri-plugin-webdriver is ready"; the debug binary carries all three), the
   crate is absent from the release dependency graph, and the release app launched with
-  `TAURI_WEBDRIVER_PORT=47123` answered nothing on that port or the default 4445.
+  `TAURI_WEBDRIVER_PORT=47123` answered nothing on that port or the default 4445. Proved again on
+  2026-10-13 after the in-memory credential store (below): the release binary has no
+  `credentials::driven` symbol and does have the keychain's `set_password` (the debug driven binary has
+  fifteen `driven` symbols), and still answers nothing on either port.
+
+**Driven runs do not exercise the keychain.** With the same feature, the three `credentials_*`
+commands answer from a map held in memory for the process's life instead of the OS keychain
+(`src-tauri/src/credentials.rs`, the `driven` module). A driven run's `HOME` is a scratch folder with
+no keychain, where a sign-in failed with "A default keychain could not be found", and a script must
+never write into the person's own. The `Credentials` port and `TauriCredentialsLive` are unchanged, so
+a sign-in through the app's own form works and cloud flows can be driven; but the keychain path itself
+(storing, reading and clearing a token in the macOS Keychain) is untested on desktop, and stays so
+until somebody signs in on a normal build. A token lasts one run: sign in again after a relaunch.
 
 The same feature does three more things to the driven build only: it reads the dev server from
 `SEFER_DEV_URL` instead of the compiled-in `localhost:3000` (so every run takes free ports and two
@@ -86,7 +98,14 @@ appears there: measure, and check rendering, with the window visible.
 ## Rust commands
 
 `credentials_get/set/clear` answer `Credentials`; `install_update_from_endpoint` serves the manual
-version switch. The git2 half is one
+version switch. `tree_listing` and `tree_read` (`src-tauri/src/tree.rs`) answer core's `FolderTree`
+service through `TauriFolderTreeLive`: a folder's every file with its size and mtime, and many files'
+bytes as one binary answer (a little-endian `u32` length before each file), read-only and on a blocking
+thread. Through the fs plugin a folder of small files costs an IPC call per file; Translation Notes'
+Psalms is about 2,400 chunk files, which its freshness check stat'ed and its first read read one call at
+a time (12.3 s and 39.8 s with the display awake). With the two commands the listing is 49 ms and the
+read 0.8 s, and the notes for a verse answer in 0.25 s from a pack and 1.3 s when the pack is built
+(2026-10-13). The git2 half is one
 command per port member, and the whole `Git` port is answered — no member refuses by name any more:
 
 | Rust command                | TS member                                  | Port     |
@@ -259,8 +278,11 @@ matrix: Preview is the last rehearsal before a tag, not a place to put something
 - **Icons are the v1 app's**, copied verbatim (`src-tauri/icons/`) — same logo by intent.
 - **No code signing or notarisation.** v1 pulled Apple certificates from 1Password; Sefer has no
   signing identity yet, so macOS builds are unsigned and Gatekeeper warns.
-- **Remote progress is a final tally, not a live trickle.** git2 reports progress through callbacks
-  inside one blocking command; a live readout needs the Rust side to emit Tauri events.
+- **Only a clone reports live progress.** `git_clone` emits git's own phases ("Receiving objects",
+  "Resolving deltas", "Checking out files") on the `sefer://git-progress` Tauri event a few times a
+  second, and `TauriRemoteLive` publishes them on the port's `progress()` stream, so a download's toast
+  moves as the Web's does (2026-10-13). Fetch, push and deepen still report a final tally; the same
+  callbacks would carry them.
 - **No mobile.** The Rust is `cfg`-gated for it and the icon set omits `ios/` and `android/`.
 - `chmod`, `truncate`, `utimes`, `open`, `link`/`symlink` and `glob` are unimplemented on
   `TauriFileSystemLive` and fail with a `PlatformError` naming the method, as on the other two hosts.
