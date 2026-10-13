@@ -1,6 +1,7 @@
 /**
  * The desktop app launches, a project arrives on the native disk and opens, a
- * book shows its text, and an edit and Undo round-trip.
+ * book shows its text, an edit and Undo round-trip, and the save model holds:
+ * an edit reaches the backup journal, and only Record a version writes the file.
  *
  * The template for promoting more desktop checks: each `it` makes one claim
  * only the desktop host can get wrong (the Tauri IPC, the native filesystem,
@@ -21,7 +22,8 @@
  *     editor receives as real `beforeinput`/`input`, the way typing arrives.
  */
 
-import { cpSync, existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { cpSync, existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -36,7 +38,30 @@ const projects = path.join(
   "org.wycliffe.sefer",
   "projects",
 );
+const appData = path.join(home, "Library", "Application Support", "org.wycliffe.sefer");
 const editor = "[data-testid='editor-host'] .cm-content";
+const mod = process.platform === "darwin" ? "Meta" : "Control";
+
+/**
+ * The backup journals holding `word`: `.jsonl` files under app data, outside
+ * the projects and the Library (the journals sit beside them, each under its
+ * project's path).
+ */
+const journalsHolding = (word: string): string[] => {
+  const found: string[] = [];
+  const walk = (directory: string): void => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const at = path.join(directory, entry.name);
+      if (directory === appData && (entry.name === "projects" || entry.name === "library"))
+        continue;
+      if (entry.isDirectory()) walk(at);
+      else if (entry.name.endsWith(".jsonl") && readFileSync(at, "utf8").includes(word))
+        found.push(at);
+    }
+  };
+  if (existsSync(appData)) walk(appData);
+  return found;
+};
 
 const bodyText = (): Promise<string> => browser.execute(() => document.body.innerText);
 
@@ -163,10 +188,48 @@ describe("the desktop app", () => {
       timeoutMsg: "the typed text never reached the editor",
     });
 
-    await browser.keys([process.platform === "darwin" ? "Meta" : "Control", "z"]);
+    await browser.keys([mod, "z"]);
     await browser.waitUntil(async () => (await editorText()) === before, {
       timeout: 10_000,
       timeoutMsg: "Undo did not restore the text",
     });
+  });
+
+  it("keeps an edit in the backup journal and writes the file only on Record a version", async () => {
+    const book = path.join(projects, "small-nt", "19-PSA.usfm");
+    await placeCaret("who does not walk");
+    await $(editor).addValue(" RECORDED");
+    // The journal flush is debounced (500 ms of quiet, 5 s at most).
+    await browser.waitUntil(() => journalsHolding("RECORDED").length > 0, {
+      timeout: 15_000,
+      interval: 500,
+      timeoutMsg: "no backup journal holds the edit",
+    });
+    expect(readFileSync(book, "utf8").includes("RECORDED")).toBe(false);
+
+    // In-app, not a reload: a reload would drop the unsaved edit.
+    await browser.keys([mod, "s"]);
+    await $("[data-review-record]").click();
+    await $("#commit-message").waitForDisplayed({ timeout: 30_000 });
+    const name = await $("[role=dialog] input:not(#commit-message)");
+    if ((await name.isExisting()) && (await name.getValue()) === "")
+      await name.addValue("Desktop smoke");
+    await $("#commit-message").addValue("Desktop smoke: Record a version");
+    await browser.execute(() =>
+      [...document.querySelectorAll<HTMLButtonElement>("[role=dialog] button")]
+        .filter((button) => button.innerText.trim() === "Save")
+        .at(-1)
+        ?.click(),
+    );
+
+    await browser.waitUntil(() => readFileSync(book, "utf8").includes("RECORDED"), {
+      timeout: 30_000,
+      interval: 500,
+      timeoutMsg: "Record a version did not write the book",
+    });
+    const head = spawnSync("git", ["-C", path.dirname(book), "log", "-1", "--format=%s"], {
+      encoding: "utf8",
+    });
+    expect(head.stdout.trim()).toBe("Desktop smoke: Record a version");
   });
 });
