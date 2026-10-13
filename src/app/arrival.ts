@@ -23,6 +23,7 @@ import { lastSegment } from "#core/fileSystem/path";
 import { Git } from "#core/git/git";
 import { Observability } from "#core/observability";
 import { readProjectMetadata } from "#core/project/discovery";
+import { hostOfUrl } from "#core/project/shareLink";
 import { cloneRepository } from "#core/remote/clone";
 import { Remote } from "#core/remote/remote";
 import type { CloneOptions, Progress } from "#core/remote/remote";
@@ -36,7 +37,7 @@ import {
   type RelatedResource,
 } from "#core/resources/relationships";
 
-import { describe, describeTransfer } from "./describe";
+import { describe, describeTransfer, remoteReasonOf } from "./describe";
 import { contentHostFor } from "./endpoints";
 import { t } from "./i18n";
 import { indexFor, packFor } from "./kinds/table";
@@ -370,11 +371,18 @@ const pullSourceTexts = (
       }
       const pulled = yield* Effect.result(cloneArrival(services, "sourceText", url));
       if (pulled._tag === "Failure") {
+        // Gitea answers an anonymous read of a repository that is missing,
+        // or private, with 401, which git words as an authentication
+        // failure. For a source text that only ever means it is not there
+        // for this device to read: said so, not as a sign-in problem.
         rows.push({
           ref,
           title: `${ref.language}_${ref.resource}`,
           outcome: "failed",
-          note: describe(pulled.failure),
+          note:
+            remoteReasonOf(pulled.failure) === "Unauthorized"
+              ? t("not on {host}, or not public", { host: hostOfUrl(url) ?? host })
+              : describe(pulled.failure),
         });
         operation?.note("sources.resolve", "refused", undefined, { "sources.how": "clone" });
         continue;
