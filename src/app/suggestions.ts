@@ -378,7 +378,7 @@ const suggestionTitle = (now = new Date()): string =>
  * (`?against=shared&copy=1`), whose Save records a decision commit on top of
  * both and sends it as an ordinary fast-forward.
  */
-export class CopyHasWork extends Error {
+class CopyHasWork extends Error {
   readonly reason = "copy-has-work";
   constructor() {
     super("your copy has changes this device does not have");
