@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use std::path::{Component, Path};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use git2::{
     build::{CheckoutBuilder, RepoBuilder},
@@ -23,6 +24,13 @@ use git2::{
     StatusOptions,
 };
 use serde::Serialize;
+use tauri::Emitter;
+
+/// The event a clone's live progress is emitted on (`GitProgress`), which
+/// `src/platform/tauri/remote.ts` publishes as the Remote port's `progress()`.
+const PROGRESS_EVENT: &str = "sefer://git-progress";
+/// How often at most: a toast reads it, nothing else.
+const PROGRESS_EVERY: Duration = Duration::from_millis(250);
 
 use crate::errors::{
     fail, AUTH_FAILED, CONFLICT, IO, NOT_A_REPOSITORY, OFFLINE, REFUSED, REJECTED,
@@ -80,7 +88,7 @@ pub struct GitChangedPath {
 
 /// Mirrors the `Remote` port's `Progress`. `total` is `None` until the far
 /// side has said how much there is, which is most of a fetch's first phase.
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct GitProgress {
     pub phase: String,
     pub loaded: usize,
@@ -1021,6 +1029,7 @@ fn git_clone_now(
     username: Option<String>,
     token: Option<String>,
     depth: Option<i32>,
+    app: tauri::AppHandle,
 ) -> Result<GitProgress, String> {
     let received = Arc::new(AtomicUsize::new(0));
     let total = Arc::new(AtomicUsize::new(0));
@@ -1028,9 +1037,34 @@ fn git_clone_now(
     {
         let received = Arc::clone(&received);
         let total = Arc::clone(&total);
+        let app = app.clone();
+        let mut last = Instant::now() - PROGRESS_EVERY;
         callbacks.transfer_progress(move |stats| {
             received.store(stats.received_objects(), Ordering::Relaxed);
             total.store(stats.total_objects(), Ordering::Relaxed);
+            // A live readout, as the Web has, in git's own phase names: the
+            // objects as they arrive, then the deltas as they are resolved.
+            // At most a few a second, because the toast is all that reads it.
+            if last.elapsed() >= PROGRESS_EVERY {
+                last = Instant::now();
+                let resolving = stats.total_objects() > 0
+                    && stats.received_objects() == stats.total_objects()
+                    && stats.total_deltas() > 0;
+                let progress = if resolving {
+                    GitProgress {
+                        phase: "Resolving deltas".to_string(),
+                        loaded: stats.indexed_deltas(),
+                        total: Some(stats.total_deltas()),
+                    }
+                } else {
+                    GitProgress {
+                        phase: "Receiving objects".to_string(),
+                        loaded: stats.received_objects(),
+                        total: (stats.total_objects() > 0).then(|| stats.total_objects()),
+                    }
+                };
+                let _ = app.emit(PROGRESS_EVENT, progress);
+            }
             true
         });
     }
@@ -1041,8 +1075,28 @@ fn git_clone_now(
     if let Some(depth) = depth {
         options.depth(depth);
     }
+    // Writing the working tree is its own phase, and for a reference text the
+    // long one: en_tn's 29,300 files took 22 s after its 8 s of objects.
+    let mut checkout = CheckoutBuilder::new();
+    {
+        let mut last = Instant::now() - PROGRESS_EVERY;
+        checkout.progress(move |_path, done, of| {
+            if last.elapsed() >= PROGRESS_EVERY {
+                last = Instant::now();
+                let _ = app.emit(
+                    PROGRESS_EVENT,
+                    GitProgress {
+                        phase: "Checking out files".to_string(),
+                        loaded: done,
+                        total: (of > 0).then_some(of),
+                    },
+                );
+            }
+        });
+    }
     RepoBuilder::new()
         .fetch_options(options)
+        .with_checkout(checkout)
         .clone(&url, Path::new(&root))
         .map_err(transport_failure)?;
     Ok(GitProgress {
@@ -1242,6 +1296,7 @@ pub async fn git_fetch_ref(
 
 #[tauri::command]
 pub async fn git_clone(
+    app: tauri::AppHandle,
     url: String,
     root: String,
     username: Option<String>,
@@ -1250,7 +1305,7 @@ pub async fn git_clone(
 ) -> Result<GitProgress, String> {
     off_thread(move || {
         writing(&root.clone(), move || {
-            git_clone_now(url, root, username, token, depth)
+            git_clone_now(url, root, username, token, depth, app)
         })
     })
     .await

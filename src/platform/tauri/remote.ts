@@ -24,6 +24,7 @@
  * host uses.
  */
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { Effect, Layer, Option, PubSub, Stream } from "effect";
 
 import type { Repo } from "#core/git/git";
@@ -44,6 +45,9 @@ const ORIGIN = "origin";
 
 /** How many progress events a slow reader may fall behind before losing some. */
 const PROGRESS_DEPTH = 64;
+
+/** The event `src-tauri/src/git.rs` emits a clone's live progress on. */
+const PROGRESS_EVENT = "sefer://git-progress";
 
 export interface TauriRemoteOptions {
   /** The content host (`VITE_SEFER_CONTENT_HOST`); `null` disables publishing by name. */
@@ -113,6 +117,16 @@ const makeTauriRemote = (
     // watching, the events are worthless, and they must never make a transfer
     // wait or let a long fetch grow the heap.
     const events = yield* PubSub.sliding<Progress>({ capacity: PROGRESS_DEPTH });
+    // A clone's live readout: the Rust side emits git's own phases ("Receiving
+    // objects", then "Resolving deltas") a few times a second while the
+    // blocking command runs, and they join the final tally below on one
+    // stream. Before, a 30 s download said "Starting…" until it was over.
+    // Listened to for the Remote's life, which is the app's.
+    yield* Effect.promise(() =>
+      listen<WireProgress>(PROGRESS_EVENT, (event) => {
+        Effect.runFork(PubSub.publish(events, progressOf(event.payload)));
+      }),
+    );
 
     const originUrl = (repo: Repo, name = ORIGIN): Effect.Effect<string, RemoteError> =>
       Effect.flatMap(call<string | null>("git_remote_url", { root: repo.root, name }), (url) =>
