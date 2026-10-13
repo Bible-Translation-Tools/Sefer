@@ -372,6 +372,30 @@ const suggestionTitle = (now = new Date()): string =>
   });
 
 /**
+ * The person's copy holds versions this device does not have, so nothing can
+ * be sent to it as it is: a send is a fast-forward, and Sefer never forces
+ * one. Not an error to retry. The one way on is Review against the copy
+ * (`?against=shared&copy=1`), whose Save records a decision commit on top of
+ * both and sends it as an ordinary fast-forward.
+ */
+export class CopyHasWork extends Error {
+  readonly reason = "copy-has-work";
+  constructor() {
+    super("your copy has changes this device does not have");
+  }
+}
+
+/** Whatever a rejected offer carried, read by its `reason`, as `describe` reads every failure. */
+export const isCopyHasWork = (cause: unknown): boolean =>
+  typeof cause === "object" &&
+  cause !== null &&
+  "reason" in cause &&
+  cause.reason === "copy-has-work";
+
+/** The search that opens Review against the person's own copy. */
+export const COPY_REVIEW = { against: "shared", copy: 1 } as const;
+
+/**
  * Suggests what this project's copy holds to the shared project: one open
  * suggestion per person, which later sends to the copy keep up to date by
  * themselves (`Suggestions.suggest` answers the open one rather than opening
@@ -390,8 +414,20 @@ export const suggestMyChanges = (services: Services, project: Project): Promise<
       // usually just sent it there, and sending the same commit again, a
       // moment after the suggestion opened, showed on WACS as "force-pushed
       // d3d8722 to d3d8722".
+      // The copy read again first: if it holds work this device lacks (sent
+      // from another device, or an older offer the shared project never
+      // took) the push could only be refused, so say that instead and offer
+      // the one decision that settles it, Review against the copy.
+      yield* Effect.ignore(
+        remote.fetchRef(repo, `refs/heads/${at.branch}`, copyRef(at.branch), COPY),
+      );
       const head = yield* git.resolve(repo, "HEAD");
       const sent = yield* git.resolve(repo, copyRef(at.branch));
+      if (Option.isSome(head) && Option.isSome(sent) && head.value !== sent.value) {
+        const base = yield* git.mergeBase(repo, head.value, sent.value);
+        if (!(Option.isSome(base) && base.value === sent.value))
+          return yield* Effect.fail(new CopyHasWork());
+      }
       if (Option.isNone(head) || Option.isNone(sent) || head.value !== sent.value)
         yield* remote.push(repo, COPY);
       return yield* (yield* Suggestions).suggest(at.host, at.owner, at.name, {

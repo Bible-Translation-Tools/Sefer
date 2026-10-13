@@ -78,8 +78,10 @@ import { useShell } from "../../ProjectContext";
 import { recordVersion } from "../../recordVersion";
 import {
   acceptSuggestion,
+  COPY_REVIEW,
   copyRef,
   declineSuggestion,
+  isCopyHasWork,
   suggestionRef,
   suggestMyChanges,
 } from "../../suggestions";
@@ -912,7 +914,7 @@ export function ReviewPanel() {
               ? t("The suggestion is closed; its author sees it was not brought in.")
               : t("Its author can read your note."),
         });
-        setRecordOpen(false);
+        closeRecord();
         void collaboration.refresh(services, project);
         void navigate({ to: "/project/$slug/suggestions", params: { slug: shell.slug() } });
       })
@@ -1212,13 +1214,17 @@ export function ReviewPanel() {
           );
           setRecordedLine({
             tone: "success",
-            title: t("Combined with the shared project on this device"),
+            title: fromCopy()
+              ? t("Combined with your copy on this device")
+              : t("Combined with the shared project on this device"),
             detail: staticMessage,
           });
           markTaken(outcome.sent);
           setSendLine(
             outcome.sent
-              ? lineOfSend({ kind: "sent" })
+              ? lineOfSend(
+                  outcome.to === "copy" ? { kind: "sent", toCopy: true } : { kind: "sent" },
+                )
               : {
                   tone: "warning",
                   title: t("Saved here. Not sent yet"),
@@ -1359,7 +1365,7 @@ export function ReviewPanel() {
      * The move the line offers: compare what arrived, send again, go sign in,
      * or — after a send to the person's copy — offer it to the shared project.
      */
-    readonly action?: "see" | "retry" | "send" | "open" | "offer";
+    readonly action?: "see" | "copy" | "retry" | "send" | "open" | "offer";
   }
   const [recordedLine, setRecordedLine] = createSignal<ReceiptLine | undefined>(undefined, {
     name: "reviewRecordedLine",
@@ -1367,6 +1373,18 @@ export function ReviewPanel() {
   const [sendLine, setSendLine] = createSignal<ReceiptLine | "sending" | undefined>(undefined, {
     name: "reviewSendLine",
   });
+
+  /**
+   * Close the Record dialog and forget its receipt, as closing it by hand
+   * does. The receipt's own moves ("Compare with your copy", "Compare the
+   * changes") close it from code, which skips `onOpenChange`; the next Save
+   * then opened on the last receipt, with no message field to record with.
+   */
+  const closeRecord = (): void => {
+    setRecordOpen(false);
+    setRecordedLine(undefined);
+    setSendLine(undefined);
+  };
 
   /** The send's line once it has one: not while it is still under way. */
   const sentLine = (): ReceiptLine | undefined => {
@@ -1400,7 +1418,9 @@ export function ReviewPanel() {
         : outcome.kind !== "refused"
           ? undefined
           : outcome.reason === "Rejected"
-            ? ("see" as const)
+            ? outcome.toCopy === true
+              ? ("copy" as const)
+              : ("see" as const)
             : outcome.reason === "Unauthorized"
               ? ("open" as const)
               : ("retry" as const);
@@ -1418,11 +1438,15 @@ export function ReviewPanel() {
     if (project === undefined) return;
     switch (action) {
       case "see":
-        setRecordOpen(false);
+        closeRecord();
         seeShared();
         return;
+      case "copy":
+        closeRecord();
+        seeCopy();
+        return;
       case "open":
-        setRecordOpen(false);
+        closeRecord();
         void navigate({ to: "/project/$slug/settings", params: { slug: shell.slug() } });
         return;
       case "retry":
@@ -1442,16 +1466,40 @@ export function ReviewPanel() {
             }),
           )
           .catch((cause: unknown) =>
-            setSendLine({
-              tone: "error",
-              title: t("Could not offer your changes"),
-              detail: describe(cause),
-              action: "offer",
-            }),
+            setSendLine(
+              isCopyHasWork(cause)
+                ? {
+                    tone: "warning",
+                    title: t("Not offered yet: your copy has changes this device does not"),
+                    detail: t(
+                      "Compare with your copy and choose what to keep; then offer again. Nothing is lost on either side.",
+                    ),
+                    action: "copy",
+                  }
+                : {
+                    tone: "error",
+                    title: t("Could not offer your changes"),
+                    detail: describe(cause),
+                    action: "offer",
+                  },
+            ),
           )
           .finally(() => void collaboration.refresh(services, project));
         return;
     }
+  };
+
+  /**
+   * Review against the person's own copy (`copy=1`): what a send or an offer
+   * the copy refused leads to. Its Save is the one decision: a decision commit
+   * on top of this device's work and the copy's, sent as a fast-forward.
+   */
+  const seeCopy = (): void => {
+    void navigate({
+      to: "/project/$slug/review",
+      params: { slug: shell.slug() },
+      search: COPY_REVIEW,
+    });
   };
 
   /**
@@ -1468,8 +1516,11 @@ export function ReviewPanel() {
   // when Review is already open that is a search change, not a mount.
   // "Review their changes" does the same with `against=writer`.
   createEffect(
-    () => search().against,
-    (against) => {
+    // `copy` too: from a review already against the shared project, "Compare
+    // with your copy" changes only that, and "theirs" must be read again.
+    () => `${String(search().against)}:${String(search().copy)}`,
+    () => {
+      const against = untrack(() => search().against);
       if (against === "shared") untrack(seeShared);
       if (against === "writer" && untrack(rightId) !== "writer" && untrack(leftId) !== "writer")
         untrack(() => pick("right", "writer"));
@@ -1862,9 +1913,13 @@ export function ReviewPanel() {
           title={t("Save")}
           description={
             againstShared()
-              ? t(
-                  "The project's text is kept as you left it here: your choices, and anything you edited. A passage only the shared project changed, that you didn't choose for, comes in. Everything else it changed arrives too, as one version.",
-                )
+              ? fromCopy()
+                ? t(
+                    "The project's text is kept as you left it here: your choices, and anything you edited. A passage only your copy changed, that you didn't choose for, comes in. Its versions stay in the history either way, and this one goes on top, so the next send is an ordinary one.",
+                  )
+                : t(
+                    "The project's text is kept as you left it here: your choices, and anything you edited. A passage only the shared project changed, that you didn't choose for, comes in. Everything else it changed arrives too, as one version.",
+                  )
               : t("Your changes in {count} book(s) are written and kept as a version.", {
                   count: unsaved().length,
                 })
@@ -1878,7 +1933,7 @@ export function ReviewPanel() {
                   disabled={sendLine() === "sending"}
                   data-review-record-done
                   onClick={() => {
-                    setRecordOpen(false);
+                    closeRecord();
                     // A suggestion that is now closed has nothing left to
                     // review here: back to the list it came from.
                     if (broughtIn()) {
@@ -2049,9 +2104,9 @@ function Receipt(props: {
     readonly tone: "success" | "warning" | "error" | "muted";
     readonly title: string;
     readonly detail?: string;
-    readonly action?: "see" | "retry" | "send" | "open" | "offer";
+    readonly action?: "see" | "copy" | "retry" | "send" | "open" | "offer";
   };
-  readonly onAction: (action: "see" | "retry" | "send" | "open" | "offer") => void;
+  readonly onAction: (action: "see" | "copy" | "retry" | "send" | "open" | "offer") => void;
 }) {
   const glyph = () => {
     switch (props.line.tone) {
@@ -2065,10 +2120,12 @@ function Receipt(props: {
         return <Info size={18} class="text-on-surface-tertiary" />;
     }
   };
-  const label = (action: "see" | "retry" | "send" | "open" | "offer"): string => {
+  const label = (action: "see" | "copy" | "retry" | "send" | "open" | "offer"): string => {
     switch (action) {
       case "see":
         return t("Compare the changes");
+      case "copy":
+        return t("Compare with your copy");
       case "retry":
         return t("Try sending again");
       case "send":
@@ -2093,7 +2150,11 @@ function Receipt(props: {
           {(action) => (
             <Button
               size="sm"
-              variant={action() === "see" || action() === "offer" ? "primary" : "secondary"}
+              variant={
+                action() === "see" || action() === "copy" || action() === "offer"
+                  ? "primary"
+                  : "secondary"
+              }
               data-receipt-action={action()}
               onClick={() => props.onAction(action())}
             >

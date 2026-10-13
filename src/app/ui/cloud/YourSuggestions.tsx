@@ -7,6 +7,7 @@
  * editor's note (`mySuggestions`), not from git.
  */
 
+import { useNavigate } from "@tanstack/solid-router";
 import { For, Show, createEffect, createSignal } from "solid-js";
 
 import type { Project } from "#core/project/project";
@@ -16,6 +17,8 @@ import { describe } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import {
+  COPY_REVIEW,
+  isCopyHasWork,
   mySuggestions,
   suggestMyChanges,
   withdrawSuggestion,
@@ -23,6 +26,7 @@ import {
 } from "../../suggestions";
 import { ago } from "../panels/format";
 import { Button, toasts } from "../primitives";
+import { copyHasWorkMessage } from "./copy";
 import { QuietSection } from "./QuietSection";
 
 const statusOf = (mine: MySuggestion): string => {
@@ -42,6 +46,7 @@ export function YourSuggestions(props: {
   readonly asked?: number;
 }) {
   const shell = useShell();
+  const navigate = useNavigate();
   const { services } = shell;
   const facts = () => collaboration.facts(props.project.root);
   const [mine, setMine] = createSignal<readonly MySuggestion[] | undefined>(undefined, {
@@ -71,9 +76,22 @@ export function YourSuggestions(props: {
     setBusy(true);
     work
       .then(() => toasts.success({ title: done }))
-      .catch((cause: unknown) =>
-        toasts.error({ title: t("That did not work"), message: describe(cause) }),
-      )
+      .catch((cause: unknown) => {
+        // The copy holds work this device lacks: not a failure, one decision.
+        if (isCopyHasWork(cause)) {
+          toasts.info({
+            title: t("Your copy has changes this device does not"),
+            message: copyHasWorkMessage(),
+          });
+          void navigate({
+            to: "/project/$slug/review",
+            params: { slug: shell.slug() },
+            search: COPY_REVIEW,
+          });
+          return;
+        }
+        toasts.error({ title: t("That did not work"), message: describe(cause) });
+      })
       .finally(() => {
         setBusy(false);
         void load(project);

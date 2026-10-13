@@ -24,10 +24,11 @@ import { collaboration } from "../../collaboration";
 import { describe } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { suggestMyChanges } from "../../suggestions";
+import { COPY_REVIEW, isCopyHasWork, suggestMyChanges } from "../../suggestions";
 import { ago } from "../panels/format";
 import { Button, toasts } from "../primitives";
 import { chooseOwnCopy, chooseShared } from "./collab";
+import { copyHasWorkMessage } from "./copy";
 
 export function CollabSection(props: { readonly onLeave: () => void }) {
   const shell = useShell();
@@ -63,11 +64,28 @@ export function CollabSection(props: { readonly onLeave: () => void }) {
           ),
         });
       } catch (cause) {
-        toasts.error({ title: t("Could not offer your changes"), message: describe(cause) });
+        // The copy holds work this device lacks: not a failure, one decision.
+        if (isCopyHasWork(cause)) {
+          toasts.info({
+            title: t("Your copy has changes this device does not"),
+            message: copyHasWorkMessage(),
+          });
+          toCopyReview();
+        } else toasts.error({ title: t("Could not offer your changes"), message: describe(cause) });
       } finally {
         await collaboration.refresh(services, project);
       }
     });
+
+  /** Review against the person's own copy: the one decision a refused offer leads to. */
+  const toCopyReview = (): void => {
+    props.onLeave();
+    void navigate({
+      to: "/project/$slug/review",
+      params: { slug: shell.slug() },
+      search: COPY_REVIEW,
+    });
+  };
 
   const toSettings = (): void => {
     props.onLeave();
@@ -146,7 +164,9 @@ export function CollabSection(props: { readonly onLeave: () => void }) {
               <Show when={held().copyAhead}>
                 <div class="flex items-center gap-2" data-sync-copy="ahead">
                   <p class="min-w-0 flex-1 text-small text-on-surface-secondary">
-                    {t("Your copy has work from another of your devices.")}
+                    {t(
+                      "Your copy has changes this device does not: from another device, or offered before.",
+                    )}
                   </p>
                   <Button
                     size="sm"

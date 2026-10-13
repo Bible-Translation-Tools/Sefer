@@ -153,7 +153,13 @@ export type SendOutcome =
   | { readonly kind: "sent"; readonly toCopy?: true }
   | { readonly kind: "detached" }
   | { readonly kind: "held" }
-  | { readonly kind: "refused"; readonly reason: RemoteFailureReason };
+  /**
+   * `toCopy`: it was the person's own copy that refused. `Rejected` then means
+   * the copy holds work this device does not (another device's, or an older
+   * offer the shared project never took), and the way on is Review against
+   * the copy, not against the shared project.
+   */
+  | { readonly kind: "refused"; readonly reason: RemoteFailureReason; readonly toCopy?: true };
 
 /**
  * Send this device's versions now, whatever the project's send-on-save says:
@@ -172,6 +178,10 @@ export const sendNow = async (
   if (outcome.kind === "refused" && outcome.reason === "Rejected")
     await checkForChanges(services, project);
   else await syncWatch.refresh(services, project).catch(() => undefined);
+  // Refused by the person's own copy: the check above has read the copy again
+  // (`fetchCopy`), and the popover's "your copy has work" line needs the facts.
+  if (outcome.kind === "refused" && outcome.toCopy === true)
+    await collaboration.refresh(services, project);
   // Refused by the shared project's permissions, or a sign-in gone stale: ask
   // whether this account can write, so the popover can offer the copy mode.
   if (outcome.kind === "refused" && outcome.reason === "Unauthorized")
@@ -194,8 +204,10 @@ const attemptSend = async (
     "sync.action": "push",
     "sync.cause": cause,
   });
+  let to: string | undefined;
   try {
-    const to = explicit ?? (await destination(services, project));
+    to = explicit ?? (await destination(services, project));
+    const target = to;
     const sent = await services.run(
       Effect.gen(function* () {
         const git = yield* Git;
@@ -204,22 +216,25 @@ const attemptSend = async (
         // A project attached to nothing has nowhere to send to; that is not a
         // refusal, and the Save dialog did not promise a send.
         if (Option.isNone(yield* remote.origin(repo))) return false;
-        yield* remote.push(repo, to);
+        yield* remote.push(repo, target);
         return true;
       }),
     );
     if (sent) syncStatus.noteSend({ sent: true });
     // The copy's ref is what "waiting to be sent" is measured against in the
     // copy mode: read it again, so what was just sent stops counting.
-    if (sent && to === "copy") await fetchCopy(services, project);
+    if (sent && target === "copy") await fetchCopy(services, project);
     operation.end("passed", { "sync.sent": sent });
     if (!sent) return { kind: "detached" };
-    return to === "copy" ? { kind: "sent", toCopy: true } : { kind: "sent" };
+    return target === "copy" ? { kind: "sent", toCopy: true } : { kind: "sent" };
   } catch (cause) {
     const reason = remoteReasonOf(cause) ?? "Rejected";
     syncStatus.noteSend({ refused: reason });
-    operation.end(remoteVerdict(reason), { "sync.reason": reason });
-    return { kind: "refused", reason };
+    operation.end(remoteVerdict(reason), {
+      "sync.reason": reason,
+      ...(to === undefined ? {} : { "sync.to": to }),
+    });
+    return to === "copy" ? { kind: "refused", reason, toCopy: true } : { kind: "refused", reason };
   }
 };
 
@@ -246,8 +261,16 @@ export type SettleOutcome =
       readonly recorded: RecordOutcome;
       readonly sending: Promise<SendOutcome> | undefined;
     }
-  /** One decision commit; `sent` is false when it is kept here and sending did not finish. */
-  | { readonly kind: "combined"; readonly commit: string | undefined; readonly sent: boolean }
+  /**
+   * One decision commit; `sent` is false when it is kept here and sending did
+   * not finish; `to` is the remote it went (or goes) to: `copy` in the copy mode.
+   */
+  | {
+      readonly kind: "combined";
+      readonly commit: string | undefined;
+      readonly sent: boolean;
+      readonly to: string;
+    }
   | {
       readonly kind: "refused";
       readonly receive?: ReceiveRefusal | undefined;
@@ -323,10 +346,10 @@ export const settleWithShared = async (
   );
   void syncWatch.refresh(services, project).catch(() => undefined);
   if (combined._tag === "Success")
-    return { kind: "combined", commit: combined.success.commit, sent: true };
+    return { kind: "combined", commit: combined.success.commit, sent: true, to: sendTo };
   // Recorded here and not sent is not a refusal: the next send carries it.
   if (combined.failure.state === "recorded")
-    return { kind: "combined", commit: undefined, sent: false };
+    return { kind: "combined", commit: undefined, sent: false, to: sendTo };
   return {
     kind: "refused",
     combine: combined.failure.refusal,

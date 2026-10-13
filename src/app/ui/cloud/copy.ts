@@ -400,6 +400,14 @@ export const sendOutcomeCopy = (
     case "refused":
       switch (outcome.reason) {
         case "Rejected":
+          if (outcome.toCopy === true)
+            return {
+              tone: "warning",
+              title: t("Saved here. Not sent: your copy has changes this device does not"),
+              detail: t(
+                "They came from another device, or from changes you offered before. Compare with your copy and choose what to keep; then it sends as usual. Nothing is lost on either side.",
+              ),
+            };
           return {
             tone: "warning",
             title: t("Saved here. Not sent: the shared project has changed"),
@@ -432,3 +440,12 @@ export const sendOutcomeCopy = (
       }
   }
 };
+
+/**
+ * What an offer says when the person's copy holds changes this device does
+ * not: the one decision, Review against the copy, comes next.
+ */
+export const copyHasWorkMessage = (): string =>
+  t(
+    "Compare with your copy and choose what to keep; then offer again. Nothing is lost on either side.",
+  );
