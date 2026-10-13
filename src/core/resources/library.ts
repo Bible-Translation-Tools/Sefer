@@ -383,14 +383,23 @@ const makeLibrary = (
     const registryPath = joinPath(libraryRoot, REGISTRY_FILE);
     const stored = yield* readJson(fileSystem, registryPath);
     let held = EMPTY;
+    /**
+     * Rows written before kinds that could not be recognised on this load —
+     * a Burrito on a drive that is not mounted, metadata that did not read
+     * this time. Not offered, but KEPT: every save writes them back, so a
+     * transient failure never deletes a row and its upstream, and the next
+     * load tries again. `add` of the same root, or `remove`, settles one.
+     */
+    let unrecognised: readonly (typeof ResourceRecord.Type)[] = [];
     if (stored !== undefined) {
       const decoded = decodeRegistry(withContainer(stored));
       if (Result.isSuccess(decoded)) {
         // A row written before kinds says nothing about what it holds. It is
-        // recognised again from its own metadata, never assumed: a row whose
-        // metadata now declares something Sefer cannot read is left out (and
-        // said so); its files are still on disk to add again.
+        // recognised again from its own metadata, never assumed: a row that
+        // cannot be recognised now is not offered (and said so), and is kept
+        // in the registry as it was (`unrecognised`).
         const resources: Resource[] = [];
+        const kept: (typeof ResourceRecord.Type)[] = [];
         for (const record of decoded.success.resources) {
           const { content, format, ...rest } = record;
           if (content !== undefined && format !== undefined) {
@@ -407,8 +416,12 @@ const makeLibrary = (
               root: record.root,
               ...(record.upstream === undefined ? {} : { upstream: record.upstream }),
             });
-          else observability?.note("library.load", "declined", again.failure.description);
+          else {
+            kept.push(record);
+            observability?.note("library.load", "declined", again.failure.description);
+          }
         }
+        unrecognised = kept;
         held = {
           resources,
           ...(decoded.success.bindings === undefined ? {} : { bindings: decoded.success.bindings }),
@@ -424,10 +437,17 @@ const makeLibrary = (
       Effect.mapError(
         Effect.gen(function* () {
           yield* fileSystem.makeDirectory(parentPath(registryPath), { recursive: true });
+          const written = {
+            ...next,
+            resources: [
+              ...next.resources,
+              ...unrecognised.filter((row) => !next.resources.some((each) => each.id === row.id)),
+            ],
+          };
           yield* writeFileStringAtomic(
             fileSystem,
             registryPath,
-            `${JSON.stringify(next, undefined, 2)}\n`,
+            `${JSON.stringify(written, undefined, 2)}\n`,
           );
           held = next;
         }),
@@ -524,6 +544,8 @@ const makeLibrary = (
               ? {}
               : { upstream: { url: normaliseRepoUrl(known.url), commit: known.commit } }),
           };
+          // Recognised now: no longer kept aside as unrecognised.
+          unrecognised = unrecognised.filter((row) => row.id !== resource.id);
           yield* persist({
             ...held,
             resources: [...held.resources.filter((held) => held.id !== resource.id), resource],
@@ -552,9 +574,13 @@ const makeLibrary = (
         }),
 
       remove: (id) =>
-        Effect.suspend(() =>
-          persist({ ...held, resources: held.resources.filter((resource) => resource.id !== id) }),
-        ),
+        Effect.suspend(() => {
+          unrecognised = unrecognised.filter((row) => row.id !== id);
+          return persist({
+            ...held,
+            resources: held.resources.filter((resource) => resource.id !== id),
+          });
+        }),
 
       pick: (projectRoot, role, resourceId) =>
         Effect.gen(function* () {
