@@ -31,6 +31,14 @@ tauri-plugin-os = "2"
 # The Git port's desktop half. `https` is the transport Gitea/WACS needs; ssh
 # is deliberately absent because Sefer authenticates with a token, never a key.
 git2 = { version = "0.21", features = ["https"] }
+# An embedded W3C WebDriver server (WebdriverIO's driver over WKWebView,
+# WebView2 and WebKitGTK), so an agent or `pnpm test:desktop` can drive the real
+# app. Optional, and only the `webdriver` feature names it: the desktop
+# launcher turns that on for a debug build and nothing else does, so a release
+# build never compiles it. Not a `[target.'cfg(debug_assertions)']` dependency:
+# cargo evaluates that cfg without the profile, so it would reach release too.
+# See documentation/architecture/desktop.md, "Driving the app".
+tauri-plugin-wdio-webdriver = { version = "1.5", optional = true }
 
 
 [dev-dependencies]
@@ -58,6 +66,8 @@ keyring = { version = "3", features = ["sync-secret-service"] }
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]
+# Debug builds only; `src/lib.rs` refuses to compile it into a release.
+webdriver = ["dep:tauri-plugin-wdio-webdriver"]
 
 [profile.dev]
 incremental = true

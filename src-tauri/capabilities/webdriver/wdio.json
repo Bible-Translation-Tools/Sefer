@@ -1,0 +1,7 @@
+{
+  "$schema": "../../gen/schemas/desktop-schema.json",
+  "identifier": "webdriver",
+  "description": "The embedded WebDriver server's permission. Read only when the `webdriver` cargo feature is on, which only the desktop launcher's debug build turns on; see build.rs.",
+  "windows": ["main"],
+  "permissions": ["wdio-webdriver:default"]
+}

@@ -16,6 +16,12 @@ mod updater;
 
 use tauri::Manager;
 
+// The embedded WebDriver server answers anyone on localhost with full control
+// of the window. It exists for agents and `pnpm test:desktop`, and a release
+// must never carry it, so asking for it in one is a build error, not a warning.
+#[cfg(all(feature = "webdriver", not(debug_assertions)))]
+compile_error!("the `webdriver` feature is for debug builds only; see documentation/architecture/desktop.md");
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     git::configure_timeouts();
@@ -35,6 +41,21 @@ pub fn run() {
             .plugin(tauri_plugin_window_state::Builder::new().build())
             .plugin(tauri_plugin_updater::Builder::new().build())
             .plugin(tauri_plugin_process::init());
+    }
+
+    // The driven build: the WebDriver server on `TAURI_WEBDRIVER_PORT`, and the
+    // dev server at `SEFER_DEV_URL` rather than the compiled-in
+    // `localhost:3000`, so the launcher can put each run on free ports and two
+    // runs (two worktrees, say) never meet.
+    #[cfg(feature = "webdriver")]
+    {
+        builder = builder.plugin(tauri_plugin_wdio_webdriver::init());
+    }
+    #[allow(unused_mut)]
+    let mut context = tauri::generate_context!();
+    #[cfg(feature = "webdriver")]
+    if let Some(url) = std::env::var("SEFER_DEV_URL").ok().and_then(|url| url.parse().ok()) {
+        context.config_mut().build.dev_url = Some(url);
     }
 
     builder
@@ -81,6 +102,6 @@ pub fn run() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running Sefer");
 }

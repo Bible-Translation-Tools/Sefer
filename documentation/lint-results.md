@@ -46,7 +46,7 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | --- | --- | --- |
 | oxlint errors | 0 | `pnpm lint`, every commit |
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
-| fallow dead code (`pnpm deadcode`) | 8 issue(s) | every deploy; advisory on branches |
+| fallow dead code (`pnpm deadcode`) | 0 issue(s) | every deploy; advisory on branches |
 | fallow duplication | 1.7% in 67 clone group(s) | none — advisory |
 | suppression comments | 15 | each listed below with its reason |
 
@@ -78,7 +78,7 @@ None.
 
 From `.fallowrc.jsonc`, where each one's reason is written beside it.
 
-- **Extra entries:** `src/App.tsx`, `src/Document.tsx`, `tools/vite/lucideSolidShim.ts`
-- **Dependencies it cannot see used:** `@tauri-apps/cli`, `@solidjs/diagnostics`, `@tauri-apps/plugin-opener`
+- **Extra entries:** `src/App.tsx`, `src/Document.tsx`, `tools/vite/lucideSolidShim.ts`, `e2e-desktop/wdio.conf.ts`, `e2e-desktop/**/*.desktop.ts`
+- **Dependencies it cannot see used:** `@tauri-apps/cli`, `@solidjs/diagnostics`, `@tauri-apps/plugin-opener`, `@wdio/cli`, `@wdio/local-runner`, `@wdio/mocha-framework`, `@wdio/spec-reporter`, `@wdio/tauri-service`
 
 <!-- lint-results:end -->
