@@ -76,20 +76,11 @@ composed in `src/app/services.ts` with the Galley hasher): Git never sees it, a
 shared drive never carries it, and no project scan mistakes it for content. It
 holds nothing but journals, so finding them is one plain listing.
 
-**The former place, read until the release after next (2026-10-13).** Until
-2026-10-13 the journal root was app data itself, beside the Library and
-desktop's projects, which finding the journals had to skip (`notJournals`). So
-that unsaved work an older build left is still offered, recovery also reads
-that place (`formerRoot`), with the same skip-list plus `journals/`. Nothing is
-moved: a journal found there is read, set aside, restored, compacted and
-removed where it is, and every new journal goes to `journals/`. Stop reading
-it in the release after next; that is deleting `formerRoot` and `notJournals`
-from the composition, one change in `src/app/services.ts` (the options can go
-from `recovery.ts` after). Driven on 2026-10-13: a Psalms journal written by
-the previous build was offered after the change and its set-aside copy stayed
-in the old place, a new Jude edit journalled into `journals/` on desktop and
-on the Web (OPFS `/sefer/app/journals/…`), and the Web restored it after a
-reload. Writes
+Until 2026-10-13 the journal root was app data itself, beside the Library and
+desktop's projects, and finding the journals had to walk past both (on desktop,
+every project's `.git` and en_tn's 1,300 folders at one IPC call each). The old
+place is not read: Will ruled no migration was needed (2026-10-13), so a
+journal an older build left there is not offered. Writes
 use `writeFileAtomic` on the whole file — append-by-rewrite is the simplest
 correct thing at one book's unsaved edits, no partial line can ever be read,
 and the `FileSystem` port has no append primitive to be atomic with.

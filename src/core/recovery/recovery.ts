@@ -178,24 +178,6 @@ export interface RecoveryOptions {
    * should pass `HostInfo.paths().appData` once that service exists.
    */
   readonly journalRoot: string;
-  /**
-   * Where an older build wrote its journals, read as well as `journalRoot` so
-   * unsaved work it left is still offered; nothing is moved there. A journal
-   * found here is read, written and removed in place for the rest of its life;
-   * every new journal goes to `journalRoot`. Added 2026-10-13, when journals
-   * moved from the top of app data to `appData/journals`: stop reading it the
-   * release after next, which is deleting the option where the composition
-   * passes it (`src/app/services.ts`).
-   */
-  readonly formerRoot?: string;
-  /**
-   * Folders under `formerRoot` that hold no journals and are never walked
-   * looking for them. App data also holds the projects, the Library and now
-   * `journals/`, and walking it whole was every project's `.git` and en_tn's
-   * 1,300 folders, at one IPC call per folder on desktop (`journal.offer` took
-   * 7 s awake and 170–350 s asleep, 2026-10-13). Goes with `formerRoot`.
-   */
-  readonly notJournals?: readonly string[];
   /** Defaults to 500 ms of quiet, 5 s maximum: off the keystroke path. */
   readonly policy?: DebouncePolicy;
   /**
@@ -364,18 +346,9 @@ const make = (
      */
     const owned = new Set<string>();
 
-    /**
-     * Journals found under `formerRoot` (and not under `root`), by id: they
-     * stay where they are until removed. Filled by `listIds`.
-     */
-    const former = new Set<string>();
-    const rootOf = (id: string): string =>
-      former.has(id) && options.formerRoot !== undefined ? options.formerRoot : root;
+    const fileFor = (id: string): string => joinPath(root, `${id}${JOURNAL_SUFFIX}`);
 
-    const fileFor = (id: string): string => joinPath(rootOf(id), `${id}${JOURNAL_SUFFIX}`);
-
-    const directoryFor = (id: string): string =>
-      joinPath(rootOf(id), id.slice(0, id.lastIndexOf("/")));
+    const directoryFor = (id: string): string => joinPath(root, id.slice(0, id.lastIndexOf("/")));
 
     const write = (id: string, journal: Journal): Effect.Effect<void, RecoveryError> =>
       Effect.mapError(
@@ -385,13 +358,9 @@ const make = (
         (error) => ioError(id, error.message),
       );
 
-    // Removed from the former place, an id's next write goes to `root`.
     const remove = (id: string): Effect.Effect<void, RecoveryError> =>
-      Effect.tap(
-        Effect.mapError(fileSystem.remove(fileFor(id), { force: true }), (error) =>
-          ioError(id, error.message),
-        ),
-        () => Effect.sync(() => former.delete(id)),
+      Effect.mapError(fileSystem.remove(fileFor(id), { force: true }), (error) =>
+        ioError(id, error.message),
       );
 
     /**
@@ -412,8 +381,6 @@ const make = (
           return undefined;
         }
         const aside = `${id}${ASIDE}${last.at}`;
-        // Set aside beside it: a journal in the former place stays there.
-        if (former.has(id)) former.add(aside);
         yield* write(aside, found.success);
         yield* remove(id);
         observability?.note("journal.aside", "rewrote", undefined, {
@@ -574,52 +541,14 @@ const make = (
      * nothing on either real host. The id is only a handle; a journal's
      * identity is the header it carries, which is what `pending` reads.
      */
-    const skipped = new Set((options.notJournals ?? []).map((path) => normalisePath(path)));
-    /**
-     * Every name below `under`, as a recursive listing would give it, but
-     * never descending into a folder `notJournals` names: its own entries,
-     * then each one that is not skipped, recursively. A file at the top level
-     * lists nothing below itself, which is the empty answer.
-     */
-    const namesBelow = (under: string): Effect.Effect<readonly string[]> =>
-      skipped.size === 0
-        ? Effect.orElseSucceed(fileSystem.readDirectory(under, { recursive: true }), () => [])
-        : Effect.gen(function* () {
-            const top = yield* Effect.orElseSucceed(fileSystem.readDirectory(under), () => []);
-            const names: string[] = [];
-            for (const entry of top) {
-              const path = joinPath(under, entry);
-              if (skipped.has(normalisePath(path))) continue;
-              names.push(entry);
-              const below = yield* Effect.orElseSucceed(
-                fileSystem.readDirectory(path, { recursive: true }),
-                (): readonly string[] => [],
-              );
-              for (const name of below) names.push(`${entry}/${name}`);
-            }
-            return names;
-          });
-
-    const idsIn = (names: readonly string[]): readonly string[] =>
-      names
-        .filter((name) => name.endsWith(JOURNAL_SUFFIX) && name.split("/").length >= 2)
-        .map((name) => journalId(name.slice(0, -JOURNAL_SUFFIX.length)));
-
-    /**
-     * Every journal id under `root`, then those only under `formerRoot`
-     * (remembered in `former`, so they are read and written where they are).
-     * `root` holds nothing but journals, so it is one plain listing.
-     */
-    const listIds = Effect.gen(function* () {
-      const current = idsIn(
-        yield* Effect.orElseSucceed(fileSystem.readDirectory(root, { recursive: true }), () => []),
-      );
-      if (options.formerRoot === undefined) return current;
-      const here = new Set(current);
-      const older = idsIn(yield* namesBelow(options.formerRoot)).filter((id) => !here.has(id));
-      for (const id of older) former.add(id);
-      return [...current, ...older];
-    });
+    /** `root` holds nothing but journals, so finding them is one plain listing. */
+    const listIds = Effect.map(
+      Effect.orElseSucceed(fileSystem.readDirectory(root, { recursive: true }), () => []),
+      (names) =>
+        names
+          .filter((name) => name.endsWith(JOURNAL_SUFFIX) && name.split("/").length >= 2)
+          .map((name) => journalId(name.slice(0, -JOURNAL_SUFFIX.length))),
+    );
 
     const prune = (
       id: string,
