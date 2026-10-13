@@ -422,6 +422,10 @@ const domainLayer = (
     tauri === undefined
       ? NoUpdaterLive(build)
       : tauri.TauriUpdaterLive({ updaterHost: env.updaterHost }),
+    // A whole folder's listing or files in one call, where the FileSystem
+    // port would cross IPC per file. Desktop only; core reads it through
+    // `serviceOption` and walks the port without it.
+    tauri === undefined ? Layer.empty : tauri.TauriFolderTreeLive,
   );
 
   // Save must find Recovery, or a crash costs the user everything since the

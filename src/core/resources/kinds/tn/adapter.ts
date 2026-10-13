@@ -11,7 +11,7 @@
  * by book.
  */
 
-import { Effect, type FileSystem } from "effect";
+import { Effect, Option, type FileSystem } from "effect";
 
 import type { BookId } from "../../../book/book";
 import type { Address } from "../../../location/address";
@@ -21,6 +21,7 @@ import {
   type PlaceContext,
   type ResourceHandle,
 } from "../handle";
+import { FolderTree } from "../tree";
 import { answersPlace, noteOf, type Note } from "./note";
 import { bookPack, helpBooks, type HelpBook, type Pack } from "./pack";
 
@@ -35,6 +36,13 @@ export const openTranslationNotes = (
     const books = new Map<string, HelpBook>(
       (yield* helpBooks(fileSystem, resource.root)).map((help) => [help.book, help]),
     );
+    // The host's fast path to a folder, captured now as `fileSystem` is: the
+    // handle's reads run later, wherever the caller runs them (the notes pane
+    // forks them bare), and would otherwise find no `FolderTree` and walk the
+    // port one IPC call per file.
+    const fast = yield* Effect.serviceOption(FolderTree);
+    const withHost = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+      Option.isSome(fast) ? Effect.provideService(effect, FolderTree, fast.value) : effect;
     /** Most recent last. */
     const held = new Map<string, Pack>();
 
@@ -52,7 +60,7 @@ export const openTranslationNotes = (
           return yield* Effect.fail(
             new Unavailable({ reason: "Missing", description: `${resource.title} has no ${id}` }),
           );
-        const pack = yield* bookPack(fileSystem, resource.root, help);
+        const pack = yield* withHost(bookPack(fileSystem, resource.root, help));
         held.set(id, pack);
         for (const oldest of held.keys()) {
           if (held.size <= HELD) break;

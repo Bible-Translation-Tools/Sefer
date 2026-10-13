@@ -12,6 +12,7 @@
 mod credentials;
 mod errors;
 mod git;
+mod tree;
 mod updater;
 
 use tauri::Manager;
@@ -109,6 +110,8 @@ pub fn run() {
             git::git_deepen,
             git::git_is_shallow,
             git::git_push,
+            tree::tree_listing,
+            tree::tree_read,
             credentials::credentials_get,
             credentials::credentials_set,
             credentials::credentials_clear,
