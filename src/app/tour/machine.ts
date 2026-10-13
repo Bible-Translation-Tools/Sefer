@@ -305,6 +305,10 @@ export const startTour = (context: TourContext, tour: Tour): void => {
       }
     };
     if (!ready()) {
+      // Whatever ran before is over: its card left on screen while this one
+      // waits was frozen (its polling stopped), and its Next cancelled the
+      // start, since stepping restarts polling for the old tour.
+      setRunning(undefined);
       poll = setInterval(() => {
         if (ready() || Date.now() - started > READY_TIMEOUT_MS) {
           stopPolling();

@@ -120,15 +120,24 @@ export function TourOutlet() {
     return now === undefined ? undefined : now.steps[now.index];
   };
 
-  // Where the anchor is, measured every frame while a step shows: the page
-  // under a tutorial scrolls, resizes and re-renders, and the ring follows.
+  // Where the anchor is, measured every frame while a spotlight step shows,
+  // and not at all otherwise: the page under a tutorial scrolls, resizes and
+  // re-renders, and the ring follows.
   const [box, setBox] = createSignal<Box | undefined>(undefined);
   let frame = 0;
   let scrolledFor: unknown;
+  const spotlit = () => {
+    const now = runningTour();
+    return now?.phase === "showing" ? step()?.spotlight?.anchor : undefined;
+  };
   const measure = (): void => {
     const now = runningTour();
-    const anchor = now?.phase === "showing" ? step()?.spotlight?.anchor : undefined;
-    const element = anchor === undefined ? null : anchored(anchor);
+    const anchor = spotlit();
+    if (anchor === undefined) {
+      setBox(undefined);
+      return;
+    }
+    const element = anchored(anchor);
     if (element === null) setBox(undefined);
     else {
       // Brought into view once per step, not every frame.
@@ -149,11 +158,25 @@ export function TourOutlet() {
     }
     frame = requestAnimationFrame(measure);
   };
-  frame = requestAnimationFrame(measure);
+  createEffect(spotlit, (anchor) => {
+    cancelAnimationFrame(frame);
+    if (anchor === undefined) setBox(undefined);
+    else frame = requestAnimationFrame(measure);
+  });
   onCleanup(() => cancelAnimationFrame(frame));
 
+  // Escape stops a tutorial: one the person is only reading. Not a workflow,
+  // which they work underneath, where Escape closes the editor's palettes and
+  // popovers all the time; it stops by its Stop button. And not when
+  // something else already took the key, unless it came from the card.
   const onKeyDown = (event: KeyboardEvent): void => {
-    if (event.key === "Escape" && runningTour() !== undefined) stopTour();
+    if (event.key !== "Escape") return;
+    const now = runningTour();
+    if (now === undefined || now.tour.kind === "workflow") return;
+    const fromCard =
+      event.target instanceof Element && event.target.closest("[data-tour-card]") !== null;
+    if (event.defaultPrevented && !fromCard) return;
+    stopTour();
   };
   document.addEventListener("keydown", onKeyDown);
   onCleanup(() => document.removeEventListener("keydown", onKeyDown));
