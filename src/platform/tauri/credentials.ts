@@ -48,6 +48,14 @@ const decode = (secret: string): Option.Option<Credential> => {
   }
 };
 
+/**
+ * The keychain's own words for a failure. A bare `Effect.tryPromise` wraps the
+ * command's rejection in an exception reading only "An error occurred in
+ * Effect.tryPromise", which is all a failed sign-in said (2026-10-13).
+ */
+const keychainSaid = (cause: unknown): Error =>
+  cause instanceof Error ? cause : new Error(String(cause));
+
 export const TauriCredentialsLive: Layer.Layer<Credentials> = Layer.succeed(Credentials, {
   get: (remote) =>
     Effect.map(
@@ -71,19 +79,23 @@ export const TauriCredentialsLive: Layer.Layer<Credentials> = Layer.succeed(Cred
   // a sign-in that did not persist, and a sign-out that left the token behind.
   set: (remote, credential) =>
     Effect.orDie(
-      Effect.tryPromise(() =>
-        invoke<void>("credentials_set", {
-          service: KEYCHAIN_SERVICE,
-          account: remote,
-          secret: JSON.stringify(credential),
-        }),
-      ),
+      Effect.tryPromise({
+        try: () =>
+          invoke<void>("credentials_set", {
+            service: KEYCHAIN_SERVICE,
+            account: remote,
+            secret: JSON.stringify(credential),
+          }),
+        catch: keychainSaid,
+      }),
     ),
 
   clear: (remote) =>
     Effect.orDie(
-      Effect.tryPromise(() =>
-        invoke<void>("credentials_clear", { service: KEYCHAIN_SERVICE, account: remote }),
-      ),
+      Effect.tryPromise({
+        try: () =>
+          invoke<void>("credentials_clear", { service: KEYCHAIN_SERVICE, account: remote }),
+        catch: keychainSaid,
+      }),
     ),
 });

@@ -55,6 +55,15 @@ const updaterTarget = (): string => {
 const messageOf = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
 
+/**
+ * A plugin call whose rejection is kept as it is. A bare `Effect.tryPromise`
+ * wraps it in an exception whose message is only "An error occurred in
+ * Effect.tryPromise", and that is all the About panel said for a failed check
+ * (found driving the app, 2026-10-13).
+ */
+const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, unknown> =>
+  Effect.tryPromise({ try: run, catch: (cause) => cause });
+
 /** One release row as the worker's `/versions` route publishes it. */
 interface WireRelease {
   readonly version: string;
@@ -111,7 +120,7 @@ export const TauriUpdaterLive = (options: TauriUpdaterOptions): Layer.Layer<Upda
          * than interpreted.
          */
         check: () =>
-          Effect.map(Effect.result(Effect.tryPromise(() => check())), (result): CheckResult => {
+          Effect.map(Effect.result(attempt(() => check())), (result): CheckResult => {
             if (Result.isFailure(result)) {
               return { _tag: "Unavailable", reason: messageOf(result.failure) };
             }
@@ -133,12 +142,12 @@ export const TauriUpdaterLive = (options: TauriUpdaterOptions): Layer.Layer<Upda
             // download URL and its signature belong to one manifest, and a
             // manifest read minutes ago may no longer be the current one.
             const update = yield* Effect.mapError(
-              Effect.tryPromise(() => check()),
+              attempt(() => check()),
               (cause) => new UpdaterError({ reason: "Network", description: messageOf(cause) }),
             );
             if (update === null) return;
             yield* Effect.mapError(
-              Effect.tryPromise(() => update.downloadAndInstall()),
+              attempt(() => update.downloadAndInstall()),
               (cause) => new UpdaterError({ reason: "Failed", description: messageOf(cause) }),
             );
             yield* Effect.orDie(Effect.promise(() => relaunch()));
@@ -168,7 +177,7 @@ export const TauriUpdaterLive = (options: TauriUpdaterOptions): Layer.Layer<Upda
             const base = yield* requireHost();
             const endpoint = `${base}/${updaterTarget()}/at/${requested}`;
             yield* Effect.mapError(
-              Effect.tryPromise(() => invoke<void>("install_update_from_endpoint", { endpoint })),
+              attempt(() => invoke<void>("install_update_from_endpoint", { endpoint })),
               (cause) => new UpdaterError({ reason: "Failed", description: messageOf(cause) }),
             );
             yield* Effect.orDie(Effect.promise(() => relaunch()));
