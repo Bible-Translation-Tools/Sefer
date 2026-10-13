@@ -70,8 +70,7 @@ export function NotesSection() {
       ),
     );
     const offered = HELP_TEXTS.filter((help) => {
-      const url = helpUrl(services, help);
-      return url !== undefined && !urls.has(normaliseRepoUrl(url));
+      return !urls.has(normaliseRepoUrl(helpUrl(help)));
     });
     const all: Row[] = [
       ...held().map((resource): Row => ({ kind: "held", resource })),
@@ -86,9 +85,16 @@ export function NotesSection() {
     });
   };
 
+  /** Repositories whose last download failed, said on the button (`data-state`) for the tutorial. */
+  const [failed, setFailed] = createSignal<ReadonlySet<string>>(new Set(), {
+    name: "notesFailed",
+  });
   const download = (help: HelpText): void => {
+    setFailed((held) => new Set([...held].filter((each) => each !== help.repository)));
     // The toast says how it went, either way.
-    void downloadHelp(services, help).catch(() => undefined);
+    void downloadHelp(services, help).catch(() =>
+      setFailed((held) => new Set([...held, help.repository])),
+    );
   };
 
   const remove = (resource: Resource): void => {
@@ -187,6 +193,7 @@ export function NotesSection() {
                         size="flush"
                         data-tour="notes-download"
                         data-repository={help().repository}
+                        data-state={failed().has(help().repository) ? "failed" : undefined}
                         loading={helpDownloads().has(help().repository)}
                         icon={<Download size={16} aria-hidden="true" />}
                         onClick={() => download(help())}

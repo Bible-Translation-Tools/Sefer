@@ -360,8 +360,8 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       ),
     );
     return HELP_TEXTS.flatMap((help) => {
-      const url = helpUrl(services, help);
-      return url === undefined || held.has(normaliseRepoUrl(url)) ? [] : [{ help, url }];
+      const url = helpUrl(help);
+      return held.has(normaliseRepoUrl(url)) ? [] : [{ help, url }];
     });
   };
 

@@ -541,18 +541,29 @@ export interface HelpText {
   readonly title: string;
   /** Its language's tag. */
   readonly language: string;
-  /** Where it is on the content host, `Owner/repo`. */
+  /** Where it is on its host, `Owner/repo`. */
   readonly repository: string;
+  /**
+   * The host it lives on, named, as a share link names its cloud
+   * (`host=`): the configured cloud says nothing about where WA publishes
+   * its helps, and the dev channel's cloud (WACS dev) holds an older copy.
+   */
+  readonly host: string;
 }
 
 /**
  * The helps Sefer can read, by repository, because the Language API's view
  * has no rows for them (plan §6, "Catalogue gap"): a second source, stated
- * here and nowhere else, until the API lists them. WA's canonical `en_tn`,
+ * here and nowhere else, until the API lists them. Each names its host. WA's canonical `en_tn`,
  * not `en_tn_condensed`.
  */
 export const HELP_TEXTS: readonly HelpText[] = [
-  { title: "Translation Notes", language: "en", repository: "WycliffeAssociates/en_tn" },
+  {
+    title: "Translation Notes",
+    language: "en",
+    repository: "WycliffeAssociates/en_tn",
+    host: "https://content.bibletranslationtools.org",
+  },
 ];
 
 export const gatewayTexts = (rows: readonly CatalogueEntry[]): readonly CatalogueEntry[] => {

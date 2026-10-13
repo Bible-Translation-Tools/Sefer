@@ -63,19 +63,25 @@ export const notesTour: Tour = {
         title: "Download them",
         body: "Press Download. The notes come down once for this device, newest version only, and a toast in the corner shows how far it has got. If this row already says Remove, they are here already: press Next.",
       },
-      // Moves on as soon as the download has started (or was never needed).
+      // Moves on as soon as the download has started, or already failed, or
+      // was never needed.
       advance: () =>
         present("[data-tour=notes-remove]") ||
+        present("[data-tour=notes-download][data-state=failed]") ||
         document.querySelector("[data-tour=notes-download] [class*=animate-spin]") !== null,
     },
     {
-      // Waits for the download to finish: the row turns into "on this device".
-      ready: () => present("[data-tour=notes-remove]"),
+      // Waits for the download to END: the row turns into "on this device",
+      // or, when it failed, the Download button says so (`data-state`). A
+      // failure must not leave this step waiting out its ten minutes.
+      ready: () =>
+        present("[data-tour=notes-remove]") ||
+        present("[data-tour=notes-download][data-state=failed]"),
       timeoutMs: DOWNLOAD_MS,
       spotlight: {
-        anchor: "[data-tour=notes-remove]",
+        anchor: "[data-tour=notes-remove], [data-tour=notes-download]",
         title: "On this device",
-        body: "That is all 29,000 notes files, kept as one file per book. Remove takes them off again; nothing else depends on them.",
+        body: "That is all 29,000 notes files, kept as one file per book. Remove takes them off again; nothing else depends on them. If the row still says Download, it did not finish: the message in the corner says why. Press Download to try again, then Next.",
       },
       advance: "user",
     },

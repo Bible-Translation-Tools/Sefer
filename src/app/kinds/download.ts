@@ -16,16 +16,13 @@ import type { Resource } from "#core/resources/library";
 import { describeCopy, referenceCopy } from "../arrival";
 import type { HelpText } from "../catalogue";
 import { describe, remoteReasonOf } from "../describe";
-import { contentHostFor } from "../endpoints";
 import { t } from "../i18n";
 import type { Services } from "../services";
 import { toasts } from "../ui/primitives";
 
-/** Where a help is cloned from on the configured content host, or `undefined` with none. */
-export const helpUrl = (services: Services, help: HelpText): string | undefined => {
-  const host = contentHostFor(services.settings);
-  return host === null ? undefined : `${host}/${help.repository}`;
-};
+/** Where a help is cloned from: its own named host, whichever cloud this build is configured for. */
+export const helpUrl = (help: HelpText): string =>
+  `${help.host.replace(/\/+$/u, "")}/${help.repository}`;
 
 /**
  * The repositories being downloaded right now, so every screen that offers
@@ -36,10 +33,30 @@ const [downloading, setDownloading] = createSignal<ReadonlySet<string>>(new Set(
 });
 export const helpDownloads = downloading;
 
-/** Downloads `help` into the Library (once per device), with its progress toast. */
+/** Downloads in flight, by repository: a second ask joins the first. */
+const inFlight = new Map<string, Promise<Resource>>();
+
+/**
+ * Downloads `help` into the Library (once per device), with its progress
+ * toast. Asked again while it is downloading (the projects page, then the
+ * reference column's menu), it answers with the same download rather than
+ * starting a second one into the same folder, whose failure would remove
+ * what the first registers.
+ */
 export const downloadHelp = (services: Services, help: HelpText): Promise<Resource> => {
-  const url = helpUrl(services, help);
-  if (url === undefined) return Promise.reject(new Error(t("No cloud is configured.")));
+  const running = inFlight.get(help.repository);
+  if (running !== undefined) return running;
+  const started = startDownload(services, help);
+  inFlight.set(help.repository, started);
+  void started.then(
+    () => inFlight.delete(help.repository),
+    () => inFlight.delete(help.repository),
+  );
+  return started;
+};
+
+const startDownload = (services: Services, help: HelpText): Promise<Resource> => {
+  const url = helpUrl(help);
   const title = t("Downloading {title}", { title: help.title });
   const toast = toasts.progress({ title, message: t("Starting…") });
   const operation = services.composition.observability.operation("import.remote", {
