@@ -8,7 +8,7 @@ import { contentHostFor } from "#app/endpoints";
 import { t } from "#app/i18n";
 import { useShell } from "#app/ProjectContext";
 import { projectsFrom, standingOf } from "#app/shareLinks";
-import { hostOfUrl, sourceUrl, type Source, type VersionStanding } from "#core/project/shareLink";
+import { placeOf, sourceUrl, type Source, type VersionStanding } from "#core/project/shareLink";
 import { Remote } from "#core/remote/remote";
 
 import { Button, DelayedSpinner, EmptyState, toasts } from "../primitives";
@@ -106,16 +106,13 @@ export function OpenByLink(props: {
   const query = (): URLSearchParams => new URLSearchParams(props.searchStr);
 
   const source = (): Source | undefined => {
-    const named = query().get("host");
-    const configured = contentHostFor(shell.services.settings);
-    const host = named ?? (configured === null ? undefined : hostOfUrl(configured));
-    return host === undefined
+    // `host=` is a bare host or a whole base (scheme and path prefix); with
+    // none, the configured cloud, whose own scheme and prefix are kept.
+    const named = query().get("host") ?? contentHostFor(shell.services.settings);
+    const at = named === null ? undefined : placeOf(named);
+    return at === undefined
       ? undefined
-      : {
-          host: host.toLowerCase(),
-          owner: props.owner.toLowerCase(),
-          repo: props.repo.toLowerCase(),
-        };
+      : { ...at, owner: props.owner.toLowerCase(), repo: props.repo.toLowerCase() };
   };
 
   /** Opens `root` at the link's place, and says how its version stands. */
@@ -195,7 +192,7 @@ export function OpenByLink(props: {
         // that reads beside the source (Find's reference scope) needs them
         // registered when it mounts.
         if (Result.isSuccess(arrived)) {
-          await announceSourceTexts(shell.services, arrived.success.root, `https://${named.host}`);
+          await announceSourceTexts(shell.services, arrived.success.root, named.base);
           return openAt(arrived.success.root, target);
         }
         toasts.error({

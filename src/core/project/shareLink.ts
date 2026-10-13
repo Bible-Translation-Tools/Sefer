@@ -17,7 +17,11 @@
  * the receiver's: the dev channel's is WACS dev and production's is WACS, so
  * a link copied on one and opened on the other found nothing when it was left
  * out for "the usual host" (2026-10-12). A link without it (typed by hand,
- * or made before) is looked for on the receiver's configured host.
+ * or made before) is looked for on the receiver's configured host. It is the
+ * bare host (`host=wacs.org`) for the usual `https://<host>`, so those links
+ * read as they always did, and the whole base otherwise
+ * (`host=http://localhost:3000`, `host=https://h/git`): a Gitea on plain http,
+ * or served under a path, is a different place from `https://<host>`.
  *
  * Owner and repository go into the path as they are: Gitea allows only
  * letters, digits, `-`, `_` and `.` in either (2026-10-12, `IsValidUsername`
@@ -27,16 +31,43 @@
 
 /** A shared project, as a link names it. Lower case: Gitea ignores case. */
 export interface Source {
+  /** The host alone (`wacs.org`, `localhost:3000`): what a person is shown. */
   readonly host: string;
+  /**
+   * Where the server's repositories start: scheme, host and any path prefix
+   * before owner/repo (`https://wacs.org`, `http://localhost:3000`,
+   * `https://h/git`), no trailing slash. What a clone URL is built from and
+   * what two sources are compared by.
+   */
+  readonly base: string;
   readonly owner: string;
   readonly repo: string;
 }
 
 /**
- * The source a remote URL points at, or undefined when it is not an
- * `https://host/owner/repo` address. Credentials, a trailing slash and `.git`
- * are ignored, so a clone URL and the browser address of the same project
- * agree.
+ * The host and base a link's `host=` (or a configured content host) names: a
+ * bare host is `https://<host>`; a URL is taken whole, scheme and path prefix
+ * kept. Undefined when it is neither.
+ */
+export const placeOf = (named: string): Pick<Source, "host" | "base"> | undefined => {
+  let parsed: URL;
+  try {
+    parsed = new URL(named.includes("://") ? named : `https://${named}`);
+  } catch {
+    return undefined;
+  }
+  if (parsed.host === "") return undefined;
+  const host = parsed.host.toLowerCase();
+  const prefix = parsed.pathname.replace(/\/+$/u, "");
+  return { host, base: `${parsed.protocol}//${host}${prefix}`.toLowerCase() };
+};
+
+/**
+ * The source a remote URL points at, or undefined when it is not a
+ * `<scheme>://host/[prefix/]owner/repo` address: the last two segments are
+ * owner and repository, everything before them the prefix. Credentials, a
+ * trailing slash and `.git` are ignored, so a clone URL and the browser
+ * address of the same project agree.
  */
 export const sourceOf = (url: string): Source | undefined => {
   let parsed: URL;
@@ -52,8 +83,14 @@ export const sourceOf = (url: string): Source | undefined => {
     .filter((part) => part !== "");
   const [owner, repo] = parts.slice(-2);
   if (parts.length < 2 || owner === undefined || repo === undefined) return undefined;
+  const host = parsed.host.toLowerCase();
+  const prefix = parts
+    .slice(0, -2)
+    .map((part) => `/${part}`)
+    .join("");
   return {
-    host: parsed.host.toLowerCase(),
+    host,
+    base: `${parsed.protocol}//${host}${prefix}`.toLowerCase(),
     owner: owner.toLowerCase(),
     repo: repo.toLowerCase(),
   };
@@ -61,11 +98,15 @@ export const sourceOf = (url: string): Source | undefined => {
 
 /** The same project, whatever the case or form of the two addresses. */
 export const sameSource = (left: Source, right: Source): boolean =>
-  left.host === right.host && left.owner === right.owner && left.repo === right.repo;
+  left.base === right.base && left.owner === right.owner && left.repo === right.repo;
 
 /** The clone address of a source. */
 export const sourceUrl = (source: Source): string =>
-  `https://${source.host}/${source.owner}/${source.repo}`;
+  `${source.base}/${source.owner}/${source.repo}`;
+
+/** What a link's `host=` says: the bare host for the usual `https://<host>`, else the base. */
+const hostParam = (source: Source): string =>
+  source.base === `https://${source.host}` ? source.host : source.base;
 
 /** The host part of a configured content host (`https://wacs.org/` → `wacs.org`). */
 export const hostOfUrl = (url: string): string | undefined => {
@@ -93,7 +134,7 @@ export const shareLinkPath = (
   query.delete("at");
   query.delete("host");
   if (at !== undefined) query.set("at", at);
-  query.set("host", source.host);
+  query.set("host", hostParam(source));
   const tail = query.size === 0 ? "" : `?${query.toString()}`;
   return `/r/${source.owner}/${source.repo}${rest}${tail}`;
 };
