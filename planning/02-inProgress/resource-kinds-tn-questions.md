@@ -24,7 +24,7 @@ A chunk's range closes at the next sibling (convention, `closeAtNextSibling`); a
 
 ### 4. Where `en_tn` comes from
 
-The Language API's view has no rows for the helps. **Chosen:** a second source stated once, `HELP_TEXTS` in `src/app/catalogue.ts` (`WycliffeAssociates/en_tn` on the configured content host), offered in the reference column's menu and the `/projects` Notes section. The URL is relative to the configured host, so the dev channel's WACS dev would need its own `en_tn` (untested there). **Cost:** trivial to add rows; small to switch to API rows once the API has them.
+The Language API's view has no rows for the helps. **Chosen:** a second source stated once, `HELP_TEXTS` in `src/app/catalogue.ts`, offered in the reference column's menu and the `/projects` Notes section. Each row names its host (WA's `en_tn` on WACS production), as share links do, so every channel downloads the same notes (the dev channel's WACS dev holds an older copy) and a help never shares a Library folder across clouds (review finding 6, moot for helps since; source texts still key their folder by owner and repository only). **Cost:** trivial to add rows; small to switch to API rows once the API has them.
 
 ### 5. Packs: where, and the staleness stamp
 
