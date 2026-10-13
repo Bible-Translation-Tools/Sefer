@@ -21,6 +21,7 @@
 
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createWriteStream, existsSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 
@@ -108,6 +109,18 @@ export const startDevServer = async (
  * port, and the scratch `HOME`. `test:desktop` hands the same variables to
  * `@wdio/tauri-service`, which spawns the app itself.
  */
+/**
+ * The app's scratch `HOME` for a run: `<tmp>/sefer-verify/<runId>/home`, NOT
+ * under `.verify/` (which holds the logs and screenshots). The fs capability
+ * scope's globs cross one hidden folder below `$APPDATA`, and a journal path
+ * nests the project's absolute path inside app data, so a `HOME` under
+ * `.claude/…/.verify/` put two hidden folders in every journal path and every
+ * backup-journal write was refused as a forbidden path (2026-10-13). A
+ * person's real paths have none.
+ */
+export const scratchHome = (runDir: string): string =>
+  path.join(tmpdir(), "sefer-verify", path.basename(runDir), "home");
+
 const desktopEnv = (devUrl: string, home: string): Record<string, string> => ({
   HOME: home,
   SEFER_DEV_URL: devUrl,
@@ -127,7 +140,7 @@ export interface DesktopRun {
 
 /**
  * Starts Vite and the app, waits for both, and tees the app's output into
- * `<runDir>/app.log`. `home` defaults to a fresh `<runDir>/home`; pass a
+ * `<runDir>/app.log`. `home` defaults to a fresh `scratchHome(runDir)`; pass a
  * folder to keep a profile across runs.
  */
 export const startDesktop = async (
@@ -137,7 +150,7 @@ export const startDesktop = async (
 ): Promise<DesktopRun> => {
   const binary = desktopBinary(root);
   if (!existsSync(binary)) throw new Error(`${binary} is missing; build it first`);
-  const home = options.home ?? path.join(runDir, "home");
+  const home = options.home ?? scratchHome(runDir);
   mkdirSync(home, { recursive: true });
   const started = Date.now();
 

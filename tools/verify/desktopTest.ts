@@ -24,7 +24,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
-import { buildDesktop, startDevServer } from "./desktopApp.ts";
+import { buildDesktop, scratchHome, startDevServer } from "./desktopApp.ts";
 import { newRun } from "./devServer.ts";
 
 const main = async (): Promise<void> => {
@@ -40,7 +40,7 @@ const main = async (): Promise<void> => {
     buildDesktop(root, runDir);
   }
 
-  const home = path.join(runDir, "home");
+  const home = scratchHome(runDir);
   mkdirSync(home, { recursive: true });
   const server = await startDevServer(root, runDir);
   try {

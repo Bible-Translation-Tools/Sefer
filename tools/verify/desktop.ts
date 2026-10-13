@@ -7,7 +7,7 @@
  * WebDriver server answers `/status`, and prints ONE JSON line:
  *
  *     {"webdriver":"http://127.0.0.1:61234","hostname":"127.0.0.1","port":61234,
- *      "devUrl":"http://localhost:61233/","home":"…/.verify/<runId>/home",
+ *      "devUrl":"http://localhost:61233/","home":"<tmp>/sefer-verify/<runId>/home",
  *      "runId":"…","runDir":"…/.verify/<runId>","appPid":1234,"vitePid":1233}
  *
  * Attach from a script with WebdriverIO:
@@ -29,7 +29,10 @@
  *     pnpm verify:desktop --home <dir>    # keep the app's data across runs
  *
  * The app's window appears and takes focus: a WKWebView has no headless mode.
- * Its data lives under the scratch `HOME`, never the person's own.
+ * Its data lives under the scratch `HOME` (`scratchHome`: the system temp
+ * folder, outside any hidden folder), never the person's own. A `--home`
+ * of your own must not sit under a hidden folder either: the fs scope refuses
+ * journal writes there.
  */
 
 import path from "node:path";
