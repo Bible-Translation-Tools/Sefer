@@ -1,6 +1,6 @@
 # Agent verification
 
-Status: agreed workflow direction. This is not yet an executable app-specific skill: exact launch isolation, readiness checks, and desktop driving recipes must be proved as the application takes shape.
+Status: agreed workflow direction. This is not yet an executable app-specific skill: exact launch isolation and readiness checks must be proved as the application takes shape. The desktop driving recipe is proved (2026-10-12; "Driving the desktop app" below).
 
 ## What exists now
 
@@ -28,6 +28,7 @@ The `accept: text/html` header is not optional: `@solidjs/vite-plugin` runs in c
 
 What the artifact directory does _not_ yet contain is browser-side observability. `SEFER_LOG` reaches the Vite process, not the page; in a browser the ring mirrors `note` events to `console.debug` and is read through `__sefer.observability`. `observability.jsonl` currently holds the dev server's own stderr.
 
+- **The desktop launcher** is `pnpm verify:desktop [--check] [--no-build] [--home <dir>]` (`tools/verify/desktop.ts` over `tools/verify/desktopApp.ts`, Node built-ins only): the debug app with WebdriverIO's embedded WebDriver server, Vite and the app on free ports, a scratch `HOME`, and one JSON line with the endpoint. `pnpm test:desktop` runs `e2e-desktop/` on the same pieces. Step by step in "Driving the desktop app" below.
 - **The perf measurement** is `pnpm verify:perf [--chars N] [--runs K] [--headed]` (`tools/verify/perf.ts`; also `--warmup`, `--cadence <ms>`, `--levels off,all`). It shares `tools/verify/devServer.ts` with the launch helper, starts a dev server with no sink or stream variables, and drives Playwright's headless Chromium: for each run and level, a fresh page on `/projects?fixture=1`, the level set through `setLevel`, then only clicks — Open Project (timed to the editor; a fresh context lands on the fixture's first book, Psalms), USFM, a line — a warm-up, `N` characters at a fixed cadence (default 200 at 150 ms), and one Compare against the files (timed; the app bar's More menu, to the Review screen). Two instruments, because the ring records nothing at `off`: **`meter`** is the keystroke meter's `editor.gesture_ms`, `editor.browser_input_ms`, `editor.unaccounted_ms` and `editor.to_paint_ms` off each `editor.mutation` (so `all` only), and **`probe`** is the script's own Event Timing observer — `handlers` (summed event processing per key press, the JS work), `input` (the browser's input-to-paint) — plus the frame trick as `paint`; the all-vs-off delta is on the probe. Also heap after a forced GC (CDP), events and bytes per minute of the typing window, how many minutes the 2,000-event ring covers at that rate, and the failure ring's size. `<runDir>/<level>-<run>.jsonl` holds every event of each typing window (drained as it goes, so a wrap loses nothing), `summary.json` every run, and stdout one JSON line of medians. Limits: the dev server, not a build; the fixture's Psalms is 3 KB, not en_ulb; and over the fixture the disk sink writes nothing, so its flush cost is not in these numbers.
 
 ## Exploration and regression tests have different jobs
@@ -93,6 +94,48 @@ The web host prefers the File System Access picker, which is a native dialog no 
     pnpm build && pnpm serve --port 3000 --strictPort   # the dev server's own port
 
 **4. Prefer the longest task to the wall clock.** CDP `Tracing` with `devtools.timeline`, `performance.mark` either side of the interaction, then the top-level tasks in the window. A single 69ms task and two 34ms tasks take the same total time and do not feel the same; the second is the one that keeps typing responsive. A sampling profile (`Profiler.*`) correlated to a task's window by timestamp is what names the functions inside it — the timeline alone will only say `EventDispatch`.
+
+## Driving the desktop app
+
+The real Tauri app, driven over WebDriver the way the rig above drives Chrome. Proved on 2026-10-12 by importing a folder, editing, Undo, Translation Notes, a Writer migration with its history, a tutorial and a share link, all in the desktop app ([desktop](../architecture/desktop.md), "Driving the app", says what the server is and why it cannot reach a release).
+
+**1. Launch it. `pnpm verify:desktop`, and never run the binary by hand.**
+
+    pnpm verify:desktop                 # build (incremental), launch, stay up until SIGTERM
+    pnpm verify:desktop --check         # launch, open one session, report, stop
+    pnpm verify:desktop --no-build      # reuse src-tauri/target/debug/sefer as it is
+    pnpm verify:desktop --home <dir>    # keep the app's data across runs
+
+It builds `cargo build --features webdriver` (about 8 minutes the first time; seconds after), starts Vite and the app on free ports, waits until the WebDriver server answers `/status`, and prints one JSON line: `webdriver` (`http://127.0.0.1:<port>`), `hostname`, `port`, `devUrl`, `home`, `runId`, `runDir`, `appPid`, `vitePid`. Logs are `<runDir>/cargo.log`, `vite.log` and `app.log`. Run it in the background and read the line from its output; stop it with SIGTERM to the `verify:desktop` process (`pkill -TERM -f tools/verify/desktop.ts`), which stops the app and Vite with it.
+
+**The app's data is scratch.** `HOME` is `<runDir>/home` (or `--home`), so the Library, settings and projects land in `<home>/Library/Application Support/org.wycliffe.sefer`, never the person's own. A file the app should import goes under that `HOME` too (`<home>/Documents/…`): the fs capability scope is `$HOME/**`, and `HOME` is what it resolves. The keychain is the person's real one; nothing here signs in.
+
+**The window appears and is not headless.** A WKWebView has no headless mode. On a machine nobody is watching (display asleep, screen locked) the app still runs, but slowly: see "timings" below.
+
+**2. Attach and read.** WebdriverIO's `remote` against that port; any W3C client works.
+
+    import { remote } from "webdriverio";
+    const browser = await remote({ hostname: "127.0.0.1", port, capabilities: {},
+      connectionRetryTimeout: 1_200_000 });            // long scripts outlive the 120 s default
+    await browser.setTimeout({ script: 600_000 });
+    await browser.url(`${devUrl}projects`);           // no address bar: navigate the webview
+    await browser.execute(() => globalThis.__sefer.observability.traces.recent());
+    await browser.saveScreenshot(`${runDir}/01-projects.png`);
+    await browser.deleteSession();                     // the app keeps running
+
+Keep exploratory scripts under `.verify/` (uncommitted), screenshot each step and look at them. `globalThis.__sefer` is there because the webview runs the dev server: read `observability.traces.recent()`, `errors()` and `failures()` instead of adding logging. The driver's own injected scripts can throw "stale element reference" into the page after a navigation, which lands in the failure ring as `client.error`; that is the driver, not the app.
+
+**3. Know what the driver can and cannot do.** It drives the page through JavaScript, not the OS:
+
+- **Click** is `element.click()` plus `focus()`. Buttons and menu items work. It places no caret: an editor click needs a mousedown at a point.
+- **Pointer and key actions** are untrusted synthetic events. CodeMirror's keymap answers a synthetic `keydown`, so Meta+Z (Control+Z off macOS) undoes, but a synthetic key inserts no text, some keys (End) do nothing, and the driver's mousedown carries `detail: 0`, which CodeMirror reads as a line selection. To place a caret, scroll the line into view, wait half a second (CodeMirror re-lays out after a scroll, and coordinates taken in the same task land a line or two off), measure the point with a DOM `Range`, and dispatch your own `mousedown`/`mouseup` with `detail: 1` there. `e2e-desktop/smoke.desktop.ts`'s `placeCaret` is the recipe.
+- **Typing** is `element.addValue(text)`: `execCommand("insertText")` at the selection, which the editor receives as real `beforeinput`/`input`. Into an `<input>` it sets the value and fires `input`, which Solid hears.
+- **Native dialogs cannot be driven.** Answer the dialog plugin in the page instead: Tauri posts every command through the global `fetch` to `ipc://localhost/<command>` (`__TAURI_INTERNALS__.invoke` is frozen), so wrapping `window.fetch` to answer `ipc://localhost/plugin%3Adialog%7Copen` with `{"content-type": "application/json", "Tauri-Response": "ok"}` and a JSON path is a picked folder (`answerDialogs` in the smoke spec). A navigation reloads the page and drops the wrapper, so install it after `url()`.
+- **A click right after `url()` can land before the page is listening.** Wait for the thing you need, then pause a second, before the first click.
+
+**4. Timings on an unattended machine are not product timings.** With the display asleep (an agent's usual case), macOS throttles a window nobody can see. The driven build turns off WKWebView's background throttling and holds off App Nap, but a hidden page's timers still slip to about 200 ms, and the plugin's 50 ms run-loop pump bounds every IPC round trip. Measured 2026-10-12 with the display asleep for five hours: one `stat` 7–80 ms instead of about 1 ms; walking en_tn's Psalms (2,600 files, one `stat` each) took minutes. Use generous timeouts, assert outcomes, and measure performance only with the window visible on an awake display. Worse, **`requestAnimationFrame` never fires** while the display sleeps, so anything the app defers to a frame never appears: the Findings screen counted 28 findings and drew no cards for ten minutes (its list waits on `requestAnimationFrame`), and the findings tutorial's fourth step said its anchor was not on screen. That is the machine, not the app; check it before reporting a missing element (`requestAnimationFrame` in `browser.execute`, with a timeout).
+
+**5. Promote what earns it** into `e2e-desktop/` ([testing](../architecture/testing.md), "Desktop"), and run it with `pnpm test:desktop`.
 
 ## Measuring on a slow machine
 

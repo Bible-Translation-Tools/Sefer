@@ -40,6 +40,49 @@ without opening the plugin) and grants their paths ONCE through `fs:scope`, over
 Projects live in the user's own folders on desktop, so the scope is broad; it is still explicit, and a
 path outside it comes back as `PermissionDenied` rather than as a silent empty read.
 
+## Driving the app: the debug-only WebDriver server
+
+An agent or `pnpm test:desktop` drives the real app the way Playwright drives the Web build, through
+WebdriverIO's **embedded** driver: `tauri-plugin-wdio-webdriver` inside the app serves W3C WebDriver
+over the platform's own webview API (WKWebView here), and `@wdio/tauri-service` or any WebDriver client
+connects to it. It is the route the Tauri v2 docs recommend, and the only free one on macOS: Tauri's
+`tauri-driver` does not run there and CrabNebula's driver needs a paid key. How to use it is in
+[agent verification](../agents/verification.md), "Driving the desktop app"; the suite is in
+[testing](testing.md).
+
+**It can never reach a release.** The server answers anyone on localhost with full control of the
+window, so four things keep it in debug builds:
+
+- The crate is an **optional** dependency named only by the `webdriver` cargo feature, and only
+  `tools/verify/desktopApp.ts` (`cargo build --features webdriver`) turns that on. A release build does
+  not compile it. It is deliberately not a `[target.'cfg(debug_assertions)'.dependencies]` entry: cargo
+  evaluates that cfg without the profile, so the crate would compile into a release too.
+- `src/lib.rs` makes `webdriver` without `debug_assertions` a `compile_error!`, so
+  `cargo build --release --features webdriver` fails rather than shipping it.
+- Its one permission, `wdio-webdriver:default`, lives in `capabilities/webdriver/`, which `build.rs`
+  reads only when the feature is on (Tauri refuses a capability naming a plugin the build lacks, and its
+  default `capabilities/**/*` would read the folder in every build).
+- Proved on 2026-10-12: `target/release/sefer` carries none of the server's strings (`wdio`,
+  `TAURI_WEBDRIVER_PORT`, "tauri-plugin-webdriver is ready"; the debug binary carries all three), the
+  crate is absent from the release dependency graph, and the release app launched with
+  `TAURI_WEBDRIVER_PORT=47123` answered nothing on that port or the default 4445.
+
+The same feature does three more things to the driven build only: it reads the dev server from
+`SEFER_DEV_URL` instead of the compiled-in `localhost:3000` (so every run takes free ports and two
+worktrees never meet), it skips opening the devtools window, and it keeps a window that is not
+frontmost from being throttled: WKWebView's background throttling is off, and an `NSProcessInfo`
+activity holds off App Nap. Without them, on a Mac whose display had been asleep for hours, each IPC
+round trip took 0.4–3 s and Translation Notes' first read of Psalms took minutes. Even with them, a
+hidden page's timers are still throttled to about 200 ms and the plugin's own 50 ms run-loop pump
+bounds each IPC round trip, and `requestAnimationFrame` does not fire at all, so **timings taken on an
+unattended machine are not product timings**, and anything drawn after a frame (the Findings list) never
+appears there: measure, and check rendering, with the window visible.
+
+`tauri-plugin-wdio` (the service's `browser.tauri.execute` and command mocking, which also needs
+`withGlobalTauri` and a frontend import) is not installed: `browser.execute` reaches the page,
+`globalThis.__sefer` is the evidence, and a native dialog is answered in the page instead
+([verification](../agents/verification.md)).
+
 ## Rust commands
 
 `credentials_get/set/clear` answer `Credentials`; `install_update_from_endpoint` serves the manual

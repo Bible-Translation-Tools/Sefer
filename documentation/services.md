@@ -78,11 +78,12 @@ The port is `effect/FileSystem` used as-is. Implementations: memory (tests, fixt
 
 - Web cannot open a folder on the user's disk: `pickFolder` returns a handle name, not a path (`TODO(seam)` in `platform/web/dialogs.ts`).
 - Web never calls `navigator.storage.persist()`, and nothing tells the user if the browser evicts storage.
-- The Tauri implementation is not run against the contract suite (it needs a Tauri runtime).
+- The Tauri implementation is not run against the contract suite (it needs a Tauri runtime). Its `copy` was unimplemented until 2026-10-12, which failed every Import folder on desktop; driving the app found it, and `pnpm test:desktop` now imports a folder through it.
+- On desktop every file call is one IPC round trip, so work that touches thousands of files one at a time is slow there however fast the disk is: Translation Notes' freshness check is one `stat` per file of a book, every time a book is first read in a session (Psalms in en_tn: about 2,600). Measured only with the display asleep, where each round trip cost 7–80 ms; not measured on an awake machine.
 
 ### Ideas / future
 
-- A Tauri journey that proves real IPC and a refusal outside the fs scope.
+- A Tauri journey that proves real IPC and a refusal outside the fs scope. The harness exists (`pnpm test:desktop`, `e2e-desktop/`); the journey does not.
 
 ## Settings
 
@@ -483,8 +484,8 @@ One port answered by isomorphic-git over OPFS on Web and git2 0.21 through Rust 
 
 The flow needs one top-to-bottom pass before more is added.
 
-- `git_walk` and `git_blobs` (desktop) compile but no migration has been run in the desktop app (2026-10-09).
-- The lifecycle, the lanes and the desktop commands are built but the desktop app has not been run against them; Web Locks across two tabs has not been exercised either (2026-09-30).
+- Writer migration ran in the desktop app on 2026-10-12 (driven over WebDriver): five `aba` books from a local folder of Writer clones replayed 706 commits through `git_walk`, `git_blobs` and the pack writer in 50 s, a strict fsck of the result was clean, and History listed every version with its Writer author, date and diff. Not run: the WACS table as the source (no catalogue URL in that build) and Add a book… into an existing project.
+- The lifecycle and the lanes have not been exercised under contention on desktop. The desktop commands for intake, commit, log, show, walk, blobs and a newest-only clone have run in the app (2026-10-12); fetch, fast-forward, push, deepen and the merge abort have not. Web Locks across two tabs has not been exercised either (2026-09-30).
 - The only repair an `unhealthy` repository allows is aborting a merge; there is no screen for it.
 
 ### Ideas / future
@@ -581,7 +582,8 @@ Every text this device can read beside a project, and which one a project reads.
 - The last chunk of a chapter closes with the open project's verse counts, so in a book the project does not hold it names only its first verse.
 - Notes follow the caret, not the scroll. Picking notes replaces the scripture pane while chosen, and which text is shown is not remembered when the project reopens.
 - Remove on the projects page does not release a handle a project already has open until that project closes.
-- No Web button adds a picked folder or zip of notes; desktop's `Library.add(folder)` recognises one but was not run in the app. Nothing of Translation Notes has been run on the desktop host.
+- No Web button adds a picked folder or zip of notes; desktop's `Library.add(folder)` recognises one but was not run in the app.
+- On desktop (run 2026-10-12, driven over WebDriver, display asleep): Download, the notes following the caret, Find's Search Translation Notes and Remove all work. The clone is shallow (one commit, an 11 MB pack, 29,300 files checked out) and took 287 s with a toast that said "Starting…" throughout, because desktop transfer progress is a final tally. A book's first read builds its pack from the raw tree (Psalms: minutes), every later session re-checks it with one `stat` per file ([FileSystem](#filesystem)), and while that ran the recovery journal's offer (`journal.offer`, no candidates) took 170–350 s, and the editor did not appear until it ended. How much of that is the asleep display rather than the app is not measured.
 - A copy is the repository's newest version. A project that lists `24-02` gets `24-07` when that is newest, and the toast says so; checking out an older listed version is not built (Burrito `revision` holds the listed version, not a commit, so nothing records which commit was meant).
 - Source texts are pulled on arrival (download, import, clone, assembly), not on open: a project that arrived before 2026-10-06 shows its declared text as missing until Download is pressed.
 - Gateway texts downloaded before 2026-10-06 stay in the projects folder (ruled: they are not moved).
