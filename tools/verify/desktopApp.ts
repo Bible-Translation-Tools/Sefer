@@ -12,9 +12,11 @@
  *      `globalThis.__sefer` (the observability surface) is there to read.
  *   3. The binary itself, told the dev server's URL through `SEFER_DEV_URL`
  *      (instead of the compiled-in `localhost:3000`) and its WebDriver port
- *      through `TAURI_WEBDRIVER_PORT`, with `HOME` pointed at a scratch folder
- *      so the app's data — the Library, settings, projects it creates — never
- *      lands in the person's own `~/Library/Application Support`.
+ *      through `TAURI_WEBDRIVER_PORT`, with `HOME` (and on Linux the XDG
+ *      folders) pointed at a scratch folder so the app's data — the Library,
+ *      settings, projects it creates — never lands in the person's own
+ *      `~/Library/Application Support` or `~/.local/share`. Windows is refused:
+ *      see `scratchEnv`.
  *
  * Node built-ins only, like the other `tools/verify` scripts.
  */
@@ -105,11 +107,6 @@ export const startDevServer = async (
 };
 
 /**
- * The environment the app runs under: the dev server's URL, the WebDriver
- * port, and the scratch `HOME`. `test:desktop` hands the same variables to
- * `@wdio/tauri-service`, which spawns the app itself.
- */
-/**
  * The app's scratch `HOME` for a run: `<tmp>/sefer-verify/<runId>/home`, NOT
  * under `.verify/` (which holds the logs and screenshots). The fs capability
  * scope's globs cross one hidden folder below `$APPDATA`, and a journal path
@@ -121,8 +118,33 @@ export const startDevServer = async (
 export const scratchHome = (runDir: string): string =>
   path.join(tmpdir(), "sefer-verify", path.basename(runDir), "home");
 
+/**
+ * The variables that move the app's data folders under the scratch `home`:
+ * `HOME` on macOS, where app data is `$HOME/Library/Application Support`, and
+ * on Linux the XDG folders too, which take precedence over `HOME` when the
+ * developer has them set. `test:desktop` hands the same variables to
+ * `@wdio/tauri-service` (`e2e-desktop/wdio.conf.ts`), which spawns the app
+ * itself. Windows is refused: Tauri reads app data from the Known Folders
+ * API, which no environment variable redirects, so a driven run there would
+ * write into the developer's own `%APPDATA%\org.wycliffe.sefer`.
+ */
+export const scratchEnv = (home: string): Record<string, string> => {
+  if (process.platform === "win32")
+    throw new Error(
+      "driven desktop runs are macOS and Linux only: on Windows the app's data folder cannot be moved to a scratch folder",
+    );
+  return {
+    HOME: home,
+    XDG_DATA_HOME: path.join(home, ".local", "share"),
+    XDG_CONFIG_HOME: path.join(home, ".config"),
+    XDG_CACHE_HOME: path.join(home, ".cache"),
+    XDG_STATE_HOME: path.join(home, ".local", "state"),
+  };
+};
+
+/** The environment the app runs under: the dev server's URL and the scratch folders. */
 const desktopEnv = (devUrl: string, home: string): Record<string, string> => ({
-  HOME: home,
+  ...scratchEnv(home),
   SEFER_DEV_URL: devUrl,
 });
 

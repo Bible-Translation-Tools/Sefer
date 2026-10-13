@@ -28,6 +28,8 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { scratchEnv } from "../tools/verify/desktopApp.ts";
+
 const root = fileURLToPath(new URL("..", import.meta.url));
 const runDir = process.env["SEFER_VERIFY_RUN_DIR"] ?? path.join(root, ".verify", "test-desktop");
 const home = process.env["SEFER_DESKTOP_HOME"];
@@ -49,8 +51,8 @@ export const config: WebdriverIO.Config = {
         appBinaryPath: application,
         driverProvider: "embedded",
         // The app's data goes under the run's scratch folder, never the
-        // person's own Library.
-        env: { HOME: home },
+        // person's own Library (or XDG folders on Linux).
+        env: scratchEnv(home),
       },
     },
   ],
