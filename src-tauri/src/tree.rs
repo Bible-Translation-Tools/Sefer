@@ -8,14 +8,19 @@
 //! (2026-10-13). Here a listing and a bulk read are one call each, walked on a
 //! blocking thread.
 //!
-//! Both are read-only. Like the git commands they take a path from the
-//! webview rather than going through the fs plugin's scope: this process can
-//! read anywhere the user can, and nothing here writes.
+//! Both are read-only, and both answer only inside the app data folder, where
+//! the projects and the library live (`src/app/services.ts`). They read with
+//! `std::fs` rather than through the fs plugin, so they check for themselves:
+//! the folder asked for is canonicalised and refused unless it is below the
+//! canonical app data folder, and each file read is checked the same way, so a
+//! symlink cannot lead out. The walk does not follow symlinks at all, so a link
+//! loop cannot recurse.
 
 use std::path::{Component, Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 use serde::Serialize;
+use tauri::Manager;
 
 use crate::errors::{fail, IO, REFUSED};
 
@@ -42,13 +47,17 @@ fn walk(root: &Path, directory: &Path, out: &mut Vec<ListedFile>) -> std::io::Re
     for entry in std::fs::read_dir(directory)? {
         let entry = entry?;
         let path = entry.path();
-        // `metadata` follows a symlink, as the TypeScript walk's `stat` did.
-        let Ok(meta) = std::fs::metadata(&path) else {
+        // `file_type` does not follow a symlink: a link is skipped, so a loop
+        // cannot recurse and a link cannot lead outside the root.
+        let Ok(kind) = entry.file_type() else {
             continue;
         };
-        if meta.is_dir() {
+        if kind.is_dir() {
             walk(root, &path, out)?;
-        } else if meta.is_file() {
+        } else if kind.is_file() {
+            let Ok(meta) = entry.metadata() else {
+                continue;
+            };
             let mtime = meta
                 .modified()
                 .ok()
@@ -66,9 +75,50 @@ fn walk(root: &Path, directory: &Path, out: &mut Vec<ListedFile>) -> std::io::Re
     Ok(())
 }
 
-fn listing(directory: String) -> Result<Vec<ListedFile>, String> {
-    let root = PathBuf::from(&directory);
+/// The canonical app data folder: the only place these commands read.
+fn allowed(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let folder = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| fail(IO, error.to_string()))?;
+    folder
+        .canonicalize()
+        .map_err(|error| fail(IO, format!("{}: {error}", folder.display())))
+}
+
+/// `directory` canonicalised when it is inside `allowed`; `Ok(None)` when it
+/// does not exist but its nearest existing folder is inside; refused otherwise.
+fn inside(allowed: &Path, directory: &str) -> Result<Option<PathBuf>, String> {
+    let refused = || {
+        fail(
+            REFUSED,
+            format!("{directory} is outside the app data folder"),
+        )
+    };
+    let asked = Path::new(directory);
+    if !asked.is_absolute() || asked.components().any(|part| part == Component::ParentDir) {
+        return Err(refused());
+    }
+    let mut existing = asked;
+    loop {
+        match existing.canonicalize() {
+            Ok(real) if real.starts_with(allowed) => {
+                return Ok((existing == asked).then_some(real));
+            }
+            Ok(_) => return Err(refused()),
+            Err(_) => match existing.parent() {
+                Some(parent) => existing = parent,
+                None => return Err(refused()),
+            },
+        }
+    }
+}
+
+fn listing(allowed: &Path, directory: String) -> Result<Vec<ListedFile>, String> {
     // No folder is no files, as the port says, not a failure.
+    let Some(root) = inside(allowed, &directory)? else {
+        return Ok(Vec::new());
+    };
     if !root.is_dir() {
         return Ok(Vec::new());
     }
@@ -80,14 +130,19 @@ fn listing(directory: String) -> Result<Vec<ListedFile>, String> {
 
 /// Every file below `directory`, sorted by path, with its size and mtime.
 #[tauri::command]
-pub async fn tree_listing(directory: String) -> Result<Vec<ListedFile>, String> {
-    tauri::async_runtime::spawn_blocking(move || listing(directory))
+pub async fn tree_listing(
+    app: tauri::AppHandle,
+    directory: String,
+) -> Result<Vec<ListedFile>, String> {
+    let allowed = allowed(&app)?;
+    tauri::async_runtime::spawn_blocking(move || listing(&allowed, directory))
         .await
         .map_err(|error| fail(IO, error.to_string()))?
 }
 
-fn read_all(directory: String, paths: Vec<String>) -> Result<Vec<u8>, String> {
-    let root = PathBuf::from(&directory);
+fn read_all(allowed: &Path, directory: String, paths: Vec<String>) -> Result<Vec<u8>, String> {
+    let root = inside(allowed, &directory)?
+        .ok_or_else(|| fail(IO, format!("{directory}: no such folder")))?;
     let mut out = Vec::new();
     for path in &paths {
         let inside = Path::new(path);
@@ -97,8 +152,15 @@ fn read_all(directory: String, paths: Vec<String>) -> Result<Vec<u8>, String> {
         {
             return Err(fail(REFUSED, format!("{path} is not inside {directory}")));
         }
-        let bytes = std::fs::read(root.join(inside))
+        let file = root
+            .join(inside)
+            .canonicalize()
             .map_err(|error| fail(IO, format!("{path}: {error}")))?;
+        // A symlink inside the folder may still point out of it.
+        if !file.starts_with(&root) {
+            return Err(fail(REFUSED, format!("{path} is not inside {directory}")));
+        }
+        let bytes = std::fs::read(&file).map_err(|error| fail(IO, format!("{path}: {error}")))?;
         let length = u32::try_from(bytes.len())
             .map_err(|_| fail(IO, format!("{path}: larger than 4 GiB")))?;
         out.extend_from_slice(&length.to_le_bytes());
@@ -113,10 +175,12 @@ fn read_all(directory: String, paths: Vec<String>) -> Result<Vec<u8>, String> {
 /// and has to be parsed.
 #[tauri::command]
 pub async fn tree_read(
+    app: tauri::AppHandle,
     directory: String,
     paths: Vec<String>,
 ) -> Result<tauri::ipc::Response, String> {
-    let bytes = tauri::async_runtime::spawn_blocking(move || read_all(directory, paths))
+    let allowed = allowed(&app)?;
+    let bytes = tauri::async_runtime::spawn_blocking(move || read_all(&allowed, directory, paths))
         .await
         .map_err(|error| fail(IO, error.to_string()))??;
     Ok(tauri::ipc::Response::new(bytes))

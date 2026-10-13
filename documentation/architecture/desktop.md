@@ -101,7 +101,10 @@ appears there: measure, and check rendering, with the window visible.
 version switch. `tree_listing` and `tree_read` (`src-tauri/src/tree.rs`) answer core's `FolderTree`
 service through `TauriFolderTreeLive`: a folder's every file with its size and mtime, and many files'
 bytes as one binary answer (a little-endian `u32` length before each file), read-only and on a blocking
-thread. Through the fs plugin a folder of small files costs an IPC call per file; Translation Notes'
+thread. They read with `std::fs`, outside the fs plugin's scope, so they check for themselves: the folder
+is canonicalised and refused unless it is below the canonical app data folder (the projects and the
+Library live there), each file read is checked the same way, and the walk skips symlinks, so a link can
+neither lead out nor loop. Through the fs plugin a folder of small files costs an IPC call per file; Translation Notes'
 Psalms is about 2,400 chunk files, which its freshness check stat'ed and its first read read one call at
 a time (12.3 s and 39.8 s with the display awake). With the two commands the listing is 49 ms and the
 read 0.8 s, and the notes for a verse answer in 0.25 s from a pack and 1.3 s when the pack is built
