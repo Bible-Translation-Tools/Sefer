@@ -481,7 +481,16 @@ function Find() {
    * project (`ProjectAnalysis.attach` registers them as it opens), so nothing
    * here registers anything.
    */
+  /**
+   * Which run is the latest. Only the reference-material scope awaits (its
+   * haystack is read through the handle), so a run started after it can
+   * finish first; the late one must then write nothing, or it wipes the
+   * newer run's hits (switching it off mid-search left the project scope
+   * at 0 results, 2026-10-12).
+   */
+  let latest = 0;
   const run = async (over?: Over): Promise<void> => {
+    const generation = (latest += 1);
     // What was searched before this run: the same search again is a re-take,
     // and a re-take keeps the reader's place in the results.
     const previous = untrack(searched);
@@ -549,6 +558,11 @@ function Find() {
         const listed = await shell.services.run(
           Effect.result(documents.list(projectBooks(), context)),
         );
+        if (generation !== latest) {
+          stop();
+          search.end("declined", { "find.reason": "superseded" });
+          return;
+        }
         if (Result.isFailure(listed)) continue;
         const texts = new Map(listed.success.map((document) => [document.id, document.text]));
         const scanned = Search.findInDocuments(listed.success, staticQuery);
