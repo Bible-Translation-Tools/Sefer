@@ -24,6 +24,7 @@ import { tempDir } from "@tauri-apps/api/path";
 import {
   copyFile,
   exists,
+  lstat,
   mkdir,
   readDir,
   readFile,
@@ -271,17 +272,34 @@ const makeTauriFileSystem = (): FileSystem.FileSystem => {
    * every folder import on desktop ("copy is not implemented by the Tauri
    * FileSystem", found driving the app on 2026-10-12). `overwrite` is not
    * honoured: the OS copy replaces a file, which every caller asks for.
+   * Symlinks are skipped, never followed, so a link loop cannot recurse; below
+   * the top, each entry's kind comes from `readDir` rather than one `stat` per
+   * entry over IPC.
    */
+  const copyDirectory = (
+    from: string,
+    to: string,
+  ): Effect.Effect<void, PlatformError.PlatformError> =>
+    Effect.gen(function* () {
+      yield* attempt("copy", to, () => mkdir(to, { recursive: true }));
+      const entries = yield* attempt("copy", from, () => readDir(from));
+      for (const entry of entries) {
+        if (entry.isSymlink) continue;
+        const source = joinPath(from, entry.name);
+        const target = joinPath(to, entry.name);
+        if (entry.isDirectory) yield* copyDirectory(source, target);
+        else if (entry.isFile) yield* copyFileAt(source, target);
+      }
+    });
+
   const copy: FileSystem.FileSystem["copy"] = (fromPath, toPath) =>
     Effect.gen(function* () {
       const from = normalisePath(fromPath);
       const to = normalisePath(toPath);
-      const info = yield* attempt("copy", from, () => stat(from));
+      const info = yield* attempt("copy", from, () => lstat(from));
+      if (info.isSymlink) return;
       if (!info.isDirectory) return yield* copyFileAt(from, to);
-      yield* attempt("copy", to, () => mkdir(to, { recursive: true }));
-      const entries = yield* attempt("copy", from, () => readDir(from));
-      for (const entry of entries)
-        yield* copy(joinPath(from, entry.name), joinPath(to, entry.name));
+      yield* copyDirectory(from, to);
     });
 
   const fileSystem = FileSystem.make({
