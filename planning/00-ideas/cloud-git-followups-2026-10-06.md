@@ -61,6 +61,16 @@ server from the current tip. The message was typed.
   were declined, so offering one again is a choice. If a per-passage reason is wanted later, it is a
   comment on the pull request or a [git note](git-notes-rationale.md).
 
+  2026-10-13, the author's half is done: a declined offering stays on the author's copy's branch,
+  so their next send or offer was refused as non-fast-forward with no way out. That refusal now
+  leads to Review against the copy, and its Save records the author's decision once ("keep ours" when
+  they take none of the old offer): a decision commit with their head and the copy's head as parents,
+  sent as a fast-forward. The old versions stay in history but change nothing, so they stop riding
+  along in the next offer's net change; the old commits still show in the new pull request's list of
+  commits. It is the author's own decision, through Review, so it meets the 2026-10-07 condition.
+  The reviewer's side (Decline recording anything) is unchanged and still deferred. See sync.md, "A
+  copy that has moved on", and `planning/02-inProgress/diverged-copy-test-guide.md`.
+
 - **What the author sees of a partial accept.** A suggestion brought in with some passages taken
   and others kept shows its author "Brought into the shared project" and the reviewer's message, not
   which verses were taken. Sefer could write the per-verse outcome ("Obadiah 1:1 taken; 1:2 kept")

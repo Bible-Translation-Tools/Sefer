@@ -341,6 +341,14 @@ as a keep-ours decision commit would end that, but would reset the author's own 
 receive, which Will ruled out on 2026-10-07; remembering declines by content is the proposal
 (`planning/00-ideas/cloud-git-followups-2026-10-06.md`).
 
+On the AUTHOR's side the decision commit now does settle it (2026-10-13): when their copy holds
+versions this device lacks (an earlier offer never taken, or another device's work), a send or an
+offer goes to Review against the copy, and its Save records one decision commit with this device's
+head and the copy's head as parents ("keep ours" when nothing of the copy's is taken), sent to the
+copy as a fast-forward ([sync](sync.md), "A copy that has moved on"). The next suggestion's net
+change is then only what the author kept. It is the author's own decision, in Review, which is the
+condition Will set on 2026-10-07.
+
 The editors' list ("To review", `SuggestionsCard`) names each suggestion by its title, and leaves
 out the signed-in person's own (`openSuggestions`): those are under Yours.
 

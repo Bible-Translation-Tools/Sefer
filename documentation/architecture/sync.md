@@ -401,7 +401,39 @@ popover offers "See the changes", Review against it (`?against=shared&copy=1`, l
 copy"), and Record catches this device up and sends back to the copy. Nothing from the copy arrives
 without that review. Suggestions are `/project/$slug/suggestions`, a third sidebar tab beside Changes
 and History (`ChangesHistorySidebar`), for anyone who works in their own copy (Yours) or can write
-(To review); with the sidebar hidden, the three tabs come above the page. The sign-in token carries
+(To review); with the sidebar hidden, the three tabs come above the page.
+
+**A copy that has moved on** (2026-10-13). The copy can hold versions this device lacks for two
+reasons: another of the person's devices sent there, or an earlier offer the shared project never
+took stays on the copy's branch. Either way a send to it is not a fast-forward, the server refuses
+it (`Rejected`), and Sefer never forces one. That refusal now leads to the path above, the one
+decision, instead of a dead end:
+
+- Save's receipt says "Not sent: your copy has changes this device does not" (`SendOutcome`
+  `refused` with `toCopy`) and offers **Compare with your copy**, Review against the copy
+  (`?against=shared&copy=1`, labelled "Your copy"). It used to say the shared project had changed,
+  and its Compare compared with the shared project.
+- **Offer my changes** (Suggestions, the cloud popover, Save's receipt) reads the copy first
+  (`fetchCopy`); if the copy's tip is not in this device's history it pushes nothing and goes to the
+  same review (`CopyHasWork`), where before it failed on the push.
+- **The review's Save is the decision.** What only the copy changed is preset to the copy's side;
+  choosing "Keep the editor's" for those passages records "keep ours". Either way `settleWithShared`
+  combines with the copy's tip as "theirs": one decision commit whose parents are this device's head
+  and the copy's head, whose files are the person's text. The copy's versions stay in history,
+  unchanged, and change nothing they were not chosen for; the decision commit sits on top of the copy,
+  so the send is a fast-forward and every later one is too. Nothing is reset, deleted or forced.
+- An offer afterwards carries the old versions in its history but not in its net change: the
+  decision is recorded once, on the author's side, so a passage they declined to keep stops riding
+  along. (This is not the reviewer's Decline, which is still only a close; see the followups note.)
+
+Driven end to end on desktop against the sandbox on 2026-10-13: the fork's `f2c457e` (a Genesis
+title change never taken), a refused send, Review against the copy with Genesis kept as ours, decision
+commit `2590981` pushed to the fork as a fast-forward from `f2c457e` (Gitea's feed shows an ordinary
+push of three commits), and the offer as `Will_Kelly/x-en-ulb` pull request #1, whose net change is
+Jude alone. The Web build shows the same receipt and review. The steps by hand are
+`planning/02-inProgress/diverged-copy-test-guide.md`.
+
+The sign-in token carries
 `write:issue` for the notes; one minted before that must sign in again. On the Web every suggestion
 call goes through the WACS proxy's allowlist ([git](git.md), Suggested changes).
 
