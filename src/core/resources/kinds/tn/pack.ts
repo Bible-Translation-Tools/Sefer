@@ -184,21 +184,26 @@ const buildPack = (
     return pack;
   });
 
+/**
+ * One book's pack, `absent` when there is none, or `undecodable` when the
+ * file is there and is not a pack this build reads: corrupt, or written by a
+ * build with another `PACK_VERSION`.
+ */
 const readPack = (
   fileSystem: FileSystem.FileSystem,
   root: string,
   book: string,
-): Effect.Effect<Pack | undefined> =>
+): Effect.Effect<Pack | "absent" | "undecodable"> =>
   Effect.map(Effect.option(fileSystem.readFileString(packPath(root, book))), (text) => {
-    if (text._tag === "None") return undefined;
+    if (text._tag === "None") return "absent";
     let parsed: unknown;
     try {
       parsed = JSON.parse(text.value);
     } catch {
-      return undefined;
+      return "undecodable";
     }
     const decoded = decodePack(parsed);
-    return Result.isSuccess(decoded) ? decoded.success : undefined;
+    return Result.isSuccess(decoded) ? decoded.success : "undecodable";
   });
 
 /**
@@ -265,11 +270,22 @@ export const bookPack = (
   Effect.gen(function* () {
     const directory = joinPath(root, help.path);
     const raw = yield* Effect.orElseSucceed(fileSystem.exists(directory), () => false);
-    const held = yield* readPack(fileSystem, root, help.book);
+    const read = yield* readPack(fileSystem, root, help.book);
     if (!raw) {
-      if (held !== undefined) return held;
+      if (typeof read === "object") return read;
+      // The packs are the resource here, so one this build cannot read is
+      // not "no notes": it is a copy to download again (every pack, after a
+      // `PACK_VERSION` change).
+      if (read === "undecodable")
+        return yield* Effect.fail(
+          unavailable(
+            "Unreadable",
+            `The notes for ${help.book} were packed by another version of Sefer. Remove them on the projects page and download them again.`,
+          ),
+        );
       return yield* Effect.fail(unavailable("Missing", `no notes for ${help.book}`));
     }
+    const held = typeof read === "object" ? read : undefined;
     const listed = yield* filesBelow(fileSystem, directory);
     const stamp: Stamp = { kind: "tree", fingerprint: fingerprint(listed) };
     if (held?.stamp.kind === "tree" && held.stamp.fingerprint === stamp.fingerprint) return held;
